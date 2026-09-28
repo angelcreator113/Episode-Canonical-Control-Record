@@ -1,0 +1,123 @@
+/**
+ * F-Reg-2 fix group 2 (v1.2 R2), src/routes/consciousness.js: rows 42 and 43
+ * of the scoping note's §3.4 (F-Reg-2_Fix_Plan_v1.0.md §4.2). Both read
+ * writer_notes (a JSON blob in a TEXT column), set one key and write it back.
+ * characterRegistry.js was #2179/#2181; registrySync.js #2183;
+ * characterGenerationRoutes.js #2186/#2192.
+ *
+ * Each test holds the first request after its read of the character until a
+ * second request has run (or, when the fix locks the row, until a short
+ * timeout shows the second is waiting on the lock). On origin/main one of
+ * the two keys is lost; with the fix both survive.
+ */
+jest.unmock('uuid');
+
+const mockCreate = jest.fn();
+jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
+
+const request = require('supertest');
+const crypto = require('crypto');
+const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
+const models = require('../../src/models');
+
+const { sequelize } = models;
+
+const shouldSkip =
+  !process.env.DATABASE_URL ||
+  process.env.DATABASE_URL?.includes('amazonaws.com') ||
+  !process.env.DATABASE_URL?.includes('episode_metadata_test');
+
+const uuid = () => crypto.randomUUID();
+const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
+const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const BASE = '/api/v1/consciousness';
+
+async function seed() {
+  const ids = { reg: uuid(), rc: uuid() };
+  await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'RMW consciousness registry', NOW(), NOW())`, ids);
+  await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, writer_notes, created_at, updated_at)
+             VALUES (:rc, :reg, :key, 'Conscious Character', '{}', NOW(), NOW())`,
+    { ...ids, key: `conscious-${ids.rc.slice(0, 8)}` });
+  return ids;
+}
+
+// Hold the first RegistryCharacter.findByPk after it returns, until `second()`
+// has finished or `waitMs` has passed, whichever is first.
+function interleave(second, waitMs = 600) {
+  const original = models.RegistryCharacter.findByPk.bind(models.RegistryCharacter);
+  let secondPromise = null;
+  let first = true;
+  jest.spyOn(models.RegistryCharacter, 'findByPk').mockImplementation(async (...args) => {
+    const result = await original(...args);
+    if (first) {
+      first = false;
+      secondPromise = second();
+      await Promise.race([secondPromise.then(() => {}, () => {}), sleep(waitMs)]);
+    }
+    return result;
+  });
+  return () => secondPromise;
+}
+
+const notesOf = async (id) => JSON.parse((await q(`SELECT writer_notes FROM registry_characters WHERE id = :id`, { id }))[0].writer_notes);
+
+(shouldSkip ? describe.skip : describe)('F-Reg-2 fix group 2, consciousness.js: interleaved writer_notes writes are not lost', () => {
+  let token;
+  const seeded = [];
+  const auth = () => `Bearer ${token}`;
+
+  beforeAll(() => {
+    token = TokenService.generateTokenPair({
+      id: 'test-user-rmw-consciousness',
+      email: 'test@rmw-consciousness.dev',
+      name: 'RMW Consciousness Test',
+      groups: ['USER', 'EDITOR'],
+      role: 'USER',
+    }).accessToken;
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+  afterAll(async () => {
+    for (const ids of seeded) await run(`DELETE FROM character_registries WHERE id = :reg`, ids); // cascades characters
+  });
+
+  const save = (character_id, profile, is_lala_profile) =>
+    request(app).post(`${BASE}/save`).set('Authorization', auth()).send({ character_id, profile, is_lala_profile });
+
+  it('row 42: two saves of different profiles keep both', async () => {
+    const ids = await seed();
+    seeded.push(ids);
+
+    const secondDone = interleave(() => save(ids.rc, { from: 'second save' }, true));
+    const first = await save(ids.rc, { from: 'first save' }, false);
+    const second = await secondDone();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const notes = await notesOf(ids.rc);
+    expect(notes.consciousness).toEqual({ from: 'first save' });
+    expect(notes.inherited_consciousness).toEqual({ from: 'second save' });
+  });
+
+  it('row 43: dilemma triggers and a concurrent save keep both', async () => {
+    const ids = await seed();
+    seeded.push(ids);
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({ active_dilemma: { dilemma: 'set by the trigger run' } }) }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    const secondDone = interleave(() => save(ids.rc, { from: 'concurrent save' }, false));
+    const first = await request(app).post(`${BASE}/dilemma-triggers`).set('Authorization', auth())
+      .send({ character: { id: ids.rc, display_name: 'Conscious Character' }, dilemmas: { active: 'a', latent_1: 'b', latent_2: 'c' } });
+    const second = await secondDone();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const notes = await notesOf(ids.rc);
+    expect(notes.dilemma_triggers).toEqual({ active_dilemma: { dilemma: 'set by the trigger run' } });
+    expect(notes.consciousness).toEqual({ from: 'concurrent save' });
+  });
+});
