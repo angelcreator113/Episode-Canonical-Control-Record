@@ -2342,6 +2342,49 @@ field.
 per-user check that skips the draft instead of failing the route.
 `aiCostTracker`'s budget refusal is caught the same way.
 
+**(w) Episode production workspace rulings (Evoni, 2026-09-28, Task
+#2207).** Docs only: no code is changed by this entry. The basis is
+`docs/EPISODE_PRODUCTION_READ.md` (Task #2202, merged as `f39a77c9` in
+#2204), cited, not restated. Recorded verbatim. P1 is also rule 19 of
+`docs/DESIGN_DOCTRINE.md`.
+
+**P1.** Once Start Episode is pressed, the Episode becomes the production
+workspace; ordinary production work should never require leaving the
+Episode.
+
+**P2.** Use episode_briefs.event_id as the canonical Episode → Source Event
+link; migrate readers toward listEpisodeEvents and do not add another
+event-link column.
+
+**P3.** Fix first. Regenerate must be transactional/safe: create and
+validate the replacement episode before unlinking the event or
+deleting/superseding the existing episode.
+
+**P4.** Fix second. Timeline Editor must always honor the requested
+episode_id and must never fall back to or display another episode's
+timeline.
+
+**P5.** Fix third. The feed-moment beat step must persist successfully or
+surface a clear save error; silent failure is not acceptable.
+
+**P6.** Delete the unmounted EpisodeWardrobeTab.jsx and its unsafe
+arbitrary-wardrobe fallback; maintain one canonical episode-level Wardrobe
+implementation.
+
+**P7.** Production becomes Assets · Scenes · Character Clips · Wardrobe ·
+Lala's Phone · Checklist; Character Clips gets its own episode-production
+tab for Lala and JustAWoman footage.
+
+**P8.** Episode Lala's Phone uses the same canonical phone system, derives
+required phone moments from each beat's surface, shows readiness by beat,
+and moves Missions under Advanced.
+
+**P9.** Once an event has started an episode, accepted Terms are locked
+server-side; edits to requirements, compensation/payment,
+deliverables/restrictions, and source-event linkage must be rejected
+through ordinary event-edit routes rather than relying on the UI lock
+alone.
+
 ---
 
 ## 9. Owed before enforcement
