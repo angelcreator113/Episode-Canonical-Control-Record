@@ -439,6 +439,10 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // guard for every route that starts an episode through this function
   // (generate-episode, generate-episode-from-many, regenerate-episode).
   // A link to a soft- or hard-deleted episode does not block.
+  // regenerate-episode passes replacingEpisodeId: the event's own live
+  // episode then passes the guard and is superseded inside the transaction
+  // below, only once its replacement exists (§8(w) P3, Task #2210).
+  const replacingEpisodeId = options.replacingEpisodeId || null;
   const eventId = typeof event.id === 'string' ? event.id : String(event.id);
   let liveEpisode = null;
   try {
@@ -447,7 +451,9 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     // Column may not exist, skip check
     console.warn('[EpisodeGenerator] used-event check skipped:', checkErr.message);
   }
-  if (liveEpisode) throw eventEpisodeConflictError(liveEpisode);
+  if (liveEpisode && !(replacingEpisodeId && liveEpisode.id === replacingEpisodeId)) {
+    throw eventEpisodeConflictError(liveEpisode);
+  }
 
   // Get next episode number from active episodes only. Soft-deleted
   // regenerate history should not inflate visible episode numbering.
@@ -456,8 +462,8 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     const [rows] = await models.sequelize.query(
       `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num
        FROM episodes
-       WHERE show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { showId } }
+       WHERE show_id = :showId AND deleted_at IS NULL${replacingEpisodeId ? ' AND id <> :replacingEpisodeId' : ''}`,
+      { replacements: { showId, replacingEpisodeId } }
     );
     nextNumber = parseInt(rows?.[0]?.next_num) || 1;
   } catch {
@@ -708,6 +714,13 @@ Return ONLY JSON.` }],
         forward_hook: aiForwardHook,
         status: 'draft',
       }, { transaction });
+    }
+
+    if (replacingEpisodeId) {
+      await models.sequelize.query(
+        'UPDATE episodes SET deleted_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL',
+        { replacements: { episodeId: replacingEpisodeId }, transaction }
+      );
     }
 
     await stampEventUsed(models.sequelize, eventId, episode.id, { transaction });
