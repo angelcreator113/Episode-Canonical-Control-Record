@@ -160,12 +160,23 @@ describe('draftEventConcept', () => {
     }
   });
 
-  test('Task #2135: quotation marks are stripped, straight and curly; the name is never truncated', async () => {
-    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, name: '“Maya’s  Golden Hour”' })));
-    expect((await draftEventConcept(PROFILE, { userId: 'u1' })).name).toBe('Mayas Golden Hour');
+  test('Task #2135: double quotes are stripped anywhere, straight and curly; the name is never truncated', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, name: '“Golden  "Hour"”' })));
+    expect((await draftEventConcept(PROFILE, { userId: 'u1' })).name).toBe('Golden Hour');
     const justUnder = 'y'.repeat(NAME_LIMIT - 1);
     expect(parseName(justUnder, PROFILE)).toBe(justUnder);
     expect(parseName(`${justUnder}y`, PROFILE)).toBe('');
+  });
+
+  test('Task #2135 review: apostrophes inside the name are kept; single quotes wrapping it are stripped', () => {
+    expect(parseName("Maya's Golden Hour", PROFILE)).toBe("Maya's Golden Hour");
+    expect(parseName('Maya’s Golden Hour', PROFILE)).toBe('Maya’s Golden Hour');
+    expect(parseName("'Golden Hour'", PROFILE)).toBe('Golden Hour');
+    expect(parseName('‘Golden Hour’', PROFILE)).toBe('Golden Hour');
+    expect(parseName('“Maya’s Golden Hour”', PROFILE)).toBe('Maya’s Golden Hour');
+    expect(parseName(`"'Golden Hour'"`, PROFILE)).toBe('Golden Hour');
+    // A lone wrapping quote is left as written.
+    expect(parseName("Golden Hour'", PROFILE)).toBe("Golden Hour'");
   });
 
   test('a malformed reply gives null', async () => {

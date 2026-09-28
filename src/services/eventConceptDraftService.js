@@ -46,9 +46,20 @@ const FIELD_MAX = { concept: 300, activity: 300, description: 1200 };
 // Task #2135: a drafted name is kept only when under this many characters,
 // the suggest-names prompt's "Each name is under 40 characters." rule.
 const NAME_LIMIT = 40;
-// Straight and curly quotation marks, single and double, as the
-// suggest-names handler strips them.
+// Quotation marks in a drafted name (Evoni, Task #2135 review): double
+// quotes, straight and curly, are stripped anywhere; single quotes only when
+// they wrap the whole name, so an apostrophe (' or ’) inside it is kept.
+// (The suggest-names handler still strips every single quote.)
+const DOUBLE_QUOTES = /["“”]/g;
+const WRAPPING_SINGLE_QUOTES = /^['‘’]\s*(.*?)\s*['‘’]$/;
+// For comparing against the fallback only: every quotation mark.
 const QUOTE_MARKS = /["'‘’“”]/g;
+
+function stripNameQuotes(raw) {
+  const name = raw.replace(DOUBLE_QUOTES, '').replace(/\s+/g, ' ').trim();
+  const wrapped = name.match(WRAPPING_SINGLE_QUOTES);
+  return wrapped ? wrapped[1] : name;
+}
 
 // Styling (Task #2124). dress_code is STRING(200) on world_events.
 const STYLING_MAX = { dress_code: 200, keyword: 30, text: 300, item: 120, list: 5 };
@@ -242,10 +253,10 @@ function fallbackNameFor(profile) {
 const nameKey = (v) => v.replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 // The drafted name, or '' (with a warning) when it is empty, 40 characters
-// or longer, or the fallback name. Quotation marks are stripped first; the
-// name is never truncated.
+// or longer, or the fallback name. Quotation marks are stripped first
+// (stripNameQuotes); the name is never truncated.
 function parseName(raw, profile) {
-  const name = typeof raw === 'string' ? raw.replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim() : '';
+  const name = typeof raw === 'string' ? stripNameQuotes(raw) : '';
   if (!name) {
     console.warn('[eventConceptDraft] name missing or empty; the event keeps its fallback name');
     return '';
