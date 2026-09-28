@@ -8,7 +8,6 @@ import {
   suggestEventTime, suggestDressCode, isAutoScheduledDate, resolveEventBasics,
   suggestEventCategory, suggestEventFormat,
   CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, OPPORTUNITY_TYPE_TO_FORMAT,
-  NAME_WORDS_TO_CATEGORY, NAME_WORDS_TO_FORMAT,
   draftStateOf, hasValueState,
 } from './eventBasics';
 import { computeEventPackageReadiness, computeEventState } from './eventReadinessSections';
@@ -247,10 +246,10 @@ describe('category and format suggestions (Task #1888)', () => {
   const tableValues = (t) => (Array.isArray(t) ? t.map((r) => r.value) : Object.values(t));
 
   test('every table value is in eventTaxonomy.json', () => {
-    for (const t of [CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, NAME_WORDS_TO_CATEGORY]) {
+    for (const t of [CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY]) {
       for (const v of tableValues(t)) expect(taxonomy.category).toContain(v);
     }
-    for (const t of [OPPORTUNITY_TYPE_TO_FORMAT, NAME_WORDS_TO_FORMAT]) {
+    for (const t of [OPPORTUNITY_TYPE_TO_FORMAT]) {
       for (const v of tableValues(t)) expect(taxonomy.format).toContain(v);
     }
   });
@@ -298,9 +297,10 @@ describe('category and format suggestions (Task #1888)', () => {
       expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'runway' } } }).value).toBe('fashion');
     });
 
-    test('from a word in the name (calendar spawn)', () => {
-      expect(suggestEventCategory(calendarSpawn, null))
-        .toEqual({ value: 'beauty_wellness', basis: 'From name: "beauty"' });
+    test('the name is never read (§8(u) R3, Task #2134): a calendar spawn\'s name suggests nothing', () => {
+      expect(suggestEventCategory(calendarSpawn, null)).toBeNull();
+      expect(suggestEventCategory({ name: 'The Winter Gala' })).toBeNull();
+      expect(suggestEventCategory({ name: 'Spring Beauty Pop-Up' })).toBeNull();
     });
 
     test('a linked venue is not a source (its type was chosen from the creator\'s category)', () => {
@@ -314,7 +314,7 @@ describe('category and format suggestions (Task #1888)', () => {
       expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'gaming' } } }, { content_category: 'drama' })).toBeNull();
       // An opportunity type with no plain mapping suggests nothing.
       expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'podcast' } } })).toBeNull();
-      // A name whose words point two ways is ambiguous.
+      // A name is never read (§8(u) R3), whatever its words.
       expect(suggestEventCategory({ name: 'Fashion Brunch' })).toBeNull();
       // event_type is never read.
       expect(suggestEventCategory({ event_type: 'brand_deal' })).toBeNull();
@@ -322,13 +322,17 @@ describe('category and format suggestions (Task #1888)', () => {
   });
 
   describe('suggestEventFormat', () => {
-    test('from a word in the name', () => {
-      expect(suggestEventFormat(calendarSpawn, null))
-        .toEqual({ value: 'brand_launch', basis: 'From name: "launch"' });
-      expect(suggestEventFormat({ name: 'The Winter Gala' }).value).toBe('gala');
-      expect(suggestEventFormat({ name: 'Sunday Brunch at Ivy' }).value).toBe('brunch');
-      expect(suggestEventFormat({ name: 'Midnight Première' }).value).toBe('premiere');
-      expect(suggestEventFormat({ name: 'Rose Garden Soirée' }).value).toBe('garden_soiree');
+    test('the name is never read (§8(u) R3, Task #2134): a name with a format word suggests nothing', () => {
+      expect(suggestEventFormat(calendarSpawn, null)).toBeNull();
+      expect(suggestEventFormat({ name: 'The Winter Gala' })).toBeNull();
+      expect(suggestEventFormat({ name: 'Sunday Brunch at Ivy' })).toBeNull();
+      expect(suggestEventFormat({ name: 'Midnight Première' })).toBeNull();
+      expect(suggestEventFormat({ name: 'Rose Garden Soirée' })).toBeNull();
+    });
+
+    test('the opportunity type still wins even when the name has a different format word', () => {
+      expect(suggestEventFormat({ name: 'Sunday Brunch', canon_consequences: { automation: { opportunity_type: 'award_show' } } }))
+        .toEqual({ value: 'gala', basis: 'From opportunity: award show' });
     });
 
     test('from the opportunity type', () => {

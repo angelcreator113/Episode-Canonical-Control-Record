@@ -184,12 +184,13 @@ export function suggestDressCode(event, venueLocation) {
 //     opportunity's own name; no linked venue.
 // event_type is never read: it is the mechanic, an axis separate from
 // category and format (docs/EVENT_EPISODE_FLOW.md §8(k)). Prestige is never
-// read: every event has one.
+// read: every event has one. The event's name is never read either: the name
+// describes the finished concept and is never used to infer category or
+// format (§8(u) R3; the name-word tables were retired by Task #2134).
 //
 // Each table maps one fact to one taxonomy value; a fact not listed (e.g.
 // content category "drama") suggests nothing. Sources are tried in a
-// fixed order and the first that yields a value wins. A name whose words
-// point at two different values is ambiguous and suggests nothing.
+// fixed order and the first that yields a value wins.
 
 // Content category (SocialProfile.content_category, free text) → category.
 // Whole value only, trimmed and lower-cased. fitness and lifestyle follow
@@ -236,28 +237,6 @@ export const OPPORTUNITY_TYPE_TO_FORMAT = {
 // itself chosen from the creator's content category, so a venue-based
 // suggestion would echo that choice rather than add a fact. If a mapping is
 // not deliberately defined, no suggestion beats one from a table nobody chose.
-
-// Words in the event's name → category / format. Whole words only.
-export const NAME_WORDS_TO_CATEGORY = [
-  { pattern: /\b(fashion|runway|couture|collection preview)\b/i, value: 'fashion' },
-  { pattern: /\b(beauty|skincare|wellness|spa)\b/i, value: 'beauty_wellness' },
-  { pattern: /\b(brunch|dinner|supper)\b/i, value: 'brunch_dining' },
-  { pattern: /\b(gallery|art|concert|premiere|film)\b/i, value: 'arts_entertainment' },
-  { pattern: /\bluxury\b/i, value: 'luxury_prestige' },
-  { pattern: /\btravel\b/i, value: 'travel_destination' },
-  { pattern: /\b(charity|community|fundraiser)\b/i, value: 'community_local' },
-];
-export const NAME_WORDS_TO_FORMAT = [
-  { pattern: /\bcocktails?\b/i, value: 'cocktail_party' },
-  { pattern: /\bgarden (party|soiree|soirée)(?![\p{L}])/iu, value: 'garden_soiree' },
-  { pattern: /\b(gallery|opening reception)\b/i, value: 'gallery_opening' },
-  { pattern: /\bgala\b/i, value: 'gala' },
-  { pattern: /\bbrunch\b/i, value: 'brunch' },
-  { pattern: /\bconcert\b/i, value: 'concert' },
-  { pattern: /\blaunch\b/i, value: 'brand_launch' },
-  { pattern: /\b(premiere|première)(?![\p{L}])/iu, value: 'premiere' },
-];
-
 const lower = (v) => text(v).toLowerCase();
 
 const automationOf = (event) => {
@@ -268,30 +247,15 @@ const automationOf = (event) => {
 // Only a value the taxonomy allows is ever suggested.
 const allowed = (value, list) => (value && list.includes(value) ? value : null);
 
-// One { value, word } from the name, or null when no word matches or the
-// words point at two different values.
-function fromName(name, table, list) {
-  const n = text(name);
-  if (!n) return null;
-  const hits = [];
-  for (const { pattern, value } of table) {
-    const m = n.match(pattern);
-    if (m && allowed(value, list) && !hits.some((h) => h.value === value)) {
-      hits.push({ value, word: m[0].toLowerCase() });
-    }
-  }
-  return hits.length === 1 ? hits[0] : null;
-}
-
 /**
  * Category suggestion. Sources, first match wins:
  *   1. the organizer's content_category (organizer: the linked creator
  *      profile; a brand organizer carries none);
  *   2. the Feed creator the event was started from
  *      (automation.content_category, written by from-profile);
- *   3. automation.opportunity_type (opportunity pipeline);
- *   4. a word in the event's name.
- * The linked venue is not a source (see the note above the name tables).
+ *   3. automation.opportunity_type (opportunity pipeline).
+ * The event's name is not a source (§8(u) R3); nor is the linked venue (see
+ * the "No venue_type table" note).
  * Returns { value, basis } or null when none of them says.
  */
 export function suggestEventCategory(event, organizer) {
@@ -310,17 +274,13 @@ export function suggestEventCategory(event, organizer) {
   const fromOpp = allowed(OPPORTUNITY_TYPE_TO_CATEGORY[oppType], EVENT_CATEGORIES);
   if (fromOpp) return { value: fromOpp, basis: `From opportunity: ${fmtFormat(oppType)}` };
 
-  const byName = fromName(ev.name, NAME_WORDS_TO_CATEGORY, EVENT_CATEGORIES);
-  if (byName) return { value: byName.value, basis: `From name: "${byName.word}"` };
-
   return null;
 }
 
 /**
- * Format suggestion. Sources, first match wins:
- *   1. a word in the event's name (it names the gathering directly);
- *   2. automation.opportunity_type (opportunity pipeline).
- * The linked venue is not a source (see the note above the name tables).
+ * Format suggestion. One source: automation.opportunity_type (opportunity
+ * pipeline). The event's name is not a source (§8(u) R3); nor is the linked
+ * venue (see the "No venue_type table" note).
  * `organizer` is taken for symmetry with suggestEventCategory, but no
  * organizer fact names a format: a creator's content category says what
  * world they are in, not what shape their event takes.
@@ -329,9 +289,6 @@ export function suggestEventCategory(event, organizer) {
 export function suggestEventFormat(event, organizer) {
   const ev = event || {};
   const auto = automationOf(ev);
-
-  const byName = fromName(ev.name, NAME_WORDS_TO_FORMAT, EVENT_FORMATS);
-  if (byName) return { value: byName.value, basis: `From name: "${byName.word}"` };
 
   const oppType = lower(auto.opportunity_type);
   const fromOpp = allowed(OPPORTUNITY_TYPE_TO_FORMAT[oppType], EVENT_FORMATS);
