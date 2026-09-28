@@ -654,7 +654,7 @@ async function executeAssistantAction(action, params = {}, context = {}) {
         if (!charId) return { error: 'No character_id specified' };
 
         const [char] = await sequelize.query(
-          `SELECT status FROM registry_characters WHERE id = :charId AND deleted_at IS NULL`,
+          `SELECT depth_level FROM registry_characters WHERE id = :charId AND deleted_at IS NULL`,
           { replacements: { charId }, type: sequelize.QueryTypes.SELECT }
         );
         if (char?.depth_level === 'alive') {
