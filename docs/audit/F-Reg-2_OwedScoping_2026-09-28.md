@@ -327,16 +327,40 @@ This read makes no recommendation and no ruling.
 
 ## §4 Tails — re-derived, not carried
 
+The commands are the register's own, as `PROJECT_CONTEXT.md` §6.3 records them (Task #2076's re-derivation).
+
+**FD tail: FD-69.**
+
 ```
-$ ls docs/audit/ | grep -E '^FD-[0-9]+_' | sort -t- -k2 -n
+$ ls docs/audit | grep -E '^FD-[0-9]+_' | sort -t- -k2 -n
 FD-66_Model_Migration_Contract_Mismatch_2026-08-18_DRAFT.md
 FD-69_Unauthenticated_Token_Issuance_2026-08-22_DRAFT.md
+```
 
+**XK tail: XK-4.** Two derivations give different answers:
+
+```
 $ ls docs/audit/ | grep -E '^XK-[0-9]+_'
 XK-2_Extent_Census_2026-09-05.md
 
-$ grep -oE 'PE #[0-9]+' docs/audit/Session_PE_Roster.md | sort -t'#' -k2 -n | tail -1
-PE #68
+$ grep -n '^### XK-' docs/audit/Cross_Keystone_Register.md
+57:### XK-1 — `paranoid` exposure
+208:### XK-2 — row-scope not enforced in SQL
+289:### XK-3 — no authorization substrate for the tenancy root
+410:### XK-4 — tenancy absent from the route contract
+```
+
+The register treats the second as the tail. XK numbers are entries in `Cross_Keystone_Register.md`, admitted only when "A Fix Plan revision ratifies its admission" (`Cross_Keystone_Register.md:30`). The same file says it "mints nothing on its own" and that "Entries acquire ownership only when a Fix Plan revision ratifies them" (`:9`). The `/audit-file` rule is "XK by the Cross-Keystone Register via a ratifying revision" (`.claude/skills/audit-file/SKILL.md:14`).
+
+XK-4 was ratified by `F-Stats-1_Fix_Plan_v1.62.md` §65.4 (`:9`, "**XK-4 is ratified** … It is admitted to `Cross_Keystone_Register.md` by this revision"; PR #2069). `PROJECT_CONTEXT.md` §6.3 records XK-4 as the tail, re-derived by Task #2076 with the second command.
+
+The filename scan finds only standalone notes named `XK-<n>_…`. The one such file, `XK-2_Extent_Census_2026-09-05.md` (#1271), is an extent census of an existing entry, not a mint. XK-1, XK-3 and XK-4 have no standalone file, so that scan cannot give the tail.
+
+**PE tail: PE #68.**
+
+```
+$ grep -oE '^### PE #[0-9]+' docs/audit/Session_PE_Roster.md | grep -oE '[0-9]+' | sort -n | tail -1
+68
 ```
 
 Nothing minted here.
