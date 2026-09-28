@@ -289,7 +289,7 @@ router.post('/promote-ghost/:characterId', async (req, res) => {
       character_key: ghost_name.toLowerCase().replace(/\s+/g, '_'),
       depth_level:   'sparked',
       status:        'draft',
-      role_type:     'supporting',
+      role_type:     'support',
       world_exists:  false,
     });
 
