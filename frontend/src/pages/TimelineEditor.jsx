@@ -33,6 +33,7 @@ function TimelineEditor() {
   const [canvasZoom, setCanvasZoom] = useState(1.0); // Zoom for preview canvas
   const [timelineZoom, setTimelineZoom] = useState(1.0); // Zoom for timeline tracks
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null); // 'not_found' | 'failed' | null
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [loopMode, setLoopMode] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
@@ -306,17 +307,36 @@ function TimelineEditor() {
 
   const loadEpisodeData = async () => {
     setLoading(true);
+    setLoadError(null);
+
+    // The requested episode must load, and must be that episode, before
+    // anything else does: never show another episode's timeline or a
+    // placeholder in its place (§8(w) P4, Task #2212).
+    let ep = null;
     try {
-      // Load episode, platform, scenes, and timeline data in parallel
-      const [episodeRes, platformRes, scenesRes, timelineRes] = await Promise.all([
-        episodeAPI.getById(episodeId),
+      const episodeRes = await episodeAPI.getById(episodeId);
+      ep = episodeRes?.data?.episode || episodeRes?.data || null;
+    } catch (error) {
+      console.error('Timeline: episode load failed:', error.message);
+      setLoadError(error?.response?.status === 404 ? 'not_found' : 'failed');
+      setLoading(false);
+      return;
+    }
+    if (!ep?.id || String(ep.id) !== String(episodeId)) {
+      console.error('Timeline: episode response did not match the requested episode', episodeId);
+      setLoadError('not_found');
+      setLoading(false);
+      return;
+    }
+    setEpisode(ep);
+
+    try {
+      // Load platform, scenes, and timeline data in parallel
+      const [platformRes, scenesRes, timelineRes] = await Promise.all([
         platformAPI.get(episodeId),
         sceneAPI.getAll(episodeId),
         timelineDataAPI.get(episodeId),
       ]);
-
-      const ep = episodeRes.data.episode || episodeRes.data;
-      setEpisode(ep);
 
       const plat = platformRes.data;
       setPlatform(plat.platform || 'youtube');
@@ -352,12 +372,6 @@ function TimelineEditor() {
       setKeyframes(tl.keyframes || []);
     } catch (error) {
       console.warn('API unavailable, using mock data:', error.message);
-      setEpisode({
-        id: episodeId,
-        episode_number: 1,
-        title: 'Untitled Episode',
-        platform: 'youtube',
-      });
       setPlatform('youtube');
       setScenes([
         { id: 'scene-1', scene_number: 1, title: 'Intro', duration_seconds: 5.0, background_url: null, characters: [], ui_elements: [] },
@@ -750,6 +764,23 @@ function TimelineEditor() {
         <div className="loading-state">
           <div className="spinner"></div>
           <p>Loading timeline...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="timeline-editor">
+        <div className="loading-state" role="alert">
+          <p>
+            {loadError === 'not_found'
+              ? `Episode ${episodeId || ''} was not found, so there is no timeline to open.`
+              : 'This episode could not be loaded, so its timeline was not opened.'}
+          </p>
+          <button className="back-btn" onClick={() => navigate(episodeId ? `/episodes/${episodeId}` : '/episodes')}>
+            ← Back to the episode
+          </button>
         </div>
       </div>
     );
