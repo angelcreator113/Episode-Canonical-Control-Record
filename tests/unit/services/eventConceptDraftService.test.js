@@ -394,9 +394,23 @@ describe('buildDraftPrompt context (Task #2154)', () => {
     expect(prompt).toContain('Calendar event: Holiday Gala');
     expect(prompt).toContain('Theme: luxury prestige');
     expect(prompt).toContain("What the world knows about it: The season's biggest night.");
-    // Only the block is added: everything from "Write these:" on is unchanged.
+    // After the block, the only change is the dropped host rule.
     const tail = (p) => p.slice(p.indexOf('Write these:'));
-    expect(tail(prompt)).toBe(tail(buildDraftPrompt(PROFILE, { venueName: 'The Loft' })));
+    const HOST_RULE = "- Do not call the creator the event's organizer or host.\n";
+    expect(tail(prompt)).toBe(tail(buildDraftPrompt(PROFILE, { venueName: 'The Loft' })).replace(HOST_RULE, ''));
+  });
+
+  test('with context the creator is the host: host wording allowed, the no-host rule dropped', () => {
+    const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: CAL });
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n")).toBe(true);
+    expect(prompt).toContain('Host (a Feed creator): Maya Moves');
+    expect(prompt).not.toContain('Started from Feed creator');
+    expect(prompt).not.toMatch(/Do not call the creator the event's organizer or host/);
+    // Without context the rule and the "started from" wording stay.
+    const plain = buildDraftPrompt(PROFILE, { venueName: 'The Loft' });
+    expect(plain).toContain("- Do not call the creator the event's organizer or host.");
+    expect(plain).toContain('Started from Feed creator: Maya Moves');
+    expect(plain).not.toContain('Host (a Feed creator)');
   });
 
   test('context fields are capped like the draft fields; a missing one is left out', () => {

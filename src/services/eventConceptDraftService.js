@@ -122,24 +122,33 @@ ${lines.join('\n')}
 `;
 }
 
-// No show name (doctrine rule 11). The creator is who the event was started
-// from, not its organizer or host (§8(r); Task #1790), so the prompt does
-// not call them either. context.context (Task #2154) adds a block only when
-// present, so a call without it (from-profile) gets the same prompt as before.
+// No show name (doctrine rule 11). From-profile: the creator is who the
+// event was started from, not its organizer or host (§8(r); Task #1790), so
+// the prompt does not call them either. With context.context (Task #2154,
+// the calendar path) the creator is the event's host (spawnEventsFromCalendar
+// saves them as host), so the prompt says so and drops that rule. A call
+// without context (from-profile) gets the same prompt as before, byte for byte.
 function buildDraftPrompt(profile, context = {}) {
   const p = profile || {};
+  const ctxBlock = contextBlock(context.context);
+  const creator = words(p.display_name) || words(p.handle);
   const facts = [
-    words(p.display_name) || words(p.handle) ? `Started from Feed creator: ${words(p.display_name) || words(p.handle)}` : null,
+    creator ? (ctxBlock ? `Host (a Feed creator): ${creator}` : `Started from Feed creator: ${creator}`) : null,
     words(p.content_category) ? `Creator's niche: ${words(p.content_category)}` : null,
     words(p.archetype) ? `Creator's archetype: ${words(p.archetype)}` : null,
     words(context.venueName) ? `Venue: ${words(context.venueName)}` : null,
   ].filter(Boolean);
 
-  return `Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.
+  const opening = ctxBlock
+    ? 'Draft a fictional social event in Lala\'s world, hosted by the Feed creator below.'
+    : 'Draft a fictional social event in Lala\'s world, fitting the Feed creator it was started from.';
+  const hostRule = ctxBlock ? '' : '- Do not call the creator the event\'s organizer or host.\n';
+
+  return `${opening}
 
 ${facts.length > 0 ? facts.join('\n') : 'No details beyond the event existing — keep it simple and do not invent specifics.'}
 
-${contextBlock(context.context)}Write these:
+${ctxBlock}Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
@@ -160,8 +169,7 @@ ${contextBlock(context.context)}Write these:
 - name: write this last, from the concept, activity and format above. Each name is under 40 characters. No quotation marks in the name itself.
 
 Rules:
-- Do not call the creator the event's organizer or host.
-- Do not invent a venue, date or guest names the details above don't give you.
+${hostRule}- Do not invent a venue, date or guest names the details above don't give you.
 - No quotation marks inside the values.
 
 Return ONLY this JSON, no other text:
