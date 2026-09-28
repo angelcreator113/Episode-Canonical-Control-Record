@@ -181,6 +181,17 @@ and anything that generates images, are not decided here.
 
 ---
 
+## Rules added (Evoni, 2026-09-28)
+
+**19. The Episode is the production workspace.** Ruled by Evoni on
+2026-09-28 (`docs/EVENT_EPISODE_FLOW.md` §8(w) P1), verbatim: "Once Start
+Episode is pressed, the Episode becomes the production workspace; ordinary
+production work should never require leaving the Episode."
+*Why:* ordinary production work should never require leaving the Episode.
+Recorded by #2207.
+
+---
+
 ## Not decided here
 
 Open navigation questions, not resolved by this document:
