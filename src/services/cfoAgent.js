@@ -35,6 +35,14 @@ function setBudget(updates) {
   return { ...budgetConfig };
 }
 
+// The AI error rate as a percentage: failed calls over all calls, 0 when there
+// were no calls (Task #2145). Pure arithmetic, kept apart so it can be tested.
+function errorRatePct({ errors, total }) {
+  const e = Number(errors) || 0;
+  const t = Number(total) || 0;
+  return t > 0 ? (e / t) * 100 : 0;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SUB-AGENT 1: Cost Watchdog
 // ═══════════════════════════════════════════════════════════════
@@ -91,12 +99,16 @@ async function costWatchdog(db, _options = {}) {
     }
 
     // 4. Error waste
+    // Task #2145: errors are the calls logged with is_error true, over all
+    // calls in the window. A row with is_error NULL counts as not an error
+    // (FILTER (WHERE is_error) skips NULL). This used to count every call as
+    // an "error" (COUNT(*)), so the rate could never read below 50%.
     const [errorRow] = await db.sequelize.query(`
-      SELECT COUNT(*)::int AS errors, COUNT(*) FILTER (WHERE NOT is_error)::int AS successes
+      SELECT COUNT(*) FILTER (WHERE is_error)::int AS errors, COUNT(*)::int AS total
       FROM ai_usage_logs WHERE created_at >= NOW() - INTERVAL '7 days'
     `, { type: db.sequelize.QueryTypes.SELECT });
 
-    const errorRate = errorRow.errors > 0 ? (errorRow.errors / (errorRow.errors + errorRow.successes)) * 100 : 0;
+    const errorRate = errorRatePct(errorRow);
     if (errorRate > 5) {
       findings.push({ level: 'critical', msg: `${errorRate.toFixed(1)}% error rate — failed calls waste money on partial token processing` });
       score -= 20;
@@ -708,4 +720,4 @@ function stopScheduler() {
   }
 }
 
-module.exports = { runFullAudit, runSubAgent, getHistory, getSchedulerStatus, startScheduler, stopScheduler, getBudget, setBudget };
+module.exports = { runFullAudit, runSubAgent, getHistory, getSchedulerStatus, startScheduler, stopScheduler, getBudget, setBudget, errorRatePct };
