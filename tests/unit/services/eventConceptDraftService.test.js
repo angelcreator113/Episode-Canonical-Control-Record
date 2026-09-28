@@ -18,11 +18,13 @@ const {
   resetDraftLimit,
   parseStyling,
   parseTaxonomy,
+  parseName,
   normaliseTime,
   FORMALITY_SCALE,
   R8_CONTRACT,
   MODELS,
   DRAFT_TIMEOUT_MS,
+  NAME_LIMIT,
 } = require('../../../src/services/eventConceptDraftService');
 
 const PROFILE = { display_name: 'Maya Moves', handle: 'mayamoves', content_category: 'fitness', archetype: 'soft_life' };
@@ -130,6 +132,53 @@ describe('draftEventConcept', () => {
     }
   });
 
+  test('Task #2135: the same one call also returns a valid name, as the last field', async () => {
+    const full = { ...REPLY, ...TAXONOMY, styling: STYLING, name: 'Golden Hour Sculpt Social' };
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify(full)));
+    const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+    expect(draft).toEqual(full);
+    expect(Object.keys(draft).pop()).toBe('name');
+    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test('Task #2135: an unusable name is dropped alone, with a warning; everything else is kept', async () => {
+    const cases = [
+      ['missing', undefined],
+      ['empty', '   '],
+      ['only quotation marks', '"“”"'],
+      ['the fallback pattern', 'Event with Maya Moves'],
+      ['the fallback pattern, other case and quoted', '"event with maya moves"'],
+      [`${NAME_LIMIT} characters`, 'x'.repeat(NAME_LIMIT)],
+      ['over the limit', 'The Golden Hour Rooftop Sculpt and Recovery Social'],
+    ];
+    for (const [label, name] of cases) {
+      console.warn.mockClear();
+      mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, ...TAXONOMY, styling: STYLING, name })));
+      const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+      expect({ label, draft }).toEqual({ label, draft: { ...REPLY, ...TAXONOMY, styling: STYLING } });
+      expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/name .*fallback name/));
+    }
+  });
+
+  test('Task #2135: double quotes are stripped anywhere, straight and curly; the name is never truncated', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, name: '“Golden  "Hour"”' })));
+    expect((await draftEventConcept(PROFILE, { userId: 'u1' })).name).toBe('Golden Hour');
+    const justUnder = 'y'.repeat(NAME_LIMIT - 1);
+    expect(parseName(justUnder, PROFILE)).toBe(justUnder);
+    expect(parseName(`${justUnder}y`, PROFILE)).toBe('');
+  });
+
+  test('Task #2135 review: apostrophes inside the name are kept; single quotes wrapping it are stripped', () => {
+    expect(parseName("Maya's Golden Hour", PROFILE)).toBe("Maya's Golden Hour");
+    expect(parseName('Maya’s Golden Hour', PROFILE)).toBe('Maya’s Golden Hour');
+    expect(parseName("'Golden Hour'", PROFILE)).toBe('Golden Hour');
+    expect(parseName('‘Golden Hour’', PROFILE)).toBe('Golden Hour');
+    expect(parseName('“Maya’s Golden Hour”', PROFILE)).toBe('Maya’s Golden Hour');
+    expect(parseName(`"'Golden Hour'"`, PROFILE)).toBe('Golden Hour');
+    // A lone wrapping quote is left as written.
+    expect(parseName("Golden Hour'", PROFILE)).toBe("Golden Hour'");
+  });
+
   test('a malformed reply gives null', async () => {
     mockMessagesCreate.mockResolvedValue(reply('{"concept": "half a reply"'));
     expect(await draftEventConcept(PROFILE, { userId: 'u1' })).toBeNull();
@@ -198,6 +247,21 @@ describe('buildDraftPrompt', () => {
     expect(prompt).toContain(`format: exactly one of ${FORMAT_VALUES.join(', ')}.`);
     expect(prompt).toContain('24-hour HH:MM');
     expect(prompt).not.toMatch(/invent a venue, date, time/);
+  });
+
+  test('Task #2135: asks for the name last, with the suggest-names name rules, and no show name', () => {
+    const prompt = buildDraftPrompt(PROFILE, { showName: 'Styling Adventures with Lala' });
+    expect(NAME_LIMIT).toBe(40);
+    expect(prompt).toContain('Each name is under 40 characters.');
+    expect(prompt).toContain('No quotation marks in the name itself.');
+    expect(prompt).toContain('- name: write this last, from the concept, activity and format above.');
+    expect(prompt).not.toMatch(/Do not name the event/);
+    expect(prompt).not.toMatch(/Styling Adventures/);
+    // Name is the last field asked for and the last key in the JSON shape.
+    const fieldLines = prompt.split('Rules:')[0];
+    expect(fieldLines.lastIndexOf('- name:')).toBeGreaterThan(fieldLines.lastIndexOf('- styling'));
+    expect(fieldLines.lastIndexOf('- name:')).toBeGreaterThan(fieldLines.lastIndexOf('- format:'));
+    expect(prompt.trim().endsWith('"name": "..."}')).toBe(true);
   });
 
   test('with no facts it still asks for a simple draft and invents nothing', () => {

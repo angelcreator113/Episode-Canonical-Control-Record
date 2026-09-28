@@ -71,7 +71,7 @@ import {
 import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
-import { resolveEventBasics, hasValueState, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
+import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import EventConceptSection from '../components/EventConceptSection';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
@@ -377,6 +377,9 @@ export default function EventPackagePage() {
   // too, set / suggested / missing like the others. The organizer is the
   // linked creator profile, when there is one.
   const basics = resolveEventBasics(event, venueLocation, { suggest: !used, organizer: sourceProfile });
+  // Task #2135: the name's draft state against its saved copy, or null.
+  const nameDraft = event.name ? draftStateOf(event, 'name', event.name) : null;
+  const NameStateIcon = nameDraft ? basicsStateIcon(nameDraft) : null;
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
   const startedFrom = used ? null : describeStartedFrom(event, startedFromProfile);
@@ -877,7 +880,20 @@ export default function EventPackagePage() {
             )}
           </div>
           <dl className="epp-fields">
-            <div><dt>Name</dt><dd>{event.name}</dd></div>
+            {/* Task #2135 (rule 14): a drafted name reads Auto-drafted · AI
+                draft, then Edited once changed; a name never drafted keeps
+                the plain row. */}
+            {nameDraft ? (
+              <div className={`epp-basic is-${nameDraft.state}`} data-testid="basics-name" data-state={nameDraft.state}>
+                <dt>
+                  Name
+                  <span className="epp-basic-state" data-testid="basics-name-state"><NameStateIcon size={11} aria-hidden="true" /> {basicsStateLabel(nameDraft)}</span>
+                </dt>
+                <dd>{event.name}</dd>
+              </div>
+            ) : (
+              <div data-testid="basics-name"><dt>Name</dt><dd>{event.name}</dd></div>
+            )}
             {BASICS_ORDER.map(renderBasicsRow)}
             <div><dt>Brand</dt><dd>{event.host_brand || 'Not set'}</dd></div>
             {renderBasicsRow('category')}

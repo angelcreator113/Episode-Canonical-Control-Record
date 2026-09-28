@@ -315,8 +315,9 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
       ? facts.join('\n')
       : 'No details recorded for this event yet beyond it existing — do not invent any.';
 
-    // Framed by the organizer's niche and the event's format and
-    // description (§8(u) R9, src/utils/suggestNamesFraming.js).
+    // Framed by the organizer's niche and the event's format and drafted
+    // concept, or its description when it has no concept (§8(u) R9,
+    // Task #2135, src/utils/suggestNamesFraming.js).
     const framing = buildSuggestNamesFraming(event, organizer);
 
     const prompt = `${framing} Suggest three short, creative names for it.
@@ -2551,6 +2552,10 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     for (const field of ['category', 'format', 'event_time']) {
       if (draft?.[field]) draftedTaxonomy[field] = draft[field];
     }
+    // Task #2135 (§8(u) R1, R3, R9): the draft's name, present only when
+    // valid (under 40 characters, not the fallback). Without one the event
+    // keeps "Event with <creator>" as before.
+    const draftedName = draft?.name || null;
     const draftAutomation = draft
       ? {
         concept: draft.concept,
@@ -2562,6 +2567,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           activity: 'ai_draft',
           ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
           ...Object.fromEntries(Object.keys(draftedTaxonomy).map((field) => [field, 'ai_draft'])),
+          ...(draftedName ? { name: 'ai_draft' } : {}),
         },
         // Task #2128 (rule 14): a copy of each drafted column value. The
         // Event Package shows a field Auto-drafted while its column equals
@@ -2571,6 +2577,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           description: draft.description,
           ...(styling ? { dress_code: styling.dress_code, dress_code_keywords: styling.dress_code_keywords } : {}),
           ...draftedTaxonomy,
+          ...(draftedName ? { name: draftedName } : {}),
         },
       }
       : {};
@@ -2578,7 +2585,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
 
     const eventData = {
       show_id: showId,
-      name: `${event_template || 'Event'} with ${creatorName}`,
+      name: draftedName || `${event_template || 'Event'} with ${creatorName}`,
       event_type: 'invite',
       host: null,
       host_brand: null,
