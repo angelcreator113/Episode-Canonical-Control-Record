@@ -67,6 +67,19 @@ Other measured redirects with meaningful successors remain aliases unless a late
 
 `/story-engine`, `/story-threads`, and `/story-calendar` become internal destinations under WRITE -> Stories. They are not sidebar items and are not palette-only. Stories is the hub.
 
+## Character Registry rulings
+
+Design ruling by Evoni, 2026-09-28. The Character Registry becomes a cast list rebuilt around the Feed. These rulings extend the Character Studio line under Mislabels above. Recorded verbatim; no code is changed by this section.
+
+- C1. The Character Registry holds the people who can appear in Styling Adventures with Lala: Lala, Feed hosts, people connected to those hosts, and a small number of recurring side characters.
+- C2. A Feed person becomes a registry character when they have a story role (appears in an episode, is cast in an event, or has a stated relationship to Lala or a host), not merely because they exist in the Feed.
+- C3. A Feed profile and its registry entry are two linked views of one person. The Feed holds social presence; the registry holds story role, relationships, history and episode use. There is one link, stored on the registry entry.
+- C4. The Character Registry stays the cast list; deeper editing happens in the character's Studio.
+- C5. Registry states: active; side character; retired (has episode history, no future casting, stays readable); archived (no episode history, hidden).
+- C6. Each profile gets "Remove from cast", which sets retired if the character has episode history and archived otherwise. "Delete permanently" is offered only when nothing references the character (episode, event, relationship, asset or story row), as checked by the app.
+- C7. No bulk deletion. Evoni reviews existing characters one by one: a Feed match is linked; a useful recurring character without a Feed profile is kept as a side character; an unused idea or duplicate is archived or deleted; a character already used in an episode is retired.
+- C8. The build waits until F-Reg-2's characterRegistry.js PRs (v1.2 R2) have merged.
+
 ## Governing principle
 
 Sidebar = workspaces and major hubs. Hub pages = navigation to specialist tools. Specialist tools = never expected to be memorized as standalone URLs.
