@@ -30,6 +30,7 @@ const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../ut
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
+const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
 const { normalizeRestrictions } = require('../services/eventTermsService');
 
@@ -384,12 +385,14 @@ Return ONLY this JSON, no other text:
       return res.status(500).json({ success: false, error: 'Claude returned invalid JSON', raw: text });
     }
 
-    // Strip any quote marks the model included anyway (straight and curly,
-    // single and double) and enforce the length rule defensively rather
-    // than trusting the prompt alone.
+    // Clean any quote marks the model included anyway, the same way the
+    // creation draft does (cleanEventName, Task #2139: double quotes
+    // anywhere, single quotes only when they wrap the name, apostrophes
+    // kept), and enforce the length rule defensively rather than trusting
+    // the prompt alone.
     const names = Array.isArray(parsed.names)
       ? parsed.names
-          .map((n) => String(n || '').replace(/["'‘’“”]/g, '').trim().slice(0, 40))
+          .map((n) => cleanEventName(String(n || '')).slice(0, 40))
           .filter(Boolean)
           .slice(0, 3)
       : [];

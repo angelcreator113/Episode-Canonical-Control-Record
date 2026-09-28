@@ -38,6 +38,7 @@
 // The model file is required directly, not the models index: it exports the
 // taxonomy lists on its define function and needs no database.
 const { CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
+const { cleanEventName } = require('../utils/cleanEventName');
 
 const MODELS = ['claude-haiku-4-5-20251001'];
 const DRAFT_TIMEOUT_MS = 10000;
@@ -46,20 +47,11 @@ const FIELD_MAX = { concept: 300, activity: 300, description: 1200 };
 // Task #2135: a drafted name is kept only when under this many characters,
 // the suggest-names prompt's "Each name is under 40 characters." rule.
 const NAME_LIMIT = 40;
-// Quotation marks in a drafted name (Evoni, Task #2135 review): double
-// quotes, straight and curly, are stripped anywhere; single quotes only when
-// they wrap the whole name, so an apostrophe (' or ’) inside it is kept.
-// (The suggest-names handler still strips every single quote.)
-const DOUBLE_QUOTES = /["“”]/g;
-const WRAPPING_SINGLE_QUOTES = /^['‘’]\s*(.*?)\s*['‘’]$/;
-// For comparing against the fallback only: every quotation mark.
+// Quotation marks in a drafted name (Evoni, Task #2135 review) are cleaned
+// by cleanEventName (src/utils/cleanEventName.js, Task #2139), which the
+// suggest-names handler shares. For comparing against the fallback only:
+// every quotation mark.
 const QUOTE_MARKS = /["'‘’“”]/g;
-
-function stripNameQuotes(raw) {
-  const name = raw.replace(DOUBLE_QUOTES, '').replace(/\s+/g, ' ').trim();
-  const wrapped = name.match(WRAPPING_SINGLE_QUOTES);
-  return wrapped ? wrapped[1] : name;
-}
 
 // Styling (Task #2124). dress_code is STRING(200) on world_events.
 const STYLING_MAX = { dress_code: 200, keyword: 30, text: 300, item: 120, list: 5 };
@@ -254,9 +246,9 @@ const nameKey = (v) => v.replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim().to
 
 // The drafted name, or '' (with a warning) when it is empty, 40 characters
 // or longer, or the fallback name. Quotation marks are stripped first
-// (stripNameQuotes); the name is never truncated.
+// (cleanEventName); the name is never truncated.
 function parseName(raw, profile) {
-  const name = typeof raw === 'string' ? stripNameQuotes(raw) : '';
+  const name = cleanEventName(raw);
   if (!name) {
     console.warn('[eventConceptDraft] name missing or empty; the event keeps its fallback name');
     return '';
