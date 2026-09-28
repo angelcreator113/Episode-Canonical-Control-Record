@@ -1304,7 +1304,9 @@ router.post('/evaluate-stories', requireAuth, aiRateLimiter, async (req, res) =>
 
     // Load franchise constraints + author notes + enrichment context for evaluation
     const charKeys = story.characters_in_scene || [];
-    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+    // F-Reg-2 v1.2 R1: the story's registry, read back from its dossier rows
+    // as the write-back does (O-e); null when it cannot be resolved.
+    const regId = await resolveStoryRegistryId(story);
     const [evalFranchise, evalAuthorNotes, evalContinuity, evalGrowth, evalWorldState, evalCrossings] = await Promise.all([
       loadFranchiseConstraints(charKeys),
       loadAuthorNotes(charKeys, regId),
@@ -1393,7 +1395,9 @@ router.post('/propose-memory', requireAuth, aiRateLimiter, async (req, res) => {
 
     // Load existing memories for context
     const charKeys = story.characters_in_scene || [];
-    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+    // F-Reg-2 v1.2 R1: the story's registry, read back from its dossier rows
+    // as the write-back does (O-e); null when it cannot be resolved.
+    const regId = await resolveStoryRegistryId(story);
 
     // Look up character_id for the story's character_key
     let characterId = null;
@@ -1466,7 +1470,9 @@ router.post('/propose-registry-update', requireAuth, aiRateLimiter, async (req, 
 
     // Load current registry profiles for characters in scene
     const charKeys = story.characters_in_scene || [];
-    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+    // F-Reg-2 v1.2 R1: the story's registry, read back from its dossier rows
+    // as the write-back does (O-e); null when it cannot be resolved.
+    const regId = await resolveStoryRegistryId(story);
 
     let charProfiles = [];
     if (charKeys.length && regId) {
@@ -1571,12 +1577,15 @@ router.post('/write-back', requireAuth, async (req, res) => {
     // 2. Commit confirmed memories — resolve character_id from character_key
     if (confirmed_memories?.length) {
       let charId = null;
-      if (story.character_key) {
-        const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
-        const regChar = regId
-          ? await db.RegistryCharacter.findOne({ where: { character_key: story.character_key, registry_id: regId }, attributes: ['id'], transaction })
-          : await db.RegistryCharacter.findOne({ where: { character_key: story.character_key }, attributes: ['id'], transaction });
+      // F-Reg-2 v1.2 R1: scoped to the story's own registry, as the registry
+      // updates below are (O-e). When that cannot be resolved, no character
+      // is guessed by key alone; the memories keep mem.character_id or null.
+      const regId = story.character_key ? await resolveStoryRegistryId(story, transaction) : null;
+      if (regId) {
+        const regChar = await db.RegistryCharacter.findOne({ where: { character_key: story.character_key, registry_id: regId }, attributes: ['id'], transaction });
         if (regChar) charId = regChar.id;
+      } else if (story.character_key) {
+        console.warn(`[write-back] story ${story_id}: registry not resolved; memories not linked by character_key "${story.character_key}"`);
       }
       for (const mem of confirmed_memories) {
         await db.StorytellerMemory.create({
