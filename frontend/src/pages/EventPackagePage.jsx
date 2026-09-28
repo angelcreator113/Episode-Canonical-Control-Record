@@ -72,6 +72,7 @@ import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
+import EventConceptSection from '../components/EventConceptSection';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
@@ -931,6 +932,7 @@ export default function EventPackagePage() {
             </div>
           )}
         </section>
+        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} />
 
         <section className="epp-section">
           <div className="epp-section-header">
