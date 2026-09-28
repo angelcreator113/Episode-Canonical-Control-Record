@@ -6,18 +6,27 @@
  * Otherwise shows an episode picker.
  */
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { episodeAPI } from '../services/api';
 import './StudioPickerPage.css';
 
 export default function StudioTimelinePage() {
   const navigate = useNavigate();
+  // An episode asked for by the link (e.g. Production → Scenes → Timeline
+  // Editor) always wins; the working episode is only used when none is
+  // requested (§8(w) P4, Task #2212).
+  const [searchParams] = useSearchParams();
+  const requestedId = searchParams.get('episode_id');
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [workingId] = useState(() => localStorage.getItem('working-episode-id'));
 
   /* If a working episode exists, go straight to the editor */
   useEffect(() => {
+    if (requestedId) {
+      navigate(`/episodes/${requestedId}/timeline`, { replace: true });
+      return;
+    }
     if (workingId) {
       navigate(`/episodes/${workingId}/timeline`, { replace: true });
       return;
@@ -30,9 +39,9 @@ export default function StudioTimelinePage() {
       })
       .catch(() => setEpisodes([]))
       .finally(() => setLoading(false));
-  }, [workingId, navigate]);
+  }, [requestedId, workingId, navigate]);
 
-  if (workingId) {
+  if (requestedId || workingId) {
     return (
       <div className="sp-loading">
         <div className="sp-loading-dots"><span /><span /><span /></div>
