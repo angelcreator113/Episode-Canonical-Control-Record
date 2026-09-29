@@ -348,9 +348,6 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
   const tierReward = tierCoinRewards[evalResult.tier_final] || 0;
   const paidBonus = (eventContext.cost > 0) ? (evalResult.tier_final === 'slay' ? 50 : evalResult.tier_final === 'pass' ? 25 : 0) : 0;
-  const coinDeltaFrom = (result) => Math.round(
-    (result?.summary?.total_income || 0) - (result?.summary?.total_expenses || 0) + tierReward + paidBonus
-  );
 
   // ── 10c–15. One transaction, idempotent (§8(x) D2, Task #2228) ──
   // Finalize, the reward rows, the coin change, the history row, the
@@ -374,17 +371,14 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       return { already_completed: true, message: 'Episode already completed', evaluation: lockedEpisode.evaluation_json };
     }
 
-    // ── 10c. Refuse a completion that would take coins below zero (Task #1933) ──
-    // Before #1933 the coin delta was applied with no check (applyDeltas
-    // floors coins at −9999), so an episode whose entry cost, wardrobe and
-    // extras exceeded Lala's balance left character_state negative. The
-    // financials are computed first without writing anything, so a refusal
-    // leaves no ledger rows behind.
-    const financialPreview = await finalizeEpisodeFinancials(episodeId, showId, db, { dryRun: true, transaction });
-    const projectedCoinDelta = coinDeltaFrom(financialPreview);
-    if (projectedCoinDelta < 0 && currentStats.coins + projectedCoinDelta < 0) {
-      throw new InsufficientCoinsError({ needed: -projectedCoinDelta, have: currentStats.coins, action: 'episode_completion' });
-    }
+    // ── 10c. The ledger balance before this completion books anything ──
+    // D1 (§8(x), §8(y); Task #2247): the ledger is Lala's balance. Locking the
+    // show here (after the episode, the order every ledger writer keeps) also
+    // seeds an unseeded ledger. The refusal (Task #1933) is checked after the
+    // rows are written, in step 12a, against the real balance; a refusal
+    // rolls every row back.
+    const { lockLedgerBalance, syncCoinsFromLedger } = require('./coinLedgerSync');
+    const ledgerBefore = await lockLedgerBalance(sequelize, showId, { transaction });
 
     // ── 11. Finalize financials (coins come from here, not evaluation) ──
     financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction });
@@ -434,9 +428,20 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       );
     }
 
-    // Final coin delta = financial pipeline net + tier reward + paid bonus
+    // Recompute coins from the ledger (D1): every row above, milestones and
+    // the event reward included. The coin delta is the ledger's movement
+    // across this completion; a finalize that already ran alone is in
+    // ledgerBefore.
     const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
-    mergedDeltas.coins = coinDeltaFrom(financialResult);
+    const { balance: ledgerAfter } = await syncCoinsFromLedger(sequelize, showId, { transaction });
+    mergedDeltas.coins = ledgerAfter - ledgerBefore;
+
+    // ── 12a. Refuse a completion that takes Lala below zero (Task #1933, §8(y) Q6) ──
+    // Only a completion that spends is refused; one that earns is not, even
+    // if a legacy balance is still below zero.
+    if (ledgerAfter < 0 && mergedDeltas.coins < 0) {
+      throw new InsufficientCoinsError({ needed: -mergedDeltas.coins, have: ledgerBefore, action: 'episode_completion' });
+    }
 
     // ── 11b. Financial mood deltas ──
     // Translate the episode's financial outcome into stress deltas so Lala's
@@ -485,13 +490,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     // ── 12. Apply all deltas to character state ──
     newState = applyDeltas(currentStats, mergedDeltas);
 
-    // Task #1933: coins move by the delta in the same statement that checks
-    // the balance (changeCoins: `coins + :delta >= 0`), not by writing back a
-    // total computed from the read in step 4. A spend that landed after that
-    // read can no longer make this write go below zero; it is refused.
-    newState.coins = await changeCoins(sequelize, {
+    // Coins were written by syncCoinsFromLedger above; this statement writes
+    // the other stats only (delta 0).
+    newState.coins = ledgerAfter;
+    await changeCoins(sequelize, {
       stateId: characterState.id,
-      delta: mergedDeltas.coins,
+      delta: 0,
       transaction,
       action: 'episode_completion',
       extraSet: `reputation = :reputation, brand_trust = :brand_trust,

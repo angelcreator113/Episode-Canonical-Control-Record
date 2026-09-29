@@ -17,6 +17,12 @@
  * sequelize.query is mocked; getOutfitScore is a jest.fn. No database.
  */
 
+// D1 (Task #2247): completion syncs coins from the ledger; the ledger itself
+// is covered in tests/integration/coinLedgerSync.integration.test.js.
+jest.mock('../../../src/services/coinLedgerSync', () => ({
+  lockLedgerBalance: jest.fn(async () => 1000),
+  syncCoinsFromLedger: jest.fn(async () => ({ balance: 1000, rows_updated: 1 })),
+}));
 jest.mock('../../../src/services/financialTransactionService', () => ({
   finalizeEpisodeFinancials: jest.fn(async () => ({
     summary: { total_income: 0, total_expenses: 0 }, balance_before: 500, balance_after: 500,

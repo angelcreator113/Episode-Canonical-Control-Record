@@ -9,6 +9,12 @@
  * over a small in-memory world. No database.
  */
 const mockModels = {};
+// D1 (Task #2247): completion syncs coins from the ledger; the ledger itself
+// is covered in tests/integration/coinLedgerSync.integration.test.js.
+jest.mock('../../../src/services/coinLedgerSync', () => ({
+  lockLedgerBalance: jest.fn(async () => 1000),
+  syncCoinsFromLedger: jest.fn(async () => ({ balance: 1000, rows_updated: 1 })),
+}));
 jest.mock('../../../src/models', () => mockModels);
 jest.mock('../../../src/controllers/wardrobeController', () => new Proxy({}, { get: () => (req, res) => res.json({}) }));
 jest.mock('../../../src/middleware/auth', () => ({

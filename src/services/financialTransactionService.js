@@ -338,13 +338,38 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   // a failure writes nothing, and two finalizes of one episode run one after
   // the other, so the second sees the first's rows and books nothing. A
   // caller that already holds a transaction (completeEpisode) passes it.
+  //
+  // D1 (§8(x), §8(y) Q6; Task #2247): run alone, it then recomputes
+  // character_state.coins from the ledger in the same transaction, and
+  // refuses (InsufficientCoinsError, everything rolled back) when its rows
+  // would take Lala below zero. A caller that passes its own transaction
+  // (completeEpisode) books more rows after this, so it syncs and checks
+  // itself.
   if (!dryRun && !transaction) {
-    return sequelize.transaction((t) => finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t }));
+    return sequelize.transaction(async (t) => {
+      const result = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t });
+      if (result.already_finalized) return result;
+      const { syncCoinsFromLedger } = require('./coinLedgerSync');
+      const { InsufficientCoinsError } = require('./coinBalanceGuard');
+      const { balance } = await syncCoinsFromLedger(sequelize, showId, { transaction: t });
+      const net = (result.summary?.total_income || 0) - (result.summary?.total_expenses || 0);
+      if (balance < 0 && net < 0) {
+        throw new InsufficientCoinsError({ needed: -net, have: balance - net, action: 'finalize_financials' });
+      }
+      return { ...result, coins_after: balance };
+    });
   }
   const rootSequelize = sequelize;
   if (transaction) {
     sequelize = withTransaction(rootSequelize, transaction);
     await sequelize.query(`SELECT id FROM episodes WHERE id = :episodeId FOR UPDATE`, { replacements: { episodeId } });
+    // Then the show (D1, Task #2247): episode before show, the order every
+    // ledger writer keeps. This also seeds an unseeded ledger, so the
+    // balance read below includes Lala's starting bankroll.
+    if (!dryRun) {
+      const { lockLedgerBalance } = require('./coinLedgerSync');
+      await lockLedgerBalance(rootSequelize, showId, { transaction });
+    }
   }
 
   // 1. Check if already finalized (finalize's own rows, not the outfit lock's)

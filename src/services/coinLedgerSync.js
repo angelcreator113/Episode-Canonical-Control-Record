@@ -64,6 +64,16 @@ async function lockedLedgerBalance(sequelize, showId, transaction) {
 }
 
 /**
+ * Lock the show and return its ledger balance, seeding it if needed, without
+ * writing coins. For a caller that needs the balance before it books rows
+ * (Complete's movement and refusal; Task #2247).
+ */
+async function lockLedgerBalance(sequelize, showId, { transaction } = {}) {
+  requireTransaction('lockLedgerBalance', transaction);
+  return lockedLedgerBalance(sequelize, showId, transaction);
+}
+
+/**
  * Write the ledger balance to every 'lala' character_state row of the show
  * (§8(y) Q3, Q4) and return it.
  *
@@ -99,6 +109,7 @@ async function spendFromLedger(sequelize, { showId, cost, transaction, action = 
 }
 
 module.exports = {
+  lockLedgerBalance,
   syncCoinsFromLedger,
   spendFromLedger,
   LEDGER_BALANCE_SQL,

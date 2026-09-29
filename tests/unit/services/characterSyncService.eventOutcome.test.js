@@ -16,6 +16,12 @@
 
 let mockTier = 'slay';
 
+// D1 (Task #2247): completion syncs coins from the ledger; the ledger itself
+// is covered in tests/integration/coinLedgerSync.integration.test.js.
+jest.mock('../../../src/services/coinLedgerSync', () => ({
+  lockLedgerBalance: jest.fn(async () => 1000),
+  syncCoinsFromLedger: jest.fn(async () => ({ balance: 1000, rows_updated: 1 })),
+}));
 jest.mock('../../../src/utils/evaluationFormula', () => {
   const actual = jest.requireActual('../../../src/utils/evaluationFormula');
   return {

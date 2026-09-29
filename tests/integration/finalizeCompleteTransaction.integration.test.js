@@ -13,7 +13,8 @@ jest.unmock('uuid');
 const crypto = require('crypto');
 const models = require('../../src/models');
 const { completeEpisode } = require('../../src/services/episodeCompletionService');
-const { finalizeEpisodeFinancials } = require('../../src/services/financialTransactionService');
+const { finalizeEpisodeFinancials, getCurrentBalance } = require('../../src/services/financialTransactionService');
+const { DEFAULT_STARTING_BALANCE } = require('../../src/utils/financialRates');
 
 const { sequelize } = models;
 
@@ -101,7 +102,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(count(rows, 'event_entry')).toBe(1);
     expect(count(rows, 'tier_reward')).toBe(1);
     expect(await status(ids)).toBe('accepted');
-    expect(await coins(ids)).toBe(1000 + result.stat_deltas.coins);
+    // D1 (Task #2247): coins are the ledger, seeded once with the starting
+    // balance, not the row's old 1000 plus a delta.
+    expect(await coins(ids)).toBe(await getCurrentBalance(sequelize, ids.show));
+    expect(await coins(ids)).toBe(DEFAULT_STARTING_BALANCE + result.stat_deltas.coins);
   });
 
   it('two completes at once: one completes, the other finds it done, and nothing is booked twice', async () => {
@@ -118,7 +122,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const rows = await ledger(ids);
     expect(count(rows, 'event_entry')).toBe(1);
     expect(count(rows, 'tier_reward')).toBe(1);
-    expect(await coins(ids)).toBe(1000 + done[0].stat_deltas.coins);
+    expect(await coins(ids)).toBe(await getCurrentBalance(sequelize, ids.show));
+    expect(await coins(ids)).toBe(DEFAULT_STARTING_BALANCE + done[0].stat_deltas.coins);
   });
 
   it('two standalone finalizes at once book the episode once', async () => {
