@@ -3,6 +3,7 @@
 const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, EVENT_EXTRAS } = require('../utils/financialRates');
 const { withTransaction } = require('../utils/withTransaction');
 const { wholeCoins } = require('../utils/wholeCoins');
+const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 
 /**
  * Financial Transaction Service
@@ -51,7 +52,8 @@ async function getStartingBalance(sequelize, showId) {
 
 async function getCurrentBalance(sequelize, showId) {
   try {
-    // Sum all executed transactions to get current balance
+    // Sum the executed transactions that count (§8(aa) M6: a deleted
+    // episode's rows stay as history but leave the balance; Task #2267)
     const [row] = await sequelize.query(
       `SELECT
         COUNT(*)::int as tx_count,
@@ -60,8 +62,8 @@ async function getCurrentBalance(sequelize, showId) {
           SUM(CASE WHEN type = 'expense' OR type = 'deduction' THEN amount ELSE 0 END),
           0
         ) as balance
-      FROM financial_transactions
-      WHERE show_id = :showId AND status = 'executed' AND deleted_at IS NULL`,
+      FROM financial_transactions ft
+      WHERE ft.show_id = :showId AND ${countedLedgerRows('ft')}`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     );
     const balance = parseFloat(row?.balance) || 0;
