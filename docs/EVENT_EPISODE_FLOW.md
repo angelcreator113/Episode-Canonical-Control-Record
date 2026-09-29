@@ -2711,6 +2711,41 @@ episode filter) with the wardrobe economy.
 - Phases A–C are not filed.
 - Phase A waits on D1's reconciliation (#2250).
 
+**(bb) Task rulings (Evoni, 2026-09-29, Task #2262).** Docs only: no code
+is changed by this entry. The basis is `docs/TASK_LISTS_READ.md` (Task
+#2256, PR #2261), cited, not restated. The rulings are recorded verbatim.
+
+**T1.** Only accepted host or brand deliverables can be required. Generated
+social tasks are Lala's goals or optional ideas, never required; the
+automatic "Sponsored Post 1/2 (required)" is removed.
+
+**T2.** One task list, with a source on every item: host requirement, brand
+deliverable, Lala's goal, or optional idea. The Career Checklist, phone
+overlays and Run Sheet are views of it.
+
+**T3.** Coins never come from ticking a task. Contract pay follows
+deliverable status (Law 8). Whether finishing a goal affects story stats is
+decided in the deal design.
+
+**T4.** The Career Checklist is saved and reloaded; it shows saved tasks,
+and Regenerate replaces its image instead of adding another asset row. The
+AI never invents deliverables; it may only suggest goals and ideas, clearly
+marked.
+
+**T5.** After Start Episode, task edits go to the episode's copy.
+
+**T6.** Regenerating an episode keeps completion flags for tasks that carry
+over.
+
+**T7.** Wardrobe-list completion comes from Lala's actual wardrobe choices,
+with no manual toggle that gets silently overwritten.
+
+**Where these stand:**
+- T3 is filed as a fix: #2263.
+- T1, T2 and T4–T7 are not filed.
+- T3's contract pay by deliverable status belongs to the deal build (§8(z)
+  Law 8).
+
 ---
 
 ## 9. Owed before enforcement
