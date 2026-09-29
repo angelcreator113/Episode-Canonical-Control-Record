@@ -588,9 +588,11 @@ router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
       careerTier = await getAccessibleCareerTier(showId, models);
     } catch { /* default to 5 — no gating */ }
 
-    // Get available events (not used, or reusable), filtered by career tier
+    // Available events: draft or ready, never used by an episode and not
+    // deleted (§8(x) D5, Task #2231), filtered by career tier.
     const [events] = await models.sequelize.query(
       `SELECT * FROM world_events WHERE show_id = :showId AND status IN ('draft', 'ready')
+       AND used_in_episode_id IS NULL AND deleted_at IS NULL
        AND (career_tier IS NULL OR career_tier <= :careerTier)
        ORDER BY prestige ASC`,
       { replacements: { showId, careerTier } }
@@ -612,7 +614,16 @@ router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
       if (prestigeDiff <= 1) { score += 2; reasons.push('sweet spot difficulty'); }
 
       // Check requirements met
-      const reqs = typeof ev.requirements === 'string' ? JSON.parse(ev.requirements || '{}') : (ev.requirements || {});
+      // Requirements are a weight, not a gate (§8(x) D5): an unmet one lowers
+      // the score and the event is still returned. A malformed value counts
+      // as no requirements rather than failing the whole route.
+      let reqs = {};
+      try {
+        reqs = typeof ev.requirements === 'string' ? JSON.parse(ev.requirements || '{}') : (ev.requirements || {});
+      } catch (parseErr) {
+        console.error(`[career-goals] suggest-events: unreadable requirements on event ${ev.id}:`, parseErr.message);
+      }
+      if (!reqs || typeof reqs !== 'object') reqs = {};
       let reqsMet = true;
       if (reqs.reputation_min && (charState.reputation || 0) < reqs.reputation_min) reqsMet = false;
       if (reqs.brand_trust_min && (charState.brand_trust || 0) < reqs.brand_trust_min) reqsMet = false;
