@@ -2534,7 +2534,8 @@ Q8 and Q9 have no question in the note; Evoni added them.
 no code is changed by this entry. The subsections are:
 - **(z-1)** a read-only inventory of the currency-like fields and labels, as
   the code stands;
-- **(z-2)** Evoni's laws and doctrine, verbatim;
+- **(z-2)** Evoni's laws and doctrine, verbatim, with her final wording for
+  Law 0 and the doctrine (given before this entry was pushed);
 - **(z-3)** a proposed map from each law to where it is built.
 
 Standing labels:
@@ -2628,7 +2629,7 @@ again at finalize.
 
 **Law 0.** Prime Coins are the LalaVerse's only currency; money and Prime
 Coins are the same thing. Anything not spendable (retail value, gift value,
-pending pay, difficulty) is never called coins.
+pending pay, difficulty) is never called coins. One Prime Coin feels like $1.
 
 1. Lala receives one starting bankroll per show/career.
 2. Her balance persists across every episode.
@@ -2648,9 +2649,7 @@ pending pay, difficulty) is never called coins.
 **Doctrine.** Money in the LalaVerse should behave like money in Lala's
 life: finite, persistent, earned, spent, saved, gifted, owed and invested.
 Prime Coins are not merely a score; they are a canonical resource whose
-history tells part of Lala's career story. $1 should feel like a $1 coin
-
-(Recorded as given; the doctrine's last sentence has no closing period.)
+history tells part of Lala's career story.
 
 **(z-3) Where each law is built — proposed, for Evoni's approval**
 
