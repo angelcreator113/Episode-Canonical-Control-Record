@@ -53,8 +53,9 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/todo/social`);
       const saved = res?.data?.social_tasks;
+      const assetUrl = res?.data?.career_asset_url || null; // T4: the saved image
       if (Array.isArray(saved) && saved.length > 0) {
-        setCareerList((prev) => ({ ...(prev || {}), tasks: saved }));
+        setCareerList((prev) => ({ ...(prev || {}), tasks: saved, assetUrl: prev?.assetUrl || assetUrl }));
       }
     } catch (err) {
       console.error('[TodoList] task list fetch error:', err);

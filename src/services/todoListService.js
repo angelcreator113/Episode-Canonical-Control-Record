@@ -245,6 +245,8 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
  * @param {object} event - The world event
  * @param {object} options - { width, listType: 'wardrobe' | 'career' }
  */
+const CAREER_LIST_ROLE = 'UI.OVERLAY.CAREER_LIST';
+
 // T2 (§8(bb); Task #2294): the source label on a rendered one-list item.
 // 'deliverable' is a T1-era deliverable task stamped before owed_to existed.
 const SOURCE_BADGE = {
@@ -754,31 +756,56 @@ async function generateCareerList(episodeId, showId, models) {
   const buffer = renderTodoAsset(tasks.map((t, i) => ({ ...t, order: i + 1 })), event, { listType: 'career' });
   const assetUrl = await uploadTodoAsset(buffer, episodeId);
 
+  // T4 (§8(bb); Task #2300): Regenerate replaces the episode's Career List
+  // image instead of adding another asset row. The newest live row is
+  // updated in place; one is created only when the episode has none. Rows
+  // left by earlier regenerates are not touched.
   const { Asset } = models;
-  const asset = await Asset.create({
-    id: uuidv4(),
-    name: `${event.name} — Career List`,
-    asset_type: 'TODO_LIST',
-    asset_role: 'UI.OVERLAY.CAREER_LIST',
-    asset_group: 'EPISODE',
-    asset_scope: 'EPISODE',
-    purpose: 'MAIN',
-    category: 'overlay',
-    entity_type: 'prop',
-    s3_url_raw: assetUrl,
-    s3_url_processed: assetUrl,
-    episode_id: episodeId,
-    show_id: showId,
-    approval_status: 'approved',
-    metadata: {
-      source: 'career-list-generator',
-      list_type: 'career',
-      event_id: event.id,
-      event_name: event.name,
-      task_count: tasks.length,
-      generated_at: new Date().toISOString(),
-    },
-  });
+  const metadata = {
+    source: 'career-list-generator',
+    list_type: 'career',
+    event_id: event.id,
+    event_name: event.name,
+    task_count: tasks.length,
+    generated_at: new Date().toISOString(),
+  };
+  // Raw SQL, named columns only: the Asset model declares s3_key_processed,
+  // which no migration adds to assets, so a model read can fail on it.
+  const [existing] = await sequelize.query(
+    `SELECT id, metadata FROM assets
+     WHERE episode_id = :episodeId AND asset_role = :role AND deleted_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    { replacements: { episodeId, role: CAREER_LIST_ROLE }, type: sequelize.QueryTypes.SELECT }
+  );
+  let asset;
+  if (existing) {
+    const prior = typeof existing.metadata === 'string' ? JSON.parse(existing.metadata || '{}') : (existing.metadata || {});
+    await sequelize.query(
+      `UPDATE assets SET name = :name, s3_url_raw = :url, s3_url_processed = :url,
+              metadata = CAST(:metadata AS jsonb), updated_at = NOW()
+       WHERE id = :id`,
+      { replacements: { id: existing.id, name: `${event.name} — Career List`, url: assetUrl, metadata: JSON.stringify({ ...prior, ...metadata }) } }
+    );
+    asset = { id: existing.id };
+  } else {
+    asset = await Asset.create({
+      id: uuidv4(),
+      name: `${event.name} — Career List`,
+      asset_type: 'TODO_LIST',
+      asset_role: CAREER_LIST_ROLE,
+      asset_group: 'EPISODE',
+      asset_scope: 'EPISODE',
+      purpose: 'MAIN',
+      category: 'overlay',
+      entity_type: 'prop',
+      s3_url_raw: assetUrl,
+      s3_url_processed: assetUrl,
+      episode_id: episodeId,
+      show_id: showId,
+      approval_status: 'approved',
+      metadata,
+    });
+  }
 
   return { tasks, assetUrl, assetId: asset.id, eventName: event.name, listType: 'career' };
 }
