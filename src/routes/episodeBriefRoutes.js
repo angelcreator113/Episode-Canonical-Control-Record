@@ -56,6 +56,17 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'Brief is locked. Unlock before editing.' });
     }
 
+    // Terms lock (§8(x) D4; Task #2230): the brief's event is the episode's
+    // source event (§8(w) P2). Once set it cannot be changed or cleared here.
+    if (req.body.event_id !== undefined && brief.event_id
+        && String(req.body.event_id ?? '') !== String(brief.event_id)) {
+      return res.status(409).json({
+        error: "This episode was started from an event, so its source event can't change. Its terms and episode link are locked.",
+        code: 'EVENT_TERMS_LOCKED',
+        fields: ['event_id'],
+      });
+    }
+
     const updatable = [
       'arc_number', 'position_in_arc', 'episode_archetype',
       'narrative_purpose', 'designed_intent', 'allowed_outcomes',
