@@ -340,7 +340,23 @@ router.get('/episodes/:episodeId/todo/social', requireAuth, async (req, res) => 
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     );
 
-    if (!todoList) return res.json({ success: true, social_tasks: [], financial_summary: null });
+    // T4 (§8(bb); Task #2300): the Career Checklist's saved image, so the
+    // view reloads it with the list. The newest live row, the one Regenerate
+    // updates.
+    let careerAssetUrl = null;
+    try {
+      const [careerAsset] = await sequelize.query(
+        `SELECT s3_url_processed, s3_url_raw FROM assets
+         WHERE episode_id = :episodeId AND asset_role = 'UI.OVERLAY.CAREER_LIST' AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1`,
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+      );
+      careerAssetUrl = careerAsset?.s3_url_processed || careerAsset?.s3_url_raw || null;
+    } catch (assetErr) {
+      console.error('[TodoList] career asset read failed (no image returned):', assetErr.message);
+    }
+
+    if (!todoList) return res.json({ success: true, social_tasks: [], financial_summary: null, career_asset_url: careerAssetUrl });
 
     let socialTasks = todoList.social_tasks;
     if (typeof socialTasks === 'string') socialTasks = JSON.parse(socialTasks);
@@ -354,7 +370,7 @@ router.get('/episodes/:episodeId/todo/social', requireAuth, async (req, res) => 
       score: (socialTasks || []).length > 0 ? Math.round(((socialTasks || []).filter(t => t.completed).length / socialTasks.length) * 10) : 0,
     };
 
-    return res.json({ success: true, social_tasks: socialTasks || [], financial_summary: financialSummary, completion });
+    return res.json({ success: true, social_tasks: socialTasks || [], financial_summary: financialSummary, completion, career_asset_url: careerAssetUrl });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

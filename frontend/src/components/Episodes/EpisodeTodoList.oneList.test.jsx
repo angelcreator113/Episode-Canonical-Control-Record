@@ -51,6 +51,20 @@ describe('Career Checklist: a view of the one task list (T2)', () => {
     expect(screen.getByText(/4 tasks on the episode's list/)).toBeTruthy();
   });
 
+  test('the saved checklist image comes back with the list (T4, Task #2300)', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/todo') return { data: { data: WARDROBE } };
+      if (url === '/api/v1/episodes/ep-1/todo/social') {
+        return { data: { success: true, social_tasks: SAVED, career_asset_url: 'https://cdn/career.png' } };
+      }
+      return { data: {} };
+    });
+    render(<EpisodeTodoList episodeId="ep-1" showId="show-1" />);
+    fireEvent.click(await screen.findByText('💼 Career Checklist'));
+    fireEvent.click(await screen.findByText('Preview Overlay'));
+    expect(screen.getByAltText('Career list').getAttribute('src')).toBe('https://cdn/career.png');
+  });
+
   test('with nothing saved it offers Generate; the result is the saved list', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/todo') return { data: { data: WARDROBE } };
