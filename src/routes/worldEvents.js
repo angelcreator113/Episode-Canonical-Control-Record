@@ -33,6 +33,7 @@ const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
 const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
 const { normalizeRestrictions } = require('../services/eventTermsService');
+const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -658,6 +659,25 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       return res.status(409).json(staleSaveBody(expected, current[0]));
     };
 
+    // Terms lock (§8(x) D4, §8(w) P9; Task #2230). Once the event has
+    // started a live episode, its access requirements, compensation,
+    // restrictions and episode link cannot change here. A locked field sent
+    // with its stored value is not a change, so full-form saves still work.
+    if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
+      const [storedRows] = await models.sequelize.query(
+        `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id
+           FROM world_events WHERE id = :eventId AND show_id = :showId`,
+        { replacements: { eventId, showId } }
+      );
+      if (storedRows?.[0]) {
+        const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
+        if (lockEpisode) {
+          const changed = changedLockedFields(storedRows[0], updates, lockEpisode);
+          if (changed.length > 0) return res.status(409).json(termsLockedBody(lockEpisode, changed));
+        }
+      }
+    }
+
     // Build dynamic SET clause
     const allowedFields = [
       'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
@@ -1036,6 +1056,15 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     // Get episode
     const episode = await models.Episode.findByPk(episode_id);
     if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+
+    // Terms lock (§8(x) D4; Task #2230): an event that started a live
+    // episode is never moved to another one. Injecting into the same
+    // episode again is allowed.
+    const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
+    if (lockEpisode && String(lockEpisode.id) !== String(episode_id)) {
+      return res.status(409).json(termsLockedBody(lockEpisode, ['used_in_episode_id'],
+        `This event started ${episodeLabel(lockEpisode)}, so it can't be moved to another episode. Its terms and episode link are locked.`));
+    }
 
     // Build [EVENT:] tag
     const parts = [`name="${event.name}"`];

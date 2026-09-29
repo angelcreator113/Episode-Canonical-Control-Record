@@ -72,6 +72,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [scriptInfo, setScriptInfo] = useState(null);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [linkBusy, setLinkBusy] = useState(false);
+  // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
+  const [linkError, setLinkError] = useState(null);
   // World locations for the show — needed to resolve venue_location_id on
   // each linked event into a name + thumbnail. Locations don't propagate
   // to the episode directly; the Locations card reads them through the
@@ -232,6 +234,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const linkEvent = async (eventId) => {
     if (!eventId || !showId) return;
     setLinkBusy(true);
+    setLinkError(null);
     try {
       await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: episode.id });
       const ev = allEvents.find(e => e.id === eventId);
@@ -241,6 +244,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       }
     } catch (err) {
       console.error('[Episode] Failed to link event:', err);
+      setLinkError(`Could not link the event: ${err.response?.data?.error || err.message || 'request failed'}`);
     } finally {
       setLinkBusy(false);
     }
@@ -248,12 +252,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const unlinkEvent = async (eventId) => {
     if (!eventId || !showId) return;
     setLinkBusy(true);
+    setLinkError(null);
     try {
       await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: null });
       setLinkedEvents(prev => prev.filter(e => e.id !== eventId));
       setAllEvents(prev => prev.map(e => e.id === eventId ? { ...e, used_in_episode_id: null } : e));
     } catch (err) {
       console.error('[Episode] Failed to unlink event:', err);
+      setLinkError(`Could not unlink the event: ${err.response?.data?.error || err.message || 'request failed'}`);
     } finally {
       setLinkBusy(false);
     }
@@ -624,6 +630,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 </div>
               ))}
             </div>
+          )}
+          {linkError && (
+            <p role="alert" style={{ margin: '0 0 6px', fontSize: 12, color: '#b45309' }}>{linkError}</p>
           )}
           <select
             value=""

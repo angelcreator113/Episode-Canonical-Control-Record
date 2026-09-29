@@ -7,8 +7,10 @@
 // at a live episode (deleted_at IS NULL) is refused with 409 naming that
 // episode; a link to a deleted episode does not block — the state the
 // 2026-09-22 data reset left. POST .../inject re-points the link in the same
-// UPDATE, which releases the old episode, so a move (swap, reorder, AI-fix
-// reassign) is never refused. Mocked, no database.
+// UPDATE. It used to move an event between live episodes freely (swap,
+// reorder, AI-fix reassign); since §8(x) D4 (Evoni, 2026-09-29; Task #2230)
+// the terms lock refuses to move an event that started a live episode.
+// Mocked, no database.
 
 const express = require('express');
 const request = require('supertest');
@@ -20,7 +22,7 @@ const mockEvents = {
   'ev-unused': { id: 'ev-unused', show_id: SHOW, name: 'Unused Soiree', used_in_episode_id: null },
   'ev-live': { id: 'ev-live', show_id: SHOW, name: 'Gala', used_in_episode_id: 'ep-live' },
   'ev-dead': { id: 'ev-dead', show_id: SHOW, name: 'Reset Brunch', used_in_episode_id: 'ep-dead' },
-  // Three events each linked to a live episode, for swap and season reorder.
+  // Three events each linked to a live episode, for swap and re-inject.
   'ev-a': { id: 'ev-a', show_id: SHOW, name: 'Event A', used_in_episode_id: 'ep-a' },
   'ev-b': { id: 'ev-b', show_id: SHOW, name: 'Event B', used_in_episode_id: 'ep-b' },
   'ev-c': { id: 'ev-c', show_id: SHOW, name: 'Event C', used_in_episode_id: 'ep-c' },
@@ -133,7 +135,7 @@ afterEach(() => jest.restoreAllMocks());
 const inject = (eventId, episodeId) =>
   request(app).post(`/api/v1/world/${SHOW}/events/${eventId}/inject`).send({ episode_id: episodeId });
 
-describe('POST /world/:showId/events/:eventId/inject (a move, never refused)', () => {
+describe('POST /world/:showId/events/:eventId/inject (a started event is never moved, §8(x) D4)', () => {
   test('an unused event is injected: script saved and event marked used', async () => {
     const res = await inject('ev-unused', 'ep-target');
     expect(res.status).toBe(200);
@@ -144,44 +146,35 @@ describe('POST /world/:showId/events/:eventId/inject (a move, never refused)', (
     expect(mockEventUpdates[0].sql).toMatch(/status = 'used'/);
   });
 
-  test('an event linked to a live episode moves to another: the link is re-pointed, releasing the old episode', async () => {
+  test('an event linked to a live episode is not moved to another: 409, nothing written', async () => {
     const res = await inject('ev-live', 'ep-target');
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(mockEventUpdates).toHaveLength(1);
-    // One column, one episode: the UPDATE replaces ep-live with ep-target.
-    expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-live' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('EVENT_TERMS_LOCKED');
+    expect(res.body.episode).toEqual({ id: 'ep-live', title: 'Gala Night', episode_number: 3 });
+    expect(res.body.error).toBe('This event started Episode 3 "Gala Night", so it can\'t be moved to another episode. Its terms and episode link are locked.');
+    expect(mockEpisodeUpdate).not.toHaveBeenCalled();
+    expect(mockEventUpdates).toHaveLength(0);
+    expect(mockEvents['ev-live'].used_in_episode_id).toBe('ep-live');
   });
 
-  test('swap: two events linked to live episodes trade episodes (WorldAdmin handleSwapEpisodes)', async () => {
+  test('swap: two events linked to live episodes are both refused and keep their episodes (WorldAdmin handleSwapEpisodes)', async () => {
     // handleSwapEpisodes fires both injects together with Promise.all.
     const [a, b] = await Promise.all([inject('ev-a', 'ep-b'), inject('ev-b', 'ep-a')]);
-    expect(a.status).toBe(200);
-    expect(b.status).toBe(200);
-    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-b');
-    expect(mockEvents['ev-b'].used_in_episode_id).toBe('ep-a');
+    expect(a.status).toBe(409);
+    expect(b.status).toBe(409);
+    expect(mockEventUpdates).toHaveLength(0);
+    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-a');
+    expect(mockEvents['ev-b'].used_in_episode_id).toBe('ep-b');
   });
 
-  test('season reorder: three linked events rotate across three live episodes (applyReorderPlan)', async () => {
-    // applyReorderPlan injects each changed event into its new episode, one
-    // after another; each move releases the event's previous episode.
-    const plan = [['ev-a', 'ep-b'], ['ev-b', 'ep-c'], ['ev-c', 'ep-a']];
-    for (const [eventId, episodeId] of plan) {
-      const res = await inject(eventId, episodeId);
-      expect(res.status).toBe(200);
-    }
-    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-b');
-    expect(mockEvents['ev-b'].used_in_episode_id).toBe('ep-c');
-    expect(mockEvents['ev-c'].used_in_episode_id).toBe('ep-a');
-    // Each event holds exactly one link, so none ends up on two live episodes.
-    const links = ['ev-a', 'ev-b', 'ev-c'].map(id => mockEvents[id].used_in_episode_id);
-    expect(new Set(links).size).toBe(3);
-  });
-
-  test('after a move, generating from the moved event is refused: its new episode is live', async () => {
-    await inject('ev-a', 'ep-b');
+  test('a started event can be injected into its own episode again', async () => {
+    const res = await inject('ev-a', 'ep-a');
+    expect(res.status).toBe(200);
+    expect(mockEventUpdates).toHaveLength(1);
+    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-a');
+    // Still the one live episode it started: generating from it is refused.
     await expect(episodeGenerator.generateEpisodeFromEvent(mockEvents['ev-a'], serviceModels()))
-      .rejects.toMatchObject({ code: 'EVENT_ALREADY_HAS_EPISODE', episode: expect.objectContaining({ id: 'ep-b' }) });
+      .rejects.toMatchObject({ code: 'EVENT_ALREADY_HAS_EPISODE', episode: expect.objectContaining({ id: 'ep-a' }) });
   });
 
   test('an event whose linked episode was deleted is injected', async () => {
