@@ -15,6 +15,7 @@ const path = require('path');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables } = require('./eventTermsService');
 const { withDeliverableTasks, isSocialTaskRequired, socialTaskSource } = require('../utils/socialTaskSource');
+const { readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('./episodeTaskCopyService');
 
 // T2 (§8(bb); Task #2294): each item's source, as the rendered list shows it.
 const SOURCE_LABEL = {
@@ -264,7 +265,15 @@ async function uploadChecklist(buffer, eventId) {
 
 async function generateSocialChecklist(event, models, options = {}) {
   const forceRebuild = options.forceRebuild === true;
+  // T5 (§8(bb); Task #2304): after Start Episode the list lives on the
+  // episode (options.episode, from startedEpisodeFor). It is read from and
+  // written to episode_todo_lists.social_tasks, not the event.
+  const episode = options.episode || null;
   let tasks = event.canon_consequences?.automation?.social_tasks || [];
+  if (episode) {
+    const onEpisode = await readEpisodeSocialTasks(models.sequelize, episode.id);
+    if (onEpisode && onEpisode.length > 0) tasks = onEpisode;
+  }
   if (!Array.isArray(tasks)) tasks = [];
 
   if (forceRebuild || tasks.length === 0) {
@@ -345,7 +354,7 @@ async function generateSocialChecklist(event, models, options = {}) {
         s3_url_raw: assetUrl,
         s3_url_processed: assetUrl,
         show_id: event.show_id,
-        episode_id: event.used_in_episode_id || null,
+        episode_id: episode?.id || event.used_in_episode_id || null,
         metadata: {
           source: 'social-checklist-generator',
           event_id: event.id,
@@ -359,10 +368,21 @@ async function generateSocialChecklist(event, models, options = {}) {
     }
   }
 
+  // After Start Episode the tasks go to the episode's copy (T5), keeping
+  // completion for items that carry over; the event keeps only the
+  // checklist image reference.
+  if (episode) {
+    tasks = await writeEpisodeSocialTasks(
+      models.sequelize,
+      { episodeId: episode.id, showId: event.show_id, eventId: event.id },
+      tasks
+    );
+  }
+
   // Store tasks + checklist URL back on the event automation data
   try {
     const auto = event.canon_consequences?.automation || {};
-    auto.social_tasks = tasks;
+    if (!episode) auto.social_tasks = tasks;
     if (assetUrl) auto.social_checklist_url = assetUrl;
     if (asset?.id) auto.social_checklist_asset_id = asset.id;
     await models.sequelize.query(
@@ -371,7 +391,7 @@ async function generateSocialChecklist(event, models, options = {}) {
     );
   } catch { /* non-blocking */ }
 
-  return { tasks, assetUrl, assetId: asset?.id || null };
+  return { tasks, assetUrl, assetId: asset?.id || null, savedTo: episode ? 'episode' : 'event', episodeId: episode?.id || null };
 }
 
 module.exports = {

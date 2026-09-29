@@ -34,6 +34,7 @@ const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
 const { normalizeRestrictions, listEventDeliverables } = require('../services/eventTermsService');
 const { withDeliverableTasks } = require('../utils/socialTaskSource');
+const { startedEpisodeFor, readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('../services/episodeTaskCopyService');
 const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
 
 async function getModels() {
@@ -3230,12 +3231,15 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', requireA
     }
 
     const socialChecklistService = require('../services/socialChecklistService');
-    const result = await socialChecklistService.generateSocialChecklist(event, models, { forceRebuild: force });
+    // T5 (§8(bb); Task #2304): after Start Episode, the episode's copy.
+    const episode = await startedEpisodeFor(models.sequelize, eventId);
+    const result = await socialChecklistService.generateSocialChecklist(event, models, { forceRebuild: force, episode });
 
+    const where = episode ? " on the episode's task list" : '';
     return res.json({
       success: true,
       data: result,
-      message: `${force ? 'Social tasks regenerated' : 'Social checklist generated'} with ${result.tasks.length} tasks`,
+      message: `${force ? 'Social tasks regenerated' : 'Social checklist generated'} with ${result.tasks.length} tasks${where}`,
     });
   } catch (error) {
     console.error('Generate social checklist error:', error);
@@ -3645,6 +3649,7 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
+    const startedEpisode = await startedEpisodeFor(sequelize, eventId);
 
     // Update asset: approved + link to episode (handle missing approval_status column)
     try {
@@ -3672,13 +3677,24 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
     } else if (asset.asset_role === 'UI.OVERLAY.SOCIAL_TASKS') {
       auto.social_checklist_asset_id = assetId;
       auto.social_checklist_url = asset.s3_url_processed;
-      if (meta.tasks) auto.social_tasks = typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks;
+      // T5 (§8(bb); Task #2304): after Start Episode the edited tasks go to
+      // the episode's copy (below), not the event's.
+      if (meta.tasks && !startedEpisode) auto.social_tasks = typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks;
     }
 
     await sequelize.query(
       'UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :id',
       { replacements: { cc: JSON.stringify({ ...event.canon_consequences, automation: auto }), id: eventId } }
     );
+
+    // T5: an approved social-task edit after Start Episode is saved to the
+    // episode's copy, keeping completion for tasks that carry over.
+    let savedTo = 'event';
+    if (startedEpisode && asset.asset_role === 'UI.OVERLAY.SOCIAL_TASKS' && meta.tasks) {
+      const edited = typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks;
+      await writeEpisodeSocialTasks(sequelize, { episodeId: startedEpisode.id, showId, eventId }, edited);
+      savedTo = 'episode';
+    }
 
     // If linked to episode, upsert episode_todo_lists for wardrobe
     if (event.used_in_episode_id && asset.asset_role === 'UI.OVERLAY.WARDROBE_LIST') {
@@ -3704,7 +3720,7 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
       } catch (err) { console.warn('[OverlayApprove] episode_todo_lists upsert error:', err.message); }
     }
 
-    return res.json({ success: true, message: 'Overlay approved', episodeId: event.used_in_episode_id });
+    return res.json({ success: true, message: 'Overlay approved', episodeId: event.used_in_episode_id, savedTo });
   } catch (err) {
     console.error('[OverlayApprove] Error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -3823,6 +3839,14 @@ router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', requireA
     const { sequelize } = models;
 
     const assetRole = overlayType === 'wardrobe' ? 'UI.OVERLAY.WARDROBE_LIST' : 'UI.OVERLAY.SOCIAL_TASKS';
+
+    // T5 (§8(bb); Task #2304): after Start Episode, social tasks are edited
+    // from the episode's copy.
+    if (overlayType !== 'wardrobe') {
+      const episode = await startedEpisodeFor(sequelize, eventId);
+      const onEpisode = episode ? await readEpisodeSocialTasks(sequelize, episode.id) : null;
+      if (onEpisode && onEpisode.length > 0) return res.json({ success: true, tasks: onEpisode, source: 'episode', episodeId: episode.id });
+    }
 
     // Find most recent asset for this overlay type
     const [asset] = await sequelize.query(

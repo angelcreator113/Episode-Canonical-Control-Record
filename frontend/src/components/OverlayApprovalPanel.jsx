@@ -85,12 +85,13 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
     if (!pendingAssetId) return;
     setApproving(true);
     try {
-      await api.post(`/api/v1/world/${showId}/events/${event.id}/approve-overlay`, { assetId: pendingAssetId });
+      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/approve-overlay`, { assetId: pendingAssetId });
       const approvedId = pendingAssetId;
       setPendingAssetId(null);
       setShowPreview(false);
       if (onGenerated) onGenerated(imageUrl, approvedId, tasks);
-      showToast(`${title} approved`);
+      // T5 (Task #2304): after Start Episode, task edits are saved to the episode's copy.
+      showToast(res?.data?.savedTo === 'episode' ? `${title} approved — saved to the episode's task list` : `${title} approved`);
     } catch (err) {
       setError(err.response?.data?.error || 'Approval failed');
     } finally {
