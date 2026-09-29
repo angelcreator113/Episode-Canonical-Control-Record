@@ -36,11 +36,11 @@ MEASURED. v1.2 is the newest F-Reg-2 plan.
 
 ## §1 RULINGS — Evoni, 2026-09-29
 
-**RULED**, verbatim, as recorded on Task #2240.
+**RULED**, verbatim, as recorded on Task #2240. R2 is Evoni's corrected wording, given before this revision was pushed and recorded as a comment on #2240; the issue body carries her first wording.
 
 > R1. Fix group 2 is closed, with row 12 recorded as moot and row 74 as blocked on the registry build.
 
-> R2. O-a, O-c and O-d are the next F-Reg-2 work, in that order, each scoped by a read before any fix.
+> R2. O-a, O-c and O-d are the next F-Reg-2 work, in that order, each scoped by a read before any fix. O-a's read first checks whether #2197 (deploy BR) already fixed it; if it did, the read records the evidence and O-a is discharged in the next version.
 
 > R3. Family and Boundary, the eight story-table columns, and v1.0 §4.5's unverified items remain owed, unsequenced.
 
@@ -136,7 +136,7 @@ $ grep -n "depth_level" src/routes/memories/assistant.js | head -2
 
 ATTESTED: `F-Deploy-1_Deploy_2026-09-28_BR.md:115` records #2197 (`660eb775`) as deployed in BR.
 
-This plan does not discharge O-a. INFERRED: O-a's read (R2) may find nothing left to fix. That finding, and whether O-a closes, is for that read and for Evoni.
+This plan does not discharge O-a. Under R2, O-a's read first checks whether #2197 already fixed it; if it did, the read records the evidence and O-a is discharged in the next version.
 
 `onboarding.js` and `therapy.js` are unchanged since the scoping read's basis.
 
@@ -223,7 +223,7 @@ The tails are FD-69, XK-4 and PE #68. Nothing is minted here.
 
 - **RULES** (§1, Evoni):
   - Fix group 2 is closed: row 12 moot, row 74 blocked on the registry build.
-  - O-a, O-c, O-d are next, in that order, each scoped by a read before any fix.
+  - O-a, O-c, O-d are next, in that order, each scoped by a read before any fix. O-a's read first checks #2197; if it fixed O-a, O-a is discharged in the next version.
   - Family and Boundary, the story-table columns and v1.0 §4.5 stay owed, unsequenced.
 - **Notes, unruled:** `storyteller_memories.line_id` drift (§5). O-a's site was changed by #2197 (§3.1).
 - **Banners:** none. **Closes:** fix group 2, by R1. **Discharges:** nothing. **Mints:** nothing.
