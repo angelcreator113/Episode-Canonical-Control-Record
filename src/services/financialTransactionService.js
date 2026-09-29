@@ -22,6 +22,8 @@ const { wholeCoins } = require('../utils/wholeCoins');
 
 const { v4: uuidv4 } = require('uuid');
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ─── SOCIAL TASK REWARD RATES ────────────────────────────────────────────────
 
 const SOCIAL_TASK_REWARDS = {
@@ -233,7 +235,12 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
       amount: reward,
       description: `Milestone: ${goal.label} — ${goal.description || ''}`.trim(),
       source_type: 'milestone',
-      source_id: goal.id,
+      // source_id is a UUID column; goal ids are slugs ('rising-star'), so the
+      // id rides in metadata.goal_id. Writing the slug made the insert fail:
+      // silently outside a transaction (the payout was never booked), and,
+      // inside Finalize/Complete's transaction (§8(x) D2), failing the whole
+      // completion (Task #2252).
+      source_id: UUID_RE.test(String(goal.id)) ? goal.id : null,
       source_name: goal.label,
       metadata: { goal_id: goal.id, threshold: goal.threshold },
       status: 'executed',
@@ -665,8 +672,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       // Feed integration — one post per milestone reached, plus an
       // aggregate big-spend post when the episode moved a lot of coins.
       // Wrapped in try/catch so a feed-table issue can't 500 the
-      // finalize endpoint; inside a transaction it runs in its own
-      // savepoint so a failed post cannot abort the rest.
+      // finalize endpoint. Inside a transaction the posts run after it
+      // commits, outside it (Task #2252): the feed writers swallow their
+      // own SQL errors, and a swallowed error inside the transaction left
+      // it aborted, so its COMMIT silently rolled the money back (a
+      // standalone finalize) or failed the next statement (Complete).
+      // Posting after commit also means no post for money that rolled back.
       const postToFeed = async (sequelize) => {
         const feed = require('./financialFeedService');
         if (result.triggered.length > 0) {
@@ -683,14 +694,13 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           nextGoalThreshold: nextGoal?.threshold,
         });
       };
-      try {
-        if (transaction) {
-          await rootSequelize.transaction({ transaction }, (savepoint) => postToFeed(withTransaction(rootSequelize, savepoint)));
-        } else {
-          await postToFeed(sequelize);
-        }
-      } catch (feedErr) {
+      const postSafely = () => postToFeed(rootSequelize).catch((feedErr) => {
         console.warn('[finalizeEpisodeFinancials] feed post failed:', feedErr.message);
+      });
+      if (transaction && typeof transaction.afterCommit === 'function') {
+        transaction.afterCommit(postSafely);
+      } else {
+        await postSafely();
       }
       return result.triggered.map((t) => ({ ...t, payout_tx: withoutTransaction(t.payout_tx) }));
     })(),
