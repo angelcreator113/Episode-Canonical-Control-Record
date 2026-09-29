@@ -2530,6 +2530,157 @@ Q8 and Q9 have no question in the note; Evoni added them.
 - **Held:** the deal-type design note (D6–D10) waits on Evoni's
   go-ahead, because payouts depend on the ledger design.
 
+**(z) LalaVerse economy laws (Evoni, 2026-09-29, Task #2253).** Docs only:
+no code is changed by this entry. The subsections are:
+- **(z-1)** a read-only inventory of the currency-like fields and labels, as
+  the code stands;
+- **(z-2)** Evoni's laws and doctrine, verbatim, with her final wording for
+  Law 0 and the doctrine (given before this entry was pushed);
+- **(z-3)** a proposed map from each law to where it is built.
+
+Standing labels:
+- **MEASURED**: read from the code at the basis below, cited by name, with
+  a line where useful.
+- **INFERRED**: a conclusion drawn from reading code, not from running it.
+- **RULED**: an earlier ruling, cited.
+
+Basis: `origin/main` at `e786433046fada8562befd1691fff70917d322c4` (#2251,
+D1 PR 1). At this basis, D1's later PRs (#2247–#2250) are not merged. Two
+balances exist:
+- the ledger (`financial_transactions`, read by `getCurrentBalance`);
+- `character_state.coins`, which the spend guards check.
+
+**(z-1) Currency inventory (MEASURED unless marked)**
+
+*The balance itself.*
+
+| Field | What it does | Lala spends or earns it? |
+|---|---|---|
+| `character_state.coins` | Checked by the spend guards and many prompts. Moved by deltas (`coinBalanceGuard`), set by the manual edit and the admin reset (500), seeded at 500 | It is the balance, as a cached copy (D1) |
+| Ledger balance (`getCurrentBalance`) | Sum of executed, live `financial_transactions`. Shown by the Finance tab, `/balance`, the forecast and the phone's Money Balance | It is the balance (D1: the authority) |
+| `shows.metadata.starting_balance` (default `DEFAULT_STARTING_BALANCE` 1900) | Seeds the ledger's `seed` row | Earned once (§8(y) Q1) |
+| `episodes.total_income`, `total_expenses`, `financial_score` | Per-episode summary written by finalize and Complete. The script writer calls `income − expenses` "balance" | Not spendable: a summary |
+
+*Things Lala spends.*
+
+| Field | Where it is charged | Notes |
+|---|---|---|
+| `world_events.cost_coins` | Finalize, as `event_entry` | Not charged when `is_paid` is true (`normalizePaidFreeFlags`). `is_free` has no column. |
+| `EVENT_EXTRAS` (drinks, valet, photo booth) | Finalize, every event, one `styling_extras` row | Charged for paid and free events alike. The forecast's photo-booth rule differs from finalize's. |
+| `wardrobe.coin_cost` | `/wardrobe/select`, `/lock-outfit-atomic`, `/purchase`, for unowned `coin`-locked pieces | Moves both balances in one transaction and sets `is_owned` |
+| `wardrobe.price` (retail, DECIMAL) | Finalize, as `coin_cost \|\| price` for unowned, non-gifted, non-borrowed pieces not bought through the lock | The outfit snapshot (`PUT /world/:showId/events/:eventId/outfit`) stores `price` but not `coin_cost`, so **retail `price` is what finalize charges** |
+| `wardrobe.rental_price` | Finalize, as `wardrobe_rental`, when `acquisition_type` is `rented` | **No writer exists**, and the snapshot omits it. A rented piece is charged full `price` as `wardrobe_purchase`: the rental path is dead. |
+| Tier reward on FAIL (−25) | Complete, `tier_reward` as an expense | |
+| `manual_adjustment` (negative) | The Characters-tab edit | |
+
+INFERRED: a piece bought through `/select` or `/purchase` can be charged
+again at finalize.
+- Those ledger rows carry no `episode_id`.
+- Finalize excludes only the lock's rows (`flow = 'lock_outfit'`).
+- Finalize reads `is_owned` from the snapshot, frozen when the outfit was
+  saved.
+
+*Things Lala earns.*
+
+| Field | Where it is paid | Notes |
+|---|---|---|
+| `world_events.payment_amount` with `is_paid` | Finalize, `event_payment` | Events made from opportunities are always `is_paid: false` (`compensationFromOpportunity`), so their pay is recorded but not paid |
+| Brand-deal content fee | Finalize, `content_revenue`: 10% of the payment for `event_type` `brand_deal` | Nothing is delivered or checked for it |
+| `SOCIAL_TASK_REWARDS` × `TIMING_MULTIPLIERS` | Finalize, `social_task_reward`, for tasks marked completed | `viral_bonus` is defined but unused |
+| Tier rewards (`tierCoinRewards`) | Complete, `tier_reward` | |
+| Paid bonus | Complete, `tier_paid_bonus` | Keyed on raw `cost_coins > 0`, even for paid events whose entry cost is not charged. The forecast keys on the charged cost. |
+| `world_events.rewards.coins` | Complete, `event_reward`, on slay or pass | Ledger only until D1 PR 2: `coinDeltaFrom` leaves it out |
+| Milestone `reward_coins` | Finalize, `checkMilestones` | The insert has always failed: #2252, unmerged at this basis |
+| `manual_adjustment` (positive) | The Characters-tab edit | |
+
+*Not spendable, but labelled as coins or money.*
+
+| Field or label | What it actually is |
+|---|---|
+| `price_estimate` | AI output only (`wardrobeLibrary.js`). It becomes the default `price` (minimum 150) and `coin_cost`, so it is charged **indirectly** |
+| `wardrobe.resale_value` | Unused |
+| `evaluationFormula` coin delta (`computeStatDeltas`, `applyDeltas`) | A preview. Complete overwrites it. |
+| EvaluateEpisode override costs ("Coins −50", "Coins −100") | Never charged: Complete re-runs `evaluate` without overrides |
+| The financial forecast (`/financial-forecast`), `checkAffordability`, `episodeGeneratorService.calculateFinancials` | Estimates. Each prices outfits and extras differently from finalize. |
+| `requirements.coins_min` ("🪙 Coins min") | A suggester weight (§8(x) D5), never charged |
+| Career goals with `target_metric` `coins` | Progress only |
+| Opportunity `payment_amount`, `expenses`, `net_value`, `payment_status` | Pipeline display. Moving to `paid` sets `payment_status` only; no ledger row. |
+| `outfit_score.outfit_cost`, the closet's owned and unowned value | Display. `outfit_cost` sums `price` including owned pieces, and feeds the "Dropped N coins" big-spend post. |
+| `CONTENT_REVENUE_PER_PRESTIGE` | Unused |
+| Profile money fields (`monthly_earnings_range`, `income_breakdown`, `money_behavior_*`) | Characterisation |
+| `AIUsageLog.cost_usd`, `EpisodeScript.generation_cost` | Real USD API cost, not game money |
+
+*UI and prompt wording.*
+- **`$` shown for coin amounts:**
+  - `EpisodeScriptWriterPage` ("(`$`…)", with a `DollarSign` icon, on the episode net);
+  - the script-writer, wardrobe-intelligence, distribution, episode-generator and feed-pipeline prompts;
+  - opportunity pay in WorldAdmin (the same field on events is labelled "coins").
+- **The same `wardrobe.price` in two units:** shown with `$` in WorldAdmin, OutfitCalendar, EpisodeAssetsTab, ShowWardrobeTab, ShowInsightsTab, UniversePage and the phone's WardrobePriceRenderer, but charged as coins at finalize.
+- **Coin labels on things that are not spent or earned as labelled:**
+  - "Total Event Budget 🪙" sums `cost_coins`, including paid events whose entry cost is never charged, and leaves out extras and wardrobe;
+  - "🪙 Coins min";
+  - the override "Coins −50" and "Coins −100";
+  - `🪙 {cost_coins}` on paid events;
+  - "Lala earns coins for attending", which is true only with `is_paid`.
+- **One balance, five names:** "🪙 Balance", "Coins", "💰 … coins", "Money Balance", "Wealth". Some read the ledger and some read `character_state.coins`. "Prime Coins" appears only in ShowSettings' economy-model list.
+- **Real USD, correctly labelled `$`:** AI cost (CFOAgent, AICostTracker), location price level, the CreateEpisode placeholder.
+
+**(z-2) The laws — Evoni, 2026-09-29, recorded verbatim**
+
+**Law 0.** Prime Coins are the LalaVerse's only currency; money and Prime
+Coins are the same thing. Anything not spendable (retail value, gift value,
+pending pay, difficulty) is never called coins. One Prime Coin feels like $1.
+
+1. Lala receives one starting bankroll per show/career.
+2. Her balance persists across every episode.
+3. Every change in spendable coins comes through the ledger.
+4. Purchased things cost money once.
+5. Owned things do not cost money to reuse.
+6. Gifted, borrowed, rented, comped and purchased are financially distinct.
+7. Event expenses are itemized rather than represented by one mysterious cost.
+8. Contracted earnings come from accepted Event Terms/deliverables.
+9. Pending income is not spendable income.
+10. Gifts/assets have value but are not cash.
+11. No ordinary action can take Lala below zero.
+12. Episode completion never resets money.
+13. Every transaction points back to the thing that caused it.
+14. The script/Phone/Recap may use financial state as story context.
+
+**Doctrine.** Money in the LalaVerse should behave like money in Lala's
+life: finite, persistent, earned, spent, saved, gifted, owed and invested.
+Prime Coins are not merely a score; they are a canonical resource whose
+history tells part of Lala's career story.
+
+**(z-3) Where each law is built — proposed, for Evoni's approval**
+
+The build names are the ones Evoni listed. "Wardrobe-economy build" and
+"event-budget build" are not filed. The inventory rows each law answers
+are named.
+
+| Law | Where it is built | What the inventory shows it must change |
+|---|---|---|
+| 0 | Every build relabels its own surfaces: wardrobe-economy (`price` is retail value, not coins), event-budget ("Total Event Budget", `cost_coins` on paid events), the deal build (pending pay), story use (the `$` prompts) | `$` for coins, `price` in two units, and five names for one balance (z-1, wording) |
+| 1 | Already ruled: §8(y) Q1, Q2. Built by D1 PRs 1 and 4, and PR 5 for existing shows (Q9) | 500 vs 1900 seeds |
+| 2 | Already ruled: §8(y) Q8. D1 PR 2, with a test | — |
+| 3 | Already ruled: §8(x) D1. D1 PRs 1–4. The deal build for opportunity "paid" | Opportunity `payment_status: 'paid'` writes no ledger row |
+| 4 | Wardrobe-economy build. Already ruled in part: §8(x) D3, for pieces the lock bought | Finalize charges retail `price`; a `/select` or `/purchase` piece can be charged again (INFERRED) |
+| 5 | Wardrobe-economy build | Finalize reads `is_owned` from a snapshot frozen at outfit save |
+| 6 | Wardrobe-economy build (rented, gifted, borrowed, purchased). The deal build for comped (§8(x) D7, "invited/comped") | `rental_price` has no writer; rented pieces pay full `price` |
+| 7 | Event-budget build | One `styling_extras` row for drinks, valet and photo booth; the forecast's rules differ from finalize's; the paid bonus keys on an uncharged cost |
+| 8 | Deal build: §8(x) D6–D10, with payout timing in D8 and opportunity events in D10 | Opportunity events are always unpaid; the brand-deal content fee needs no deliverable |
+| 9 | Deal build: §8(x) D8 | Opportunity "paid" is a status only |
+| 10 | Wardrobe-economy build. Already ruled for deals: §8(x) D8, "gifted value recorded but not paid in coins" | `resale_value` is unused; the closet's value sums `price` |
+| 11 | Already ruled: Task #1933, §8(y) Q6. D1 PR 2 (Complete, Finalize), PR 3 (wardrobe), PR 4 (manual edit) | — |
+| 12 | Already ruled: §8(y) Q8 and Q5 (Admin Reset stops touching coins). D1 PRs 2 and 4 | — |
+| 13 | D1 PRs 3–4, #2252 (milestone rows), and a later audit of every writer | `/select` and `/purchase` rows carry no `episode_id`; milestone rows carry the goal id in metadata only |
+| 14 | Story use | The script writer reports the episode net as "Balance: $…", not the ledger balance |
+
+**Where this stands:**
+- The laws and doctrine are recorded.
+- The map in (z-3) is a proposal, not a ruling.
+- The wardrobe-economy and event-budget builds are not filed.
+- The deal-type design note stays held until Evoni says go.
+
 ---
 
 ## 9. Owed before enforcement
