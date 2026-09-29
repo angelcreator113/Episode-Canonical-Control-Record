@@ -2,6 +2,7 @@
 
 const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, EVENT_EXTRAS } = require('../utils/financialRates');
 const { withTransaction } = require('../utils/withTransaction');
+const { wholeCoins } = require('../utils/wholeCoins');
 
 /**
  * Financial Transaction Service
@@ -107,8 +108,14 @@ async function getCurrentBalance(sequelize, showId) {
  * a duplicate. Call this from show-creation or the first-time someone opens
  * the wardrobe so the ledger has a clean origin row instead of treating the
  * starting balance as an invisible baseline.
+ *
+ * With `transaction`, the check and the insert run in it and a failure throws,
+ * so the seed commits or rolls back with the rows it balances
+ * (coinLedgerSync; §8(y) Q1–Q2, Task #2246). Without one, a failure is logged
+ * and reported in the result, as before.
  */
-async function seedStartingBalance(sequelize, showId) {
+async function seedStartingBalance(rootSequelize, showId, { transaction = null } = {}) {
+  const sequelize = transaction ? withTransaction(rootSequelize, transaction) : rootSequelize;
   try {
     const [existing] = await sequelize.query(
       `SELECT id, amount FROM financial_transactions
@@ -118,7 +125,7 @@ async function seedStartingBalance(sequelize, showId) {
     );
     if (existing) return { seeded: false, existing };
 
-    const amount = await getStartingBalance(sequelize, showId);
+    const amount = wholeCoins(await getStartingBalance(sequelize, showId));
     if (!amount || amount <= 0) return { seeded: false, reason: 'starting_balance is 0' };
 
     const tx = await logTransaction(sequelize, showId, {
@@ -131,10 +138,12 @@ async function seedStartingBalance(sequelize, showId) {
       balance_before: 0,
       balance_after: amount,
       status: 'executed',
+      ...(transaction ? { transaction } : {}),
     });
     return { seeded: true, transaction: tx };
   } catch (err) {
     console.warn('[FinancialTx] seedStartingBalance failed:', err.message);
+    if (transaction) throw err;
     return { seeded: false, error: err.message };
   }
 }
@@ -252,7 +261,11 @@ async function logTransaction(sequelize, showId, tx) {
   // Without this, the outer transaction would commit a half-baked state
   // (e.g. character_state.coins decremented but no ledger row).
   const t = tx.transaction || null;
+  let amount = tx.amount;
   try {
+    // Whole Prime Coins at the ledger boundary (§8(y) Q7, Task #2246). A
+    // non-numeric amount throws here and is handled as a failed insert.
+    amount = wholeCoins(tx.amount);
     await sequelize.query(
       `INSERT INTO financial_transactions
        (id, show_id, episode_id, event_id, type, category, amount, description,
@@ -269,7 +282,7 @@ async function logTransaction(sequelize, showId, tx) {
           eventId: tx.event_id || null,
           type: tx.type,
           category: tx.category,
-          amount: tx.amount,
+          amount,
           description: tx.description || null,
           sourceType: tx.source_type || null,
           sourceId: tx.source_id || null,
@@ -282,7 +295,7 @@ async function logTransaction(sequelize, showId, tx) {
         ...(t ? { transaction: t } : {}),
       }
     );
-    return { id, ...tx };
+    return { id, ...tx, amount };
   } catch (err) {
     console.warn('[FinancialTx] Log failed:', err.message);
     if (t) throw err;  // propagate so the outer transaction rolls back
@@ -448,6 +461,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   const transactions = [];
 
   const addTx = async (tx) => {
+    // Rounded before the running balance, so a dry run books the same whole
+    // amounts as the real run (§8(y) Q7).
+    if (Number.isFinite(Number(tx.amount))) tx.amount = wholeCoins(tx.amount);
     tx.balance_before = balance;
     if (tx.type === 'income' || tx.type === 'reward') {
       balance += parseFloat(tx.amount);
