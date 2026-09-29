@@ -19,7 +19,8 @@ const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/e
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
-const { withDeliverableTasks } = require('../utils/socialTaskSource');
+const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../utils/socialTaskSource');
+const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after).
@@ -894,6 +895,22 @@ Return ONLY JSON.` }],
   // deliverables (read above for the terms snapshot): generated tasks become
   // goals or optional ideas, and each deliverable row becomes one task.
   socialTasks = withDeliverableTasks(socialTasks, eventDeliverables);
+
+  // T6 (§8(bb); Task #2306, Evoni's ruling): "Regenerate starts from the
+  // replaced episode's task list as it stands, keeping its edits and
+  // completion flags, and adds any required deliverable task the event's
+  // accepted terms include that the list lacks. It does not restore
+  // deleted goals or ideas or generate new ones; fresh ideas come from the
+  // Career Checklist's Regenerate." With no saved list on the replaced
+  // episode, the list built above is used.
+  if (replacingEpisodeId) {
+    try {
+      const kept = await readEpisodeSocialTasks(models.sequelize, replacingEpisodeId);
+      if (kept !== null) socialTasks = withMissingRequiredDeliverables(kept, eventDeliverables);
+    } catch (keepErr) {
+      console.error('[EpisodeGenerator] Replaced episode\'s task list read failed (list rebuilt from the event):', keepErr.message);
+    }
+  }
 
   // Wardrobe tasks (the standard 7 slots)
   const wardrobeTasks = [
