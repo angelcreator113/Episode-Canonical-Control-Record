@@ -733,4 +733,5 @@ module.exports = {
   logTransaction,
   finalizeEpisodeFinancials,
   getFinancialLedger,
+  normalizePaidFreeFlags,
 };
