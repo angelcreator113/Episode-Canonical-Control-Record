@@ -72,11 +72,13 @@ async function sharpEnhanceStill(imageUrl, options = {}) {
     console.log(`[PostProcess] Sharp: upscaling to ${targetWidth}x${targetHeight}`);
   }
 
-  // Sharpening pass
+  // Sharpening pass.
+  // sharp reads m1 (flat areas) and m2 (jagged areas); the flat/jagged
+  // names used before were ignored (Task #2333).
   pipeline = pipeline.sharpen({
     sigma: sharpenSigma,
-    flat: sharpenFlat,
-    jagged: sharpenJagged,
+    m1: sharpenFlat,
+    m2: sharpenJagged,
   });
 
   const outputBuffer = await pipeline
