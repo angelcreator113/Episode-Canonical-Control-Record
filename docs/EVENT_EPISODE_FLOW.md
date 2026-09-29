@@ -2681,6 +2681,36 @@ are named.
 - The wardrobe-economy and event-budget builds are not filed.
 - The deal-type design note stays held until Evoni says go.
 
+**(aa) Episode money rulings (Evoni, 2026-09-29, Task #2259).** Docs only:
+no code is changed by this entry. Recorded verbatim. It builds on §8(x) D1,
+§8(y) and §8(z).
+
+**M1.** Episode money appears in three places: a Production Money tab, a
+compact card on the episode Overview, and a balance chip in the episode
+header. This extends §8(w) P7's tab list.
+
+**M2.** Planned amounts never enter the ledger; only posted transactions
+do. The Money tab shows planned, pending and posted separately.
+
+**M3.** Every ledger row created during an episode's production records
+that episode's id.
+
+**M4.** Prime Bank is the permanent financial history and can filter by
+episode; Episode Money is a view of the ledger, not a separate ledger.
+
+**M5.** Build order: Phase A (read-only Money tab, header chip, posted
+rows, expected terms) after D1's reconciliation is applied; Phase B
+(financial plan, pending and receivables, itemised event budget) in the
+deal build; Phase C (wardrobe-driven projections, Money Recap, Prime Bank
+episode filter) with the wardrobe economy.
+
+**Where these stand:**
+- M3 is added to D1 PR 3 (#2248). There, the wardrobe select, lock-outfit and
+  purchase ledger rows record `episode_id` when the spend happens in an
+  episode's context, with a test.
+- Phases A–C are not filed.
+- Phase A waits on D1's reconciliation (#2250).
+
 ---
 
 ## 9. Owed before enforcement
