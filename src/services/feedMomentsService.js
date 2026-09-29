@@ -139,7 +139,10 @@ const BEAT_PHONE_MOMENTS = {
  *   purchase-decision moment (its only caller) moved out of this
  *   function — Task #1614. Kept in the signature for compatibility with
  *   episodeGeneratorService.js's positional call.
- * @param {object} options - { showType, contentLens }
+ * @param {object} options - { showType, contentLens, onlyBeats }
+ *   onlyBeats: beat numbers that already rolled a moment whose save failed
+ *   (Task #2220). Only those beats are generated, and their likelihood is
+ *   not rolled again.
  * @returns {object} Map of beat_number → feed_moment
  */
 async function generateFeedMoments(event, beats, guestProfiles, _models, options = {}) {
@@ -148,11 +151,13 @@ async function generateFeedMoments(event, beats, guestProfiles, _models, options
   const auto = event.canon_consequences?.automation || {};
   const hostName = auto.host_display_name || event.host || 'the host';
   const guests = guestProfiles || auto.guest_profiles || [];
+  const onlyBeats = Array.isArray(options.onlyBeats) ? new Set(options.onlyBeats.map(Number)) : null;
 
   // Pick which beats get feed moments (based on likelihood)
   const moments = {};
 
   for (const beat of beats) {
+    if (onlyBeats && !onlyBeats.has(beat.beat)) continue;
     // Explicit `null` in BEAT_PHONE_MOMENTS means "checked, no fitting
     // moment" — not the same as an unrecognized beat, and neither falls
     // back to a guessed default.
@@ -160,8 +165,8 @@ async function generateFeedMoments(event, beats, guestProfiles, _models, options
     if (!config) continue;
     if (!config.type) continue;
 
-    // Roll against likelihood
-    if (Math.random() > config.likelihood) continue;
+    // Roll against likelihood (a retried beat already rolled its moment)
+    if (!onlyBeats && Math.random() > config.likelihood) continue;
 
     // Pick a trigger profile (host, guest, or general feed) — keyed on the
     // canonical beat's own `phase`, not its position.

@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -73,5 +73,79 @@ describe('EpisodeScenesTab feed moment warning', () => {
 
     expect((await screen.findByRole('alert')).textContent)
       .toContain("Could not check whether this episode's feed moments were saved: Network Error");
+  });
+
+  describe('Retry feed moments (Task #2220)', () => {
+    // The plan reports `before` until the retry has run, then `after`.
+    const planSequence = (before, after) => {
+      let retried = false;
+      vi.mocked(apiClient.get).mockImplementation((url) => {
+        if (url.endsWith('/episode-brief/ep-1/plan')) {
+          return Promise.resolve({ data: { data: [], count: 0, feed_moment_missing: retried ? after : before } });
+        }
+        return Promise.resolve({ data: { success: true, data: [] } });
+      });
+      return () => { retried = true; };
+    };
+
+    beforeEach(() => {
+      vi.mocked(apiClient.post).mockReset();
+    });
+
+    test('retries the missing beats, then clears the warning and says what was saved', async () => {
+      const markRetried = planSequence([3, 7], []);
+      vi.mocked(apiClient.post).mockImplementation(async () => {
+        markRetried();
+        return { data: { success: true, data: { attempted: 2, saved: 2, failed: [] }, feed_moment_missing: [] } };
+      });
+
+      renderTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+
+      expect((await screen.findByRole('status')).textContent).toBe('Saved the feed moment for beats 3 and 7.');
+      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/feed-moments/retry');
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('a beat that fails again stays in the warning and the reason is shown', async () => {
+      const markRetried = planSequence([3, 7], [7]);
+      vi.mocked(apiClient.post).mockImplementation(async () => {
+        markRetried();
+        return { data: { success: true, data: { attempted: 2, saved: 1, failed: [{ beat_number: 7, error: 'db unavailable' }] } } };
+      });
+
+      renderTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+
+      expect((await screen.findByRole('status')).textContent).toBe('Saved 1 of 2. Still not saved for beat 7: db unavailable');
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('not saved for beat 7, so that beat has no feed moment.'));
+    });
+
+    test('the button is disabled while the retry runs', async () => {
+      planSequence([5], [5]);
+      let finish;
+      vi.mocked(apiClient.post).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+
+      renderTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+
+      const running = await screen.findByRole('button', { name: /Retrying/ });
+      expect(running.disabled).toBe(true);
+      finish({ data: { success: true, data: { attempted: 1, saved: 0, failed: [{ beat_number: 5, error: 'x' }] } } });
+      expect(await screen.findByRole('button', { name: 'Retry feed moments' })).toBeTruthy();
+    });
+
+    test('a failed request says so in plain words', async () => {
+      planSequence([5], [5]);
+      vi.mocked(apiClient.post).mockRejectedValue(Object.assign(new Error('Request failed'), {
+        response: { data: { error: "This episode's source event is gone, so its feed moments cannot be generated again." } },
+      }));
+
+      renderTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+
+      expect((await screen.findByRole('status')).textContent)
+        .toBe("Could not retry the feed moments: This episode's source event is gone, so its feed moments cannot be generated again.");
+    });
   });
 });
