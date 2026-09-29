@@ -802,6 +802,10 @@ try {
 const evaluationRoutes = trackRouteLoad('evaluation', () => require('./routes/evaluation'));
 app.use('/api/v1', evaluationRoutes);
 
+// D1 one-time coins reconciliation, ADMIN only (§8(y) Q9; Task #2250)
+const coinReconciliationRoutes = trackRouteLoad('coinReconciliation', () => require('./routes/coinReconciliationRoutes'));
+app.use('/api/v1', coinReconciliationRoutes);
+
 // World Admin routes (dashboard, decisions, browse-pool)
 const worldRoutes = trackRouteLoad('world', () => require('./routes/world'));
 app.use('/api/v1', worldRoutes);
