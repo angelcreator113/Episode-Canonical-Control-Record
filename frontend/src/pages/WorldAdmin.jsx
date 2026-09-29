@@ -918,7 +918,13 @@ function WorldAdmin() {
       }));
       setToast('✅ Swapped episode assignments');
       setTimeout(() => setToast(null), 3000);
-    } catch { setToast('Failed to swap'); setTimeout(() => setToast(null), 3000); }
+    } catch (err) {
+      // e.g. the terms lock (§8(x) D4): an event that started an episode can't be moved.
+      console.error('[WorldAdmin] Swap failed:', err.response?.data?.error || err.message);
+      setToast(`Could not swap: ${err.response?.data?.error || err.message || 'request failed'}`);
+      setTimeout(() => setToast(null), 6000);
+      loadData();
+    }
   };
 
   // handleAutoReorder/applyReorderPlan moved to SeasonTab (Task #1648,
@@ -937,7 +943,11 @@ function WorldAdmin() {
       setWorldEvents(prev => prev.filter(ev => ev.id !== removeEvent.id));
       setToast('✅ Merged — duplicate removed');
       setTimeout(() => setToast(null), 3000);
-    } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
+    } catch (err) {
+      console.error('[WorldAdmin] Merge failed:', err.response?.data?.error || err.message);
+      setToast(`Merge failed: ${err.response?.data?.error || err.message || 'request failed'}`);
+      setTimeout(() => setToast(null), 6000);
+    }
   };
 
   // AI Rebalance — Amber drafts a list of variety-improving suggestions.
@@ -3845,6 +3855,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             // modal invented and the AI left alone.
                             const saveable = ['name','event_type','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','venue_name','venue_address','event_date','event_time'];
                             const toSave = withoutOrganizerKeys(changedFields(baseline, merged, saveable));
+                            let lockedMsg = null;
                             if (Object.keys(toSave).length > 0) {
                               try {
                                 const res = await modalSave(toSave);
@@ -3872,12 +3883,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                     recordSaved({ [key]: val });
                                   } catch (e2) {
                                     console.warn(`[Event] Skip ${key}:`, e2.response?.data?.error || e2.message);
+                                    // The terms lock (§8(x) D4) is said, not skipped silently.
+                                    if (e2.response?.data?.code === 'EVENT_TERMS_LOCKED') lockedMsg = e2.response.data.error;
                                   }
                                 }
                               }
                             }
-                            setToast('✨ Enhanced — review the filled fields');
-                            setTimeout(() => setToast(null), 3000);
+                            setToast(lockedMsg ? `✨ Enhanced — but not saved: ${lockedMsg}` : '✨ Enhanced — review the filled fields');
+                            setTimeout(() => setToast(null), lockedMsg ? 6000 : 3000);
                           }
                         }
                       } catch (err) {
