@@ -377,10 +377,13 @@ function WorldAdmin() {
       return;
     }
     const [main, sub] = resolveTab(initialTab);
-    if (main !== initialTab) {
-      setActiveTab(main);
-      if (sub) setSubTab(sub);
-    }
+    if (main !== initialTab) setActiveTab(main);
+    // A main tab with sub-tabs always opens one (Task #2289): ?tab=episodes
+    // resolves to ['episodes', 'episodes-ledger'], whose main is the tab
+    // itself, so the sub-tab was never set and the page body stayed empty.
+    // Otherwise its first sub-tab, as switchTab does.
+    const landing = sub || TABS.find((t) => t.key === main)?.subs?.[0]?.key || null;
+    if (landing) setSubTab(landing);
   }, []);
 
   const switchTab = (tabKey) => {
