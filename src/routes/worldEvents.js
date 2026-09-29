@@ -4280,6 +4280,12 @@ router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAut
       data: result,
     });
   } catch (err) {
+    // §8(y) Q6 (Task #2247): a finalize that would take Lala below zero is
+    // refused with the same 400 as Complete, and writes nothing.
+    const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
+    if (err instanceof InsufficientCoinsError) {
+      return res.status(err.status).json(insufficientCoinsBody(err));
+    }
     console.error('[Financials] Finalize error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }

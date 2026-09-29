@@ -7,6 +7,13 @@
  * SELECTs. sequelize.query is mocked; no database.
  */
 
+// D1 (Task #2247): the real run locks the show and syncs coins from the
+// ledger; covered in tests/integration/coinLedgerSync.integration.test.js.
+jest.mock('../../../src/services/coinLedgerSync', () => ({
+  lockLedgerBalance: jest.fn(async () => 1000),
+  syncCoinsFromLedger: jest.fn(async () => ({ balance: 1000, rows_updated: 1 })),
+}));
+
 const { finalizeEpisodeFinancials } = require('../../../src/services/financialTransactionService');
 
 const EVENT = {
