@@ -258,6 +258,17 @@ describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)'
     expect(result.event_data.requirements).toBeUndefined();
   });
 
+  it('the event row carries opportunity_id, as convertOpportunityToEvent writes it (Task #2314)', async () => {
+    const { models, queries } = makeModels({ opportunity: termsOpportunity() });
+    await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+
+    const insert = queries.find(q => /INSERT INTO world_events/.test(q.sql));
+    expect(insert.sql).toMatch(/payment_amount, opportunity_id/);
+    expect(insert.sql).toMatch(/:payment_amount, :opportunity_id/);
+    expect(insert.opts.replacements.opportunity_id).toBe(termsOpportunity().id);
+    expect(insert.opts.replacements.opportunity_id).toBeTruthy();
+  });
+
   it('an opportunity with no terms: no deliverable insert, no restrictions, unpaid', async () => {
     const { models, queries } = makeModels({ opportunity: { ...baseOpportunity(), connector_profile_id: null } });
     const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
