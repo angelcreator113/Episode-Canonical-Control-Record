@@ -1,6 +1,7 @@
 'use strict';
 
 const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, EVENT_EXTRAS } = require('../utils/financialRates');
+const { withTransaction } = require('../utils/withTransaction');
 
 /**
  * Financial Transaction Service
@@ -202,7 +203,7 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
   // narrative (financial pressure) but doesn't un-trigger a milestone.
   if (newBalance <= oldBalance) return { triggered: [] };
 
-  const { episodeId = null } = opts;
+  const { episodeId = null, transaction = null } = opts;
   const goals = await getFinancialGoals(sequelize, showId);
   const crossed = goals.filter(g => {
     if (g.triggered_at) return false;
@@ -227,6 +228,7 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
       source_name: goal.label,
       metadata: { goal_id: goal.id, threshold: goal.threshold },
       status: 'executed',
+      ...(transaction ? { transaction } : {}),
     });
     await markGoalTriggered(sequelize, showId, goal.id, new Date().toISOString());
     triggered.push({ goal, payout_tx: tx });
@@ -316,6 +318,13 @@ function normalizePaidFreeFlags(event) {
 
 // ─── FINALIZE EPISODE FINANCIALS ─────────────────────────────────────────────
 
+// Strip the transaction handle from a logged row before it is returned.
+function withoutTransaction(row) {
+  if (!row) return row;
+  const { transaction: _transaction, ...rest } = row;
+  return rest;
+}
+
 // The outfit lock (POST /wardrobe/lock-outfit-atomic) books its purchases
 // against the episode with metadata.flow = 'lock_outfit'. They are the
 // lock's rows, not finalize's, so they never make an episode count as
@@ -337,7 +346,20 @@ const NOT_LOCK_OUTFIT_ROW = `COALESCE(metadata->>'flow', '') <> '${LOCK_OUTFIT_F
  *   any write, a completion that would take coins below zero (Task #1933).
  * @returns {object} { transactions, summary, balance_before, balance_after }
  */
-async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false } = {}) {
+async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false, transaction = null } = {}) {
+  // One transaction, under a lock on the episode row (§8(x) D2, Task #2228):
+  // a failure writes nothing, and two finalizes of one episode run one after
+  // the other, so the second sees the first's rows and books nothing. A
+  // caller that already holds a transaction (completeEpisode) passes it.
+  if (!dryRun && !transaction) {
+    return sequelize.transaction((t) => finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t }));
+  }
+  const rootSequelize = sequelize;
+  if (transaction) {
+    sequelize = withTransaction(rootSequelize, transaction);
+    await sequelize.query(`SELECT id FROM episodes WHERE id = :episodeId FOR UPDATE`, { replacements: { episodeId } });
+  }
+
   // 1. Check if already finalized (finalize's own rows, not the outfit lock's)
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
@@ -430,8 +452,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     tx.episode_id = episodeId;
     tx.event_id = event?.id || null;
     if (dryRun) { transactions.push(tx); return; }
-    const logged = await logTransaction(sequelize, showId, tx);
-    if (logged) transactions.push(logged);
+    // With the transaction named, a failed INSERT throws and rolls back.
+    const logged = await logTransaction(sequelize, showId, transaction ? { ...tx, transaction } : tx);
+    if (logged) transactions.push(withoutTransaction(logged));
   };
 
   if (event) {
@@ -552,7 +575,11 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
         episodeId,
       }}
     );
-  } catch { /* non-blocking */ }
+  } catch (err) {
+    // Inside the transaction a failure here must roll everything back.
+    if (transaction) throw err;
+    console.warn('[FinancialTx] episode totals update failed:', err.message);
+  }
 
   // 13. Update character_state_history with new coin balance
   try {
@@ -570,7 +597,10 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
         notes: `Financial finalization: +${totalIncome} income, -${totalExpenses} expenses = ${netProfit >= 0 ? '+' : ''}${netProfit} net`,
       }}
     );
-  } catch (err) { console.warn('[FinancialTx] CSH update failed:', err.message); }
+  } catch (err) {
+    if (transaction) throw err;
+    console.warn('[FinancialTx] CSH update failed:', err.message);
+  }
 
   return {
     transactions,
@@ -590,12 +620,13 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     // Lala jumps from "rising-star" straight past "it-girl". Each entry has
     // { goal, payout_tx } and the payout is already in the ledger.
     milestones_triggered: await (async () => {
-      const result = await checkMilestones(sequelize, showId, balanceBefore, balance, { episodeId });
+      const result = await checkMilestones(sequelize, showId, balanceBefore, balance, { episodeId, transaction });
       // Feed integration — one post per milestone reached, plus an
       // aggregate big-spend post when the episode moved a lot of coins.
       // Wrapped in try/catch so a feed-table issue can't 500 the
-      // finalize endpoint.
-      try {
+      // finalize endpoint; inside a transaction it runs in its own
+      // savepoint so a failed post cannot abort the rest.
+      const postToFeed = async (sequelize) => {
         const feed = require('./financialFeedService');
         if (result.triggered.length > 0) {
           await feed.postMilestoneReached(sequelize, showId, result.triggered, { episodeId });
@@ -610,10 +641,17 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           eventId: event?.id,
           nextGoalThreshold: nextGoal?.threshold,
         });
+      };
+      try {
+        if (transaction) {
+          await rootSequelize.transaction({ transaction }, (savepoint) => postToFeed(withTransaction(rootSequelize, savepoint)));
+        } else {
+          await postToFeed(sequelize);
+        }
       } catch (feedErr) {
         console.warn('[finalizeEpisodeFinancials] feed post failed:', feedErr.message);
       }
-      return result.triggered;
+      return result.triggered.map((t) => ({ ...t, payout_tx: withoutTransaction(t.payout_tx) }));
     })(),
   };
 }

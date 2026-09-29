@@ -352,26 +352,46 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     (result?.summary?.total_income || 0) - (result?.summary?.total_expenses || 0) + tierReward + paidBonus
   );
 
-  // ── 10c. Refuse a completion that would take coins below zero (Task #1933) ──
-  // Before #1933 the coin delta was applied with no check (applyDeltas
-  // floors coins at −9999), so an episode whose entry cost, wardrobe and
-  // extras exceeded Lala's balance left character_state negative. The
-  // financials are computed first without writing anything, so a refusal
-  // leaves no ledger rows behind.
-  const { finalizeEpisodeFinancials } = require('./financialTransactionService');
-  const financialPreview = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun: true });
-  const projectedCoinDelta = coinDeltaFrom(financialPreview);
-  if (projectedCoinDelta < 0 && currentStats.coins + projectedCoinDelta < 0) {
-    throw new InsufficientCoinsError({ needed: -projectedCoinDelta, have: currentStats.coins, action: 'episode_completion' });
-  }
+  // ── 10c–15. One transaction, idempotent (§8(x) D2, Task #2228) ──
+  // Finalize, the reward rows, the coin change, the history row, the
+  // episode's 'accepted' and the event's 'filmed' commit together or not at
+  // all. The episode row is locked and 'accepted' re-checked under the lock,
+  // so a retry or a concurrent call finds the episode already completed and
+  // writes nothing; a failure rolls everything back, so a retry starts clean.
+  let financialResult;
+  let newState;
+  let evaluationId;
+  let narrativeLines;
+  const outcome = await sequelize.transaction(async (transaction) => {
+    const { finalizeEpisodeFinancials } = require('./financialTransactionService');
+    const { withTransaction } = require('../utils/withTransaction');
+    const db = withTransaction(sequelize, transaction);
+    const [lockedEpisode] = await db.query(
+      `SELECT evaluation_status, evaluation_json FROM episodes WHERE id = :episodeId FOR UPDATE`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (lockedEpisode?.evaluation_status === 'accepted') {
+      return { already_completed: true, message: 'Episode already completed', evaluation: lockedEpisode.evaluation_json };
+    }
 
-  // ── 11. Finalize financials (coins come from here, not evaluation) ──
-  const financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize);
+    // ── 10c. Refuse a completion that would take coins below zero (Task #1933) ──
+    // Before #1933 the coin delta was applied with no check (applyDeltas
+    // floors coins at −9999), so an episode whose entry cost, wardrobe and
+    // extras exceeded Lala's balance left character_state negative. The
+    // financials are computed first without writing anything, so a refusal
+    // leaves no ledger rows behind.
+    const financialPreview = await finalizeEpisodeFinancials(episodeId, showId, db, { dryRun: true, transaction });
+    const projectedCoinDelta = coinDeltaFrom(financialPreview);
+    if (projectedCoinDelta < 0 && currentStats.coins + projectedCoinDelta < 0) {
+      throw new InsufficientCoinsError({ needed: -projectedCoinDelta, have: currentStats.coins, action: 'episode_completion' });
+    }
 
-  // Log tier reward as a financial transaction
-  if (tierReward !== 0) {
-    try {
-      await sequelize.query(
+    // ── 11. Finalize financials (coins come from here, not evaluation) ──
+    financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction });
+
+    // Log tier reward as a financial transaction
+    if (tierReward !== 0) {
+      await db.query(
         `INSERT INTO financial_transactions
          (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
          VALUES (:id, :showId, :episodeId, :eventId, :type, 'tier_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
@@ -382,12 +402,10 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
           desc: `${evalResult.tier_final.toUpperCase()} tier reward: ${tierReward > 0 ? '+' : ''}${tierReward} coins`,
         }}
       );
-    } catch { /* non-blocking */ }
-  }
+    }
 
-  if (paidBonus > 0) {
-    try {
-      await sequelize.query(
+    if (paidBonus > 0) {
+      await db.query(
         `INSERT INTO financial_transactions
          (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
          VALUES (:id, :showId, :episodeId, :eventId, 'income', 'tier_paid_bonus', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
@@ -397,16 +415,14 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
           desc: `Paid event ${evalResult.tier_final.toUpperCase()} bonus: +${paidBonus} coins`,
         }}
       );
-    } catch { /* non-blocking */ }
-  }
+    }
 
-  // Creator-authored coin reward from event.rewards.coins. Same shape as
-  // tier_reward — separate row so the financial ledger shows where every
-  // coin came from. Only fires on slay/pass to match stat-delta gating.
-  const eventRewardCoins = isSuccess ? (parseInt(eventRewards.coins, 10) || 0) : 0;
-  if (eventRewardCoins > 0) {
-    try {
-      await sequelize.query(
+    // Creator-authored coin reward from event.rewards.coins. Same shape as
+    // tier_reward — separate row so the financial ledger shows where every
+    // coin came from. Only fires on slay/pass to match stat-delta gating.
+    const eventRewardCoins = isSuccess ? (parseInt(eventRewards.coins, 10) || 0) : 0;
+    if (eventRewardCoins > 0) {
+      await db.query(
         `INSERT INTO financial_transactions
          (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
          VALUES (:id, :showId, :episodeId, :eventId, 'income', 'event_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
@@ -416,129 +432,131 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
           desc: `Event reward (${evalResult.tier_final.toUpperCase()}): +${eventRewardCoins} coins`,
         }}
       );
-    } catch { /* non-blocking */ }
-  }
-
-  // Final coin delta = financial pipeline net + tier reward + paid bonus
-  const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
-  mergedDeltas.coins = coinDeltaFrom(financialResult);
-
-  // ── 11b. Financial mood deltas ──
-  // Translate the episode's financial outcome into stress deltas so Lala's
-  // character state reflects "won a brand deal → relaxed" vs "blew 80% of
-  // her savings on a gala → anxiety spikes". Additive into mergedDeltas so
-  // outfit/event/social bonuses keep stacking alongside the money signal.
-  try {
-    const { getFinancialGoals } = require('./financialTransactionService');
-    const balanceBefore = financialResult.balance_before || 0;
-    const balanceAfter = financialResult.balance_after || 0;
-    const milestonesHit = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered.length : 0;
-    const goals = await getFinancialGoals(sequelize, showId);
-    const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
-    const nextThreshold = nextGoal?.threshold || null;
-    // Stress scale is already roughly 0–10 in this codebase (see the 5/8
-    // thresholds in the episode-complete memory write below). Keep our
-    // deltas modest (±5 clamp) so a single episode can't spike or crater
-    // Lala by itself — the trend matters more than one event.
-    let stress = 0;
-    if (nextThreshold && balanceAfter < nextThreshold * 0.25) stress += 2;
-    else if (nextThreshold && balanceAfter < nextThreshold * 0.5) stress += 1;
-    if (balanceAfter <= 0) stress += 2;                   // going broke hurts
-    if (financialNet < -1000) stress += 2;                // big loss in one episode
-    else if (financialNet < 0) stress += 1;
-    if (financialNet > 500) stress -= 1;                  // winning
-    if (financialNet > 2000) stress -= 2;                 // winning big
-    stress -= 2 * milestonesHit;                          // each milestone = deep relief
-    // Bank surplus (way above next goal) — she's on offense, not defense.
-    if (nextThreshold && balanceAfter > nextThreshold * 1.5) stress -= 1;
-    const clamped = Math.max(-5, Math.min(5, stress));
-    if (clamped !== 0) {
-      mergedDeltas.stress = (mergedDeltas.stress || 0) + clamped;
-      mergedDeltas.financial_mood_delta = clamped;       // surfaced for debugging + UI
     }
-    mergedDeltas._financial_context = {
-      balance_before: balanceBefore,
-      balance_after: balanceAfter,
-      episode_net: financialNet,
-      milestones_hit: milestonesHit,
-      next_goal_threshold: nextThreshold,
-    };
-  } catch (moodErr) {
-    console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
-  }
 
-  // ── 12. Apply all deltas to character state ──
-  const newState = applyDeltas(currentStats, mergedDeltas);
+    // Final coin delta = financial pipeline net + tier reward + paid bonus
+    const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
+    mergedDeltas.coins = coinDeltaFrom(financialResult);
 
-  // Task #1933: coins move by the delta in the same statement that checks
-  // the balance (changeCoins: `coins + :delta >= 0`), not by writing back a
-  // total computed from the read in step 4. A spend that landed after that
-  // read can no longer make this write go below zero; it is refused.
-  newState.coins = await changeCoins(sequelize, {
-    stateId: characterState.id,
-    delta: mergedDeltas.coins,
-    action: 'episode_completion',
-    extraSet: `reputation = :reputation, brand_trust = :brand_trust,
-         influence = :influence, stress = :stress,
-         last_applied_episode_id = :episodeId`,
-    extraReplacements: {
-      reputation: newState.reputation, brand_trust: newState.brand_trust,
-      influence: newState.influence, stress: newState.stress, episodeId,
-    },
-  });
-
-  // ── 13. Write character_state_history with evaluation reference ──
-  const evaluationId = uuidv4();
-  await sequelize.query(
-    `INSERT INTO character_state_history
-     (id, show_id, character_key, episode_id, evaluation_id, source, deltas_json, state_after_json, notes, created_at)
-     VALUES (:id, :showId, 'lala', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
-    { replacements: {
-      id: uuidv4(), showId, episodeId, evaluationId,
-      deltas: JSON.stringify(mergedDeltas),
-      stateAfter: JSON.stringify(newState),
-      notes: `${evalResult.tier_final.toUpperCase()} (${evalResult.score}/100) | Coins: ${mergedDeltas.coins >= 0 ? '+' : ''}${mergedDeltas.coins} | Social: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} tasks | Outfit: ${outfitPieces.length} pieces${look.outfit.label ? ` (${look.outfit.label})` : ''}`,
-    }}
-  );
-
-  // ── 14. Save evaluation to episode ──
-  const narrativeLines = generateNarrativeLine(evalResult);
-  const fullEvaluation = {
-    ...evalResult,
-    stat_deltas: mergedDeltas,
-    narrative_lines: narrativeLines,
-    evaluation_id: evaluationId,
-    social_task_bonuses: socialBonuses,
-    wardrobe_bonuses: wardrobeBonuses,
-    outfit: look.outfit,
-    financial_summary: financialResult.summary,
-    completed_at: new Date().toISOString(),
-  };
-
-  await sequelize.query(
-    `UPDATE episodes SET evaluation_json = :evalJson, evaluation_status = 'accepted',
-     formula_version = :version, total_income = :income, total_expenses = :expenses,
-     financial_score = :finScore, updated_at = NOW()
-     WHERE id = :episodeId`,
-    { replacements: {
-      evalJson: JSON.stringify(fullEvaluation),
-      version: FORMULA_VERSION,
-      income: financialResult.summary?.total_income || 0,
-      expenses: financialResult.summary?.total_expenses || 0,
-      finScore: mergedDeltas.coins >= 0 ? 7 : mergedDeltas.coins >= -200 ? 5 : 3,
-      episodeId,
-    }}
-  );
-
-  // ── 15. Update event status to 'filmed' ──
-  if (event) {
+    // ── 11b. Financial mood deltas ──
+    // Translate the episode's financial outcome into stress deltas so Lala's
+    // character state reflects "won a brand deal → relaxed" vs "blew 80% of
+    // her savings on a gala → anxiety spikes". Additive into mergedDeltas so
+    // outfit/event/social bonuses keep stacking alongside the money signal.
     try {
-      await sequelize.query(
+      const { getFinancialGoals } = require('./financialTransactionService');
+      const balanceBefore = financialResult.balance_before || 0;
+      const balanceAfter = financialResult.balance_after || 0;
+      const milestonesHit = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered.length : 0;
+      const goals = await getFinancialGoals(db, showId);
+      const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
+      const nextThreshold = nextGoal?.threshold || null;
+      // Stress scale is already roughly 0–10 in this codebase (see the 5/8
+      // thresholds in the episode-complete memory write below). Keep our
+      // deltas modest (±5 clamp) so a single episode can't spike or crater
+      // Lala by itself — the trend matters more than one event.
+      let stress = 0;
+      if (nextThreshold && balanceAfter < nextThreshold * 0.25) stress += 2;
+      else if (nextThreshold && balanceAfter < nextThreshold * 0.5) stress += 1;
+      if (balanceAfter <= 0) stress += 2;                   // going broke hurts
+      if (financialNet < -1000) stress += 2;                // big loss in one episode
+      else if (financialNet < 0) stress += 1;
+      if (financialNet > 500) stress -= 1;                  // winning
+      if (financialNet > 2000) stress -= 2;                 // winning big
+      stress -= 2 * milestonesHit;                          // each milestone = deep relief
+      // Bank surplus (way above next goal) — she's on offense, not defense.
+      if (nextThreshold && balanceAfter > nextThreshold * 1.5) stress -= 1;
+      const clamped = Math.max(-5, Math.min(5, stress));
+      if (clamped !== 0) {
+        mergedDeltas.stress = (mergedDeltas.stress || 0) + clamped;
+        mergedDeltas.financial_mood_delta = clamped;       // surfaced for debugging + UI
+      }
+      mergedDeltas._financial_context = {
+        balance_before: balanceBefore,
+        balance_after: balanceAfter,
+        episode_net: financialNet,
+        milestones_hit: milestonesHit,
+        next_goal_threshold: nextThreshold,
+      };
+    } catch (moodErr) {
+      console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
+    }
+
+    // ── 12. Apply all deltas to character state ──
+    newState = applyDeltas(currentStats, mergedDeltas);
+
+    // Task #1933: coins move by the delta in the same statement that checks
+    // the balance (changeCoins: `coins + :delta >= 0`), not by writing back a
+    // total computed from the read in step 4. A spend that landed after that
+    // read can no longer make this write go below zero; it is refused.
+    newState.coins = await changeCoins(sequelize, {
+      stateId: characterState.id,
+      delta: mergedDeltas.coins,
+      transaction,
+      action: 'episode_completion',
+      extraSet: `reputation = :reputation, brand_trust = :brand_trust,
+           influence = :influence, stress = :stress,
+           last_applied_episode_id = :episodeId`,
+      extraReplacements: {
+        reputation: newState.reputation, brand_trust: newState.brand_trust,
+        influence: newState.influence, stress: newState.stress, episodeId,
+      },
+    });
+
+    // ── 13. Write character_state_history with evaluation reference ──
+    evaluationId = uuidv4();
+    await db.query(
+      `INSERT INTO character_state_history
+       (id, show_id, character_key, episode_id, evaluation_id, source, deltas_json, state_after_json, notes, created_at)
+       VALUES (:id, :showId, 'lala', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
+      { replacements: {
+        id: uuidv4(), showId, episodeId, evaluationId,
+        deltas: JSON.stringify(mergedDeltas),
+        stateAfter: JSON.stringify(newState),
+        notes: `${evalResult.tier_final.toUpperCase()} (${evalResult.score}/100) | Coins: ${mergedDeltas.coins >= 0 ? '+' : ''}${mergedDeltas.coins} | Social: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} tasks | Outfit: ${outfitPieces.length} pieces${look.outfit.label ? ` (${look.outfit.label})` : ''}`,
+      }}
+    );
+
+    // ── 14. Save evaluation to episode ──
+    narrativeLines = generateNarrativeLine(evalResult);
+    const fullEvaluation = {
+      ...evalResult,
+      stat_deltas: mergedDeltas,
+      narrative_lines: narrativeLines,
+      evaluation_id: evaluationId,
+      social_task_bonuses: socialBonuses,
+      wardrobe_bonuses: wardrobeBonuses,
+      outfit: look.outfit,
+      financial_summary: financialResult.summary,
+      completed_at: new Date().toISOString(),
+    };
+
+    await db.query(
+      `UPDATE episodes SET evaluation_json = :evalJson, evaluation_status = 'accepted',
+       formula_version = :version, total_income = :income, total_expenses = :expenses,
+       financial_score = :finScore, updated_at = NOW()
+       WHERE id = :episodeId`,
+      { replacements: {
+        evalJson: JSON.stringify(fullEvaluation),
+        version: FORMULA_VERSION,
+        income: financialResult.summary?.total_income || 0,
+        expenses: financialResult.summary?.total_expenses || 0,
+        finScore: mergedDeltas.coins >= 0 ? 7 : mergedDeltas.coins >= -200 ? 5 : 3,
+        episodeId,
+      }}
+    );
+
+    // ── 15. Update event status to 'filmed' ──
+    if (event) {
+      await db.query(
         `UPDATE world_events SET status = 'filmed', updated_at = NOW() WHERE id = :id`,
         { replacements: { id: event.id } }
       );
-    } catch { /* non-blocking */ }
-  }
+    }
+
+    return null;
+  });
+  if (outcome?.already_completed) return outcome;
 
   // ── 16. Auto-push episode outcome to franchise brain ──
   try {

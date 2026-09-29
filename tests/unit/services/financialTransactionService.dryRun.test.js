@@ -23,7 +23,7 @@ function makeSequelize() {
     if (opts.type === 'SELECT') return [];
     return [[], 0];
   });
-  return { statements, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } };
+  return { statements, sequelize: { query, QueryTypes: { SELECT: 'SELECT' }, transaction: async (a, b) => (typeof a === 'function' ? a({ id: 'tx' }) : b({ id: 'tx' })) } };
 }
 
 describe('finalizeEpisodeFinancials dryRun (Task #1933)', () => {

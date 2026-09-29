@@ -69,7 +69,7 @@ function makeSequelize({ look = LOOK, lookError = null, eventPieces = EVENT_PIEC
     if (/UPDATE character_state\b[\s\S]*RETURNING coins/.test(sql)) return [[{ coins: 500 }], 1];
     return [[], 0];
   });
-  return { queries, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } };
+  return { queries, sequelize: { query, QueryTypes: { SELECT: 'SELECT' }, transaction: async (a, b) => (typeof a === 'function' ? a({ id: 'tx' }) : b({ id: 'tx' })) } };
 }
 
 function resetModels() {
