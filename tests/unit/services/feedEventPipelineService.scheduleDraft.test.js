@@ -216,8 +216,9 @@ describe('with a draft', () => {
       category: 'fashion', format: 'showcase', event_time: '10:00', dress_code: 'model-off-duty',
       dress_code_keywords: JSON.stringify(['minimal', 'clean', 'modern']),
     });
-    expect(sql).toMatch(/payment_amount, category, format, event_time, dress_code_keywords,\s*status/);
-    expect(sql).toMatch(/:payment_amount, :category, :format, :event_time, :dress_code_keywords::jsonb,\s*:status/);
+    // opportunity_id follows payment_amount since Task #2314.
+    expect(sql).toMatch(/payment_amount, opportunity_id, category, format, event_time, dress_code_keywords,\s*status/);
+    expect(sql).toMatch(/:payment_amount, :opportunity_id, :category, :format, :event_time, :dress_code_keywords::jsonb,\s*:status/);
     expect(auto.styling_brief).toEqual(DRAFT.styling.styling_brief);
     expect(auto.auto_drafted).toMatchObject({
       category: 'ai_draft', format: 'ai_draft', event_time: 'ai_draft',
