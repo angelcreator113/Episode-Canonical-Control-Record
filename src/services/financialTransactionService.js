@@ -296,14 +296,9 @@ async function logTransaction(sequelize, showId, tx) {
   }
 }
 
-function normalizePaidFreeFlags(event) {
-  const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
-  const isPaid = truthy.has(event?.is_paid);
-  const isFree = truthy.has(event?.is_free);
-  const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event?.cost_coins) || 0));
-  const eventPayment = isPaid ? (parseFloat(event?.payment_amount) || 0) : 0;
-  return { isPaid, isFree, eventCost, eventPayment };
-}
+// normalizePaidFreeFlags lives in src/utils/paidFreeFlags.js (Task #2313)
+// and is re-exported here for its existing callers.
+const { normalizePaidFreeFlags } = require('../utils/paidFreeFlags');
 
 // ─── FINALIZE EPISODE FINANCIALS ─────────────────────────────────────────────
 
