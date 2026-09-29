@@ -15,6 +15,10 @@ const { DataTypes } = require('sequelize');
 // pins it to these isIn lists.
 const CATEGORY_VALUES = Object.freeze(['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness']);
 const FORMAT_VALUES = Object.freeze(['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition']);
+// The eight deal types (docs/DEAL_DESIGN.md §2; deal build PR 1, Task
+// #2319). deal_type is null on every event until PR 2 drafts it; null means
+// a legacy event, which keeps today's finalize and Complete (§9).
+const DEAL_TYPES = Object.freeze(['self_funded', 'invited_comped', 'gifted', 'paid_appearance', 'paid_deliverables', 'appearance_plus_deliverables', 'performance_booking', 'brand_partnership']);
 
 module.exports = (sequelize) => {
   const WorldEvent = sequelize.define('WorldEvent', {
@@ -264,6 +268,20 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: 0,
     },
+    // Deal terms (deal build PR 1, migration 20260929200000; Task #2319).
+    // No code reads them yet. bonus_terms holds a performance bonus only when
+    // the accepted deal contains one (Q12, EVENT_EPISODE_FLOW.md §8(cc));
+    // gifted_value is non-cash (Q4); pricing_version names the
+    // deal_rate_anchors version the terms were priced from.
+    deal_type: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+      validate: { isIn: [DEAL_TYPES] },
+    },
+    appearance_fee: { type: DataTypes.INTEGER, allowNull: true },
+    bonus_terms: { type: DataTypes.JSONB, allowNull: true },
+    gifted_value: { type: DataTypes.INTEGER, allowNull: true },
+    pricing_version: { type: DataTypes.INTEGER, allowNull: true },
     // Access requirements — what Lala must have to take part (today:
     // reputation_min, brand_trust_min, coins_min). One of the four kinds of
     // term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1); never holds
@@ -446,8 +464,11 @@ module.exports = (sequelize) => {
     'created_at', 'updated_at', 'deleted_at',
   ];
 
+  WorldEvent.DEAL_TYPES = DEAL_TYPES;
+
   return WorldEvent;
 };
 
 module.exports.CATEGORY_VALUES = CATEGORY_VALUES;
 module.exports.FORMAT_VALUES = FORMAT_VALUES;
+module.exports.DEAL_TYPES = DEAL_TYPES;

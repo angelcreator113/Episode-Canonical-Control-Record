@@ -21,8 +21,12 @@ const { DataTypes } = require('sequelize');
  * Task #2294). The one task list shows a host row as a host requirement and
  * a brand row as a brand deliverable.
  *
+ * fee is the Prime Coins the deliverable pays on approval (deal build PR 1,
+ * Task #2319); no code reads it yet.
+ *
  * Migrations: 20260924000000-add-event-terms.js,
- * 20260929190000-add-event-deliverables-owed-to.js.
+ * 20260929190000-add-event-deliverables-owed-to.js,
+ * 20260929200001-add-event-deliverables-fee.js.
  */
 const DELIVERABLE_STATUSES = ['pending', 'completed', 'submitted', 'approved'];
 const DELIVERABLE_OWED_TO = ['host', 'brand'];
@@ -54,6 +58,7 @@ module.exports = (sequelize) => {
       comment: 'host | brand',
       validate: { isIn: [DELIVERABLE_OWED_TO] },
     },
+    fee: { type: DataTypes.INTEGER, allowNull: true },
   }, {
     tableName: 'event_deliverables',
     timestamps: true,
