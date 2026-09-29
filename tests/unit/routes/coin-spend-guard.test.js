@@ -19,8 +19,11 @@
  * under the show lock (spendFromLedger), write the ledger row and sync the
  * cached coins from the ledger. A "concurrent spend" is modelled by the fast
  * balance read (getCurrentBalance) returning a stale ledger balance while the
- * ledger, read under the lock, already holds less. The manual edit's tests
- * still pin the cache; they change in D1 PR 4.
+ * ledger, read under the lock, already holds less.
+ *
+ * D1 PR 4 (Task #2249; design §6.5): the manual edit books a
+ * manual_adjustment for the difference from the ledger, read under the lock,
+ * and syncs; it never SETs coins. Coins are Lala's only (§8(y) Q3).
  */
 
 const db = {
@@ -129,7 +132,7 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
       replacements: { amount: tx.amount, category: tx.category, episode_id: tx.episode_id, balance_before: tx.balance_before, balance_after: tx.balance_after },
       transaction: tx.transaction,
     });
-    db.ledgerBalance -= Number(tx.amount);
+    db.ledgerBalance += (tx.type === 'income' || tx.type === 'reward' ? 1 : -1) * Number(tx.amount);
     return { id: 'ftx', ...tx };
   }),
 }));
@@ -141,6 +144,10 @@ jest.mock('../../../src/services/coinLedgerSync', () => {
       if (!transaction) throw new TypeError('spendFromLedger: a transaction is required');
       if (db.ledgerBalance - cost < 0) throw new InsufficientCoinsError({ needed: cost, have: db.ledgerBalance, action });
       return { balance: db.ledgerBalance, cost };
+    }),
+    lockLedgerBalance: jest.fn(async (sequelize, showId, { transaction } = {}) => {
+      if (!transaction) throw new TypeError('lockLedgerBalance: a transaction is required');
+      return db.ledgerBalance;
     }),
     syncCoinsFromLedger: jest.fn(async (sequelize, showId, { transaction } = {}) => {
       if (!transaction) throw new TypeError('syncCoinsFromLedger: a transaction is required');
@@ -300,27 +307,48 @@ describe('POST /wardrobe/purchase (Tasks #1933, #2248)', () => {
   });
 });
 
-describe('POST /characters/:key/state/update (Task #1933)', () => {
+describe('POST /characters/:key/state/update (Tasks #1933, #2249)', () => {
   test.each([[-100], ['-100'], [''], [null], ['abc'], [12.5]])('coins %p is refused and nothing is written', async (coins) => {
     mockStaleCoins = 350;
+    db.ledgerBalance = 350;
     db.row.coins = 350;
 
     const res = await run(evaluationRouter, '/characters/:key/state/update', { show_id: 'show-1', coins }, { key: 'lala' });
 
-    // On main: −100 is written as −100.
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe('INVALID_COINS');
     expect(db.row.coins).toBe(350);
+    expect(db.ledger).toEqual([]);
     expect(db.statements.some((s) => /UPDATE character_state/.test(s.sql))).toBe(false);
   });
 
-  test('coins 0 is a valid balance', async () => {
-    mockStaleCoins = 350;
-    db.row.coins = 350;
+  test('coins 0 is a valid balance: one expense adjustment for the ledger balance, then a sync', async () => {
+    mockStaleCoins = 560; // a stale cache: the adjustment is from the ledger
+    db.ledgerBalance = 350;
+    db.row.coins = 560;
 
     const res = await run(evaluationRouter, '/characters/:key/state/update', { show_id: 'show-1', coins: '0' }, { key: 'lala' });
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.state.coins).toBe(0);
+    expect(res.body.previous_state.coins).toBe(350);
+    expect(db.ledger).toEqual([expect.objectContaining({ amount: 350, category: 'manual_adjustment' })]);
+    expect(db.ledgerBalance).toBe(0);
     expect(db.row.coins).toBe(0);
+    // Coins are never SET: only the sync writes them.
+    const stateUpdate = db.statements.find((s) => /UPDATE character_state/.test(s.sql));
+    expect(stateUpdate.sql).not.toMatch(/coins/);
+  });
+
+  test('a coin change on another key is refused (§8(y) Q3)', async () => {
+    mockStaleCoins = 500;
+    db.ledgerBalance = 350;
+
+    const res = await run(evaluationRouter, '/characters/:key/state/update', { show_id: 'show-1', coins: 900 }, { key: 'justawoman' });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe('COINS_LALA_ONLY');
+    expect(db.ledger).toEqual([]);
+    expect(db.statements.some((s) => /UPDATE character_state/.test(s.sql))).toBe(false);
   });
 });

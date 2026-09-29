@@ -61,20 +61,36 @@ async function getOrCreateCharacterState(models, showId, seasonId, characterKey)
 
   // Auto-seed with defaults
   const id = uuidv4();
-  await models.CharacterState.create({
+  const row = {
     id,
     show_id: showId,
     season_id: seasonId || null,
     character_key: characterKey,
     ...DEFAULT_STATS,
-  });
+  };
+
+  if (characterKey === 'lala') {
+    // D1 (design §6.6; §8(y) Q1; Task #2249): Lala's coins mirror the ledger,
+    // never an independent 500. The row is created and synced from the
+    // ledger (seeded with the show's starting_balance, default 1900) in one
+    // transaction. A show that does not exist gets no row: that is how the
+    // orphan character_state rows were made.
+    const show = await models.Show.findByPk(showId, { attributes: ['id'] });
+    if (!show) return null;
+    const { syncCoinsFromLedger } = require('../services/coinLedgerSync');
+    let coins;
+    await models.sequelize.transaction(async (t) => {
+      await models.CharacterState.create(row, { transaction: t });
+      ({ balance: coins } = await syncCoinsFromLedger(models.sequelize, showId, { transaction: t }));
+    });
+    return { ...row, season_id: seasonId, coins, last_applied_episode_id: null };
+  }
+
+  await models.CharacterState.create(row);
 
   return {
-    id,
-    show_id: showId,
+    ...row,
     season_id: seasonId,
-    character_key: characterKey,
-    ...DEFAULT_STATS,
     last_applied_episode_id: null,
   };
 }
@@ -144,9 +160,10 @@ router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), a
     const csCount = await models.CharacterState.count({ where: { show_id: showId } });
     const epCount = await models.Episode.count({ where: { show_id: showId } });
 
-    // Step 1: Reset character_state
+    // Step 1: Reset character_state. Coins are not touched (§8(y) Q5; Task
+    // #2249): they are Lala's career money, a view of the ledger. Resetting
+    // them would need a separate, explicit Reset Career Economy action.
     const [csUpdated] = await models.CharacterState.update({
-      coins: 500,
       reputation: 0,
       brand_trust: 0,
       influence: 0,
@@ -170,7 +187,8 @@ router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), a
       episodes_before: epCount,
       character_state_updated: csUpdated ?? 0,
       episodes_updated: epUpdated ?? 0,
-      message: 'Character stats reset and episode evaluations cleared'
+      coins_unchanged: true,
+      message: 'Character stats reset and episode evaluations cleared; coins unchanged'
     });
   } catch (err) {
     console.error('Admin reset error:', err);
@@ -204,6 +222,7 @@ router.get('/characters/:key/state', requireAuth, async (req, res) => {
       scope === 'global' ? null : season_id || null,
       key
     );
+    if (!state) return res.status(404).json({ error: 'Show not found' });
 
     // Lala's coins are the ledger balance (§8(z) Law 0, D1; Task #2273), the
     // number every other display shows; character_state.coins is its cached
@@ -280,6 +299,7 @@ router.post('/episodes/:id/evaluate', requireAuth, async (req, res) => {
     const showId = episode.show_id;
     const seasonId = null; // TODO: derive from episode.season_id when available
     const state = await getOrCreateCharacterState(models, showId, seasonId, character_key);
+    if (!state) return res.status(404).json({ error: 'Show not found' });
 
     // Get wardrobe items for style scoring — uses real outfit synergy
     const styleScores = { outfit_match: null, accessory_match: null, deadline_penalty: null };
@@ -599,6 +619,18 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
 
     // Get current state
     const state = await getOrCreateCharacterState(models, show_id, null, key);
+    if (!state) return res.status(404).json({ error: 'Show not found' });
+
+    // §8(y) Q3 (Task #2249): Prime Coins are Lala's alone. Another key's
+    // other stats stay editable, but a coin change on it is refused; the
+    // unchanged value (a form sending every field) is not a change.
+    const coinsRequested = coins !== undefined ? Number(coins) : undefined;
+    if (key !== 'lala' && coinsRequested !== undefined && coinsRequested !== Number(state.coins)) {
+      return res.status(400).json({
+        error: 'Only Lala has Prime Coins; coins cannot be edited for another character',
+        code: 'COINS_LALA_ONLY',
+      });
+    }
 
     const oldState = {
       coins: state.coins,
@@ -609,49 +641,47 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
     };
 
     const newState = {
-      coins: coins !== undefined ? Number(coins) : state.coins,
+      coins: state.coins,
       reputation: reputation !== undefined ? Math.max(0, Math.min(10, parseInt(reputation))) : state.reputation,
       brand_trust: brand_trust !== undefined ? Math.max(0, Math.min(10, parseInt(brand_trust))) : state.brand_trust,
       influence: influence !== undefined ? Math.max(0, Math.min(10, parseInt(influence))) : state.influence,
       stress: stress !== undefined ? Math.max(0, Math.min(10, parseInt(stress))) : state.stress,
     };
 
-    // Compute deltas
+    // One transaction (design §6.5): the other stats are SET; for Lala, a
+    // coin edit locks the show, reads the ledger, books a manual_adjustment
+    // for the difference and syncs the cached coins from the ledger. Coins
+    // are never SET directly. The history row records what the edit did.
+    const { logTransaction } = require('../services/financialTransactionService');
+    const { lockLedgerBalance, syncCoinsFromLedger } = require('../services/coinLedgerSync');
     const deltas = {};
-    for (const k of Object.keys(newState)) {
-      if (newState[k] !== oldState[k]) deltas[k] = newState[k] - oldState[k];
-    }
-
-    // Atomic write: state UPDATE + history row + (when coins changed) the
-    // financial-ledger mirror all commit together or roll back together.
-    // Previously the state UPDATE and history INSERT had no transaction
-    // wrapper, and the ledger mirror was non-fatal — a failing ledger
-    // insert left character_state.coins out of sync with getCurrentBalance.
-    // Now any failure rolls back every write so the two sources of truth
-    // can never drift out of admin edits. The mirror runs whenever coins
-    // changed, regardless of key; the canonical key is 'lala' (F-Sec-3
-    // decision; Task #1816).
-    const {
-      seedStartingBalance, getCurrentBalance, logTransaction,
-    } = require('../services/financialTransactionService');
-
-    let ledgerBefore = 0;
-    let adjustment = 0;
-    if (deltas.coins !== undefined) {
-      // seedStartingBalance is idempotent. Without a seed row the SUM is 0
-      // even though getCurrentBalance reports starting_balance via a
-      // fallback, so an adjustment computed against that fallback would
-      // land off-target. Run before the transaction so the seed is its
-      // own commit (it doesn't need to roll back if the edit fails).
-      await seedStartingBalance(models.sequelize, show_id);
-      ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
-      adjustment = newState.coins - ledgerBefore;
-    }
-
     await models.sequelize.transaction(async (t) => {
+      if (key === 'lala' && coinsRequested !== undefined) {
+        const ledgerBefore = await lockLedgerBalance(models.sequelize, show_id, { transaction: t });
+        oldState.coins = ledgerBefore;
+        const adjustment = coinsRequested - ledgerBefore;
+        if (adjustment !== 0) {
+          await logTransaction(models.sequelize, show_id, {
+            type: adjustment > 0 ? 'income' : 'expense',
+            category: 'manual_adjustment',
+            amount: Math.abs(adjustment),
+            description: 'Manual coin adjustment from Characters tab',
+            balance_before: ledgerBefore,
+            balance_after: ledgerBefore + adjustment,
+            metadata: { source: 'character_state_update', delta: adjustment, character_key: key },
+            transaction: t,
+          });
+        }
+        ({ balance: newState.coins } = await syncCoinsFromLedger(models.sequelize, show_id, { transaction: t }));
+      }
+
+      for (const k of Object.keys(newState)) {
+        if (newState[k] !== oldState[k]) deltas[k] = newState[k] - oldState[k];
+      }
+
       await models.sequelize.query(
         `UPDATE character_state
-         SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
+         SET reputation = :reputation, brand_trust = :brand_trust,
              influence = :influence, stress = :stress, updated_at = NOW()
          WHERE id = :stateId`,
         { replacements: { ...newState, stateId: state.id }, transaction: t }
@@ -675,19 +705,6 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
             transaction: t,
           }
         );
-      }
-
-      if (deltas.coins !== undefined && adjustment !== 0) {
-        await logTransaction(models.sequelize, show_id, {
-          type: adjustment > 0 ? 'income' : 'expense',
-          category: 'manual_adjustment',
-          amount: Math.abs(adjustment),
-          description: 'Manual coin adjustment from Characters tab',
-          balance_before: ledgerBefore,
-          balance_after: ledgerBefore + adjustment,
-          metadata: { source: 'character_state_update', delta: adjustment, character_key: key },
-          transaction: t,
-        });
       }
     });
 
