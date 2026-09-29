@@ -103,7 +103,7 @@ function resetModels() {
     WorldEvent: { findOne: jest.fn(async () => null) },
     Opportunity: { findByPk: jest.fn(async () => null), findOne: jest.fn(async () => null) },
     CareerGoal: { findAll: jest.fn(async () => []) },
-    sequelize: { query: jest.fn(async (sql, opts) => answer(sql, opts)), QueryTypes: { SELECT: 'SELECT' } },
+    sequelize: { query: jest.fn(async (sql, opts) => answer(sql, opts)), QueryTypes: { SELECT: 'SELECT' }, transaction: async (a, b) => (typeof a === 'function' ? a({ id: 'tx' }) : b({ id: 'tx' })) },
   });
 }
 

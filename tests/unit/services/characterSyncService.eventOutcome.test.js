@@ -300,7 +300,8 @@ describe('completeEpisode step 19 — the completion part runs with the real tie
       if (/UPDATE character_state\b[\s\S]*RETURNING coins/.test(sql)) return [[{ coins: 500 }], 1];
       return [[], 0];
     });
-    return { query, QueryTypes: { SELECT: 'SELECT' } };
+    // Managed transaction (completeEpisode, §8(x) D2): runs the callback.
+    return { query, QueryTypes: { SELECT: 'SELECT' }, transaction: async (a, b) => (typeof a === 'function' ? a({ id: 'tx' }) : b({ id: 'tx' })) };
   }
 
   function useStore(store) {

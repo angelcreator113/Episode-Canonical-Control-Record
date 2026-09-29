@@ -70,7 +70,7 @@ function makeDb(coins, readCoins = coins) {
     if (/^\s*SELECT/.test(sql)) return [];
     return [[], 0];
   });
-  return { row, statements, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } };
+  return { row, statements, sequelize: { query, QueryTypes: { SELECT: 'SELECT' }, transaction: async (a, b) => (typeof a === 'function' ? a({ id: 'tx' }) : b({ id: 'tx' })) } };
 }
 
 const writes = (statements, re) => statements.filter((s) => re.test(s.sql));
@@ -95,7 +95,8 @@ describe('completeEpisode never takes coins below zero (Task #1933)', () => {
     expect(row.coins).toBe(350);
     // Only the write-free preview ran; no ledger rows, no evaluation saved.
     expect(finalizeEpisodeFinancials).toHaveBeenCalledTimes(1);
-    expect(finalizeEpisodeFinancials.mock.calls[0][3]).toEqual({ dryRun: true });
+    // The preview runs inside completion's transaction (§8(x) D2, Task #2228).
+    expect(finalizeEpisodeFinancials.mock.calls[0][3]).toEqual({ dryRun: true, transaction: { id: 'tx' } });
     expect(writes(statements, /INSERT INTO financial_transactions/)).toEqual([]);
     expect(writes(statements, /UPDATE character_state/)).toEqual([]);
     expect(writes(statements, /UPDATE episodes SET evaluation_json/)).toEqual([]);
