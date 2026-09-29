@@ -15,6 +15,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
+const { careerTierFromReputation } = require('../utils/careerTiers');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -367,8 +368,10 @@ async function getAccessibleCareerTier(showId, models) {
       { replacements: { showId } }
     );
     const rep = states?.[0]?.reputation || 0;
-    // Tier 1: rep 0-2, Tier 2: rep 3-4, Tier 3: rep 5-6, Tier 4: rep 7-8, Tier 5: rep 9-10
-    return Math.min(5, Math.floor(rep / 2) + 1);
+    // Tier 1: rep 0-2, Tier 2: rep 3-4, Tier 3: rep 5-6, Tier 4: rep 7-8, Tier 5: rep 9-10.
+    // The formula used to be min(5, floor(rep/2)+1), one tier high at rep
+    // 2, 4, 6 and 8 (Task #2317).
+    return careerTierFromReputation(rep);
   } catch {
     return 1;
   }

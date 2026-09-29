@@ -34,6 +34,7 @@ const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
 const { normalizeRestrictions, listEventDeliverables } = require('../services/eventTermsService');
 const { withDeliverableTasks } = require('../utils/socialTaskSource');
+const { careerTierFromLabel, careerTierFromReputation } = require('../utils/careerTiers');
 const { startedEpisodeFor, readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('../services/episodeTaskCopyService');
 const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
 
@@ -772,11 +773,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       if (updates[field] !== undefined) {
         let val = normalizeNullLike(unwrapScalar(updates[field]));
 
+        // The five canonical tiers, by label (Task #2317). This map used to
+        // put Elite at 4 and an unknown "icon" at 5.
         if (field === 'career_tier' && typeof val === 'string') {
-          const tierMap = { emerging: 1, rising: 2, established: 3, elite: 4, icon: 5 };
-          if (tierMap[val.toLowerCase()] !== undefined) {
-            val = tierMap[val.toLowerCase()];
-          }
+          const tier = careerTierFromLabel(val);
+          if (tier !== null) val = tier;
         }
 
         if (val !== null && integerFields.has(field)) {
@@ -4473,7 +4474,7 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
     state.coins = await getCurrentBalance(sequelize, showId);
 
     // Reputation → career tier gate. Tier 1: rep 0-2, Tier 2: rep 3-4, etc.
-    const careerTier = Math.min(5, Math.floor((state.reputation || 0) / 2) + 1);
+    const careerTier = careerTierFromReputation(state.reputation); // canonical bands (Task #2317)
 
     // ── 2. Previous episode context for chain + brand continuity ──
     let prevBrief = null;
