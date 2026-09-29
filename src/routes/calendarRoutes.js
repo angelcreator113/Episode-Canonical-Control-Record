@@ -37,6 +37,7 @@ const { Op }  = require('sequelize');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
+const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 
 router.use(requireAuth);
 
@@ -566,6 +567,8 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
         scene_set_id: req.body.scene_set_id || null,
         status: 'draft',
       });
+      // The deal type's first draft (Task #2330; dealTypeDraftService).
+      await syncDraftedDealType(models.sequelize, worldEvent.id, { initial: true });
 
       return res.status(201).json({
         success: true,
@@ -596,6 +599,9 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
         },
       }
     );
+
+    // The deal type's first draft (Task #2330; dealTypeDraftService).
+    await syncDraftedDealType(models.sequelize, id, { initial: true });
 
     res.status(201).json({ success: true, event: { id, name: req.body.name || calendarEvent.title }, source: { calendar_event_id: calendarEvent.id } });
   } catch (err) {
