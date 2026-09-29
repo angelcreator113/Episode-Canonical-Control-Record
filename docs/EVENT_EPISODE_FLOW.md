@@ -2449,6 +2449,87 @@ These rulings are recorded here, in a living doc, and not in the register.
 A register note that cites them is owed, filed through `/audit-file`. No
 file under `docs/audit/` is edited by this entry.
 
+**(y) Prime Coins rulings (Evoni, 2026-09-29, Task #2244).** Docs only:
+no code is changed by this entry. Q1–Q7 answer the seven questions in
+`docs/COINS_LEDGER_CACHE_DESIGN.md` §7 (Task #2242, merged as `b4926262`
+in #2243). That note is cited, not restated. Evoni added Q8 and Q9. The
+answers are recorded verbatim.
+
+**Q1.** 1900, once per new show. Use the show's starting_balance setting,
+defaulting to 1900. This is Lala's one-time starting bankroll;
+character_state should mirror the ledger rather than independently starting
+coins at 500.
+
+**Q2.** Yes. In the one-time reconciliation, any show missing its seed
+transaction should receive its starting-balance seed first, then have its
+balance recomputed, so we don't accidentally erase its original bankroll.
+
+**Q3.** Lala only. Prime Coins are Lala's career economy at the show level.
+Other characters can have editable story stats, but they should not own or
+modify this ledger. If we later want other characters to have money, that
+should be a deliberately separate character-economy system.
+
+**Q4.** Every Lala row shows the same balance. The ledger is the authority,
+so duplicate/legacy Lala state rows cannot disagree about coins. Longer
+term, investigate why multiple Lala rows can exist rather than treating
+duplicates as normal.
+
+**Q5.** Admin Reset stops touching coins. Resetting character/story state
+should not give Lala 500 or erase career money. If needed, create a
+separate, explicit Reset Career Economy action with a strong confirmation,
+because that resets the financial history/balance.
+
+**Q6.** Yes. Finalize must enforce the same insufficient-funds protection
+as Complete. No path should be able to spend Lala below zero merely because
+it entered the ledger through a different workflow.
+
+**Q7.** Whole Prime Coins, consistently rounded. Use half-away-from-zero at
+the ledger boundary if fractional amounts can currently occur, and use the
+reconciliation query to determine whether existing cents need migration.
+Going forward, the game economy transacts in whole Prime Coins unless a
+real reason for fractional coins is found.
+
+**Q8.** Lala's coin balance persists between episodes. An accepted
+episode's ending ledger balance is the next episode's starting balance.
+There is no per-episode reset or refill.
+
+**Q9.** The one-time reconciliation is proposed per show and applied only
+after Evoni approves each show's balance.
+
+**Doctrine.** Prime Coins are Lala's persistent career economy. Each new
+show/career receives one configurable starting balance. After that initial
+seed, Lala's balance changes only through recorded economic activity:
+career earnings, event compensation, deliverables, rewards, purchases,
+event costs and other explicit transactions. Episode boundaries never reset
+the balance. The ledger is the financial authority; character state mirrors
+it.
+
+**How the answers map to the note's questions.** Each answer is matched by
+content, and none conflicts with the question it answers:
+
+| Answer | Note §7 question |
+|---|---|
+| Q1 | starting balance |
+| Q2 | seeding unseeded ledgers in the reconciliation |
+| Q3 | coins for keys other than `lala` |
+| Q4 | several `lala` rows per show |
+| Q5 | the admin reset |
+| Q6 | a standalone Finalize going below zero |
+| Q7 | rounding |
+
+Q8 and Q9 have no question in the note; Evoni added them.
+
+**Where these stand:**
+- The rulings are recorded here.
+- D1's build follows `docs/COINS_LEDGER_CACHE_DESIGN.md` §10: five PRs,
+  with the reconciliation last and gated on Q9. It is not filed by this
+  entry.
+- **Owed, unfiled:**
+  - Q4's investigation into why several Lala rows can exist.
+  - Q5's optional Reset Career Economy action.
+- **Held:** the deal-type design note (D6–D10) waits on Evoni's
+  go-ahead, because payouts depend on the ledger design.
+
 ---
 
 ## 9. Owed before enforcement
