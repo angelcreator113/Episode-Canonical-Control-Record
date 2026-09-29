@@ -565,6 +565,10 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
     restrictions: JSON.stringify(restrictions),
     is_paid: compensation.is_paid,
     payment_amount: compensation.payment_amount,
+    // The source opportunity, as convertOpportunityToEvent writes it
+    // (careerPipelineService.js); before Task #2314 this path kept it only
+    // in canon_consequences.automation.
+    opportunity_id: opp.id,
     status: 'ready',
     ...draftedColumns,
   };
@@ -577,11 +581,11 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount${extraCols},
+     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount, opportunity_id${extraCols},
      status, created_at, updated_at)
      VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount${extraVals},
+     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount, :opportunity_id${extraVals},
      :status, NOW(), NOW())`,
     { replacements: eventData }
   );
