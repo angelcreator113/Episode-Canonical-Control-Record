@@ -2793,6 +2793,61 @@ Under T3 they are decided in the deal design. They are the ±1 reputation at
 - T3's contract pay by deliverable status belongs to the deal build (§8(z)
   Law 8).
 
+**(cc) Deal answers (Evoni, 2026-09-29).** Docs only: no code is changed by
+this entry. These are Evoni's answers to the open questions of
+`docs/DEAL_DESIGN.md` §10 (Task #2310, PR #2312). That note is cited, not
+restated. The answers are recorded verbatim; the note's §10 records the same
+answers against each question.
+
+**Taken as recommended:** "Q1–Q3, Q5–Q7, Q9–Q11, Q14–Q16: take the
+recommendations as written. Q8: done by #2313."
+
+**Q4.** "Adopt five Career Rate Anchors—Emerging, Rising, Established,
+Influential and Elite. Rates are baselines, not fixed payouts. Actual
+compensation is assembled from deal type, deliverables, rights,
+restrictions, urgency and other canonical deal terms. Self-funded, comped
+and gifted opportunities do not create cash income; gifted/comped value is
+recorded separately."
+
+Starting anchors (Prime Coins): Paid appearance 150/250/450/650/900; Reel
+75/125/225/325/450; 3 Stories 35/60/110/160/225; Brand partnership base
+—/500/900/1,300/1,800; Performance/creator booking 100/200/400/600/850.
+Premiums apply only to the component they affect: rush 48h +10%, 24h +20%;
+usage 30d +15%, 90d +25%; exclusivity 7d +10%, 30d +25%, 90d +40%;
+paid-ad/whitelisting a separate premium; travel is reimbursement, not
+income; gifted product is non-cash value.
+
+**Q12 (changed).** "A SLAY does not automatically create Prime Coins. A
+performance bonus is paid only when the accepted deal explicitly contains
+one; SLAY can trigger that contractual bonus. The generic tier reward
+(+150/+75/+25/−25) is retired for all completions from this ruling on; no
+episode has been completed, so no balance has included it."
+
+**Q13.** "B, with aggregation. Canonical career goals and accepted
+deliverables may affect character state; optional ideas never do.
+Deliverables contribute to an episode/event outcome rather than granting a
+stat point independently for every completed task."
+
+**Follow-up rulings (Evoni, 2026-09-29),** on the two points
+`DEAL_DESIGN.md` §11.2 had left open:
+- "event_reward retires with the tier reward (Law 8: money only from
+  accepted terms; legacy events keep payment_amount)."
+- "tier_paid_bonus retires too (Q12)."
+
+Both retire with the tier reward in the payout PR (§8 PR 5).
+
+**Where these stand:**
+- The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
+  that note says what they change in the design:
+  - pricing becomes rate anchors by component and tier;
+  - a bonus exists only in a deal that contains one;
+  - the tier reward is retired, and the event reward and paid bonus with
+    it;
+  - stats aggregate.
+- Q8 is built by #2313 (PR #2315).
+- The deal build starts at `DEAL_DESIGN.md` §8 PR 1 (the schema).
+- Retiring the tier reward joins the payout PR (§8 PR 5), per Evoni.
+
 ---
 
 ## 9. Owed before enforcement
