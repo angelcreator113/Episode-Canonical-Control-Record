@@ -210,13 +210,18 @@ describe('POST /wardrobe/purchase (Task #1933)', () => {
     expect(ownedWrites()).toEqual([]);
   });
 
-  test('a covered purchase writes only the row it read and reports the balance the database returned', async () => {
+  test('a covered purchase writes only the row it read and reports the ledger balance', async () => {
     mockStaleCoins = 350;
     db.row.coins = 350;
+    // The ledger before and after the purchase (Task #2273: coins_before and
+    // coins_after are Lala's ledger balance, as every display shows it).
+    require('../../../src/services/financialTransactionService').getCurrentBalance
+      .mockResolvedValueOnce(350).mockResolvedValueOnce(50);
 
     const res = await run(wardrobeRouter, '/purchase', { wardrobe_id: 'w-1', show_id: 'show-1' });
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.coins_before).toBe(350);
     expect(res.body.coins_after).toBe(50);
     expect(db.row.coins).toBe(50);
     const update = db.statements.find((s) => /UPDATE character_state/.test(s.sql));
