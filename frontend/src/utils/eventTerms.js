@@ -211,6 +211,7 @@ export function buildDeliverableBody(draft) {
       deliverable_type: type || null,
       due_date: due || null,
       required: draft?.required !== false,
+      owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
     },
   };
 }
@@ -221,8 +222,12 @@ export function deliverableDraftFrom(d) {
     deliverable_type: d?.deliverable_type || '',
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
+    owed_to: d?.owed_to === 'brand' ? 'brand' : 'host',
   };
 }
+
+// Who a deliverable is owed to (T2, §8(bb); Task #2294).
+export const DELIVERABLE_OWED_TO_LABELS = { host: 'Host requirement', brand: 'Brand deliverable' };
 
 // ── Fulfilment (Task #1815, slice 1b) ──
 

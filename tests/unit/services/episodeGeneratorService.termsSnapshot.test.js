@@ -21,7 +21,7 @@ jest.mock('../../../src/services/timelinePlacementService', () => ({ autoPlaceRe
 const { generateEpisodeFromEvent } = require('../../../src/services/episodeGeneratorService');
 
 const DELIVERABLES = [
-  { id: 'd1', event_id: 'ev-1', description: 'Sponsored content', deliverable_type: null, due_date: null, required: true, status: 'pending', episode_id: null },
+  { id: 'd1', event_id: 'ev-1', description: 'Sponsored content', deliverable_type: null, due_date: null, required: true, owed_to: 'brand', status: 'pending', episode_id: null },
   { id: 'd2', event_id: 'ev-1', description: 'Story mentions', deliverable_type: 'story', due_date: '2026-11-07', required: false, status: 'pending', episode_id: null },
 ];
 
@@ -98,8 +98,9 @@ describe('generateEpisodeFromEvent — terms snapshot (Task #1814)', () => {
     expect(briefs[0].event_metadata.terms).toEqual({
       access_requirements: { reputation_min: 3, coins_min: 100 },
       deliverables: [
-        { id: 'd1', description: 'Sponsored content', deliverable_type: null, due_date: null, required: true, status: 'pending' },
-        { id: 'd2', description: 'Story mentions', deliverable_type: 'story', due_date: '2026-11-07', required: false, status: 'pending' },
+        // owed_to (T2, Task #2294): d2's row has none, so the snapshot says host.
+        { id: 'd1', description: 'Sponsored content', deliverable_type: null, due_date: null, required: true, owed_to: 'brand', status: 'pending' },
+        { id: 'd2', description: 'Story mentions', deliverable_type: 'story', due_date: '2026-11-07', required: false, owed_to: 'host', status: 'pending' },
       ],
       restrictions: [{ type: 'exclusivity', description: 'No competing beauty brands for 90 days' }],
       compensation: { is_paid: true, payment_amount: 1500 },

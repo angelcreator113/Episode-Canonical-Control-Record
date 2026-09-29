@@ -24,7 +24,7 @@ const _sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables } = require('./eventTermsService');
-const { withDeliverableTasks } = require('../utils/socialTaskSource');
+const { withDeliverableTasks, withCareerTasks } = require('../utils/socialTaskSource');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -245,6 +245,16 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
  * @param {object} event - The world event
  * @param {object} options - { width, listType: 'wardrobe' | 'career' }
  */
+// T2 (§8(bb); Task #2294): the source label on a rendered one-list item.
+// 'deliverable' is a T1-era deliverable task stamped before owed_to existed.
+const SOURCE_BADGE = {
+  host_requirement: 'host requirement',
+  brand_deliverable: 'brand deliverable',
+  deliverable: 'host requirement',
+  goal: 'goal',
+  optional: 'optional idea',
+};
+
 function renderTodoAsset(tasks, event, options = {}) {
   loadFonts();
 
@@ -336,7 +346,11 @@ function renderTodoAsset(tasks, event, options = {}) {
     const rowW = W - (PADDING * 2) + 12;
     const checkX = PADDING;
     const checkY = taskY + (TASK_H / 2) - (checkSize / 2);
-    const badgeReservedWidth = task.required ? 0 : 52;
+    // T2: a one-list item (it has a task_source) always shows its source; a
+    // wardrobe slot shows "optional" when it is not required.
+    const badgeText = task.task_source ? (SOURCE_BADGE[task.task_source] || 'optional idea')
+      : task.required ? null : 'optional';
+    const badgeReservedWidth = badgeText ? Math.round(W * 0.2) : 0;
 
     // Refined row surface to match invitation/social quality
     drawRoundedRect(ctx, rowX, rowY, rowW, rowHeight, 10);
@@ -379,12 +393,9 @@ function renderTodoAsset(tasks, event, options = {}) {
       ctx.fillText(fitTextToWidth(ctx, task.description, labelW), labelX, taskY + 45);
     }
 
-    // Optional badge — on the career list, the task's source (T1): a goal,
-    // an optional idea, or an unrequired deliverable
-    if (!task.required) {
-      const badgeText = task.task_source === 'goal' ? 'goal'
-        : task.task_source === 'deliverable' ? 'deliverable'
-        : 'optional';
+    // Source badge (T1/T2): where a one-list item comes from; "optional" on
+    // an unrequired wardrobe slot
+    if (badgeText) {
       const badgeFont = `${Math.round(W * 0.020)}px LibreBaskerville, serif`;
       ctx.font = badgeFont;
       const badgeW = Math.ceil(ctx.measureText(badgeText).width) + 10;
@@ -701,18 +712,46 @@ async function generateCareerList(episodeId, showId, models) {
 
   console.log(`[CareerList] Generating for: ${event.name}`);
 
-  // T1 (§8(bb); Task #2292): the generated tasks are goals or optional
-  // ideas; each accepted deliverable is added as its own task, the only
-  // kind that can be required.
+  // T2 (§8(bb); Task #2294): one task list. The Career Checklist is a view
+  // of the episode's list (episode_todo_lists.social_tasks): its generated
+  // goals and ideas are saved into that list, replacing the previous
+  // career items, and the rendered checklist shows the whole list. T1: a
+  // generated item is never required; only a deliverable is.
+  const [todoRow] = await sequelize.query(
+    'SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+  );
+  let stored = todoRow?.social_tasks;
+  if (typeof stored === 'string') stored = JSON.parse(stored || '[]');
+  if (!Array.isArray(stored)) stored = [];
+
+  // A list saved before T1 may lack the event's deliverables; each row not
+  // yet on the list is added. Stored items are otherwise left as they are.
   let deliverables = [];
   try {
     deliverables = await listEventDeliverables(sequelize, event.id);
   } catch (delivErr) {
-    console.error('[CareerList] Deliverables read failed (no career task is required):', delivErr.message);
+    console.error('[CareerList] Deliverables read failed (none added to the list):', delivErr.message);
   }
-  const tasks = withDeliverableTasks(await generateCareerTasks(event), deliverables)
-    .map((t, i) => ({ ...t, order: i + 1 }));
-  const buffer = renderTodoAsset(tasks, event, { listType: 'career' });
+  const onList = new Set(stored.map((t) => t?.deliverable_id).filter(Boolean));
+  const missing = withDeliverableTasks([], deliverables).filter((t) => !onList.has(t.deliverable_id));
+
+  const tasks = withCareerTasks([...stored, ...missing], await generateCareerTasks(event));
+  if (todoRow) {
+    await sequelize.query(
+      'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
+      { replacements: { tasks: JSON.stringify(tasks), id: todoRow.id } }
+    );
+  } else {
+    await sequelize.query(
+      `INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, social_tasks, status, created_at, updated_at)
+       VALUES (:id, :episodeId, :showId, :eventId, '[]', :tasks, 'generated', NOW(), NOW())
+       ON CONFLICT (episode_id) DO UPDATE SET social_tasks = EXCLUDED.social_tasks, updated_at = NOW()`,
+      { replacements: { id: uuidv4(), episodeId, showId: showId || null, eventId: event.id, tasks: JSON.stringify(tasks) } }
+    );
+  }
+
+  const buffer = renderTodoAsset(tasks.map((t, i) => ({ ...t, order: i + 1 })), event, { listType: 'career' });
   const assetUrl = await uploadTodoAsset(buffer, episodeId);
 
   const { Asset } = models;

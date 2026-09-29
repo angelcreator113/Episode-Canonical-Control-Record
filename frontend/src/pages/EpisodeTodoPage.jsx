@@ -217,11 +217,14 @@ export default function EpisodeTodoPage() {
         </div>
       )}
 
-      {/* Social Media Tasks */}
+      {/* The episode's one task list (T2, §8(bb); Task #2294): host
+          requirements, brand deliverables, Lala's goals and optional ideas,
+          each labelled with its source. The Career Checklist is the same
+          list. */}
       {socialTasks.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Social Media ({socialCompleted}/{socialTasks.length})</span>
+            <span>Tasks ({socialCompleted}/{socialTasks.length})</span>
             {socialCompleted === socialTasks.length && <span style={{ color: '#16a34a' }}>All done</span>}
           </div>
 

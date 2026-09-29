@@ -17,9 +17,15 @@ const { DataTypes } = require('sequelize');
  * src/routes/eventDeliverables.js moves one forward a step at a time
  * (validateDeliverableTransition in eventTermsService.js; Task #1815).
  *
- * Migration: 20260924000000-add-event-terms.js.
+ * owed_to says who the deliverable is owed to, host or brand (T2, §8(bb);
+ * Task #2294). The one task list shows a host row as a host requirement and
+ * a brand row as a brand deliverable.
+ *
+ * Migrations: 20260924000000-add-event-terms.js,
+ * 20260929190000-add-event-deliverables-owed-to.js.
  */
 const DELIVERABLE_STATUSES = ['pending', 'completed', 'submitted', 'approved'];
+const DELIVERABLE_OWED_TO = ['host', 'brand'];
 
 module.exports = (sequelize) => {
   const EventDeliverable = sequelize.define('EventDeliverable', {
@@ -41,6 +47,13 @@ module.exports = (sequelize) => {
     submitted_at: { type: DataTypes.DATE, allowNull: true },
     approved_at: { type: DataTypes.DATE, allowNull: true },
     episode_id: { type: DataTypes.UUID, allowNull: true },
+    owed_to: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: 'host',
+      comment: 'host | brand',
+      validate: { isIn: [DELIVERABLE_OWED_TO] },
+    },
   }, {
     tableName: 'event_deliverables',
     timestamps: true,
@@ -57,6 +70,7 @@ module.exports = (sequelize) => {
   };
 
   EventDeliverable.STATUSES = DELIVERABLE_STATUSES;
+  EventDeliverable.OWED_TO = DELIVERABLE_OWED_TO;
 
   return EventDeliverable;
 };

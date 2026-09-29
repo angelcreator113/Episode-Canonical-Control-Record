@@ -34,7 +34,7 @@ import {
   REQUIREMENT_KEYS, describeRequirements, requirementsDraftFrom, buildRequirementsUpdate,
   restrictionsOf, restrictionLabel, buildRestrictionAdd, buildRestrictionRemove,
   describeCompensation, compensationDraftFrom, buildCompensationUpdate,
-  buildDeliverableBody, deliverableDraftFrom,
+  buildDeliverableBody, deliverableDraftFrom, DELIVERABLE_OWED_TO_LABELS,
   DELIVERABLE_STATUS_LABELS, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel, deliverableTimeline,
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_TYPE_MAX, DELIVERABLE_DUE_MAX,
 } from '../../utils/eventTerms';
@@ -283,6 +283,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   <div className="epp-term-item-main">
                     <span className="epp-term-item-text">{d.description}</span>
                     <span className="epp-term-meta">
+                      <span data-testid={`terms-deliverable-owed-${d.id}`}>{DELIVERABLE_OWED_TO_LABELS[d.owed_to === 'brand' ? 'brand' : 'host']}</span>
                       {d.deliverable_type && <span>{d.deliverable_type}</span>}
                       {d.due_date && <span>Due {d.due_date}</span>}
                       {d.required === false && <span>Optional</span>}
@@ -361,6 +362,16 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   />
                 </label>
               </div>
+              <label className="epp-term-field">
+                <span>Owed to</span>
+                <select
+                  value={delivDraft.owed_to} data-testid="terms-deliverable-owed-to"
+                  onChange={(e) => setDelivDraft((d) => ({ ...d, owed_to: e.target.value }))}
+                >
+                  <option value="host">{DELIVERABLE_OWED_TO_LABELS.host}</option>
+                  <option value="brand">{DELIVERABLE_OWED_TO_LABELS.brand}</option>
+                </select>
+              </label>
               <label className="epp-term-check">
                 <input
                   type="checkbox" checked={delivDraft.required}

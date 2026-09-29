@@ -59,7 +59,8 @@ describe('Episode Ledger tasks show no false "required" (T1)', () => {
 
     expect(panel.getAllByText('required')).toHaveLength(1);
     expect(within(row('One reel in the coat')).getByText('required')).toBeTruthy();
-    expect(within(row('One reel in the coat')).getByTestId('task-source').textContent).toBe('Deliverable');
+    // T2 (Task #2294): a deliverable stamped without owed_to reads as a host requirement.
+    expect(within(row('One reel in the coat')).getByTestId('task-source').textContent).toBe('Host requirement');
 
     for (const label of ['Sponsored Post 1', 'Get Ready With Me']) {
       expect(within(row(label)).queryByText('required')).toBeNull();

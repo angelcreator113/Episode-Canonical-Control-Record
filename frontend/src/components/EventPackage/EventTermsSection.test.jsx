@@ -109,9 +109,23 @@ describe('EventTermsSection', () => {
     fireEvent.click(screen.getByTestId('terms-deliverable-save'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       '/api/v1/world/show-1/events/ev-1/deliverables',
-      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true }
+      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'host' }
     ));
     expect(putEvent).not.toHaveBeenCalled();
+  });
+
+  test('a deliverable can be marked as owed to a brand (T2, Task #2294)', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, deliverable: { id: 'd3' } } });
+    renderTerms();
+    await waitFor(() => expect(screen.getByText('Sponsored content')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('terms-deliverable-add'));
+    fireEvent.change(screen.getByTestId('terms-deliverable-description'), { target: { value: 'Tag the label' } });
+    fireEvent.change(screen.getByTestId('terms-deliverable-owed-to'), { target: { value: 'brand' } });
+    fireEvent.click(screen.getByTestId('terms-deliverable-save'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/events/ev-1/deliverables',
+      expect.objectContaining({ description: 'Tag the label', owed_to: 'brand' })
+    ));
   });
 
   test('locked: shows the terms, offers no editing', async () => {
