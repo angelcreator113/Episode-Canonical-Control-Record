@@ -3996,7 +3996,6 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income (coins)</div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{income.toLocaleString()}</div>
                             {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {fc.income.event_payment}</div>}
-                            {fc?.income?.social_task_rewards > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Tasks: +{fc.income.social_task_rewards}</div>}
                             {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content est: +{fc.income.content_revenue_est}</div>}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>

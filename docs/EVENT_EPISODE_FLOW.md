@@ -2704,12 +2704,22 @@ rows, expected terms) after D1's reconciliation is applied; Phase B
 deal build; Phase C (wardrobe-driven projections, Money Recap, Prime Bank
 episode filter) with the wardrobe economy.
 
+**M6.** Once an episode or show is deleted, it no longer affects Lala's
+money. Ledger rows tied to a deleted episode or show stay as history but are
+excluded from the balance; the balance is recomputed as if that episode never
+happened.
+
+(M6 was ruled by Evoni later on 2026-09-29, with the per-show reconciliation
+decisions, and added here; Task #2267.)
+
 **Where these stand:**
 - M3 is added to D1 PR 3 (#2248). There, the wardrobe select, lock-outfit and
   purchase ledger rows record `episode_id` when the spend happens in an
   episode's context, with a test.
 - Phases A–C are not filed.
 - Phase A waits on D1's reconciliation (#2250).
+- M6 is built into D1's ledger sum (#2267). Both `getCurrentBalance` and
+  `syncCoinsFromLedger` leave out rows whose episode is no longer live.
 
 **(bb) Task rulings (Evoni, 2026-09-29, Task #2262).** Docs only: no code
 is changed by this entry. The basis is `docs/TASK_LISTS_READ.md` (Task
