@@ -65,7 +65,9 @@ router.get('/:showId/filter', requireAuth, async (req, res) => {
       try {
         const episode = await Episode.findByPk(event.used_in_episode_id);
         if (episode) {
-          const balance = parseFloat(episode.total_income || 0) - parseFloat(episode.total_expenses || 0);
+          // Lala's ledger balance, not one episode's net (Task #2273).
+          const { getCurrentBalance } = require('../services/financialTransactionService');
+          const balance = await getCurrentBalance(require('../models').sequelize, episode.show_id);
           pressureLevel = balance < 0 ? 'desperate'
             : balance < 500 ? 'tight'
             : balance < 2000 ? 'comfortable'
@@ -214,7 +216,9 @@ router.post('/:showId/suggest', requireAuth, async (req, res) => {
       try {
         const ep = await Episode.findByPk(episodeId);
         if (ep) {
-          const balance = parseFloat(ep.total_income || 0) - parseFloat(ep.total_expenses || 0);
+          // Lala's ledger balance, not one episode's net (Task #2273).
+          const { getCurrentBalance } = require('../services/financialTransactionService');
+          const balance = await getCurrentBalance(models.sequelize, ep.show_id);
           financialNote = `Lala's budget: $${balance}. ${balance < 0 ? 'She is in debt — choose items she already owns.' : balance < 500 ? 'Money is tight — keep it affordable.' : 'She can splurge a little.'}`;
         }
       } catch { /* skip */ }

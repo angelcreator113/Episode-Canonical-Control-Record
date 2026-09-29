@@ -4,6 +4,7 @@ const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
 const { requireAuth } = require('../middleware/auth');
+const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 
 // Lazy load Show model to avoid circular dependencies
 let Show = null;
@@ -491,8 +492,8 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
         COALESCE(SUM(CASE WHEN type IN ('income', 'reward') THEN amount ELSE 0 END), 0)::bigint AS lifetime_income,
         COALESCE(SUM(CASE WHEN type IN ('expense', 'deduction') THEN amount ELSE 0 END), 0)::bigint AS lifetime_expenses,
         COUNT(*)::int AS tx_count
-       FROM financial_transactions
-       WHERE show_id = :showId AND status = 'executed' AND deleted_at IS NULL`,
+       FROM financial_transactions ft
+       WHERE ft.show_id = :showId AND ${countedLedgerRows('ft')}`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     );
     const lifetimeIncome = Number(totalsRow?.lifetime_income) || 0;
@@ -502,7 +503,9 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
     // Group transactions by episode_id, join against episodes for title/number.
     // Orphan transactions (episode_id null) are bucketed under "Unlinked" so
     // they still count in lifetime totals but don't clutter the table.
-    const [byEpRows] = await sequelize.query(
+    // SELECT returns the rows themselves; destructuring took the first row,
+    // so any show with an episode failed here (Task #2273).
+    const byEpRows = await sequelize.query(
       `SELECT
         e.id AS episode_id,
         e.episode_number,
@@ -525,13 +528,14 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
     );
 
     // ── Rolling balance per episode (for the trend line) ──
-    // Walk episodes oldest → newest and carry forward. Starts from 0 and
-    // lets the seed transaction (which lives on no specific episode) show
-    // up as the first income spike on the "Unlinked" row — that's fine for
-    // the trend because the running balance still matches getCurrentBalance
-    // by the end.
+    // Walk episodes oldest → newest and carry forward, starting from what
+    // the rows on no live episode (the seed, purchases outside an episode)
+    // contribute, so the newest episode's balance_after is Lala's balance
+    // (Task #2273). Rows on no episode are placed before the first episode.
+    const currentBalance = await getCurrentBalance(sequelize, showId);
     const chrono = [...(byEpRows || [])].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-    let running = 0;
+    const episodesNet = chrono.reduce((sum, r) => sum + (Number(r.income) || 0) - (Number(r.expenses) || 0), 0);
+    let running = currentBalance - episodesNet;
     const trend = [];
     const byEpisode = [];
     for (const r of chrono) {
@@ -573,7 +577,6 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
       ? spendingEpisodes.reduce((s, e) => s + e.income, 0) / spendingEpisodes.length
       : 0;
     const burnRate = Math.max(0, avgExpense - avgIncome);  // net burn only; income offsets
-    const currentBalance = await getCurrentBalance(sequelize, showId);
     const runway = burnRate > 0 ? Math.floor(currentBalance / burnRate) : null;
 
     return res.json({
@@ -929,9 +932,9 @@ router.get('/:id/financial-breakdowns', requireAuth, async (req, res) => {
       `SELECT COALESCE(category, 'uncategorized') AS category,
               COALESCE(SUM(amount), 0)::bigint AS total,
               COUNT(*)::int AS tx_count
-       FROM financial_transactions
-       WHERE show_id = :showId AND type IN ('income', 'reward')
-         AND status = 'executed' AND deleted_at IS NULL
+       FROM financial_transactions ft
+       WHERE ft.show_id = :showId AND ft.type IN ('income', 'reward')
+         AND ${countedLedgerRows('ft')}
        GROUP BY category
        ORDER BY total DESC`,
       { replacements: { showId } }
@@ -940,9 +943,9 @@ router.get('/:id/financial-breakdowns', requireAuth, async (req, res) => {
       `SELECT COALESCE(category, 'uncategorized') AS category,
               COALESCE(SUM(amount), 0)::bigint AS total,
               COUNT(*)::int AS tx_count
-       FROM financial_transactions
-       WHERE show_id = :showId AND type IN ('expense', 'deduction')
-         AND status = 'executed' AND deleted_at IS NULL
+       FROM financial_transactions ft
+       WHERE ft.show_id = :showId AND ft.type IN ('expense', 'deduction')
+         AND ${countedLedgerRows('ft')}
        GROUP BY category
        ORDER BY total DESC`,
       { replacements: { showId } }

@@ -74,7 +74,9 @@ async function getCurrentBalance(sequelize, showId) {
     if ((row?.tx_count || 0) === 0) {
       return await getStartingBalance(sequelize, showId);
     }
-    return balance;
+    // Whole coins (§8(y) Q7), as syncCoinsFromLedger writes them, so every
+    // display of Lala's balance shows the same number (Task #2273).
+    return wholeCoins(balance);
   } catch {
     // Table might not exist yet — try character_state_history fallback
     try {
@@ -655,8 +657,11 @@ async function getFinancialLedger(showId, sequelize, options = {}) {
     : 'WHERE ft.show_id = :showId AND ft.deleted_at IS NULL';
   const replacements = episodeId ? { showId, episodeId, limit } : { showId, limit };
 
+  // Every row stays listed, as history; `counted` says whether it counts
+  // toward Lala's balance (§8(aa) M6: not voided, not a deleted episode's).
   const [rows] = await sequelize.query(
-    `SELECT ft.*, e.title as episode_title, e.episode_number
+    `SELECT ft.*, e.title as episode_title, e.episode_number,
+       (${countedLedgerRows('ft')}) AS counted
      FROM financial_transactions ft
      LEFT JOIN episodes e ON e.id = ft.episode_id
      ${whereClause}
@@ -667,21 +672,42 @@ async function getFinancialLedger(showId, sequelize, options = {}) {
 
   const balance = await getCurrentBalance(sequelize, showId);
 
-  // Episode-level summary
+  // Totals over the rows that count, not over the listed page (Task #2273).
+  const [totalsRow] = await sequelize.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN ft.type IN ('income', 'reward') THEN ft.amount ELSE 0 END), 0) AS income,
+       COALESCE(SUM(CASE WHEN ft.type IN ('expense', 'deduction') THEN ft.amount ELSE 0 END), 0) AS expenses
+     FROM financial_transactions ft
+     ${whereClause} AND ${countedLedgerRows('ft')}`,
+    { replacements, type: sequelize.QueryTypes.SELECT }
+  );
+  const income = Number(totalsRow?.income) || 0;
+  const expenses = Number(totalsRow?.expenses) || 0;
+
+  // Episode-level summary: each live episode's counted ledger rows. The
+  // episodes.total_* columns are finalize's own rows only (no outfit-lock
+  // purchases, no voids), so they are not read here.
   const [episodeSummary] = await sequelize.query(
     `SELECT e.id, e.episode_number, e.title,
-       COALESCE(e.total_income, 0) as total_income,
-       COALESCE(e.total_expenses, 0) as total_expenses,
+       COALESCE(SUM(CASE WHEN ft.type IN ('income', 'reward') THEN ft.amount ELSE 0 END), 0) as total_income,
+       COALESCE(SUM(CASE WHEN ft.type IN ('expense', 'deduction') THEN ft.amount ELSE 0 END), 0) as total_expenses,
        e.financial_score
      FROM episodes e
+     LEFT JOIN financial_transactions ft
+       ON ft.episode_id = e.id AND ft.show_id = :showId AND ${countedLedgerRows('ft')}
      WHERE e.show_id = :showId AND e.deleted_at IS NULL
+     GROUP BY e.id, e.episode_number, e.title, e.financial_score
      ORDER BY e.episode_number`,
     { replacements: { showId } }
-  ).catch(() => [[]]);
+  ).catch((err) => {
+    console.error('[getFinancialLedger] episode summary failed:', err.message);
+    return [[]];
+  });
 
   return {
     transactions: rows || [],
     balance,
+    totals: { income, expenses, net: income - expenses },
     episode_summary: episodeSummary || [],
     count: (rows || []).length,
   };

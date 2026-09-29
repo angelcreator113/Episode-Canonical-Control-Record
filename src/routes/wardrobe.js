@@ -1592,11 +1592,10 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
     // 3. One transaction: spend, ledger, ownership, links.
     const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
     const ledgerBefore = purchases.length > 0 ? await getCurrentBalance(models.sequelize, show_id) : null;
-    let coinsAfter = character.coins;
     try {
       await models.sequelize.transaction(async (t) => {
         if (totalCost > 0) {
-          coinsAfter = await spendCoins(models.sequelize, {
+          await spendCoins(models.sequelize, {
             stateId: state?.id, cost: totalCost, transaction: t, action: 'wardrobe_lock_outfit',
           });
         }
@@ -1664,7 +1663,10 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
       message: `Locked ${ids.length} piece${ids.length === 1 ? '' : 's'}${purchases.length ? `, bought ${purchases.length} for ${totalCost} coins` : ''}`,
       locked: ids.map((id) => ({ id, name: byId.get(id).name, coin_purchased: purchasedIds.has(id) })),
       coins_spent: totalCost,
-      coins_after: coinsAfter,
+      // Lala's ledger balance after the purchase, the number every display
+      // shows (Task #2273); the spend itself still guards the cached copy
+      // until D1 PR 3.
+      coins_after: await getCurrentBalance(models.sequelize, show_id),
     });
   } catch (error) {
     console.error('[LOCK-OUTFIT] error:', error);
@@ -1726,13 +1728,12 @@ router.post('/purchase', requireAuth, async (req, res) => {
     // concurrent purchases both paid from the same balance. The deduction is
     // now conditional on the row it read (spendCoins: `WHERE coins >=
     // :cost`); a purchase that lost a race is refused and rolls back.
-    let newCoins = currentCoins - cost;
     const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
     const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
     try {
       await models.sequelize.transaction(async (t) => {
         if (cost > 0) {
-          newCoins = await spendCoins(models.sequelize, { stateId: state?.id, cost, transaction: t, action: 'wardrobe_purchase' });
+          await spendCoins(models.sequelize, { stateId: state?.id, cost, transaction: t, action: 'wardrobe_purchase' });
         }
         await logTransaction(models.sequelize, show_id, {
           type: 'expense',
@@ -1798,8 +1799,9 @@ router.post('/purchase', requireAuth, async (req, res) => {
       success: true,
       message: `Purchased "${item.name}" for ${cost} coins`,
       item: { ...item, is_owned: true },
-      coins_before: currentCoins,
-      coins_after: newCoins,
+      // Ledger balances, as every display shows them (Task #2273).
+      coins_before: ledgerBefore,
+      coins_after: await getCurrentBalance(models.sequelize, show_id),
       cost,
     });
   } catch (error) {

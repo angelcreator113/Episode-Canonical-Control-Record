@@ -298,6 +298,10 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   it('a successful lock writes every link as approved and debits the total once', async () => {
     db.row.coins = 500;
     mockItems = [DRESS_300, SHOES_100, BAG];
+    // The ledger before and after the lock (Task #2273: coins_after is
+    // Lala's ledger balance, as every display shows it).
+    require('../../../src/services/financialTransactionService').getCurrentBalance
+      .mockResolvedValueOnce(500).mockResolvedValueOnce(100);
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'buy-shoes', 'own-bag']));
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ success: true, coins_spent: 400, coins_after: 100 });

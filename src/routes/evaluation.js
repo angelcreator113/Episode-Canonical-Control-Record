@@ -205,12 +205,21 @@ router.get('/characters/:key/state', requireAuth, async (req, res) => {
       key
     );
 
+    // Lala's coins are the ledger balance (§8(z) Law 0, D1; Task #2273), the
+    // number every other display shows; character_state.coins is its cached
+    // copy and can lag it until the next sync.
+    let coins = state.coins;
+    if (key === 'lala') {
+      const { getCurrentBalance } = require('../services/financialTransactionService');
+      coins = await getCurrentBalance(models.sequelize, show_id);
+    }
+
     return res.json({
       success: true,
       scope,
       character_key: key,
       state: {
-        coins: state.coins,
+        coins,
         reputation: state.reputation,
         brand_trust: state.brand_trust,
         influence: state.influence,
