@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import SocialTaskBadge from './SocialTaskBadge';
+import { isSocialTaskRequired } from '../utils/socialTaskSource';
 
 /**
  * OverlayApprovalPanel — Reusable generate → preview → edit → approve/reject workflow
@@ -48,6 +50,10 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
   }, [existingTasks]);
 
   const isWardrobe = overlayType === 'wardrobe';
+  // T1 (§8(bb); Task #2292): a social task is required only when a
+  // deliverable stands behind it. Wardrobe slots keep their own flag.
+  const taskRequired = (t) => (isWardrobe ? Boolean(t.required) : isSocialTaskRequired(t));
+  const requiredCount = (list) => list.filter(taskRequired).length;
   const title = isWardrobe ? 'Wardrobe Shopping List' : 'Social Tasks';
   const accentColor = isWardrobe ? '#B8962E' : '#6366f1';
   const displayUrl = imageUrl || existingUrl;
@@ -246,7 +252,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                   />
                   {tasks.length > 0 && (
                     <div style={{ marginTop: 14, fontSize: 11, color: '#888', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <span>{tasks.length} tasks{tasks.filter(t => t.required).length > 0 && ` · ${tasks.filter(t => t.required).length} required`}</span>
+                      <span>{tasks.length} tasks{requiredCount(tasks) > 0 && ` · ${requiredCount(tasks)} required`}</span>
                       {isWardrobe && tasks.some(t => t.wardrobe_id) && (
                         <span style={{ padding: '1px 8px', background: '#eef2ff', color: '#6366f1', borderRadius: 6, fontWeight: 600 }}>From outfit picker</span>
                       )}
@@ -273,7 +279,9 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                           <span style={{ fontSize: 10, fontWeight: 700, color: timingColor, textTransform: 'uppercase' }}>
                             {isWardrobe ? (task.slot || `Task ${i + 1}`) : (TIMING_LABELS[task.timing] || task.slot || `Task ${i + 1}`)}
                           </span>
-                          {task.required && <span style={{ fontSize: 9, padding: '1px 6px', background: `${timingColor}20`, color: timingColor, borderRadius: 4, fontWeight: 700 }}>required</span>}
+                          {isWardrobe
+                            ? task.required && <span style={{ fontSize: 9, padding: '1px 6px', background: `${timingColor}20`, color: timingColor, borderRadius: 4, fontWeight: 700 }}>required</span>
+                            : <SocialTaskBadge task={task} />}
                           {!isWardrobe && task.platform && <span style={{ fontSize: 9, color: '#999' }}>{task.platform}</span>}
                         </div>
                         <input
@@ -397,7 +405,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             {title}
             {tasks.length > 0 && (
               <span style={{ fontWeight: 400, color: '#888', marginLeft: 6 }}>
-                ({tasks.length} tasks{tasks.filter(t => t.required).length > 0 && `, ${tasks.filter(t => t.required).length} required`})
+                ({tasks.length} tasks{requiredCount(tasks) > 0 && `, ${requiredCount(tasks)} required`})
               </span>
             )}
           </div>
@@ -451,7 +459,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                       }}>
                         <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
                         <span style={{ color: '#aaa', marginLeft: 4 }}>{t.platform}</span>
-                        {t.required && <span style={{ color: TIMING_COLORS[phase], marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+                        <SocialTaskBadge task={t} />
                       </div>
                     ))}
                   </div>

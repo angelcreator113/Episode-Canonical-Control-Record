@@ -1,0 +1,37 @@
+.social-task-badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.social-task-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.social-task-badge--deliverable {
+  background: var(--lala-gold, #B8962E);
+  color: var(--lala-parchment, #FAF7F0);
+}
+
+.social-task-badge--goal {
+  background: rgba(184, 150, 46, 0.14);
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.social-task-badge--optional {
+  background: transparent;
+  border: 1px dashed rgba(44, 44, 44, 0.3);
+  color: rgba(44, 44, 44, 0.65);
+}
+
+.social-task-badge--required {
+  background: var(--lala-danger, #B84D2E);
+  color: var(--lala-parchment, #FAF7F0);
+  font-weight: 600;
+}

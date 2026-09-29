@@ -2750,9 +2750,25 @@ over.
 **T7.** Wardrobe-list completion comes from Lala's actual wardrobe choices,
 with no manual toggle that gets silently overwritten.
 
+**T8** (Evoni, 2026-09-29, Task #2292). "The automatic +1 stress penalty at
+episode completion applies only when a required social task is traceable to
+an accepted required deliverable. A legacy/template social task whose only
+basis is required: true does not change Lala's stress. Those tasks may still
+appear on the Run Sheet or affect production completeness, but they do not
+create a character-state consequence unless they represent a canonical
+obligation."
+
+Completion-rate effects on reputation and influence stay unchanged for now.
+Under T3 they are decided in the deal design. They are the ±1 reputation at
+≥80% or <30% completion and the +1 influence at ≥90%, both in
+`computeSocialTaskBonuses` (`src/services/episodeCompletionService.js`).
+
 **Where these stand:**
 - T3 is filed as a fix: #2263.
-- T1, T2 and T4–T7 are not filed.
+- T1 and T8 are built under #2292. `computeSocialTaskBonuses` counts a task
+  as required only when it carries a `deliverable_id` stamped from an
+  accepted deliverable.
+- T2 and T4–T7 are not filed.
 - T3's contract pay by deliverable status belongs to the deal build (§8(z)
   Law 8).
 

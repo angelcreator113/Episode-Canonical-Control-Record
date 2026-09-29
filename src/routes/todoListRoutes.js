@@ -13,6 +13,7 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
+const { isSocialTaskRequired } = require('../utils/socialTaskSource');
 
 router.post('/episodes/:episodeId/todo/generate', requireAuth, async (req, res) => {
   try {
@@ -114,7 +115,9 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
     const completion = {
       total: allTasks.length,
       completed: allTasks.filter(t => t.completed).length,
-      all_required_done: allTasks.filter(t => t.required).every(t => t.completed),
+      // Wardrobe slots keep their own flag; a social task counts only when a
+      // deliverable stands behind it (T1, §8(bb); Task #2292).
+      all_required_done: [...tasks.filter(t => t.required), ...updatedSocialTasks.filter(isSocialTaskRequired)].every(t => t.completed),
       social_tasks_completed: updatedSocialTasks.filter(t => t.completed).length,
       social_tasks_total: updatedSocialTasks.length,
     };
@@ -312,8 +315,10 @@ router.post('/episodes/:episodeId/todo/complete-social/:slot', requireAuth, asyn
     const completion = {
       total: socialTasks.length,
       completed: socialTasks.filter(t => t.completed).length,
-      required_total: socialTasks.filter(t => t.required).length,
-      required_done: socialTasks.filter(t => t.required && t.completed).length,
+      // T1 (§8(bb); Task #2292): only a task backed by a deliverable counts
+      // as required; a stored pre-T1 required: true alone does not.
+      required_total: socialTasks.filter(isSocialTaskRequired).length,
+      required_done: socialTasks.filter(t => isSocialTaskRequired(t) && t.completed).length,
       score: Math.round((socialTasks.filter(t => t.completed).length / socialTasks.length) * 10),
     };
 

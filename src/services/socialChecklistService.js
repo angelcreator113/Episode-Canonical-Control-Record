@@ -13,6 +13,8 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { listEventDeliverables } = require('./eventTermsService');
+const { withDeliverableTasks, isSocialTaskRequired, socialTaskSource } = require('../utils/socialTaskSource');
 const fs = require('fs');
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -115,7 +117,7 @@ function renderSocialChecklist(tasks, event, options = {}) {
   ctx.fillText('Social Media Checklist', W / 2, y + 52);
 
   // Task count + required count
-  const reqCount = tasks.filter(t => t.required).length;
+  const reqCount = tasks.filter(isSocialTaskRequired).length;
   ctx.font = `${Math.round(W * 0.022)}px LibreBaskerville, serif`;
   ctx.fillStyle = '#666';
   ctx.fillText(`${tasks.length} tasks · ${reqCount} required`, W / 2, y + 72);
@@ -156,8 +158,9 @@ function renderSocialChecklist(tasks, event, options = {}) {
       // Checkbox
       ctx.beginPath();
       ctx.rect(checkX, checkY, checkSize, checkSize);
-      ctx.strokeStyle = task.required ? config.color : config.color + '60';
-      ctx.lineWidth = task.required ? 1.8 : 1.2;
+      const required = isSocialTaskRequired(task);
+      ctx.strokeStyle = required ? config.color : config.color + '60';
+      ctx.lineWidth = required ? 1.8 : 1.2;
       ctx.stroke();
 
       // Completed check
@@ -182,12 +185,15 @@ function renderSocialChecklist(tasks, event, options = {}) {
       ctx.fillStyle = task.completed ? '#CCC' : '#999';
       ctx.fillText(task.platform || '', labelX, taskY + 34);
 
-      // Required badge
-      if (task.required) {
+      // Source badge (T1): "required" only on a real deliverable; otherwise
+      // where the task comes from — deliverable, goal or optional idea.
+      {
+        const source = socialTaskSource(task);
         ctx.textAlign = 'right';
-        ctx.font = `bold ${Math.round(W * 0.018)}px LibreBaskerville, serif`;
-        ctx.fillStyle = config.color;
-        ctx.fillText('required', W - PADDING, taskY + 18);
+        ctx.font = `${required ? 'bold ' : ''}${Math.round(W * 0.018)}px LibreBaskerville, serif`;
+        ctx.fillStyle = required ? config.color : config.color + 'A0';
+        const badge = required ? 'deliverable · required' : source === 'optional' ? 'optional idea' : source;
+        ctx.fillText(badge, W - PADDING, taskY + 18);
         ctx.textAlign = 'left';
       }
 
@@ -284,6 +290,16 @@ async function generateSocialChecklist(event, models, options = {}) {
         : [],
     });
   }
+
+  // T1 (§8(bb); Task #2292): required comes only from the event's
+  // deliverables. A saved list from before T1 is brought into line here.
+  let deliverables = [];
+  try {
+    deliverables = await listEventDeliverables(models.sequelize, event.id);
+  } catch (delivErr) {
+    console.error('[SocialChecklist] Deliverables read failed (no task is required):', delivErr.message);
+  }
+  tasks = withDeliverableTasks(tasks, deliverables);
 
   // Render checklist image (optional — may fail if canvas not available)
   let buffer = null;

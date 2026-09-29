@@ -27,6 +27,7 @@ const {
 } = require('../utils/evaluationFormula');
 const { changeCoins, InsufficientCoinsError } = require('./coinBalanceGuard');
 const { EPISODE_EVENT_SQL, LALA_STATE_SQL, DEFAULT_LALA_STATE, buildOutfitScoreContext } = require('./outfitScoreContext');
+const { isSocialTaskRequired } = require('../utils/socialTaskSource');
 
 // ─── SOCIAL TASK STAT BONUSES ────────────────────────────────────────────────
 // Completing social tasks should affect more than just coins
@@ -37,8 +38,14 @@ function computeSocialTaskBonuses(socialTasks) {
   const completed = socialTasks.filter(t => t.completed);
   const total = socialTasks.length;
   const completionRate = total > 0 ? completed.length / total : 0;
-  const requiredDone = socialTasks.filter(t => t.required && t.completed).length;
-  const requiredTotal = socialTasks.filter(t => t.required).length;
+  // Ruling (Evoni, 2026-09-29, T1 §8(bb); Task #2292): a required task
+  // changes Lala's state only when it traces to an accepted required
+  // deliverable — the deliverable_id Start Episode stamps from the event's
+  // deliverable row (never read here). A legacy or template task whose only basis is
+  // required: true is not an obligation here: it moves neither stress nor
+  // the all-required influence bonus. It still counts toward completion.
+  const requiredDone = socialTasks.filter(t => isSocialTaskRequired(t) && t.completed).length;
+  const requiredTotal = socialTasks.filter(isSocialTaskRequired).length;
   const allRequiredDone = requiredTotal > 0 && requiredDone === requiredTotal;
 
   const bonuses = {};

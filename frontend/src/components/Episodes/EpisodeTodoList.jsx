@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import SocialTaskBadge from '../SocialTaskBadge';
+import { isSocialTaskRequired } from '../../utils/socialTaskSource';
 
 /**
  * EpisodeTodoList
@@ -334,7 +336,7 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
               {((isLocked && isWardrobe) || !isWardrobe) && !excluded && (
                 <div style={{
                   width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-                  border: task.completed ? 'none' : `1.5px solid ${task.required ? (isWardrobe ? '#B8962E' : '#6366f1') : '#CCC'}`,
+                  border: task.completed ? 'none' : `1.5px solid ${(isWardrobe ? task.required : isSocialTaskRequired(task)) ? (isWardrobe ? '#B8962E' : '#6366f1') : '#CCC'}`,
                   background: task.completed ? '#1A7A40' : 'transparent',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
@@ -358,8 +360,10 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
               </div>
 
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                {!task.required && !excluded && (
-                  <span style={{ fontSize: 10, color: isWardrobe ? '#B8962E' : '#6366f1', fontWeight: 500 }}>optional</span>
+                {/* Career tasks show their source (T1, §8(bb); Task #2292) */}
+                {!isWardrobe && !excluded && <SocialTaskBadge task={task} />}
+                {isWardrobe && !task.required && !excluded && (
+                  <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 500 }}>optional</span>
                 )}
                 {excluded && (
                   <span style={{ fontSize: 10, color: '#999', fontWeight: 500 }}>excluded</span>

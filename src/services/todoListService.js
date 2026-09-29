@@ -23,6 +23,8 @@ const { createCanvas, registerFont } = require('canvas');
 const _sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { listEventDeliverables } = require('./eventTermsService');
+const { withDeliverableTasks } = require('../utils/socialTaskSource');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -377,9 +379,12 @@ function renderTodoAsset(tasks, event, options = {}) {
       ctx.fillText(fitTextToWidth(ctx, task.description, labelW), labelX, taskY + 45);
     }
 
-    // Optional badge
+    // Optional badge — on the career list, the task's source (T1): a goal,
+    // an optional idea, or an unrequired deliverable
     if (!task.required) {
-      const badgeText = 'optional';
+      const badgeText = task.task_source === 'goal' ? 'goal'
+        : task.task_source === 'deliverable' ? 'deliverable'
+        : 'optional';
       const badgeFont = `${Math.round(W * 0.020)}px LibreBaskerville, serif`;
       ctx.font = badgeFont;
       const badgeW = Math.ceil(ctx.measureText(badgeText).width) + 10;
@@ -506,7 +511,14 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
         );
         hostProfile = rows?.[0] || null;
       }
-      const socialTasks = buildSocialTasks(eventType, hostProfile);
+      // T1 (§8(bb); Task #2292): required only from the event's deliverables.
+      let deliverables = [];
+      try {
+        deliverables = await listEventDeliverables(sequelize, event.id);
+      } catch (delivErr) {
+        console.error('[TodoList] Deliverables read failed (no social task is required):', delivErr.message);
+      }
+      const socialTasks = buildSocialTasks(eventType, hostProfile, [], { deliverables });
       socialTasksJson = JSON.stringify(socialTasks);
     } catch { /* episodeGeneratorService not available — skip */ }
   }
@@ -607,7 +619,7 @@ async function generateCareerTasks(event) {
   const prompt = `You are writing Lala's CAREER to-do list for an event in a luxury life simulator show.
 
 This is NOT the wardrobe checklist — this is about what she needs to ACCOMPLISH during the event:
-deliverables, content to create, people to network with, social media tasks, brand obligations.
+content to create, people to network with, social media moments, career positioning.
 
 EVENT:
 Name: ${event.name}
@@ -623,9 +635,12 @@ Write 4-6 career tasks. Each should feel specific to THIS event.
 Mix of:
 - Content creation (what to film, post, or capture)
 - Networking (who to connect with, impressions to make)
-- Brand deliverables (if brand_deal or paid event)
 - Social media (what to post and when)
 - Career positioning (what this event should do for her career)
+
+These are Lala's own goals and ideas. Do not invent brand or host obligations:
+the event's accepted deliverables are added to the list separately. Mark
+"goal": true for what she means to do, false for an optional idea.
 
 Respond ONLY with a JSON array:
 [
@@ -633,7 +648,7 @@ Respond ONLY with a JSON array:
     "slot": "content_main",
     "label": "Film a 30-second venue walkthrough for Stories",
     "description": "The algorithm rewards early-event content",
-    "required": true,
+    "goal": true,
     "completed": false,
     "order": 1
   }
@@ -653,17 +668,20 @@ Respond ONLY with a JSON array:
       slot:        t.slot        || `career_${i + 1}`,
       label:       t.label       || 'Career task',
       description: t.description || '',
-      required:    t.required    ?? (i < 2),
+      // T1 (§8(bb); Task #2292): a generated career task is never required.
+      required:    false,
+      task_source: (t.goal ?? t.required ?? (i < 2)) ? 'goal' : 'optional',
       completed:   false,
       order:       i + 1,
     }));
-  } catch {
-    // Fallback career tasks
+  } catch (err) {
+    console.error('[CareerList] Generation failed, using the fallback tasks:', err.message);
+    // Fallback career tasks — goals and optional ideas, none required (T1)
     return [
-      { slot: 'content_main', label: 'Capture the moment everyone will talk about', description: 'The content that makes the event worth attending', required: true, completed: false, order: 1 },
-      { slot: 'network', label: 'Make one connection that changes everything', description: 'The right conversation at the right time', required: true, completed: false, order: 2 },
-      { slot: 'social_post', label: 'Post before the night ends', description: 'First to post sets the narrative', required: false, completed: false, order: 3 },
-      { slot: 'brand_moment', label: 'Give the brand their money shot', description: 'They invited you for a reason — deliver it', required: false, completed: false, order: 4 },
+      { slot: 'content_main', label: 'Capture the moment everyone will talk about', description: 'The content that makes the event worth attending', required: false, task_source: 'goal', completed: false, order: 1 },
+      { slot: 'network', label: 'Make one connection that changes everything', description: 'The right conversation at the right time', required: false, task_source: 'goal', completed: false, order: 2 },
+      { slot: 'social_post', label: 'Post before the night ends', description: 'First to post sets the narrative', required: false, task_source: 'optional', completed: false, order: 3 },
+      { slot: 'brand_moment', label: 'Give the brand their money shot', description: 'They invited you for a reason — deliver it', required: false, task_source: 'optional', completed: false, order: 4 },
     ];
   }
 }
@@ -683,7 +701,17 @@ async function generateCareerList(episodeId, showId, models) {
 
   console.log(`[CareerList] Generating for: ${event.name}`);
 
-  const tasks = await generateCareerTasks(event);
+  // T1 (§8(bb); Task #2292): the generated tasks are goals or optional
+  // ideas; each accepted deliverable is added as its own task, the only
+  // kind that can be required.
+  let deliverables = [];
+  try {
+    deliverables = await listEventDeliverables(sequelize, event.id);
+  } catch (delivErr) {
+    console.error('[CareerList] Deliverables read failed (no career task is required):', delivErr.message);
+  }
+  const tasks = withDeliverableTasks(await generateCareerTasks(event), deliverables)
+    .map((t, i) => ({ ...t, order: i + 1 }));
   const buffer = renderTodoAsset(tasks, event, { listType: 'career' });
   const assetUrl = await uploadTodoAsset(buffer, episodeId);
 

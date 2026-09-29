@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../services/api';
 import { eventCreatorOrganizer } from '../utils/eventOrganizer';
+import SocialTaskBadge from '../components/SocialTaskBadge';
 import './WorldAdmin.css';
 
 // ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -248,7 +249,7 @@ export default function EpisodeTodoPage() {
                         <span style={{ fontSize: 13, fontWeight: 600, color: task.completed ? '#16a34a' : '#1a1a2e', textDecoration: task.completed ? 'line-through' : 'none' }}>
                           {task.label}
                         </span>
-                        {task.required && <span style={{ fontSize: 8, padding: '1px 5px', background: '#fef2f2', color: '#dc2626', borderRadius: 3, fontWeight: 600 }}>required</span>}
+                        <SocialTaskBadge task={task} />
                         {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#dbeafe', color: '#1e40af', borderRadius: 3, fontWeight: 600 }}>{task.platform}</span>}
                         {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#d1fae5', color: '#065f46', borderRadius: 3, fontWeight: 600 }}>niche</span>}
                       </div>
