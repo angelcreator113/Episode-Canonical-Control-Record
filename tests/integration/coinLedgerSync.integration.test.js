@@ -11,7 +11,7 @@ jest.unmock('uuid');
 const crypto = require('crypto');
 const models = require('../../src/models');
 const { syncCoinsFromLedger, spendFromLedger } = require('../../src/services/coinLedgerSync');
-const { logTransaction } = require('../../src/services/financialTransactionService');
+const { logTransaction, getCurrentBalance } = require('../../src/services/financialTransactionService');
 const { DEFAULT_STARTING_BALANCE } = require('../../src/utils/financialRates');
 
 const { sequelize } = models;
@@ -111,6 +111,33 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
                       (:b, :show, 'income', 'x', 30, 'pending', NULL, NOW(), NOW())`, { a: uuid(), b: uuid(), show });
 
     expect((await sync(show)).balance).toBe(500);
+  });
+
+  it("leaves out a deleted episode's rows, in the sync and in getCurrentBalance (§8(aa) M6)", async () => {
+    const show = await seedShow({ metadata: { starting_balance: 1000 } });
+    const live = uuid();
+    const gone = uuid();
+    const vanished = uuid(); // an episode_id that names no episode at all
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, deleted_at, created_at, updated_at)
+               VALUES (:live, :show, 'Live', 1, 'draft', NULL, NOW(), NOW()),
+                      (:gone, :show, 'Deleted', 2, 'draft', NOW(), NOW(), NOW())`, { live, gone, show });
+    const episodeRow = (episodeId, type, amount) => run(
+      `INSERT INTO financial_transactions (id, show_id, episode_id, type, category, amount, status, created_at, updated_at)
+       VALUES (:id, :show, :episodeId, :type, 'test', :amount, 'executed', NOW(), NOW())`,
+      { id: uuid(), show, episodeId, type, amount });
+    await ledgerRow(show, 'income', 1000, 'seed');
+    await episodeRow(live, 'expense', 100);
+    await episodeRow(gone, 'expense', 400);
+    await episodeRow(vanished, 'income', 50);
+
+    const { balance } = await sync(show);
+
+    expect(balance).toBe(900); // 1000 − 100; the deleted and vanished episodes' rows are history only
+    expect(await getCurrentBalance(sequelize, show)).toBe(900);
+    const [{ n }] = await q(`SELECT COUNT(*)::int AS n FROM financial_transactions WHERE show_id = :show`, { show });
+    expect(n).toBe(4); // nothing is deleted
+    await run(`DELETE FROM financial_transactions WHERE show_id = :show`, { show });
+    await run(`DELETE FROM episodes WHERE show_id = :show`, { show });
   });
 
   it('a rollback takes the seed and the coin write with it', async () => {
