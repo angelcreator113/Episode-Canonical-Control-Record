@@ -15,6 +15,8 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { isSocialTaskRequired } = require('../utils/socialTaskSource');
 
+const WARDROBE_COMPLETION_DERIVED = 'WARDROBE_COMPLETION_DERIVED';
+
 router.post('/episodes/:episodeId/todo/generate', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
@@ -86,30 +88,35 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
 
     if (!todoList) return res.status(404).json({ error: 'No to-do list found' });
 
-    const tasks = (typeof todoList.tasks === 'string'
+    const tasks = typeof todoList.tasks === 'string'
       ? JSON.parse(todoList.tasks)
-      : todoList.tasks || []
-    ).map(t => t.slot === slot ? { ...t, completed } : t);
+      : todoList.tasks || [];
 
-    // Also apply completion to social_tasks if the slot lives there
     const socialTasksRaw = typeof todoList.social_tasks === 'string'
       ? JSON.parse(todoList.social_tasks || '[]')
       : (todoList.social_tasks || []);
-    const socialTaskSlots = new Set(socialTasksRaw.map(t => t.slot));
-    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? { ...t, completed } : t);
-    const slotInSocial = socialTaskSlots.has(slot);
+    const slotInSocial = socialTasksRaw.some(t => t.slot === slot);
 
-    if (slotInSocial) {
-      await sequelize.query(
-        'UPDATE episode_todo_lists SET tasks = :tasks, social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
-        { replacements: { tasks: JSON.stringify(tasks), socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
-      );
-    } else {
-      await sequelize.query(
-        'UPDATE episode_todo_lists SET tasks = :tasks, updated_at = NOW() WHERE id = :id',
-        { replacements: { tasks: JSON.stringify(tasks), id: todoList.id } }
-      );
+    // T7 (§8(bb); Task #2307): a wardrobe task's completion comes from Lala's
+    // outfit (getTodoList derives it from episode_wardrobe on every read),
+    // so it has no manual toggle; one written here was silently replaced.
+    // A slot on the social list is still completed here.
+    if (!slotInSocial) {
+      if (tasks.some(t => t.slot === slot)) {
+        return res.status(409).json({
+          success: false,
+          code: WARDROBE_COMPLETION_DERIVED,
+          error: 'A wardrobe task is complete when Lala\'s outfit fills its slot. Choose the piece in the episode\'s wardrobe instead.',
+        });
+      }
+      return res.status(404).json({ error: `No task with slot "${slot}"` });
     }
+
+    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? { ...t, completed } : t);
+    await sequelize.query(
+      'UPDATE episode_todo_lists SET social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
+      { replacements: { socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
+    );
 
     const allTasks = [...tasks, ...updatedSocialTasks];
     const completion = {
