@@ -20,17 +20,19 @@
 
 const { InsufficientCoinsError } = require('./coinBalanceGuard');
 const { wholeCoins } = require('../utils/wholeCoins');
+const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 
 // getCurrentBalance's sum (financialTransactionService), rounded half away
-// from zero (§8(y) Q7). No fallbacks: an error throws and rolls back.
+// from zero (§8(y) Q7), over the rows that count (§8(aa) M6: not a deleted
+// episode's). No fallbacks: an error throws and rolls back.
 const LEDGER_BALANCE_SQL = `
   SELECT COUNT(*)::int AS tx_count,
          ROUND(COALESCE(
            SUM(CASE WHEN type IN ('income', 'reward') THEN amount
                     WHEN type IN ('expense', 'deduction') THEN -amount
                     ELSE 0 END), 0)) AS balance
-    FROM financial_transactions
-   WHERE show_id = :showId AND status = 'executed' AND deleted_at IS NULL`;
+    FROM financial_transactions ft
+   WHERE ft.show_id = :showId AND ${countedLedgerRows('ft')}`;
 
 function requireTransaction(fn, transaction) {
   if (!transaction) throw new TypeError(`${fn}: a transaction is required`);

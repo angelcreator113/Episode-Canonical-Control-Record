@@ -2916,7 +2916,8 @@ router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) =>
 // tier-table estimate that previously lived inline in WorldAdmin's Financial
 // Preview card. Sources are honest about where each number came from:
 //
-//   income   = event_payment  + social_task_rewards + content_revenue_est
+//   income   = event_payment  + content_revenue_est (ticked tasks pay no
+//              coins: §8(bb) T3, Task #2263)
 //   expenses = event_cost     + outfit_retail (owned) + outfit_rentals
 //                             + drinks_est + valet_est + photo_booth_est
 //
@@ -2961,17 +2962,12 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       if (Array.isArray(event.outfit_pieces)) return event.outfit_pieces;
       try { return JSON.parse(event.outfit_pieces); } catch { return []; }
     })();
-    const automation = (() => {
-      if (!event.canon_consequences) return {};
-      if (typeof event.canon_consequences === 'object') return event.canon_consequences.automation || {};
-      try { return JSON.parse(event.canon_consequences)?.automation || {}; } catch { return {}; }
-    })();
 
     const {
       USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE,
     } = require('../utils/financialRates');
     const {
-      getCurrentBalance, getFinancialGoals, calculateSocialTaskRewards,
+      getCurrentBalance, getFinancialGoals,
     } = require('../services/financialTransactionService');
 
     // ── Outfit costs ────────────────────────────────────────────────
@@ -3018,9 +3014,6 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
 
     // ── Income side ─────────────────────────────────────────────────
     const eventPayment = isPaid ? (parseFloat(event.payment_amount) || 0) : 0;
-    const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
-    const taskRewards = calculateSocialTaskRewards(socialTasks);
-    const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
     // Content fee uses the same rule as finalize-financials: paid brand
     // deals get a 10% brand-deal content fee on top of event payment. No
     // delivery is checked (Task #1808).
@@ -3030,9 +3023,8 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
 
     const income = {
       event_payment: eventPayment,
-      social_task_rewards: socialTaskRewards,
       content_revenue_est: contentRevenueEst,
-      total: eventPayment + socialTaskRewards + contentRevenueEst,
+      total: eventPayment + contentRevenueEst,
     };
 
     // ── Tier-dependent bonuses (forecast only) ──────────────────────────
