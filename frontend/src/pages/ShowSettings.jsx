@@ -167,12 +167,14 @@ export default function ShowSettings() {
   }
 
   async function resetStats() {
-    if (!window.confirm("Reset Lala's stats to defaults?\n\nCoins: 500, Reputation: 1, Brand Trust: 1, Influence: 1, Stress: 0\n\nThis cannot be undone.")) return;
+    // Coins are not reset (§8(y) Q5; Task #2249): they are Lala's career
+    // money, a view of the ledger, and a coins value sent here would book a
+    // ledger adjustment to it.
+    if (!window.confirm("Reset Lala's story stats to defaults?\n\nReputation: 1, Brand Trust: 1, Influence: 1, Stress: 0\n\nCoins are not changed: they are Lala's career money.\n\nThis cannot be undone.")) return;
     setResetting(true);
     try {
       await api.post('/api/v1/characters/lala/state/update', {
         show_id:    showId,
-        coins:      500,
         reputation: 1,
         brand_trust: 1,
         influence:  1,
@@ -180,7 +182,7 @@ export default function ShowSettings() {
         source:     'manual',
         notes:      'Reset from Settings page',
       });
-      showToast("Lala's stats reset to defaults");
+      showToast("Lala's story stats reset to defaults; coins unchanged");
     } catch (err) {
       showToast(err.response?.data?.error || err.message, 'error');
     } finally {
@@ -400,7 +402,7 @@ export default function ShowSettings() {
               color='#dc2626'
               icon='⚠️'
               title="Reset Lala's Stats"
-              desc='Resets all character stats to defaults: 500 coins, 1 reputation, 1 brand trust, 1 influence, 0 stress. This cannot be undone.'
+              desc="Resets Lala's story stats to defaults: 1 reputation, 1 brand trust, 1 influence, 0 stress. Coins are not changed. This cannot be undone."
               danger
             >
               <button

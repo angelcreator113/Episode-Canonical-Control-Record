@@ -238,14 +238,22 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   if (existingState) {
     characterState = existingState;
   } else {
-    // Auto-seed
+    // Auto-seed. D1 (design §6.6; §8(y) Q1; Task #2249): the row is created
+    // and its coins synced from the ledger (seeded with the show's
+    // starting_balance, default 1900) in one transaction, so it never holds
+    // an independent 500.
     const stateId = uuidv4();
-    await sequelize.query(
-      `INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
-       VALUES (:id, :showId, 'lala', :coins, :reputation, :brand_trust, :influence, :stress, NOW(), NOW())`,
-      { replacements: { id: stateId, showId, ...DEFAULT_LALA_STATE } }
-    );
-    characterState = { id: stateId, ...DEFAULT_LALA_STATE };
+    const { syncCoinsFromLedger } = require('./coinLedgerSync');
+    let coins;
+    await sequelize.transaction(async (seedTx) => {
+      await sequelize.query(
+        `INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
+         VALUES (:id, :showId, 'lala', :coins, :reputation, :brand_trust, :influence, :stress, NOW(), NOW())`,
+        { replacements: { id: stateId, showId, ...DEFAULT_LALA_STATE }, transaction: seedTx }
+      );
+      ({ balance: coins } = await syncCoinsFromLedger(sequelize, showId, { transaction: seedTx }));
+    });
+    characterState = { id: stateId, ...DEFAULT_LALA_STATE, coins };
   }
 
   // ── 5. Get outfit score for evaluation ──
