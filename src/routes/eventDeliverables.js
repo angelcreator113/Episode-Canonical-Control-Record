@@ -13,7 +13,7 @@
  * POST   /api/v1/world/:showId/events/:eventId/deliverables/:deliverableId/status — Advance (Task #1815)
  *
  * The add/edit/remove routes edit only the terms themselves: description,
- * deliverable_type, due_date, required. The PUT refuses status and its
+ * deliverable_type, due_date, required, owed_to (host | brand; Task #2294). The PUT refuses status and its
  * timestamps (400 DELIVERABLE_STATUS_NOT_EDITABLE).
  *
  * Fulfilment (slice 1b, §8(t) item 4) is the status POST alone: after
@@ -35,7 +35,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const {
   listEventDeliverables, validateDeliverableTransition, DELIVERABLE_STATUS_FLOW,
-  DESCRIPTION_MAX, TYPE_MAX, DUE_DATE_MAX,
+  DESCRIPTION_MAX, TYPE_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO,
 } = require('../services/eventTermsService');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
@@ -47,7 +47,7 @@ const STATUS_CONFLICT_CODE = 'DELIVERABLE_STATUS_CONFLICT';
 const FULFILMENT_FIELDS = ['status', 'completed_at', 'submitted_at', 'approved_at'];
 
 const RETURNING = `RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, created_at, updated_at`;
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`;
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -97,6 +97,11 @@ function readDeliverableBody(body, { partial }) {
     if (typeof b.required !== 'boolean') return { error: 'required must be true or false' };
     fields.required = b.required;
   }
+  // Who it is owed to (T2, §8(bb); Task #2294): host or brand.
+  if (b.owed_to !== undefined) {
+    if (!DELIVERABLE_OWED_TO.includes(b.owed_to)) return { error: `owed_to must be one of ${DELIVERABLE_OWED_TO.join(', ')}` };
+    fields.owed_to = b.owed_to;
+  }
   return { fields };
 }
 
@@ -142,16 +147,17 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
 
     const f = parsed.fields;
     const [rows] = await models.sequelize.query(
-      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, status, created_at, updated_at)
-       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, 'pending', NOW(), NOW())
+      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, status, created_at, updated_at)
+       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, 'pending', NOW(), NOW())
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
       { replacements: {
         id: uuidv4(), eventId,
         description: f.description,
         deliverable_type: f.deliverable_type ?? null,
         due_date: f.due_date ?? null,
         required: f.required !== false,
+        owed_to: f.owed_to || 'host',
       } }
     );
     return res.status(201).json({ success: true, deliverable: rows?.[0] || null });
@@ -185,7 +191,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
     if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
     const keys = Object.keys(parsed.fields);
     if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required)' });
+      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to)' });
     }
 
     const event = await loadEvent(models.sequelize, showId, eventId);
@@ -197,7 +203,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
       `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
        WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
       { replacements: { ...parsed.fields, deliverableId, eventId } }
     );
     if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });

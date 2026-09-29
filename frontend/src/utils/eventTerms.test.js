@@ -82,9 +82,13 @@ describe('compensation', () => {
 describe('deliverable form', () => {
   test('body trims and nulls empties; description required', () => {
     expect(buildDeliverableBody({ description: ' Tagged post ', deliverable_type: ' ', due_date: '2026-11-07', required: false }))
-      .toEqual({ body: { description: 'Tagged post', deliverable_type: null, due_date: '2026-11-07', required: false } });
+      .toEqual({ body: { description: 'Tagged post', deliverable_type: null, due_date: '2026-11-07', required: false, owed_to: 'host' } });
     expect(buildDeliverableBody({ description: '' }).error).toBeTruthy();
-    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', due_date: '', required: true });
+    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', due_date: '', required: true, owed_to: 'host' });
+    // T2 (Task #2294): owed_to is host or brand; anything else reads as host.
+    expect(buildDeliverableBody({ description: 'Reel', owed_to: 'brand' }).body.owed_to).toBe('brand');
+    expect(buildDeliverableBody({ description: 'Reel', owed_to: 'sponsor' }).body.owed_to).toBe('host');
+    expect(deliverableDraftFrom({ description: 'Reel', owed_to: 'brand' }).owed_to).toBe('brand');
   });
 });
 

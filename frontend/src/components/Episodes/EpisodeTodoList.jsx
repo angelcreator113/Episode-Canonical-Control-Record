@@ -8,7 +8,11 @@ import { isSocialTaskRequired } from '../../utils/socialTaskSource';
  *
  * Shows TWO to-do checklists for an episode:
  *   1. Wardrobe Shopping List (UI.OVERLAY.WARDROBE_LIST) — cute vibe-based names per outfit piece
- *   2. Career Checklist (UI.OVERLAY.CAREER_LIST) — event deliverables, content, networking
+ *   2. Career Checklist (UI.OVERLAY.CAREER_LIST) — a view of the episode's one
+ *      task list (T2, §8(bb); Task #2294): host requirements, brand
+ *      deliverables, Lala's goals and optional ideas, each labelled. It
+ *      loads the saved list (GET /todo/social); Generate adds career goals
+ *      and ideas to that list and saves them.
  *
  * Usage:
  *   <EpisodeTodoList
@@ -43,6 +47,21 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
   }, [episodeId]);
 
   useEffect(() => { fetchTodoList(); }, [fetchTodoList]);
+
+  // T2: the Career Checklist shows the episode's one task list, as saved.
+  const fetchOneList = useCallback(async () => {
+    try {
+      const res = await api.get(`/api/v1/episodes/${episodeId}/todo/social`);
+      const saved = res?.data?.social_tasks;
+      if (Array.isArray(saved) && saved.length > 0) {
+        setCareerList((prev) => ({ ...(prev || {}), tasks: saved }));
+      }
+    } catch (err) {
+      console.error('[TodoList] task list fetch error:', err);
+    }
+  }, [episodeId]);
+
+  useEffect(() => { fetchOneList(); }, [fetchOneList]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -205,7 +224,7 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
         <div style={{ padding: 20, textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>💼</div>
           <p style={{ margin: '0 0 12px', fontSize: 13, color: '#444' }}>
-            Generate your career checklist — content goals, networking tasks, brand deliverables.
+            Generate your career checklist: Lala's goals and ideas, added to the episode's task list. Deliverables come from the event's terms.
           </p>
           <button onClick={handleGenerateCareer} disabled={generatingCareer} style={{
             background: generatingCareer ? '#EEE' : '#6366f1',
@@ -241,7 +260,7 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
                 )}
               </>
             ) : (
-              <>{careerList?.tasks?.length || 0} career tasks</>
+              <>{careerList?.tasks?.length || 0} tasks on the episode's list</>
             )}
           </p>
         </div>

@@ -1,6 +1,7 @@
 /**
- * A task's source — Deliverable, Goal or Optional idea — and "required" only
- * when a real deliverable stands behind it (T1, §8(bb); Task #2292).
+ * A task's source — Host requirement, Brand deliverable, Goal or Optional
+ * idea (T2, Task #2294) — and "required" only when a real deliverable stands
+ * behind it (T1, §8(bb); Task #2292).
  */
 import React from 'react';
 import { SOURCE_LABEL, socialTaskSource, isSocialTaskRequired } from '../utils/socialTaskSource';

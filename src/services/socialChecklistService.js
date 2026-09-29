@@ -15,6 +15,14 @@ const path = require('path');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables } = require('./eventTermsService');
 const { withDeliverableTasks, isSocialTaskRequired, socialTaskSource } = require('../utils/socialTaskSource');
+
+// T2 (§8(bb); Task #2294): each item's source, as the rendered list shows it.
+const SOURCE_LABEL = {
+  host_requirement: 'host requirement',
+  brand_deliverable: 'brand deliverable',
+  goal: 'goal',
+  optional: 'optional idea',
+};
 const fs = require('fs');
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -185,14 +193,16 @@ function renderSocialChecklist(tasks, event, options = {}) {
       ctx.fillStyle = task.completed ? '#CCC' : '#999';
       ctx.fillText(task.platform || '', labelX, taskY + 34);
 
-      // Source badge (T1): "required" only on a real deliverable; otherwise
-      // where the task comes from — deliverable, goal or optional idea.
+      // Source badge (T1/T2): where the task comes from — host requirement,
+      // brand deliverable, goal or optional idea — and "required" only on a
+      // real deliverable.
       {
         const source = socialTaskSource(task);
         ctx.textAlign = 'right';
         ctx.font = `${required ? 'bold ' : ''}${Math.round(W * 0.018)}px LibreBaskerville, serif`;
         ctx.fillStyle = required ? config.color : config.color + 'A0';
-        const badge = required ? 'deliverable · required' : source === 'optional' ? 'optional idea' : source;
+        const label = SOURCE_LABEL[source] || source;
+        const badge = required ? `${label} · required` : label;
         ctx.fillText(badge, W - PADDING, taskY + 18);
         ctx.textAlign = 'left';
       }

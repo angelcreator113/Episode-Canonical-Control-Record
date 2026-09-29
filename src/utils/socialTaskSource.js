@@ -8,16 +8,22 @@
  * make a task required. Everything the generator writes is Lala's goal or an
  * optional idea, never required.
  *
- *   deliverable — built from an event_deliverables row; carries deliverable_id
- *   goal        — a generated task Lala means to do
- *   optional    — a generated idea she may skip
+ *   host_requirement  — an event_deliverables row owed to the host
+ *   brand_deliverable — an event_deliverables row owed to a brand
+ *   goal              — a generated task Lala means to do
+ *   optional          — a generated idea she may skip
+ *
+ * T2 (§8(bb); Task #2294) splits T1's single "deliverable" source by the
+ * row's owed_to. Every item of the episode's one task list carries one of
+ * these four. A deliverable task stamped before T2 (task_source
+ * 'deliverable', no owed_to) reads as a host requirement, owed_to's default.
  *
  * Tasks stored before T1 carry no task_source and may carry required: true
  * with no deliverable behind them. They are read as a goal (required) or an
  * optional idea (not required), and never as required.
  */
 
-const TASK_SOURCES = ['deliverable', 'goal', 'optional'];
+const TASK_SOURCES = ['host_requirement', 'brand_deliverable', 'goal', 'optional'];
 
 // The template slots that used to invent brand obligations with no
 // deliverable behind them ("Sponsored Post 1/2 (required)"). Dropped from
@@ -27,7 +33,7 @@ const RETIRED_SLOTS = new Set(['brand_post_1', 'brand_post_2']);
 const DESCRIPTION_MAX = 160;
 
 function socialTaskSource(task) {
-  if (task?.deliverable_id) return 'deliverable';
+  if (task?.deliverable_id) return task.owed_to === 'brand' ? 'brand_deliverable' : 'host_requirement';
   if (task?.task_source === 'goal' || task?.task_source === 'optional') return task.task_source;
   return task?.required ? 'goal' : 'optional';
 }
@@ -48,7 +54,8 @@ function deliverableTask(d) {
     timing: 'during',
     required: d.required !== false,
     completed: false,
-    task_source: 'deliverable',
+    task_source: d.owed_to === 'brand' ? 'brand_deliverable' : 'host_requirement',
+    owed_to: d.owed_to === 'brand' ? 'brand' : 'host',
     deliverable_id: d.id,
   };
 }
@@ -68,8 +75,44 @@ function withDeliverableTasks(tasks, deliverables = []) {
   return [...generated, ...rows.map(deliverableTask)];
 }
 
+/**
+ * T2 (§8(bb); Task #2294): the Career Checklist adds its goals and ideas to
+ * the episode's one task list instead of keeping a copy of its own. Its
+ * items are marked generated_by: 'career'. A regenerate replaces the
+ * previous career items and keeps everything else (deliverables, social
+ * goals and ideas). A career item never becomes required, and one whose
+ * slot carries over keeps its completion.
+ */
+function withCareerTasks(tasks, careerTasks = []) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const previous = new Map(list.filter((t) => t?.generated_by === 'career').map((t) => [t.slot, t]));
+  const kept = list.filter((t) => t && t.generated_by !== 'career');
+  const taken = new Set(kept.map((t) => t.slot));
+  const added = [];
+  for (const [i, t] of (Array.isArray(careerTasks) ? careerTasks : []).entries()) {
+    if (!t || t.deliverable_id) continue;
+    let slot = String(t.slot || `career_${i + 1}`);
+    if (!slot.startsWith('career_')) slot = `career_${slot}`;
+    while (taken.has(slot)) slot = `${slot}_${i + 1}`;
+    taken.add(slot);
+    added.push({
+      slot,
+      label: t.label || 'Career task',
+      description: t.description || '',
+      timing: t.timing || 'during',
+      platform: t.platform || null,
+      required: false,
+      task_source: socialTaskSource(t),
+      generated_by: 'career',
+      completed: Boolean(previous.get(slot)?.completed),
+    });
+  }
+  return [...kept, ...added];
+}
+
 module.exports = {
   TASK_SOURCES,
+  withCareerTasks,
   RETIRED_SLOTS,
   socialTaskSource,
   isSocialTaskRequired,

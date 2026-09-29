@@ -29,8 +29,8 @@ describe('deliverablesFromOpportunity', () => {
       deliverables: [{ description: 'Sponsored content', completed: false }, { description: 'Story mentions', completed: true }],
     });
     expect(rows).toEqual([
-      { description: 'Sponsored content', deliverable_type: null, due_date: null, required: true },
-      { description: 'Story mentions', deliverable_type: null, due_date: null, required: true },
+      { description: 'Sponsored content', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' },
+      { description: 'Story mentions', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' },
     ]);
   });
 
@@ -44,14 +44,14 @@ describe('deliverablesFromOpportunity', () => {
       ],
     });
     expect(rows).toEqual([
-      { description: 'Tagged post', deliverable_type: 'post', due_date: '2026-11-07', required: true },
-      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true },
+      { description: 'Tagged post', deliverable_type: 'post', due_date: '2026-11-07', required: true, owed_to: 'brand' },
+      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' },
     ]);
   });
 
   test('accepts the JSONB column as a string (raw SQL rows) and tolerates junk', () => {
     expect(deliverablesFromOpportunity({ deliverables: '[{"description":"Appear on show"}]' }))
-      .toEqual([{ description: 'Appear on show', deliverable_type: null, due_date: null, required: true }]);
+      .toEqual([{ description: 'Appear on show', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' }]);
     const err = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(deliverablesFromOpportunity({ deliverables: 'not json' })).toEqual([]);
     expect(err).toHaveBeenCalled();
@@ -101,6 +101,18 @@ describe('insertEventDeliverables', () => {
       description1: 'B', type1: null, due1: '2026-11-07', required1: false,
     });
     expect(r.id0).not.toBe(r.id1);
+    // T2 (Task #2294): owed_to is written per row; a row without one is the host's.
+    expect(r).toMatchObject({ owed0: 'host', owed1: 'host' });
+    expect(calls[0].sql).toMatch(/required, owed_to, status/);
+  });
+
+  test('owed_to is carried; an unknown value is the host\'s (T2)', async () => {
+    const { sequelize, calls } = recorder();
+    await insertEventDeliverables(sequelize, 'ev-1', [
+      { description: 'A', owed_to: 'brand' },
+      { description: 'B', owed_to: 'sponsor' },
+    ]);
+    expect(calls[0].opts.replacements).toMatchObject({ owed0: 'brand', owed1: 'host' });
   });
 
   test('no rows, no query', async () => {
@@ -140,7 +152,7 @@ describe('buildTermsSnapshot', () => {
     );
     expect(snap).toEqual({
       access_requirements: { reputation_min: 3 },
-      deliverables: [{ id: 'd1', description: 'Tagged post', deliverable_type: 'post', due_date: null, required: true, status: 'pending' }],
+      deliverables: [{ id: 'd1', description: 'Tagged post', deliverable_type: 'post', due_date: null, required: true, owed_to: 'host', status: 'pending' }],
       restrictions: [{ type: 'exclusivity', description: 'No rival brands' }],
       compensation: { is_paid: true, payment_amount: 1500 },
     });

@@ -33,6 +33,9 @@ const DUE_DATE_MAX = 50;
 // Fulfilment (§8(t) item 4): each status after pending has its own
 // timestamp column. Order matters: a row moves one step forward at a time.
 const DELIVERABLE_STATUS_FLOW = ['pending', 'completed', 'submitted', 'approved'];
+// Who a deliverable is owed to (T2, §8(bb); Task #2294). An Opportunity's
+// deliverables are a brand's; one entered by hand defaults to the host.
+const DELIVERABLE_OWED_TO = ['host', 'brand'];
 const DELIVERABLE_STATUS_TIMESTAMP = {
   completed: 'completed_at',
   submitted: 'submitted_at',
@@ -79,6 +82,7 @@ function deliverablesFromOpportunity(opp) {
       deliverable_type: text(entry.type).slice(0, TYPE_MAX) || null,
       due_date: text(entry.due_date).slice(0, DUE_DATE_MAX) || null,
       required: true,
+      owed_to: 'brand',
     });
   }
   return rows;
@@ -124,10 +128,11 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
     replacements[`type${i}`] = row.deliverable_type || null;
     replacements[`due${i}`] = row.due_date || null;
     replacements[`required${i}`] = row.required !== false;
-    return `(:id${i}, :event_id, :description${i}, :type${i}, :due${i}, :required${i}, 'pending', NOW(), NOW())`;
+    replacements[`owed${i}`] = DELIVERABLE_OWED_TO.includes(row.owed_to) ? row.owed_to : 'host';
+    return `(:id${i}, :event_id, :description${i}, :type${i}, :due${i}, :required${i}, :owed${i}, 'pending', NOW(), NOW())`;
   });
   await sequelize.query(
-    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, status, created_at, updated_at)
+    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, status, created_at, updated_at)
      VALUES ${values.join(', ')}`,
     { replacements, transaction: options.transaction }
   );
@@ -137,7 +142,7 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
 /** The event's live deliverables, oldest first. */
 async function listEventDeliverables(sequelize, eventId) {
   const [rows] = await sequelize.query(
-    `SELECT id, event_id, description, deliverable_type, due_date, required, status,
+    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, status,
             completed_at, submitted_at, approved_at, episode_id, created_at, updated_at
      FROM event_deliverables
      WHERE event_id = :eventId AND deleted_at IS NULL
@@ -178,6 +183,7 @@ function buildTermsSnapshot(event, deliverables) {
       deliverable_type: d.deliverable_type || null,
       due_date: d.due_date || null,
       required: d.required !== false,
+      owed_to: d.owed_to || 'host',
       status: d.status || 'pending',
     })),
     restrictions: Array.isArray(restrictions) ? restrictions : [],
@@ -272,4 +278,5 @@ module.exports = {
   DESCRIPTION_MAX,
   TYPE_MAX,
   DUE_DATE_MAX,
+  DELIVERABLE_OWED_TO,
 };

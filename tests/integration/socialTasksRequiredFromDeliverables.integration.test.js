@@ -100,7 +100,8 @@ const PRE_T1_SAVED_TASKS = [
     expect(required).toHaveLength(1);
     expect(required[0]).toMatchObject({
       deliverable_id: row.id,
-      task_source: 'deliverable',
+      // T2 (Task #2294): a hand-entered row is owed to the host by default.
+      task_source: 'host_requirement',
       label: 'One Instagram reel wearing the Maison Rue coat',
       description: 'instagram_reel · due launch night',
     });

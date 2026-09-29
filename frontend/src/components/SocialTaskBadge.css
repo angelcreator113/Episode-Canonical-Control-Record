@@ -14,7 +14,8 @@
   white-space: nowrap;
 }
 
-.social-task-badge--deliverable {
+.social-task-badge--host_requirement,
+.social-task-badge--brand_deliverable {
   background: var(--lala-gold, #B8962E);
   color: var(--lala-parchment, #FAF7F0);
 }
@@ -34,4 +35,8 @@
   background: var(--lala-danger, #B84D2E);
   color: var(--lala-parchment, #FAF7F0);
   font-weight: 600;
+}
+
+.social-task-badge--brand_deliverable {
+  background: var(--lala-ink, #2C2C2C);
 }

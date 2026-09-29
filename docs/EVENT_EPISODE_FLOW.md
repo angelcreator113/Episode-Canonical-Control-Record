@@ -2768,7 +2768,16 @@ Under T3 they are decided in the deal design. They are the ±1 reputation at
 - T1 and T8 are built under #2292. `computeSocialTaskBonuses` counts a task
   as required only when it carries a `deliverable_id` stamped from an
   accepted deliverable.
-- T2 and T4–T7 are not filed.
+- T2 is built in part under #2294, following Evoni's decisions of 2026-09-29:
+  - a new `event_deliverables.owed_to` column (host or brand), set in the
+    Event Package form, so a deliverable is a host requirement or a brand
+    deliverable;
+  - the one list is `episode_todo_lists.social_tasks`, holding the
+    deliverables, social goals and ideas, and career goals and ideas; the
+    wardrobe list stays separate (T7);
+  - the Run Sheet and the Career Checklist are views of it;
+  - the phone view is a later slice, #2295.
+- T4–T7 are not filed.
 - T3's contract pay by deliverable status belongs to the deal build (§8(z)
   Law 8).
 
