@@ -110,8 +110,22 @@ function withCareerTasks(tasks, careerTasks = []) {
   return [...kept, ...added];
 }
 
+/**
+ * T6 (§8(bb); Task #2306): a list kept as it stands, plus one task for each
+ * required deliverable in the accepted terms that it lacks (matched by
+ * deliverable_id). Nothing else is added, restored or changed.
+ */
+function withMissingRequiredDeliverables(tasks, deliverables = []) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const onList = new Set(list.map((t) => t?.deliverable_id).filter(Boolean));
+  const missing = (Array.isArray(deliverables) ? deliverables : [])
+    .filter((d) => d && d.id && d.required !== false && String(d.description || '').trim() && !onList.has(d.id));
+  return [...list, ...missing.map(deliverableTask)];
+}
+
 module.exports = {
   TASK_SOURCES,
+  withMissingRequiredDeliverables,
   withCareerTasks,
   RETIRED_SLOTS,
   socialTaskSource,
