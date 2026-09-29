@@ -1,3 +1,11 @@
+> **BANNER 1 — APP CHECK DONE; D1 RULED CLOSED (added 2026-09-29, after
+> `d667f89c`, additive).**
+>
+> This record's body is preserved exactly as merged at `784a2eda` (#2281) and is
+> not edited. Its "App check: not supplied" is answered in
+> `F-Stats-1_D1_Closed_Ruling_2026-09-29.md` §1 (Evoni's app check, ATTESTED),
+> which also records her ruling that D1 is closed (§2).
+
 | **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CA, 2026-09-29, backend and frontend, one plain restart, no migration, performed personally by Evoni, outside any agent session, with `scripts/deploy-prod.sh`. D1 PRs 3 and 4 go live: the wardrobe spends, the manual edit, the admin reset and the seed paths go through the ledger. Every balance display reads the ledger. Production reaches origin/main.* |
 | --- |
 

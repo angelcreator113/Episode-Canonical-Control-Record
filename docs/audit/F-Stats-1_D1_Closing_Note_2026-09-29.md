@@ -1,3 +1,10 @@
+> **BANNER 1 — D1 RULED CLOSED (added 2026-09-29, after `d667f89c`,
+> additive).**
+>
+> This note's body is preserved exactly as merged at `d667f89c` (#2283) and is
+> not edited. Evoni's ruling that D1 is closed, and her CA app check, are
+> recorded in `F-Stats-1_D1_Closed_Ruling_2026-09-29.md`.
+
 | **PRIME STUDIOS** **F-STATS-1 REGISTER NOTE** *D1 is built and deployed, and the balance authority is settled in code: what shipped and where it went live, the two register items it answers, and what is still owed. A note, not a Fix Plan revision.* |
 | --- |
 
