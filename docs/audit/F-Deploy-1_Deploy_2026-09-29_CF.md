@@ -1,3 +1,17 @@
+> **BANNER 1 — §9 GRANTS FLAG CLOSED (added 2026-09-29, before this record
+> merged, additive).**
+>
+> The record's body below is not edited. §9 flagged that the three new tables
+> were created by `postgres`, and that whether the app user can read and write
+> them was CANNOT-TELL.
+>
+> **ATTESTED.** Evoni ran a read-only check as `episode_app_dev` on
+> 2026-09-29. For `deal_rate_anchors`, `deal_rate_premiums` and
+> `event_costs`, SELECT, INSERT, UPDATE and DELETE each returned `t`.
+>
+> **The §9 flag is closed:** the app user holds all four privileges on all
+> three tables. Evoni: no grant change is needed.
+
 | **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CF, 2026-09-29, backend and frontend, five migrations, one plain restart. Evoni ran it herself, outside any agent session, as a manual deploy under `DEVELOPMENT_WORKFLOW.md` §7.1, because the range carried migrations. Deal build PR 1 (the deal schema, with the version 1 rate anchors seeded), the career-tier fix and the deal answers go live. Production reaches origin/main.* |
 | --- |
 
