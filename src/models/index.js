@@ -148,6 +148,9 @@ let EpisodeScript; // Versioned AI-generated episode scripts
 let FeedPost; // Feed timeline posts after episodes
 let FeedMoment; // Persisted phone-screen moments from episodes
 let EventDeliverable; // What Lala owes an event (Task #1814)
+let DealRateAnchor; // Career Rate Anchors (deal build PR 1, Task #2319)
+let DealRatePremium; // Deal rate premiums (Task #2319)
+let EventCost; // An event's itemised costs (Task #2319)
 let ShowArc; // Narrative arc with phases, debt, progression
 let Opportunity; // Career opportunity pipeline
 let CareerGoal; // Multi-goal career tension system
@@ -411,6 +414,9 @@ try {
   FeedPost = require('./FeedPost')(sequelize);
   FeedMoment = require('./FeedMoment')(sequelize);
   EventDeliverable = require('./EventDeliverable')(sequelize);
+  DealRateAnchor = require('./DealRateAnchor')(sequelize);
+  DealRatePremium = require('./DealRatePremium')(sequelize);
+  EventCost = require('./EventCost')(sequelize);
   ShowArc = require('./ShowArc')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
   CareerGoal = require('./CareerGoal')(sequelize);
@@ -569,6 +575,9 @@ const requiredModels = {
   FeedPost,
   FeedMoment,
   EventDeliverable,
+  DealRateAnchor,
+  DealRatePremium,
+  EventCost,
   ShowArc,
   Opportunity,
   CareerGoal,
@@ -831,6 +840,9 @@ if (FeedMoment && FeedMoment.associate) {
 }
 if (EventDeliverable && EventDeliverable.associate) {
   EventDeliverable.associate(requiredModels);
+}
+if (EventCost && EventCost.associate) {
+  EventCost.associate(requiredModels);
 }
 if (ShowArc && ShowArc.associate) {
   ShowArc.associate(requiredModels);
@@ -2070,6 +2082,9 @@ module.exports.EpisodeScript = EpisodeScript;
 module.exports.FeedPost = FeedPost;
 module.exports.FeedMoment = FeedMoment;
 module.exports.EventDeliverable = EventDeliverable;
+module.exports.DealRateAnchor = DealRateAnchor;
+module.exports.DealRatePremium = DealRatePremium;
+module.exports.EventCost = EventCost;
 module.exports.ShowArc = ShowArc;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;
