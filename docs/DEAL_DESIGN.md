@@ -571,6 +571,113 @@ PR 1 carries the only migrations. PRs 2–7 need no further schema.
 | 15 | Is a **rights/usage** term a restriction or its own kind? | **Its own modifier kind** in pricing (`rights`), stored as a restriction entry `{type: 'usage_rights', description}` on the event, so there is still one home per term (§8(t) item 1). |
 | 16 | Does the stale **`social_task_reward` reader** in `shows.js:518` go? | **Yes,** in PR 5. Since #2265 no row has that category, so it always reads 0. |
 
+### 10.1 Evoni's answers (2026-09-29)
+
+These are recorded verbatim in `docs/EVENT_EPISODE_FLOW.md` §8(cc).
+
+| # | Answer |
+|---|---|
+| 1, 2, 3, 5, 6, 7, 9, 10, 11, 14, 15, 16 | "take the recommendations as written" |
+| 8 | "done by #2313" (PR #2315): Complete's paid-bonus gate uses the normalised entry cost |
+| 4 | Five Career Rate Anchors; the starting anchors and premiums are in §8(cc). "Rates are baselines, not fixed payouts." |
+| 12 | **Changed.** "A SLAY does not automatically create Prime Coins. A performance bonus is paid only when the accepted deal explicitly contains one … The generic tier reward (+150/+75/+25/−25) is retired for all completions from this ruling on." |
+| 13 | "B, with aggregation … Deliverables contribute to an episode/event outcome rather than granting a stat point independently for every completed task." |
+
+---
+
+## 11. What the answers change (PROPOSED, following §10.1)
+
+### 11.1 Pricing (Q4) replaces §3's table
+
+**The anchor table replaces `deal_pricing` and `deal_pricing_modifiers`.**
+- **`deal_rate_anchors`** has one row per component × career tier:
+  - `id`, `version`, `component`, `career_tier` (1–5), `amount` (INTEGER,
+    null where there is no anchor);
+  - `created_at`, `updated_at`, `deleted_at`.
+- **Components:** `paid_appearance`, `reel`, `stories_3`,
+  `brand_partnership_base` and `performance_booking`.
+- **Version 1 holds Evoni's starting anchors,** Emerging → Elite:
+
+| Component | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| `paid_appearance` | 150 | 250 | 450 | 650 | 900 |
+| `reel` | 75 | 125 | 225 | 325 | 450 |
+| `stories_3` | 35 | 60 | 110 | 160 | 225 |
+| `brand_partnership_base` | — (null) | 500 | 900 | 1,300 | 1,800 |
+| `performance_booking` | 100 | 200 | 400 | 600 | 850 |
+
+- **`deal_rate_premiums`** has one row per premium:
+  - `id`, `version`;
+  - `kind`: `rush`, `usage`, `exclusivity` or `paid_ad`;
+  - `key`: `48h`, `24h`, `30d`, `90d`, `7d` …;
+  - `percent` (DECIMAL, null when not set);
+  - `created_at`, `updated_at`, `deleted_at`.
+- **Version 1 holds Evoni's premiums:**
+  - rush: 48h +10%, 24h +20%;
+  - usage: 30d +15%, 90d +25%;
+  - exclusivity: 7d +10%, 30d +25%, 90d +40%;
+  - `paid_ad` / whitelisting: "a separate premium", with no percent given, so
+    it is stored with `percent` null and shown as "set before use".
+- **Assembling a proposal** ("Rates are baselines, not fixed payouts"):
+  - each component of the deal takes its anchor for the event's tier;
+  - a premium applies **only to the component it affects**, for example a
+    rush on the reel raises the reel, not the appearance;
+  - the result is written onto the deal (§3.2), and Evoni edits any number
+    before the lock.
+- **No prestige multiplier:** Q4 names none, so there is none.
+- **An anchor that is null** (Brand partnership at Emerging) means the
+  component is not offered at that tier, and "Propose terms" says so.
+- **No cash income from self-funded, comped or gifted deals** (Q4):
+  - they take no anchors;
+  - their value is recorded separately: comped costs in `event_costs` with
+    `paid_by` host or brand, and gifted value in `gifted_value`.
+- **Travel is reimbursement, not income** (Q4): an `event_costs` row with
+  `kind 'travel'` and `paid_by` host or brand, never an income row.
+- **Seeding:** because Evoni supplied the numbers, PR 1 seeds version 1 in
+  its migration. The insert is guarded to run only when version 1 has no
+  rows.
+
+### 11.2 Bonus and tier reward (Q12) change §4
+
+- **The deal bonus exists only when the accepted deal contains one**
+  (`bonus_terms` set on the event).
+  - "Propose terms" never adds a bonus on its own.
+  - SLAY (or the tier the deal names) triggers the contractual bonus at
+    Complete.
+- **The generic tier reward is retired** for all completions (Evoni: "no
+  episode has been completed, so no balance has included it"). In the payout
+  PR (§8 PR 5):
+  - Complete stops writing `tier_reward` rows;
+  - the same table is removed from `evaluationFormula.computeStatDeltas`'
+    coin preview and from the forecast's `tierBonuses`;
+  - the paid bonus (`tier_paid_bonus`) goes with it. **INFERRED**, from "A
+    SLAY does not automatically create Prime Coins", and for Evoni to
+    confirm: it is a generic SLAY/PASS payment, not a deal term.
+- **Open for Evoni: the event reward.** `event_reward` (Complete books an
+  event's `rewards.coins` on SLAY or PASS, ECS:437) is also automatic.
+  Either it retires with the tier reward, or, for deal events, it becomes the
+  deal's `bonus_terms`. The design takes neither without a ruling.
+- **QUESTION 12 is answered;** §10's recommendation for it no longer
+  applies.
+
+### 11.3 Goals and stats (Q13) change §7
+
+- **B with aggregation:**
+  - only canonical career goals and accepted deliverables count;
+  - optional ideas never do;
+  - the result is one outcome per episode, not a stat point per completed
+    task.
+- `computeSocialTaskBonuses` (ECS:35–76) already aggregates by completion
+  rate. The change is that its rate is taken over goals and deliverables
+  only.
+- It is built after the payouts (§8), as planned.
+
+### 11.4 PR 1, the schema, as it now stands
+
+- **M-1, M-2, M-4 and M-5** are as in §8.
+- **M-3 is replaced by** `deal_rate_anchors` and `deal_rate_premiums`, with
+  version 1 seeded from §11.1. Its `down` drops both tables.
+
 ---
 
 ## What this note does not do
