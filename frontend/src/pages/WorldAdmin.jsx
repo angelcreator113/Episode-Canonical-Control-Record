@@ -23,6 +23,7 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import EpisodeTasksPanel from '../components/EpisodeTasksPanel';
+import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
@@ -5109,7 +5110,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         <span style={{ color: '#999' }}>☐</span>
                         <span style={{ fontWeight: 600 }}>{task.label}</span>
-                        {task.required && <span style={{ fontSize: 8, padding: '1px 4px', background: '#fef2f2', color: '#dc2626', borderRadius: 3 }}>required</span>}
+                        <SocialTaskBadge task={task} />
                         {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3 }}>{task.platform}</span>}
                         {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#d1fae5', color: '#065f46', borderRadius: 3 }}>niche</span>}
                       </div>

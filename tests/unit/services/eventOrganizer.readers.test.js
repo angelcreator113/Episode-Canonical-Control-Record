@@ -251,7 +251,8 @@ describe('readers behind S3/canvas — take the creator from eventCreatorOrganiz
     expect(block).not.toMatch(/automation\.host_(profile_id|handle|display_name)/);
   });
   test('todoListService.generateEpisodeTodoList — social tasks', () => {
-    const block = between(read('src/services/todoListService.js'), 'If no social tasks exist yet', 'buildSocialTasks(eventType, hostProfile)');
+    // T1 (#2292) gave the call more arguments; the end marker is its prefix.
+    const block = between(read('src/services/todoListService.js'), 'If no social tasks exist yet', 'buildSocialTasks(eventType, hostProfile');
     expect(block).toMatch(/eventCreatorOrganizer\(event\)/);
     expect(block).not.toMatch(/host_profile_id/);
   });

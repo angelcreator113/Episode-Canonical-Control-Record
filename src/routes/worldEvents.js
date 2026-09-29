@@ -32,7 +32,8 @@ const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
 const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
-const { normalizeRestrictions } = require('../services/eventTermsService');
+const { normalizeRestrictions, listEventDeliverables } = require('../services/eventTermsService');
+const { withDeliverableTasks } = require('../utils/socialTaskSource');
 const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
 
 async function getModels() {
@@ -3522,7 +3523,14 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requ
           socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile, outfitPieces);
         } catch { socialTasks = []; }
       }
-      tasks = socialTasks;
+      // T1 (§8(bb); Task #2292): required only from the event's deliverables.
+      let deliverables = [];
+      try {
+        deliverables = await listEventDeliverables(sequelize, event.id);
+      } catch (delivErr) {
+        console.error('[overlay-generate] Deliverables read failed (no social task is required):', delivErr.message);
+      }
+      tasks = withDeliverableTasks(socialTasks, deliverables);
       buffer = socialChecklistService.renderSocialChecklist(tasks, event);
       assetRole = 'UI.OVERLAY.SOCIAL_TASKS';
       assetName = `${event.name} — Social Tasks`;

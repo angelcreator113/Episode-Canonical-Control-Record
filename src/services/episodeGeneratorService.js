@@ -19,63 +19,68 @@ const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/e
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
+const { withDeliverableTasks } = require('../utils/socialTaskSource');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
-// Tasks vary by event type and timing (before/during/after)
+// Tasks vary by event type and timing (before/during/after).
+//
+// No template is required (T1, §8(bb); Task #2292): each is Lala's goal or an
+// optional idea (task_source). Only an accepted deliverable (an
+// event_deliverables row, passed as context.deliverables) makes a task
+// required; see src/utils/socialTaskSource.js. The brand_deal template no
+// longer invents "Sponsored Post 1/2 (required)".
 
 const SOCIAL_TASK_TEMPLATES = {
   invite: {
     before: [
-      { slot: 'grwm', label: 'Get Ready With Me', description: 'Film getting ready process — outfit, hair, makeup', platform: 'tiktok', timing: 'before', required: true },
-      { slot: 'outfit_reveal', label: 'Outfit Reveal', description: 'Post outfit details to stories, tag brands', platform: 'instagram', timing: 'before', required: true },
+      { slot: 'grwm', label: 'Get Ready With Me', description: 'Film getting ready process — outfit, hair, makeup', platform: 'tiktok', timing: 'before', task_source: 'goal' },
+      { slot: 'outfit_reveal', label: 'Outfit Reveal', description: 'Post outfit details to stories, tag brands', platform: 'instagram', timing: 'before', task_source: 'goal' },
     ],
     during: [
-      { slot: 'arrival', label: 'Arrival Content', description: 'Film arrival — venue, outfit, energy', platform: 'instagram', timing: 'during', required: true },
-      { slot: 'host_photo', label: 'Photo with Host', description: 'Post with the host — relationship visibility', platform: 'instagram', timing: 'during', required: true },
-      { slot: 'go_live', label: 'Go Live', description: 'Live stream from the event — engagement opportunity', platform: 'tiktok', timing: 'during', required: false },
-      { slot: 'bts_stories', label: 'Behind the Scenes', description: 'Stories showing exclusivity — who is here, vibes, food', platform: 'instagram', timing: 'during', required: true },
+      { slot: 'arrival', label: 'Arrival Content', description: 'Film arrival — venue, outfit, energy', platform: 'instagram', timing: 'during', task_source: 'goal' },
+      { slot: 'host_photo', label: 'Photo with Host', description: 'Post with the host — relationship visibility', platform: 'instagram', timing: 'during', task_source: 'goal' },
+      { slot: 'go_live', label: 'Go Live', description: 'Live stream from the event — engagement opportunity', platform: 'tiktok', timing: 'during', task_source: 'optional' },
+      { slot: 'bts_stories', label: 'Behind the Scenes', description: 'Stories showing exclusivity — who is here, vibes, food', platform: 'instagram', timing: 'during', task_source: 'goal' },
     ],
     after: [
-      { slot: 'recap', label: 'Event Recap', description: 'Carousel or reel summarizing the night', platform: 'instagram', timing: 'after', required: true },
-      { slot: 'thank_host', label: 'Thank the Host', description: 'Public appreciation post — relationship maintenance', platform: 'instagram', timing: 'after', required: false },
-      { slot: 'engage', label: 'Engage with Attendees', description: 'Comment on other attendees posts — network building', platform: 'instagram', timing: 'after', required: false },
+      { slot: 'recap', label: 'Event Recap', description: 'Carousel or reel summarizing the night', platform: 'instagram', timing: 'after', task_source: 'goal' },
+      { slot: 'thank_host', label: 'Thank the Host', description: 'Public appreciation post — relationship maintenance', platform: 'instagram', timing: 'after', task_source: 'optional' },
+      { slot: 'engage', label: 'Engage with Attendees', description: 'Comment on other attendees posts — network building', platform: 'instagram', timing: 'after', task_source: 'optional' },
     ],
   },
   brand_deal: {
     before: [
-      { slot: 'teaser', label: 'Brand Teaser', description: 'Hint at upcoming collab without revealing', platform: 'instagram', timing: 'before', required: false },
+      { slot: 'teaser', label: 'Brand Teaser', description: 'Hint at upcoming collab without revealing', platform: 'instagram', timing: 'before', task_source: 'optional' },
     ],
     during: [
-      { slot: 'brand_post_1', label: 'Sponsored Post 1', description: 'Primary brand content — must follow brief', platform: 'instagram', timing: 'during', required: true },
-      { slot: 'brand_post_2', label: 'Sponsored Post 2', description: 'Secondary brand content — different angle', platform: 'tiktok', timing: 'during', required: true },
-      { slot: 'brand_stories', label: 'Brand Stories', description: 'Stories showing product in use — authentic feel', platform: 'instagram', timing: 'during', required: true },
+      { slot: 'brand_stories', label: 'Brand Stories', description: 'Stories showing product in use — authentic feel', platform: 'instagram', timing: 'during', task_source: 'goal' },
     ],
     after: [
-      { slot: 'engagement_check', label: 'Check Engagement', description: 'Monitor metrics — brand will check', platform: 'instagram', timing: 'after', required: true },
+      { slot: 'engagement_check', label: 'Check Engagement', description: 'Monitor metrics — brand will check', platform: 'instagram', timing: 'after', task_source: 'goal' },
     ],
   },
   guest: {
     before: [
-      { slot: 'grwm', label: 'Get Ready', description: 'Getting ready content — casual vibe', platform: 'tiktok', timing: 'before', required: false },
+      { slot: 'grwm', label: 'Get Ready', description: 'Getting ready content — casual vibe', platform: 'tiktok', timing: 'before', task_source: 'optional' },
     ],
     during: [
-      { slot: 'presence', label: 'Show Presence', description: 'Post that you are here — be seen', platform: 'instagram', timing: 'during', required: true },
-      { slot: 'network', label: 'Network Content', description: 'Photos with other attendees — expand reach', platform: 'instagram', timing: 'during', required: true },
+      { slot: 'presence', label: 'Show Presence', description: 'Post that you are here — be seen', platform: 'instagram', timing: 'during', task_source: 'goal' },
+      { slot: 'network', label: 'Network Content', description: 'Photos with other attendees — expand reach', platform: 'instagram', timing: 'during', task_source: 'goal' },
     ],
     after: [
-      { slot: 'recap', label: 'Recap', description: 'Quick recap of the experience', platform: 'tiktok', timing: 'after', required: false },
+      { slot: 'recap', label: 'Recap', description: 'Quick recap of the experience', platform: 'tiktok', timing: 'after', task_source: 'optional' },
     ],
   },
   upgrade: {
     before: [
-      { slot: 'grwm', label: 'Elevated GRWM', description: 'Make this one special — higher production value', platform: 'tiktok', timing: 'before', required: true },
+      { slot: 'grwm', label: 'Elevated GRWM', description: 'Make this one special — higher production value', platform: 'tiktok', timing: 'before', task_source: 'goal' },
     ],
     during: [
-      { slot: 'arrival', label: 'Grand Arrival', description: 'Film the full arrival — venue reveal moment', platform: 'instagram', timing: 'during', required: true },
-      { slot: 'experience', label: 'VIP Experience', description: 'Show the exclusive access — what others dont see', platform: 'instagram', timing: 'during', required: true },
+      { slot: 'arrival', label: 'Grand Arrival', description: 'Film the full arrival — venue reveal moment', platform: 'instagram', timing: 'during', task_source: 'goal' },
+      { slot: 'experience', label: 'VIP Experience', description: 'Show the exclusive access — what others dont see', platform: 'instagram', timing: 'during', task_source: 'goal' },
     ],
     after: [
-      { slot: 'recap', label: 'Experience Recap', description: 'Cinematic recap — this is portfolio content', platform: 'instagram', timing: 'after', required: true },
+      { slot: 'recap', label: 'Experience Recap', description: 'Cinematic recap — this is portfolio content', platform: 'instagram', timing: 'after', task_source: 'goal' },
     ],
   },
 };
@@ -88,32 +93,32 @@ SOCIAL_TASK_TEMPLATES.default = SOCIAL_TASK_TEMPLATES.invite;
 
 const PLATFORM_TASKS = {
   tiktok: [
-    { slot: 'tiktok_trend', label: 'TikTok Trend', description: 'Film a trending sound/format at the event', platform: 'tiktok', timing: 'during', required: false },
-    { slot: 'tiktok_duet', label: 'Duet Bait', description: 'Post something attendees will duet or stitch', platform: 'tiktok', timing: 'after', required: false },
+    { slot: 'tiktok_trend', label: 'TikTok Trend', description: 'Film a trending sound/format at the event', platform: 'tiktok', timing: 'during', task_source: 'optional' },
+    { slot: 'tiktok_duet', label: 'Duet Bait', description: 'Post something attendees will duet or stitch', platform: 'tiktok', timing: 'after', task_source: 'optional' },
   ],
   instagram: [
-    { slot: 'ig_carousel', label: 'Photo Carousel', description: 'Polished multi-image post — the grid matters', platform: 'instagram', timing: 'after', required: false },
-    { slot: 'ig_collab', label: 'Collab Post', description: 'Joint post with host or key attendee — shared audiences', platform: 'instagram', timing: 'after', required: false },
+    { slot: 'ig_carousel', label: 'Photo Carousel', description: 'Polished multi-image post — the grid matters', platform: 'instagram', timing: 'after', task_source: 'optional' },
+    { slot: 'ig_collab', label: 'Collab Post', description: 'Joint post with host or key attendee — shared audiences', platform: 'instagram', timing: 'after', task_source: 'optional' },
   ],
   youtube: [
-    { slot: 'yt_vlog', label: 'Vlog the Event', description: 'Film everything — this becomes a full video', platform: 'youtube', timing: 'during', required: true },
-    { slot: 'yt_broll', label: 'Capture B-Roll', description: 'Get cinematic shots for the edit — venue, crowd, details', platform: 'youtube', timing: 'during', required: true },
-    { slot: 'yt_thumbnail', label: 'Thumbnail Moment', description: 'Stage a thumbnail-worthy reaction shot', platform: 'youtube', timing: 'during', required: false },
+    { slot: 'yt_vlog', label: 'Vlog the Event', description: 'Film everything — this becomes a full video', platform: 'youtube', timing: 'during', task_source: 'goal' },
+    { slot: 'yt_broll', label: 'Capture B-Roll', description: 'Get cinematic shots for the edit — venue, crowd, details', platform: 'youtube', timing: 'during', task_source: 'goal' },
+    { slot: 'yt_thumbnail', label: 'Thumbnail Moment', description: 'Stage a thumbnail-worthy reaction shot', platform: 'youtube', timing: 'during', task_source: 'optional' },
   ],
   twitter: [
-    { slot: 'twitter_thread', label: 'Live Thread', description: 'Tweet play-by-play from the event — build narrative', platform: 'twitter', timing: 'during', required: true },
-    { slot: 'twitter_take', label: 'Hot Take', description: 'Post a spicy opinion about the event — drive engagement', platform: 'twitter', timing: 'after', required: false },
+    { slot: 'twitter_thread', label: 'Live Thread', description: 'Tweet play-by-play from the event — build narrative', platform: 'twitter', timing: 'during', task_source: 'goal' },
+    { slot: 'twitter_take', label: 'Hot Take', description: 'Post a spicy opinion about the event — drive engagement', platform: 'twitter', timing: 'after', task_source: 'optional' },
   ],
   onlyfans: [
-    { slot: 'of_exclusive', label: 'Exclusive BTS', description: 'Behind-the-scenes content only subscribers see', platform: 'onlyfans', timing: 'after', required: true },
-    { slot: 'of_tease', label: 'Free Tease', description: 'Post a teaser on main socials that drives to subscriber content', platform: 'onlyfans', timing: 'after', required: false },
+    { slot: 'of_exclusive', label: 'Exclusive BTS', description: 'Behind-the-scenes content only subscribers see', platform: 'onlyfans', timing: 'after', task_source: 'goal' },
+    { slot: 'of_tease', label: 'Free Tease', description: 'Post a teaser on main socials that drives to subscriber content', platform: 'onlyfans', timing: 'after', task_source: 'optional' },
   ],
   twitch: [
-    { slot: 'twitch_irl', label: 'IRL Stream', description: 'Live stream the event to your community', platform: 'twitch', timing: 'during', required: true },
-    { slot: 'twitch_react', label: 'Reaction Stream', description: 'React to the event content with your chat after', platform: 'twitch', timing: 'after', required: false },
+    { slot: 'twitch_irl', label: 'IRL Stream', description: 'Live stream the event to your community', platform: 'twitch', timing: 'during', task_source: 'goal' },
+    { slot: 'twitch_react', label: 'Reaction Stream', description: 'React to the event content with your chat after', platform: 'twitch', timing: 'after', task_source: 'optional' },
   ],
   substack: [
-    { slot: 'substack_essay', label: 'Post-Event Essay', description: 'Long-form reflection on the event — the thoughtful angle', platform: 'substack', timing: 'after', required: true },
+    { slot: 'substack_essay', label: 'Post-Event Essay', description: 'Long-form reflection on the event — the thoughtful angle', platform: 'substack', timing: 'after', task_source: 'goal' },
   ],
   multi: [], // multi-platform profiles use the event-type defaults + category bonuses
 };
@@ -123,32 +128,32 @@ const PLATFORM_TASKS = {
 
 const CATEGORY_TASKS = {
   fashion: [
-    { slot: 'outfit_breakdown', label: 'Outfit Breakdown', description: 'Detail every piece — brand, price, where to get it', platform: 'instagram', timing: 'after', required: false },
-    { slot: 'style_comparison', label: 'Style Comparison', description: 'Compare your look to other attendees — who wore it best?', platform: 'tiktok', timing: 'after', required: false },
+    { slot: 'outfit_breakdown', label: 'Outfit Breakdown', description: 'Detail every piece — brand, price, where to get it', platform: 'instagram', timing: 'after', task_source: 'optional' },
+    { slot: 'style_comparison', label: 'Style Comparison', description: 'Compare your look to other attendees — who wore it best?', platform: 'tiktok', timing: 'after', task_source: 'optional' },
   ],
   beauty: [
-    { slot: 'makeup_closeup', label: 'Makeup Close-Up', description: 'Film the makeup look in detail — products used', platform: 'tiktok', timing: 'before', required: false },
-    { slot: 'beauty_review', label: 'Event Glam Review', description: 'How did the look hold up? Honest review of products used', platform: 'instagram', timing: 'after', required: false },
+    { slot: 'makeup_closeup', label: 'Makeup Close-Up', description: 'Film the makeup look in detail — products used', platform: 'tiktok', timing: 'before', task_source: 'optional' },
+    { slot: 'beauty_review', label: 'Event Glam Review', description: 'How did the look hold up? Honest review of products used', platform: 'instagram', timing: 'after', task_source: 'optional' },
   ],
   lifestyle: [
-    { slot: 'day_in_life', label: 'Day in the Life', description: 'Frame the event as part of a full day — morning to night', platform: 'tiktok', timing: 'before', required: false },
-    { slot: 'aesthetic_reel', label: 'Aesthetic Reel', description: 'Curated visuals — food, decor, vibes, no talking', platform: 'instagram', timing: 'during', required: false },
+    { slot: 'day_in_life', label: 'Day in the Life', description: 'Frame the event as part of a full day — morning to night', platform: 'tiktok', timing: 'before', task_source: 'optional' },
+    { slot: 'aesthetic_reel', label: 'Aesthetic Reel', description: 'Curated visuals — food, decor, vibes, no talking', platform: 'instagram', timing: 'during', task_source: 'optional' },
   ],
   fitness: [
-    { slot: 'pre_event_routine', label: 'Pre-Event Routine', description: 'Show the workout or prep that got you event-ready', platform: 'tiktok', timing: 'before', required: false },
+    { slot: 'pre_event_routine', label: 'Pre-Event Routine', description: 'Show the workout or prep that got you event-ready', platform: 'tiktok', timing: 'before', task_source: 'optional' },
   ],
   food: [
-    { slot: 'food_review', label: 'Food & Drink Review', description: 'Review everything served — the real content', platform: 'tiktok', timing: 'during', required: false },
+    { slot: 'food_review', label: 'Food & Drink Review', description: 'Review everything served — the real content', platform: 'tiktok', timing: 'during', task_source: 'optional' },
   ],
   music: [
-    { slot: 'music_moment', label: 'Music Moment', description: 'Capture the DJ set, live performance, or playlist vibe', platform: 'tiktok', timing: 'during', required: false },
+    { slot: 'music_moment', label: 'Music Moment', description: 'Capture the DJ set, live performance, or playlist vibe', platform: 'tiktok', timing: 'during', task_source: 'optional' },
   ],
   creator_economy: [
-    { slot: 'collab_pitch', label: 'Collab Pitch', description: 'Use this event to set up a future collab — film the ask', platform: 'instagram', timing: 'during', required: false },
-    { slot: 'metrics_flex', label: 'Engagement Flex', description: 'Share the numbers this event content generated', platform: 'twitter', timing: 'after', required: false },
+    { slot: 'collab_pitch', label: 'Collab Pitch', description: 'Use this event to set up a future collab — film the ask', platform: 'instagram', timing: 'during', task_source: 'optional' },
+    { slot: 'metrics_flex', label: 'Engagement Flex', description: 'Share the numbers this event content generated', platform: 'twitter', timing: 'after', task_source: 'optional' },
   ],
   drama: [
-    { slot: 'drama_recap', label: 'Drama Recap', description: 'Spill what really happened — the version people want', platform: 'tiktok', timing: 'after', required: false },
+    { slot: 'drama_recap', label: 'Drama Recap', description: 'Spill what really happened — the version people want', platform: 'tiktok', timing: 'after', task_source: 'optional' },
   ],
 };
 
@@ -221,7 +226,7 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], cont
     }
   }
 
-  if (!hostProfile) return tasks;
+  if (!hostProfile) return withDeliverableTasks(tasks, context.deliverables);
 
   const usedSlots = new Set(tasks.map(t => t.slot));
 
@@ -249,7 +254,7 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], cont
   const order = { before: 0, during: 1, after: 2 };
   tasks.sort((a, b) => (order[a.timing] || 1) - (order[b.timing] || 1));
 
-  return tasks;
+  return withDeliverableTasks(tasks, context.deliverables);
 }
 
 // ─── EPISODE BEAT TEMPLATES ──────────────────────────────────────────────────
@@ -884,6 +889,11 @@ Return ONLY JSON.` }],
         : [],
     });
   }
+  // T1 (§8(bb); Task #2292): the saved list may predate T1 and carry
+  // required: true on generated tasks. Required comes only from the event's
+  // deliverables (read above for the terms snapshot): generated tasks become
+  // goals or optional ideas, and each deliverable row becomes one task.
+  socialTasks = withDeliverableTasks(socialTasks, eventDeliverables);
 
   // Wardrobe tasks (the standard 7 slots)
   const wardrobeTasks = [
