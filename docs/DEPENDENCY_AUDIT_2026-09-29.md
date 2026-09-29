@@ -9,9 +9,17 @@ After Deploy CE, the CFO's `dependency_audit` reported "15 critical/high
 security vulnerabilities" (14 at CD). See
 `docs/audit/F-Deploy-1_Deploy_2026-09-29_CE.md` §9.
 
-The number comes from `dependencyAudit` in `src/services/cfoAgent.js`:
-- it runs `npm audit --json` in the repository root, so the backend only,
-  not `frontend/`;
+The number comes from `dependencyAudit` in `src/services/cfoAgent.js`
+(lines 273 and 282 at `8e210132`):
+
+```js
+auditOutput = execSync('npm audit --json 2>nul', { cwd: rootDir, encoding: 'utf-8', timeout: 30000 });
+...
+const criticalVulns = (vulnCount.critical || 0) + (vulnCount.high || 0);
+```
+
+- `rootDir` is the repository root, so it audits the backend only, not
+  `frontend/`;
 - it adds `critical` and `high` from `metadata.vulnerabilities`.
 
 The same root audit restricted to production dependencies gives exactly 15.
@@ -85,8 +93,60 @@ matching `high: 15`.
   - `nodemailer` 8 → 10;
   - `sharp` 0.34 → 0.35 (0.x, so a breaking bump).
 - **Not in this count:**
-  - `frontend/` (the CFO does not audit it);
+  - `frontend/` (the CFO does not audit it; listed below);
   - backend dev dependencies (20 critical/high without `--omit=dev`).
+
+## Frontend — not counted by the CFO
+
+`frontend/` has its own lockfile, and the CFO's `dependencyAudit` never
+audits it. Same run and same session as above:
+
+```
+$ cd frontend && npm audit --json
+"metadata": {"vulnerabilities": {"info":0,"low":2,"moderate":15,"high":18,"critical":2,"total":37}}
+$ cd frontend && npm audit --omit=dev --json
+"metadata": {"vulnerabilities": {"info":0,"low":0,"moderate":10,"high":8,"critical":1,"total":19}}
+```
+
+**20 critical/high** in all: 2 critical and 18 high.
+- **Runtime (9):** in `dependencies`, so they can reach the bundle the
+  browser loads.
+- **Build-time only (11):** dev dependencies, reachable only on a machine
+  running the build or the dev server.
+
+**Runtime dependencies (9 = 1 critical + 8 high):**
+
+| # | Package | Severity | Installed | Declared | Advisories, in short | Fix path |
+|---|---|---|---|---|---|---|
+| F1 | `jspdf` | **critical** | 4.1.0 | `^4.0.0` | 5: PDF object injection (`addJS`, FreeText colour), AcroForm JavaScript execution, GIF-dimension DoS | `npm audit fix` |
+| F2 | `axios` | high | 1.13.5 | `^1.6.2` | 28: the same axios advisories as backend #1 | `npm audit fix` |
+| F3 | `colorthief` | high | 2.6.0 | `^2.6.0` | none of its own: flagged through `sharp`, `ndarray-pixels` and `file-type` | `npm audit fix` |
+| F4 | `ndarray-pixels` | high | 4.1.0 | transitive (`colorthief`) | none of its own: flagged through `sharp` | `npm audit fix` |
+| F5 | `sharp` | high | 0.33.5 | transitive (`colorthief`) | 2: libvips and libheif, as backend #6 | `npm audit fix` |
+| F6 | `form-data` | high | 4.0.5 | transitive | 1: CRLF injection, as backend #2 | `npm audit fix` |
+| F7 | `lodash` | high | 4.17.23 | transitive | 2: as backend #12 | `npm audit fix` |
+| F8 | `socket.io-parser` | high | 4.2.5 | transitive | 2: as backend #14 | `npm audit fix` |
+| F9 | `ws` | high | 8.18.3 | transitive | 2: as backend #15 | `npm audit fix` |
+
+**Build-time only (11 = 1 critical + 10 high):**
+
+| # | Package | Severity | Installed | Declared | Advisories, in short | Fix path |
+|---|---|---|---|---|---|---|
+| F10 | `vitest` | **critical** | 0.34.6 | devDep `^0.34.0` | 1: arbitrary file read and execution while the Vitest UI server is listening; also flagged through `vite` and `vite-node` | **semver-major:** `vitest@5.0.2` |
+| F11 | `vite` | high | 7.3.1, 5.4.21 | devDep `^7.3.1` | 8: dev-server path traversal, `server.fs.deny` bypass, file read over the dev WebSocket; through `esbuild`. 5.4.21 is vitest's copy. | via `vitest@5.0.2` (semver-major) |
+| F12 | `postcss` | high | 8.5.6 | devDep `^8.5.6` | 4: XSS in stringify output; file read via `sourceMappingURL` | `npm audit fix` |
+| F13 | `rollup` | high | 4.57.1 | transitive | 1: arbitrary file write via path traversal | `npm audit fix` |
+| F14 | `brace-expansion` | high | 1.1.12 | transitive | 4: expansion DoS | `npm audit fix` |
+| F15 | `browserslist` | high | 4.28.1 | transitive | 2: memory growth; crash on crafted stats | `npm audit fix` |
+| F16 | `flatted` | high | 3.3.3 | transitive | 2: recursion DoS; prototype pollution in `parse()` | `npm audit fix` |
+| F17 | `js-yaml` | high | 4.1.1 | transitive | 4: quadratic merge-key and `!!omap` DoS | `npm audit fix` |
+| F18 | `minimatch` | high | 3.1.2 | transitive | 3: ReDoS | `npm audit fix` |
+| F19 | `nanoid` | high | 3.3.11 | transitive | 3: generator loops; integer overflow | `npm audit fix` |
+| F20 | `picomatch` | high | 4.0.3 | transitive | 2: glob method injection; extglob ReDoS | `npm audit fix` |
+
+**Frontend fix paths:** 18 of 20 resolve with `npm audit fix`. `vitest`
+and its copy of `vite` need `vitest` 0.34 → 5, a major upgrade of the test
+runner.
 
 ## What this document does not do
 
