@@ -1,0 +1,165 @@
+/* Production → Money (Episode Money, Phase A; Task #2278). */
+
+.em-tab {
+  --em-positive: #2F7D4F;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.em-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.em-card {
+  background: var(--lala-surface, #FFFFFF);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: var(--lala-radius, 8px);
+  padding: 12px 14px;
+}
+
+.em-card-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-card-value {
+  margin-top: 6px;
+  font-family: 'Lora', serif;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.em-card-note,
+.em-explain {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.em-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lala-gold, #B8962E);
+}
+
+.em-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-surface, #FFFFFF);
+}
+
+.em-row {
+  display: grid;
+  grid-template-columns: 110px 160px minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+}
+
+.em-row:first-child {
+  border-top: none;
+}
+
+.em-row-date {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-row-category {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.em-row-desc {
+  color: var(--lala-ink-muted, #6B6557);
+  overflow-wrap: anywhere;
+}
+
+.em-row-amount {
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+}
+
+.em-row-expected {
+  background: var(--lala-parchment, #FAF7F0);
+  color: var(--lala-ink-muted, #6B6557);
+  font-style: italic;
+}
+
+.em-pos {
+  color: var(--em-positive);
+}
+
+.em-neg {
+  color: var(--lala-danger, #B84D2E);
+}
+
+.em-empty {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-parchment, #FAF7F0);
+  border: 1px dashed var(--lala-parchment-3, #E8E0D0);
+  border-radius: var(--lala-radius, 8px);
+}
+
+.em-error {
+  color: var(--lala-danger, #B84D2E);
+  background: var(--lala-danger-soft, #F7E4DC);
+}
+
+/* 375px: the summary cards stack and each row wraps into two lines. */
+@media (max-width: 600px) {
+  .em-tab {
+    padding: 12px;
+  }
+
+  .em-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .em-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'category amount'
+      'desc desc'
+      'date date';
+    row-gap: 2px;
+  }
+
+  .em-row-category { grid-area: category; }
+  .em-row-amount { grid-area: amount; }
+  .em-row-desc { grid-area: desc; }
+  .em-row-date { grid-area: date; }
+}

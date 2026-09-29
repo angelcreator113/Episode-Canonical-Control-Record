@@ -22,6 +22,7 @@ const EpisodeDistributionTab = lazy(() => import('../components/Episodes/Episode
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
 const EpisodeProductionChecklist = lazy(() => import('../components/Episodes/EpisodeProductionChecklist'));
 const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
+const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
@@ -45,6 +46,12 @@ export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
 export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
+// Lala's ledger balance for the header chip: the same /balance the Dashboard
+// reads (Episode Money Phase A, #2278).
+export const getShowBalanceApi = async (showId) => {
+  const r = await api.get(`/api/v1/world/${showId}/balance`);
+  return r?.data?.balance ?? null;
+};
 export const getCharacterStateApi = (charKey, showId) =>
   api.get(`/api/v1/characters/${charKey}/state?show_id=${showId}`).then((r) => r.data);
 export const addEpisodeLibrarySceneApi = (epId, payload) =>
@@ -87,6 +94,8 @@ const EpisodeDetail = () => {
       { key: 'assets', label: 'Assets' },
       { key: 'scenes', label: 'Scenes' },
       { key: 'wardrobe', label: 'Wardrobe' },
+      // §8(aa) M1: Money follows Wardrobe (Episode Money Phase A, #2278).
+      { key: 'money', label: 'Money' },
       { key: 'phone', label: 'Phone' },
       { key: 'checklist', label: 'Production Checklist' },
     ]},
@@ -103,6 +112,7 @@ const EpisodeDetail = () => {
       'assets': ['production', 'assets'],
       'scenes': ['production', 'scenes'],
       'wardrobe': ['production', 'wardrobe'],
+      'money': ['production', 'money'],
       'phone': ['production', 'phone'],
       'checklist': ['production', 'checklist'],
       'production': ['production', 'assets'],
@@ -183,6 +193,24 @@ const EpisodeDetail = () => {
       if (sub) setEpSubTab(sub);
     }
   }, [searchParams]);
+
+  // The header's balance chip (§8(aa) M1): Lala's ledger balance, from the
+  // same /balance the Dashboard reads. It opens Production → Money.
+  const [headerBalance, setHeaderBalance] = useState(null);
+  const chipShowId = episode?.show_id || episode?.showId;
+  useEffect(() => {
+    if (!chipShowId) return undefined;
+    let cancelled = false;
+    getShowBalanceApi(chipShowId)
+      .then((balance) => { if (!cancelled) setHeaderBalance(balance); })
+      .catch((err) => { console.error('[EpisodeDetail] balance load failed:', err); });
+    return () => { cancelled = true; };
+  }, [chipShowId]);
+  const openMoneyTab = () => {
+    setActiveTabState('production');
+    setEpSubTab('money');
+    setSearchParams({ tab: 'money' });
+  };
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [episodeEvents, setEpisodeEvents] = useState([]);
@@ -550,6 +578,17 @@ const EpisodeDetail = () => {
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
                 ◆ Working Episode
               </span>
+              {headerBalance !== null && (
+                <button
+                  type="button"
+                  className="ed-balance-chip"
+                  onClick={openMoneyTab}
+                  title="Lala's balance. Open this episode's money."
+                  data-testid="ed-balance-chip"
+                >
+                  {Number(headerBalance).toLocaleString()} 🪙
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -839,6 +878,11 @@ const EpisodeDetail = () => {
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
         {tabKey === 'production.phone' && (
           <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} />
+        )}
+
+        {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
+        {tabKey === 'production.money' && (
+          <EpisodeMoneyTab episode={episode} showId={episode?.show_id || episode?.showId} />
         )}
 
         {/* Checklist Tab */}
