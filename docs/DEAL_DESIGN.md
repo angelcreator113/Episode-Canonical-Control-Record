@@ -650,13 +650,12 @@ These are recorded verbatim in `docs/EVENT_EPISODE_FLOW.md` §8(cc).
   - Complete stops writing `tier_reward` rows;
   - the same table is removed from `evaluationFormula.computeStatDeltas`'
     coin preview and from the forecast's `tierBonuses`;
-  - the paid bonus (`tier_paid_bonus`) goes with it. **INFERRED**, from "A
-    SLAY does not automatically create Prime Coins", and for Evoni to
-    confirm: it is a generic SLAY/PASS payment, not a deal term.
-- **Open for Evoni: the event reward.** `event_reward` (Complete books an
-  event's `rewards.coins` on SLAY or PASS, ECS:437) is also automatic.
-  Either it retires with the tier reward, or, for deal events, it becomes the
-  deal's `bonus_terms`. The design takes neither without a ruling.
+  - the paid bonus (`tier_paid_bonus`) goes with it. **RULED** (Evoni,
+    2026-09-29): "tier_paid_bonus retires too (Q12)."
+  - the event reward (`event_reward`, Complete's booking of an event's
+    `rewards.coins` on SLAY or PASS, ECS:437) goes with it. **RULED**
+    (Evoni, 2026-09-29): "event_reward retires with the tier reward (Law 8:
+    money only from accepted terms; legacy events keep payment_amount)."
 - **QUESTION 12 is answered;** §10's recommendation for it no longer
   applies.
 

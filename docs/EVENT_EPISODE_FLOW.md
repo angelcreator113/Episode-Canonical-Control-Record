@@ -2828,12 +2828,21 @@ deliverables may affect character state; optional ideas never do.
 Deliverables contribute to an episode/event outcome rather than granting a
 stat point independently for every completed task."
 
+**Follow-up rulings (Evoni, 2026-09-29),** on the two points
+`DEAL_DESIGN.md` §11.2 had left open:
+- "event_reward retires with the tier reward (Law 8: money only from
+  accepted terms; legacy events keep payment_amount)."
+- "tier_paid_bonus retires too (Q12)."
+
+Both retire with the tier reward in the payout PR (§8 PR 5).
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
   - pricing becomes rate anchors by component and tier;
   - a bonus exists only in a deal that contains one;
-  - the tier reward is retired;
+  - the tier reward is retired, and the event reward and paid bonus with
+    it;
   - stats aggregate.
 - Q8 is built by #2313 (PR #2315).
 - The deal build starts at `DEAL_DESIGN.md` §8 PR 1 (the schema).
