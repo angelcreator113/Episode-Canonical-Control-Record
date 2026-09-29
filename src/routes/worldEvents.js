@@ -139,7 +139,10 @@ router.get('/world/:showId/events', requireAuth, async (req, res) => {
 // instead of going through the model.
 // ═══════════════════════════════════════════
 
-router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next) => {
+  // Registered before /events/next-suggestions, which it would otherwise
+  // swallow as an event id (Task #2273).
+  if (req.params.eventId === 'next-suggestions') return next();
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -4416,6 +4419,9 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
       { replacements: { showId } }
     );
     const state = stateRows?.[0] || { coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 };
+    // Coins are the ledger balance, not the cached copy (Task #2273).
+    const { getCurrentBalance } = require('../services/financialTransactionService');
+    state.coins = await getCurrentBalance(sequelize, showId);
 
     // Reputation → career tier gate. Tier 1: rep 0-2, Tier 2: rep 3-4, etc.
     const careerTier = Math.min(5, Math.floor((state.reputation || 0) / 2) + 1);

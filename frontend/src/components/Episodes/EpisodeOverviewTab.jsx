@@ -137,7 +137,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       // transactions anyway.
       api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
         .then(({ data }) => {
-          const txs = data?.data?.transactions || [];
+          // Only the rows that count toward Lala's balance: a voided row
+          // stays in the ledger as history but is not money (Task #2273).
+          const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
           setLedger({ transactions: txs, loading: false });
         })
         .catch(() => setLedger({ transactions: [], loading: false }));

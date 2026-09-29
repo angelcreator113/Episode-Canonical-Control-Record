@@ -54,7 +54,6 @@ function ShowInsightsTab({ show }) {
 
       // Financial ledger
       const ledger = ledgerRes.status === 'fulfilled' ? (ledgerRes.value.data?.data || {}) : {};
-      const transactions = ledger.transactions || [];
       const episodeSummary = ledger.episode_summary || [];
 
       // Episodes
@@ -78,9 +77,11 @@ function ShowInsightsTab({ show }) {
         if (evalJson?.score) scores.push({ episode: ep.episode_number, score: evalJson.score, tier: evalJson.tier_final, title: ep.title });
       });
 
-      // Financial totals
-      const totalIncome = transactions.filter(t => t.type === 'income' || t.type === 'reward').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
-      const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+      // Financial totals: the server's sums over the rows that count toward
+      // Lala's balance (no voided rows, no deleted episode's), not a sum of
+      // the listed page (Task #2273).
+      const totalIncome = Number(ledger.totals?.income) || 0;
+      const totalExpenses = Number(ledger.totals?.expenses) || 0;
 
       // Wardrobe stats
       const tierDist = { basic: 0, mid: 0, luxury: 0, elite: 0 };
