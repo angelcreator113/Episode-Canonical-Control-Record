@@ -4306,7 +4306,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             };
                             setEventDetailModal(updated);
                             setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
-                            setToast(`Regenerated ${tasks.length} social tasks for this invite`);
+                            // T5 (Task #2304): after Start Episode the tasks are saved to the episode's copy.
+                            setToast(regen.data?.data?.savedTo === 'episode'
+                              ? `Regenerated ${tasks.length} social tasks on the episode's task list`
+                              : `Regenerated ${tasks.length} social tasks for this invite`);
                           }
                         } catch (err) {
                           setToast('Failed: ' + (err.response?.data?.error || err.message));
