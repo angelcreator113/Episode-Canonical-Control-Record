@@ -22,6 +22,7 @@ import api from '../services/api';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
+import EpisodeTasksPanel from '../components/EpisodeTasksPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
@@ -58,6 +59,16 @@ export const listEpisodeTodoSocialApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/todo/social`).then((r) => r.data);
 export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
+// The Episodes ledger's "Tasks & Details" panel: the linked event's host,
+// guests and venue, and the episode's social tasks (EpisodeTasksPanel).
+const loadEpisodeTaskDetails = async (showId, epId) => {
+  const [todoRes, eventsRes] = await Promise.all([
+    listEpisodeTodoSocialApi(epId).catch((err) => { console.error('[WorldAdmin] social tasks load failed:', err); return {}; }),
+    listWorldEventsApi(showId).catch((err) => { console.error('[WorldAdmin] events load failed:', err); return { events: [] }; }),
+  ]);
+  const event = (eventsRes.events || []).find((ev) => ev.used_in_episode_id === epId);
+  return { event, automation: event?.canon_consequences?.automation, socialTasks: todoRes.social_tasks || [] };
+};
 export const listShowWardrobeApi = (showId) =>
   api.get(`/api/v1/shows/${showId}/wardrobe`).then((r) => r.data);
 export const updateWardrobeItemApi = (itemId, payload) =>
@@ -1826,57 +1837,12 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
-                    {/* ── Social Tasks + Beats (load on demand) ── */}
-                    <div style={{ marginTop: 14 }}>
-                      <button
-                        onClick={async (e) => {
-                          const btn = e.target;
-                          if (btn.dataset.loaded) return;
-                          btn.textContent = '⏳ Loading...';
-                          try {
-                            // Fetch event details + real social tasks from todo list
-                            const [todoRes, eventsRes] = await Promise.all([
-                              listEpisodeTodoSocialApi(ep.id).catch(() => ({})),
-                              listWorldEventsApi(showId).catch(() => ({ events: [] })),
-                            ]);
-                            const linkedEv = (eventsRes.events || []).find(ev => ev.used_in_episode_id === ep.id);
-                            const automation = linkedEv?.canon_consequences?.automation;
-                            const guests = automation?.guest_profiles || [];
-                            const host = automation?.host_display_name;
-
-                            let html = '';
-                            if (host) html += `<div style="margin-bottom:8px"><strong>Host:</strong> ${host} (${automation?.host_handle || ''})</div>`;
-                            if (guests.length > 0) html += `<div style="margin-bottom:8px"><strong>Guest List:</strong> ${guests.map(g => g.display_name || g.handle).join(', ')}</div>`;
-                            if (linkedEv?.venue_name) html += `<div style="margin-bottom:8px"><strong>Venue:</strong> ${linkedEv.venue_name}${linkedEv.venue_address ? ' — ' + linkedEv.venue_address : ''}</div>`;
-
-                            const socialTasks = todoRes.social_tasks || [];
-                            html += '<div style="margin-top:12px;font-weight:600;color:#B8962E">📱 Social Media Tasks</div>';
-                            if (socialTasks.length > 0) {
-                              html += '<div style="margin-top:4px;display:grid;gap:4px">';
-                              socialTasks.forEach(t => {
-                                const check = t.completed ? '☑' : '☐';
-                                const bg = t.source === 'platform' ? '#f0f7ff' : t.source === 'category' ? '#f0fdf4' : '#f8f8f8';
-                                const badge = t.source === 'platform' ? `<span style="font-size:8px;padding:1px 4px;background:#dbeafe;color:#1e40af;border-radius:3px;margin-left:4px">${t.platform}</span>` : t.source === 'category' ? '<span style="font-size:8px;padding:1px 4px;background:#d1fae5;color:#065f46;border-radius:3px;margin-left:4px">niche</span>' : '';
-                                const req = t.required ? '<span style="font-size:8px;padding:1px 4px;background:#fef2f2;color:#dc2626;border-radius:3px;margin-left:4px">required</span>' : '';
-                                html += `<div style="font-size:12px;padding:4px 8px;background:${bg};border-radius:4px">${check} <strong>${t.label}</strong>${req}${badge} <span style="color:#999;font-size:10px">· ${t.platform} · ${t.timing}</span></div>`;
-                              });
-                              html += '</div>';
-                            } else {
-                              html += '<div style="margin-top:4px;font-size:11px;color:#999">No social tasks generated yet</div>';
-                            }
-
-                            const container = btn.parentNode.querySelector('.ep-tasks-content');
-                            if (container) { container.innerHTML = html; container.style.display = 'block'; }
-                            btn.textContent = '📱 Tasks & Details ▲';
-                            btn.dataset.loaded = 'true';
-                          } catch { btn.textContent = '📱 View Tasks & Details'; }
-                        }}
-                        style={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
-                      >
-                        📱 View Tasks & Details
-                      </button>
-                      <div className="ep-tasks-content" style={{ display: 'none', marginTop: 10, padding: 12, background: '#fafafa', borderRadius: 8, fontSize: 12, lineHeight: 1.6 }} />
-                    </div>
+                    {/* ── Social Tasks + Beats (load on demand; opens and closes) ── */}
+                    <EpisodeTasksPanel
+                      episodeId={ep.id}
+                      load={(epId) => loadEpisodeTaskDetails(showId, epId)}
+                      buttonStyle={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
+                    />
 
                     {/* ── Evaluation Details ── */}
                     {ej && (
