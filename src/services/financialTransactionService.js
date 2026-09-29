@@ -15,7 +15,6 @@ const { wholeCoins } = require('../utils/wholeCoins');
  *     ├→ Deduct wardrobe costs (owned items free, rentals cost rental_price)
  *     ├→ Credit event payment (if is_paid)
  *     ├→ Credit content revenue (brand_deal bonus)
- *     ├→ Credit social task rewards (per completed task)
  *     ├→ Update character state coins (running balance)
  *     └→ Log each as a transaction record
  */
@@ -24,19 +23,9 @@ const { v4: uuidv4 } = require('uuid');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// ─── SOCIAL TASK REWARD RATES ────────────────────────────────────────────────
-
-const SOCIAL_TASK_REWARDS = {
-  // Required tasks pay more
-  required: { base: 25, viral_bonus: 50 },
-  optional: { base: 10, viral_bonus: 25 },
-};
-
-const TIMING_MULTIPLIERS = {
-  before: 1.0,   // Standard rate — prep work
-  during: 1.2,   // Premium — capturing live moments
-  after:  0.8,   // Lower — post-event content is easier
-};
+// Coins never come from ticking a task (docs/EVENT_EPISODE_FLOW.md §8(bb) T3,
+// Task #2263): completed social tasks pay nothing here. Contract pay follows
+// deliverable status (§8(z) Law 8), in the deal build.
 
 // ─── GET CURRENT BALANCE ─────────────────────────────────────────────────────
 
@@ -303,30 +292,6 @@ async function logTransaction(sequelize, showId, tx) {
   }
 }
 
-// ─── CALCULATE SOCIAL TASK REWARDS ───────────────────────────────────────────
-
-function calculateSocialTaskRewards(socialTasks) {
-  if (!Array.isArray(socialTasks) || socialTasks.length === 0) return [];
-
-  return socialTasks
-    .filter(t => t.completed)
-    .map(t => {
-      const rates = t.required ? SOCIAL_TASK_REWARDS.required : SOCIAL_TASK_REWARDS.optional;
-      const timingMult = TIMING_MULTIPLIERS[t.timing] || 1.0;
-      const reward = Math.round(rates.base * timingMult);
-
-      return {
-        slot: t.slot,
-        label: t.label,
-        platform: t.platform,
-        timing: t.timing,
-        required: t.required,
-        reward,
-        description: `Content: "${t.label}" on ${t.platform || 'social'}`,
-      };
-    });
-}
-
 function normalizePaidFreeFlags(event) {
   const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
   const isPaid = truthy.has(event?.is_paid);
@@ -432,27 +397,6 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     lockBoughtPieceIds = new Set((lockRows || []).map((r) => String(r.source_id)));
   } catch (lockErr) {
     console.error('[FinancialTx] Could not read outfit-lock purchases for episode', episodeId, lockErr.message);
-  }
-
-  // 4. Load social tasks from episode_todo_lists
-  let socialTasks = [];
-  try {
-    const [todoList] = await sequelize.query(
-      `SELECT social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    );
-    if (todoList?.social_tasks) {
-      socialTasks = typeof todoList.social_tasks === 'string'
-        ? JSON.parse(todoList.social_tasks) : todoList.social_tasks;
-    }
-  } catch { /* non-blocking */ }
-
-  // Also check event automation for social tasks
-  if (socialTasks.length === 0 && event) {
-    let cc = event.canon_consequences;
-    if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
-    const auto = cc?.automation || {};
-    if (auto.social_tasks?.length > 0) socialTasks = auto.social_tasks;
   }
 
   // 5. Get current balance
@@ -561,17 +505,6 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     }
   }
 
-  // 11. Social task rewards
-  const taskRewards = calculateSocialTaskRewards(socialTasks);
-  for (const reward of taskRewards) {
-    await addTx({
-      type: 'reward', category: 'social_task_reward', amount: reward.reward,
-      description: reward.description,
-      source_type: 'social_task', source_name: reward.label,
-      metadata: { platform: reward.platform, timing: reward.timing, required: reward.required },
-    });
-  }
-
   // 12. Update episode financial totals
   const totalIncome = transactions.filter(t => t.type === 'income' || t.type === 'reward').reduce((s, t) => s + parseFloat(t.amount), 0);
   const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount), 0);
@@ -631,7 +564,6 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       total_income: totalIncome,
       total_expenses: totalExpenses,
       net_profit: netProfit,
-      social_task_rewards: taskRewards.reduce((s, r) => s + r.reward, 0),
       wardrobe_cost: transactions.filter(t => t.category === 'wardrobe_purchase' || t.category === 'wardrobe_rental').reduce((s, t) => s + parseFloat(t.amount), 0),
       event_cost: normalizePaidFreeFlags(event).eventCost,
       event_payment: normalizePaidFreeFlags(event).eventPayment,
@@ -736,7 +668,6 @@ module.exports = {
   markGoalTriggered,
   checkMilestones,
   logTransaction,
-  calculateSocialTaskRewards,
   finalizeEpisodeFinancials,
   getFinancialLedger,
 };
