@@ -597,7 +597,14 @@ module.exports = {
     const oldValues = episode.toJSON();
 
     if (hard === 'true' && process.env.NODE_ENV !== 'production') {
-      await episode.destroy({ force: true });
+      // The episode's ledger rows stop counting (§8(aa) M6), so Lala's coins
+      // are synced in the same transaction (Task #2284). softDelete does the
+      // same.
+      const { syncCoinsAfterEpisodeChange } = require('../services/coinLedgerSync');
+      await Episode.sequelize.transaction(async (transaction) => {
+        await episode.destroy({ force: true, transaction });
+        await syncCoinsAfterEpisodeChange(Episode.sequelize, episode.show_id, { transaction });
+      });
     } else {
       await episode.softDelete();
     }

@@ -722,6 +722,10 @@ Return ONLY JSON.` }],
         'UPDATE episodes SET deleted_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL',
         { replacements: { episodeId: replacingEpisodeId }, transaction }
       );
+      // The superseded episode's ledger rows stop counting (§8(aa) M6):
+      // sync Lala's coins in this transaction (Task #2284).
+      const { syncCoinsAfterEpisodeChange } = require('./coinLedgerSync');
+      await syncCoinsAfterEpisodeChange(models.sequelize, showId, { transaction });
     }
 
     await stampEventUsed(models.sequelize, eventId, episode.id, { transaction });
