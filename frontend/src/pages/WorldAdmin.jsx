@@ -232,6 +232,10 @@ function WorldAdmin() {
   const [charState, setCharState] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [stateHistory, setStateHistory] = useState([]);
+  // Each live episode's posted money, from the ledger (§8(aa) M4, Episode
+  // Money Phase A #2278): /financial-summary's by_episode, keyed by episode
+  // id. The Episode Ledger reads this, not episodes.total_income/expenses.
+  const [episodeMoney, setEpisodeMoney] = useState({});
   const [decisions, setDecisions] = useState([]);
   const [worldEvents, setWorldEvents] = useState([]);
   const [sceneSets, setSceneSets] = useState([]);
@@ -619,6 +623,11 @@ function WorldAdmin() {
           setEpisodes(Array.isArray(list) ? list : []);
         }).catch(() => setEpisodes([])),
         api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(() => setStateHistory([])),
+        api.get(`/api/v1/shows/${showId}/financial-summary`).then(r => {
+          const byId = {};
+          for (const e of r.data?.by_episode || []) byId[e.episode_id] = e;
+          setEpisodeMoney(byId);
+        }).catch((err) => { console.error('[LoadData] Episode money load failed:', err.message); setEpisodeMoney({}); }),
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => { console.log('[LoadData] Events loaded:', r.data?.events?.length || 0); setWorldEvents(r.data?.events || []); }).catch(err => { console.error('[LoadData] Events load FAILED:', err.response?.status, err.response?.data || err.message); setWorldEvents([]); }),
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
@@ -1655,10 +1664,12 @@ The revised event should feel like a completely different experience from the si
 
           {/* Financial Summary */}
           {(() => {
-            const totalIncome = episodes.reduce((s, e) => s + (parseFloat(e.total_income) || 0), 0);
-            const totalExpenses = episodes.reduce((s, e) => s + (parseFloat(e.total_expenses) || 0), 0);
+            // From the ledger (M4): each listed episode's posted rows.
+            const moneyOf = (e) => episodeMoney[e.id] || { income: 0, expenses: 0 };
+            const totalIncome = episodes.reduce((s, e) => s + (Number(moneyOf(e).income) || 0), 0);
+            const totalExpenses = episodes.reduce((s, e) => s + (Number(moneyOf(e).expenses) || 0), 0);
             const net = totalIncome - totalExpenses;
-            const epsWithFinancials = episodes.filter(e => e.total_income > 0 || e.total_expenses > 0).length;
+            const epsWithFinancials = episodes.filter(e => moneyOf(e).income > 0 || moneyOf(e).expenses > 0).length;
             if (epsWithFinancials === 0) return null;
             return (
               <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1687,6 +1698,9 @@ The revised event should feel like a completely different experience from the si
             const tier = ej?.tier_final;
             const score = ej?.score;
             const isExpanded = expandedEpisode === ep.id;
+            // This episode's posted money, from the ledger (M4; #2278).
+            const epIncome = Number(episodeMoney[ep.id]?.income) || 0;
+            const epExpenses = Number(episodeMoney[ep.id]?.expenses) || 0;
             const epHistory = stateHistory.filter(h => h.episode_id === ep.id);
             const deltas = epHistory.length > 0 ? (typeof epHistory[0].deltas_json === 'string' ? JSON.parse(epHistory[0].deltas_json) : epHistory[0].deltas_json) : null;
             const stateAfter = epHistory.length > 0 ? (typeof epHistory[0].state_after_json === 'string' ? JSON.parse(epHistory[0].state_after_json) : epHistory[0].state_after_json) : null;
@@ -1812,22 +1826,22 @@ The revised event should feel like a completely different experience from the si
                     )}
 
                     {/* ── Episode Financials ── */}
-                    {(ep.total_income > 0 || ep.total_expenses > 0) && (
+                    {(epIncome > 0 || epExpenses > 0) && (
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                           <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>{ep.total_income || 0}</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>{epIncome}</div>
                           </div>
                           <div style={{ padding: '8px 14px', background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ fontSize: 10, color: '#dc2626' }}>Expenses</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#dc2626' }}>{ep.total_expenses || 0}</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#dc2626' }}>{epExpenses}</div>
                           </div>
-                          <div style={{ padding: '8px 14px', background: (ep.total_income || 0) >= (ep.total_expenses || 0) ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ padding: '8px 14px', background: epIncome >= epExpenses ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ fontSize: 10, color: '#666' }}>Net</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: (ep.total_income || 0) >= (ep.total_expenses || 0) ? '#16a34a' : '#dc2626' }}>
-                              {((ep.total_income || 0) - (ep.total_expenses || 0)).toFixed(0)}
+                            <div style={{ fontSize: 16, fontWeight: 800, color: epIncome >= epExpenses ? '#16a34a' : '#dc2626' }}>
+                              {(epIncome - epExpenses).toFixed(0)}
                             </div>
                           </div>
                           {ep.financial_score && (
