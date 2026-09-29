@@ -21,6 +21,11 @@
  * episode_wardrobe and ownership log that interpret the statements these
  * routes issue; the fake transaction restores them all on a throw, as a
  * rollback would. No database.
+ *
+ * D1 PR 3 (Task #2248; design §6.4): the lock spends from the LEDGER, checked
+ * under the show lock (spendFromLedger), and syncs the cached coins from it.
+ * `db.ledgerBalance` is the ledger's sum; a lost race is the fast read
+ * (getCurrentBalance) returning a stale ledger balance.
  */
 
 const db = {
@@ -30,6 +35,7 @@ const db = {
   ownedWrites: [],
   statements: [],
   failLinkOn: null,
+  ledgerBalance: 0,
 };
 
 let mockItems = [];
@@ -60,11 +66,14 @@ const fakeSequelize = {
       db.links.push({ episode_id: r.episode_id, wardrobe_id: r.wardrobe_id, approval_status: m && m[1], sql });
       return [[], 1];
     }
+    if (/SELECT id, show_id FROM episodes/.test(sql)) {
+      return r.episodeId === 'ep-1' ? [{ id: 'ep-1', show_id: 'show-1' }] : [];
+    }
     if (opts.type === 'SELECT') return [];
     return [[], 0];
   }),
   transaction: jest.fn(async (cb) => {
-    const snap = { coins: db.row.coins, ledger: db.ledger.length, links: db.links.length, owned: db.ownedWrites.length };
+    const snap = { coins: db.row.coins, ledger: db.ledger.length, links: db.links.length, owned: db.ownedWrites.length, ledgerBalance: db.ledgerBalance };
     try {
       return await cb({ id: 'tx' });
     } catch (err) {
@@ -72,6 +81,7 @@ const fakeSequelize = {
       db.ledger.length = snap.ledger;
       db.links.length = snap.links;
       db.ownedWrites.length = snap.owned;
+      db.ledgerBalance = snap.ledgerBalance;
       throw err;
     }
   }),
@@ -110,15 +120,34 @@ jest.mock('../../../src/middleware/auth', () => ({
   authorize: () => (req, res, next) => next(),
 }));
 jest.mock('../../../src/services/financialTransactionService', () => ({
-  getCurrentBalance: jest.fn(async () => 500),
+  // The fast read, outside the transaction: possibly stale.
+  getCurrentBalance: jest.fn(async () => mockStaleCoins ?? db.ledgerBalance),
   logTransaction: jest.fn(async (sequelize, showId, tx) => {
     await sequelize.query('INSERT INTO financial_transactions (amount) VALUES (:amount)', {
-      replacements: { amount: tx.amount, category: tx.category, source_id: tx.source_id, balance_before: tx.balance_before, balance_after: tx.balance_after },
+      replacements: { amount: tx.amount, category: tx.category, source_id: tx.source_id, episode_id: tx.episode_id, balance_before: tx.balance_before, balance_after: tx.balance_after },
       transaction: tx.transaction,
     });
+    db.ledgerBalance -= Number(tx.amount);
     return { id: 'ftx', ...tx };
   }),
 }));
+// The ledger under the show lock: the check that decides, and the sync.
+jest.mock('../../../src/services/coinLedgerSync', () => {
+  const { InsufficientCoinsError } = jest.requireActual('../../../src/services/coinBalanceGuard');
+  return {
+    spendFromLedger: jest.fn(async (sequelize, { cost, transaction, action }) => {
+      if (!transaction) throw new TypeError('spendFromLedger: a transaction is required');
+      if (db.ledgerBalance - cost < 0) throw new InsufficientCoinsError({ needed: cost, have: db.ledgerBalance, action });
+      return { balance: db.ledgerBalance, cost };
+    }),
+    syncCoinsFromLedger: jest.fn(async (sequelize, showId, { transaction } = {}) => {
+      if (!transaction) throw new TypeError('syncCoinsFromLedger: a transaction is required');
+      db.row.coins = db.ledgerBalance;
+      return { balance: db.ledgerBalance, rows_updated: 1 };
+    }),
+  };
+});
+const { spendFromLedger } = require('../../../src/services/coinLedgerSync');
 
 const router = require('../../../src/routes/wardrobe');
 
@@ -168,6 +197,8 @@ const POOL_BODY = {
 
 beforeEach(() => {
   db.row.coins = 0;
+  db.ledgerBalance = 0;
+  spendFromLedger.mockClear();
   db.row.reputation = 0;
   db.ledger.length = 0;
   db.links.length = 0;
@@ -246,9 +277,11 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   const BAG = item({ id: 'own-bag', name: 'Pearl Clutch', clothing_category: 'accessories', is_owned: true });
   const body = (wardrobe_ids) => ({ episode_id: 'ep-1', show_id: 'show-1', wardrobe_ids });
   const writes = () => db.statements.filter((s) => /INSERT|UPDATE/.test(s.sql));
+  // The ledger and its cached copy agree before each lock.
+  const setBalance = (coins) => { db.ledgerBalance = coins; db.row.coins = coins; };
 
   it('refuses when the second piece cannot be afforded: no coins spent, nothing written', async () => {
-    db.row.coins = 350; // the dress (300) alone fits; dress + shoes (400) does not
+    setBalance(350); // the dress (300) alone fits; dress + shoes (400) does not
     mockItems = [DRESS_300, SHOES_100, BAG];
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'buy-shoes', 'own-bag']));
     expect(res.statusCode).toBe(400);
@@ -261,8 +294,8 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   });
 
   it('a spend that lost a race after the up-front read rolls back every row', async () => {
-    db.row.coins = 350;
-    mockStaleCoins = 500; // the read saw 500; the row holds 350 when the spend runs
+    setBalance(350);
+    mockStaleCoins = 500; // the read saw 500; the ledger holds 350 when the spend runs
     mockItems = [DRESS_300, SHOES_100, BAG];
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'buy-shoes', 'own-bag']));
     expect(res.statusCode).toBe(400);
@@ -274,7 +307,7 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   });
 
   it('a link write that fails part-way rolls back the spend, the ledger and the earlier links', async () => {
-    db.row.coins = 500;
+    setBalance(500);
     db.failLinkOn = 'buy-shoes';
     mockItems = [DRESS_300, SHOES_100, BAG];
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'buy-shoes', 'own-bag']));
@@ -286,7 +319,7 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   });
 
   it('refuses a piece that is out of reach before writing anything', async () => {
-    db.row.coins = 1000;
+    setBalance(1000);
     mockItems = [DRESS_300, item({ id: 'excl', name: 'Maison Exclusive', clothing_category: 'shoes', lock_type: 'brand_exclusive' })];
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'excl']));
     expect(res.statusCode).toBe(400);
@@ -296,17 +329,19 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   });
 
   it('a successful lock writes every link as approved and debits the total once', async () => {
-    db.row.coins = 500;
+    setBalance(500);
     mockItems = [DRESS_300, SHOES_100, BAG];
     const res = await run('/lock-outfit-atomic', body(['buy-dress', 'buy-shoes', 'own-bag']));
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ success: true, coins_spent: 400, coins_after: 100 });
     expect(db.row.coins).toBe(100);
 
-    const spends = db.statements.filter((s) => /UPDATE character_state/.test(s.sql));
-    expect(spends).toHaveLength(1);
-    expect(spends[0].replacements.delta).toBe(-400);
-    expect(spends[0].transaction).toBeTruthy();
+    // One spend of the total, checked against the ledger inside the
+    // transaction; nothing writes the cache but the sync.
+    expect(spendFromLedger).toHaveBeenCalledTimes(1);
+    expect(spendFromLedger.mock.calls[0][1]).toMatchObject({ showId: 'show-1', cost: 400, transaction: expect.anything() });
+    expect(db.statements.filter((s) => /UPDATE character_state/.test(s.sql))).toEqual([]);
+    expect(db.ledger.map((r) => r.episode_id)).toEqual(['ep-1', 'ep-1']);
 
     expect(db.links.map((l) => l.wardrobe_id).sort()).toEqual(['buy-dress', 'buy-shoes', 'own-bag']);
     for (const l of db.links) {
@@ -320,19 +355,20 @@ describe('POST /wardrobe/lock-outfit-atomic is all-or-nothing (Task #1937)', () 
   });
 
   it('an outfit of owned pieces spends nothing and writes no ledger rows', async () => {
-    db.row.coins = 50;
+    setBalance(50);
     mockItems = [OWNED_DRESS, OWNED_SHOES];
     const res = await run('/lock-outfit-atomic', body(['own-dress', 'own-shoes']));
     expect(res.statusCode).toBe(200);
     expect(res.body.coins_spent).toBe(0);
     expect(db.row.coins).toBe(50);
+    expect(spendFromLedger).not.toHaveBeenCalled();
     expect(db.statements.filter((s) => /UPDATE character_state/.test(s.sql))).toEqual([]);
     expect(db.ledger).toEqual([]);
     expect(db.links).toHaveLength(2);
   });
 
   it('a missing piece is a 404 and writes nothing', async () => {
-    db.row.coins = 500;
+    setBalance(500);
     mockItems = [OWNED_DRESS];
     const res = await run('/lock-outfit-atomic', body(['own-dress', 'gone']));
     expect(res.statusCode).toBe(404);

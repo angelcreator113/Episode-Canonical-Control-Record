@@ -312,12 +312,14 @@ function withoutTransaction(row) {
   return rest;
 }
 
-// The outfit lock (POST /wardrobe/lock-outfit-atomic) books its purchases
-// against the episode with metadata.flow = 'lock_outfit'. They are the
-// lock's rows, not finalize's, so they never make an episode count as
-// finalized (§8(x) D3, Task #2229).
-const LOCK_OUTFIT_FLOW = 'lock_outfit';
-const NOT_LOCK_OUTFIT_ROW = `COALESCE(metadata->>'flow', '') <> '${LOCK_OUTFIT_FLOW}'`;
+// The wardrobe spends (POST /wardrobe/select, /lock-outfit-atomic,
+// /purchase) book their purchases with metadata.flow 'select', 'lock_outfit'
+// or 'purchase', and against the episode when made in its context (§8(aa)
+// M3, Task #2248). They are the wardrobe's rows, not finalize's, so they
+// never make an episode count as finalized (§8(x) D3, Task #2229).
+const WARDROBE_SPEND_FLOWS = ['select', 'lock_outfit', 'purchase'];
+const NOT_WARDROBE_SPEND_ROW =
+  `COALESCE(metadata->>'flow', '') NOT IN (${WARDROBE_SPEND_FLOWS.map((f) => `'${f}'`).join(', ')})`;
 
 /**
  * Execute all financial transactions for an episode.
@@ -376,7 +378,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
      WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
-       AND ${NOT_LOCK_OUTFIT_ROW}`,
+       AND ${NOT_WARDROBE_SPEND_ROW}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => [{ cnt: 0 }]);
 
@@ -410,20 +412,28 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
   }
 
-  // Pieces the outfit lock already bought for this episode. The event's
-  // outfit_pieces snapshot can still say is_owned: false for them, so
-  // without this finalize would charge for them a second time (§8(x) D3).
-  let lockBoughtPieceIds = new Set();
-  try {
-    const lockRows = await sequelize.query(
-      `SELECT source_id FROM financial_transactions
-        WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
-          AND category = 'wardrobe_purchase' AND metadata->>'flow' = :flow`,
-      { replacements: { episodeId, flow: LOCK_OUTFIT_FLOW }, type: sequelize.QueryTypes.SELECT }
-    );
-    lockBoughtPieceIds = new Set((lockRows || []).map((r) => String(r.source_id)));
-  } catch (lockErr) {
-    console.error('[FinancialTx] Could not read outfit-lock purchases for episode', episodeId, lockErr.message);
+  // Pieces Lala has already paid for: any counted wardrobe_purchase row of
+  // the show for the piece, from any spend (select, lock-outfit, purchase)
+  // or an earlier finalize. The event's outfit_pieces snapshot can still say
+  // is_owned: false for them, so without this finalize would charge a second
+  // time (§8(z) Law 4, "Purchased things cost money once"; §8(x) D3;
+  // Task #2248).
+  let boughtPieceIds = new Set();
+  // source_id is a uuid column: a non-uuid piece id would fail the query and,
+  // inside D2's transaction, abort it (#2252), so only uuids are asked about.
+  const pieceIds = outfitPieces.map((p) => String(p?.id ?? '')).filter((id) => UUID_RE.test(id));
+  if (pieceIds.length > 0) {
+    try {
+      const boughtRows = await sequelize.query(
+        `SELECT DISTINCT ft.source_id FROM financial_transactions ft
+          WHERE ft.show_id = :showId AND ft.category = 'wardrobe_purchase'
+            AND ft.source_id IN (:pieceIds) AND ${countedLedgerRows('ft')}`,
+        { replacements: { showId, pieceIds }, type: sequelize.QueryTypes.SELECT }
+      );
+      boughtPieceIds = new Set((boughtRows || []).map((r) => String(r.source_id)));
+    } catch (boughtErr) {
+      console.error('[FinancialTx] Could not read earlier purchases for episode', episodeId, boughtErr.message);
+    }
   }
 
   // 5. Get current balance
@@ -475,7 +485,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
           metadata: { tier: piece.tier, brand: piece.brand },
         });
-      } else if (!piece.is_owned && !lockBoughtPieceIds.has(String(piece.id))) {
+      } else if (!piece.is_owned && !boughtPieceIds.has(String(piece.id))) {
         const cost = parseFloat(piece.coin_cost) || parseFloat(piece.price) || 0;
         if (cost > 0) {
           await addTx({

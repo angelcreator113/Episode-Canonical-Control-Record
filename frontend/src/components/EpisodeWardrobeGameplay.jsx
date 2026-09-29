@@ -480,7 +480,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const purchaseItem = async (item) => {
     setPurchasing(item.id);
     try {
-      const res = await api.post('/api/v1/wardrobe/purchase', { wardrobe_id: item.id, show_id: showId });
+      // The episode's id goes on the ledger row (§8(aa) M3, Task #2248).
+      const res = await api.post('/api/v1/wardrobe/purchase', { wardrobe_id: item.id, show_id: showId, episode_id: episodeId || undefined });
       if (res.data.success) {
         // Update local coin balance immediately
         if (res.data.coins_after != null) setLocalCoins(res.data.coins_after);
