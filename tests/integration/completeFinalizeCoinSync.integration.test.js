@@ -78,7 +78,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
   afterEach(() => jest.restoreAllMocks());
   afterAll(async () => {
+    // Feed posts run after commit, without being awaited (Task #2252).
+    await new Promise((resolve) => setTimeout(resolve, 200));
     for (const show of shows) {
+      await run(`DELETE FROM feed_posts WHERE show_id = :show`, { show });
       await run(`DELETE FROM financial_transactions WHERE show_id = :show`, { show });
       await run(`DELETE FROM character_state_history WHERE show_id = :show`, { show });
       await run(`DELETE FROM character_state WHERE show_id = :show`, { show });
