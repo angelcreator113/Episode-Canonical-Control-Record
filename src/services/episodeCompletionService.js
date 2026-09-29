@@ -28,6 +28,7 @@ const {
 const { changeCoins, InsufficientCoinsError } = require('./coinBalanceGuard');
 const { EPISODE_EVENT_SQL, LALA_STATE_SQL, DEFAULT_LALA_STATE, buildOutfitScoreContext } = require('./outfitScoreContext');
 const { isSocialTaskRequired } = require('../utils/socialTaskSource');
+const { normalizePaidFreeFlags } = require('../utils/paidFreeFlags');
 
 // ─── SOCIAL TASK STAT BONUSES ────────────────────────────────────────────────
 // Completing social tasks should affect more than just coins
@@ -362,7 +363,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   // Tier reward gets added as a transaction too
   const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
   const tierReward = tierCoinRewards[evalResult.tier_final] || 0;
-  const paidBonus = (eventContext.cost > 0) ? (evalResult.tier_final === 'slay' ? 50 : evalResult.tier_final === 'pass' ? 25 : 0) : 0;
+  // The paid bonus is gated on the normalised entry cost, the rule the
+  // financial forecast uses (normalizePaidFreeFlags: 0 for a paid or free
+  // event), not raw cost_coins (Task #2313). eventContext.cost stays the raw
+  // value: it is the evaluation's difficulty input.
+  const { eventCost: chargedEntryCost } = normalizePaidFreeFlags(event || {});
+  const paidBonus = (chargedEntryCost > 0) ? (evalResult.tier_final === 'slay' ? 50 : evalResult.tier_final === 'pass' ? 25 : 0) : 0;
 
   // ── 10c–15. One transaction, idempotent (§8(x) D2, Task #2228) ──
   // Finalize, the reward rows, the coin change, the history row, the
