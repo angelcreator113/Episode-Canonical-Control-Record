@@ -58,13 +58,16 @@ describe('EventDeliverable', () => {
       expect(a[col]).toBeDefined();
       expect(a[col].allowNull).toBe(true);
     }
-    // owed_to arrived in its own migration (T2, Task #2294).
-    const migration = ['20260924000000-add-event-terms.js', '20260929190000-add-event-deliverables-owed-to.js']
+    // owed_to arrived in its own migration (T2, Task #2294); fee in deal
+    // build PR 1 (Task #2319).
+    const migration = ['20260924000000-add-event-terms.js', '20260929190000-add-event-deliverables-owed-to.js',
+      '20260929200001-add-event-deliverables-fee.js']
       .map((f) => fs.readFileSync(path.join(ROOT, 'src', 'migrations', f), 'utf8')).join('\n');
     for (const col of Object.keys(a)) expect(migration).toMatch(new RegExp(`\\b${col}\\b`));
     expect(a.owed_to.allowNull).toBe(false);
     expect(a.owed_to.defaultValue).toBe('host');
     expect(EventDeliverable.OWED_TO).toEqual(['host', 'brand']);
+    expect(a.fee.allowNull).toBe(true);
   });
 
   test('status accepts the four lifecycle values only', async () => {
