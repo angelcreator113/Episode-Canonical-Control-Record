@@ -2747,6 +2747,12 @@ marked.
 **T6.** Regenerating an episode keeps completion flags for tasks that carry
 over.
 
+T6 ruling (Evoni, 2026-09-29, Task #2306): "Regenerate starts from the
+replaced episode's task list as it stands, keeping its edits and completion
+flags, and adds any required deliverable task the event's accepted terms
+include that the list lacks. It does not restore deleted goals or ideas or
+generate new ones; fresh ideas come from the Career Checklist's Regenerate."
+
 **T7.** Wardrobe-list completion comes from Lala's actual wardrobe choices,
 with no manual toggle that gets silently overwritten.
 
@@ -2777,7 +2783,13 @@ Under T3 they are decided in the deal design. They are the ±1 reputation at
     wardrobe list stays separate (T7);
   - the Run Sheet and the Career Checklist are views of it;
   - the phone view is a later slice, #2295.
-- T4–T7 are not filed.
+- T4's remainder is built under #2300 (PR #2302): Regenerate replaces the
+  Career Checklist's image, and the saved image reloads. T2 had already
+  saved and reloaded the list, and T1/T2 had kept the AI to goals and ideas.
+- T5 is built under #2304 (PR #2305): after Start Episode, task edits go to
+  the episode's copy.
+- T6 is built under #2306, following the ruling above.
+- T7 is filed as #2307.
 - T3's contract pay by deliverable status belongs to the deal build (§8(z)
   Law 8).
 
