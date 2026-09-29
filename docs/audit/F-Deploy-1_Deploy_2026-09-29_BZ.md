@@ -20,7 +20,6 @@ RECORD. Standings:
 - **ATTESTED**: the script's summary block, as Evoni pasted it.
 - **MEASURED**: what this repository shows, with output pasted.
 - **INFERRED**: marked where used.
-- **CANNOT-TELL**: marked where used.
 
 Nothing is upgraded. This document closes no keystone and discharges no
 owed item. It mints no FD, XK or PE number, and it rules on nothing.
@@ -149,28 +148,35 @@ returns `220`.
 
 **Not in this tree.** D1 PRs 3–4 (#2248, #2249) are not built.
 
-**The hold.** Evoni's earlier ruling held #2255 until PR 5's apply had run
-(ruling "(a)"). The squash commit is authored by `angelcreator113`; it
-merged and went live at BZ. This record does not re-rule the order.
+**The order: PR 2 went live before the apply.** Evoni's earlier ruling held
+#2255 until PR 5's apply had run (ruling "(a)"). That order was not kept:
+#2255 merged (the squash commit is authored by `angelcreator113`) and went
+live at BZ, and the reconciliation apply ran afterwards (ATTESTED, Evoni,
+2026-09-29). This record does not re-rule the order.
 
-**INFERRED, from the code at this tree.** On show `9bd0655f-…`, if a
-Complete or Finalize runs before the reconciliation apply:
-- Lala's coins sync to the ledger sum as it then stands: 460 plus that
-  episode's net. (If episode `be95953c-…` is not live, M6 already excludes
-  purchase `3408a459-…`, and the base is 845, not 460.)
-- The episode's new ledger rows are not voided by the approval, so after the
-  four voids the ledger sums to 1900 plus that net. Unless the net is 0, the
-  apply then refuses (`coinReconciliation.js`, `applyReconciliation`),
-  writing nothing, and the approval needs a new ruling.
-- Purchase `3408a459-…` does not block the apply either way: an M6-excluded
-  row is still `executed` and not deleted, so it is voidable.
+**Why it mattered — INFERRED, from the code at this tree.** On show
+`9bd0655f-…`, a Complete or Finalize between BZ and the apply would have
+booked that episode's rows and synced Lala's coins from the ledger. Those
+rows are not in the approval, so after the four voids the ledger would have
+summed to 1900 plus that episode's net, and unless the net was 0 the apply
+would have refused, writing nothing.
 
-If the apply runs first, the ledger is the 1900 seed alone, and every later
-Complete and Finalize syncs from there.
-
-**CANNOT-TELL:** whether the apply, or any Complete or Finalize on that show,
-has run since BY. Nothing in the summary reports it, and this record does not
-investigate production.
+**What happened in between.**
+- **ATTESTED** (Evoni, 2026-09-29): no ledger rows were added between BZ and
+  the apply.
+- **Consistent with it, from her pasted dry-run and apply responses** (the
+  reconciliation register note, `F-Stats-1_D1_ReconciliationApplied_2026-09-29.md`):
+  - `coins_before` was 560 in both responses. That is the cache value Q-A
+    read before any of this, so neither Complete nor Finalize had synced
+    the cache since; both do (§5).
+  - Neither run was refused. The apply refuses unless the ledger sums to
+    exactly 1900 after the four voids, so any counted row added in between
+    netted to 0.
+  - The responses alone do not exclude a row that nets to 0 or one that
+    does not count; the "no rows added" is Evoni's attestation.
+- **Outcome:** show `9bd0655f-…` went from 560 to 1900; the four
+  `wardrobe_purchase` rows (285 + 385 + 385 + 385 = 1,440) were voided;
+  nothing was refused.
 
 **ATTESTED (§0).** CFO: 84/100, 1 critical (`dependency_audit`, 14
 critical/high), 4 warnings, the same as at BY.
@@ -202,8 +208,8 @@ false
 - It records no credential or host.
 - It edits no filed document.
 - It investigates no CFO finding.
-- It records no reconciliation result. The dry run and the apply are
-  Evoni's.
+- It records the reconciliation outcome only as far as it bears on this
+  deploy's order (§5); the full record is the reconciliation register note.
 - It re-rules nothing about the #2255 hold.
 - It discharges nothing and mints nothing.
 - The filing session made no host, AWS, database or Cognito contact.
@@ -229,8 +235,10 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
 - **Deploy:** 0 pending of 220; `/health` healthy and connected; restart
   count 27.
 - **CFO:** 84/100, 1 critical, 4 warnings.
-- **Reconciliation:** CANNOT-TELL whether it has run. INFERRED: it must run
-  before any Complete or Finalize on show `9bd0655f-…`, or it refuses.
+- **Reconciliation:** PR 2 went live here, before the apply. The apply then
+  ran and was not refused: show `9bd0655f-…` 560 → 1900, four rows voided.
+  No ledger rows were added in between (ATTESTED; consistent with both
+  responses, §5).
 - **App check:** not supplied.
 - Nothing is RULED here. The filing session made no host, AWS, database or
   Cognito contact.
