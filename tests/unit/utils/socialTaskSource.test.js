@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { buildSocialTasks } = require('../../../src/services/episodeGeneratorService');
 const {
-  socialTaskSource, isSocialTaskRequired, withDeliverableTasks, withCareerTasks, TASK_SOURCES,
+  socialTaskSource, isSocialTaskRequired, withDeliverableTasks, withCareerTasks, withMissingRequiredDeliverables, TASK_SOURCES,
 } = require('../../../src/utils/socialTaskSource');
 
 const EVENT_TYPES = ['invite', 'brand_deal', 'guest', 'upgrade', 'something_else'];
@@ -158,5 +158,27 @@ describe('withCareerTasks: the Career Checklist adds to the one list', () => {
     const out = withCareerTasks(list, [{ slot: 'grwm', label: 'Clash' }, { deliverable_id: 'd-x', label: 'Fake' }]);
     expect(out.filter((t) => t.deliverable_id)).toEqual([list[1]]);
     expect(new Set(out.map((t) => t.slot)).size).toBe(out.length);
+  });
+});
+
+describe('withMissingRequiredDeliverables (T6, Task #2306)', () => {
+  const kept = [
+    { slot: 'grwm', label: 'Edited', task_source: 'goal', required: false, completed: true },
+    { slot: 'deliverable_d-1', label: 'Reel', deliverable_id: 'd-1', owed_to: 'brand', task_source: 'brand_deliverable', required: true, completed: true },
+  ];
+  const rows = [
+    { id: 'd-1', description: 'Reel', required: true, owed_to: 'brand' },
+    { id: 'd-2', description: 'Toast', required: true, owed_to: 'host' },
+    { id: 'd-3', description: 'Story', required: false, owed_to: 'brand' },
+  ];
+
+  test('the list stands; only a missing required deliverable is added', () => {
+    const out = withMissingRequiredDeliverables(kept, rows);
+    expect(out.slice(0, 2)).toEqual(kept);
+    expect(out.slice(2).map((t) => [t.deliverable_id, t.task_source, t.completed])).toEqual([['d-2', 'host_requirement', false]]);
+  });
+
+  test('an empty kept list gets the required deliverables only', () => {
+    expect(withMissingRequiredDeliverables([], rows).map((t) => t.deliverable_id)).toEqual(['d-1', 'd-2']);
   });
 });

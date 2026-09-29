@@ -583,12 +583,15 @@ async function getTodoList(episodeId, models) {
 
   if (!todoList) return null;
 
-  // Check which slots are filled from episode wardrobe
+  // Which slots Lala's outfit fills (T7, §8(bb); Task #2307): a wardrobe
+  // task's completion comes only from here, never from a manual toggle. A
+  // piece counts when it is linked to the episode and not rejected.
   const wardrobeItems = await sequelize.query(
     `SELECT w.clothing_category
      FROM episode_wardrobe ew
      JOIN wardrobe w ON w.id = ew.wardrobe_id
-     WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
+     WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
+       AND COALESCE(ew.approval_status, 'pending') <> 'rejected'`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
 

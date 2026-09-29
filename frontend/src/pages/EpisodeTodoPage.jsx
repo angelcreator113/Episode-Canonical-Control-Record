@@ -82,16 +82,9 @@ export default function EpisodeTodoPage() {
       .catch(() => {});
   }, [todoList]);
 
-  const toggleWardrobeTask = async (slot) => {
-    try {
-      const completed = !todoList.tasks.find(t => t.slot === slot)?.completed;
-      const res = await completeTodoSlotApi(episodeId, slot, { completed });
-      const d = res.data;
-      if (d.success) {
-        setTodoList(prev => ({ ...prev, tasks: d.tasks, completion: d.completion }));
-      }
-    } catch {}
-  };
+  // T7 (§8(bb); Task #2307): wardrobe rows have no toggle. A wardrobe
+  // task is complete when Lala's outfit fills its slot; GET /todo derives
+  // it from the episode's wardrobe, and a manual toggle was overwritten.
 
   const toggleSocialTask = async (slot) => {
     try {
@@ -191,19 +184,22 @@ export default function EpisodeTodoPage() {
             <span>Wardrobe ({wardrobeCompleted}/{wardrobeTasks.length})</span>
             {wardrobeCompleted === wardrobeTasks.length && <span style={{ color: '#16a34a' }}>All done</span>}
           </div>
+          <div data-testid="wardrobe-completion-note" style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
+            Filled from Lala's outfit. Choose pieces in the episode's wardrobe to complete these.
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {wardrobeTasks.map(task => (
               <div
                 key={task.slot}
-                onClick={() => toggleWardrobeTask(task.slot)}
+                data-testid={`wardrobe-task-${task.slot}`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
                   background: task.completed ? '#f0fdf4' : '#fff',
                   border: `1px solid ${task.completed ? '#bbf7d0' : '#e2e8f0'}`,
-                  borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+                  borderRadius: 10, cursor: 'default',
                 }}
               >
-                <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{task.completed ? '✅' : '⬜'}</span>
+                <span style={{ fontSize: 18, width: 24, textAlign: 'center' }} aria-label={task.completed ? 'Filled by the outfit' : 'Not filled yet'}>{task.completed ? '✅' : '⬜'}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: task.completed ? '#16a34a' : '#1a1a2e', textDecoration: task.completed ? 'line-through' : 'none' }}>
                     {task.label}
