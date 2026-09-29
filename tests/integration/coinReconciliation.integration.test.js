@@ -125,6 +125,55 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(await coinsOf(b.show)).toBe(1900);
   });
 
+  it("the checked-in approval, run against the live show's rows as Evoni's query showed them, lands on 1900", async () => {
+    const { D1_RECONCILIATION_APPROVALS } = require('../../src/config/d1ReconciliationApprovals');
+    const show = '9bd0655f-0426-4da4-95b8-44cdfd608b2b';
+    const cleanup = async () => {
+      await run(`DELETE FROM financial_transactions WHERE show_id = :show`, { show });
+      await run(`DELETE FROM character_state WHERE show_id = :show`, { show });
+      await run(`DELETE FROM shows WHERE id = :show`, { show });
+    };
+    await cleanup();
+    await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, 'Live show replay', 'live-show-replay', NOW(), NOW())`, { show });
+    await run(`INSERT INTO character_state (id, show_id, character_key, coins, created_at, updated_at)
+               VALUES ('5fd6a9df-4c2c-4a6e-957e-665ae2092b2f', :show, 'lala', 560, NOW(), NOW())`, { show });
+    // Evoni's production read of the show's ledger, 2026-09-29.
+    const rows = [
+      ['305eed68-5689-4961-8ce6-ca6d1dd613a8', 'seed', 'income', 1900, null],
+      ['1e9da9a3-e7fc-48a7-850e-295c1ae7945d', 'wardrobe_purchase', 'expense', 285, null],
+      ['d7b34f33-b51d-4d3f-8659-3f2dd2516575', 'wardrobe_purchase', 'expense', 385, null],
+      ['b008d849-f3f1-4306-a32f-31ae18d844ac', 'wardrobe_purchase', 'expense', 385, null],
+      ['3408a459-f230-48e5-8c80-11fd1c173588', 'wardrobe_purchase', 'expense', 385, 'be95953c-8965-4953-b20b-951ee12ea807'],
+    ];
+    for (const [id, category, type, amount, episodeId] of rows) {
+      await run(`INSERT INTO financial_transactions (id, show_id, episode_id, type, category, amount, status, created_at, updated_at)
+                 VALUES (:id, :show, :episodeId, :type, :category, :amount, 'executed', NOW(), NOW())`,
+        { id, show, episodeId, type, category, amount });
+    }
+    const voids = D1_RECONCILIATION_APPROVALS[0].void_transaction_ids;
+    const voidTotal = rows.filter(([id]) => voids.includes(id)).reduce((sum, r) => sum + r[3], 0);
+
+    try {
+      expect(voidTotal).toBe(1440);
+      const dry = await applyReconciliation(sequelize, D1_RECONCILIATION_APPROVALS, { dryRun: true });
+      expect(dry.refused).toEqual([]);
+      expect(dry.results[0]).toMatchObject({ coins_before: 560, coins_after: 1900, applied: false });
+      const applied = await applyReconciliation(sequelize, D1_RECONCILIATION_APPROVALS, { dryRun: false, actor: 'test' });
+      expect(applied.results[0]).toMatchObject({ coins_after: 1900, applied: true });
+      expect(await coinsOf(show)).toBe(1900);
+      const statuses = await q(`SELECT category, status FROM financial_transactions WHERE show_id = :show ORDER BY category`, { show });
+      expect(statuses).toEqual([
+        { category: 'seed', status: 'executed' },
+        ...Array(4).fill({ category: 'wardrobe_purchase', status: 'voided' }),
+      ]);
+      // A second run is refused: the rows are already voided, so nothing is applied twice.
+      const again = await applyReconciliation(sequelize, D1_RECONCILIATION_APPROVALS, { dryRun: true });
+      expect(again.refused[0].reason).toMatch(/not a live executed row \(status voided\)/);
+    } finally {
+      await cleanup();
+    }
+  });
+
   describe('POST /api/v1/admin/coins/reconcile', () => {
     const token = (groups) => TokenService.generateTokenPair({
       id: `test-recon-${groups.join('-')}`, email: 'recon@test.dev', name: 'Recon', groups, role: groups[0],
@@ -142,7 +191,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     it('dry-runs by default, applying only the checked-in approvals', async () => {
       const res = await post(['ADMIN'], {});
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ success: true, dry_run: true, approvals: 0, results: [], refused: [] });
+      // The checked-in approval names the production show, which this test
+      // database does not have: it is reported refused and nothing changes.
+      expect(res.body).toMatchObject({ success: false, dry_run: true, approvals: 1, results: [] });
+      expect(res.body.refused).toEqual([{
+        show_id: '9bd0655f-0426-4da4-95b8-44cdfd608b2b',
+        reason: expect.stringMatching(/show not found/),
+      }]);
     });
 
     it('a real apply needs the confirmation string', async () => {
