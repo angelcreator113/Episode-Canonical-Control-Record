@@ -117,30 +117,47 @@ async function loadScriptContext(episodeId, showId, models) {
     }).then(e => e?.toJSON());
   } catch { /* non-blocking */ }
 
-  // 4. Financial state
+  // 4. Financial state, from the ledger (§8(z) Law 0 and Law 14; §8(aa)
+  //    M4; Task #2288). Lala's balance is her ledger balance
+  //    (getCurrentBalance), the number every screen shows; the episode's
+  //    income and expenses are its counted ledger rows (M6: no voided row).
+  //    Pressure and affordability follow Lala's balance, not one episode.
   context.financial = null;
   try {
     const episode = await models.Episode.findByPk(episodeId);
     if (episode) {
-      const income = parseFloat(episode.total_income) || 0;
-      const expenses = parseFloat(episode.total_expenses) || 0;
+      const { getCurrentBalance } = require('./financialTransactionService');
+      const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
+      const balance = await getCurrentBalance(sequelize, episode.show_id);
+      const [totals] = await sequelize.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN ft.type IN ('income', 'reward') THEN ft.amount ELSE 0 END), 0) AS income,
+           COALESCE(SUM(CASE WHEN ft.type IN ('expense', 'deduction') THEN ft.amount ELSE 0 END), 0) AS expenses
+           FROM financial_transactions ft
+          WHERE ft.episode_id = :episodeId AND ${countedLedgerRows('ft')}`,
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+      );
+      const income = Math.round(Number(totals?.income) || 0);
+      const expenses = Math.round(Number(totals?.expenses) || 0);
       context.financial = {
         total_income: income,
         total_expenses: expenses,
-        balance: income - expenses,
+        balance,
         financial_score: episode.financial_score,
-        pressure_level: income - expenses < 0 ? 'desperate'
-          : income - expenses < 500 ? 'tight'
-          : income - expenses < 2000 ? 'comfortable'
+        pressure_level: balance < 0 ? 'desperate'
+          : balance < 500 ? 'tight'
+          : balance < 2000 ? 'comfortable'
           : 'flush',
       };
       // Add event cost if available
       if (context.event?.cost_coins) {
         context.financial.event_cost = context.event.cost_coins;
-        context.financial.can_afford = (income - expenses) >= context.event.cost_coins;
+        context.financial.can_afford = balance >= context.event.cost_coins;
       }
     }
-  } catch { /* non-blocking */ }
+  } catch (err) {
+    console.error('[ScriptWriter] financial context failed (non-blocking):', err.message);
+  }
 
   // 5. Wardrobe for this episode
   context.wardrobe = [];
@@ -383,7 +400,8 @@ function buildFullPrompt(context) {
       : financial.pressure_level === 'comfortable' ? '✅'
       : '💰';
     financialContext = `${emoji} FINANCIAL PRESSURE: ${financial.pressure_level.toUpperCase()}
-  Income: $${financial.total_income} | Expenses: $${financial.total_expenses} | Balance: $${financial.balance}
+  Lala's balance: ${financial.balance} Prime Coins
+  This episode so far: income ${financial.total_income} Prime Coins | expenses ${financial.total_expenses} Prime Coins
   Financial score: ${financial.financial_score || 'N/A'}`;
     if (financial.event_cost) {
       financialContext += `\n  Event cost: ${financial.event_cost} coins | Can afford: ${financial.can_afford ? 'YES' : 'NO — THIS CREATES TENSION'}`;
@@ -830,4 +848,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt };
