@@ -108,7 +108,26 @@ async function spendFromLedger(sequelize, { showId, cost, transaction, action = 
   return { balance, cost: c };
 }
 
+/**
+ * An episode was deleted, restored or superseded (§8(aa) M6; Task #2284):
+ * the ledger rows that count toward Lala's balance changed without a ledger
+ * write, so sync the cache in the caller's transaction. A show that no
+ * longer exists has no balance to keep; nothing is synced for it.
+ *
+ * @returns {Promise<{ balance: number, rows_updated: number } | null>}
+ */
+async function syncCoinsAfterEpisodeChange(sequelize, showId, { transaction } = {}) {
+  requireTransaction('syncCoinsAfterEpisodeChange', transaction);
+  if (!showId) return null;
+  const [show] = await sequelize.query('SELECT id FROM shows WHERE id = :showId', {
+    replacements: { showId }, type: sequelize.QueryTypes.SELECT, transaction,
+  });
+  if (!show) return null;
+  return syncCoinsFromLedger(sequelize, showId, { transaction });
+}
+
 module.exports = {
+  syncCoinsAfterEpisodeChange,
   lockLedgerBalance,
   syncCoinsFromLedger,
   spendFromLedger,

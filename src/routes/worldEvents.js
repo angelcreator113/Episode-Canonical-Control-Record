@@ -4306,6 +4306,23 @@ router.get('/world/:showId/financial-ledger', requireAuth, async (req, res) => {
   }
 });
 
+// GET /world/:showId/episodes/:episodeId/money — Episode Money, Phase A
+// (§8(aa) M1–M5; Task #2278): the balance, the episode's posted ledger rows
+// and net, and the source event's terms as expected lines. Read-only.
+router.get('/world/:showId/episodes/:episodeId/money', requireAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { getEpisodeMoney } = require('../services/episodeMoneyService');
+    const money = await getEpisodeMoney(models.sequelize, { showId, episodeId });
+    if (!money) return res.status(404).json({ success: false, error: 'Episode not found' });
+    return res.json({ success: true, data: money });
+  } catch (err) {
+    console.error('[Financials] Episode money error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /world/:showId/balance — current coin balance
 router.get('/world/:showId/balance', requireAuth, async (req, res) => {
   try {

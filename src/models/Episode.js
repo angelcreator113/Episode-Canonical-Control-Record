@@ -206,19 +206,32 @@ module.exports = (sequelize) => {
    */
 
   /**
+   * Set deleted_at and, in the same transaction, sync Lala's coins: under
+   * §8(aa) M6 a deleted episode's ledger rows leave her balance, and a
+   * restored one's come back (Task #2284).
+   */
+  async function setDeletedAt(episode, deletedAt) {
+    const { syncCoinsAfterEpisodeChange } = require('../services/coinLedgerSync');
+    return sequelize.transaction(async (transaction) => {
+      episode.deleted_at = deletedAt;
+      await episode.save({ transaction });
+      await syncCoinsAfterEpisodeChange(sequelize, episode.show_id, { transaction });
+      return episode;
+    });
+  }
+
+  /**
    * Mark episode as deleted (soft delete)
    */
   Episode.prototype.softDelete = async function () {
-    this.deleted_at = new Date();
-    return this.save();
+    return setDeletedAt(this, new Date());
   };
 
   /**
    * Restore soft-deleted episode
    */
   Episode.prototype.restore = async function () {
-    this.deleted_at = null;
-    return this.save();
+    return setDeletedAt(this, null);
   };
 
   /**
