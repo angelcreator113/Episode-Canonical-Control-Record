@@ -316,6 +316,13 @@ function normalizePaidFreeFlags(event) {
 
 // ─── FINALIZE EPISODE FINANCIALS ─────────────────────────────────────────────
 
+// The outfit lock (POST /wardrobe/lock-outfit-atomic) books its purchases
+// against the episode with metadata.flow = 'lock_outfit'. They are the
+// lock's rows, not finalize's, so they never make an episode count as
+// finalized (§8(x) D3, Task #2229).
+const LOCK_OUTFIT_FLOW = 'lock_outfit';
+const NOT_LOCK_OUTFIT_ROW = `COALESCE(metadata->>'flow', '') <> '${LOCK_OUTFIT_FLOW}'`;
+
 /**
  * Execute all financial transactions for an episode.
  * Called when an episode is finalized/filmed.
@@ -331,10 +338,11 @@ function normalizePaidFreeFlags(event) {
  * @returns {object} { transactions, summary, balance_before, balance_after }
  */
 async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false } = {}) {
-  // 1. Check if already finalized
+  // 1. Check if already finalized (finalize's own rows, not the outfit lock's)
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
-     WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL`,
+     WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
+       AND ${NOT_LOCK_OUTFIT_ROW}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => [{ cnt: 0 }]);
 
@@ -366,6 +374,22 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   if (event?.outfit_pieces) {
     outfitPieces = typeof event.outfit_pieces === 'string'
       ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+  }
+
+  // Pieces the outfit lock already bought for this episode. The event's
+  // outfit_pieces snapshot can still say is_owned: false for them, so
+  // without this finalize would charge for them a second time (§8(x) D3).
+  let lockBoughtPieceIds = new Set();
+  try {
+    const lockRows = await sequelize.query(
+      `SELECT source_id FROM financial_transactions
+        WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
+          AND category = 'wardrobe_purchase' AND metadata->>'flow' = :flow`,
+      { replacements: { episodeId, flow: LOCK_OUTFIT_FLOW }, type: sequelize.QueryTypes.SELECT }
+    );
+    lockBoughtPieceIds = new Set((lockRows || []).map((r) => String(r.source_id)));
+  } catch (lockErr) {
+    console.error('[FinancialTx] Could not read outfit-lock purchases for episode', episodeId, lockErr.message);
   }
 
   // 4. Load social tasks from episode_todo_lists
@@ -434,7 +458,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
           metadata: { tier: piece.tier, brand: piece.brand },
         });
-      } else if (!piece.is_owned) {
+      } else if (!piece.is_owned && !lockBoughtPieceIds.has(String(piece.id))) {
         const cost = parseFloat(piece.coin_cost) || parseFloat(piece.price) || 0;
         if (cost > 0) {
           await addTx({
