@@ -2385,6 +2385,70 @@ deliverables/restrictions, and source-event linkage must be rejected
 through ordinary event-edit routes rather than relying on the UI lock
 alone.
 
+**(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
+only: no code is changed by this entry. The basis is
+`docs/EVENT_TERMS_MONEY_READ.md` (Task #2223, merged as `eeb710af` in
+#2224), cited, not restated. Recorded verbatim.
+
+**D1.** Yes. The transaction ledger is the authoritative balance;
+character_state.coins is a cached copy, always recomputed from the ledger.
+
+**D2.** Yes. Finalize and Complete run in one database transaction and are
+idempotent: a retry never doubles rewards and never leaves a half-finished
+state.
+
+**D3.** Yes. A wardrobe outfit lock never causes finalize to skip entry
+cost, payment or rewards.
+
+**D4.** Yes. The terms lock is enforced server-side in every route that can
+change locked terms or the episode link (event PUT, inject, brief edit, and
+the shared PUT used by WorldAdmin and the overview), keyed on the episode
+link per §8(w) P2.
+
+**D5.** Yes. The next-event suggester never returns used or deleted
+events; access requirements stay a weight, not a hard gate.
+
+**D6.** Yes. Deliverables keep manual advancement for now; money is tied to
+their status only in the deal build.
+
+**D7.** Yes. Adopt the eight deal types (self-funded, invited/comped,
+gifted, paid appearance, paid deliverables, appearance + deliverables,
+performance/creator booking, brand partnership), stored on the event.
+
+**D8.** Yes. Payout timing for new deals only: appearance fee on
+attendance, content fee on an approved deliverable, bonus on evaluation,
+gifted value recorded but not paid in coins. Existing events keep today's
+behaviour.
+
+**D9.** Yes. Pricing numbers live in a data table Evoni can tune, not in
+code.
+
+**D10.** Yes. Events created from opportunities pay according to their
+deal type instead of always being unpaid.
+
+**D11.** Defer. Per-brand relationships come later; brand trust stays one
+number for now.
+
+**Where these stand:**
+- **Filed as fixes:**
+  - D2 → #2228
+  - D3 → #2229
+  - D4 → #2230, which also implements §8(w) P9
+  - D5 → #2231
+- **D1** is recorded; no fix is filed for it here.
+- **D6–D10** belong to the deal build and are not filed yet.
+- **D11** is deferred.
+
+**Register note owed.** D1–D3 rule on the F-Stats-1 money path. They
+touch:
+- the Class 4 "parallel balance readers, none authoritative" item, whose
+  priority is at `docs/audit/F-Stats-1_Fix_Plan_v1.62.md:112`;
+- the reach probe `docs/audit/F-Stats-1_S355_ReachProbe_2026-09-27.md` §3.
+
+These rulings are recorded here, in a living doc, and not in the register.
+A register note that cites them is owed, filed through `/audit-file`. No
+file under `docs/audit/` is edited by this entry.
+
 ---
 
 ## 9. Owed before enforcement
