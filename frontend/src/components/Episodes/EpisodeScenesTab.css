@@ -29,6 +29,27 @@
   margin-top: 2px;
 }
 
+.est-warning p {
+  flex: 1;
+}
+
+.est-warning-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.est-warning-note {
+  margin: -12px 0 0;
+  font-size: 13px;
+  color: #6b4e00;
+}
+
+@media (max-width: 480px) {
+  .est-warning {
+    flex-wrap: wrap;
+  }
+}
+
 /* Sections */
 .est-section {
   background: #fff;

@@ -18,6 +18,7 @@ const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
+const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after)
@@ -818,12 +819,7 @@ Return ONLY JSON.` }],
         feedMomentSave.attempted++;
         try {
           const moment = feedMoments[beatNum];
-          const setLines = moment.script_lines ? ', script_lines = CAST(:scriptLines AS jsonb)' : '';
-          const [updated] = await models.sequelize.query(
-            `UPDATE scene_plans SET feed_moment = CAST(:feedMoment AS jsonb)${setLines}, updated_at = NOW() WHERE id = :id RETURNING id`,
-            { replacements: { id: row.id, feedMoment: JSON.stringify(moment), scriptLines: JSON.stringify(moment.script_lines || null) } }
-          );
-          if (!Array.isArray(updated) || updated.length === 0) throw new Error(`scene_plans row ${row.id} not found`);
+          await saveBeatFeedMoment(models.sequelize, row.id, moment);
           row.feed_moment = moment;
           if (moment.script_lines) row.script_lines = moment.script_lines;
           feedMomentSave.saved++;
@@ -846,13 +842,7 @@ Return ONLY JSON.` }],
   // alone cannot say whether one was meant to be there (Task #2216).
   if (brief?.id) {
     try {
-      await models.sequelize.query(
-        `UPDATE episode_briefs
-            SET event_metadata = jsonb_set(COALESCE(event_metadata, '{}'::jsonb), '{feed_moment_save}', CAST(:save AS jsonb)),
-                updated_at = NOW()
-          WHERE id = :id`,
-        { replacements: { id: brief.id, save: JSON.stringify({ ...feedMomentSave, recorded_at: new Date().toISOString() }) } }
-      );
+      await recordFeedMomentSave(models.sequelize, brief.id, { ...feedMomentSave, recorded_at: new Date().toISOString() });
     } catch (recordErr) {
       console.error(`[EpisodeGenerator] Could not record the feed moment save outcome on brief ${brief.id}:`, recordErr.message);
     }

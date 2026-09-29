@@ -28,6 +28,8 @@ export const deleteSceneApi = (sceneId) =>
   apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
 export const getEpisodePlanApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episode-brief/${episodeId}/plan`);
+export const retryFeedMomentsApi = (episodeId) =>
+  apiClient.post(`${API_BASE}/episode-brief/${episodeId}/feed-moments/retry`);
 
 // Scene-set routes (duplicated from CP2 SceneSetsTab.jsx per file-local convention)
 export const listSceneSetsApi = () => apiClient.get(`${API_BASE}/scene-sets`);
@@ -76,6 +78,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   // Beats whose feed moment was not saved at generation (§8(w) P5, Task #2216)
   const [feedMomentCheck, setFeedMomentCheck] = useState({ missing: [], error: null });
+  // Retry for just those beats (Task #2220): { running, note } — note is a plain-words outcome
+  const [feedMomentRetry, setFeedMomentRetry] = useState({ running: false, note: null });
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
@@ -132,6 +136,29 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       setFeedMomentCheck({ missing: [], error: err.message || 'request failed' });
     }
   }, [episodeId]);
+
+  // Re-run the save for the missing beats only, then refresh the warning
+  const retryFeedMoments = async () => {
+    if (!episodeId || feedMomentRetry.running) return;
+    setFeedMomentRetry({ running: true, note: null });
+    let note;
+    try {
+      const res = await retryFeedMomentsApi(episodeId);
+      const { saved = 0, failed = [] } = res.data?.data || {};
+      const savedBeats = feedMomentCheck.missing.filter((b) => !failed.some((f) => Number(f.beat_number) === b));
+      if (failed.length === 0) {
+        note = saved > 0 ? `Saved the feed moment for ${savedBeats.length === 1 ? 'beat' : 'beats'} ${listBeats(savedBeats)}.` : 'Nothing needed saving.';
+      } else {
+        const failedBeats = failed.map((f) => Number(f.beat_number));
+        note = `${saved > 0 ? `Saved ${saved} of ${saved + failed.length}. ` : ''}Still not saved for ${failedBeats.length === 1 ? 'beat' : 'beats'} ${listBeats(failedBeats)}: ${failed[0].error}`;
+      }
+    } catch (err) {
+      console.error('Failed to retry feed moments:', err);
+      note = `Could not retry the feed moments: ${err.response?.data?.error || err.message || 'request failed'}`;
+    }
+    await fetchFeedMomentCheck();
+    setFeedMomentRetry({ running: false, note });
+  };
 
   useEffect(() => {
     fetchSceneSets();
@@ -273,7 +300,18 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             {listBeats(feedMomentCheck.missing)}, so {feedMomentCheck.missing.length === 1 ? 'that beat has' : 'those beats have'} no
             feed moment.
           </p>
+          <button
+            type="button"
+            className="est-btn est-btn-outline est-btn-sm est-warning-action"
+            onClick={retryFeedMoments}
+            disabled={feedMomentRetry.running}
+          >
+            {feedMomentRetry.running ? <><Loader size={13} className="est-spin" /> Retrying…</> : 'Retry feed moments'}
+          </button>
         </div>
+      )}
+      {feedMomentRetry.note && (
+        <p className="est-warning-note" role="status">{feedMomentRetry.note}</p>
       )}
       {feedMomentCheck.error && (
         <div className="est-warning" role="alert">
