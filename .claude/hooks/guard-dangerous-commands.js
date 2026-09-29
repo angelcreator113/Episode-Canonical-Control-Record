@@ -14,10 +14,22 @@ process.stdin.on('end', () => {
   let cmd = '';
   try { cmd = String((JSON.parse(raw).tool_input || {}).command || ''); } catch (e) { process.exit(0); }
 
-  // Drop heredoc bodies whose consumer is a file writer (cat/tee), keep the rest.
+  // A commit, tag or note message is data, not commands (Task #2299): its
+  // quoted -m/--message arguments are blanked, and a heredoc that git reads
+  // as a message is treated like a cat/tee heredoc. Anything outside the
+  // quotes, or a heredoc piped on into a shell, is still scanned.
+  const isGitMessage = /(^|[\n;&|(`]\s*)git\s+(commit|tag|notes)\b/.test(cmd);
+  const input = isGitMessage
+    ? cmd.replace(/(\s(?:-m|--message)(?:\s+|=))("(?:[^"\\]|\\[\s\S])*"|'[^']*')/g, '$1""')
+    : cmd;
+  const dataConsumer = (line) =>
+    /(^|[\s;&|(])(cat|tee)\b/.test(line) || /(^|[\s;&|(])git\s+(commit|tag|notes)\b/.test(line);
+
+  // Drop heredoc bodies whose consumer is a file writer (cat/tee) or a git
+  // message, keep the rest.
   const heredoc = /(^|\n)([^\n]*?)<<-?\s*'?"?([A-Za-z_][A-Za-z0-9_]*)"?'?[^\n]*\n([\s\S]*?)\n\3(?=\n|$)/g;
-  const scan = cmd.replace(heredoc, (m, pre, line, tag, body) =>
-    /(^|[\s;&|(])(cat|tee)\b/.test(line) ? `${pre}${line}<<${tag}\n${tag}` : m);
+  const scan = input.replace(heredoc, (m, pre, line, tag, body) =>
+    dataConsumer(line) ? `${pre}${line}<<${tag}\n${tag}` : m);
 
   // "command position": start of string, start of a line, or after ; & | ( ` $( or sudo/env prefixes.
   const at = (name) => new RegExp(`(^|[\\n;&|(\`]\\s*|\\$\\(\\s*)(sudo\\s+|env\\s+[A-Z_]+=\\S+\\s+)*${name}(\\s|$)`);
@@ -42,9 +54,9 @@ process.stdin.on('end', () => {
   //   - its contents piped into a shell (cat …deploy-prod… | bash).
   // Heredoc bodies fed to a shell count too, including a cat/tee heredoc
   // whose output is piped into one (those are otherwise dropped as data).
-  const scanExec = cmd.replace(heredoc, (m, pre, line, tag) => {
+  const scanExec = input.replace(heredoc, (m, pre, line, tag) => {
     const firstLine = m.slice(pre.length).split('\n')[0]; // the whole `cat <<EOF | …` line
-    return /(^|[\s;&|(])(cat|tee)\b/.test(line) && !/\|\s*(sudo\s+)?(bash|sh|zsh|dash|ksh)\b/.test(firstLine)
+    return dataConsumer(line) && !/\|\s*(sudo\s+)?(bash|sh|zsh|dash|ksh)\b/.test(firstLine)
       ? `${pre}${line}<<${tag}\n${tag}` : m;
   });
   const POS = '(?:^|[\\n;&|(`]\\s*|\\$\\(\\s*)';
