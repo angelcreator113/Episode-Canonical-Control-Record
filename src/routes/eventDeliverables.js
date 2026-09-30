@@ -374,7 +374,7 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
       );
       if (!moved?.[0] || to !== 'approved') return { rows: moved, contentFee: null };
       const [dealRows] = await sequelize.query(
-        `SELECT id, name, deal_type, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId`,
+        `SELECT id, name, deal_type, deal_components, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId`,
         { replacements: { eventId }, transaction }
       );
       const { bookContentFee } = require('../services/dealPayoutService');

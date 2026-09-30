@@ -45,6 +45,14 @@ const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
 const { DEAL_TYPES } = require('../models/WorldEvent');
 
+// A deal_type body value as the PUT loop reads it: '', 'null' and
+// 'undefined' are null (normalizeNullLike), anything else as sent.
+function normalizeDealTypeValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'string' && ['', 'null', 'undefined'].includes(value.trim().toLowerCase())) return null;
+  return value;
+}
+
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
 }
@@ -583,7 +591,10 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       });
       // The deal type's first draft (Task #2330; dealTypeDraftService).
       const dealDraft = await syncDraftedDealType(models.sequelize, event.id, { initial: true });
-      if (dealDraft.deal_type) event.set('deal_type', dealDraft.deal_type);
+      if (dealDraft.deal_type) {
+        event.set('deal_type', dealDraft.deal_type);
+        event.set('deal_components', dealDraft.deal_components);
+      }
 
       return res.status(201).json({ success: true, event: event.toJSON() });
     }
@@ -709,6 +720,39 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       return res.status(409).json(staleSaveBody(expected, current[0]));
     };
 
+    // Deal components (ruling D14, 2026-09-30; docs/DEAL_COMPONENTS_DESIGN.md
+    // §3): deal_components is the source of truth and deal_type (with
+    // appearance_required) its derived copy for one release. A body with
+    // deal_components writes the derived copy; a body with only deal_type or
+    // appearance_required (the pre-D14 form) writes the components through
+    // the one-to-one map, so the two never disagree.
+    {
+      const { readComponents, componentsFromDealType, dealTypeFromComponents } = require('../utils/dealComponents');
+      if (updates.deal_components !== undefined) {
+        const read = readComponents(updates.deal_components === '' ? null : updates.deal_components);
+        if (read.error) {
+          return res.status(400).json({ success: false, error: 'Invalid value for deal_components', message: read.error });
+        }
+        const derived = dealTypeFromComponents(read.value);
+        updates.deal_components = read.value;
+        updates.deal_type = derived.deal_type;
+        updates.appearance_required = derived.appearance_required;
+      } else if (updates.deal_type !== undefined || updates.appearance_required !== undefined) {
+        const [storedDeal] = await models.sequelize.query(
+          'SELECT deal_type, appearance_required FROM world_events WHERE id = :eventId AND show_id = :showId',
+          { replacements: { eventId, showId } }
+        );
+        const stored = storedDeal?.[0];
+        if (stored) {
+          const dealType = updates.deal_type !== undefined ? normalizeDealTypeValue(updates.deal_type) : stored.deal_type;
+          const appearance = updates.appearance_required !== undefined ? updates.appearance_required : stored.appearance_required;
+          if (dealType == null || DEAL_TYPES.includes(dealType)) {
+            updates.deal_components = dealType == null ? null : componentsFromDealType(dealType, appearance === true);
+          }
+        }
+      }
+    }
+
     // Terms lock (§8(x) D4, §8(w) P9; Task #2230). Once the event has
     // started a live episode, its access requirements, compensation,
     // restrictions and episode link cannot change here. A locked field sent
@@ -716,12 +760,19 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
       const [storedRows] = await models.sequelize.query(
         `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id,
-                deal_type, appearance_fee, bonus_terms, gifted_value,
+                deal_type, deal_components, appearance_fee, bonus_terms, gifted_value,
                 partnership_base_fee, performance_fee, appearance_required
            FROM world_events WHERE id = :eventId AND show_id = :showId`,
         { replacements: { eventId, showId } }
       );
       if (storedRows?.[0]) {
+        // D14: a row written with only a deal_type (before its components)
+        // is compared as the components that type maps to, so re-sending
+        // the same terms is not a change.
+        if (storedRows[0].deal_components == null && storedRows[0].deal_type != null) {
+          const { componentsOf } = require('../utils/dealComponents');
+          storedRows[0].deal_components = componentsOf({ deal_type: storedRows[0].deal_type, appearance_required: storedRows[0].appearance_required });
+        }
         const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
         if (lockEpisode) {
           // Reopened terms (Reopen ruling, §8(cc); Task #2378): every locked
@@ -774,6 +825,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
       // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
       'deal_type',
+      // D14 (2026-09-30): the ticked components, a JSON array of keys
+      // (src/utils/dealComponents.js), or null; locked with the terms.
+      'deal_components',
       // Deal components (deal build PR 3, Task #2341; Evoni's Deal PR 3
       // ruling, §8(cc)): Propose terms drafts the fees from the rate card;
       // Evoni edits them here until the terms lock. appearance_required says a
@@ -813,7 +867,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
       'required_ui_overlays', 'rewards', 'requirements', 'color_palette',
-      'restrictions', 'bonus_terms',
+      'restrictions', 'bonus_terms', 'deal_components',
     ]);
 
     const normalizeNullLike = (value) => {
@@ -2902,8 +2956,13 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // The deal type's first draft (Task #2330; dealTypeDraftService).
     const dealDraft = await syncDraftedDealType(models.sequelize, event.id || eventData.id, { initial: true });
     if (dealDraft.deal_type) {
-      if (typeof event.set === 'function') event.set('deal_type', dealDraft.deal_type);
-      else event.deal_type = dealDraft.deal_type;
+      if (typeof event.set === 'function') {
+        event.set('deal_type', dealDraft.deal_type);
+        event.set('deal_components', dealDraft.deal_components);
+      } else {
+        event.deal_type = dealDraft.deal_type;
+        event.deal_components = dealDraft.deal_components;
+      }
     }
 
     res.status(201).json({ success: true, event: event.toJSON ? event.toJSON() : event });
@@ -3064,7 +3123,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     try {
       const [eventRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type,
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type, deal_components,
                 host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
                 appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
@@ -3075,7 +3134,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
       const [fallbackRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type,
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type, deal_components,
                 host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
                 appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,

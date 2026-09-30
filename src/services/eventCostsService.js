@@ -47,6 +47,21 @@ const ENTRY_SOURCE = 'event_cost';
 // The entry line's payer by deal type (answer 2); other deal types draft none.
 const ENTRY_PAYER_BY_DEAL = Object.freeze({ self_funded: 'lala', invited_comped: 'host' });
 
+/**
+ * The entry line's payer from the deal's components (D14; answer 3,
+ * 2026-09-30: "A cash deal without 'entry covered' drafts no entry line;
+ * only self-funded deals draft an entry Lala pays."): 'lala' for a deal
+ * with no components, 'host' (comped) when entry is covered, else none.
+ */
+function entryPayerFor(event) {
+  const { dealPlanOf } = require('../utils/dealComponents');
+  const plan = dealPlanOf(event);
+  if (!plan) return null;
+  if (plan.selfFunded) return 'lala';
+  if (plan.entryCovered) return 'host';
+  return null;
+}
+
 // The drafted extras, in order: key, label.
 const EXTRAS_LINES = Object.freeze([
   { key: 'drinks', label: 'Drinks' },
@@ -56,9 +71,9 @@ const EXTRAS_LINES = Object.freeze([
 
 const COST_COLUMNS = 'id, event_id, kind, label, amount, paid_by, created_at, updated_at';
 
-/** A deal event is one with a deal type; legacy events have none. */
+/** A deal event is one with deal components (or, before D14, a deal type); legacy events have neither. */
 function isDealEvent(event) {
-  return Boolean(event && event.deal_type);
+  return require('../utils/dealComponents').isDealEvent(event);
 }
 
 function parseJson(value, fallback) {
@@ -139,7 +154,7 @@ function costTotals(costs) {
  */
 function draftedCostLines(event) {
   const lines = [];
-  const entryPayer = ENTRY_PAYER_BY_DEAL[event?.deal_type];
+  const entryPayer = entryPayerFor(event);
   const entry = Number(event?.cost_coins) || 0;
   if (entryPayer && entry > 0) {
     lines.push({ key: 'entry', kind: 'entry', label: 'Entry / ticket', amount: entry, paid_by: entryPayer, source: ENTRY_SOURCE });
@@ -160,7 +175,7 @@ function draftedCostLines(event) {
  */
 async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
   const [eventRows] = await sequelize.query(
-    `SELECT id, deal_type, cost_coins, prestige, format, event_type, dress_code, canon_consequences
+    `SELECT id, deal_type, deal_components, cost_coins, prestige, format, event_type, dress_code, canon_consequences
        FROM world_events WHERE id = :eventId FOR UPDATE`,
     { replacements: { eventId }, transaction }
   );
@@ -220,6 +235,7 @@ module.exports = {
   EXTRAS_SOURCE,
   ENTRY_SOURCE,
   ENTRY_PAYER_BY_DEAL,
+  entryPayerFor,
   isDealEvent,
   draftedCostLines,
   listEventCosts,

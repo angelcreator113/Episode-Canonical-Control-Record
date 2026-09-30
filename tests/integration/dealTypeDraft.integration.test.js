@@ -145,7 +145,8 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
     const res = await put(show, id, { deal_type: 'paid_appearance' });
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ code: 'EVENT_TERMS_LOCKED', fields: ['deal_type'] });
+    // D14: the components change with the type (deal_type is their derived copy).
+    expect(res.body).toMatchObject({ code: 'EVENT_TERMS_LOCKED', fields: ['deal_type', 'deal_components'] });
 
     // The same value is not a change, so a full-form save still works.
     expect((await put(show, id, { deal_type: 'invited_comped', name: 'Locked Gala' })).status).toBe(200);

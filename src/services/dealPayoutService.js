@@ -104,9 +104,10 @@ function payerFor(event, component) {
  * Returns [{ category, amount, description, metadata }].
  */
 function completionPayouts(event, tier) {
-  if (!event?.deal_type) return [];
-  const { DEAL_PLANS, dealComponents } = require('./dealPricingService');
-  const plan = DEAL_PLANS[event.deal_type];
+  // D14: the plan comes from the deal's ticked components (deal_type for an
+  // event written before them); null is a legacy event.
+  const { planFor, dealComponents } = require('./dealPricingService');
+  const plan = planFor(event);
   if (!plan || !plan.cash) return [];
 
   const rows = [];
@@ -118,7 +119,7 @@ function completionPayouts(event, tier) {
       category,
       amount,
       description: `${COMPONENT_LABELS[component]} for "${event.name}"`,
-      metadata: { component, deal_type: event.deal_type, ...payerFor(event, component) },
+      metadata: { component, deal_type: event.deal_type, deal_components: plan.keys, ...payerFor(event, component) },
     });
   }
 
@@ -129,7 +130,7 @@ function completionPayouts(event, tier) {
       category: 'deal_bonus',
       amount: bonus,
       description: `Deal bonus (${String(tier).toUpperCase()}) for "${event.name}"`,
-      metadata: { tier, deal_type: event.deal_type, ...payerFor(event, 'appearance') },
+      metadata: { tier, deal_type: event.deal_type, deal_components: plan.keys, ...payerFor(event, 'appearance') },
     });
   }
   return rows;
@@ -137,9 +138,8 @@ function completionPayouts(event, tier) {
 
 /** A deliverable's content fee (pure): its fee, when the deal pays deliverables. */
 function contentFeeFor(event, deliverable) {
-  if (!event?.deal_type) return 0;
-  const { DEAL_PLANS } = require('./dealPricingService');
-  const plan = DEAL_PLANS[event.deal_type];
+  const { planFor } = require('./dealPricingService');
+  const plan = planFor(event);
   if (!plan || !plan.cash || !plan.deliverables) return 0;
   return wholePositive(deliverable?.fee);
 }

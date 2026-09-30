@@ -147,6 +147,8 @@ async function reopenEligibility(sequelize, eventId, { transaction, lockEpisode:
 function deliverableTerms(deliverables) {
   return (deliverables || []).map((d) => ({
     id: d.id, description: d.description ?? null, deliverable_type: d.deliverable_type ?? null,
+    // D15 (2026-09-30): the format's platform and quantity.
+    platform: d.platform ?? null, quantity: d.quantity == null ? 1 : Number(d.quantity),
     due_date: d.due_date ?? null, required: d.required !== false, owed_to: d.owed_to || 'host',
     fee: d.fee == null ? null : Number(d.fee),
   }));
@@ -164,11 +166,24 @@ function termsState(event, deliverables, costs) {
   return { fields, deliverables: deliverableTerms(deliverables), costs: costTerms(costs) };
 }
 
+// A reopen taken before a field or key existed (deal_components, D14; a
+// deliverable's platform and quantity, D15) did not record it: only what
+// the snapshot holds is compared, so a deploy is never read as an edit.
+function onlyKeysOf(beforeList, nowList) {
+  const sample = (beforeList || [])[0];
+  if (!sample) return nowList;
+  const keys = Object.keys(sample);
+  return nowList.map((entry) => Object.fromEntries(keys.map((k) => [k, entry[k] ?? null])));
+}
+
 /** The terms that changed between the reopen's `before` and now. */
 function changedTerms(before, event, deliverables, costs) {
   const now = termsState(event, deliverables, costs);
-  const changed = before?.fields ? changedLockedFields(before.fields, now.fields, null) : [];
-  if (!before || stable(before.deliverables || []) !== stable(now.deliverables)) changed.push('deliverables');
+  const nowFields = before?.fields
+    ? Object.fromEntries(Object.entries(now.fields).filter(([k]) => Object.prototype.hasOwnProperty.call(before.fields, k)))
+    : now.fields;
+  const changed = before?.fields ? changedLockedFields(before.fields, nowFields, null) : [];
+  if (!before || stable(before.deliverables || []) !== stable(onlyKeysOf(before.deliverables, now.deliverables))) changed.push('deliverables');
   if (!before || stable(before.costs || []) !== stable(now.costs)) changed.push('costs');
   return changed;
 }

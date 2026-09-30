@@ -285,8 +285,13 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   // (a models object without one) the event keeps no draft.
   const dealDraft = await syncDraftedDealType(sequelize, event.id || eventData.id, { initial: true });
   if (dealDraft.deal_type) {
-    if (typeof event.set === 'function') event.set('deal_type', dealDraft.deal_type);
-    else event.deal_type = dealDraft.deal_type;
+    if (typeof event.set === 'function') {
+      event.set('deal_type', dealDraft.deal_type);
+      event.set('deal_components', dealDraft.deal_components);
+    } else {
+      event.deal_type = dealDraft.deal_type;
+      event.deal_components = dealDraft.deal_components;
+    }
   }
 
   return {

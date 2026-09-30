@@ -14,10 +14,11 @@ function normalizePaidFreeFlags(event) {
   const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
   const isPaid = truthy.has(event?.is_paid);
   const isFree = truthy.has(event?.is_free);
-  // A deal event (deal_type set) is never charged cost_coins: it keeps it
-  // as difficulty only (Law 0), and its costs are its itemised event_costs
-  // rows (deal build PR 4, Task #2365; docs/DEAL_DESIGN.md §5).
-  const isDeal = Boolean(event?.deal_type);
+  // A deal event (deal components set, or before D14 a deal_type) is never
+  // charged cost_coins: it keeps it as difficulty only (Law 0), and its
+  // costs are its itemised event_costs rows (deal build PR 4, Task #2365;
+  // docs/DEAL_DESIGN.md §5).
+  const isDeal = require('./dealComponents').isDealEvent(event);
   const eventCost = (isDeal || isFree || isPaid) ? 0 : (Number(event?.cost_coins) || 0);
   // Nor is a deal event paid payment_amount (or its 10% content_revenue):
   // it is paid its deal payouts instead (deal build PR 5, dealPayoutService;
