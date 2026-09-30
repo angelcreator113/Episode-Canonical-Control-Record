@@ -975,10 +975,6 @@ function WorldAdmin() {
     }
   };
 
-  // handleAutoReorder/applyReorderPlan moved to SeasonTab (Task #1648,
-  // docs/EVENT_EPISODE_FLOW.md §8(m)) — episode sequencing belongs on the
-  // Episodes tab's Season Arc view, not the Events queue.
-
   // Merge duplicate events — keep first, delete second
   const handleMergeDuplicates = async (keepEvent, removeEvent) => {
     if (!window.confirm(`Keep "${keepEvent.name}" and delete the duplicate? The duplicate's episode link will transfer.`)) return;
@@ -1676,7 +1672,7 @@ The revised event should feel like a completely different experience from the si
 
       {/* ════════════════════════ SEASON ════════════════════════ */}
       {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} worldEvents={worldEvents} loadData={loadData} setToast={setToast} />
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -3208,8 +3204,6 @@ The revised event should feel like a completely different experience from the si
 
         </div>
       )}
-          {/* Auto-Reorder preview modal moved to SeasonTab (Task #1648,
-              docs/EVENT_EPISODE_FLOW.md §8(m)). */}
           {eventDetailModal && (() => {
             // Hydrate missing fields from automation data + derive from
             // context (hydrateEventForModal, utils/eventEditorChanges.js —
@@ -7459,7 +7453,7 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
-function SeasonTab({ showId, api, S, episodes, worldEvents = [], loadData, setToast }) {
+function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
@@ -7468,13 +7462,6 @@ function SeasonTab({ showId, api, S, episodes, worldEvents = [], loadData, setTo
   const [warning, setWarning] = useState(null);
   const [goals, setGoals] = useState([]);
   const [rhythm, setRhythm] = useState(null);
-  // Auto-Reorder — moved here from the Events tab (Task #1648,
-  // docs/EVENT_EPISODE_FLOW.md §8(m)): episode sequencing belongs with
-  // season planning, not the event-creation queue. Previews its plan
-  // before touching the DB; null = no preview open, otherwise an array of
-  // { ep, current, proposed, changed }.
-  const [reorderPlan, setReorderPlan] = useState(null);
-  const [reorderApplying, setReorderApplying] = useState(false);
 
   const loadArc = useCallback(async () => {
     setLoading(true);
@@ -7551,51 +7538,6 @@ function SeasonTab({ showId, api, S, episodes, worldEvents = [], loadData, setTo
       alert(err.response?.data?.error || err.message);
     }
     setExtending(false);
-  };
-
-  // Auto-reorder all linked events by prestige ascending across episodes.
-  // Builds a preview without touching anything — the creator applies or
-  // cancels explicitly, rather than a confirm() silently overwriting
-  // curated assignments.
-  const handleAutoReorder = () => {
-    const linked = worldEvents.filter(ev => ev.used_in_episode_id);
-    if (linked.length === 0) {
-      if (setToast) { setToast('No linked events to reorder'); setTimeout(() => setToast(null), 3000); }
-      return;
-    }
-    const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
-    const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-
-    const plan = sortedEps.map((ep, i) => {
-      const current = worldEvents.find(ev => ev.used_in_episode_id === ep.id) || null;
-      const proposed = sortedByPrestige[i] || null;
-      return {
-        ep,
-        current,
-        proposed,
-        changed: (current?.id || null) !== (proposed?.id || null),
-      };
-    });
-    setReorderPlan(plan);
-  };
-
-  const applyReorderPlan = async () => {
-    if (!reorderPlan) return;
-    const changes = reorderPlan.filter(p => p.changed && p.proposed);
-    if (changes.length === 0) { setReorderPlan(null); return; }
-    setReorderApplying(true);
-    try {
-      for (const p of changes) {
-        await api.post(`/api/v1/world/${showId}/events/${p.proposed.id}/inject`, { episode_id: p.ep.id });
-      }
-      if (setToast) { setToast(`✅ Reordered ${changes.length} event${changes.length === 1 ? '' : 's'} by prestige`); setTimeout(() => setToast(null), 3000); }
-      setReorderPlan(null);
-      if (loadData) loadData();
-    } catch (err) {
-      if (setToast) { setToast(`Reorder failed: ${err.response?.data?.error || err.message}`); setTimeout(() => setToast(null), 3000); }
-    } finally {
-      setReorderApplying(false);
-    }
   };
 
   if (loading) return <div style={S.center}>Loading season data...</div>;
@@ -7688,79 +7630,6 @@ function SeasonTab({ showId, api, S, episodes, worldEvents = [], loadData, setTo
           </div>
         </div>
       </div>
-
-      {/* Episode Order — Auto-Reorder (Task #1648, moved from the Events
-          tab: episode sequencing is a season-planning job, not an
-          event-creation one). */}
-      <div style={S.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <div>
-            <h3 style={{ ...S.cardTitle, margin: '0 0 2px' }}>Episode Order</h3>
-            <p style={{ ...S.muted, margin: 0 }}>Preview reassigning linked events across episodes by prestige, low to high.</p>
-          </div>
-          <button onClick={handleAutoReorder} style={{ padding: '7px 14px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
-            📊 Auto-Reorder
-          </button>
-        </div>
-      </div>
-      {reorderPlan && (() => {
-        const changes = reorderPlan.filter(p => p.changed);
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => !reorderApplying && setReorderPlan(null)}>
-            <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 720, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-              <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>📊 Auto-Reorder Preview</div>
-                <div style={{ fontSize: 13, color: '#64748b' }}>
-                  Sort linked events by prestige (low → high) across episodes.
-                  {' '}<b style={{ color: changes.length > 0 ? '#7c3aed' : '#64748b' }}>{changes.length}</b> of {reorderPlan.length} episodes would change.
-                </div>
-              </div>
-              <div style={{ padding: '12px 24px' }}>
-                {reorderPlan.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#64748b', padding: 12 }}>No episodes to reorder.</div>
-                ) : (
-                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#94a3b8', textAlign: 'left' }}>
-                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Episode</th>
-                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Currently</th>
-                        <th style={{ padding: '6px 8px', fontWeight: 700, width: 24 }}></th>
-                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Proposed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reorderPlan.map((p, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: p.changed ? '#faf5ff' : 'transparent' }}>
-                          <td style={{ padding: '8px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>Ep {p.ep.episode_number}</td>
-                          <td style={{ padding: '8px', color: p.current ? '#475569' : '#cbd5e1' }}>
-                            {p.current ? `${p.current.name} (P${p.current.prestige ?? '?'})` : '— empty —'}
-                          </td>
-                          <td style={{ padding: '8px', color: p.changed ? '#7c3aed' : '#cbd5e1', textAlign: 'center' }}>
-                            {p.changed ? '→' : '·'}
-                          </td>
-                          <td style={{ padding: '8px', color: p.proposed ? (p.changed ? '#7c3aed' : '#475569') : '#cbd5e1', fontWeight: p.changed ? 600 : 400 }}>
-                            {p.proposed ? `${p.proposed.name} (P${p.proposed.prestige ?? '?'})` : '— empty —'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0' }}>
-                <button onClick={() => setReorderPlan(null)} disabled={reorderApplying}
-                  style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#475569', cursor: reorderApplying ? 'wait' : 'pointer' }}>
-                  Cancel
-                </button>
-                <button onClick={applyReorderPlan} disabled={reorderApplying || changes.length === 0}
-                  style={{ padding: '8px 16px', background: changes.length === 0 ? '#e5e7eb' : '#7c3aed', color: changes.length === 0 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: reorderApplying ? 'wait' : (changes.length === 0 ? 'not-allowed' : 'pointer') }}>
-                  {reorderApplying ? '⏳ Applying...' : changes.length === 0 ? 'No changes' : `Apply ${changes.length} reassignment${changes.length === 1 ? '' : 's'}`}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>
