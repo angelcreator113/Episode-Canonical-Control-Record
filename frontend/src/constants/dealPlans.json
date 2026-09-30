@@ -1,0 +1,18 @@
+{
+  "components": {
+    "appearance": { "field": "appearance_fee", "label": "Appearance fee" },
+    "partnership_base": { "field": "partnership_base_fee", "label": "Partnership base" },
+    "performance": { "field": "performance_fee", "label": "Performance fee" }
+  },
+  "plans": {
+    "self_funded": { "components": [], "deliverables": false, "cash": false },
+    "invited_comped": { "components": [], "deliverables": false, "cash": false },
+    "gifted": { "components": [], "deliverables": false, "cash": false, "giftedValue": true },
+    "paid_appearance": { "components": ["appearance"], "deliverables": false, "cash": true },
+    "paid_deliverables": { "components": [], "deliverables": true, "cash": true },
+    "appearance_plus_deliverables": { "components": ["appearance"], "deliverables": true, "cash": true },
+    "performance_booking": { "components": ["performance"], "deliverables": true, "cash": true },
+    "brand_partnership": { "components": ["partnership_base"], "deliverables": true, "cash": true, "appearanceIfRequired": true }
+  },
+  "deliverable_anchors": { "reel": "reel", "story_set_3": "stories_3" }
+}
