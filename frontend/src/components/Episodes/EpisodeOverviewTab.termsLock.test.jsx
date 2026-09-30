@@ -58,4 +58,13 @@ describe('EpisodeOverviewTab and the terms lock', () => {
     await vi.waitFor(() => expect(screen.queryByText('The Gala')).toBeNull());
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  // Task #2356: each linked event links back to its Event Package.
+  test('a linked event links to its Event Package', async () => {
+    renderTab();
+
+    const link = await screen.findByTestId('overview-event-package-ev-1');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+    expect(link.textContent).toContain('View Event Package');
+  });
 });

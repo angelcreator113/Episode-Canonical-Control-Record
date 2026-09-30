@@ -298,6 +298,33 @@
   background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
 }
 
+/* Task #2356: the source event's link back to its Event Package. */
+.ed-source-event-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  margin-top: 0.25rem;
+  font-size: var(--text-sm);
+  color: #8a6d1f;
+  text-decoration: none;
+  font-weight: 600;
+}
+.ed-source-event-link:hover { text-decoration: underline; }
+.ed-source-event-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9a8a60;
+}
+.ed-source-event-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ed-show-icon {
   font-size: var(--text-lg);
   line-height: 1;

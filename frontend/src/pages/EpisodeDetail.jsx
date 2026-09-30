@@ -214,6 +214,10 @@ const EpisodeDetail = () => {
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [episodeEvents, setEpisodeEvents] = useState([]);
+  // The source event, for the header's link back to its Event Package
+  // (Task #2356): the brief's event (episode_briefs.event_id, §8(w) P2),
+  // which GET /episodes/:id/events returns first, flagged link.anchor.
+  const [sourceEvent, setSourceEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [characterState, setCharacterState] = useState({});
 
@@ -367,6 +371,26 @@ const EpisodeDetail = () => {
     fetchEvents();
     fetchCharState();
   }, [episode, tabKey, episodeId]);
+
+  useEffect(() => {
+    if (!episodeId) return undefined;
+    let cancelled = false;
+    // Optional header detail: any failure, synchronous or not, leaves the
+    // link off and never breaks the page.
+    const loadSourceEvent = async () => {
+      try {
+        const data = await getEpisodeEvents(episodeId);
+        if (cancelled) return;
+        const events = data?.events || [];
+        setSourceEvent(events.find((ev) => ev.link?.anchor) || null);
+      } catch (err) {
+        console.error('Failed to load the source event:', err);
+        if (!cancelled) setSourceEvent(null);
+      }
+    };
+    loadSourceEvent();
+    return () => { cancelled = true; };
+  }, [episodeId]);
 
   // Handle scene selection from library
   const handleSceneSelect = async (libraryScene) => {
@@ -590,6 +614,20 @@ const EpisodeDetail = () => {
                 </button>
               )}
             </div>
+            {/* Its own line, outside .ed-header-meta, which phones hide
+                (Task #2356: the link back must work at 375px). */}
+            {sourceEvent && (sourceEvent.show_id || episode.show_id || episode.showId) && (
+              <Link
+                to={`/shows/${sourceEvent.show_id || episode.show_id || episode.showId}/events/${sourceEvent.id}`}
+                className="ed-source-event-link"
+                data-testid="ed-source-event"
+                title="Open the Event Package this episode was started from"
+              >
+                <span className="ed-source-event-label">From event</span>
+                <span className="ed-source-event-name">{sourceEvent.name || 'Event'}</span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            )}
           </div>
         </div>
         <div className="ed-header-actions">

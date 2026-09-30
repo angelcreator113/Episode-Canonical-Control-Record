@@ -60,7 +60,7 @@
  * and its consequence, with Start Anyway / Go back.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
@@ -373,8 +373,13 @@ export default function EventPackagePage() {
     );
   }
 
-  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
-  const used = !!event.used_in_episode_id;
+  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy } = data;
+  // Read-only once Start Episode has locked the terms (Task #2356): the
+  // server's own lock (termsLockedBy: the brief that names this event, §8(w)
+  // P2, else the used_in_episode_id stamp), so the page never offers an edit
+  // the server would refuse.
+  const used = !!event.used_in_episode_id || !!termsLockedBy;
+  const lockEpisode = termsLockedBy || usedInEpisode || null;
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
@@ -868,9 +873,21 @@ export default function EventPackagePage() {
       {toast && <div className="epp-toast">{toast}</div>}
 
       {used && (
-        <div className="epp-used-banner">
-          <Lock size={16} />
-          Used by Episode {usedInEpisode?.episode_number ?? '—'}{usedInEpisode?.title ? `: ${usedInEpisode.title}` : ''}
+        <div className="epp-used-banner" data-testid="terms-locked-banner" role="note">
+          <Lock size={16} aria-hidden="true" />
+          <span className="epp-used-banner-text">
+            <strong>Locked at Start Episode.</strong>{' '}
+            Used by Episode {lockEpisode?.episode_number ?? '—'}{lockEpisode?.title ? `: ${lockEpisode.title}` : ''}.
+            {' '}This package is read-only; its terms can't change now.
+          </span>
+          {lockEpisode?.id && (
+            <Link
+              to={`/episodes/${lockEpisode.id}?tab=overview`}
+              className="epp-used-banner-link" data-testid="terms-locked-open-episode"
+            >
+              Open Episode →
+            </Link>
+          )}
         </div>
       )}
 

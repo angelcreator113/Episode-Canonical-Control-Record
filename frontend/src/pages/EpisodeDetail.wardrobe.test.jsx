@@ -130,11 +130,17 @@ describe('EpisodeDetail — Production → Wardrobe (Task #1906)', () => {
     expect(screen.getByText('No events linked to this episode')).toBeTruthy();
   });
 
-  test('the events read does not run off the Wardrobe sub-tab', async () => {
+  // Task #2356: the header now reads /episodes/:id/events once on every
+  // tab for its "From event" link. The Wardrobe effect's own work (its
+  // second events read and Lala's character state) still stays off.
+  test('the Wardrobe reads do not run off the Wardrobe sub-tab', async () => {
     mockApi([{ id: 'ev-1', name: 'Maison Belle Gala', link: { anchor: true } }]);
     renderAt('/episodes/ep-1?tab=scripts');
 
-    await waitFor(() => expect(screen.getAllByText('Episode One').length).toBeGreaterThan(0));
-    expect(api.get).not.toHaveBeenCalledWith('/api/v1/episodes/ep-1/events');
+    await waitFor(() => expect(screen.getByTestId('ed-source-event')).toBeTruthy());
+    const eventsReads = vi.mocked(api.get).mock.calls.filter(([url]) => url === '/api/v1/episodes/ep-1/events');
+    expect(eventsReads).toHaveLength(1);
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => url.startsWith('/api/v1/characters/lala/state'))).toBe(false);
+    expect(screen.queryByText('STYLING FOR EVENT')).toBeNull();
   });
 });

@@ -306,3 +306,51 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     });
   });
 });
+
+// Task #2356: the header shows the episode's source event (the anchor from
+// episode_briefs.event_id, §8(w) P2) and links to its Event Package.
+describe('EpisodeDetail — source event link (Task #2356)', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  function mockEvents(events) {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/events') return { data: { success: true, events } };
+      return { data: {} };
+    });
+  }
+
+  test('the header links to the anchor event\'s Event Package', async () => {
+    mockEvents([
+      { id: 'ev-anchor', name: 'Maison Belle Gala', show_id: 'show-1', link: { anchor: true, anchor_source: 'brief' } },
+      { id: 'ev-extra', name: 'Morning Brunch', show_id: 'show-1', link: { anchor: false } },
+    ]);
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+
+    const link = await screen.findByTestId('ed-source-event');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/events/ev-anchor');
+    expect(link.textContent).toContain('Maison Belle Gala');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events');
+  });
+
+  test('no anchor event, no link', async () => {
+    mockEvents([{ id: 'ev-extra', name: 'Morning Brunch', show_id: 'show-1', link: { anchor: false } }]);
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events'));
+    expect(screen.queryByTestId('ed-source-event')).toBeNull();
+  });
+
+  test('a failed events read leaves the page up with no link', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/events') throw new Error('boom');
+      return { data: {} };
+    });
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+    expect(screen.queryByTestId('ed-source-event')).toBeNull();
+  });
+});
