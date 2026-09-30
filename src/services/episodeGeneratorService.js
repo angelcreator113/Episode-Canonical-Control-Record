@@ -820,6 +820,17 @@ Return ONLY JSON.` }],
   // Placements card pre-populated. Silent skip when no asset has been
   // generated yet — re-running this is safe (placement helper is
   // idempotent on (episode_id, asset_id)).
+  //
+  // P10 (Task #2386): an invitation approved before Start is tagged as this
+  // episode's invitation overlay first, so the required-overlay pass
+  // prefers it (episode-specific) over any show-wide invite overlay. It is
+  // placed on the invitation beat after the scene plan exists (step 3b).
+  try {
+    const { syncEpisodeInvitationOverlay } = require('./episodeInvitationOverlayService');
+    await syncEpisodeInvitationOverlay(models, { eventId, episodeId: episode.id, place: false });
+  } catch (tagErr) {
+    console.warn('[EpisodeGenerator] Invitation overlay tag failed (non-blocking):', tagErr.message);
+  }
   try {
     const { autoPlaceRequiredOverlays } = require('./timelinePlacementService');
     const placed = await autoPlaceRequiredOverlays(models, {
@@ -840,6 +851,21 @@ Return ONLY JSON.` }],
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
   const { scenePlanRows, sceneSetIds } = await createScenePlanRows(episode, event, models);
+
+  // ── 3b. The approved invitation is this episode's invitation overlay ──
+  // P10 (Evoni, 2026-09-30; Task #2386): approved before Start, it is
+  // tagged and placed on the invitation beat (beat 5, Reveal) here —
+  // the same placement approve-invitation makes after Start. No-op when
+  // the event has no approved invitation. Never blocks Start Episode.
+  try {
+    const { syncEpisodeInvitationOverlay } = require('./episodeInvitationOverlayService');
+    const inv = await syncEpisodeInvitationOverlay(models, { eventId, episodeId: episode.id });
+    if (inv.tagged) {
+      console.log(`[EpisodeGenerator] Invitation ${inv.assetId} is the episode's invitation overlay (placed: ${inv.anchor || 'no'})`);
+    }
+  } catch (invErr) {
+    console.warn('[EpisodeGenerator] Invitation overlay placement failed (non-blocking):', invErr.message);
+  }
 
   // ── Link the chosen scene set(s) to the episode via SceneSetEpisode ──
   // Critical fix: scene_set_id was reaching scene_plans rows but never
