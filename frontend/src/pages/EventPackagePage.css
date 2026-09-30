@@ -1091,6 +1091,8 @@
    never "Set" (the columns have defaults, so stored does not mean chosen);
    a missing one reuses the Basics missing style. */
 .epp-sections > .epp-stakes { grid-column: 1 / -1; }
+/* Reopen terms sits above Terms, full width (Task #2378). */
+.epp-sections > .epp-reopen { grid-column: 1 / -1; margin: 0; }
 .epp-stakes-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
