@@ -1186,6 +1186,29 @@
   margin-left: 0;
 }
 .epp-term-value { font-size: 13px; }
+/* Deal price (Task #2341): one row per component, premium pickers per line. */
+.epp-term-component {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(184, 150, 46, 0.18);
+}
+/* "Price required" (ruling 6): a missing number, not a zero. */
+.is-price-required { color: #9a3412; font-weight: 600; }
+.epp-term-premium-line { display: flex; flex-direction: column; gap: 4px; }
+.epp-term-premium-title { font-size: 12px; color: var(--lala-ink, #2C2C2C); }
+.epp-term-premiums {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.epp-term-gaps {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
 /* Deal type's rule 14 label (Task #2330). */
 .epp-term-state {
   font-size: 11px;

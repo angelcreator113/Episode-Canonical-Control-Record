@@ -32,6 +32,10 @@ const RETIRED_SLOTS = new Set(['brand_post_1', 'brand_post_2']);
 
 const DESCRIPTION_MAX = 160;
 
+// The fixed deliverable types read by their labels (Task #2341); a row
+// written before the fixed list shows its stored text.
+const { DELIVERABLE_TYPE_LABELS } = require('../services/eventTermsService');
+
 function socialTaskSource(task) {
   if (task?.deliverable_id) return task.owed_to === 'brand' ? 'brand_deliverable' : 'host_requirement';
   if (task?.task_source === 'goal' || task?.task_source === 'optional') return task.task_source;
@@ -45,7 +49,7 @@ function isSocialTaskRequired(task) {
 /** One task per accepted deliverable row; required unless the row says not. */
 function deliverableTask(d) {
   const description = String(d.description || '').trim();
-  const detail = [d.deliverable_type, d.due_date ? `due ${d.due_date}` : null].filter(Boolean).join(' · ');
+  const detail = [DELIVERABLE_TYPE_LABELS[d.deliverable_type] || d.deliverable_type, d.due_date ? `due ${d.due_date}` : null].filter(Boolean).join(' · ');
   return {
     slot: `deliverable_${d.id}`,
     label: description.length > DESCRIPTION_MAX ? `${description.slice(0, DESCRIPTION_MAX - 1)}…` : description,

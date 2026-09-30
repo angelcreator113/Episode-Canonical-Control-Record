@@ -16,6 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
+const { findMissingPrices, dealPriceRequiredError } = require('./dealPricingService');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
@@ -460,6 +461,16 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   }
   if (liveEpisode && !(replacingEpisodeId && liveEpisode.id === replacingEpisodeId)) {
     throw eventEpisodeConflictError(liveEpisode);
+  }
+
+  // Start Episode locks the terms, so a deal's price must be complete first
+  // (Evoni's Deal PR 3 ruling, point 6, §8(cc): "Missing is missing"; Task
+  // #2341). Every priced component and paid deliverable needs a number;
+  // "Other" is never priced automatically. A regenerate replaces an episode
+  // whose terms are already locked, so it is not refused here.
+  if (!replacingEpisodeId) {
+    const missing = await findMissingPrices(models.sequelize, eventId);
+    if (missing.length) throw dealPriceRequiredError(missing);
   }
 
   // Get next episode number from active episodes only. Soft-deleted

@@ -38,6 +38,7 @@ const { careerTierFromLabel, careerTierFromReputation } = require('../utils/care
 const { startedEpisodeFor, readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('../services/episodeTaskCopyService');
 const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
+const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
 const { DEAL_TYPES } = require('../models/WorldEvent');
 
 async function getModels() {
@@ -680,7 +681,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
       const [storedRows] = await models.sequelize.query(
         `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id,
-                deal_type, appearance_fee, bonus_terms, gifted_value
+                deal_type, appearance_fee, bonus_terms, gifted_value,
+                partnership_base_fee, performance_fee, appearance_required
            FROM world_events WHERE id = :eventId AND show_id = :showId`,
         { replacements: { eventId, showId } }
       );
@@ -733,6 +735,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
       // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
       'deal_type',
+      // Deal components (deal build PR 3, Task #2341; Evoni's Deal PR 3
+      // ruling, §8(cc)): Propose terms drafts the fees from the rate card;
+      // Evoni edits them here until the terms lock. appearance_required says a
+      // brand partnership also requires an appearance; gifted_value records a
+      // gifted deal's non-cash value.
+      'appearance_fee', 'partnership_base_fee', 'performance_fee',
+      'appearance_required', 'gifted_value',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -741,7 +750,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const integerFields = new Set([
       'prestige', 'cost_coins', 'strictness', 'deadline_minutes',
       'browse_pool_size', 'payment_amount', 'career_tier', 'source_profile_id',
+      'appearance_fee', 'partnership_base_fee', 'performance_fee', 'gifted_value',
     ]);
+    const DEAL_FEE_FIELDS = new Set(['appearance_fee', 'partnership_base_fee', 'performance_fee', 'gifted_value']);
     const uuidFields = new Set([
       'season_id', 'arc_id', 'scene_set_id', 'source_calendar_event_id',
       'venue_location_id', 'used_in_episode_id', 'outfit_set_id',
@@ -807,6 +818,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         if (field === 'canon_consequences' && val !== null) {
           // Merged with the stored value just before the UPDATE (Task #1747).
           ccIncoming = val;
+        }
+
+        if (DEAL_FEE_FIELDS.has(field) && val !== null && Number(val) < 0) {
+          return res.status(400).json({ success: false, error: `Invalid value for ${field}`, message: `${field} must be 0 or more, or null` });
+        }
+
+        if (field === 'appearance_required' && typeof val !== 'boolean') {
+          return res.status(400).json({ success: false, error: 'Invalid value for appearance_required', message: 'appearance_required must be true or false' });
         }
 
         if (field === 'deal_type' && val !== null && !DEAL_TYPES.includes(val)) {
@@ -2280,6 +2299,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       console.warn('Generate episode refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
     }
+    if (error.code === DEAL_PRICE_REQUIRED_CODE) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(409).json(dealPriceRequiredBody(error));
+    }
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
   }
@@ -2324,6 +2347,21 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     // enforces that (Task #1751) and the catch below maps its refusal to
     // 409; a link to a deleted episode does not block. Extras that are
     // already linked to other episodes are skipped with a warning.
+
+    // The extras' terms lock with the episode too, so each deal's price must
+    // be complete first (Deal PR 3 ruling, point 6; Task #2341). The anchor
+    // is checked inside generateEpisodeFromEvent.
+    const extrasMissing = [];
+    for (const ev of extras) {
+      if (ev.used_in_episode_id) continue;
+      const missing = await findMissingPrices(models.sequelize, ev.id);
+      extrasMissing.push(...missing.map((m) => ({ ...m, event_id: ev.id, label: `${ev.name}: ${m.label}` })));
+    }
+    if (extrasMissing.length) {
+      const refusal = dealPriceRequiredError(extrasMissing);
+      console.warn('Multi-event generate refused:', refusal.message);
+      return res.status(409).json(dealPriceRequiredBody(refusal));
+    }
 
     let wardrobeItems = [];
     try {
@@ -2395,6 +2433,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Multi-event generate refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    if (error.code === DEAL_PRICE_REQUIRED_CODE) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(409).json(dealPriceRequiredBody(error));
     }
     console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });

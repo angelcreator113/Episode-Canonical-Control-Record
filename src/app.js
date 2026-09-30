@@ -824,6 +824,16 @@ try {
   console.error('✗ Failed to load event deliverable routes:', e.message);
 }
 
+// Deal pricing (deal build PR 3, Task #2341) — /deal-rates and
+// /world/:showId/events/:eventId/propose-terms
+try {
+  const dealPricingRoutes = require('./routes/dealPricing');
+  app.use('/api/v1', dealPricingRoutes);
+  console.log('✓ Deal pricing routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load deal pricing routes:', e.message);
+}
+
 // World Studio routes (character ecosystem + intimate scene generator)
 const worldStudioRoutes = trackRouteLoad('worldStudio', () => require('./routes/worldStudio'));
 app.use('/api/v1', worldStudioRoutes);

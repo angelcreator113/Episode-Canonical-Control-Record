@@ -282,6 +282,14 @@ module.exports = (sequelize) => {
     bonus_terms: { type: DataTypes.JSONB, allowNull: true },
     gifted_value: { type: DataTypes.INTEGER, allowNull: true },
     pricing_version: { type: DataTypes.INTEGER, allowNull: true },
+    // Deal components (deal build PR 3, migration 20260930120000; Task
+    // #2341; Evoni's Deal PR 3 ruling, §8(cc)): the brand partnership base
+    // is its own component, not an appearance fee; the performance booking
+    // has its own fee; appearance_required says a brand partnership also
+    // requires Lala to appear, so it carries an appearance_fee too.
+    partnership_base_fee: { type: DataTypes.INTEGER, allowNull: true },
+    performance_fee: { type: DataTypes.INTEGER, allowNull: true },
+    appearance_required: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     // Access requirements — what Lala must have to take part (today:
     // reputation_min, brand_trust_min, coins_min). One of the four kinds of
     // term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1); never holds

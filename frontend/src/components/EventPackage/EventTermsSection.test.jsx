@@ -109,7 +109,7 @@ describe('EventTermsSection', () => {
     fireEvent.click(screen.getByTestId('terms-deliverable-save'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       '/api/v1/world/show-1/events/ev-1/deliverables',
-      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'host' }
+      { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'host', fee: null }
     ));
     expect(putEvent).not.toHaveBeenCalled();
   });
@@ -167,6 +167,135 @@ describe('EventTermsSection', () => {
     renderTerms();
     expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Not set');
     expect(screen.queryByTestId('terms-deal-type-state')).toBeNull();
+  });
+
+  // Deal build PR 3 (Task #2341; Evoni's Deal PR 3 ruling): the deal's
+  // components, the fixed deliverable types, and Propose terms.
+  const CARD = { version: 1, anchors: {}, premiums: { rush: { '48h': 10, '24h': 20 }, paid_ad: { whitelisting: null } } };
+  const TYPED = [
+    { id: 'd1', description: 'One reel in the coat', deliverable_type: 'reel', required: true, status: 'pending', fee: null },
+    { id: 'd2', description: 'Host a Q&A', deliverable_type: 'other', required: true, status: 'pending', fee: null },
+  ];
+
+  test('pricing: Propose terms posts premiums per component, and offers them only on anchored lines (ruling 3)', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/deal-rates'
+      ? { data: { success: true, card: CARD } }
+      : { data: { success: true, deliverables: TYPED, locked: false } }));
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, proposal: { ok: true, gaps: ['"Host a Q&A": price required (Other is never priced automatically).'] } } });
+    const { onSaved } = renderTerms({ event: { ...EVENT, deal_type: 'brand_partnership', appearance_required: true } });
+    await waitFor(() => expect(screen.getByText('One reel in the coat')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('terms-propose-open'));
+    await waitFor(() => expect(screen.getByTestId('terms-premium-partnership_base-rush')).toBeTruthy());
+    expect(screen.getByTestId('terms-premium-appearance-rush')).toBeTruthy();
+    expect(screen.getByTestId('terms-premium-d1-rush')).toBeTruthy();
+    // Other has no anchor, so no premium can be chosen for it.
+    expect(screen.queryByTestId('terms-premium-d2-rush')).toBeNull();
+    // paid_ad has no percent: listed, not choosable.
+    expect(within(screen.getByTestId('terms-premium-d1-paid_ad')).getByText('whitelisting (set before use)').disabled).toBe(true);
+
+    fireEvent.change(screen.getByTestId('terms-premium-partnership_base-rush'), { target: { value: '48h' } });
+    fireEvent.change(screen.getByTestId('terms-premium-d1-rush'), { target: { value: '24h' } });
+    fireEvent.click(screen.getByTestId('terms-propose-run'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/events/ev-1/propose-terms',
+      { premiums: { partnership_base: [{ kind: 'rush', key: '48h' }], deliverables: { d1: [{ kind: 'rush', key: '24h' }] } } }
+    ));
+    await waitFor(() => expect(screen.getByTestId('terms-propose-gaps').textContent).toContain('Other is never priced automatically'));
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  test('pricing: ruling 1 — a partnership shows its base, and the appearance only when required', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], locked: false } });
+    const { putEvent } = renderTerms({ event: { ...EVENT, deal_type: 'brand_partnership', partnership_base_fee: 900 } });
+    expect(screen.getByTestId('terms-component-summary-partnership_base_fee').textContent).toBe('900 coins');
+    expect(screen.queryByTestId('terms-component-appearance_fee')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('terms-appearance-required'));
+    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ appearance_required: true }));
+  });
+
+  test('pricing: ruling 6 — a missing price reads Price required, and Start Episode is said to wait on it', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: TYPED, locked: false } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-fee-d2').textContent).toBe('Price required'));
+    expect(screen.getByTestId('terms-deliverable-type-d2').textContent).toBe('Other');
+    expect(screen.getByTestId('terms-price-missing').textContent).toContain('Start Episode waits on a price for: "One reel in the coat", "Host a Q&A".');
+  });
+
+  test('pricing: "No fee (0)" sets a Price required deliverable to 0 in one click', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: TYPED, locked: false } });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true, deliverable: { ...TYPED[1], fee: 0 } } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-nofee-d2')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('terms-deliverable-nofee-d2'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-1/deliverables/d2', { fee: 0 }));
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('pricing: no "No fee (0)" on a line that already has a price', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [{ ...TYPED[0], fee: 125 }], locked: false } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByText('One reel in the coat')).toBeTruthy());
+    expect(screen.queryByTestId('terms-deliverable-nofee-d1')).toBeNull();
+  });
+
+  test('pricing: without a deal type nothing is priced; a no-cash deal says so and cannot propose', async () => {
+    renderTerms();
+    expect(screen.getByTestId('terms-pricing-empty').textContent).toBe('Choose a deal type to price the deal.');
+    expect(screen.getByTestId('terms-propose-open').disabled).toBe(true);
+  });
+
+  test('pricing: gifted records its value, never paid (ruling 4)', async () => {
+    const { putEvent } = renderTerms({ event: { ...EVENT, deal_type: 'gifted' } });
+    expect(screen.getByTestId('terms-no-cash').textContent).toBe('Gifted: no cash income. The gifted value is recorded, never paid.');
+    expect(screen.getByTestId('terms-propose-open').disabled).toBe(true);
+    expect(screen.getByTestId('terms-component-summary-gifted_value').textContent).toBe('Not recorded');
+    fireEvent.click(screen.getByTestId('terms-component-edit-gifted_value'));
+    fireEvent.change(screen.getByTestId('terms-component-input-gifted_value'), { target: { value: '300' } });
+    fireEvent.click(screen.getByTestId('terms-component-save-gifted_value'));
+    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ gifted_value: 300 }));
+  });
+
+  test('pricing: drafted fees are labelled, and editing one component sends only that', async () => {
+    const event = {
+      ...EVENT, deal_type: 'appearance_plus_deliverables', appearance_fee: 450,
+      canon_consequences: { automation: { pricing_version: 1, auto_drafted: { appearance_fee: 'pricing', deliverable_fees: 'pricing' }, drafted_values: { appearance_fee: 450, deliverable_fees: { d1: 125 } } } },
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [{ ...TYPED[0], fee: 125 }], locked: false } });
+    const { putEvent } = renderTerms({ event });
+    expect(screen.getByTestId('terms-component-summary-appearance_fee').textContent).toBe('450 coins · Auto-drafted · pricing v1');
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-fee-d1').textContent).toBe('Fee 125 coins · Auto-drafted · pricing v1'));
+
+    fireEvent.click(screen.getByTestId('terms-component-edit-appearance_fee'));
+    fireEvent.change(screen.getByTestId('terms-component-input-appearance_fee'), { target: { value: '500' } });
+    fireEvent.click(screen.getByTestId('terms-component-save-appearance_fee'));
+    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ appearance_fee: 500 }));
+  });
+
+  test('pricing: the deliverable form offers only the fixed types (ruling 2)', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], locked: false } });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, deliverable: { id: 'd9' } } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-add')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('terms-deliverable-add'));
+    const select = screen.getByTestId('terms-deliverable-type');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose a type', 'Reel', 'Story Set (3)', 'Post', 'Photo Set', 'Other']);
+    fireEvent.change(select, { target: { value: 'other' } });
+    expect(screen.getByTestId('terms-deliverable-manual-note').textContent).toBe('Other is never priced automatically: set its fee.');
+    fireEvent.change(screen.getByTestId('terms-deliverable-description'), { target: { value: 'Host a Q&A' } });
+    fireEvent.click(screen.getByTestId('terms-deliverable-save'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/events/ev-1/deliverables',
+      expect.objectContaining({ description: 'Host a Q&A', deliverable_type: 'other' })
+    ));
+  });
+
+  test('pricing: locked shows the numbers, with no edit or propose control', async () => {
+    renderTerms({ locked: true, event: { ...EVENT, deal_type: 'paid_appearance', appearance_fee: 250 } });
+    expect(screen.getByTestId('terms-component-summary-appearance_fee').textContent).toBe('250 coins');
+    expect(screen.queryByTestId('terms-component-edit-appearance_fee')).toBeNull();
+    expect(screen.queryByTestId('terms-propose-open')).toBeNull();
   });
 
   test('deal type: editing sends only deal_type through the event PUT', async () => {
