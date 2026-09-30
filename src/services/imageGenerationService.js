@@ -15,14 +15,15 @@
  *     - Wardrobe item images
  *     - Object generation
  *
- * Cost model:
- *   Flux Dev:  $0.003/image
- *   Flux Pro:  $0.005/image
- *   DALL-E 3:  $0.04 (standard) / $0.08 (HD)
+ * Cost model: prices live in imageCostService.RATE_TABLE (Task #2387).
+ *   Every call is budget-gated before it runs and logged to ai_usage_logs
+ *   (imageCostService.runImageCall); spend is read from that table, so a
+ *   restart does not reset it.
  *
  * Caps:
  *   IMAGE_CALLS_PER_OPERATION (env, default: 3) — max calls per batch
- *   AI_DAILY_IMAGE_BUDGET_USD (env, default: 10) — daily spend cap
+ *   AI_DAILY_IMAGE_BUDGET_USD (env, default: 10) — daily image spend cap
+ *   AI_DAILY_BUDGET_USD (env, default: 50) — daily cap on all AI spend
  *
  * Environment variables:
  *   FAL_KEY              — fal.ai API key (for Flux)
@@ -33,6 +34,7 @@
  */
 
 const axios = require('axios');
+const imageCost = require('./imageCostService');
 
 // ── USE-CASE → PROVIDER ROUTING ─────────────────────────────────────────────
 // Maps use case tags to preferred provider
@@ -60,47 +62,15 @@ function getProvider(useCase) {
   return USE_CASE_PROVIDERS[useCase] || 'flux';
 }
 
-// ── DAILY IMAGE BUDGET TRACKING ─────────────────────────────────────────────
+// ── DAILY IMAGE BUDGET ──────────────────────────────────────────────────────
+// Spend is persisted in ai_usage_logs and read from there (imageCostService);
+// there is no in-memory counter.
 
-let dailyImageSpend = 0;
-let dailyImageDate = new Date().toISOString().slice(0, 10);
-let dailyImageCalls = 0;
-const DAILY_IMAGE_BUDGET = parseFloat(process.env.AI_DAILY_IMAGE_BUDGET_USD) || 10;
 const MAX_CALLS_PER_OP = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
 
-function checkImageBudget(estimatedCost) {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailyImageDate) {
-    dailyImageSpend = 0;
-    dailyImageCalls = 0;
-    dailyImageDate = today;
-  }
-  return (dailyImageSpend + estimatedCost) <= DAILY_IMAGE_BUDGET;
-}
-
-function recordImageSpend(cost) {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailyImageDate) {
-    dailyImageSpend = 0;
-    dailyImageCalls = 0;
-    dailyImageDate = today;
-  }
-  dailyImageSpend += cost;
-  dailyImageCalls += 1;
-  if (dailyImageSpend >= DAILY_IMAGE_BUDGET * 0.8) {
-    console.warn(`[ImageGen] Daily image spend $${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET} (${Math.round(dailyImageSpend / DAILY_IMAGE_BUDGET * 100)}%) — ${dailyImageCalls} calls`);
-  }
-}
-
+// Async since #2387: reads today's persisted image spend.
 function getImageBudgetStatus() {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailyImageDate) return { spend: 0, calls: 0, budget: DAILY_IMAGE_BUDGET, remaining: DAILY_IMAGE_BUDGET };
-  return {
-    spend: dailyImageSpend,
-    calls: dailyImageCalls,
-    budget: DAILY_IMAGE_BUDGET,
-    remaining: Math.max(0, DAILY_IMAGE_BUDGET - dailyImageSpend),
-  };
+  return imageCost.getImageBudgetStatus();
 }
 
 // ── SIZE MAPPING ─────────────────────────────────────────────────────────────
@@ -132,6 +102,13 @@ function normalizeSize(size) {
 
 // ── FLUX (fal.ai) ────────────────────────────────────────────────────────────
 
+const KONTEXT_MODEL = 'fal-ai/flux-pro/kontext';
+
+// Use flux-pro for HD quality, flux-dev for standard
+function fluxModelFor(options = {}) {
+  return options.quality === 'standard' ? 'fal-ai/flux/dev' : 'fal-ai/flux-pro/v1.1';
+}
+
 async function generateFlux(prompt, options = {}) {
   const FAL_KEY = process.env.FAL_KEY;
   if (!FAL_KEY) throw new Error('FAL_KEY not configured');
@@ -139,14 +116,13 @@ async function generateFlux(prompt, options = {}) {
   const size = normalizeSize(options.size);
   const imageSize = FLUX_SIZES[size] || FLUX_SIZES.landscape;
 
-  // Use flux-pro for HD quality, flux-dev for standard
-  const model = options.quality === 'standard'
-    ? 'fal-ai/flux/dev'
-    : 'fal-ai/flux-pro/v1.1';
+  const model = fluxModelFor(options);
+  const [width, height] = imageCost.falPresetSize(imageSize);
+  const plan = { model, width, height, count: 1 };
 
   console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${imageSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
-  const response = await axios.post(
+  const response = await imageCost.runImageCall(plan, () => axios.post(
     `https://fal.run/${model}`,
     {
       prompt: prompt.slice(0, 4000),
@@ -163,7 +139,7 @@ async function generateFlux(prompt, options = {}) {
       },
       timeout: 120000,
     }
-  );
+  ));
 
   const imageUrl = response.data?.images?.[0]?.url;
   if (!imageUrl) {
@@ -171,8 +147,7 @@ async function generateFlux(prompt, options = {}) {
     throw new Error(`Flux returned no image. Status: ${response.status}. Keys: ${Object.keys(response.data || {}).join(',')}`);
   }
 
-  const cost = options.quality === 'standard' ? 0.003 : 0.005;
-  recordImageSpend(cost);
+  const cost = imageCost.estimateImageCost(plan).usd;
 
   console.log(`[ImageGen] Flux success: ${imageUrl.slice(0, 80)}...`);
   return {
@@ -195,7 +170,7 @@ async function generateFlux(prompt, options = {}) {
  * identity — silhouette, color, pattern — much better than text-to-image
  * regenerated from a Claude Vision description.
  *
- * Cost: $0.04/image at the time of writing (same tier as DALL-E standard).
+ * Cost: per imageCostService.RATE_TABLE (fal-ai/flux-pro/kontext, per image).
  * The reference image can be passed as a publicly-reachable URL OR a base64
  * data URI — the caller chooses based on whether the S3 object is public.
  */
@@ -204,21 +179,15 @@ async function generateImageFromImage(referenceImageUrl, prompt, options = {}) {
   if (!FAL_KEY) throw new Error('FAL_KEY not configured');
   if (!referenceImageUrl) throw new Error('referenceImageUrl required');
 
-  const KONTEXT_COST = 0.04;
-  if (!checkImageBudget(KONTEXT_COST)) {
-    throw new Error(
-      `Daily image budget exceeded ($${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET}). ` +
-      `Try again tomorrow or increase AI_DAILY_IMAGE_BUDGET_USD.`
-    );
-  }
+  const plan = { model: KONTEXT_MODEL, count: 1 };
 
   const size = normalizeSize(options.size);
   const imageSize = FLUX_SIZES[size] || FLUX_SIZES.portrait || 'portrait_16_9';
 
   console.log(`[ImageGen] Flux Kontext | ${imageSize} | prompt: ${prompt.slice(0, 80)}...`);
 
-  const response = await axios.post(
-    'https://fal.run/fal-ai/flux-pro/kontext',
+  const response = await imageCost.runImageCall(plan, () => axios.post(
+    `https://fal.run/${KONTEXT_MODEL}`,
     {
       prompt: prompt.slice(0, 4000),
       image_url: referenceImageUrl,
@@ -234,7 +203,7 @@ async function generateImageFromImage(referenceImageUrl, prompt, options = {}) {
       },
       timeout: 180000, // Kontext is slower than flux-pro text-to-image
     }
-  );
+  ));
 
   const imageUrl = response.data?.images?.[0]?.url;
   if (!imageUrl) {
@@ -242,15 +211,14 @@ async function generateImageFromImage(referenceImageUrl, prompt, options = {}) {
     throw new Error(`Flux Kontext returned no image. Status: ${response.status}. Keys: ${Object.keys(response.data || {}).join(',')}`);
   }
 
-  recordImageSpend(KONTEXT_COST);
   console.log(`[ImageGen] Flux Kontext success: ${imageUrl.slice(0, 80)}...`);
 
   return {
     url: imageUrl,
     provider: 'flux-kontext',
-    model: 'fal-ai/flux-pro/kontext',
+    model: KONTEXT_MODEL,
     seed: response.data?.images?.[0]?.seed || null,
-    cost_estimate: KONTEXT_COST,
+    cost_estimate: imageCost.estimateImageCost(plan).usd,
   };
 }
 
@@ -266,7 +234,10 @@ async function generateDallE(prompt, options = {}) {
 
   console.log(`[ImageGen] DALL-E 3 ${quality} | ${dalleSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
-  const response = await axios.post(
+  const [width, height] = dalleSize.split('x').map(Number);
+  const plan = { model: 'dall-e-3', width, height, quality, count: 1 };
+
+  const response = await imageCost.runImageCall(plan, () => axios.post(
     'https://api.openai.com/v1/images/generations',
     {
       model: 'dall-e-3',
@@ -284,13 +255,13 @@ async function generateDallE(prompt, options = {}) {
       },
       timeout: 120000,
     }
-  );
+  ));
 
   const imageUrl = response.data?.data?.[0]?.url;
   if (!imageUrl) throw new Error('DALL-E 3 returned no image');
 
-  const cost = quality === 'hd' ? 0.08 : 0.04;
-  recordImageSpend(cost);
+  // No DALL-E 3 price in the rate table yet: null, never a guessed figure.
+  const cost = imageCost.estimateImageCost(plan).usd;
 
   console.log(`[ImageGen] DALL-E success (URL expires in ~1hr)`);
   return {
@@ -319,18 +290,32 @@ async function generateDallE(prompt, options = {}) {
  * @returns {{ url, provider, model, seed, cost_estimate, expires? }}
  */
 async function generateImage(prompt, options = {}) {
-  // Budget check — Flux Pro cost
-  const estimatedCost = 0.005;
-  if (!checkImageBudget(estimatedCost)) {
-    throw new Error(`Daily image budget exceeded ($${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET}). Try again tomorrow or increase AI_DAILY_IMAGE_BUDGET_USD.`);
-  }
-
+  // Budget check runs inside generateFlux (imageCostService.runImageCall).
   const provider = options.provider || getProvider(options.useCase);
 
   console.log(`[ImageGen] ${options.useCase || 'default'} → ${provider} | ${prompt.slice(0, 60)}...`);
 
   // All routes go to Flux Pro
   return generateFlux(prompt, options);
+}
+
+/**
+ * Estimated cost of a planned generateImage()/generateImageUrl() call with the
+ * same options, from the rate table (for showing cost before generating).
+ * Returns imageCostService.estimateImageCost's shape: { usd|null, unit,
+ * units, priced, model, provider, source }.
+ */
+function estimateGenerationCost(options = {}) {
+  const imageSize = FLUX_SIZES[normalizeSize(options.size)] || FLUX_SIZES.landscape;
+  const [width, height] = imageCost.falPresetSize(imageSize);
+  return imageCost.estimateImageCost({ model: fluxModelFor(options), width, height, count: 1 });
+}
+
+/**
+ * Estimated cost of a planned generateImageFromImage() (Flux Kontext) call.
+ */
+function estimateImageFromImageCost() {
+  return imageCost.estimateImageCost({ model: KONTEXT_MODEL, count: 1 });
 }
 
 /**
@@ -349,6 +334,8 @@ module.exports = {
   generateDallE,
   getProvider,
   getImageBudgetStatus,
+  estimateGenerationCost,
+  estimateImageFromImageCost,
   MAX_CALLS_PER_OP,
   USE_CASE_PROVIDERS,
 };

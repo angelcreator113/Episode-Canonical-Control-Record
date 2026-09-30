@@ -12,6 +12,7 @@
 
 const axios = require('axios');
 const Replicate = require('replicate');
+const { trackReplicate, isBudgetError } = require('./imageCostService');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
@@ -172,7 +173,7 @@ async function runLamaRemoval(imageUrl, maskUrl) {
   }
 
   console.log('[Inpainting] Using LaMa model for object removal');
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   let prediction;
   try {
@@ -189,6 +190,7 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
     console.error(`[Inpainting] LaMa API error (${status}):`, detail);
+    if (isBudgetError(err)) throw err; // keep the 429 and its message (#2387)
     throw new Error(`LaMa API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
@@ -286,7 +288,7 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
   }
 
   console.log('[Inpainting] Using FLUX Fill Pro premium removal');
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   const prompt = [
     'Remove masked object and reconstruct a realistic background.',
@@ -315,6 +317,7 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
       console.error(`[Inpainting] FLUX Fill Pro model-run error (${status}):`, detail);
+      if (isBudgetError(err)) throw err; // keep the 429 and its message (#2387)
       throw new Error(`FLUX Fill Pro model-run error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
     }
   }
@@ -333,6 +336,7 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
     console.error(`[Inpainting] FLUX Fill Pro API error (${status}):`, detail);
+    if (isBudgetError(err)) throw err; // keep the 429 and its message (#2387)
     throw new Error(`FLUX Fill Pro API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
@@ -430,7 +434,7 @@ async function runSdxlInpainting(imageUrl, maskUrl, prompt, options = {}) {
   const negativePrompt = 'text, watermark, logo, blurry, low quality, artifacts, seams, distorted, ghosting, smudges, duplicated textures, patches, painted look';
 
   console.log(`[Inpainting] Using SDXL inpainting: prompt="${prompt.slice(0, 80)}...", strength=${strength}`);
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   let prediction;
   try {
@@ -452,6 +456,7 @@ async function runSdxlInpainting(imageUrl, maskUrl, prompt, options = {}) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
     console.error(`[Inpainting] Replicate API error (${status}):`, detail);
+    if (isBudgetError(err)) throw err; // keep the 429 and its message (#2387)
     throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
@@ -488,7 +493,7 @@ async function removeImageBackground(imageUrl, entityId) {
   }
 
   console.log('[Inpainting] Removing background from reference image');
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   try {
     const output = await replicate.run('cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003', {
@@ -520,6 +525,7 @@ async function removeImageBackground(imageUrl, entityId) {
     return s3Url;
   } catch (err) {
     console.warn('[Inpainting] Background removal failed, using original image:', err.message);
+    if (isBudgetError(err)) throw err;
     return imageUrl;
   }
 }
@@ -852,6 +858,7 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
           resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
         } catch (fluxError) {
           console.warn('[Inpainting] FLUX premium removal failed; falling back to LaMa:', fluxError.message);
+          if (isBudgetError(fluxError)) throw fluxError;
           resultUrl = await runLamaRemoval(imageUrl, maskUrl);
         }
       } else {
@@ -861,6 +868,7 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
           resultUrl = await runLamaRemoval(imageUrl, maskUrl);
         } catch (lamaError) {
           console.warn('[Inpainting] LaMa removal failed; falling back to SDXL:', lamaError.message);
+          if (isBudgetError(lamaError)) throw lamaError;
           resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
         }
       }
@@ -876,6 +884,11 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
 
     return { inpainted_url: s3Url };
   } catch (error) {
+    // A budget refusal is a 429 too, but not the provider's: pass it through.
+    if (isBudgetError(error)) {
+      console.error(`[Inpainting] refused: ${error.message}`);
+      throw error;
+    }
     const status = Number.parseInt(String(error?.status || error?.response?.status || ''), 10);
     const isProviderRateLimit = status === 429 || /rate[-\s]?limit|throttled|too many requests/i.test(String(error?.message || ''));
 

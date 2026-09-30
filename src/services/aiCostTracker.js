@@ -65,7 +65,7 @@ function inferRouteName() {
   const lines = stack.split('\n');
   
   // Skip these service files — they're wrappers, not the actual callers
-  const skipServices = ['aiCostTracker', 'anthropic', 'index'];
+  const skipServices = ['aiCostTracker', 'imageCostService', 'anthropic', 'index'];
   
   let foundRoute = null;
   let foundService = null;
@@ -185,6 +185,16 @@ function refreshIfStale() {
 function getDailySpend() {
   rollDay();
   return spendCache.dbSpend + spendCache.pendingSpend + spendCache.persistedSpend;
+}
+
+// Today's spend, re-reading ai_usage_logs first when the cached figure is
+// stale. For async callers (image generation, #2387) that can wait for the
+// read, so a fresh process counts today's persisted spend on its first call.
+async function getFreshDailySpend() {
+  rollDay();
+  if (Date.now() - spendCache.fetchedAt >= SPEND_CACHE_MS) await refreshSpend();
+  else if (spendCache.inFlight) await spendCache.inFlight;
+  return getDailySpend();
 }
 
 function checkBudget(costEstimate) {
@@ -386,4 +396,7 @@ function applyPatch() {
 // Auto-apply on require
 applyPatch();
 
-module.exports = { calculateCost, MODEL_PRICING, getDailySpend, DAILY_BUDGET, SPEND_CACHE_MS, refreshSpend };
+module.exports = {
+  calculateCost, MODEL_PRICING, getDailySpend, getFreshDailySpend, DAILY_BUDGET, SPEND_CACHE_MS,
+  refreshSpend, recordSpend, inferRouteName,
+};

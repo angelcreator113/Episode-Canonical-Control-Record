@@ -18,6 +18,7 @@
 const sharp = require('sharp');
 const axios = require('axios');
 const Replicate = require('replicate');
+const { trackReplicate } = require('./imageCostService');
 const Anthropic = require('@anthropic-ai/sdk');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
@@ -189,7 +190,7 @@ async function aiUpscaleImage(imageUrl, options = {}) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const replicate = new Replicate({ auth: replicateToken });
+  const replicate = trackReplicate(new Replicate({ auth: replicateToken })); // budget-gated + logged (#2387)
 
   console.log(`[WardrobeImage] AI Upscale: Starting ${scale}x upscale...`);
 

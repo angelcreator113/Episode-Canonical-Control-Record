@@ -23,6 +23,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { isBudgetError } = require('../services/imageCostService');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
 const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../utils/eventVersion');
@@ -1650,7 +1651,7 @@ router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, a
     });
   } catch (err) {
     console.error('[InviteGen] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
@@ -3326,7 +3327,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, async 
     });
   } catch (err) {
     console.error('[VenueGen] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
@@ -4133,7 +4134,7 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', require
     });
   } catch (err) {
     console.error('[EpisodeTitleOverlay] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 

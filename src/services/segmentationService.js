@@ -9,6 +9,7 @@
  */
 
 const Replicate = require('replicate');
+const { trackReplicate, isBudgetError } = require('./imageCostService');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
@@ -222,7 +223,7 @@ async function segmentWithPoints(imageUrl, points, entityId) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   // Get image dimensions to convert normalized coords to pixel coords
   let imgWidth = 1024;
@@ -318,6 +319,10 @@ async function segmentWithPoints(imageUrl, points, entityId) {
       const s3Url = await storeMaskToS3(maskUrl, entityId, { seedPoint: firstPositive });
       return { maskUrl: s3Url };
     } catch (err) {
+      if (isBudgetError(err)) {
+        console.error(`[Segmentation] refused: ${err.message}`);
+        throw err; // budget refusal: not a rate limit, no retry, no fallback
+      }
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
 
@@ -357,6 +362,7 @@ async function segmentWithPoints(imageUrl, points, entityId) {
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+          if (isBudgetError(fallbackErr)) throw fallbackErr;
         }
       }
 
@@ -457,7 +463,7 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   let imgWidth = 1024;
   let imgHeight = 1024;
@@ -504,6 +510,7 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
           });
         } catch (multiErr) {
           console.warn('[Segmentation] Multi-point failed for grounded_sam, falling back to last include point:', multiErr.message);
+          if (isBudgetError(multiErr)) throw multiErr;
           // Find the last include point (label=1)
           let lastIncludeIdx = -1;
           for (let i = labels.length - 1; i >= 0; i--) {
@@ -552,6 +559,10 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
       const s3Url = await storeMaskToS3(maskUrl, entityId, { seedPoint: { x: seedPair[0], y: seedPair[1] } });
       return { maskUrl: s3Url };
     } catch (err) {
+      if (isBudgetError(err)) {
+        console.error(`[Segmentation] refused: ${err.message}`);
+        throw err; // budget refusal: not a rate limit, no retry, no fallback
+      }
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
 
@@ -593,6 +604,7 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+          if (isBudgetError(fallbackErr)) throw fallbackErr;
         }
       }
       throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
@@ -613,7 +625,7 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
   // Text-based detection requires Grounded SAM (SAM 2 base doesn't support text_prompt)
   const textModel = GROUNDED_SAM_MODEL;
   console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${textModel}`);
@@ -649,6 +661,10 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
       const s3Url = await storeMaskToS3(maskUrl, entityId);
       return { maskUrl: s3Url };
     } catch (err) {
+      if (isBudgetError(err)) {
+        console.error(`[Segmentation] refused: ${err.message}`);
+        throw err; // budget refusal: not a rate limit, no retry, no fallback
+      }
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
 
