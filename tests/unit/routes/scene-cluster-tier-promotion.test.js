@@ -43,7 +43,7 @@ const REQUIRE_AUTH_COUNTS = {
   'sceneTemplates.js': 6,      // 1 import + 5 handlers
   'sceneLibrary.js': 6,        // 1 import + 5 handlers (3 ex-authenticateToken + 2 ex-bare)
   'sceneProposeRoute.js': 7,   // 1 import + 6 handlers (1 with aiRateLimiter)
-  'sceneSetRoutes.js': 71,     // 1 import + 70 handlers (12 with aiRateLimiter)
+  'sceneSetRoutes.js': 75,     // 1 import + 74 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3)
   'sceneLinks.js': 5,          // 1 import + 4 handlers
 };
 
@@ -54,7 +54,7 @@ const AI_RATE_LIMITER_COUNTS = {
   'sceneTemplates.js': 0,
   'sceneLibrary.js': 0,
   'sceneProposeRoute.js': 3,   // 2 import-line matches + 1 handler (POST /propose-scene)
-  'sceneSetRoutes.js': 14,     // 2 import-line matches + 12 handler invocations
+  'sceneSetRoutes.js': 15,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison)
   'sceneLinks.js': 0,
 };
 
@@ -176,6 +176,12 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       });
     });
 
+    test('sceneSetRoutes.js — POST /model-comparison wrapped requireAuth + authorize ADMIN + aiRateLimiter (Task #2396)', () => {
+      expect(readSrc('sceneSetRoutes.js')).toMatch(
+        /router\.post\(['"]\/model-comparison['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
+      );
+    });
+
     test('sceneSetRoutes.js — exactly 12 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
@@ -192,17 +198,17 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
   });
 
   describe('CP4 zone aggregate consumer counts', () => {
-    test('CP4 zone contains 132 total requireAuth references across 6 files (6 imports + 126 handlers)', () => {
+    test('CP4 zone contains 136 total requireAuth references across 6 files (6 imports + 130 handlers; +4 Task #2396)', () => {
       const total = CP4_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(132);
+      expect(total).toBe(136);
     });
 
-    test('CP4 zone contains 17 total aiRateLimiter references (4 import-line matches + 13 handler invocations)', () => {
-      // sceneProposeRoute.js (3) + sceneSetRoutes.js (14) = 17.
+    test('CP4 zone contains 18 total aiRateLimiter references (4 import-line matches + 14 handler invocations)', () => {
+      // sceneProposeRoute.js (3) + sceneSetRoutes.js (15) = 18 (+1 Task #2396 POST /model-comparison).
       // Import lines have 2 matches each (destructure + module path) since
       // 'aiRateLimiter' appears in both `{ aiRateLimiter }` and `'.../aiRateLimiter'`.
       const total = CP4_FILES.reduce((sum, filename) => {
@@ -210,7 +216,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
         const matches = src.match(/\baiRateLimiter\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(17);
+      expect(total).toBe(18);
     });
 
     test('CP4 zone has zero optionalAuth references', () => {

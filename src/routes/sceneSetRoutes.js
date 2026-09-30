@@ -6,11 +6,13 @@ const { Op }  = require('sequelize');
 const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const { isBudgetError } = require('../services/imageCostService');
+const modelComparison = require('../services/sceneModelComparisonService');
 const artifactService    = require('../services/artifactDetectionService');
 const postProcessService = require('../services/postProcessingService');
 
@@ -153,6 +155,100 @@ router.get('/generation-check', requireAuth, (req, res) => {
   });
 });
 
+// ─── BASE STILL MODELS + MODEL COMPARISON (Task #2396) ───────────────────────
+// Registered before /:id so the literal paths are not read as ids.
+
+// GET /base-models — the models a set's base still can use, each with its
+// rate-table estimate, and the current default (SCENE_BASE_MODEL_DEFAULT).
+router.get('/base-models', requireAuth, (req, res) => {
+  try {
+    const models = Object.values(sceneGenService.SCENE_BASE_MODELS).map((cfg) => ({
+      key: cfg.key, label: cfg.label, model: cfg.model, provider: cfg.provider,
+      width: cfg.width, height: cfg.height, quality: cfg.quality,
+      estimate_usd: sceneGenService.estimateBaseStillCost(cfg.key).usd,
+    }));
+    res.json({ success: true, models, default_model: sceneGenService.defaultBaseModel() });
+  } catch (err) {
+    console.error('Scene Sets GET /base-models error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /model-comparison — ADMIN. Two prompts (or two scene set ids to copy
+// the description from) × the chosen models (default all three) → one scene
+// set per model per prompt, base stills only. Without confirm: true it
+// generates nothing and answers 400 CONFIRM_REQUIRED with the estimate.
+router.post('/model-comparison', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const plan = await modelComparison.planComparison(req.body, models);
+    if (req.body.confirm !== true) {
+      return res.status(400).json({
+        success: false,
+        code: 'CONFIRM_REQUIRED',
+        error: 'Review the estimate, then send the same request with confirm: true to generate.',
+        estimate: plan.estimate,
+        models: plan.modelKeys,
+      });
+    }
+    const missing = modelComparison.missingProviderKeys(plan.modelKeys);
+    if (missing.length) {
+      return res.status(503).json({ success: false, error: `Not configured: ${missing.join(', ')}` });
+    }
+    await modelComparison.assertComparisonBudget(plan.estimate);
+
+    const { group, sets } = await modelComparison.createComparisonSets(plan, models, {
+      requestedBy: req.user?.id || null,
+    });
+    res.status(202).json({
+      success: true,
+      data: {
+        group,
+        estimate: plan.estimate,
+        sets: sets.map((s) => ({
+          id: s.id, name: s.name, base_model: s.base_model,
+          prompt_index: s.base_generation.comparison_prompt_index,
+        })),
+        status: 'generating',
+      },
+    });
+
+    // Background: stills one after another (each budget-gated and logged).
+    modelComparison.runComparison(sets, models)
+      .then((results) => console.log(`[ModelComparison] ${group}: ${results.filter((r) => r.ok).length}/${results.length} stills generated`))
+      .catch((err) => console.error(`[ModelComparison] ${group} run failed:`, err.message));
+  } catch (err) {
+    console.error('Scene Sets POST /model-comparison error:', err);
+    if (res.headersSent) return;
+    if (isBudgetError(err)) return res.status(429).json({ success: false, code: err.code, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /model-comparison — recent comparison groups.
+router.get('/model-comparison', requireAuth, async (req, res) => {
+  try {
+    const groups = await modelComparison.listComparisons(require('../models'));
+    res.json({ success: true, groups });
+  } catch (err) {
+    console.error('Scene Sets GET /model-comparison error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /model-comparison/:group — the group side by side: per model, the two
+// stills, size, and the cost logged in ai_usage_logs.
+router.get('/model-comparison/:group', validateUUIDParam('group'), requireAuth, async (req, res) => {
+  try {
+    const data = await modelComparison.getComparison(req.params.group, require('../models'));
+    if (!data) return res.status(404).json({ success: false, error: 'Comparison not found' });
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Scene Sets GET /model-comparison/:group error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── POST /  — create a new scene set ─────────────────────────────────────────
 
 router.post('/', requireAuth, async (req, res) => {
@@ -172,10 +268,14 @@ router.post('/', requireAuth, async (req, res) => {
       time_of_day,
       season,
       world_location_id,
+      base_model,
     } = req.body;
 
     if (!name || !scene_type) {
       return res.status(400).json({ success: false, error: 'name and scene_type are required' });
+    }
+    if (base_model != null && !sceneGenService.isBaseModelKey(base_model)) {
+      return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
     }
 
     const createFields = {
@@ -192,6 +292,7 @@ router.post('/', requireAuth, async (req, res) => {
       time_of_day: time_of_day || null,
       season: season || null,
       notes: notes || null,
+      base_model: base_model || null,
       generation_status: 'pending',
     };
     let set;
@@ -265,10 +366,18 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       'base_runway_model', 'base_still_url', 'notes',
       'style_reference_url', 'negative_prompt', 'variation_count',
       'time_of_day', 'season',
+      'base_model',
     ];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    // base_model: one of SCENE_BASE_MODELS, or null/'' for the default (Task #2396).
+    if (updates.base_model !== undefined) {
+      if (updates.base_model === '' || updates.base_model === null) updates.base_model = null;
+      else if (!sceneGenService.isBaseModelKey(updates.base_model)) {
+        return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
+      }
     }
 
     // Handle room_properties — stored in visual_language JSONB
@@ -672,14 +781,17 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
       });
     }
 
-    if (!process.env.FAL_KEY && !process.env.RUNWAY_ML_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).' });
+    // The key the set's base model needs (Task #2396).
+    const baseModelKey = sceneGenService.resolveBaseModel(set);
+    const missingKeys = modelComparison.missingProviderKeys([baseModelKey]);
+    if (missingKeys.length) {
+      return res.status(503).json({ success: false, error: `Base model ${baseModelKey} needs ${missingKeys.join(', ')}, which is not configured.` });
     }
 
     await set.update({ generation_status: 'generating' });
 
     // Return immediately, generate in background
-    res.status(202).json({ success: true, data: { status: 'generating', message: 'Base generation started in background' } });
+    res.status(202).json({ success: true, data: { status: 'generating', base_model: baseModelKey, message: 'Base generation started in background' } });
 
     // Background generation
     try {

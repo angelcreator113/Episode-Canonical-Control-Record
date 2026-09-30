@@ -63,7 +63,21 @@ const RATE_TABLE = {
     provider: 'openai', model: 'gpt-image-1', unit: 'image', usd: null,
     bySizeQuality: { 'high:1536x1024': 0.25 },
     inputImageTokenUsdPerMillion: 10,
-    source: `${EVONI_OPENAI_2026_09_30}: high quality 1536x1024 $0.25 per image output, plus input image tokens at $10 per 1M for edits. Used by sceneGenerationService images/edits (generateDallEStill, cropAndOutpaint)`,
+    source: `${EVONI_OPENAI_2026_09_30}: high quality 1536x1024 $0.25 per image output, plus input image tokens at $10 per 1M for edits. Used by sceneGenerationService images/edits (generateDallEStill)`,
+  },
+  // Task #2396. Output priced per image; the input-image-token rate for
+  // edits is not given yet (null, not 0): runImageCall logs the output price
+  // and warns that the input tokens are unpriced.
+  // Sizes: 1024x1024, 1536x1024, 1024x1536 (and auto), quality low|medium|high,
+  // on /v1/images/generations and /v1/images/edits — per search-result
+  // summaries of developers.openai.com (models/gpt-image-1.5, images API
+  // reference) on 2026-09-30; the pages themselves were not reachable from
+  // the agent session, so these sizes are UNCONFIRMED against the primary doc.
+  'gpt-image-1.5': {
+    provider: 'openai', model: 'gpt-image-1.5', unit: 'image', usd: null,
+    bySizeQuality: { 'high:1536x1024': 0.20 },
+    inputImageTokenUsdPerMillion: null,
+    source: `Evoni, 2026-09-30 (Task #2396): high quality 1536x1024 $0.20 per image output. Input image tokens for edits: ${PRICE_NEEDED}. Used by sceneGenerationService (base still choice 'gpt-image-1.5', cropAndOutpaint)`,
   },
   // ── Replicate ─────────────────────────────────────────────────────────────
   'meta/sam-2-large': {
@@ -179,6 +193,9 @@ function estimateImageCost({ model, width, height, count = 1, provider = null, q
   return {
     model: rate.model, provider: rate.provider, unit: rate.unit, units, usd, priced, source: rate.source,
     inputImageTokenUsdPerMillion: rate.inputImageTokenUsdPerMillion || null,
+    // The model bills input image tokens but the table has no rate for them.
+    inputImageTokensUnpriced: Object.prototype.hasOwnProperty.call(rate, 'inputImageTokenUsdPerMillion')
+      && typeof rate.inputImageTokenUsdPerMillion !== 'number',
   };
 }
 
@@ -295,7 +312,7 @@ async function logImageUsage({
   try {
     const db = require('../models');
     if (!db.AIUsageLog) throw new Error('AIUsageLog model not loaded');
-    await db.AIUsageLog.create({
+    const row = await db.AIUsageLog.create({
       route_name: routeName || 'unknown',
       model_name: String(estimate.model || 'unknown').slice(0, 100),
       input_tokens: inputTokens || 0,
@@ -309,8 +326,10 @@ async function logImageUsage({
       billed_units: estimate.units,
     });
     if (markPersisted) markPersisted();
+    return { id: row && row.id != null ? row.id : null, cost };
   } catch (err) {
     console.error(`[ImageCost] could not write ai_usage_logs row for ${estimate.model}: ${err.message}`);
+    return { id: null, cost };
   }
 }
 
@@ -326,7 +345,15 @@ function inferRoute() {
 /**
  * Budget-gate, run and log one image call.
  *
- * @param {object} plan — { model, width?, height?, count?, provider?, routeName? }
+ * @param {object} plan — { model, width?, height?, count?, provider?, routeName?,
+ *   inputImages?, onLogged? }
+ *   inputImages: true for an edit that sends input images (so an unpriced
+ *     input-token rate is warned about even when the response reports none).
+ *   onLogged: called after a successful call is logged, with
+ *     { usageLogId, costUsd, estimateUsd, inputTokens, inputTokensUnpriced,
+ *       model, provider } — costUsd is what the ai_usage_logs row records
+ *     (null for an unpriced model). Used to record a call's true cost on the
+ *     record it produced (Task #2396).
  * @param {Function} fn — async () => provider result
  */
 async function runImageCall(plan, fn) {
@@ -343,10 +370,25 @@ async function runImageCall(plan, fn) {
     });
     throw err;
   }
-  const input = inputImageTokenCost(estimate, result);
-  await logImageUsage({
+  const input = inputImageTokenCost(estimate, result, { inputImages: Boolean(plan.inputImages) });
+  const logged = await logImageUsage({
     estimate, routeName, durationMs: Date.now() - startedAt, inputTokens: input.tokens, extraUsd: input.usd,
   });
+  if (typeof plan.onLogged === 'function') {
+    try {
+      plan.onLogged({
+        usageLogId: logged ? logged.id : null,
+        costUsd: logged ? logged.cost : null,
+        estimateUsd: estimate.usd,
+        inputTokens: input.tokens,
+        inputTokensUnpriced: Boolean(input.unpriced),
+        model: estimate.model,
+        provider: estimate.provider,
+      });
+    } catch (err) {
+      console.error(`[ImageCost] onLogged callback failed for ${estimate.model}: ${err.message}`);
+    }
+  }
   return result;
 }
 
@@ -355,11 +397,24 @@ async function runImageCall(plan, fn) {
  * input_tokens_details.image_tokens) and their cost at the model's
  * per-1M rate. { tokens: 0, usd: 0 } when the model has no such rate or the
  * response reports no usage.
+ *
+ * A model that bills input image tokens but has no rate in the table
+ * (inputImageTokenUsdPerMillion: null, e.g. gpt-image-1.5) returns
+ * { tokens, usd: 0, unpriced: true } and logs a warning whenever the response
+ * reports input image tokens or the call sent input images — the output price
+ * is still logged, but the input-token part is never silently counted as $0.
  */
-function inputImageTokenCost(estimate, result) {
+function inputImageTokenCost(estimate, result, { inputImages = false } = {}) {
   const rate = estimate && estimate.inputImageTokenUsdPerMillion;
   const usage = result && result.data && result.data.usage;
   const tokens = Number(usage && usage.input_tokens_details && usage.input_tokens_details.image_tokens) || 0;
+  if (estimate && estimate.inputImageTokensUnpriced && (tokens > 0 || inputImages)) {
+    console.warn(
+      `[ImageCost] input-image-token cost for ${estimate.model} edits is not priced ` +
+      `(${tokens} input image tokens reported) — logging the output price only; price needed from Evoni (Task #2396)`,
+    );
+    return { tokens, usd: 0, unpriced: true };
+  }
   if (!rate || tokens <= 0) return { tokens: 0, usd: 0 };
   return { tokens, usd: (tokens * rate) / 1e6 };
 }

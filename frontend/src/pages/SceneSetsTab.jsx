@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import apiClient from '../services/api';
 import './SceneSetsTab.css';
+import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -1319,6 +1320,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
+                    <BaseModelSelect
+                      set={set}
+                      onSaved={() => showToast('Base model saved')}
+                      onError={(msg) => showToast(msg, 'error')}
+                    />
                     {/* Description — view or safe edit mode */}
                     {localDesc && !editingDesc && (
                       <div className="scene-sets-overview-desc-wrap">
@@ -2307,6 +2313,7 @@ export default function SceneSetsTab() {
   const [filterType, setFilterType] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showModelCompare, setShowModelCompare] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
   const [descBuilderLoading, setDescBuilderLoading] = useState(false);
@@ -3003,6 +3010,13 @@ export default function SceneSetsTab() {
           >
             {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Set</>}
           </button>
+          <button
+            className="scene-sets-btn-details"
+            onClick={() => setShowModelCompare(v => !v)}
+            aria-expanded={showModelCompare}
+          >
+            <Sparkles size={14} /> Compare base models
+          </button>
           <div className="scene-sets-filters">
             <div className="scene-sets-search-wrap">
               <Search size={12} className="scene-sets-search-icon" />
@@ -3025,6 +3039,10 @@ export default function SceneSetsTab() {
           </div>
         </div>
       </div>
+
+      {showModelCompare && (
+        <SceneModelComparison onClose={() => setShowModelCompare(false)} />
+      )}
 
       {/* Create Form — minimal: just name + type */}
       {showCreateForm && (
