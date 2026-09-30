@@ -1814,26 +1814,21 @@ router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, as
       { replacements: { assetId, eventId } }
     );
 
-    // Auto-create a TimelinePlacement so the invite is queued for the
-    // video composer to render. Default: scene-start of the first
-    // scene, 5s duration, overlay z-index. Idempotent — re-approving
-    // the same invite won't pile up duplicate placements. Non-blocking
-    // so a failure here doesn't fail the approval response.
+    // P10 (Evoni, 2026-09-30; Task #2386): the approved invitation is the
+    // episode's invitation overlay — tagged, listed in that episode's
+    // overlays and placed on the invitation beat. Approving a new version
+    // replaces the old one (untagged, its placement removed). Before Start
+    // Episode there is no episode yet; Start Episode tags and places it.
+    // Idempotent; non-blocking so a failure here doesn't fail the approval.
     let placement = null;
+    let invitationOverlay = null;
     if (episodeId) {
       try {
-        const { placeOverlayOnFirstScene } = require('../services/timelinePlacementService');
-        placement = await placeOverlayOnFirstScene(models, {
-          episodeId,
-          assetId,
-          defaults: {
-            duration: 5,
-            zIndex: 20,
-            properties: { kind: 'invitation', source: 'approve-invitation' },
-          },
-        });
+        const { syncEpisodeInvitationOverlay } = require('../services/episodeInvitationOverlayService');
+        invitationOverlay = await syncEpisodeInvitationOverlay(models, { eventId, episodeId });
+        placement = invitationOverlay.placement;
       } catch (placeErr) {
-        console.warn('[approve-invitation] Placement skipped:', placeErr.message);
+        console.warn('[approve-invitation] Episode invitation overlay skipped:', placeErr.message);
       }
     }
 
@@ -1842,6 +1837,7 @@ router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, as
       message: 'Invitation approved and linked to event',
       episodeId,
       placement_id: placement?.id || null,
+      placement_anchor: invitationOverlay?.anchor || null,
     });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
