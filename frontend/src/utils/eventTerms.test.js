@@ -6,6 +6,7 @@ import {
   buildDeliverableBody, deliverableDraftFrom,
   DELIVERABLE_STATUS_FLOW, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel,
   formatFulfilmentDate, deliverableTimeline,
+  DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
 } from './eventTerms';
 
 describe('access requirements', () => {
@@ -133,5 +134,31 @@ describe('fulfilment (Task #1815)', () => {
       ['submitted', 'Submitted', '2026-09-22T12:00:00.000Z'],
     ]);
     expect(deliverableTimeline({ status: 'pending' })).toEqual([]);
+  });
+});
+
+describe('deal type (Task #2330)', () => {
+  const withDraft = (value, drafted, source = 'rule') => ({
+    deal_type: value,
+    canon_consequences: { automation: { auto_drafted: { deal_type: source }, drafted_values: { deal_type: drafted } } },
+  });
+
+  test('eight types, each with a label', () => {
+    expect(DEAL_TYPES).toHaveLength(8);
+    for (const t of DEAL_TYPES) expect(DEAL_TYPE_LABELS[t]).toBeTruthy();
+  });
+
+  test('state: Auto-drafted while equal to the draft, Edited once it differs, set with no draft, missing when empty', () => {
+    expect(describeDealType(withDraft('self_funded', 'self_funded'))).toEqual({ value: 'self_funded', label: 'Self-funded', state: 'auto_drafted', note: 'Auto-drafted · rule' });
+    expect(describeDealType(withDraft('gifted', 'self_funded'))).toMatchObject({ state: 'edited', note: 'Edited' });
+    expect(describeDealType({ deal_type: 'gifted' })).toMatchObject({ state: 'set', note: null });
+    expect(describeDealType({})).toEqual({ value: null, label: 'Not set', state: 'missing', note: null });
+  });
+
+  test('update body: only deal_type; unchanged and unknown values are caught', () => {
+    expect(buildDealTypeUpdate({ deal_type: 'gifted' }, 'paid_appearance')).toEqual({ body: { deal_type: 'paid_appearance' }, unchanged: false, error: null });
+    expect(buildDealTypeUpdate({ deal_type: 'gifted' }, 'gifted').unchanged).toBe(true);
+    expect(buildDealTypeUpdate({ deal_type: 'gifted' }, '')).toEqual({ body: { deal_type: null }, unchanged: false, error: null });
+    expect(buildDealTypeUpdate({}, 'sponsorship').error).toBeTruthy();
   });
 });

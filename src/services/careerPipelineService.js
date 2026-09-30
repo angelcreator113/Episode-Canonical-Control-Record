@@ -16,6 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { careerTierFromReputation } = require('../utils/careerTiers');
+const { syncDraftedDealType } = require('./dealTypeDraftService');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -278,6 +279,15 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
 
   // Link event back to opportunity
   await opp.update({ event_id: event.id || eventData.id });
+
+  // The deal type's first draft (Task #2330; dealTypeDraftService).
+  // After the deliverables and the opportunity link. With no sequelize
+  // (a models object without one) the event keeps no draft.
+  const dealDraft = await syncDraftedDealType(sequelize, event.id || eventData.id, { initial: true });
+  if (dealDraft.deal_type) {
+    if (typeof event.set === 'function') event.set('deal_type', dealDraft.deal_type);
+    else event.deal_type = dealDraft.deal_type;
+  }
 
   return {
     event: event.toJSON ? event.toJSON() : event,
