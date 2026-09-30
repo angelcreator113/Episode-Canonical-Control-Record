@@ -402,42 +402,17 @@ describe('evaluationFormula', () => {
   });
 
   describe('computeStatDeltas', () => {
-    it('should award correct coins for slay tier', () => {
-      const evaluation = { tier_final: 'slay' };
-      const deltas = computeStatDeltas(evaluation, {});
-      expect(deltas.coins).toBe(150);
+    // The tier reward and the paid-event bonus are retired for every
+    // completion (Q12, EVENT_EPISODE_FLOW.md §8(cc); deal build PR 5): the
+    // tier no longer moves coins in the preview.
+    it.each(['slay', 'pass', 'safe', 'fail'])('the %s tier moves no coins on its own', (tier) => {
+      const deltas = computeStatDeltas({ tier_final: tier }, {});
+      expect(deltas.coins).toBe(0);
     });
 
-    it('should award correct coins for pass tier', () => {
-      const evaluation = { tier_final: 'pass' };
-      const deltas = computeStatDeltas(evaluation, {});
-      expect(deltas.coins).toBe(75);
-    });
-
-    it('should award correct coins for safe tier', () => {
-      const evaluation = { tier_final: 'safe' };
-      const deltas = computeStatDeltas(evaluation, {});
-      expect(deltas.coins).toBe(25);
-    });
-
-    it('should penalise coins for fail tier', () => {
-      const evaluation = { tier_final: 'fail' };
-      const deltas = computeStatDeltas(evaluation, {});
-      expect(deltas.coins).toBe(-25);
-    });
-
-    it('should deduct event cost from coins', () => {
-      const evaluation = { tier_final: 'slay' };
-      const deltas = computeStatDeltas(evaluation, { cost: 50 });
-      // 150 (slay reward) - 50 (cost) + 50 (paid event slay bonus) = 150
-      expect(deltas.coins).toBe(150);
-    });
-
-    it('should give paid event bonus for slay on paid events', () => {
-      const evaluation = { tier_final: 'slay' };
-      const deltas = computeStatDeltas(evaluation, { cost: 100 });
-      // 150 - 100 (cost) + 50 (paid slay bonus) = 100
-      expect(deltas.coins).toBe(100);
+    it('should deduct event cost from coins, with no paid-event bonus', () => {
+      expect(computeStatDeltas({ tier_final: 'slay' }, { cost: 50 }).coins).toBe(-50);
+      expect(computeStatDeltas({ tier_final: 'pass' }, { cost: 100 }).coins).toBe(-100);
     });
 
     it('should apply stat deltas for slay', () => {
@@ -460,7 +435,7 @@ describe('evaluationFormula', () => {
       const evaluation = { tier_final: 'pass' };
       const overrides = [{ costs: { coins: -25 } }];
       const deltas = computeStatDeltas(evaluation, {}, overrides);
-      expect(deltas.coins).toBe(75 - 25);
+      expect(deltas.coins).toBe(-25);
     });
 
     it('should apply override impacts', () => {

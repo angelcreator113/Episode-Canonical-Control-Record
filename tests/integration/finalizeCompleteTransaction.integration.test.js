@@ -100,7 +100,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const rows = await ledger(ids);
     expect(count(rows, 'event_entry')).toBe(1);
-    expect(count(rows, 'tier_reward')).toBe(1);
+    // The tier reward is retired for every completion (Q12; deal build PR 5).
+    expect(count(rows, 'tier_reward')).toBe(0);
     expect(await status(ids)).toBe('accepted');
     // D1 (Task #2247): coins are the ledger, seeded once with the starting
     // balance, not the row's old 1000 plus a delta.
@@ -121,7 +122,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(results.filter((r) => r.already_completed)).toHaveLength(1);
     const rows = await ledger(ids);
     expect(count(rows, 'event_entry')).toBe(1);
-    expect(count(rows, 'tier_reward')).toBe(1);
+    // The tier reward is retired for every completion (Q12; deal build PR 5).
+    expect(count(rows, 'tier_reward')).toBe(0);
     expect(await coins(ids)).toBe(await getCurrentBalance(sequelize, ids.show));
     expect(await coins(ids)).toBe(DEFAULT_STARTING_BALANCE + done[0].stat_deltas.coins);
   });

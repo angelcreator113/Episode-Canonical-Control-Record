@@ -21,9 +21,18 @@ let mockRaceNextUpdate = false;
 
 jest.mock('../../../src/models', () => ({
   sequelize: {
+    // The status POST moves a row and books its content fee (deal build PR 5)
+    // in one transaction; here the callback just runs.
+    transaction: jest.fn(async (fn) => fn({})),
     query: jest.fn(async (sql, opts = {}) => {
       const r = opts.replacements || {};
       mockCalls.push({ sql, replacements: r });
+      // The approval's deal read: these events are legacy (no deal type), so
+      // no content fee is booked and the ledger is not touched.
+      if (/^SELECT id, name, deal_type, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId$/.test(sql)) {
+        const ev = mockEvents[r.eventId];
+        return [ev ? [{ ...ev, deal_type: null }] : []];
+      }
       if (/FROM world_events WHERE id = :eventId AND show_id = :showId/.test(sql)) {
         const ev = mockEvents[r.eventId];
         return [ev && ev.show_id === r.showId ? [ev] : []];

@@ -3736,6 +3736,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{income.toLocaleString()}</div>
                             {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {fc.income.event_payment}</div>}
                             {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content est: +{fc.income.content_revenue_est}</div>}
+                            {/* A deal's payouts (deal build PR 5): components at Complete, content fees on approval. */}
+                            {fc?.income?.deal_components > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Deal fees: {fc.income.deal_components}</div>}
+                            {fc?.income?.content_fees > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content fees: +{fc.income.content_fees}</div>}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
                             <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses (coins)</div>
@@ -3780,13 +3783,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             </div>
                           </div>
                         </div>
-                        {/* Tier-dependent income — what the episode actually
-                            pays out if it lands SLAY or PASS. Mirrors the
-                            tier_reward + paid_bonus + event_reward transactions
-                            episodeCompletionService writes. Without this row
-                            the Net P&L undercounts and creators get a
-                            "where did the extra coins come from?" surprise
-                            on Complete. */}
+                        {/* Tier-dependent income — only a deal's contractual
+                            bonus (bonus_terms), paid at Complete for the tier
+                            it names. The generic tier reward, paid bonus and
+                            event reward are retired (Q12; deal build PR 5), so
+                            this row shows only when the deal contains a bonus. */}
                         {fc?.tier_bonuses && (fc.tier_bonuses.slay.total !== 0 || fc.tier_bonuses.pass.total !== 0) && (
                           <div style={{ marginTop: 8, padding: '8px 10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8 }}>
                             <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#854d0e', marginBottom: 4 }}>
@@ -3797,9 +3798,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               { tier: 'pass', label: '✨ If PASS', bonus: fc.tier_bonuses.pass, projected: fc.projected_balance?.if_pass },
                             ].map(row => {
                               const parts = [];
-                              if (row.bonus.tier_reward !== 0) parts.push(`tier ${row.bonus.tier_reward > 0 ? '+' : ''}${row.bonus.tier_reward}`);
-                              if (row.bonus.paid_bonus > 0) parts.push(`paid +${row.bonus.paid_bonus}`);
-                              if (row.bonus.event_reward > 0) parts.push(`reward +${row.bonus.event_reward}`);
+                              if (row.bonus.deal_bonus > 0) parts.push(`deal bonus +${row.bonus.deal_bonus}`);
                               return (
                                 <div key={row.tier} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: '#854d0e', marginBottom: 2 }}>
                                   <span>{row.label} <span style={{ fontSize: 9, color: '#a16207' }}>· {parts.join(', ')}</span></span>

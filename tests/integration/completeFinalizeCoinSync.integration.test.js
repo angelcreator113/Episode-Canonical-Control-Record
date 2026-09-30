@@ -119,7 +119,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(second.already_completed).toBe(true);
     const rows = await ledgerRows(show);
     expect(count(rows, 'event_entry')).toBe(1);
-    expect(count(rows, 'tier_reward')).toBeLessThanOrEqual(1);
+    // The tier reward is retired for every completion (Q12; deal build PR 5).
+    expect(count(rows, 'tier_reward')).toBe(0);
     expect(await coins(show)).toBe(afterFirstComplete);
     await expectCoinsMatchLedger(show);
   });

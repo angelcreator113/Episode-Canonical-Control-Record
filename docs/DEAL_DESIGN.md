@@ -796,6 +796,47 @@ holds the rules (`DEAL_PLANS`, `EVENT_COMPONENTS`, `DELIVERABLE_ANCHORS`,
 
 ---
 
+## 13. What deal build PR 5 builds (the payouts)
+
+`src/services/dealPayoutService.js` holds the rules. Money only from
+accepted terms (Law 8).
+
+- **At Complete accepted** (QUESTION 1), a cash deal is paid each component
+  its deal type carries (§12), each under its own ledger name (Evoni's
+  answer 1, §10.3): `appearance_fee`, `partnership_base_fee`,
+  `performance_fee`. Each row is `source_type 'event'`, `source_id` the
+  event, with `metadata.payer` (the brand for a partnership base, else the
+  host, or the brand when the event has one) and the payer's name.
+- **The deal bonus (Q12):** paid at Complete as `deal_bonus` only when the
+  accepted terms name the tier reached. **`bonus_terms` is
+  `{ slay?, pass?, safe? }`, coins by evaluation tier.** RULED (Evoni,
+  2026-09-30): "A deal bonus is stored as amounts by evaluation tier, e.g. { slay: 200, pass: 100 }; it pays only the amount for the tier reached; FAIL never pays; editable under Deal price until Start Episode." The Event Package's Deal price block edits it
+  for cash deals; the event PUT validates it; it locks with the terms.
+  Propose terms never adds one.
+- **On approval:** a deliverable of a deal that pays deliverables is paid
+  its fee as `content_fee` (`source_type 'deliverable'`, `source_id` the
+  deliverable, `metadata.owed_to`), in the same transaction as the move to
+  approved, with the show's ledger locked and the coin cache synced (D1).
+- **Once each:** every payout writer holds the show's ledger lock and books
+  a row only when no executed row of that category and source exists. The
+  partial unique index is the backstop: migration `20260930160000` rebuilds
+  PR 1's `financial_transactions_deal_payout_once` for the five categories,
+  guarded by its definition in `pg_indexes`. It ships in the same manual
+  deploy as #2303 (answer 1).
+- **Retired for every completion** (Q12 and the follow-ups of §11.2): the
+  tier reward, the paid bonus (`tier_paid_bonus`) and the event reward
+  (`event_reward`) are no longer booked, previewed
+  (`evaluationFormula.computeStatDeltas`) or forecast. The event's stat
+  rewards on SLAY or PASS (reputation, brand trust, influence) stay.
+- **Legacy events** (no deal type) keep `event_payment` and the 10%
+  `content_revenue` (D8). A deal event books neither, and its old
+  `is_paid` / `payment_amount` Compensation reads as not paid.
+- **Planned money** in the Money tab's expected lines and the forecast now
+  lists a deal's components and content fees; the Planned / Pending /
+  Posted split is PR 6.
+
+---
+
 ## What this note does not do
 
 - It changes no code, and writes no migration and no test.

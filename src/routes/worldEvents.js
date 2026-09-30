@@ -762,6 +762,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // gifted deal's non-cash value.
       'appearance_fee', 'partnership_base_fee', 'performance_fee',
       'appearance_required', 'gifted_value',
+      // A contractual performance bonus, only when the accepted deal
+      // contains one (Q12; deal build PR 5): { slay?, pass?, safe? } coins
+      // by evaluation tier, paid at Complete (dealPayoutService). Locks with
+      // the terms.
+      'bonus_terms',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -789,7 +794,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
       'required_ui_overlays', 'rewards', 'requirements', 'color_palette',
-      'restrictions',
+      'restrictions', 'bonus_terms',
     ]);
 
     const normalizeNullLike = (value) => {
@@ -854,6 +859,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
             error: 'Invalid value for deal_type',
             message: `deal_type must be one of: ${DEAL_TYPES.join(', ')}, or null`,
           });
+        }
+
+        if (field === 'bonus_terms') {
+          const { normalizeBonusTerms } = require('../services/dealPayoutService');
+          const normalized = normalizeBonusTerms(val);
+          if (normalized.error) {
+            return res.status(400).json({ success: false, error: 'Invalid value for bonus_terms', message: normalized.error });
+          }
+          val = normalized.value;
         }
 
         if (field === 'restrictions' && val !== null) {
@@ -3041,7 +3055,9 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     try {
       const [eventRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type,
+                host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
+                appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -3050,7 +3066,9 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
       const [fallbackRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type,
+                host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
+                appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -3132,58 +3150,46 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
     }
 
-    const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
-    const isPaid = truthy.has(event.is_paid);
-
     // ── Income side ─────────────────────────────────────────────────
-    const eventPayment = isPaid ? (parseFloat(event.payment_amount) || 0) : 0;
-    // Content fee uses the same rule as finalize-financials: paid brand
-    // deals get a 10% brand-deal content fee on top of event payment. No
-    // delivery is checked (Task #1808).
+    // A legacy event: payment_amount when paid, plus the 10% brand-deal
+    // content fee finalize-financials books (no delivery is checked, Task
+    // #1808). A deal event (deal build PR 5; dealPayoutService): its
+    // components, paid at Complete, and its deliverables' content fees,
+    // paid on approval; normalizePaidFreeFlags gives it no payment_amount.
+    const { eventPayment } = normalizePaidFreeFlags(event);
     const contentRevenueEst = (event.event_type === 'brand_deal' && eventPayment > 0)
       ? Math.round(eventPayment * 0.1)
       : 0;
+    let dealComponentsTotal = 0;
+    let contentFeesTotal = 0;
+    if (isDeal) {
+      const { completionPayouts, contentFeeFor } = require('../services/dealPayoutService');
+      const { listEventDeliverables } = require('../services/eventTermsService');
+      dealComponentsTotal = completionPayouts(event, null).reduce((sum, p) => sum + p.amount, 0);
+      const deliverables = await listEventDeliverables(models.sequelize, event.id);
+      contentFeesTotal = deliverables.reduce((sum, d) => sum + contentFeeFor(event, d), 0);
+    }
 
     const income = {
       event_payment: eventPayment,
       content_revenue_est: contentRevenueEst,
-      total: eventPayment + contentRevenueEst,
+      deal_components: dealComponentsTotal,
+      content_fees: contentFeesTotal,
+      total: eventPayment + contentRevenueEst + dealComponentsTotal + contentFeesTotal,
     };
 
     // ── Tier-dependent bonuses (forecast only) ──────────────────────────
-    // Mirrors the income episodeCompletionService writes when the tier is
-    // finalized. Splits into per-tier so the UI can show "if SLAY/PASS"
-    // qualifiers alongside the always-pays income above. Without this,
-    // the preview undercounts by the tier_reward + paid_bonus + event_reward
-    // amounts and creators get a "where did the extra coins come from"
-    // surprise on Complete.
-    //
-    //   tier_reward    {slay:+150, pass:+75, safe:+25, fail:-25}  every tier
-    //   paid_bonus     {slay:+50,  pass:+25}                       only when event.cost_coins > 0
-    //   event_reward   event.rewards.coins                         only on slay/pass
-    const eventRewards = (() => {
-      const r = event.rewards;
-      if (!r) return {};
-      if (typeof r === 'object') return r;
-      try { return JSON.parse(r); } catch { return {}; }
-    })();
-    const eventRewardCoins = parseInt(eventRewards.coins, 10) || 0;
-    const tierBonuses = {
-      slay: {
-        tier_reward: 150,
-        paid_bonus: eventCost > 0 ? 50 : 0,
-        event_reward: eventRewardCoins,
-        total: 150 + (eventCost > 0 ? 50 : 0) + eventRewardCoins,
-      },
-      pass: {
-        tier_reward: 75,
-        paid_bonus: eventCost > 0 ? 25 : 0,
-        event_reward: eventRewardCoins,
-        total: 75 + (eventCost > 0 ? 25 : 0) + eventRewardCoins,
-      },
-      safe: { tier_reward: 25, paid_bonus: 0, event_reward: 0, total: 25 },
-      fail: { tier_reward: -25, paid_bonus: 0, event_reward: 0, total: -25 },
-    };
+    // Only a deal's contractual bonus (bonus_terms, by evaluation tier) now
+    // depends on the tier. The generic tier reward, the paid bonus and the
+    // event reward are retired for every completion (Q12 and Evoni's
+    // follow-ups, EVENT_EPISODE_FLOW.md §8(cc); deal build PR 5), so a legacy
+    // event's tiers all add 0.
+    const { normalizeBonusTerms } = require('../services/dealPayoutService');
+    const bonusTerms = (isDeal && normalizeBonusTerms(event.bonus_terms).value) || {};
+    const tierBonuses = Object.fromEntries(['slay', 'pass', 'safe', 'fail'].map((tier) => {
+      const dealBonus = tier === 'fail' ? 0 : (bonusTerms[tier] || 0);
+      return [tier, { deal_bonus: dealBonus, total: dealBonus }];
+    }));
     const itemisedLala = itemised ? itemised.lala_total : 0;
     const expenses = {
       event_cost: eventCost,

@@ -462,6 +462,51 @@ export function buildComponentFeeUpdate(field, raw) {
   return { body: { [field]: n } };
 }
 
+// ─── Performance bonus (deal build PR 5) ────────────────────────────────
+// Q12 (EVENT_EPISODE_FLOW.md §8(cc)): "A performance bonus is paid only when
+// the accepted deal explicitly contains one; SLAY can trigger that
+// contractual bonus." bonus_terms is { slay?, pass?, safe? }: coins by
+// evaluation tier, paid at Complete for the tier reached. Propose terms never
+// adds one. It locks with the terms.
+export const BONUS_TIERS = ['slay', 'pass', 'safe'];
+export const BONUS_TIER_LABELS = { slay: 'SLAY', pass: 'PASS', safe: 'SAFE' };
+
+function parseBonusTerms(value) {
+  if (value == null) return {};
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) || {}; } catch { return {}; }
+  }
+  return typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+/** { set, label }: the deal's bonus in words ("SLAY 200 · PASS 100"), or none. */
+export function describeBonusTerms(event) {
+  const terms = parseBonusTerms(event?.bonus_terms);
+  const parts = BONUS_TIERS.filter((t) => Number(terms[t]) > 0).map((t) => `${BONUS_TIER_LABELS[t]} ${Number(terms[t])} coins`);
+  return parts.length
+    ? { set: true, label: parts.join(' · ') }
+    : { set: false, label: 'None: the deal contains no bonus' };
+}
+
+/** A form draft: { slay, pass, safe } as strings. */
+export function bonusDraftFrom(event) {
+  const terms = parseBonusTerms(event?.bonus_terms);
+  return Object.fromEntries(BONUS_TIERS.map((t) => [t, terms[t] == null ? '' : String(terms[t])]));
+}
+
+/** The event PUT body for a bonus draft: { body } or { error }. Empty tiers are left out; all empty is null. */
+export function buildBonusTermsUpdate(draft) {
+  const value = {};
+  for (const t of BONUS_TIERS) {
+    const text = String(draft?.[t] ?? '').trim();
+    if (text === '') continue;
+    const n = Number(text);
+    if (!Number.isInteger(n) || n < 1) return { error: `${BONUS_TIER_LABELS[t]}: a whole number of Prime Coins, 1 or more` };
+    value[t] = n;
+  }
+  return { body: { bonus_terms: Object.keys(value).length ? value : null } };
+}
+
 export const PREMIUM_KIND_LABELS = { rush: 'Rush', usage: 'Usage', exclusivity: 'Exclusivity', paid_ad: 'Paid ad' };
 
 /**
