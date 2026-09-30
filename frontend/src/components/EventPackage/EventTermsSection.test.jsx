@@ -136,7 +136,48 @@ describe('EventTermsSection', () => {
     expect(screen.queryByTestId('terms-deliverable-add')).toBeNull();
     expect(screen.queryByTestId('terms-restriction-input')).toBeNull();
     expect(screen.queryByTestId('terms-compensation-edit')).toBeNull();
+    expect(screen.queryByTestId('terms-deal-type-edit')).toBeNull();
     expect(screen.queryByLabelText('Remove Sponsored content')).toBeNull();
+  });
+
+  // Deal build PR 2 (Task #2330): the deal type, drafted by the server's
+  // fixed rule, labelled per doctrine rule 14, editable until the lock.
+  const drafted = (dealType, draftedValue = dealType, source = 'rule') => ({
+    ...EVENT,
+    deal_type: dealType,
+    canon_consequences: { automation: { auto_drafted: { deal_type: source }, drafted_values: { deal_type: draftedValue } } },
+  });
+
+  test('deal type: a drafted value reads Auto-drafted · <source>', async () => {
+    renderTerms({ event: drafted('invited_comped') });
+    expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Invited, comped · Auto-drafted · rule');
+  });
+
+  test('deal type: from an opportunity, and once changed it reads Edited', async () => {
+    renderTerms({ event: drafted('paid_appearance', 'paid_appearance', 'opportunity') });
+    expect(screen.getByTestId('terms-deal-type-state').textContent).toContain('Auto-drafted · opportunity');
+  });
+
+  test('deal type: a value different from the draft reads Edited', async () => {
+    renderTerms({ event: drafted('gifted', 'invited_comped') });
+    expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Gifted · Edited');
+  });
+
+  test('deal type: no value and no draft reads Not set, with no label', async () => {
+    renderTerms();
+    expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Not set');
+    expect(screen.queryByTestId('terms-deal-type-state')).toBeNull();
+  });
+
+  test('deal type: editing sends only deal_type through the event PUT', async () => {
+    const { putEvent } = renderTerms({ event: drafted('invited_comped') });
+    fireEvent.click(screen.getByTestId('terms-deal-type-edit'));
+    const select = screen.getByTestId('terms-deal-type-select');
+    expect(select.value).toBe('invited_comped');
+    expect(screen.getByTestId('terms-deal-type-save').disabled).toBe(true);
+    fireEvent.change(select, { target: { value: 'paid_appearance' } });
+    fireEvent.click(screen.getByTestId('terms-deal-type-save'));
+    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ deal_type: 'paid_appearance' }));
   });
 
   test('before Start Episode: no fulfilment control', async () => {

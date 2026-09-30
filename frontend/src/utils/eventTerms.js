@@ -18,6 +18,7 @@
  *
  * Pure; no I/O.
  */
+import dealTypesMirror from '../constants/dealTypes.json';
 
 // The access-requirement keys the next-event suggester checks (the
 // suggest-events route in src/routes/careerGoals.js) and the old editor
@@ -279,4 +280,53 @@ export function deliverableTimeline(d) {
     out.push({ status, label: DELIVERABLE_STATUS_LABELS[status], at: new Date(at).toISOString(), text });
   }
   return out;
+}
+
+// ─── Deal type (deal build PR 2, Task #2330) ─────────────────────────────
+// The eight deal types (docs/DEAL_DESIGN.md §2), mirrored from
+// WorldEvent.DEAL_TYPES in constants/dealTypes.json (pinned by
+// tests/unit/models/WorldEvent.dealTypeMirror.test.js). The server drafts
+// one at creation by a fixed rule (dealTypeDraftService) and records it in
+// automation.auto_drafted / drafted_values, as the other drafted fields are
+// (doctrine rule 14): Auto-drafted while the column equals the drafted copy,
+// Edited once it differs.
+export const DEAL_TYPES = dealTypesMirror.deal_type;
+
+export const DEAL_TYPE_LABELS = {
+  self_funded: 'Self-funded',
+  invited_comped: 'Invited, comped',
+  gifted: 'Gifted',
+  paid_appearance: 'Paid appearance',
+  paid_deliverables: 'Paid deliverables',
+  appearance_plus_deliverables: 'Appearance plus deliverables',
+  performance_booking: 'Performance booking',
+  brand_partnership: 'Brand partnership',
+};
+
+const DEAL_TYPE_SOURCE_LABELS = { opportunity: 'opportunity', rule: 'rule' };
+
+/**
+ * { value, label, state, note } for the Terms area. state is
+ * 'auto_drafted', 'edited', 'set' (a value with no draft behind it) or
+ * 'missing'; note is the rule 14 label, or null.
+ */
+export function describeDealType(event) {
+  const value = event?.deal_type || null;
+  const automation = event?.canon_consequences?.automation || {};
+  const source = automation.auto_drafted?.deal_type || null;
+  const drafted = automation.drafted_values || {};
+  const hasDraft = Boolean(source) && Object.prototype.hasOwnProperty.call(drafted, 'deal_type');
+  let state = value ? 'set' : 'missing';
+  if (value && hasDraft) state = drafted.deal_type === value ? 'auto_drafted' : 'edited';
+  let note = null;
+  if (state === 'auto_drafted') note = `Auto-drafted · ${DEAL_TYPE_SOURCE_LABELS[source] || source}`;
+  else if (state === 'edited') note = 'Edited';
+  return { value, label: value ? (DEAL_TYPE_LABELS[value] || value) : 'Not set', state, note };
+}
+
+/** The event PUT body for a new deal type; unchanged when it equals the stored one. */
+export function buildDealTypeUpdate(event, next) {
+  const value = next || null;
+  if (value !== null && !DEAL_TYPES.includes(value)) return { body: null, unchanged: false, error: 'Choose one of the listed deal types.' };
+  return { body: { deal_type: value }, unchanged: value === (event?.deal_type || null), error: null };
 }

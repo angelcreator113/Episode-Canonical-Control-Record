@@ -15,6 +15,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { draftEventConcept } = require('./eventConceptDraftService');
+const { syncDraftedDealType } = require('./dealTypeDraftService');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -601,6 +602,9 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
       console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
     }
   }
+  // The deal type's first draft (Task #2330; dealTypeDraftService).
+  // After the deliverables, so a brand-owed one can count.
+  await syncDraftedDealType(sequelize, eventId, { initial: true });
 
   // Update opportunity with event link
   await sequelize.query(
@@ -851,6 +855,8 @@ async function chainEventFromMomentum(parentEventId, chainConfig, showId, models
      :status, NOW(), NOW())`,
     { replacements: eventData }
   );
+  // The deal type's first draft (Task #2330; dealTypeDraftService).
+  await syncDraftedDealType(sequelize, eventId, { initial: true });
 
   // Update parent event's seeds_future_events
   try {

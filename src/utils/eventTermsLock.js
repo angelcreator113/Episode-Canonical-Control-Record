@@ -26,6 +26,13 @@ const LOCKED_EVENT_FIELDS = {
   requirements: 'access requirements',
   is_paid: 'compensation',
   payment_amount: 'compensation',
+  // Deal terms (deal build PR 2, Task #2330; §8(cc) QUESTION 14): they lock
+  // with the rest of the compensation. The deliverable routes hold their own
+  // lock for each deliverable's fee.
+  deal_type: 'compensation',
+  appearance_fee: 'compensation',
+  bonus_terms: 'compensation',
+  gifted_value: 'compensation',
   restrictions: 'restrictions',
   used_in_episode_id: 'its episode link',
 };
@@ -62,6 +69,12 @@ function parseJson(value) {
 
 const TRUE_LIKE = new Set([true, 'true', 1, '1', 'yes']);
 
+function wholeNumber(v) {
+  if (v == null || v === '') return 'null';
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.trunc(n)) : `invalid:${String(v)}`;
+}
+
 // Each locked field reduced to a comparable form. Empty requirements ({} or
 // null) and empty restrictions ([] or null) compare equal.
 const comparable = {
@@ -71,11 +84,14 @@ const comparable = {
     return stable(parsed);
   },
   is_paid: (v) => (TRUE_LIKE.has(v) ? 'true' : 'false'),
-  payment_amount: (v) => {
-    if (v == null || v === '') return 'null';
-    const n = Number(v);
-    return Number.isFinite(n) ? String(Math.trunc(n)) : `invalid:${String(v)}`;
+  payment_amount: (v) => wholeNumber(v),
+  deal_type: (v) => (v == null || v === '' ? 'null' : String(v)),
+  appearance_fee: (v) => wholeNumber(v),
+  bonus_terms: (v) => {
+    const parsed = parseJson(v);
+    return parsed == null ? 'null' : stable(parsed);
   },
+  gifted_value: (v) => wholeNumber(v),
   restrictions: (v) => {
     const parsed = parseJson(v);
     if (parsed == null || (Array.isArray(parsed) && parsed.length === 0)) return '[]';

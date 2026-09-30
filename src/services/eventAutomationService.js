@@ -18,6 +18,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { draftEventConcept } = require('./eventConceptDraftService');
+const { syncDraftedDealType } = require('./dealTypeDraftService');
 
 // ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
 // Maps cultural calendar categories to feed profile content categories
@@ -841,6 +842,9 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
         throw new Error(`Event creation failed: ${createErr.message}`);
       }
     }
+    // The deal type's first draft (Task #2330; dealTypeDraftService).
+    const createdId = createdEvents[createdEvents.length - 1]?.id || eventData.id;
+    await syncDraftedDealType(models.sequelize, createdId, { initial: true });
   }
 
   return createdEvents;
