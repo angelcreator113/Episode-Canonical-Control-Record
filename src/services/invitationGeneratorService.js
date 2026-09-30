@@ -22,21 +22,30 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const { v4: uuidv4 } = require('uuid');
 const { detectTheme, buildInvitationContent, compositeInvitation, compositeInvitationPDF } = require('./invitationCompositingService');
 const { isDealEvent, listEventCosts } = require('./eventCostsService');
+const { listEventDeliverables } = require('./eventTermsService');
 
 /**
- * A deal event's event_costs rows, so the invitation's money line can name
- * the entry Lala pays (self_funded) or the host comps (invited_comped)
- * (Task #2375). Legacy events, or a failed read, return null and the
- * builder falls back to cost_coins.
+ * A deal event's terms rows, so the invitation can state the deal (Task
+ * #2375; invitation ruling, docs/EVENT_EPISODE_FLOW.md §8(cc)): its
+ * event_costs (entry, what the host or brand covers) and event_deliverables
+ * (each with its fee). Legacy events return nulls; a failed read logs and
+ * returns null for that part, and the builder states the rest.
  */
-async function loadInvitationCosts(sequelize, event) {
-  if (!isDealEvent(event)) return null;
+async function loadInvitationTerms(sequelize, event) {
+  if (!isDealEvent(event)) return { costs: null, deliverables: null };
+  let costs = null;
+  let deliverables = null;
   try {
-    return await listEventCosts(sequelize, event.id);
+    costs = await listEventCosts(sequelize, event.id);
   } catch (err) {
     console.error('[InviteGen] event_costs read failed, invitation falls back to cost_coins:', err.message);
-    return null;
   }
+  try {
+    deliverables = await listEventDeliverables(sequelize, event.id);
+  } catch (err) {
+    console.error('[InviteGen] event_deliverables read failed, invitation names no deliverables:', err.message);
+  }
+  return { costs, deliverables };
 }
 
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -331,8 +340,8 @@ async function generateInvitation(eventId, models, showId) {
   // Step 1: Claude writes the invitation prose (formal, elegant, personal)
   let invitationText = null;
   try {
-    const costs = await loadInvitationCosts(sequelize, event);
-    invitationText = await buildInvitationContent(event, { costs });
+    const terms = await loadInvitationTerms(sequelize, event);
+    invitationText = await buildInvitationContent(event, terms);
     console.log(`[InviteGen] Claude wrote prose: ${invitationText.opening?.slice(0, 50)}...`);
   } catch (proseErr) {
     console.warn('[InviteGen] Claude prose failed, using structured fallback:', proseErr.message);
@@ -467,8 +476,8 @@ async function exportInvitationPDF(eventId, models) {
   const bgBuffer = Buffer.from(response.data);
 
   // Re-composite at full quality for print
-  const costs = await loadInvitationCosts(sequelize, event);
-  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event, { costs });
+  const terms = await loadInvitationTerms(sequelize, event);
+  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event, terms);
   if (!pdfBuffer) throw new Error('Fonts not available for PDF export');
 
   return pdfBuffer;

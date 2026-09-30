@@ -3,8 +3,12 @@
  *
  * buildInvitationContent used to test the BOOLEAN is_paid against the
  * string 'yes', so every non-free event read "N coins per guest" (and 100
- * when cost_coins was null). describeInvitationMoney now phrases the line
- * from the deal: fees earned, comped, or the entry cost Lala pays.
+ * when cost_coins was null). describeInvitationMoney now states the deal,
+ * per Evoni's invitation ruling of 2026-09-30 (docs/EVENT_EPISODE_FLOW.md
+ * §8(cc)): in the host's voice, in Prime Coins, what Lala is paid (fees and
+ * each deliverable with its fee), what she pays (entry, if self-funded),
+ * what is covered and by whom, and any bonus; comped and gifted events say
+ * so without price talk.
  */
 jest.mock('canvas', () => { throw new Error('canvas not installed in unit tests'); }, { virtual: true });
 
@@ -18,87 +22,102 @@ const {
   buildInvitationContent,
 } = require('../../../src/services/invitationCompositingService');
 
-describe('describeInvitationMoney — deal events', () => {
-  it('paid_appearance: Lala earns the appearance fee', () => {
-    const m = describeInvitationMoney({ deal_type: 'paid_appearance', appearance_fee: 500, cost_coins: 300 });
+const NO_PRICE = /\d|Prime Coins|coins/;
+
+describe('describeInvitationMoney — deal events (invitation ruling)', () => {
+  it('paid_appearance: the appearance fee, in Prime Coins, in the host\'s voice', () => {
+    const m = describeInvitationMoney({ deal_type: 'paid_appearance', appearance_fee: 1500, cost_coins: 300 }, { costs: [], deliverables: [] });
     expect(m.kind).toBe('earn');
-    expect(m.text).toBe('Lala will earn appearance fee of 500 coins');
+    expect(m.text).toBe('We will pay you an appearance fee of 1,500 Prime Coins.');
+    expect(m.sentence).toBe(m.text);
     expect(m.text).not.toMatch(/per guest|300/);
   });
 
-  it('paid_appearance without a fee yet: paid, fee to be confirmed (no invented number)', () => {
-    const m = describeInvitationMoney({ deal_type: 'paid_appearance', appearance_fee: null, cost_coins: 300 });
-    expect(m.kind).toBe('earn');
-    expect(m.text).toBe('a paid engagement for Lala — fee to be confirmed');
+  it('paid_appearance with no fee yet: fee to be confirmed, no invented number', () => {
+    const m = describeInvitationMoney({ deal_type: 'paid_appearance', appearance_fee: null }, { costs: [], deliverables: [] });
+    expect(m.text).toBe('Your fee will be confirmed.');
   });
 
-  it('brand_partnership: names the partnership base, plus deliverables', () => {
-    const m = describeInvitationMoney({ deal_type: 'brand_partnership', partnership_base_fee: 1200, appearance_required: false });
-    expect(m.kind).toBe('earn');
-    expect(m.text).toBe('Lala will earn partnership base of 1200 coins, plus payment for each agreed deliverable');
-  });
-
-  it('brand_partnership with a required appearance: names both fees', () => {
+  it('brand_partnership: base, appearance when required, each deliverable with its fee, covered, bonus', () => {
     const m = describeInvitationMoney({
-      deal_type: 'brand_partnership', partnership_base_fee: 1200, appearance_fee: 400, appearance_required: true,
+      deal_type: 'brand_partnership', host_brand: 'Maison Vero',
+      partnership_base_fee: 1200, appearance_required: true, appearance_fee: 400,
+      bonus_terms: { slay: 200, pass: 100 },
+    }, {
+      costs: [
+        { kind: 'travel', label: 'Car', amount: 80, paid_by: 'host' },
+        { kind: 'glam', label: null, amount: 60, paid_by: 'brand' },
+        { kind: 'styling', label: 'Tailor', amount: 50, paid_by: 'lala' },
+      ],
+      deliverables: [
+        { deliverable_type: 'reel', fee: 300 },
+        { deliverable_type: 'story_set_3', fee: 120 },
+        { deliverable_type: 'post', fee: null },
+      ],
     });
-    expect(m.text).toBe('Lala will earn partnership base of 1200 coins and appearance fee of 400 coins, plus payment for each agreed deliverable');
+    expect(m.kind).toBe('earn');
+    expect(m.text).toBe([
+      'We will pay you a partnership base fee of 1,200 Prime Coins and an appearance fee of 400 Prime Coins.',
+      'For your content, we will pay 300 Prime Coins for a Reel, 120 Prime Coins for a Story Set (3) and a Post (fee to be confirmed).',
+      'We are covering your car.',
+      'Maison Vero is covering your glam.',
+      'If your look earns a Slay, we will add a bonus of 200 Prime Coins; for a Pass, 100 Prime Coins.',
+    ].join(' '));
+    // A cost Lala pays on a paid deal is not "what she pays" (entry, if self-funded).
+    expect(m.text).not.toMatch(/Tailor|tailor/);
   });
 
-  it('performance_booking and paid_deliverables are phrased as earnings too', () => {
-    expect(describeInvitationMoney({ deal_type: 'performance_booking', performance_fee: 900 }).text)
-      .toBe('Lala will earn performance fee of 900 coins, plus payment for each agreed deliverable');
+  it('performance_booking and paid_deliverables: fees and deliverables; unloaded deliverables stay generic', () => {
+    expect(describeInvitationMoney({ deal_type: 'performance_booking', performance_fee: 600 }, { costs: [], deliverables: [] }).text)
+      .toBe('We will pay you a performance fee of 600 Prime Coins.');
+    expect(describeInvitationMoney({ deal_type: 'paid_deliverables' }, { costs: [], deliverables: [{ description: 'Unboxing video', deliverable_type: 'other', fee: 250 }] }).text)
+      .toBe('For your content, we will pay 250 Prime Coins for "Unboxing video".');
     expect(describeInvitationMoney({ deal_type: 'paid_deliverables' }).text)
-      .toBe('Lala will earn payment for each agreed deliverable');
-    expect(describeInvitationMoney({ deal_type: 'appearance_plus_deliverables', appearance_fee: 250 }).text)
-      .toBe('Lala will earn appearance fee of 250 coins, plus payment for each agreed deliverable');
+      .toBe('We will pay a fee for each piece of content we agree.');
+    expect(describeInvitationMoney({ deal_type: 'paid_deliverables' }, { costs: [], deliverables: [] }).text)
+      .toBe('Your fee will be confirmed.');
   });
 
-  it('invited_comped: complimentary, names the comped entry row', () => {
-    const costs = [
-      { kind: 'entry', paid_by: 'host', amount: 350 },
-      { kind: 'extras', paid_by: 'lala', amount: 40 },
-    ];
-    const m = describeInvitationMoney({ deal_type: 'invited_comped', cost_coins: 999 }, { costs });
+  it('invited_comped: says so, names what the host covers, no price talk', () => {
+    const m = describeInvitationMoney({ deal_type: 'invited_comped', cost_coins: 350, bonus_terms: { slay: 200 } }, {
+      costs: [{ kind: 'entry', label: 'Entry / ticket', amount: 350, paid_by: 'host' }],
+      deliverables: [{ deliverable_type: 'reel', fee: 300 }],
+    });
     expect(m.kind).toBe('comped');
-    expect(m.text).toBe('complimentary — the 350-coin entry is comped by the host');
+    expect(m.text).toBe('You attend as our guest, with our compliments. We are covering your entry / ticket. In return, we ask for a Reel.');
+    expect(m.text).not.toMatch(NO_PRICE);
   });
 
-  it('invited_comped without costs loaded falls back to cost_coins; with none, plain comped', () => {
-    expect(describeInvitationMoney({ deal_type: 'invited_comped', cost_coins: 200 }).text)
-      .toBe('complimentary — the 200-coin entry is comped by the host');
-    expect(describeInvitationMoney({ deal_type: 'invited_comped', cost_coins: null }).text)
-      .toBe('complimentary — Lala attends as the host\'s guest');
-  });
-
-  it('gifted: complimentary, names the gifted value when set', () => {
-    const m = describeInvitationMoney({ deal_type: 'gifted', gifted_value: 800, cost_coins: 300 });
+  it('gifted: says so, no gift value and no price talk', () => {
+    const m = describeInvitationMoney({ deal_type: 'gifted', gifted_value: 800 }, { costs: [], deliverables: [] });
     expect(m.kind).toBe('comped');
-    expect(m.text).toBe('complimentary — Lala attends as a gifted guest (gift valued at 800 coins)');
-    expect(describeInvitationMoney({ deal_type: 'gifted' }).text)
-      .toBe('complimentary — Lala attends as a gifted guest');
+    expect(m.text).toBe('You attend as our gifted guest, with our compliments.');
+    expect(m.text).not.toMatch(NO_PRICE);
   });
 
-  it('self_funded: the entry cost Lala pays, from her entry rows', () => {
-    const costs = [
-      { kind: 'entry', paid_by: 'lala', amount: 450 },
-      { kind: 'extras', paid_by: 'lala', amount: 60 },
-    ];
-    const m = describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 300 }, { costs });
+  it('self_funded: the entry Lala pays, what the host covers, any bonus', () => {
+    const m = describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 100, bonus_terms: { pass: 50 } }, {
+      costs: [
+        { kind: 'entry', label: 'Entry / ticket', amount: 450, paid_by: 'lala' },
+        { kind: 'extras', label: 'Drinks', amount: 100, paid_by: 'host' },
+      ],
+      deliverables: [],
+    });
     expect(m.kind).toBe('cost');
-    expect(m.text).toBe('entry is 450 coins, paid by Lala');
+    expect(m.text).toBe('Entry is 450 Prime Coins, paid by you. We are covering your drinks. If your look earns a Pass, we will add a bonus of 50 Prime Coins.');
   });
 
-  it('self_funded without costs loaded falls back to cost_coins; with nothing, neutral', () => {
-    expect(describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 300 }).text)
-      .toBe('entry is 300 coins, paid by Lala');
-    const m = describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 300 }, { costs: [] });
-    expect(m.kind).toBe('neutral');
-    expect(m.text).toBe('Lala attends at her own expense — entry details to follow');
+  it('self_funded without costs loaded falls back to cost_coins; with nothing, entry details follow', () => {
+    expect(describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 300 }).text).toBe('Entry is 300 Prime Coins, paid by you.');
+    const none = describeInvitationMoney({ deal_type: 'self_funded', cost_coins: 0 }, { costs: [], deliverables: [] });
+    expect(none.kind).toBe('neutral');
+    expect(none.text).toBe('Entry details will follow.');
   });
 
   it('an unknown deal type says nothing about money', () => {
-    expect(describeInvitationMoney({ deal_type: 'mystery', cost_coins: 300 }).kind).toBe('neutral');
+    const m = describeInvitationMoney({ deal_type: 'mystery', cost_coins: 500 });
+    expect(m.kind).toBe('neutral');
+    expect(m.text).toBe('The terms will be confirmed.');
   });
 });
 
@@ -136,26 +155,38 @@ describe('describeInvitationMoney — legacy events (deal_type null)', () => {
   });
 });
 
-describe('buildInvitationContent uses the money line', () => {
+describe('buildInvitationContent states the deal', () => {
   beforeEach(() => mockCreate.mockReset());
 
-  it('hands the deal wording to the prose prompt', async () => {
+  it('hands the terms to the prose prompt, in the host\'s voice and Prime Coins', async () => {
     mockCreate.mockResolvedValue({ content: [{ text: 'OPENING: Hi.\nBODY: Body.\nCLOSING: Bye.' }] });
-    await buildInvitationContent({ name: 'Gala', deal_type: 'paid_appearance', appearance_fee: 500, is_paid: true });
+    await buildInvitationContent(
+      { name: 'Gala', deal_type: 'paid_appearance', appearance_fee: 500, is_paid: true, event_type: 'brand_deal', success_unlock: 'post a reel' },
+      { costs: [], deliverables: [] },
+    );
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
-    expect(prompt).toContain('Investment: Lala will earn appearance fee of 500 coins');
+    expect(prompt).toContain('Terms (the host speaking, in Prime Coins): We will pay you an appearance fee of 500 Prime Coins.');
+    expect(prompt).toContain('mention no price at all');
+    expect(prompt).not.toContain('Deliverable: post a reel');
     expect(prompt).not.toContain('per guest');
   });
 
-  it('uses the sentence in the no-AI fallback body, with passed costs', async () => {
+  it('a legacy event keeps the Investment line', async () => {
+    mockCreate.mockResolvedValue({ content: [{ text: 'OPENING: Hi.\nBODY: Body.\nCLOSING: Bye.' }] });
+    await buildInvitationContent({ name: 'Gala', is_paid: true, payment_amount: 750 });
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain('Investment: Lala will earn 750 coins for attending');
+  });
+
+  it('uses the statement in the no-AI fallback body, with passed costs', async () => {
     mockCreate.mockRejectedValue(new Error('offline'));
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const content = await buildInvitationContent(
       { name: 'Soiree', deal_type: 'self_funded', cost_coins: 100 },
-      { costs: [{ kind: 'entry', paid_by: 'lala', amount: 420 }] },
+      { costs: [{ kind: 'entry', paid_by: 'lala', amount: 420 }], deliverables: [] },
     );
     warn.mockRestore();
-    expect(content.body).toContain('Entry is 420 coins.');
+    expect(content.body).toContain('Entry is 420 Prime Coins, paid by you.');
     expect(content.body).not.toContain('per guest');
   });
 });

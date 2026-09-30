@@ -30,7 +30,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const Anthropic = require('@anthropic-ai/sdk');
-const { DEAL_PLANS, EVENT_COMPONENTS, dealComponents } = require('./dealPricingService');
+const { DEAL_PLANS } = require('./dealPricingService');
 
 // ─── FONT MANAGEMENT ──────────────────────────────────────────────────────────
 
@@ -269,10 +269,29 @@ function wrapText(ctx, text, maxWidth) {
 // (Task #2375).
 const TRUTHY_FLAG = new Set([true, 1, '1', 'true', 'yes', 'y']);
 
+// Deal fee components, in the order the invitation names them.
+const FEE_NAMES = Object.freeze({
+  appearance_fee: 'an appearance fee',
+  partnership_base_fee: 'a partnership base fee',
+  performance_fee: 'a performance fee',
+});
+
+const BONUS_TIER_NAMES = Object.freeze({ slay: 'a Slay', pass: 'a Pass', safe: 'a Safe' });
+
+// event_costs kinds (EventCost.KINDS), as a covered line names them.
+const COST_KIND_NAMES = Object.freeze({
+  entry: 'entry', travel: 'travel', glam: 'glam', styling: 'styling',
+  accommodation: 'accommodation', extras: 'extras', other: 'costs',
+});
+
 function positiveNumber(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function coins(n) {
+  return `${Number(n).toLocaleString('en-US')} Prime Coins`;
 }
 
 function joinList(parts) {
@@ -288,81 +307,140 @@ function entryTotal(costs, payers) {
     .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
 }
 
-const PAID_TBC = {
-  kind: 'earn',
-  text: 'a paid engagement for Lala — fee to be confirmed',
-  sentence: 'This is a paid engagement; the fee will be confirmed.',
-};
+function costName(cost) {
+  const label = cost?.label && String(cost.label).trim();
+  return (label || COST_KIND_NAMES[cost?.kind] || 'costs').toLowerCase();
+}
+
+function deliverableName(d) {
+  const { DELIVERABLE_TYPE_LABELS } = require('./eventTermsService');
+  const typed = DELIVERABLE_TYPE_LABELS[d?.deliverable_type];
+  if (typed && d.deliverable_type !== 'other') return `a ${typed}`;
+  const described = d?.description && String(d.description).trim();
+  return described ? `"${described}"` : 'a deliverable';
+}
+
+// "We are covering your entry / ticket; Maison X is covering your glam."
+// The host speaks as "we"; the brand by name. No amounts (the ruling pairs
+// amounts with what Lala is paid and pays, not with what is covered).
+function coveredSentences(event, costs) {
+  if (!Array.isArray(costs)) return [];
+  const byPayer = { host: [], brand: [] };
+  for (const c of costs) {
+    if (c && byPayer[c.paid_by]) byPayer[c.paid_by].push(costName(c));
+  }
+  const out = [];
+  if (byPayer.host.length) out.push(`We are covering your ${joinList(byPayer.host)}.`);
+  if (byPayer.brand.length) {
+    const brand = (event.host_brand && String(event.host_brand).trim()) || 'The brand';
+    out.push(`${brand} is covering your ${joinList(byPayer.brand)}.`);
+  }
+  return out;
+}
+
+// Each deliverable, with its fee when the deal pays for content.
+function deliverableSentence(event, deliverables, { withFees }) {
+  if (!Array.isArray(deliverables) || deliverables.length === 0) {
+    return withFees && deliverables === null ? 'We will pay a fee for each piece of content we agree.' : null;
+  }
+  const { contentFeeFor } = require('./dealPayoutService');
+  const parts = deliverables.map((d) => {
+    const name = deliverableName(d);
+    if (!withFees) return name;
+    const fee = contentFeeFor(event, d);
+    return fee > 0 ? `${coins(fee)} for ${name}` : `${name} (fee to be confirmed)`;
+  });
+  return withFees
+    ? `For your content, we will pay ${joinList(parts)}.`
+    : `In return, we ask for ${joinList(parts)}.`;
+}
+
+function bonusSentence(event) {
+  const { normalizeBonusTerms, BONUS_TIERS } = require('./dealPayoutService');
+  const terms = normalizeBonusTerms(event.bonus_terms).value || {};
+  const tiers = BONUS_TIERS.filter((t) => positiveNumber(terms[t]));
+  if (!tiers.length) return null;
+  const [first, ...rest] = tiers;
+  let text = `If your look earns ${BONUS_TIER_NAMES[first]}, we will add a bonus of ${coins(terms[first])}`;
+  if (rest.length) text += `; for ${joinList(rest.map((t) => `${BONUS_TIER_NAMES[t]}, ${coins(terms[t])}`))}`;
+  return `${text}.`;
+}
 
 /**
- * The invitation's money line, phrased from the deal (Task #2375). Pure:
- * `costs` are the event's event_costs rows (eventCostsService.listEventCosts),
- * loaded by the caller. When they are not passed, the entry line falls back
- * to cost_coins, which is what the drafted entry row is priced from.
+ * The invitation's statement of the deal (Task #2375), per Evoni's
+ * invitation ruling of 2026-09-30 (docs/EVENT_EPISODE_FLOW.md §8(cc)):
+ * "The invitation states the deal in the host's voice, in Prime Coins: what
+ * Lala is paid (fees, and each deliverable with its fee), what she pays
+ * (entry, if self-funded), what is covered and by whom (host or brand), and
+ * any bonus with its amount. Comped and gifted events say so without price
+ * talk."
  *
- *   paid deals (DEAL_PLANS[type].cash) — what Lala earns: each component fee
- *     that has a number, plus deliverable payment when the plan has them;
- *   invited_comped / gifted            — complimentary (comped entry named);
- *   self_funded                        — the entry cost Lala pays;
- *   legacy (deal_type null)            — is_paid read as a boolean: paid earns
- *     payment_amount, free or cost 0 is complimentary, else cost_coins entry.
+ * Pure: `costs` (eventCostsService.listEventCosts) and `deliverables`
+ * (eventTermsService.listEventDeliverables) are loaded by the caller; null
+ * means not loaded. Fees come from dealPayoutService (completionPayouts,
+ * contentFeeFor), the same source the Money tab reads.
+ *
+ * Legacy events (deal_type null) keep one line: is_paid read as a boolean;
+ * paid earns payment_amount, free or cost 0 is complimentary, else the
+ * cost_coins entry.
  *
  * Returns { kind: 'earn'|'comped'|'cost'|'neutral', text, sentence }: `text`
- * goes to the prose prompt as "Investment:", `sentence` to the no-AI body.
+ * goes to the prose prompt, `sentence` to the no-AI body.
  */
-function describeInvitationMoney(event, { costs = null } = {}) {
+function describeInvitationMoney(event, { costs = null, deliverables = null } = {}) {
   const e = event || {};
 
   if (e.deal_type) {
     const plan = DEAL_PLANS[e.deal_type];
+    const done = (kind, sentences) => {
+      const text = sentences.filter(Boolean).join(' ');
+      return { kind, text, sentence: text };
+    };
 
-    if (plan && plan.cash) {
-      const fees = dealComponents(e)
-        .map((key) => {
-          const comp = EVENT_COMPONENTS[key];
-          const amount = positiveNumber(e[comp.field]);
-          return amount ? `${comp.label.toLowerCase()} of ${amount} coins` : null;
-        })
-        .filter(Boolean);
-      let text;
-      if (fees.length && plan.deliverables) text = `Lala will earn ${joinList(fees)}, plus payment for each agreed deliverable`;
-      else if (fees.length) text = `Lala will earn ${joinList(fees)}`;
-      else if (plan.deliverables) text = 'Lala will earn payment for each agreed deliverable';
-      else return { ...PAID_TBC };
-      return { kind: 'earn', text, sentence: `${text}.` };
+    if (!plan) return done('neutral', ['The terms will be confirmed.']);
+
+    // Comped and gifted: say so, without price talk.
+    if (e.deal_type === 'invited_comped' || e.deal_type === 'gifted') {
+      return done('comped', [
+        e.deal_type === 'gifted'
+          ? 'You attend as our gifted guest, with our compliments.'
+          : 'You attend as our guest, with our compliments.',
+        ...coveredSentences(e, costs),
+        deliverableSentence(e, deliverables, { withFees: false }),
+      ]);
     }
 
-    if (e.deal_type === 'invited_comped') {
-      const comped = entryTotal(costs, ['host', 'brand']);
-      const entry = positiveNumber(comped === null ? e.cost_coins : comped);
-      return entry
-        ? { kind: 'comped', text: `complimentary — the ${entry}-coin entry is comped by the host`, sentence: `Your ${entry}-coin entry is comped by the host.` }
-        : { kind: 'comped', text: 'complimentary — Lala attends as the host\'s guest', sentence: 'You attend as the host\'s guest, with our compliments.' };
+    const sentences = [];
+    let kind = 'neutral';
+
+    if (plan.cash) {
+      kind = 'earn';
+      const { completionPayouts } = require('./dealPayoutService');
+      const fees = completionPayouts(e, null).map((p) => `${FEE_NAMES[p.category] || 'a fee'} of ${coins(p.amount)}`);
+      if (fees.length) sentences.push(`We will pay you ${joinList(fees)}.`);
+      if (plan.deliverables) sentences.push(deliverableSentence(e, deliverables, { withFees: true }));
+      if (!fees.length && !(plan.deliverables && sentences.some(Boolean))) sentences.push('Your fee will be confirmed.');
+    } else {
+      if (e.deal_type === 'self_funded') {
+        const paid = entryTotal(costs, ['lala']);
+        const entry = positiveNumber(paid === null ? e.cost_coins : paid);
+        if (entry) { kind = 'cost'; sentences.push(`Entry is ${coins(entry)}, paid by you.`); }
+        else sentences.push('Entry details will follow.');
+      }
+      sentences.push(deliverableSentence(e, deliverables, { withFees: false }));
     }
 
-    if (e.deal_type === 'gifted') {
-      const gift = positiveNumber(e.gifted_value);
-      return gift
-        ? { kind: 'comped', text: `complimentary — Lala attends as a gifted guest (gift valued at ${gift} coins)`, sentence: `You attend as our gifted guest, with a gift valued at ${gift} coins.` }
-        : { kind: 'comped', text: 'complimentary — Lala attends as a gifted guest', sentence: 'You attend as our gifted guest, with our compliments.' };
-    }
-
-    if (e.deal_type === 'self_funded') {
-      const paid = entryTotal(costs, ['lala']);
-      const entry = positiveNumber(paid === null ? e.cost_coins : paid);
-      return entry
-        ? { kind: 'cost', text: `entry is ${entry} coins, paid by Lala`, sentence: `Entry is ${entry} coins.` }
-        : { kind: 'neutral', text: 'Lala attends at her own expense — entry details to follow', sentence: 'Entry details will follow.' };
-    }
-
-    // A deal type this builder does not know: say nothing about money.
-    return { kind: 'neutral', text: 'terms to be confirmed', sentence: 'Terms will be confirmed.' };
+    sentences.push(...coveredSentences(e, costs));
+    sentences.push(bonusSentence(e));
+    return done(kind, sentences);
   }
 
   // Legacy event (deal_type null).
   if (TRUTHY_FLAG.has(e.is_paid)) {
     const payment = positiveNumber(e.payment_amount);
-    if (!payment) return { ...PAID_TBC };
+    if (!payment) {
+      return { kind: 'earn', text: 'a paid engagement for Lala — fee to be confirmed', sentence: 'This is a paid engagement; the fee will be confirmed.' };
+    }
     const text = `Lala will earn ${payment} coins for attending`;
     return { kind: 'earn', text, sentence: `${text}.` };
   }
@@ -381,10 +459,12 @@ function describeInvitationMoney(event, { costs = null } = {}) {
 
 /**
  * @param {object} event  world_events row
- * @param {{ costs?: object[]|null }} [options]  the event's event_costs rows
- *   (listEventCosts), loaded by the caller; the builder stays pure of the DB.
+ * @param {{ costs?: object[]|null, deliverables?: object[]|null }} [options]
+ *   the event's event_costs rows (listEventCosts) and event_deliverables rows
+ *   (listEventDeliverables), loaded by the caller; the builder stays pure of
+ *   the DB.
  */
-async function buildInvitationContent(event, { costs = null } = {}) {
+async function buildInvitationContent(event, { costs = null, deliverables = null } = {}) {
   const nameParts = (event.name || 'Event').split(' — ');
   const eventName = nameParts[0].trim();
   const eventSubtitle = nameParts[1]?.trim() || null;
@@ -395,10 +475,12 @@ async function buildInvitationContent(event, { costs = null } = {}) {
     event.browse_pool_bias === 'social' ||
     event.browse_pool_bias === 'romantic';
 
-  const money = describeInvitationMoney(event, { costs });
+  const money = describeInvitationMoney(event, { costs, deliverables });
   const investmentText = money.text;
 
-  const hasDeliverable = event.event_type === 'brand_deal' || event.event_type === 'deliverable';
+  // A deal event's deliverables are stated in its terms (invitation ruling,
+  // 2026-09-30); the old hint stays for legacy events only.
+  const hasDeliverable = !event.deal_type && (event.event_type === 'brand_deal' || event.event_type === 'deliverable');
   const deliverableText = hasDeliverable
     ? (event.success_unlock?.split(',')[0]?.trim() || 'content creation required')
     : null;
@@ -429,7 +511,7 @@ Date: ${eventDate || 'TBD'}
 Time: ${eventTime || 'Evening'}
 Dress Code: ${event.dress_code || 'elegant'}
 Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
-Investment: ${investmentText}
+${event.deal_type ? 'Terms (the host speaking, in Prime Coins)' : 'Investment'}: ${investmentText}
 Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
 ${deliverableText ? `Deliverable: ${deliverableText}` : ''}
 Notable Guests: ${guestNames || 'select attendees'}
@@ -442,8 +524,10 @@ Write the invitation as FOUR parts. Return ONLY these parts, nothing else:
 PART 1 — OPENING (1-2 sentences, 20-35 words):
 A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
 
-PART 2 — BODY (3-5 sentences, 50-80 words):
-Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the investment, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. Mention the money terms naturally, exactly as given under Investment (what Lala earns, that she is comped, or what entry costs); never invent a price. If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
+PART 2 — BODY (3-6 sentences, 50-110 words):
+Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the ${event.deal_type ? 'terms' : 'investment'}, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. ${event.deal_type
+  ? 'State the terms in the host\'s voice ("we"), as given under Terms: every amount exactly as written, in Prime Coins, and every item named — what Lala is paid, what she pays, what is covered and by whom, and any bonus. Never invent, round, merge or drop an amount. If the terms say she attends as a guest or gifted guest, say so and mention no price at all.'
+  : 'Mention the money terms naturally, exactly as given under Investment (what Lala earns, that she is comped, or what entry costs); never invent a price.'} If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
 
 PART 3 — SOCIAL CTA (1 sentence, under 20 words):
 A social media call-to-action: what hashtag to use, tagging the host, sharing expectations. Keep it stylish.
@@ -465,7 +549,7 @@ CLOSING: [your closing line]`;
     const anthropic = new Anthropic();
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
+      max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -704,14 +788,14 @@ async function compositeInvitation(backgroundBuffer, event, customContent = null
  * Returns a PNG buffer wrapped for PDF context — true PDF requires
  * additional tooling, so this produces a high-quality print-ready PNG.
  */
-async function compositeInvitationPDF(backgroundBuffer, event, { costs = null } = {}) {
+async function compositeInvitationPDF(backgroundBuffer, event, { costs = null, deliverables = null } = {}) {
   if (!(await checkFonts())) return null;
 
   const meta = await sharp(backgroundBuffer).metadata();
   const width = meta.width || 1024;
   const height = meta.height || 1792;
 
-  const content = await buildInvitationContent(event, { costs });
+  const content = await buildInvitationContent(event, { costs, deliverables });
   const textLayer = renderTextLayer(content, width, height);
 
   // High-res composite for print
