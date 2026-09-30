@@ -17,6 +17,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
+const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 
 const client = new Anthropic();
 
@@ -132,6 +133,8 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
          ON CONFLICT DO NOTHING`,
         { replacements: ev }
       );
+      // The deal type's first draft (Task #2330; dealTypeDraftService).
+      await syncDraftedDealType(db.sequelize, ev.id, { initial: true });
     }
 
     const breakdown = events.reduce((acc, ev) => {

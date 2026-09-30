@@ -37,6 +37,7 @@ const {
   listEventDeliverables, validateDeliverableTransition, DELIVERABLE_STATUS_FLOW,
   DESCRIPTION_MAX, TYPE_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO,
 } = require('../services/eventTermsService');
+const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
 const STATUS_NOT_EDITABLE_CODE = 'DELIVERABLE_STATUS_NOT_EDITABLE';
@@ -160,6 +161,8 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
         owed_to: f.owed_to || 'host',
       } }
     );
+    // A brand-owed deliverable can change an Auto-drafted deal type (Task #2330).
+    await syncDraftedDealType(models.sequelize, eventId);
     return res.status(201).json({ success: true, deliverable: rows?.[0] || null });
   } catch (error) {
     console.error('Create event deliverable error:', error);
@@ -207,6 +210,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
       { replacements: { ...parsed.fields, deliverableId, eventId } }
     );
     if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });
+    if (parsed.fields.owed_to !== undefined) await syncDraftedDealType(models.sequelize, eventId);
     return res.json({ success: true, deliverable: rows[0] });
   } catch (error) {
     console.error('Update event deliverable error:', error);
@@ -237,6 +241,7 @@ router.delete('/world/:showId/events/:eventId/deliverables/:deliverableId', requ
       { replacements: { deliverableId, eventId } }
     );
     if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });
+    await syncDraftedDealType(models.sequelize, eventId);
     return res.json({ success: true, deleted: rows[0].id });
   } catch (error) {
     console.error('Delete event deliverable error:', error);
