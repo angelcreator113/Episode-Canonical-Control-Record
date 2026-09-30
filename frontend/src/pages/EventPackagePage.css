@@ -121,6 +121,74 @@
   text-decoration: underline;
 }
 
+/* Reopen terms (Task #2378): under the lock banner. Rows wrap at 375px;
+   the buttons drop to their own line when they have to. */
+.epp-reopen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -8px 0 16px;
+  font-size: 13px;
+}
+.epp-reopen-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 8px;
+  background: var(--lala-surface, #FFFFFF);
+}
+.epp-reopen-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.epp-reopen-why,
+.epp-reopen-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+  overflow-wrap: anywhere;
+}
+.epp-reopen-error { color: #b42318; }
+.epp-reopen-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--lala-gold, #B8962E);
+  border-radius: 8px;
+  background: var(--lala-parchment, #FAF7F0);
+}
+.epp-reopen-offer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.epp-reopen-offer-head span { flex: 1 1 auto; min-width: 0; }
+.epp-reopen-offer-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.epp-reopen-reminder {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0;
+  flex: 1 1 200px;
+  min-width: 0;
+  color: #92400e;
+  font-size: 12px;
+}
+.epp-reopen-confirm-body {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+.epp-reopen-confirm-body p { margin: 0 0 8px; }
+
 .epp-sections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

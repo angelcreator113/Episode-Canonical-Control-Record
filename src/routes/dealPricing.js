@@ -38,7 +38,7 @@ const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
 const { listEventDeliverables } = require('../services/eventTermsService');
-const { findTermsLockEpisode, termsLockedBody } = require('../utils/eventTermsLock');
+const { findTermsWriteLock, termsLockedBody } = require('../utils/eventTermsLock');
 const { loadRateCard, proposeTerms, PRICING_SOURCE, EVENT_COMPONENTS } = require('../services/dealPricingService');
 const { listEventCosts, draftExtrasCosts } = require('../services/eventCostsService');
 
@@ -95,7 +95,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    const lockEpisode = await findTermsLockEpisode(sequelize, eventId);
+    const lockEpisode = await findTermsWriteLock(sequelize, eventId);
     if (lockEpisode) return res.status(409).json(termsLockedBody(lockEpisode, Object.values(EVENT_COMPONENTS).map((c) => c.field)));
 
     const deliverables = await listEventDeliverables(sequelize, eventId);

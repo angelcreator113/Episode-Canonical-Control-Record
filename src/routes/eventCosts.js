@@ -16,9 +16,10 @@
  * its cost_coins entry cost and styling extras as before (D8), so a write
  * to one is refused with 400 EVENT_NOT_A_DEAL.
  *
- * The rows lock with the terms (D4): once findTermsLockEpisode finds the
+ * The rows lock with the terms (D4): once findTermsWriteLock finds the
  * episode the event started, every write is refused with 409
- * EVENT_TERMS_LOCKED.
+ * EVENT_TERMS_LOCKED. Reopened terms (Task #2378) lift the lock until
+ * Save and relock.
  *
  * Location: src/routes/eventCosts.js
  */
@@ -30,7 +31,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 const { requireAuth } = require('../middleware/auth');
-const { findTermsLockEpisode, termsLockedBody } = require('../utils/eventTermsLock');
+const { findTermsWriteLock, termsLockedBody } = require('../utils/eventTermsLock');
 const {
   isDealEvent, listEventCosts, readCostBody, draftExtrasCosts,
 } = require('../services/eventCostsService');
@@ -91,7 +92,7 @@ async function withWritableEvent(req, res, label, write) {
       const event = await loadEvent(sequelize, showId, eventId, { transaction });
       if (!event) return { status: 404, body: { success: false, error: 'Event not found' } };
       if (!isDealEvent(event)) return { status: 400, body: notADealBody() };
-      const lockEpisode = await findTermsLockEpisode(sequelize, eventId, { transaction });
+      const lockEpisode = await findTermsWriteLock(sequelize, eventId, { transaction });
       if (lockEpisode) return { status: 409, body: termsLockedBody(lockEpisode, ['costs']) };
       return write(transaction, event, sequelize);
     });
@@ -117,7 +118,7 @@ router.get('/world/:showId/events/:eventId/costs', requireAuth, async (req, res)
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const costs = await listEventCosts(models.sequelize, eventId);
-    const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
+    const lockEpisode = await findTermsWriteLock(models.sequelize, eventId);
     return res.json({
       success: true,
       costs,
