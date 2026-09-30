@@ -42,6 +42,7 @@ const {
   DESCRIPTION_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO, DELIVERABLE_TYPES,
 } = require('../services/eventTermsService');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
+const { reopenMarkerOf } = require('../utils/eventTermsLock');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
 const STATUS_NOT_EDITABLE_CODE = 'DELIVERABLE_STATUS_NOT_EDITABLE';
@@ -61,10 +62,17 @@ async function getModels() {
 // The event, scoped to the show. null when absent or deleted.
 async function loadEvent(sequelize, showId, eventId) {
   const [rows] = await sequelize.query(
-    'SELECT id, show_id, used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+    'SELECT id, show_id, used_in_episode_id, canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
     { replacements: { eventId, showId } }
   );
   return rows?.[0] || null;
+}
+
+// Locked once started, unless Evoni has reopened the terms (Reopen ruling,
+// §8(cc); Task #2378): reopenMarkerOf is the same marker findTermsWriteLock
+// reads.
+function isLocked(event) {
+  return !!event.used_in_episode_id && !reopenMarkerOf(event.canon_consequences);
 }
 
 function lockedBody(event) {
@@ -144,7 +152,7 @@ router.get('/world/:showId/events/:eventId/deliverables', requireAuth, async (re
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const deliverables = await listEventDeliverables(models.sequelize, eventId);
-    return res.json({ success: true, deliverables, locked: !!event.used_in_episode_id });
+    return res.json({ success: true, deliverables, locked: isLocked(event) });
   } catch (error) {
     console.error('List event deliverables error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load deliverables', message: error.message });
@@ -167,7 +175,7 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
 
     const event = await loadEvent(models.sequelize, showId, eventId);
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (event.used_in_episode_id) return res.status(409).json(lockedBody(event));
+    if (isLocked(event)) return res.status(409).json(lockedBody(event));
 
     const f = parsed.fields;
     const [rows] = await models.sequelize.query(
@@ -223,7 +231,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
 
     const event = await loadEvent(models.sequelize, showId, eventId);
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (event.used_in_episode_id) return res.status(409).json(lockedBody(event));
+    if (isLocked(event)) return res.status(409).json(lockedBody(event));
 
     const setClauses = keys.map((k) => `${k} = :${k}`);
     const [rows] = await models.sequelize.query(
@@ -256,7 +264,7 @@ router.delete('/world/:showId/events/:eventId/deliverables/:deliverableId', requ
 
     const event = await loadEvent(models.sequelize, showId, eventId);
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (event.used_in_episode_id) return res.status(409).json(lockedBody(event));
+    if (isLocked(event)) return res.status(409).json(lockedBody(event));
 
     const [rows] = await models.sequelize.query(
       `UPDATE event_deliverables SET deleted_at = NOW(), updated_at = NOW()

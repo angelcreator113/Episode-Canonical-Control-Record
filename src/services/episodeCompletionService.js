@@ -210,6 +210,11 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json };
   }
 
+  // Reopened terms (Reopen ruling, §8(cc); Task #2378): refused before any
+  // write. Finalize checks again under the episode lock.
+  const { assertEpisodeTermsNotReopened } = require('../utils/eventTermsLock');
+  await assertEpisodeTermsNotReopened(sequelize, episodeId);
+
   // ── 2. Load event (prefer highest prestige for multi-event episodes) ──
   // EPISODE_EVENT_SQL is shared with the styling game's score (Task #1943).
   const [event] = await sequelize.query(

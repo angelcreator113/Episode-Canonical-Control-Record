@@ -32,7 +32,7 @@ export const BORDER_OPTIONS = [
 
 // ─── INVITATION BUTTON COMPONENT ──────────────────────────────────────────────
 
-export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false, approvalInfo = null }) {
+export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false, approvalInfo = null, regenerateSignal = 0 }) {
   const [generating, setGenerating]   = useState(false);
   const [approving, setApproving]     = useState(false);
   const [imageUrl, setImageUrl]       = useState(event.invitation_url || null);
@@ -113,6 +113,17 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoGenerate]);
+
+  // Regenerate on request from the page (Reopen terms offer, Task #2378):
+  // each increase of regenerateSignal after mount regenerates once. The
+  // value at mount is only remembered, so a remount never regenerates.
+  const lastRegenSignal = useRef(regenerateSignal);
+  useEffect(() => {
+    if (regenerateSignal === lastRegenSignal.current) return;
+    lastRegenSignal.current = regenerateSignal;
+    if (!generating) handleGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regenerateSignal]);
 
   const handleApprove = async () => {
     if (!pendingAssetId) return;

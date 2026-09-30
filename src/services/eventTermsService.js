@@ -150,28 +150,28 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
 }
 
 /** The event's live deliverables, oldest first. */
-async function listEventDeliverables(sequelize, eventId) {
+async function listEventDeliverables(sequelize, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
     `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status,
             completed_at, submitted_at, approved_at, episode_id, created_at, updated_at
      FROM event_deliverables
      WHERE event_id = :eventId AND deleted_at IS NULL
      ORDER BY created_at ASC, id ASC`,
-    { replacements: { eventId } }
+    { replacements: { eventId }, transaction }
   );
   return rows || [];
 }
 
 /**
- * Start Episode: stamps the episode on every live deliverable of the
- * event. Returns the number of rows the UPDATE reports, or null when the
+ * Start Episode (and Save and relock after a reopen, Task #2378): stamps
+ * the episode on every live deliverable of the event. Returns the number of rows the UPDATE reports, or null when the
  * driver does not report one.
  */
-async function stampDeliverablesEpisode(sequelize, eventId, episodeId) {
+async function stampDeliverablesEpisode(sequelize, eventId, episodeId, { transaction } = {}) {
   const [, meta] = await sequelize.query(
     `UPDATE event_deliverables SET episode_id = :episodeId, updated_at = NOW()
      WHERE event_id = :eventId AND deleted_at IS NULL`,
-    { replacements: { eventId, episodeId } }
+    { replacements: { eventId, episodeId }, transaction }
   );
   return typeof meta?.rowCount === 'number' ? meta.rowCount : null;
 }

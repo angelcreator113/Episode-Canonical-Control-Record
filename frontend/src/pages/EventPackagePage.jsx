@@ -88,6 +88,7 @@ import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersio
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventOutfitPicker from '../components/EventOutfitPicker';
+import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -179,6 +180,12 @@ export default function EventPackagePage() {
   const [invitationApprovalInfo, setInvitationApprovalInfo] = useState(null);
   // Style (Task #2376): the closet picker, open while choosing Lala's look.
   const [outfitPickerOpen, setOutfitPickerOpen] = useState(false);
+  // Reopen terms (Task #2378): the regeneration offer after Save and
+  // relock, and a count InvitationButton regenerates on. Owned here for the
+  // same reason as invitationApprovalInfo: the reload after a relock
+  // unmounts the panel.
+  const [termsOffer, setTermsOffer] = useState(null);
+  const [invitationRegenSignal, setInvitationRegenSignal] = useState(0);
 
   // Change Organizer (Task #1761; was Change Host). One picker, two kinds.
   // brands: null = not fetched yet; brandsError = the list could not be
@@ -376,7 +383,7 @@ export default function EventPackagePage() {
     );
   }
 
-  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy } = data;
+  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, termsReopen } = data;
   // Read-only once Start Episode has locked the terms (Task #2356): the
   // server's own lock (termsLockedBy: the brief that names this event, §8(w)
   // P2, else the used_in_episode_id stamp), so the page never offers an edit
@@ -881,7 +888,9 @@ export default function EventPackagePage() {
           <span className="epp-used-banner-text">
             <strong>Locked at Start Episode.</strong>{' '}
             Used by Episode {lockEpisode?.episode_number ?? '—'}{lockEpisode?.title ? `: ${lockEpisode.title}` : ''}.
-            {' '}This package is read-only; its terms can't change now.
+            {termsReopen
+              ? ' Its terms are reopened; the rest of this package stays read-only.'
+              : " This package is read-only; its terms can't change now."}
           </span>
           {lockEpisode?.id && (
             <Link
@@ -893,6 +902,19 @@ export default function EventPackagePage() {
           )}
         </div>
       )}
+
+      <TermsReopenPanel
+        showId={showId}
+        eventId={eventId}
+        locked={used}
+        reopen={termsReopen || null}
+        episode={lockEpisode}
+        offer={termsOffer}
+        onOffer={setTermsOffer}
+        onChanged={load}
+        onRegenerateInvitation={() => setInvitationRegenSignal((n) => n + 1)}
+        onToast={setToast}
+      />
 
       <div className="epp-sections">
         <section className="epp-section">
@@ -1184,6 +1206,7 @@ export default function EventPackagePage() {
               event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
               showId={showId}
               approvalInfo={invitationApprovalInfo}
+              regenerateSignal={invitationRegenSignal}
               onGenerated={(_url, _assetId, approvalDetail) => {
                 if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
                 load();
@@ -1239,7 +1262,7 @@ export default function EventPackagePage() {
           showId={showId}
           eventId={eventId}
           event={event}
-          locked={used}
+          locked={used && !termsReopen}
           putEvent={putEvent}
           onSaved={load}
           onToast={setToast}

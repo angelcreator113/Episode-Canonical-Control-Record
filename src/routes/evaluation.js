@@ -580,6 +580,9 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Accept error:', error);
+    // Task #2378: nothing books while the event's terms are reopened.
+    const { TermsReopenedError, termsReopenedBody } = require('../utils/eventTermsLock');
+    if (error instanceof TermsReopenedError) return res.status(error.status).json(termsReopenedBody(error));
     // Task #1933: completion refuses a result that would take coins below zero.
     if (error instanceof InsufficientCoinsError) {
       return res.status(error.status).json(insufficientCoinsBody(error));
