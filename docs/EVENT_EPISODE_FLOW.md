@@ -2983,6 +2983,16 @@ into terms costs and event spending; the money side is also noted in
 
 > Event costs split in two. Terms costs (entry, ticket, travel, anything the deal itself involves) stay in the Event Package and lock at Start Episode. Event spending (drinks, valet, photo booth and other things Lala chooses during the event) lives in the episode's Money tab, editable until Complete, each line quantity × unit price, auto-drafted from the event's extras as suggestions, charged at Complete like other costs.
 
+**D13, D14 and D15 (Evoni, 2026-09-30).** Recorded verbatim. They continue
+the D series of §8(x). Not yet built; to be designed first, in
+`docs/DEAL_COMPONENTS_DESIGN.md`, which asks Evoni numbered questions.
+
+> D13. Choosing the deal terms drafts the whole Terms section automatically: deliverables sized to the job (D12), their prices from the rate anchors, costs and who covers them, and a suggested bonus where the deal usually has one; all Auto-drafted and editable until the lock. Deliverable drafts also suggest Lala's relationship goals (e.g. a co-styled moment or follow-up with a guest brand), filed as goals, not deliverables.
+
+> D14. A deal can combine components: Evoni ticks what it includes (paid to appear, paid for content, partnership base, performance fee, gifted items, entry covered), and the deal's label is derived from the combination. Write a short design note on replacing the single deal_type (migration, existing events, payouts, invitation wording), with numbered questions for me.
+
+> D15. Deliverables use real influencer formats, each with a platform and quantity and a plain one-line description: Instagram Reel, TikTok video, GRWM video, Instagram Stories (×N), carousel post, Go Live, link in bio (days), try-on/haul video, content for the brand (UGC). Labels read naturally ("1 TikTok GRWM, 3 Instagram Stories"); "Story Set (3)" is renamed "Instagram Stories (×3)". Rate anchors for the new formats start as proportions of the Reel anchor for my approval: TikTok 1.0×, GRWM 1.2×, carousel 0.6×, Go Live 1.5×, try-on/haul 1.0×, UGC 0.8× (usage priced on top), link in bio 0.3× per 7 days. The Tasks list uses the same format names.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -3005,6 +3015,9 @@ into terms costs and event spending; the money side is also noted in
 - D12 and T9 (2026-09-30) are built after P10–P12 (Task #2395); the T9
   follow-up is built into the T9 PR.
 - The event cost split (2026-09-30) is built after the D12/T9/P14 batch.
+- D13, D14 and D15 (2026-09-30) are designed in
+  `docs/DEAL_COMPONENTS_DESIGN.md` and wait on Evoni's answers to its
+  questions before they are built.
 
 ---
 
