@@ -110,6 +110,11 @@ module.exports = (sequelize) => {
     // (jsonb, nullable). Scene Studio's canvas save and the property room
     // create write it.
     canvas_settings: { type: DataTypes.JSONB, allowNull: true },
+    // Task #2396: migration 20261001140000. Which model draws the base still
+    // (NULL = default, see sceneGenerationService.resolveBaseModel) and what
+    // the last base generation used and cost.
+    base_model: { type: DataTypes.STRING(40), allowNull: true },
+    base_generation: { type: DataTypes.JSONB, allowNull: true },
   }, {
     sequelize,
     modelName: 'SceneSet',

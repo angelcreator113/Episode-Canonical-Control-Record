@@ -118,7 +118,8 @@ async function generateFlux(prompt, options = {}) {
 
   const model = fluxModelFor(options);
   const [width, height] = imageCost.falPresetSize(imageSize);
-  const plan = { model, width, height, count: 1 };
+  // onLogged (optional): receives the logged row id and cost (Task #2396).
+  const plan = { model, width, height, count: 1, onLogged: options.onLogged };
 
   console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${imageSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
@@ -179,7 +180,7 @@ async function generateImageFromImage(referenceImageUrl, prompt, options = {}) {
   if (!FAL_KEY) throw new Error('FAL_KEY not configured');
   if (!referenceImageUrl) throw new Error('referenceImageUrl required');
 
-  const plan = { model: KONTEXT_MODEL, count: 1 };
+  const plan = { model: KONTEXT_MODEL, count: 1, onLogged: options.onLogged };
 
   const size = normalizeSize(options.size);
   const imageSize = FLUX_SIZES[size] || FLUX_SIZES.portrait || 'portrait_16_9';
