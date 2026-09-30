@@ -114,16 +114,16 @@ describe('base model resolution', () => {
   });
 });
 
-describe('gpt-image-1.5 rate entry', () => {
-  it('$0.20 at high 1536x1024; other sizes unpriced; input image tokens unpriced (null, not 0)', () => {
+describe('gpt-image-1.5 rate entry (Evoni, 2026-09-30)', () => {
+  it('$0.20 per image at high 1536x1024 as the estimate; image input $8 per 1M ($2 cached); output $32 per 1M', () => {
     expect(imageCost.RATE_TABLE['gpt-image-1.5']).toMatchObject({
       provider: 'openai', model: 'gpt-image-1.5', unit: 'image', usd: null,
-      bySizeQuality: { 'high:1536x1024': 0.20 }, inputImageTokenUsdPerMillion: null,
+      bySizeQuality: { 'high:1536x1024': 0.20 },
+      inputImageTokenUsdPerMillion: 8, cachedInputImageTokenUsdPerMillion: 2, outputImageTokenUsdPerMillion: 32,
     });
     const est = imageCost.estimateImageCost({ model: 'gpt-image-1.5', width: 1536, height: 1024, quality: 'high' });
-    expect(est).toMatchObject({ usd: 0.2, priced: true, inputImageTokensUnpriced: true });
+    expect(est).toMatchObject({ usd: 0.2, priced: true, inputImageTokensUnpriced: false });
     expect(imageCost.estimateImageCost({ model: 'gpt-image-1.5', width: 1024, height: 1024, quality: 'high' }).usd).toBeNull();
-    // gpt-image-1 keeps its priced input-token rate
     expect(imageCost.estimateImageCost({ model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high' }).inputImageTokensUnpriced).toBe(false);
   });
 
@@ -137,42 +137,52 @@ describe('gpt-image-1.5 rate entry', () => {
   });
 });
 
-describe('inputImageTokenCost with a null input-token rate', () => {
+describe('gpt-image-1.5 token costs', () => {
   const est = () => imageCost.estimateImageCost({ model: 'gpt-image-1.5', width: 1536, height: 1024, quality: 'high' });
 
-  it('warns and marks unpriced when the response reports input image tokens', () => {
-    const out = imageCost.inputImageTokenCost(est(), { data: { usage: { input_tokens_details: { image_tokens: 1200 } } } });
-    expect(out).toEqual({ tokens: 1200, usd: 0, unpriced: true });
-    expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/input-image-token cost for gpt-image-1.5 edits is not priced/));
-  });
-
-  it('warns for an edit that sent images even when no usage is reported', () => {
-    expect(imageCost.inputImageTokenCost(est(), { data: {} }, { inputImages: true })).toEqual({ tokens: 0, usd: 0, unpriced: true });
-    expect(console.warn).toHaveBeenCalled();
-  });
-
-  it('text-to-image with no input images: no warning', () => {
-    expect(imageCost.inputImageTokenCost(est(), { data: {} })).toEqual({ tokens: 0, usd: 0 });
+  it('input image tokens at $8 per 1M, cached ones at $2; no unpriced warning', () => {
+    expect(imageCost.inputImageTokenCost(est(), { data: { usage: { input_tokens_details: { image_tokens: 1000000 } } } }))
+      .toEqual({ tokens: 1000000, cachedTokens: 0, usd: 8 });
+    const mixed = imageCost.inputImageTokenCost(est(), { data: { usage: { input_tokens_details: { image_tokens: 1000, cached_tokens: 400 } } } });
+    expect(mixed.tokens).toBe(1000);
+    expect(mixed.cachedTokens).toBe(400);
+    expect(mixed.usd).toBeCloseTo((600 * 8 + 400 * 2) / 1e6, 10);
+    expect(imageCost.inputImageTokenCost(est(), { data: {} }, { inputImages: true })).toEqual({ tokens: 0, usd: 0 });
     expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('output tokens at $32 per 1M; none reported: null (the per-image estimate is logged)', () => {
+    expect(imageCost.outputImageTokenCost(est(), { data: { usage: { output_tokens: 6000 } } })).toEqual({ tokens: 6000, usd: 0.192 });
+    expect(imageCost.outputImageTokenCost(est(), { data: {} })).toEqual({ tokens: 0, usd: null });
+    const e1 = imageCost.estimateImageCost({ model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high' });
+    expect(imageCost.outputImageTokenCost(e1, { data: { usage: { output_tokens: 6000 } } }).usd).toBeNull();
   });
 
   it('gpt-image-1 still prices input tokens at $10 per 1M', () => {
     const e1 = imageCost.estimateImageCost({ model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high' });
     expect(imageCost.inputImageTokenCost(e1, { data: { usage: { input_tokens_details: { image_tokens: 1000 } } } }))
-      .toEqual({ tokens: 1000, usd: 0.01 });
+      .toEqual({ tokens: 1000, cachedTokens: 0, usd: 0.01 });
   });
 
-  it('runImageCall logs the output price and reports it through onLogged', async () => {
+  it('runImageCall logs reported tokens at their rates in place of the per-image estimate', async () => {
     const onLogged = jest.fn();
     await imageCost.runImageCall(
       { model: 'gpt-image-1.5', width: 1536, height: 1024, quality: 'high', inputImages: true, routeName: 't', onLogged },
-      async () => ({ data: { usage: { input_tokens_details: { image_tokens: 500 } } } }),
+      async () => ({ data: { usage: { output_tokens: 6000, input_tokens_details: { image_tokens: 500 } } } }),
     );
     expect(mockRows).toHaveLength(1);
-    expect(mockRows[0]).toMatchObject({ model_name: 'gpt-image-1.5', cost_usd: 0.2, input_tokens: 500 });
+    expect(mockRows[0]).toMatchObject({ model_name: 'gpt-image-1.5', cost_usd: 0.196, input_tokens: 500, output_tokens: 6000 });
     expect(onLogged).toHaveBeenCalledWith(expect.objectContaining({
-      usageLogId: 1, costUsd: 0.2, estimateUsd: 0.2, inputTokens: 500, inputTokensUnpriced: true,
+      usageLogId: 1, costUsd: 0.196, estimateUsd: 0.2, inputTokens: 500, inputTokensUnpriced: false,
     }));
+  });
+
+  it('runImageCall with no usage reported logs the $0.20 per-image estimate', async () => {
+    await imageCost.runImageCall(
+      { model: 'gpt-image-1.5', width: 1536, height: 1024, quality: 'high', routeName: 't' },
+      async () => ({ data: {} }),
+    );
+    expect(mockRows[mockRows.length - 1]).toMatchObject({ cost_usd: 0.2, output_tokens: 0 });
   });
 });
 
@@ -219,7 +229,7 @@ describe('generateBaseScene records the logged cost per model', () => {
     });
   });
 
-  it('gpt-image-1.5 with a style reference uses /v1/images/edits and warns the input tokens are unpriced', async () => {
+  it('gpt-image-1.5 with a style reference uses /v1/images/edits; its input tokens are priced', async () => {
     axios.get.mockResolvedValue({ data: Buffer.from('ref') });
     axios.post.mockResolvedValue({ data: { data: [{ b64_json: B64 }], usage: { input_tokens_details: { image_tokens: 800 } } } });
     const appended = [];
@@ -230,10 +240,11 @@ describe('generateBaseScene records the logged cost per model', () => {
 
     expect(axios.post.mock.calls[0][0]).toBe('https://api.openai.com/v1/images/edits');
     expect(appended).toEqual(expect.arrayContaining([['model', 'gpt-image-1.5'], ['size', '1536x1024'], ['quality', 'high']]));
-    expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/input-image-token cost for gpt-image-1.5 edits is not priced/));
+    expect(console.warn).not.toHaveBeenCalledWith(expect.stringMatching(/input-image-token cost .* is not priced/));
     const final = models.updates[models.updates.length - 1];
-    expect(final.generation_cost).toBe(0.2);
-    expect(final.base_generation.input_tokens_unpriced).toBe(true);
+    // $0.20 per image (no output tokens reported) + 800 input image tokens at $8 per 1M.
+    expect(final.generation_cost).toBe(0.2064);
+    expect(final.base_generation.input_tokens_unpriced).toBe(false);
   });
 
   it.each([
@@ -271,7 +282,7 @@ describe('outpaint angles use gpt-image-1.5 and report their cost', () => {
     expect(appended).toEqual(expect.arrayContaining([['model', 'gpt-image-1.5'], ['size', '1536x1024'], ['quality', 'high']]));
     expect(mockRows[0]).toMatchObject({ model_name: 'gpt-image-1.5', cost_usd: 0.2 });
     expect(costs.value()).toBe(0.2);
-    expect(costs.inputTokensUnpriced).toBe(true);
+    expect(costs.inputTokensUnpriced).toBe(false);
   });
 
   it('a pure crop makes no provider call and records 0', async () => {
