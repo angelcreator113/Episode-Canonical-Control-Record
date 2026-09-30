@@ -67,11 +67,13 @@ async function sharpEnhanceWardrobe(inputBuffer, options = {}) {
     console.log(`[WardrobeImage] Resizing to fit ${maxWidth}x${maxHeight}`);
   }
 
-  // Sharpening pass — optimized for fabric/clothing textures
+  // Sharpening pass — optimized for fabric/clothing textures.
+  // sharp reads m1 (flat areas) and m2 (jagged areas); the flat/jagged
+  // names used before were ignored (Task #2333).
   pipeline = pipeline.sharpen({
     sigma: sharpenSigma,
-    flat: sharpenFlat,
-    jagged: sharpenJagged,
+    m1: sharpenFlat,
+    m2: sharpenJagged,
   });
 
   // Slight contrast boost for clothing photography
@@ -134,10 +136,11 @@ async function generateThumbnail(inputBuffer, options = {}) {
       position: 'centre',
       kernel: sharp.kernel.lanczos3,
     })
+    // m1/m2: sharp's flat and jagged amounts (Task #2333).
     .sharpen({
       sigma: 0.5, // Light sharpening for small images
-      flat: 0.8,
-      jagged: 0.3,
+      m1: 0.8,
+      m2: 0.3,
     });
 
   let outputBuffer;
@@ -347,38 +350,51 @@ async function addDropShadow(inputBuffer, options = {}) {
   const newWidth = inputMeta.width + padding * 2;
   const newHeight = inputMeta.height + padding * 2;
 
-  // Extract alpha channel to create shadow mask
-  const alphaBuffer = await sharp(inputBuffer)
-    .extractChannel(3)
-    .toBuffer();
+  // Task #2334: the shadow layer must be exactly newWidth × newHeight, or
+  // the final composite fails ("Image to composite must have same dimensions
+  // or smaller"). It used to be extended by 2 × padding and then also resized,
+  // and composited as a one-channel image with no alpha.
+  //
+  // The mask is the item's alpha placed on the padded canvas at the shadow
+  // offset. Extend adds exactly padding on each side in total, so no resize
+  // is needed. It is blurred on the canvas, so the blur can spread past the
+  // item's edge. An offset larger than the padding is clamped to it (a
+  // negative extend is refused).
+  const clampOffset = (v) => Math.max(-padding, Math.min(padding, Math.round(Number(v) || 0)));
+  const offsetX = clampOffset(shadowOffsetX);
+  const offsetY = clampOffset(shadowOffsetY);
+  const opacity = Math.max(0, Math.min(1, Number(shadowOpacity)));
+  const blurSigma = Number(shadowBlur);
 
-  // Create shadow: blur the alpha, tint black, reduce opacity
-  const shadowBuffer = await sharp(alphaBuffer)
-    .blur(shadowBlur)
+  // The alpha is written out on its own first: in a single sharp pipeline
+  // extend runs before extractChannel, so the padding would take the extend
+  // background's alpha (opaque) instead of 0.
+  const alphaOnly = await sharp(inputBuffer).extractChannel(3).png().toBuffer();
+  let maskPipeline = sharp(alphaOnly)
     .extend({
-      top: padding + shadowOffsetY,
-      bottom: padding - shadowOffsetY,
-      left: padding + shadowOffsetX,
-      right: padding - shadowOffsetX,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .resize(newWidth, newHeight, { fit: 'fill' })
+      top: padding + offsetY,
+      bottom: padding - offsetY,
+      left: padding + offsetX,
+      right: padding - offsetX,
+      background: { r: 0, g: 0, b: 0 },
+    });
+  if (blurSigma >= 0.3) maskPipeline = maskPipeline.blur(blurSigma);
+  const shadowMask = await sharp(await maskPipeline.png().toBuffer())
+    .linear(Number.isFinite(opacity) ? opacity : 0.25, 0)
     .toColourspace('b-w')
+    .png()
     .toBuffer();
 
-  // Create the shadow layer (black with variable opacity from alpha)
+  // The shadow layer: black, with the scaled mask as its alpha.
   const shadowLayer = await sharp({
     create: {
       width: newWidth,
       height: newHeight,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: shadowOpacity },
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
     },
   })
-    .composite([{
-      input: shadowBuffer,
-      blend: 'dest-in',
-    }])
+    .joinChannel(shadowMask)
     .png()
     .toBuffer();
 
@@ -619,17 +635,18 @@ async function enhanceTexture(inputBuffer, options = {}) {
   let pipeline = sharp(inputBuffer);
 
   // Apply unsharp mask with larger radius for "clarity" effect
+  // m1/m2: sharp's flat and jagged amounts (Task #2333).
   pipeline = pipeline.sharpen({
     sigma: 2.5,              // Larger sigma = more clarity-like effect
-    flat: 1.0,
-    jagged: 0.5,
+    m1: 1.0,
+    m2: 0.5,
   });
 
   // Second pass: fine detail sharpening
   pipeline = pipeline.sharpen({
     sigma: 0.8,              // Small sigma for micro-details
-    flat: detailSharpen,
-    jagged: 0.3,
+    m1: detailSharpen,
+    m2: 0.3,
   });
 
   // Slight contrast boost for texture pop
