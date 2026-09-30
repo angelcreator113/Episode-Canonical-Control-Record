@@ -25,6 +25,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables } = require('./eventTermsService');
 const { withDeliverableTasks, withCareerTasks } = require('../utils/socialTaskSource');
+const { goalTaskScale, goalFields, composeGoalTasks, enforceGoalTaskBounds } = require('../utils/goalTasks');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -531,7 +532,8 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
       } catch (delivErr) {
         console.error('[TodoList] Deliverables read failed (no social task is required):', delivErr.message);
       }
-      const socialTasks = buildSocialTasks(eventType, hostProfile, [], { deliverables });
+      // T9 (§8(cc); Task #2395): the event row sets the goal count and text.
+      const socialTasks = buildSocialTasks(eventType, hostProfile, [], { event, deliverables });
       socialTasksJson = JSON.stringify(socialTasks);
     } catch { /* episodeGeneratorService not available — skip */ }
   }
@@ -624,6 +626,16 @@ async function getTodoList(episodeId, models) {
 
 // ─── CAREER LIST GENERATOR ───────────────────────────────────────────────────
 
+// T9 (docs/EVENT_EPISODE_FLOW.md §8(cc); Task #2395): "Lala's goal tasks
+// scale with the event: 2–3 for small or low-key events, 4–6 for major ones;
+// no fixed template lists." The count comes from goalTaskScale (prestige);
+// the prompt asks for it and enforceGoalTaskBounds holds it server-side.
+// Haiku 4.5, the side-call model this generator already used; two attempts
+// (an API error or an unreadable reply); every call is logged and budget-
+// gated by the aiCostTracker patch on the SDK.
+const CAREER_MODELS = ['claude-haiku-4-5-20251001'];
+const CAREER_ATTEMPTS = 2;
+
 /**
  * Generate a career task list for an event — the tasks Lala must complete
  * during the event itself (deliverables, social posts, networking goals).
@@ -632,6 +644,12 @@ async function getTodoList(episodeId, models) {
  * wardrobe shopping list (UI.OVERLAY.WARDROBE_LIST).
  */
 async function generateCareerTasks(event) {
+  const bounds = goalTaskScale(event);
+  const count = bounds.min === bounds.max ? `${bounds.min}` : `${bounds.min} to ${bounds.max}`;
+  const sizeLine = bounds.scale === 'major'
+    ? 'a major event'
+    : bounds.scale === 'small' ? 'a small or low-key event' : 'a mid-sized event';
+
   const prompt = `You are writing Lala's CAREER to-do list for an event in a luxury life simulator show.
 
 This is NOT the wardrobe checklist — this is about what she needs to ACCOMPLISH during the event:
@@ -640,14 +658,16 @@ content to create, people to network with, social media moments, career position
 EVENT:
 Name: ${event.name}
 Type: ${event.event_type || 'invite'}
-Host: ${event.host || 'unknown'}
+${event.format ? `Format: ${String(event.format).replace(/_/g, ' ')}\n` : ''}Host: ${event.host || 'unknown'}
 Brand: ${event.host_brand || 'none'}
-Prestige: ${event.prestige || 5}/10
+${event.venue_name ? `Venue: ${event.venue_name}\n` : ''}Prestige: ${bounds.prestige}/10 (${sizeLine})
 Dress Code: ${event.dress_code || 'chic'}
-${event.narrative_stakes ? `Stakes: ${event.narrative_stakes.slice(0, 200)}` : ''}
+${event.description ? `Description: ${String(event.description).slice(0, 300)}\n` : ''}${event.narrative_stakes ? `Stakes: ${event.narrative_stakes.slice(0, 200)}` : ''}
 ${event.is_paid ? `Payment: ${event.payment_amount} coins` : 'Unpaid event'}
 
-Write 4-6 career tasks. Each should feel specific to THIS event.
+Write ${count} career tasks — no more, no fewer. This is ${sizeLine}, so the list is that size.
+Each must be specific to THIS event: name its host, brand, venue, format or
+dress code where it can. No generic items that would fit any event.
 Mix of:
 - Content creation (what to film, post, or capture)
 - Networking (who to connect with, impressions to make)
@@ -670,36 +690,44 @@ Respond ONLY with a JSON array:
   }
 ]`;
 
-  try {
-    const response = await getAnthropic().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
-      messages: [{ role: 'user', content: prompt }],
-    });
+  let lastErr = null;
+  for (let attempt = 0; attempt < CAREER_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await getAnthropic().messages.create({
+        model: CAREER_MODELS[0],
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }],
+      });
 
-    const raw = response.content[0]?.text || '[]';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const tasks = JSON.parse(clean);
-    return tasks.map((t, i) => ({
-      slot:        t.slot        || `career_${i + 1}`,
-      label:       t.label       || 'Career task',
-      description: t.description || '',
-      // T1 (§8(bb); Task #2292): a generated career task is never required.
-      required:    false,
-      task_source: (t.goal ?? t.required ?? (i < 2)) ? 'goal' : 'optional',
-      completed:   false,
-      order:       i + 1,
-    }));
-  } catch (err) {
-    console.error('[CareerList] Generation failed, using the fallback tasks:', err.message);
-    // Fallback career tasks — goals and optional ideas, none required (T1)
-    return [
-      { slot: 'content_main', label: 'Capture the moment everyone will talk about', description: 'The content that makes the event worth attending', required: false, task_source: 'goal', completed: false, order: 1 },
-      { slot: 'network', label: 'Make one connection that changes everything', description: 'The right conversation at the right time', required: false, task_source: 'goal', completed: false, order: 2 },
-      { slot: 'social_post', label: 'Post before the night ends', description: 'First to post sets the narrative', required: false, task_source: 'optional', completed: false, order: 3 },
-      { slot: 'brand_moment', label: 'Give the brand their money shot', description: 'They invited you for a reason — deliver it', required: false, task_source: 'optional', completed: false, order: 4 },
-    ];
+      const raw = response.content[0]?.text || '[]';
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed)) throw new Error('reply is not a JSON array');
+      const tasks = parsed.map((t, i) => ({
+        slot:        t?.slot        || `career_${i + 1}`,
+        label:       t?.label       || '',
+        description: t?.description || '',
+        // T1 (§8(bb); Task #2292): a generated career task is never required.
+        required:    false,
+        task_source: (t?.goal ?? t?.required ?? (i < 2)) ? 'goal' : 'optional',
+        completed:   false,
+        order:       i + 1,
+      }));
+      // T9: trimmed to the event's maximum; a short reply is kept, not padded.
+      return enforceGoalTaskBounds(tasks, bounds, 'CareerList')
+        .map((t, i) => ({ ...t, order: i + 1 }));
+    } catch (err) {
+      lastErr = err;
+      console.error(`[CareerList] Generation attempt ${attempt + 1} of ${CAREER_ATTEMPTS} failed:`, err.message);
+    }
   }
+
+  // T9: no fixed fallback list. The minimum for the event's scale is written
+  // from its own fields (dress code, venue, host, brand, guests, format,
+  // description, stakes, name); see src/utils/goalTasks.js.
+  console.error('[CareerList] Generation failed; writing the event\'s minimum goals from its fields:', lastErr?.message);
+  return composeGoalTasks(goalFields(event), bounds, { upTo: bounds.min, where: 'CareerList' })
+    .map((t, i) => ({ ...t, order: i + 1 }));
 }
 
 /**

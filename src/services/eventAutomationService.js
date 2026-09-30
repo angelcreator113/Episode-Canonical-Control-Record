@@ -748,6 +748,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
               : null,
             [],
             {
+              prestige, // T9 (§8(cc); Task #2395): sets the goal count
               event_name: eventName,
               host_name: hostName,
               host_handle: host?.handle || null,

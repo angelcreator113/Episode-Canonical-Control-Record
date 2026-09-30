@@ -2828,7 +2828,16 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           social_tasks: (() => {
             try {
               const { buildSocialTasks } = require('../services/episodeGeneratorService');
-              return buildSocialTasks('invite', { platform: 'instagram', content_category: p.content_category || 'creator_economy' });
+              // T9 (§8(cc); Task #2395): goals written from this event's
+              // fields, their count set by its prestige.
+              return buildSocialTasks('invite', { platform: 'instagram', content_category: p.content_category || 'creator_economy' }, [], {
+                prestige,
+                event_name: draftedName || `${event_template || 'Event'} with ${creatorName}`,
+                venue_name: venue?.name || null,
+                dress_code: styling ? styling.dress_code : null,
+                description: descriptionText,
+                guest_names: (guestList || []).map((g) => g?.display_name || g?.handle).filter(Boolean),
+              });
             } catch { return []; }
           })(),
         },
@@ -3654,7 +3663,8 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requ
             );
             hostProfile = rows?.[0] || null;
           }
-          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile, outfitPieces);
+          // T9 (§8(cc); Task #2395): the event row sets the goal count and text.
+          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile, outfitPieces, { event });
         } catch { socialTasks = []; }
       }
       // T1 (§8(bb); Task #2292): required only from the event's deliverables.
