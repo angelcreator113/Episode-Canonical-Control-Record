@@ -26,7 +26,8 @@ const { DataTypes } = require('sequelize');
  *
  * Migrations: 20260924000000-add-event-terms.js,
  * 20260929190000-add-event-deliverables-owed-to.js,
- * 20260929200001-add-event-deliverables-fee.js.
+ * 20260929200001-add-event-deliverables-fee.js,
+ * 20261001160000-add-deliverable-formats.js.
  */
 const DELIVERABLE_STATUSES = ['pending', 'completed', 'submitted', 'approved'];
 const DELIVERABLE_OWED_TO = ['host', 'brand'];
@@ -59,6 +60,10 @@ module.exports = (sequelize) => {
       validate: { isIn: [DELIVERABLE_OWED_TO] },
     },
     fee: { type: DataTypes.INTEGER, allowNull: true },
+    // Ruling D15 (2026-09-30): the platform and the quantity (pieces, slides
+    // or days) of the format in deliverable_type (src/utils/deliverableFormats.js).
+    platform: { type: DataTypes.STRING(20), allowNull: true, comment: 'instagram | tiktok | youtube' },
+    quantity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
   }, {
     tableName: 'event_deliverables',
     timestamps: true,

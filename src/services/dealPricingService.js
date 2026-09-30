@@ -12,9 +12,11 @@
  *   1. The brand partnership base is its own component, not an appearance
  *      fee; the deliverables are priced on top; the appearance anchor is
  *      added separately only when the partnership requires an appearance.
- *   2. Deliverables use a fixed typed list. Reel and Story Set (3) take
- *      their anchors; Post, Photo Set and Other are priced by hand. Appearance
- *      is not a deliverable. No price depends on words in free text.
+ *   2. Deliverables use a fixed typed list. Appearance is not a
+ *      deliverable. No price depends on words in free text. Since D15
+ *      (2026-09-30) the list is the influencer formats in
+ *      src/utils/deliverableFormats.js, each with its anchor on the rate card
+ *      (v2); only Other is priced by hand.
  *   3. Premiums on one component add up (+10% and +15% is +25%) and apply
  *      only to that component.
  *   4. The deal type decides the components (DEAL_PLANS).
@@ -33,6 +35,9 @@
  */
 
 const { DELIVERABLE_TYPE_LABELS } = require('./eventTermsService');
+const {
+  DELIVERABLE_FORMATS, formatOf, formatAnchorPrice, deliverableTypeLabel,
+} = require('../utils/deliverableFormats');
 
 const PRICING_SOURCE = 'pricing';
 
@@ -58,9 +63,13 @@ const DEAL_PLANS = Object.freeze({
   brand_partnership: { components: ['partnership_base'], deliverables: true, cash: true, appearanceIfRequired: true },
 });
 
-// Ruling 2: the only deliverable types with an automatic anchor in V1. Every
-// other type (post, photo_set, other) and any untyped row is priced by hand.
-const DELIVERABLE_ANCHORS = Object.freeze({ reel: 'reel', story_set_3: 'stories_3' });
+// Ruling 2 as D15 extends it: each format's anchor component on the rate
+// card. Other and any untyped row are priced by hand. How the anchor turns
+// into a price (per piece, per slide, per started week) is
+// deliverableFormats.formatAnchorPrice.
+const DELIVERABLE_ANCHORS = Object.freeze(Object.fromEntries(
+  Object.entries(DELIVERABLE_FORMATS).filter(([, f]) => f.anchor).map(([k, f]) => [k, f.anchor])
+));
 
 
 const TRUE_LIKE = new Set([true, 'true', 1, '1']);
@@ -80,7 +89,7 @@ function tierOf(careerTier) {
 }
 
 function deliverableName(d) {
-  return `"${d?.description || DELIVERABLE_TYPE_LABELS[d?.deliverable_type] || 'Deliverable'}"`;
+  return `"${d?.description || deliverableTypeLabel(d) || 'Deliverable'}"`;
 }
 
 /** Why a deliverable has no automatic price, for "Price required". */
@@ -177,23 +186,28 @@ const hasChoices = (list) => Array.isArray(list) && list.length > 0;
 // read as Influential and Elite for both the Post and the third piece.
 const DRAFTED_DELIVERABLES_SOURCE = 'deal';
 
-/** D12's mapping: [{ type, required? }] for a deal type at a tier. Pure. */
+// D15 (2026-09-30): the pieces are drafted in the new formats: a Reel is an
+// Instagram Reel, a Story Set (3) is Instagram Stories ×3, a Post is an
+// Instagram post (answer 8). D13's drafting (a later PR) supersedes this.
+const REEL = { type: 'instagram_reel' };
+const STORIES = { type: 'instagram_stories', quantity: 3 };
+const POST = { type: 'instagram_post' };
+
+/** D12's mapping: [{ type, quantity?, required? }] for a deal type at a tier. Pure. */
 function draftedDeliverableTypes(dealType, tier) {
   const t = tierOf(tier);
   switch (dealType) {
     case 'paid_appearance':
-      return [{ type: 'story_set_3', required: false }];
+      return [{ ...STORIES, required: false }];
     case 'paid_deliverables':
-      if (t <= 2) return [{ type: 'reel' }];
-      if (t === 3) return [{ type: 'reel' }, { type: 'story_set_3' }];
-      return [{ type: 'reel' }, { type: 'story_set_3' }, { type: 'post' }];
+      if (t <= 2) return [REEL];
+      if (t === 3) return [REEL, STORIES];
+      return [REEL, STORIES, POST];
     case 'appearance_plus_deliverables':
     case 'performance_booking':
-      return t <= 3 ? [{ type: 'reel' }] : [{ type: 'reel' }, { type: 'story_set_3' }];
+      return t <= 3 ? [REEL] : [REEL, STORIES];
     case 'brand_partnership':
-      return t <= 3
-        ? [{ type: 'reel' }, { type: 'story_set_3' }]
-        : [{ type: 'reel' }, { type: 'story_set_3' }, { type: 'post' }];
+      return t <= 3 ? [REEL, STORIES] : [REEL, STORIES, POST];
     default:
       return [];
   }
@@ -204,11 +218,11 @@ function draftedDeliverableTypes(dealType, tier) {
  *   event: { deal_type, career_tier }
  *   tier:  overrides event.career_tier
  *   card:  the rate card (loadRateCard); without one no fee is drafted.
- * Returns [{ deliverable_type, description, required, owed_to, fee }]. The
- * fee is the anchor at the tier for Reel and Story Set (3) on a deal that
- * pays its deliverables (rulings 2 and 4); null otherwise: "Price required"
- * for a Post (priced by hand, ruling 2), and no fee at all on a paid
- * appearance, which does not pay deliverables. owed_to is the brand on a
+ * Returns [{ deliverable_type, platform, quantity, description, required,
+ * owed_to, fee }]. The fee is the format's anchor price at the tier (D15)
+ * on a deal that pays its deliverables (rulings 2 and 4); null otherwise:
+ * "Price required" when the card has no anchor there, and no fee at all on
+ * a paid appearance, which does not pay deliverables. owed_to is the brand on a
  * brand partnership and the host otherwise (the hand-entry default), so a
  * draft never re-drafts an Auto-drafted deal type (dealTypeDraftService's
  * rule 2 reads brand-owed deliverables).
@@ -219,15 +233,20 @@ function draftDeliverablesForDeal(event, { tier, card } = {}) {
   if (!plan) return [];
   const t = tierOf(tier ?? event?.career_tier);
   const owedTo = dealType === 'brand_partnership' ? 'brand' : 'host';
-  return draftedDeliverableTypes(dealType, t).map(({ type, required = true }) => {
-    const component = DELIVERABLE_ANCHORS[type] || null;
-    const anchor = plan.deliverables && component ? card?.anchors?.[component]?.[t] : null;
-    return {
+  return draftedDeliverableTypes(dealType, t).map(({ type, quantity, required = true }) => {
+    const format = formatOf(type);
+    const row = {
       deliverable_type: type,
-      description: DELIVERABLE_TYPE_LABELS[type],
+      platform: format.platforms[0] || null,
+      quantity: quantity || format.defaultQuantity,
+    };
+    const price = plan.deliverables ? formatAnchorPrice(row, t, card) : null;
+    return {
+      ...row,
+      description: deliverableTypeLabel(row),
       required,
       owed_to: owedTo,
-      fee: anchor == null ? null : anchor,
+      fee: price == null ? null : price,
     };
   });
 }
@@ -286,7 +305,7 @@ function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
       return { id: d.id, component: null, anchor: null, fee: null, premiums: [], note: 'Not paid for this deal type.', price_required: false };
     }
     const component = DELIVERABLE_ANCHORS[d.deliverable_type] || null;
-    const anchor = component ? card.anchors?.[component]?.[tier] : null;
+    const anchor = component ? formatAnchorPrice(d, tier, card) : null;
     if (anchor == null) {
       const reason = component ? `${component} is not offered at tier ${tier}` : manualPriceReason(d);
       const note = `${deliverableName(d)}: price required (${reason}).`;

@@ -61,6 +61,7 @@ import {
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_DUE_MAX,
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
+  DELIVERABLE_FORMATS, PLATFORM_LABELS, quantityWord,
   dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableDraftNote, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
   BONUS_TIERS, BONUS_TIER_LABELS, describeBonusTerms, bonusDraftFrom, buildBonusTermsUpdate,
@@ -469,7 +470,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                     <span className="epp-term-item-text">{d.description}</span>
                     <span className="epp-term-meta">
                       <span data-testid={`terms-deliverable-owed-${d.id}`}>{DELIVERABLE_OWED_TO_LABELS[d.owed_to === 'brand' ? 'brand' : 'host']}</span>
-                      {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d.deliverable_type)}</span>}
+                      {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d)}{d.platform && DELIVERABLE_FORMATS[d.deliverable_type]?.platforms.length > 1 ? ` · ${PLATFORM_LABELS[d.platform]}` : ''}</span>}
                       {(() => {
                         const fee = describeDeliverableFee(event, d);
                         return fee.label && (
@@ -554,12 +555,43 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   <span>Type</span>
                   <select
                     value={delivDraft.deliverable_type} data-testid="terms-deliverable-type"
-                    onChange={(e) => setDelivDraft((d) => ({ ...d, deliverable_type: e.target.value }))}
+                    onChange={(e) => {
+                      // D15: a new format starts at its own platform and quantity.
+                      const type = e.target.value;
+                      const f = DELIVERABLE_FORMATS[type];
+                      setDelivDraft((d) => ({
+                        ...d,
+                        deliverable_type: type,
+                        platform: f ? (f.platforms.includes(d.platform) ? d.platform : (f.platforms.length === 1 ? f.platforms[0] : '')) : '',
+                        quantity: f ? String(f.defaultQuantity) : '',
+                      }));
+                    }}
                   >
                     <option value="">{delivDraft.legacy_type ? `${delivDraft.legacy_type} (choose a type)` : 'Choose a type'}</option>
                     {DELIVERABLE_TYPES.map((t) => <option key={t} value={t}>{DELIVERABLE_TYPE_LABELS[t]}</option>)}
                   </select>
                 </label>
+                {DELIVERABLE_FORMATS[delivDraft.deliverable_type]?.platforms.length > 1 && (
+                  <label className="epp-term-field">
+                    <span>Platform</span>
+                    <select
+                      value={delivDraft.platform} data-testid="terms-deliverable-platform"
+                      onChange={(e) => setDelivDraft((d) => ({ ...d, platform: e.target.value }))}
+                    >
+                      <option value="">{DELIVERABLE_FORMATS[delivDraft.deliverable_type].platformInPhrase ? 'Choose a platform' : 'Any platform'}</option>
+                      {DELIVERABLE_FORMATS[delivDraft.deliverable_type].platforms.map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
+                    </select>
+                  </label>
+                )}
+                {DELIVERABLE_FORMATS[delivDraft.deliverable_type] && (
+                  <label className="epp-term-field">
+                    <span>{quantityWord(DELIVERABLE_FORMATS[delivDraft.deliverable_type])}</span>
+                    <input
+                      type="number" min={1} step={1} inputMode="numeric" value={delivDraft.quantity} data-testid="terms-deliverable-quantity"
+                      onChange={(e) => setDelivDraft((d) => ({ ...d, quantity: e.target.value }))}
+                    />
+                  </label>
+                )}
                 <label className="epp-term-field">
                   <span>Due</span>
                   <input
@@ -590,7 +622,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                 <p className="epp-term-note" data-testid="terms-deliverable-manual-note">
                   {delivDraft.deliverable_type === 'other'
                     ? 'Other is never priced automatically: set its fee.'
-                    : 'Priced by hand: only a Reel or a Story Set (3) takes a rate from the card.'}
+                    : 'Choose a format to price it from the rate card.'}
                 </p>
               )}
               <label className="epp-term-check">
@@ -808,7 +840,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
           )}
           {plan.cash && (
             <p className="epp-term-note">
-              Rates are baselines, not fixed payouts: a proposal fills each component and each Reel or Story Set (3) from the rate card; Post, Photo Set and Other are priced by hand. Every number stays editable until the terms lock.
+              Rates are baselines, not fixed payouts: a proposal fills each component and each deliverable format from the rate card; only Other is priced by hand. Every number stays editable until the terms lock.
             </p>
           )}
         </div>

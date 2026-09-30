@@ -14,5 +14,5 @@
     "performance_booking": { "components": ["performance"], "deliverables": true, "cash": true },
     "brand_partnership": { "components": ["partnership_base"], "deliverables": true, "cash": true, "appearanceIfRequired": true }
   },
-  "deliverable_anchors": { "reel": "reel", "story_set_3": "stories_3" }
+  "deliverable_anchors": { "instagram_reel": "reel", "instagram_post": "instagram_post", "tiktok_video": "tiktok_video", "grwm_video": "grwm_video", "instagram_stories": "stories_3", "carousel_post": "carousel_post", "go_live": "go_live", "link_in_bio": "link_in_bio_week", "try_on_haul": "try_on_haul", "ugc": "ugc" }
 }

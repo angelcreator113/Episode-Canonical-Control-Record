@@ -12,7 +12,12 @@ const { DataTypes } = require('sequelize');
  * Rows are versioned; version 1 is seeded by
  * 20260929200002-create-deal-rate-anchors.js. No code reads them yet.
  */
-const RATE_COMPONENTS = Object.freeze(['paid_appearance', 'reel', 'stories_3', 'brand_partnership_base', 'performance_booking']);
+// Version 2 (20261001160000-add-deliverable-formats.js; ruling D15 and
+// answer 8, 2026-09-30) adds the deliverable formats' anchors.
+const RATE_COMPONENTS = Object.freeze([
+  'paid_appearance', 'reel', 'stories_3', 'brand_partnership_base', 'performance_booking',
+  'tiktok_video', 'grwm_video', 'instagram_post', 'carousel_post', 'go_live', 'try_on_haul', 'ugc', 'link_in_bio_week',
+]);
 
 module.exports = (sequelize) => {
   const DealRateAnchor = sequelize.define('DealRateAnchor', {

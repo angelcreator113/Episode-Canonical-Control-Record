@@ -22,7 +22,9 @@ const {
   buildInvitationContent,
 } = require('../../../src/services/invitationCompositingService');
 
-const NO_PRICE = /\d|Prime Coins|coins/;
+// No amount: D15's quantities ("7 days", "3 Instagram Stories") are
+// digits too, so it is the coin amounts that are refused.
+const NO_PRICE = /\d[\d,]*\s*(?:Prime Coins|coins)|Prime Coins|coins/;
 
 describe('describeInvitationMoney — deal events (invitation ruling)', () => {
   it('paid_appearance: the appearance fee, in Prime Coins, in the host\'s voice', () => {
@@ -50,15 +52,16 @@ describe('describeInvitationMoney — deal events (invitation ruling)', () => {
         { kind: 'styling', label: 'Tailor', amount: 50, paid_by: 'lala' },
       ],
       deliverables: [
-        { deliverable_type: 'reel', fee: 300 },
-        { deliverable_type: 'story_set_3', fee: 120 },
-        { deliverable_type: 'post', fee: null },
+        { deliverable_type: 'instagram_reel', fee: 300 },
+        { deliverable_type: 'instagram_stories', quantity: 3, fee: 120 },
+        { deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 1, fee: null },
       ],
     });
     expect(m.kind).toBe('earn');
     expect(m.text).toBe([
       'We will pay you a partnership base fee of 1,200 Prime Coins and an appearance fee of 400 Prime Coins.',
-      'For your content, we will pay 300 Prime Coins for a Reel, 120 Prime Coins for a Story Set (3) and a Post (fee to be confirmed).',
+      // D15: the natural phrase ("1 TikTok GRWM, 3 Instagram Stories").
+      'For your content, we will pay 300 Prime Coins for 1 Instagram Reel, 120 Prime Coins for 3 Instagram Stories and 1 TikTok GRWM (fee to be confirmed).',
       'We are covering your car.',
       'Maison Vero is covering your glam.',
       'If your look earns a Slay, we will add a bonus of 200 Prime Coins; for a Pass, 100 Prime Coins.',
@@ -81,10 +84,10 @@ describe('describeInvitationMoney — deal events (invitation ruling)', () => {
   it('invited_comped: says so, names what the host covers, no price talk', () => {
     const m = describeInvitationMoney({ deal_type: 'invited_comped', cost_coins: 350, bonus_terms: { slay: 200 } }, {
       costs: [{ kind: 'entry', label: 'Entry / ticket', amount: 350, paid_by: 'host' }],
-      deliverables: [{ deliverable_type: 'reel', fee: 300 }],
+      deliverables: [{ deliverable_type: 'link_in_bio', platform: 'instagram', quantity: 7, fee: 300 }],
     });
     expect(m.kind).toBe('comped');
-    expect(m.text).toBe('You attend as our guest, with our compliments. We are covering your entry / ticket. In return, we ask for a Reel.');
+    expect(m.text).toBe('You attend as our guest, with our compliments. We are covering your entry / ticket. In return, we ask for a link in bio on Instagram (7 days).');
     expect(m.text).not.toMatch(NO_PRICE);
   });
 

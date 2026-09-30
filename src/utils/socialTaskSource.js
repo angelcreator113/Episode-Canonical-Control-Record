@@ -32,9 +32,10 @@ const RETIRED_SLOTS = new Set(['brand_post_1', 'brand_post_2']);
 
 const DESCRIPTION_MAX = 160;
 
-// The fixed deliverable types read by their labels (Task #2341); a row
-// written before the fixed list shows its stored text.
-const { DELIVERABLE_TYPE_LABELS } = require('../services/eventTermsService');
+// A typed deliverable reads by its D15 format phrase ("1 TikTok GRWM",
+// "3 Instagram Stories"; ruling D15: "The Tasks list uses the same format
+// names"); an untyped row shows its stored text.
+const { deliverablePhrase, platformOf } = require('./deliverableFormats');
 
 function socialTaskSource(task) {
   if (task?.deliverable_id) return task.owed_to === 'brand' ? 'brand_deliverable' : 'host_requirement';
@@ -49,12 +50,12 @@ function isSocialTaskRequired(task) {
 /** One task per accepted deliverable row; required unless the row says not. */
 function deliverableTask(d) {
   const description = String(d.description || '').trim();
-  const detail = [DELIVERABLE_TYPE_LABELS[d.deliverable_type] || d.deliverable_type, d.due_date ? `due ${d.due_date}` : null].filter(Boolean).join(' · ');
+  const detail = [deliverablePhrase(d) || d.deliverable_type, d.due_date ? `due ${d.due_date}` : null].filter(Boolean).join(' · ');
   return {
     slot: `deliverable_${d.id}`,
     label: description.length > DESCRIPTION_MAX ? `${description.slice(0, DESCRIPTION_MAX - 1)}…` : description,
     description: detail || 'Accepted deliverable',
-    platform: d.deliverable_type || 'deliverable',
+    platform: platformOf(d) || d.deliverable_type || 'deliverable',
     timing: 'during',
     required: d.required !== false,
     completed: false,

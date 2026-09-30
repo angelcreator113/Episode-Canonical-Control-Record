@@ -1,27 +1,39 @@
 /**
- * The fixed deliverable types — the frontend mirror is pinned to the server
- * list (deal build PR 3, Task #2341; Evoni's Deal PR 3 ruling, QUESTION 2).
+ * The deliverable formats — the frontend mirror is pinned to the server
+ * definitions (ruling D15, Evoni 2026-09-30, superseding the Deal PR 3 list
+ * of Task #2341).
  *
- * The Terms form offers the types from
+ * The Terms form offers the formats from
  * frontend/src/constants/deliverableTypes.json, because the frontend cannot
- * import src/services. The source of truth is
- * eventTermsService.DELIVERABLE_TYPES, which the deliverable routes enforce.
+ * import src/. The source of truth is src/utils/deliverableFormats.js, which
+ * the deliverable routes enforce (eventTermsService.DELIVERABLE_TYPES).
  */
 const path = require('path');
 const { DELIVERABLE_TYPES } = require('../../../src/services/eventTermsService');
+const formats = require('../../../src/utils/deliverableFormats');
 
 const mirror = require(path.join('..', '..', '..', 'frontend', 'src', 'constants', 'deliverableTypes.json'));
 
-describe('deliverable type mirror (frontend/src/constants/deliverableTypes.json)', () => {
-  it('equals the server list, in order', () => {
-    expect(mirror.deliverable_type).toEqual(DELIVERABLE_TYPES);
+describe('deliverable format mirror (frontend/src/constants/deliverableTypes.json)', () => {
+  it('lists the server types, in order', () => {
+    expect(mirror.deliverable_type).toEqual([...DELIVERABLE_TYPES]);
+    expect([...DELIVERABLE_TYPES]).toEqual([...formats.DELIVERABLE_TYPES]);
   });
 
-  it('is the ruled list: Reel, Story Set (3), Post, Photo Set, Other', () => {
-    expect(DELIVERABLE_TYPES).toEqual(['reel', 'story_set_3', 'post', 'photo_set', 'other']);
+  it('is D15\'s list, with answer 8\'s Instagram post, and Other', () => {
+    expect([...DELIVERABLE_TYPES]).toEqual([
+      'instagram_reel', 'instagram_post', 'tiktok_video', 'grwm_video', 'instagram_stories',
+      'carousel_post', 'go_live', 'link_in_bio', 'try_on_haul', 'ugc', 'other',
+    ]);
+  });
+
+  it('mirrors the formats, the platform labels and the quantity range exactly', () => {
+    expect(mirror.formats).toEqual(JSON.parse(JSON.stringify(formats.DELIVERABLE_FORMATS)));
+    expect(mirror.platform_labels).toEqual({ ...formats.PLATFORM_LABELS });
+    expect(mirror.quantity).toEqual({ min: formats.QUANTITY_MIN, max: formats.QUANTITY_MAX });
   });
 
   it('mirrors nothing else', () => {
-    expect(Object.keys(mirror)).toEqual(['deliverable_type']);
+    expect(Object.keys(mirror)).toEqual(['deliverable_type', 'formats', 'platform_labels', 'quantity']);
   });
 });

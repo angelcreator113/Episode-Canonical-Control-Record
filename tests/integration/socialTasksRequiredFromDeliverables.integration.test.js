@@ -90,7 +90,7 @@ const PRE_T1_SAVED_TASKS = [
   it('an event with a real deliverable gets exactly that task required', async () => {
     const ids = await seedEvent({ savedTasks: PRE_T1_SAVED_TASKS });
     await insertEventDeliverables(sequelize, ids.event, [
-      { description: 'One Instagram reel wearing the Maison Rue coat', deliverable_type: 'reel', due_date: 'launch night', required: true },
+      { description: 'One Instagram reel wearing the Maison Rue coat', deliverable_type: 'instagram_reel', due_date: 'launch night', required: true },
     ]);
     const [row] = await q(`SELECT id FROM event_deliverables WHERE event_id = :event`, ids);
 
@@ -103,7 +103,10 @@ const PRE_T1_SAVED_TASKS = [
       // T2 (Task #2294): a hand-entered row is owed to the host by default.
       task_source: 'host_requirement',
       label: 'One Instagram reel wearing the Maison Rue coat',
-      description: 'Reel · due launch night',
+      // D15: the task names the format as the Terms do ("The Tasks list
+      // uses the same format names"), and its platform is the real one.
+      description: '1 Instagram Reel · due launch night',
+      platform: 'instagram',
     });
   });
 });

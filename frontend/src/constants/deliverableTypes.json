@@ -1,9 +1,199 @@
 {
   "deliverable_type": [
-    "reel",
-    "story_set_3",
-    "post",
-    "photo_set",
+    "instagram_reel",
+    "instagram_post",
+    "tiktok_video",
+    "grwm_video",
+    "instagram_stories",
+    "carousel_post",
+    "go_live",
+    "link_in_bio",
+    "try_on_haul",
+    "ugc",
     "other"
-  ]
+  ],
+  "formats": {
+    "instagram_reel": {
+      "label": "Instagram Reel",
+      "noun": [
+        "Instagram Reel",
+        "Instagram Reels"
+      ],
+      "platforms": [
+        "instagram"
+      ],
+      "platformInPhrase": false,
+      "unit": "piece",
+      "anchor": "reel",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "instagram_post": {
+      "label": "Instagram post",
+      "noun": [
+        "Instagram post",
+        "Instagram posts"
+      ],
+      "platforms": [
+        "instagram"
+      ],
+      "platformInPhrase": false,
+      "unit": "piece",
+      "anchor": "instagram_post",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "tiktok_video": {
+      "label": "TikTok video",
+      "noun": [
+        "TikTok video",
+        "TikTok videos"
+      ],
+      "platforms": [
+        "tiktok"
+      ],
+      "platformInPhrase": false,
+      "unit": "piece",
+      "anchor": "tiktok_video",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "grwm_video": {
+      "label": "GRWM video",
+      "noun": [
+        "GRWM",
+        "GRWMs"
+      ],
+      "platforms": [
+        "tiktok",
+        "instagram",
+        "youtube"
+      ],
+      "platformInPhrase": true,
+      "unit": "piece",
+      "anchor": "grwm_video",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "instagram_stories": {
+      "label": "Instagram Stories",
+      "noun": [
+        "Instagram Story",
+        "Instagram Stories"
+      ],
+      "platforms": [
+        "instagram"
+      ],
+      "platformInPhrase": false,
+      "unit": "slide",
+      "anchor": "stories_3",
+      "pricing": "per_slide_of_3",
+      "defaultQuantity": 3
+    },
+    "carousel_post": {
+      "label": "Carousel post",
+      "noun": [
+        "carousel post",
+        "carousel posts"
+      ],
+      "platforms": [
+        "instagram",
+        "tiktok"
+      ],
+      "platformInPhrase": true,
+      "unit": "piece",
+      "anchor": "carousel_post",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "go_live": {
+      "label": "Go Live",
+      "noun": [
+        "Live",
+        "Lives"
+      ],
+      "platforms": [
+        "instagram",
+        "tiktok",
+        "youtube"
+      ],
+      "platformInPhrase": true,
+      "unit": "piece",
+      "anchor": "go_live",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "link_in_bio": {
+      "label": "Link in bio",
+      "noun": [
+        "day",
+        "days"
+      ],
+      "platforms": [
+        "instagram",
+        "tiktok"
+      ],
+      "platformInPhrase": false,
+      "unit": "day",
+      "anchor": "link_in_bio_week",
+      "pricing": "per_started_week",
+      "defaultQuantity": 7
+    },
+    "try_on_haul": {
+      "label": "Try-on/haul video",
+      "noun": [
+        "try-on/haul video",
+        "try-on/haul videos"
+      ],
+      "platforms": [
+        "tiktok",
+        "instagram",
+        "youtube"
+      ],
+      "platformInPhrase": true,
+      "unit": "piece",
+      "anchor": "try_on_haul",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "ugc": {
+      "label": "Content for the brand (UGC)",
+      "noun": [
+        "UGC piece for the brand",
+        "UGC pieces for the brand"
+      ],
+      "platforms": [],
+      "platformInPhrase": false,
+      "unit": "piece",
+      "anchor": "ugc",
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    },
+    "other": {
+      "label": "Other",
+      "noun": [
+        "other deliverable",
+        "other deliverables"
+      ],
+      "platforms": [
+        "instagram",
+        "tiktok",
+        "youtube"
+      ],
+      "platformInPhrase": false,
+      "unit": "piece",
+      "anchor": null,
+      "pricing": "per_unit",
+      "defaultQuantity": 1
+    }
+  },
+  "platform_labels": {
+    "instagram": "Instagram",
+    "tiktok": "TikTok",
+    "youtube": "YouTube"
+  },
+  "quantity": {
+    "min": 1,
+    "max": 365
+  }
 }

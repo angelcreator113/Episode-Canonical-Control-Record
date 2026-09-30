@@ -312,10 +312,13 @@ function costName(cost) {
   return (label || COST_KIND_NAMES[cost?.kind] || 'costs').toLowerCase();
 }
 
+// A typed deliverable by its natural D15 phrase ("1 TikTok GRWM", "3
+// Instagram Stories", "a link in bio (7 days)"); Other and untyped rows by
+// their description.
 function deliverableName(d) {
-  const { DELIVERABLE_TYPE_LABELS } = require('./eventTermsService');
-  const typed = DELIVERABLE_TYPE_LABELS[d?.deliverable_type];
-  if (typed && d.deliverable_type !== 'other') return `a ${typed}`;
+  const { deliverablePhrase } = require('../utils/deliverableFormats');
+  const phrase = d?.deliverable_type !== 'other' ? deliverablePhrase(d) : null;
+  if (phrase) return phrase.startsWith('Link in bio') ? `a link in bio${phrase.slice('Link in bio'.length)}` : phrase;
   const described = d?.description && String(d.description).trim();
   return described ? `"${described}"` : 'a deliverable';
 }

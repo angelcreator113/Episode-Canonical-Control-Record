@@ -114,7 +114,7 @@ const readSchema = async () => ({
     const before = { schema: await readSchema(), anchors: await readAnchors(), premiums: await readPremiums() };
     for (const m of migrations) await m.up(sequelize.getQueryInterface(), Sequelize);
     expect({ schema: await readSchema(), anchors: await readAnchors(), premiums: await readPremiums() }).toEqual(before);
-    const [{ n }] = await q(`SELECT COUNT(*)::int AS n FROM deal_rate_anchors`);
+    const [{ n }] = await q(`SELECT COUNT(*)::int AS n FROM deal_rate_anchors WHERE version = 1`);
     expect(n).toBe(25);
   });
 
@@ -125,6 +125,12 @@ const readSchema = async () => ({
     for (const m of migrations) await m.up(sequelize.getQueryInterface(), Sequelize);
     expect(await readSchema()).toEqual(before);
     expect(await readAnchors()).toEqual(RULED_ANCHORS);
+    // Dropping the rate tables also dropped rate card v2 (D15's formats,
+    // 20261001160000); its up re-seeds v2 only when it is missing, so the
+    // suites that run after this one read the card the migrations leave.
+    await require('../../src/migrations/20261001160000-add-deliverable-formats').up(sequelize.getQueryInterface(), Sequelize);
+    const [{ v2 }] = await q(`SELECT COUNT(*)::int AS v2 FROM deal_rate_anchors WHERE version = 2`);
+    expect(v2).toBe(65);
   });
 
   it('M-5 refuses a second executed payout row for the same source, and nothing else', async () => {
