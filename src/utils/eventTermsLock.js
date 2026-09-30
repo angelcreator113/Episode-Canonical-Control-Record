@@ -15,6 +15,21 @@
  *
  * Deliverables have their own lock in routes/eventDeliverables.js. Itemised
  * costs (routes/eventCosts.js, Task #2365) lock through findTermsLockEpisode.
+ *
+ * Reopen (Evoni's Reopen terms ruling, docs/EVENT_EPISODE_FLOW.md §8(cc),
+ * 2026-09-30; Task #2378): Evoni can reopen a locked event's terms while its
+ * episode is still a draft (services/termsReopenService.js). While reopened,
+ * the event's canon_consequences carries a terms_reopen marker and
+ * findTermsWriteLock — the one check every term-writing route asks — reports
+ * no lock, so the ordinary editors work again. The episode link stays locked
+ * (STAYS_LOCKED_WHILE_REOPENED). Saving relocks and clears the marker.
+ *
+ * No history table exists for events, so the reopen and relock are recorded
+ * in canon_consequences.terms_history, an array of
+ *   { action: 'terms_reopened' | 'terms_relocked', at, by: { id, name },
+ *     episode_id, fields? }
+ * oldest first. Both keys are server-owned: the event PUT never writes them
+ * (withoutServerOwnedKeys).
  */
 
 const { findLiveLinkedEpisode } = require('./eventEpisodeLink');
@@ -42,6 +57,17 @@ const LOCKED_EVENT_FIELDS = {
   used_in_episode_id: 'its episode link',
 };
 
+// canon_consequences keys only the reopen service writes.
+const TERMS_REOPEN_KEY = 'terms_reopen';
+const TERMS_HISTORY_KEY = 'terms_history';
+const SERVER_OWNED_CC_KEYS = [TERMS_REOPEN_KEY, TERMS_HISTORY_KEY];
+
+// The episode link is not a term Evoni reopens: the event stays with its
+// episode while its terms are open.
+const STAYS_LOCKED_WHILE_REOPENED = new Set(['used_in_episode_id']);
+
+const EVENT_TERMS_REOPENED_CODE = 'EVENT_TERMS_REOPENED';
+
 /** The live episode that locks this event's terms, or null. */
 async function findTermsLockEpisode(sequelize, eventId, { transaction } = {}) {
   const [briefRows] = await sequelize.query(
@@ -55,6 +81,76 @@ async function findTermsLockEpisode(sequelize, eventId, { transaction } = {}) {
   );
   if (briefRows?.[0]) return briefRows[0];
   return findLiveLinkedEpisode(sequelize, eventId, { transaction });
+}
+
+/** The terms_reopen marker in a canon_consequences value, or null. */
+function reopenMarkerOf(canonConsequences) {
+  const cc = parseJson(canonConsequences);
+  const marker = cc && typeof cc === 'object' && !Array.isArray(cc) ? cc[TERMS_REOPEN_KEY] : null;
+  return marker && typeof marker === 'object' && !Array.isArray(marker) ? marker : null;
+}
+
+/** The event's open reopen marker, or null when its terms are not reopened. */
+async function readTermsReopen(sequelize, eventId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    'SELECT canon_consequences FROM world_events WHERE id = :eventId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { eventId }, transaction }
+  );
+  return reopenMarkerOf(rows?.[0]?.canon_consequences);
+}
+
+/**
+ * The lock a term write must respect: the locking episode, or null when the
+ * event has none or Evoni has reopened its terms. Every route that edits
+ * terms asks this, so a reopen lifts the lock everywhere at once.
+ */
+async function findTermsWriteLock(sequelize, eventId, { transaction } = {}) {
+  const lockEpisode = await findTermsLockEpisode(sequelize, eventId, { transaction });
+  if (!lockEpisode) return null;
+  if (await readTermsReopen(sequelize, eventId, { transaction })) return null;
+  return lockEpisode;
+}
+
+/** A canon_consequences value sent by an editor, minus the server-owned keys. */
+function withoutServerOwnedKeys(canonConsequences) {
+  if (!canonConsequences || typeof canonConsequences !== 'object' || Array.isArray(canonConsequences)) return canonConsequences;
+  const out = { ...canonConsequences };
+  for (const key of SERVER_OWNED_CC_KEYS) delete out[key];
+  return out;
+}
+
+/**
+ * Finalize and Complete book money from the terms; while an event's terms
+ * are reopened they are refused (409), so nothing books on terms that are
+ * still changing.
+ */
+class TermsReopenedError extends Error {
+  constructor(event) {
+    super(`The terms of "${event?.name || 'this event'}" are reopened. Save and relock them on the Event Package first.`);
+    this.name = 'TermsReopenedError';
+    this.status = 409;
+    this.code = EVENT_TERMS_REOPENED_CODE;
+    this.event = event ? { id: event.id, name: event.name ?? null } : null;
+  }
+}
+
+function termsReopenedBody(err) {
+  return { success: false, error: err.message, code: EVENT_TERMS_REOPENED_CODE, event: err.event };
+}
+
+/** Throws TermsReopenedError when an event of this episode has its terms reopened. */
+async function assertEpisodeTermsNotReopened(sequelize, episodeId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `SELECT w.id, w.name FROM world_events w
+      WHERE w.deleted_at IS NULL
+        AND jsonb_typeof(w.canon_consequences -> '${TERMS_REOPEN_KEY}') = 'object'
+        AND (w.used_in_episode_id = :episodeId
+             OR w.id IN (SELECT b.event_id FROM episode_briefs b
+                          WHERE b.episode_id = :episodeId AND b.deleted_at IS NULL AND b.event_id IS NOT NULL))
+      LIMIT 1`,
+    { replacements: { episodeId }, transaction }
+  );
+  if (rows?.[0]) throw new TermsReopenedError(rows[0]);
 }
 
 // Stable JSON for comparison: object keys sorted, so key order never reads
@@ -151,6 +247,18 @@ function termsLockedBody(episode, fields, message) {
 
 module.exports = {
   EVENT_TERMS_LOCKED_CODE,
+  EVENT_TERMS_REOPENED_CODE,
+  TERMS_REOPEN_KEY,
+  TERMS_HISTORY_KEY,
+  STAYS_LOCKED_WHILE_REOPENED,
+  reopenMarkerOf,
+  readTermsReopen,
+  findTermsWriteLock,
+  withoutServerOwnedKeys,
+  TermsReopenedError,
+  termsReopenedBody,
+  assertEpisodeTermsNotReopened,
+  stable,
   LOCKED_EVENT_FIELDS,
   findTermsLockEpisode,
   changedLockedFields,

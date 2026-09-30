@@ -844,6 +844,16 @@ try {
   console.error('✗ Failed to load event cost routes:', e.message);
 }
 
+// Reopen terms (Task #2378) — /world/:showId/events/:eventId/terms/
+// reopen-eligibility | reopen | relock
+try {
+  const eventTermsReopenRoutes = require('./routes/eventTermsReopen');
+  app.use('/api/v1', eventTermsReopenRoutes);
+  console.log('✓ Event terms reopen routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load event terms reopen routes:', e.message);
+}
+
 // World Studio routes (character ecosystem + intimate scene generator)
 const worldStudioRoutes = trackRouteLoad('worldStudio', () => require('./routes/worldStudio'));
 app.use('/api/v1', worldStudioRoutes);

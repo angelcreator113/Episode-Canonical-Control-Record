@@ -362,6 +362,13 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   if (transaction) {
     sequelize = withTransaction(rootSequelize, transaction);
     await sequelize.query(`SELECT id FROM episodes WHERE id = :episodeId FOR UPDATE`, { replacements: { episodeId } });
+    // Reopened terms (Reopen ruling, §8(cc); Task #2378): nothing books on
+    // terms that are still changing. Checked under the episode lock, which
+    // the reopen also takes, so a reopen and a finalize never interleave.
+    if (!dryRun) {
+      const { assertEpisodeTermsNotReopened } = require('../utils/eventTermsLock');
+      await assertEpisodeTermsNotReopened(rootSequelize, episodeId, { transaction });
+    }
     // Then the show (D1, Task #2247): episode before show, the order every
     // ledger writer keeps. This also seeds an unseeded ledger, so the
     // balance read below includes Lala's starting bankroll.
@@ -741,4 +748,5 @@ module.exports = {
   finalizeEpisodeFinancials,
   getFinancialLedger,
   normalizePaidFreeFlags,
+  NOT_WARDROBE_SPEND_ROW,
 };

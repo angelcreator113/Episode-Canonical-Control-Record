@@ -300,6 +300,57 @@ function inferIntent(event) {
 
 // ─── FINANCIAL CALCULATOR ────────────────────────────────────────────────────
 
+/**
+ * The affordability warning Start Episode stores on the brief
+ * (event_metadata.affordability_warning): the event costs more coins than
+ * Lala has, or null. Save and relock after a reopen (Task #2378) rebuilds it
+ * with this same function. A failed coins read logs and counts as 0 coins,
+ * as Start Episode always has; it never blocks.
+ */
+function affordabilityWarningFor(currentCoins, event) {
+  const coins = parseInt(currentCoins) || 0;
+  const eventCost = parseFloat(event?.cost_coins) || 0;
+  if (eventCost > 0 && coins < eventCost) {
+    return { coins_needed: eventCost, coins_available: coins, shortfall: eventCost - coins };
+  }
+  return null;
+}
+
+async function computeAffordabilityWarning(sequelize, showId, event, { transaction } = {}) {
+  // A failed read counts as 0 coins, as Start Episode always has.
+  let charState;
+  try {
+    [charState] = await sequelize.query(
+      `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT, transaction }
+    );
+  } catch (affordErr) {
+    console.error('[EpisodeGenerator] Coins read for the affordability check failed (read as 0):', affordErr.message);
+  }
+  const warning = affordabilityWarningFor(charState?.coins, event);
+  if (warning) {
+    console.warn(`[EpisodeGenerator] Affordability warning: event costs ${warning.coins_needed} coins but character has ${warning.coins_available}`);
+  }
+  return warning;
+}
+
+/**
+ * The wardrobe rows calculateFinancials prices the outfit from, as the
+ * generate routes load them. A failed read logs and returns [].
+ */
+async function loadFinancialWardrobeItems(sequelize, showId, { transaction } = {}) {
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { showId }, transaction }
+    );
+    return rows || [];
+  } catch (wardrobeErr) {
+    console.error('[EpisodeGenerator] Wardrobe read for financials failed (outfit cost 0):', wardrobeErr.message);
+    return [];
+  }
+}
+
 function calculateFinancials(event, wardrobeItems = []) {
   const eventIncome = parseFloat(event.payment_amount) || 0;
   const eventExpense = parseFloat(event.cost_coins) || 0;
@@ -495,24 +546,8 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
   // ── 1. Generate Social-Media-Ready Title + Description ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
-    // \u2500\u2500 0b. Affordability guard \u2500\u2500
-    let affordabilityWarning = null;
-    try {
-      const [charState] = await models.sequelize.query(
-        `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
-      ).catch(() => []);
-      const currentCoins = parseInt(charState?.coins) || 0;
-      const eventCost = parseFloat(event.cost_coins) || 0;
-      if (eventCost > 0 && currentCoins < eventCost) {
-        affordabilityWarning = {
-          coins_needed: eventCost,
-          coins_available: currentCoins,
-          shortfall: eventCost - currentCoins,
-        };
-        console.warn(`[EpisodeGenerator] Affordability warning: event costs ${eventCost} coins but character has ${currentCoins}`);
-      }
-    } catch { /* non-blocking */ }
+  // ── 0b. Affordability guard ── (computeAffordabilityWarning)
+  const affordabilityWarning = await computeAffordabilityWarning(models.sequelize, showId, event);
 
   const outfitPieces = typeof eventData.outfit_pieces === 'string' ? JSON.parse(eventData.outfit_pieces || '[]') : (eventData.outfit_pieces || []);
   const outfitScore = typeof eventData.outfit_score === 'string' ? JSON.parse(eventData.outfit_score || 'null') : (eventData.outfit_score || null);
@@ -1087,6 +1122,9 @@ module.exports = {
   createScenePlanRows,
   buildSocialTasks,
   calculateFinancials,
+  affordabilityWarningFor,
+  computeAffordabilityWarning,
+  loadFinancialWardrobeItems,
   inferArchetype,
   inferIntent,
   SOCIAL_TASK_TEMPLATES,

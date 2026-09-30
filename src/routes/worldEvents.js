@@ -36,7 +36,10 @@ const { normalizeRestrictions, listEventDeliverables } = require('../services/ev
 const { withDeliverableTasks } = require('../utils/socialTaskSource');
 const { careerTierFromLabel, careerTierFromReputation } = require('../utils/careerTiers');
 const { startedEpisodeFor, readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('../services/episodeTaskCopyService');
-const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
+const {
+  findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS,
+  readTermsReopen, STAYS_LOCKED_WHILE_REOPENED, withoutServerOwnedKeys, TermsReopenedError, termsReopenedBody,
+} = require('../utils/eventTermsLock');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
 const { DEAL_TYPES } = require('../models/WorldEvent');
@@ -256,6 +259,16 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     } catch (lockErr) {
       console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
     }
+    // Reopened terms (Task #2378): who reopened them and when, or null.
+    let termsReopen = null;
+    if (termsLockedBy) {
+      try {
+        const marker = await readTermsReopen(models.sequelize, event.id);
+        if (marker) termsReopen = { at: marker.at ?? null, by: marker.by ?? null, episode_id: marker.episode_id ?? null };
+      } catch (reopenErr) {
+        console.error('[WorldEvents] terms reopen lookup failed:', reopenErr.message);
+      }
+    }
 
     return res.json({
       success: true,
@@ -267,6 +280,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
       usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
       termsLockedBy,
+      termsReopen,
     });
   } catch (error) {
     console.error('Get single event error:', error);
@@ -709,7 +723,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       if (storedRows?.[0]) {
         const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
         if (lockEpisode) {
-          const changed = changedLockedFields(storedRows[0], updates, lockEpisode);
+          // Reopened terms (Reopen ruling, §8(cc); Task #2378): every locked
+          // field but the episode link is editable until Save and relock.
+          const reopened = await readTermsReopen(models.sequelize, eventId);
+          const changed = changedLockedFields(storedRows[0], updates, lockEpisode)
+            .filter((f) => !reopened || STAYS_LOCKED_WHILE_REOPENED.has(f));
           if (changed.length > 0) return res.status(409).json(termsLockedBody(lockEpisode, changed));
         }
       }
@@ -842,7 +860,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
         if (field === 'canon_consequences' && val !== null) {
           // Merged with the stored value just before the UPDATE (Task #1747).
-          ccIncoming = val;
+          // The terms reopen marker and history are server-owned (Task #2378).
+          ccIncoming = withoutServerOwnedKeys(val);
         }
 
         if (DEAL_FEE_FIELDS.has(field) && val !== null && Number(val) < 0) {
@@ -2276,16 +2295,8 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Pull existing wardrobe items for financial calculation
-    let wardrobeItems = [];
-    try {
-      const [rows] = await models.sequelize.query(
-        `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
-        { replacements: { showId } }
-      );
-      wardrobeItems = rows || [];
-    } catch { /* wardrobe table may not exist yet */ }
-
     const episodeGenerator = require('../services/episodeGeneratorService');
+    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId);
     const result = await episodeGenerator.generateEpisodeFromEvent(event, models, {
       showId,
       wardrobeItems,
@@ -2397,16 +2408,8 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
       return res.status(409).json(dealPriceRequiredBody(refusal));
     }
 
-    let wardrobeItems = [];
-    try {
-      const [w] = await models.sequelize.query(
-        `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
-        { replacements: { showId } }
-      );
-      wardrobeItems = w || [];
-    } catch { /* wardrobe may not exist yet */ }
-
     const episodeGenerator = require('../services/episodeGeneratorService');
+    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId);
     const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems });
     const newEpisodeId = result?.episode?.id;
 
@@ -4407,6 +4410,8 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     });
   } catch (err) {
     console.error('[CompleteEpisode] Error:', err);
+    // Task #2378: nothing books while the event's terms are reopened.
+    if (err instanceof TermsReopenedError) return res.status(err.status).json(termsReopenedBody(err));
     // Task #1933: completion refuses a result that would take coins below zero.
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {
@@ -4439,6 +4444,11 @@ router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAut
   } catch (err) {
     // §8(y) Q6 (Task #2247): a finalize that would take Lala below zero is
     // refused with the same 400 as Complete, and writes nothing.
+    // Task #2378: nothing books while the event's terms are reopened.
+    if (err instanceof TermsReopenedError) {
+      console.error('[Financials] Finalize refused, terms reopened:', err.message);
+      return res.status(err.status).json(termsReopenedBody(err));
+    }
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {
       return res.status(err.status).json(insufficientCoinsBody(err));
