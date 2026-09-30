@@ -23,6 +23,7 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import EpisodeTasksPanel from '../components/EpisodeTasksPanel';
+import EventOutfitPicker from '../components/EventOutfitPicker';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
@@ -277,14 +278,6 @@ function WorldAdmin() {
   // is { id, type_key, name, category, generated, ... }; the picker
   // splits them into Phone vs UI buckets via category.
   const [overlayTypes, setOverlayTypes] = useState([]);
-  const [outfitOptions, setOutfitOptions] = useState([]);
-  const [outfitSelected, setOutfitSelected] = useState(new Set());
-  const [outfitSaving, setOutfitSaving] = useState(false);
-  const [outfitScore, setOutfitScore] = useState(null);
-  const [outfitSlotFilter, setOutfitSlotFilter] = useState('all');
-  const [outfitTierFilter, setOutfitTierFilter] = useState('all');
-  const [outfitHideWorn, setOutfitHideWorn] = useState(false);
-  const [outfitShowAllRepeats, setOutfitShowAllRepeats] = useState(false);
   const [wardrobeUploading, setWardrobeUploading] = useState(false);
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
   // Inline error banner for the auto-fill button. Replaces the old alert()
@@ -2802,25 +2795,7 @@ The revised event should feel like a completely different experience from the si
                             <button onClick={() => setStatusMenuEventId(ev.id)} style={S.menuItem}>Change status…</button>
                           )}
                           <div style={S.menuItem}><InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} /></div>
-                          <button onClick={async () => {
-                            setOpenEventMenuId(null);
-                            setOutfitPickerEvent(ev);
-                            setOutfitSelected(new Set());
-                            setOutfitScore(null);
-                            setOutfitSlotFilter('all');
-                            setOutfitTierFilter('all');
-                            setOutfitHideWorn(false);
-                            setOutfitShowAllRepeats(false);
-                            try {
-                              const res = await api.get(`/api/v1/world/${showId}/events/${ev.id}/wardrobe-options`);
-                              setOutfitOptions(res.data.items || []);
-                              const existing = await api.get(`/api/v1/world/${showId}/events/${ev.id}/outfit`);
-                              if (existing.data.pieces?.length > 0) {
-                                setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
-                                setOutfitScore(existing.data.score);
-                              }
-                            } catch { setOutfitOptions([]); }
-                          }} style={S.menuItem}>👗 Outfit</button>
+                          <button onClick={() => { setOpenEventMenuId(null); setOutfitPickerEvent(ev); }} style={S.menuItem}>👗 Outfit</button>
                           {linkedEpisode && (
                             <button onClick={async () => {
                               setOpenEventMenuId(null);
@@ -3894,24 +3869,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>Episode Overlays</div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={async () => {
-                          setOutfitPickerEvent(md);
-                          setOutfitSelected(new Set());
-                          setOutfitScore(null);
-                          setOutfitSlotFilter('all');
-                          setOutfitTierFilter('all');
-                          setOutfitHideWorn(false);
-                          setOutfitShowAllRepeats(false);
-                          try {
-                            const res = await api.get(`/api/v1/world/${showId}/events/${md.id}/wardrobe-options`);
-                            setOutfitOptions(res.data.items || []);
-                            const existing = await api.get(`/api/v1/world/${showId}/events/${md.id}/outfit`);
-                            if (existing.data.pieces?.length > 0) {
-                              setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
-                              setOutfitScore(existing.data.score);
-                            }
-                          } catch { setOutfitOptions([]); }
-                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                        <button onClick={() => { setOutfitPickerEvent(md); }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                           👗 Pick Outfit
                         </button>
                       </div>
@@ -4471,311 +4429,22 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
       {/* ════════════════════════ OUTFIT PICKER MODAL ════════════════════════ */}
-      {outfitPickerEvent && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }}>
-          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>👗 Pick Outfit</h2>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>{outfitPickerEvent.name} · Prestige {outfitPickerEvent.prestige}/10</p>
-              </div>
-              <button onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
-            </div>
-
-            {/* Score banner */}
-            {outfitScore && (
-              <div style={{ padding: '10px 14px', borderRadius: 10, marginBottom: 16, background: outfitScore.narrative_mood === 'confidence' ? '#f0fdf4' : outfitScore.narrative_mood === 'anxiety' ? '#fef2f2' : '#FAF7F0', border: '1px solid #e8e0d0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C' }}>Match: {outfitScore.match_score}/100</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: outfitScore.narrative_mood === 'confidence' ? '#16a34a' : outfitScore.narrative_mood === 'anxiety' ? '#dc2626' : '#B8962E' }}>
-                    {outfitScore.narrative_mood}
-                  </span>
-                </div>
-                {/* Signal breakdown — each delta inline so creators can
-                    see exactly which dimension lifted vs dropped the score.
-                    Without this, three text lines from the scorer all read
-                    the same weight even when one is +6 and another -6 (a
-                    12-pt swing in secondary that's invisible without the
-                    numeric tag). */}
-                {outfitScore.signals?.map((s, i) => {
-                  const d = typeof s.delta === 'number' ? s.delta : null;
-                  const positive = d != null && d > 0;
-                  const negative = d != null && d < 0;
-                  return (
-                    <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3, display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      {d != null && (
-                        <span style={{
-                          display: 'inline-block', minWidth: 26, textAlign: 'right',
-                          fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 10,
-                          color: positive ? '#16a34a' : negative ? '#dc2626' : '#94a3b8',
-                        }}>
-                          {positive ? '+' : ''}{d}
-                        </span>
-                      )}
-                      <span>{s.text}</span>
-                    </div>
-                  );
-                })}
-                {outfitScore.repeats?.length > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    {(outfitShowAllRepeats ? outfitScore.repeats : outfitScore.repeats.slice(0, 2)).map((r, i) => (
-                      <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
-                    ))}
-                    {outfitScore.repeats.length > 2 && (
-                      <button
-                        onClick={() => setOutfitShowAllRepeats(v => !v)}
-                        style={{ marginTop: 4, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, color: '#8b5cf6', fontFamily: "'DM Mono', monospace" }}
-                      >
-                        {outfitShowAllRepeats ? 'Show fewer repeats' : `Show ${outfitScore.repeats.length - 2} more repeats`}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Per-slot breakdown ────────────────────────────────
-                    One row per UI slot (outfit/shoes/jewelry/accessories/
-                    fragrance). Each row shows a progress bar + reason so the
-                    player can see exactly which slot is hurting the overall
-                    score. Status color: empty=gray, low=red, ok=amber,
-                    good=green. Required slots with empty status get the red
-                    "missing" treatment. */}
-                {Array.isArray(outfitScore.slots) && outfitScore.slots.length > 0 && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {outfitScore.slots.map(slot => {
-                      const emptyRequired = slot.status === 'empty' && slot.required;
-                      const color = emptyRequired ? '#dc2626'
-                        : slot.status === 'good' ? '#16a34a'
-                        : slot.status === 'ok' ? '#B8962E'
-                        : slot.status === 'low' ? '#dc2626'
-                        : '#94a3b8';
-                      const barWidth = slot.status === 'empty' ? 0 : slot.match;
-                      return (
-                        <div key={slot.slot} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 110, display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#444', fontWeight: 600, flexShrink: 0 }}>
-                            <span>{slot.icon}</span>
-                            <span>{slot.label}</span>
-                          </div>
-                          <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ width: `${barWidth}%`, height: '100%', background: color, transition: 'width 0.25s' }} />
-                          </div>
-                          <div style={{ width: 36, fontSize: 11, fontWeight: 700, color, textAlign: 'right', flexShrink: 0, fontFamily: "'DM Mono', monospace" }}>
-                            {slot.status === 'empty' ? (slot.required ? '!' : '—') : slot.match}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {/* Reason line per-row would crowd the grid; show only
-                        the first non-empty reason whose slot is dragging the
-                        score so players get one concrete thing to fix. */}
-                    {(() => {
-                      const weakest = outfitScore.slots
-                        .filter(s => s.reason && (s.status === 'low' || (s.status === 'empty' && s.required)))
-                        .sort((a, b) => a.match - b.match)[0];
-                      if (!weakest) return null;
-                      return (
-                        <div style={{ fontSize: 11, color: '#8b5cf6', marginTop: 4, fontStyle: 'italic' }}>
-                          💡 {weakest.reason}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-                {/* Surface items whose category isn't one of the 5 slots so
-                    the author can fix the category on the row. */}
-                {Array.isArray(outfitScore.unassigned) && outfitScore.unassigned.length > 0 && (
-                  <div style={{ marginTop: 8, padding: '6px 8px', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 6, fontSize: 11, color: '#c2410c' }}>
-                    ⚠️ Couldn't slot {outfitScore.unassigned.length} piece{outfitScore.unassigned.length > 1 ? 's' : ''} — check {outfitScore.unassigned.map(u => u.name).slice(0, 3).join(', ')}{outfitScore.unassigned.length > 3 ? '…' : ''}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Selected pieces */}
-            {outfitSelected.size > 0 && (
-              <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
-                <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>SELECTED ({outfitSelected.size} pieces)</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {Array.from(outfitSelected).map(id => {
-                    const item = outfitOptions.find(i => i.id === id);
-                    if (!item) return null;
-                    return (
-                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
-                           onClick={() => { const s = new Set(outfitSelected); s.delete(id); setOutfitSelected(s); setOutfitScore(null); }}>
-                        {item.image_url && <img src={item.image_url} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
-                        <span style={{ fontSize: 11 }}>{item.name}</span>
-                        <span style={{ fontSize: 10, color: '#ccc' }}>✕</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Closet filters + grid */}
-            {(() => {
-              const filteredOutfitOptions = outfitOptions.filter((item) => {
-                const slot = getSlotForCategory(item.clothing_category) || 'other';
-                if (outfitSlotFilter !== 'all' && slot !== outfitSlotFilter) return false;
-                if (outfitTierFilter !== 'all' && (item.tier || 'basic') !== outfitTierFilter) return false;
-                if (outfitHideWorn && ((parseInt(item.times_worn, 10) || 0) > 0 || !!item.last_worn_date)) return false;
-                return true;
-              });
-
-              return (
-                <>
-                  <div style={{ marginBottom: 10, padding: '8px 10px', border: '1px solid #e8e0d0', borderRadius: 8, background: '#faf7f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>FILTERS</div>
-                      {/* Auto-tag — heuristic backfill of event_types tags
-                          across the entire wardrobe. Reads name + aesthetic
-                          + brand + occasion to derive sensible tags so the
-                          occasion_precision signal stops flipping negative
-                          on untagged inventory. Wrapped in window.confirm
-                          since it's a bulk write — preview opens in toast. */}
-                      <button
-                        type="button"
-                        title="Heuristic event_types tag suggester for the whole wardrobe — fixes the 'tagged pieces don't align' signal that was dropping outfit scores"
-                        onClick={async () => {
-                          try {
-                            // Dry-run first to show the diff before writing.
-                            const dry = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: true });
-                            const changed = dry.data?.changed_count || 0;
-                            const total = dry.data?.total || 0;
-                            if (changed === 0) {
-                              setToast(`✓ All ${total} wardrobe items already tagged — nothing to add.`);
-                              setTimeout(() => setToast(null), 4000);
-                              return;
-                            }
-                            if (!window.confirm(`Auto-tag ${changed} of ${total} wardrobe items with derived event_types?\n\nExamples: ${dry.data.items.slice(0, 3).map(i => `${i.name} → +${i.added.join(', +')}`).join('; ')}${dry.data.items.length > 3 ? '...' : ''}`)) return;
-                            const apply = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: false });
-                            setToast(`✦ Auto-tagged ${apply.data.changed_count} wardrobe items. Reopen the picker to see updated scores.`);
-                            setTimeout(() => setToast(null), 6000);
-                          } catch (err) {
-                            setToast('Auto-tag failed: ' + (err?.response?.data?.error || err.message));
-                            setTimeout(() => setToast(null), 5000);
-                          }
-                        }}
-                        style={{ padding: '3px 9px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid #e8d8b8', background: '#fff', color: '#B8962E', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
-                      >
-                        ✦ Auto-tag wardrobe
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                      <button onClick={() => setOutfitSlotFilter('all')} style={{ ...S.smBtn, background: outfitSlotFilter === 'all' ? '#B8962E' : '#fff', color: outfitSlotFilter === 'all' ? '#fff' : '#555', borderColor: '#e8d9b8' }}>All Slots</button>
-                      {SLOT_KEYS.map(slot => (
-                        <button key={slot} onClick={() => setOutfitSlotFilter(slot)} style={{ ...S.smBtn, background: outfitSlotFilter === slot ? '#B8962E' : '#fff', color: outfitSlotFilter === slot ? '#fff' : '#555', borderColor: '#e8d9b8' }}>
-                          {SLOT_DEFS[slot]?.icon} {SLOT_DEFS[slot]?.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <select value={outfitTierFilter} onChange={e => setOutfitTierFilter(e.target.value)} style={{ ...S.sel, width: 140, minHeight: 30, fontSize: 11 }}>
-                        <option value="all">All tiers</option>
-                        <option value="basic">Basic</option>
-                        <option value="mid">Mid</option>
-                        <option value="luxury">Luxury</option>
-                        <option value="elite">Elite</option>
-                      </select>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#666', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                        <input type="checkbox" checked={outfitHideWorn} onChange={e => setOutfitHideWorn(e.target.checked)} />
-                        Hide already worn
-                      </label>
-                      <div style={{ marginLeft: 'auto', fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>
-                        Showing {filteredOutfitOptions.length}/{outfitOptions.length}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
-                    {filteredOutfitOptions.length} pieces in closet — tap to select
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, paddingBottom: outfitSelected.size > 0 ? 84 : 0 }}>
-                    {filteredOutfitOptions.map(item => {
-                      const selected = outfitSelected.has(item.id);
-                      return (
-                        <div key={item.id} onClick={() => {
-                          const s = new Set(outfitSelected);
-                          if (selected) s.delete(item.id); else s.add(item.id);
-                          setOutfitSelected(s);
-                          setOutfitScore(null);
-                        }} style={{
-                          border: selected ? '2px solid #B8962E' : '1px solid #e8e0d0', borderRadius: 10,
-                          overflow: 'hidden', cursor: 'pointer', background: selected ? '#faf5ea' : '#fff',
-                          transition: 'all 0.15s',
-                        }}>
-                          <div style={{ aspectRatio: '1', background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                            {item.image_url ? (
-                              <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <span style={{ fontSize: 32, color: '#ddd' }}>👗</span>
-                            )}
-                          </div>
-                          <div style={{ padding: '6px 8px' }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                            <div style={{ fontSize: 10, color: '#888' }}>{item.clothing_category} · {item.tier || 'basic'}</div>
-                            {item.brand && <div style={{ fontSize: 9, color: '#aaa' }}>{item.brand}</div>}
-                            {item.price > 0 && <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>${item.price}</div>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {outfitOptions.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>👗</div>
-                      <p style={{ fontSize: 13 }}>No wardrobe pieces yet. Upload items in the Wardrobe tab first.</p>
-                    </div>
-                  )}
-
-                  {outfitOptions.length > 0 && filteredOutfitOptions.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: 24, color: '#999', border: '1px dashed #e8e0d0', borderRadius: 10, marginTop: 8 }}>
-                      No pieces match these filters. Try clearing a filter.
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* Sticky action footer */}
-            {outfitSelected.size > 0 && (
-              <div style={{ position: 'sticky', bottom: 0, marginTop: 12, background: '#fff', paddingTop: 10, borderTop: '1px solid #f1e8d6', zIndex: 2 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: '#666' }}>
-                    {outfitSelected.size} selected
-                    {outfitScore?.match_score != null && (
-                      <span style={{ marginLeft: 8, color: '#B8962E', fontWeight: 700 }}>
-                        Match {outfitScore.match_score}/100
-                      </span>
-                    )}
-                  </div>
-                  <button onClick={() => { setOutfitSelected(new Set()); setOutfitScore(null); }} style={{ ...S.smBtn, padding: '3px 8px' }}>
-                    Clear
-                  </button>
-                </div>
-                <button disabled={outfitSaving} onClick={async () => {
-                  setOutfitSaving(true);
-                  try {
-                    const res = await api.put(`/api/v1/world/${showId}/events/${outfitPickerEvent.id}/outfit`, {
-                      wardrobe_ids: Array.from(outfitSelected),
-                    });
-                    setOutfitScore(res.data.score);
-                    setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
-                    loadData();
-                    // Force the Financial Preview useEffect to refetch — the
-                    // server now has the new outfit_pieces but eventDetailModal
-                    // is still pointing at its open-time snapshot.
-                    setForecastNonce(n => n + 1);
-                  } catch (err) { setToast('Save failed: ' + err.message); }
-                  setOutfitSaving(false);
-                }} style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>
-                  {outfitSaving ? 'Saving...' : outfitScore ? 'Update Outfit' : `Save Outfit (${outfitSelected.size} pieces)`}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>,
-        document.body
+      {/* EventOutfitPicker (Task #2376): the same picker the Event Package's
+          Style area opens. */}
+      {outfitPickerEvent && (
+        <EventOutfitPicker
+          showId={showId}
+          event={outfitPickerEvent}
+          onClose={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }}
+          onSaved={() => {
+            loadData();
+            // Force the Financial Preview useEffect to refetch — the
+            // server now has the new outfit_pieces but eventDetailModal
+            // is still pointing at its open-time snapshot.
+            setForecastNonce(n => n + 1);
+          }}
+          onToast={(msg) => { setToast(msg); setTimeout(() => setToast(null), 5000); }}
+        />
       )}
 
       {/* ════════════════════════ EPISODE BLUEPRINT MODAL ════════════════════════ */}
