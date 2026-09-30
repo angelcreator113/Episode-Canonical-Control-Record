@@ -2875,6 +2875,35 @@ deal build PR 4 (Task #2365) put to her. Recorded verbatim;
 
 > A deal bonus is stored as amounts by evaluation tier, e.g. { slay: 200, pass: 100 }; it pays only the amount for the tier reached; FAIL never pays; editable under Deal price until Start Episode.
 
+**Reopen terms ruling (Evoni, 2026-09-30).** Recorded verbatim. It
+answers what happens when an event's terms, locked at Start Episode (D4,
+`findTermsLockEpisode`), need to change. Not yet built (Task #2378); the
+build follows the CQ deploy.
+
+> An event's locked terms can be reopened by Evoni only while its episode is a draft, has no ledger rows except wardrobe purchases, and every deliverable is still pending; with confirmation; saving relocks and records the reopen in the event's history. The brief's terms snapshot, deliverable stamping, deliverable tasks, estimated money and the affordability warning rebuild automatically on save. Invitation and script regeneration are offered, not forced, with a reminder when the terms mention money.
+
+Her answers to the proposal's questions (summarised, not verbatim): yes to
+the proposed test; invitation and script regeneration are offered, not
+forced, with a reminder such as "Terms changed; the invitation mentions
+money. Regenerate?".
+
+**Invitation ruling (Evoni, 2026-09-30).** Recorded verbatim. It says
+what the event invitation states about the deal; Task #2375 builds it
+(`describeInvitationMoney` in `invitationCompositingService`).
+
+> The invitation states the deal in the host's voice, in Prime Coins: what Lala is paid (fees, and each deliverable with its fee), what she pays (entry, if self-funded), what is covered and by whom (host or brand), and any bonus with its amount. Comped and gifted events say so without price talk.
+
+**Follow-up (Evoni, 2026-09-30),** on the three choices #2375 put to her:
+"I accept all three invitation choices (covered costs without amounts;
+comped/gifted without fees or bonus; Lala's other costs left out)." What
+each means:
+1. A cost the host or brand covers is named with who covers it, without
+   its amount.
+2. A comped or gifted event names its deliverables without fees and states
+   no bonus.
+3. Costs Lala pays, other than a self-funded deal's entry, are not stated
+   on the invitation.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2891,6 +2920,9 @@ deal build PR 4 (Task #2365) put to her. Recorded verbatim;
 - Answer 2 of 2026-09-30 (the drafted entry line) is built by deal build PR
   4 (Task #2365); answer 1 (the partnership base and performance fee at
   Complete) by PR 5, with its migration in the same deploy as #2303.
+- The Reopen terms ruling (2026-09-30) is built after the CQ deploy (Task
+  #2378).
+- The invitation ruling (2026-09-30) is built by Task #2375.
 
 ---
 
