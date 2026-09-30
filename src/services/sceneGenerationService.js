@@ -246,16 +246,20 @@ async function startTextToImage(prompt, options = {}) {
           size: 'landscape',
           seed: options.seed,
           guidanceScale: options.guidanceScale,
+          onLogged: options.onLogged,
         });
         imageUrl = result?.url;
         console.log('[SceneGen] Flux Kontext still generated from base reference');
       } else {
+        // quality 'standard' = fal-ai/flux/dev, 'hd' = fal-ai/flux-pro/v1.1
+        // (imageGenerationService.fluxModelFor). Default: standard, as before.
         imageUrl = await generateImageUrl(prompt.slice(0, 4000), {
           provider: 'flux',
           size: 'landscape',
-          quality: 'standard',
+          quality: options.quality || 'standard',
           useCase: 'scene',
           seed: options.seed,
+          onLogged: options.onLogged,
         });
         console.log('[SceneGen] Flux still generated from prompt only');
       }
@@ -503,6 +507,195 @@ async function downloadAndUploadToS3(imageUrl, s3Key) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
+// ─── BASE STILL MODEL CHOICE (Task #2396) ───────────────────────────────────
+
+/**
+ * The models a scene set can draw its base still with (scene_sets.base_model).
+ * Keys are what the column stores; `model` is the provider id the rate table
+ * (imageCostService.RATE_TABLE) prices.
+ *
+ * gpt-image-1.5 sizes (1024x1024, 1536x1024, 1024x1536, auto) and qualities
+ * (low, medium, high) are UNCONFIRMED against OpenAI's own docs: taken from
+ * search-result summaries of developers.openai.com on 2026-09-30, whose pages
+ * the agent session could not fetch.
+ */
+const SCENE_BASE_MODELS = {
+  'flux-dev': {
+    key: 'flux-dev', label: 'Flux dev', provider: 'fal', model: 'fal-ai/flux/dev',
+    fluxQuality: 'standard', falSize: 'landscape_16_9', width: 1024, height: 576, quality: null,
+  },
+  'flux-pro-1.1': {
+    key: 'flux-pro-1.1', label: 'Flux pro 1.1', provider: 'fal', model: 'fal-ai/flux-pro/v1.1',
+    fluxQuality: 'hd', falSize: 'landscape_16_9', width: 1024, height: 576, quality: null,
+  },
+  'gpt-image-1.5': {
+    key: 'gpt-image-1.5', label: 'GPT Image 1.5 (high)', provider: 'openai', model: 'gpt-image-1.5',
+    width: 1536, height: 1024, quality: 'high',
+  },
+};
+
+// Today's behaviour (Flux dev from the prompt) when neither the set nor the
+// environment names a model.
+const BUILTIN_BASE_MODEL_DEFAULT = 'flux-dev';
+
+function isBaseModelKey(value) {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENE_BASE_MODELS, value);
+}
+
+/** The default base model: env SCENE_BASE_MODEL_DEFAULT when valid, else flux-dev. */
+function defaultBaseModel() {
+  const fromEnv = process.env.SCENE_BASE_MODEL_DEFAULT;
+  if (fromEnv) {
+    if (isBaseModelKey(fromEnv)) return fromEnv;
+    console.warn(`[SceneGen] SCENE_BASE_MODEL_DEFAULT="${fromEnv}" is not one of ${Object.keys(SCENE_BASE_MODELS).join(', ')}; using ${BUILTIN_BASE_MODEL_DEFAULT}`);
+  }
+  return BUILTIN_BASE_MODEL_DEFAULT;
+}
+
+/** The model key a scene set's base still uses: its base_model, else the default. */
+function resolveBaseModel(sceneSet) {
+  const chosen = sceneSet && sceneSet.base_model;
+  if (chosen) {
+    if (isBaseModelKey(chosen)) return chosen;
+    console.warn(`[SceneGen] scene set ${sceneSet.id} has unknown base_model "${chosen}"; using the default`);
+  }
+  return defaultBaseModel();
+}
+
+/** Rate-table estimate of one base still with the given model key. */
+function estimateBaseStillCost(modelKey) {
+  const cfg = SCENE_BASE_MODELS[modelKey];
+  if (!cfg) throw new Error(`Unknown base model "${modelKey}"`);
+  return imageCost.estimateImageCost({
+    model: cfg.model, width: cfg.width, height: cfg.height, quality: cfg.quality, count: 1,
+  });
+}
+
+/**
+ * Collects what runImageCall logged for a generation's provider calls, so
+ * the record it produced carries the logged cost (Task #2396).
+ * value(): the summed logged cost; 0 when no billed call ran (a pure crop);
+ * null when every call was unpriced (never a made-up number, never a silent 0).
+ */
+function createCostCollector(label) {
+  const c = {
+    usd: 0, calls: 0, unpricedCalls: 0, usageLogIds: [], inputTokensUnpriced: false, estimateUsd: 0,
+  };
+  c.onLogged = (info) => {
+    c.calls += 1;
+    if (info.usageLogId != null) c.usageLogIds.push(info.usageLogId);
+    if (typeof info.costUsd === 'number') c.usd += info.costUsd;
+    else c.unpricedCalls += 1;
+    if (typeof info.estimateUsd === 'number') c.estimateUsd += info.estimateUsd;
+    if (info.inputTokensUnpriced) c.inputTokensUnpriced = true;
+  };
+  c.value = () => {
+    if (c.calls === 0) return 0;
+    if (c.unpricedCalls === c.calls) {
+      console.warn(`[SceneGen] ${label}: no priced cost for its ${c.calls} image call(s); generation_cost not increased`);
+      return null;
+    }
+    if (c.unpricedCalls > 0) {
+      console.warn(`[SceneGen] ${label}: ${c.unpricedCalls} of ${c.calls} image call(s) unpriced; recording the priced part only`);
+    }
+    return Math.round(c.usd * 1e6) / 1e6;
+  };
+  return c;
+}
+
+/**
+ * gpt-image-1.5 still: /v1/images/generations from the prompt, or
+ * /v1/images/edits with the reference image when one is given. 1536x1024,
+ * quality high, n 1. Budget-gated and logged by runImageCall; the b64 result
+ * is saved to S3 as generateDallEStill does. Returns the S3 URL.
+ */
+async function generateGptImageStill(prompt, { referenceImageUrl = null, sceneSetId = null, onLogged } = {}) {
+  const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
+  const cfg = SCENE_BASE_MODELS['gpt-image-1.5'];
+  const size = `${cfg.width}x${cfg.height}`;
+  const text = prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt;
+  const plan = {
+    model: cfg.model, width: cfg.width, height: cfg.height, quality: cfg.quality, count: 1,
+    inputImages: Boolean(referenceImageUrl), onLogged,
+  };
+
+  let response;
+  if (referenceImageUrl) {
+    console.log('[SceneGen] gpt-image-1.5 edit with style reference');
+    const refRes = await axios.get(referenceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('model', cfg.model);
+    form.append('image', Buffer.from(refRes.data), { filename: 'reference.png', contentType: 'image/png' });
+    form.append('prompt', `Use the reference image for style, palette and materials only. Do not render any text. ${text}`);
+    form.append('n', '1');
+    form.append('size', size);
+    form.append('quality', cfg.quality);
+    response = await imageCost.runImageCall(plan, () => axios.post(
+      'https://api.openai.com/v1/images/edits',
+      form,
+      { headers: { 'Authorization': `Bearer ${apiKey}`, ...form.getHeaders() }, timeout: 180000 },
+    ));
+  } else {
+    console.log('[SceneGen] gpt-image-1.5 text-to-image');
+    response = await imageCost.runImageCall(plan, () => axios.post(
+      'https://api.openai.com/v1/images/generations',
+      { model: cfg.model, prompt: text, n: 1, size, quality: cfg.quality },
+      { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 180000 },
+    ));
+  }
+
+  const item = response.data?.data?.[0];
+  const prefix = sceneSetId ? `scenes/${sceneSetId}/base-gpt-image-1.5` : 'scenes/gpt-image-1.5';
+  if (item?.b64_json) {
+    const s3Key = `${prefix}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET, Key: s3Key, Body: Buffer.from(item.b64_json, 'base64'), ContentType: 'image/png',
+    }));
+    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  }
+  if (item?.url) {
+    return downloadAndUploadToS3(item.url, `${prefix}-${Date.now()}.png`);
+  }
+  throw new Error('gpt-image-1.5 returned no image data');
+}
+
+/**
+ * Draw a scene set's base still with the given model key.
+ * Returns { stillUrl, cost (logged USD | null), usageLogIds, inputTokensUnpriced }.
+ */
+async function generateBaseStill(sceneSet, prompt, modelKey) {
+  const cfg = SCENE_BASE_MODELS[modelKey];
+  if (!cfg) throw new Error(`Unknown base model "${modelKey}"`);
+  const costs = createCostCollector(`base still ${sceneSet.id} (${modelKey})`);
+  let stillUrl;
+  if (cfg.provider === 'openai') {
+    stillUrl = await generateGptImageStill(prompt, {
+      referenceImageUrl: sceneSet.style_reference_url || null,
+      sceneSetId: sceneSet.id,
+      onLogged: costs.onLogged,
+    });
+  } else {
+    // Flux from the prompt. styleReference is passed as before; the Flux
+    // text-to-image path does not use it (startTextToImage reads only
+    // referenceImage/referenceImages).
+    const styleReference = sceneSet.style_reference_url
+      ? { uri: sceneSet.style_reference_url, weight: 0.7 }
+      : undefined;
+    const { imageUrl } = await startTextToImage(prompt, {
+      styleReference, quality: cfg.fluxQuality, onLogged: costs.onLogged,
+    });
+    stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, 'base');
+  }
+  return {
+    stillUrl,
+    cost: costs.value(),
+    usageLogIds: costs.usageLogIds,
+    inputTokensUnpriced: costs.inputTokensUnpriced,
+  };
+}
+
 /**
  * Poll a RunwayML task until SUCCEEDED or FAILED.
  * For multi-output tasks, returns all outputs.
@@ -685,7 +878,14 @@ async function loadEventContext(sceneSet, models) {
 
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
-async function generateBaseScene(sceneSet, models) {
+/**
+ * Generate a scene set's base still with the set's model choice
+ * (scene_sets.base_model, else the default — resolveBaseModel; Task #2396).
+ *
+ * options.skipAnalysis: skip the Claude Vision analysis and style auto-lock
+ * that normally follow (the base-model comparison generates stills only).
+ */
+async function generateBaseScene(sceneSet, models, options = {}) {
   const { SceneSet } = models;
 
   const eventContext = await loadEventContext(sceneSet, models);
@@ -697,65 +897,52 @@ async function generateBaseScene(sceneSet, models) {
   );
 
   try {
-    console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
+    const modelKey = resolveBaseModel(sceneSet);
+    const cfg = SCENE_BASE_MODELS[modelKey];
+    const estimate = estimateBaseStillCost(modelKey);
+    console.log(`[SceneGen] Starting base still for: ${sceneSet.name} (${modelKey}, ${cfg.width}x${cfg.height})`);
 
-    // Determine generation engine: DALL-E (default for stills) or Runway
-    const useRunway = true;
-    let stillUrl, lockedSeed = null, stillCredits = 0;
-
-    if (!useRunway && OPENAI_API_KEY) {
-      // ── DALL-E 3 path: richer detail for static scene stills ─────────
-      console.log(`[SceneGen] Using DALL-E 3 for richer scene still`);
-      try {
-        const dalleUrl = await generateDallEStill(prompt);
-        if (!dalleUrl) throw new Error('DALL-E 3 did not return an image URL');
-
-        const s3Key = `scenes/${sceneSet.id}/base-still-${Date.now()}.png`;
-        stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
-        console.log(`[SceneGen] DALL-E still complete, uploaded to S3`);
-      } catch (dalleErr) {
-        console.warn(`[SceneGen] DALL-E 3 failed, falling back to Runway:`, dalleErr.message);
-        // Fall through to Runway path
-        stillUrl = null;
-      }
-    }
-
-    if (!stillUrl) {
-      // ── Runway path: used as fallback or when video is needed ─────────
-      console.log(`[SceneGen] Using Runway for scene still`);
-      const styleReference = sceneSet.style_reference_url
-        ? { uri: sceneSet.style_reference_url, weight: 0.7 }
-        : undefined;
-
-      const { imageUrl } = await startTextToImage(prompt, { styleReference });
-      const stillOutputUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, 'base');
-      const stillSeed = null;
-      stillCredits = 0.04;
-
-      stillUrl = stillOutputUrl;
-      lockedSeed = stillSeed != null ? String(stillSeed) : null;
-    }
+    const { stillUrl, cost, usageLogIds, inputTokensUnpriced } = await generateBaseStill(sceneSet, prompt, modelKey);
+    const lockedSeed = null;
 
     // Clean up old base still from S3 (best-effort)
     if (sceneSet.base_still_url) {
       await deleteOldS3Asset(sceneSet.base_still_url);
     }
 
-    console.log(`[SceneGen] Still complete.${lockedSeed ? ` Seed locked: ${lockedSeed}` : ' (DALL-E — no seed)'}`);
+    console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
 
-    // Lock the seed + base still URL — permanent
+    // generation_cost: the logged cost (the rate-table estimate plus any
+    // priced input image tokens). An unpriced call adds nothing, with a
+    // warning from the collector — never a made-up figure.
+    const previousCost = parseFloat(sceneSet.generation_cost || 0) || 0;
+    const baseGeneration = {
+      ...(sceneSet.base_generation || {}),
+      model_key: modelKey,
+      model: cfg.model,
+      provider: cfg.provider,
+      width: cfg.width,
+      height: cfg.height,
+      quality: cfg.quality,
+      estimate_usd: estimate.usd,
+      cost_usd: cost,
+      usage_log_ids: usageLogIds,
+      input_tokens_unpriced: inputTokensUnpriced,
+      generated_at: new Date().toISOString(),
+    };
     await SceneSet.update({
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
       generation_status: 'complete',
-      generation_cost: parseFloat(sceneSet.generation_cost || 0) + stillCredits,
+      generation_cost: typeof cost === 'number' ? Math.round((previousCost + cost) * 1e4) / 1e4 : previousCost,
+      base_generation: baseGeneration,
     }, { where: { id: sceneSet.id } });
 
     // ── Feature 4: Auto-lock style DNA from the new base image ──
     // Analyze the generated base image with Claude Vision and cache the
     // visual inventory + style lock so all future angles have concrete
     // details to preserve. Runs in background (non-blocking).
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (process.env.ANTHROPIC_API_KEY && !options.skipAnalysis) {
       const updatedSet = { ...sceneSet, base_still_url: stillUrl };
       analyzeBaseImage(updatedSet, SceneSet).catch(err =>
         console.warn(`[SceneGen] Auto image analysis failed (non-blocking): ${err.message}`)
@@ -800,7 +987,7 @@ Return ONLY JSON.` },
       }
     }
 
-    return { success: true, stillUrl, videoUrl: null, seed: lockedSeed };
+    return { success: true, stillUrl, videoUrl: null, seed: lockedSeed, model: modelKey, cost };
   } catch (err) {
     await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
     throw err;
@@ -1323,6 +1510,9 @@ async function generateDepthMap(sceneSet, SceneSetModel) {
  * Each defines: which part of the base to keep, and which direction to extend.
  * Coordinates are fractions (0-1) of the base image dimensions.
  */
+// Model for crop+outpaint angles (images/edits, 1536x1024, quality high).
+const OUTPAINT_MODEL = 'gpt-image-1.5';
+
 const CAMERA_CROP_MAP = {
   // Close-ups: crop a region, extend slightly
   VANITY_CLOSEUP:     { crop: { left: 0.55, top: 0.1, width: 0.45, height: 0.9 }, extend: 'right', extendAmount: 0.5 },
@@ -1347,9 +1537,9 @@ const CAMERA_CROP_MAP = {
  *
  * For crop-only angles (BED, DETAIL): crops + upscales. Pixel-perfect.
  * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
- * gpt-image-1 to fill the new area while keeping original pixels.
+ * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
-async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt) {
+async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged } = {}) {
   const config = CAMERA_CROP_MAP[angleLabel];
   if (!config || !baseImageUrl) return null;
 
@@ -1390,7 +1580,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
       return url;
     }
 
-    // Crop + outpaint: extend the canvas and use gpt-image-1 to fill
+    // Crop + outpaint: extend the canvas and use OUTPAINT_MODEL to fill
     // Target: 1536x1024 final image
     const targetW = 1536;
     const targetH = 1024;
@@ -1421,7 +1611,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
       .png()
       .toBuffer();
 
-    // Send to gpt-image-1 edits with the canvas as the image
+    // Send to OUTPAINT_MODEL edits with the canvas as the image
     // The transparent area is where the AI will generate new content
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -1435,9 +1625,10 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
       return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
     }
 
-    const FormData = (await import('form-data')).default;
+    const FormData = require('form-data');
     const form = new FormData();
-    form.append('model', 'gpt-image-1');
+    // gpt-image-1.5 since Task #2396 (Evoni, 2026-09-30); was gpt-image-1.
+    form.append('model', OUTPAINT_MODEL);
     form.append('image', canvas, { filename: 'canvas.png', contentType: 'image/png' });
     form.append('prompt', `Do not render any text or labels. Continue this room seamlessly — match the existing wall color, flooring, lighting, and style exactly. Fill the transparent area with a natural continuation of this room. ${prompt || ''}`);
     form.append('size', '1536x1024');
@@ -1445,7 +1636,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
 
     // Budget-gated and logged to ai_usage_logs (Task #2387).
     const response = await imageCost.runImageCall(
-      { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 },
+      { model: OUTPAINT_MODEL, width: 1536, height: 1024, quality: 'high', count: 1, inputImages: true, onLogged },
       () => axios.post(
         'https://api.openai.com/v1/images/edits',
         form,
@@ -1571,15 +1762,18 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   try {
     console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
-    let stillUrl, totalCost = 0, generatedSeed = null;
+    let stillUrl, generatedSeed = null;
     let usedCropOutpaint = false;
+    // Every billed image call below reports its logged cost here (Task #2396).
+    const angleCosts = createCostCollector(`angle ${sceneAngle.id} (${angleLabel})`);
 
     // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
     // For angles where we can crop from the base image, this gives the best
     // consistency because original pixels are kept untouched.
     if (referenceImageForEdit && CAMERA_CROP_MAP[angleLabel] !== undefined) {
       stillUrl = await cropAndOutpaint(
-        referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt
+        referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
+        { onLogged: angleCosts.onLogged },
       );
       if (stillUrl) {
         usedCropOutpaint = true;
@@ -1639,9 +1833,9 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         styleReference,
         referenceImages,
         guidanceScale: 1.5,
+        onLogged: angleCosts.onLogged,
       });
       stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
-      totalCost = 0.04;
       generatedSeed = null;
     }
     } // end of fallback full-generation block
@@ -1659,6 +1853,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         const { imageUrl: retryImageUrl } = await startTextToImage(retryPrompt, {
           referenceImages: [{ uri: referenceImageForEdit, weight: 0.95 }],
           guidanceScale: 1.3,
+          onLogged: angleCosts.onLogged,
         });
 
         stillUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
@@ -1699,6 +1894,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       };
     }
 
+    // The logged cost of this angle's image calls: the outpaint's estimate
+    // plus any priced input image tokens, or Kontext's per-image estimate
+    // (each consistency retry included); 0 for a pure crop; null (with a
+    // warning) when every call was unpriced.
+    const totalCost = angleCosts.value();
+
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
@@ -1709,7 +1910,9 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       quality_review: qualityReview,
     }, { where: { id: sceneAngle.id } });
 
-    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+    if (typeof totalCost === 'number' && totalCost > 0) {
+      await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+    }
 
     return { success: true, stillUrl, seed: generatedSeed, specValidation };
   } catch (err) {
@@ -1805,10 +2008,12 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
       ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
       : undefined;
 
+    const refineCosts = createCostCollector(`refined angle ${sceneAngle.id}`);
     const { imageUrl } = await startTextToImage(refinedPrompt, {
       seed: seedVariation,
       styleReference,
       referenceImages,
+      onLogged: refineCosts.onLogged,
     });
     const stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
 
@@ -1834,7 +2039,9 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
       console.warn(`[SceneGen] Quality analysis on refined image failed: ${qaErr.message}`);
     }
 
-    const totalCost = 0.04 + (videoResult.creditsUsed || 0);
+    // Still: the logged Kontext cost (rate-table estimate, Task #2396), not a
+    // literal. Runway video credits are added as before (INFERRED unchanged).
+    const totalCost = (refineCosts.value() || 0) + (videoResult.creditsUsed || 0);
 
     await SceneAngle.update({
       still_image_url: stillUrl,
@@ -1898,4 +2105,15 @@ module.exports = {
   CAMERA_MOTION_MAP,
   VIDEO_DURATION_MAP,
   VIDEO_MOVEMENT_MODIFIERS,
+  // Task #2396: base still model choice, true recorded costs
+  SCENE_BASE_MODELS,
+  OUTPAINT_MODEL,
+  isBaseModelKey,
+  defaultBaseModel,
+  resolveBaseModel,
+  estimateBaseStillCost,
+  createCostCollector,
+  generateBaseStill,
+  generateGptImageStill,
+  cropAndOutpaint,
 };

@@ -273,6 +273,25 @@ describe('EventTermsSection', () => {
     await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ appearance_fee: 500 }));
   });
 
+  test('D12: a deliverable Propose terms drafted reads Auto-drafted · from deal, and Edited once changed', async () => {
+    const event = {
+      ...EVENT, deal_type: 'brand_partnership',
+      canon_consequences: { automation: { auto_drafted: { deliverables: 'deal' }, drafted_values: { deliverables: {
+        r1: { type: 'reel', fee: 125, description: 'Reel', required: true },
+        s1: { type: 'story_set_3', fee: 60, description: 'Story Set (3)', required: true },
+      } } } },
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
+      { id: 'r1', description: 'Reel', deliverable_type: 'reel', required: true, owed_to: 'brand', status: 'pending', fee: 125 },
+      { id: 's1', description: 'Story Set (3)', deliverable_type: 'story_set_3', required: true, owed_to: 'brand', status: 'pending', fee: 80 },
+      { id: 'x1', description: 'Host a Q&A', deliverable_type: 'other', required: true, owed_to: 'brand', status: 'pending', fee: 50 },
+    ] } });
+    renderTerms({ event });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-draft-r1').textContent).toBe('Auto-drafted · from deal'));
+    expect(screen.getByTestId('terms-deliverable-draft-s1').textContent).toBe('Edited');
+    expect(screen.queryByTestId('terms-deliverable-draft-x1')).toBeNull();
+  });
+
   test('pricing: the deliverable form offers only the fixed types (ruling 2)', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], locked: false } });
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, deliverable: { id: 'd9' } } });

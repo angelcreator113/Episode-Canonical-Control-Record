@@ -298,6 +298,7 @@ async function generateSocialChecklist(event, models, options = {}) {
       } catch { /* non-blocking */ }
     }
     tasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
+      event, // T9: prestige sets the goal count; description, format, theme, stakes
       event_name: event.name,
       host_name: event.host || creator?.displayName,
       host_handle: creator?.handle,
