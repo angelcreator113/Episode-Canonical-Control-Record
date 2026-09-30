@@ -48,7 +48,7 @@ const STATUS_CONFLICT_CODE = 'DELIVERABLE_STATUS_CONFLICT';
 const FULFILMENT_FIELDS = ['status', 'completed_at', 'submitted_at', 'approved_at'];
 
 const RETURNING = `RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`;
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`;
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -103,6 +103,15 @@ function readDeliverableBody(body, { partial }) {
     if (!DELIVERABLE_OWED_TO.includes(b.owed_to)) return { error: `owed_to must be one of ${DELIVERABLE_OWED_TO.join(', ')}` };
     fields.owed_to = b.owed_to;
   }
+  // The deliverable's fee in Prime Coins, paid on approval (deal build PR 3,
+  // Task #2341): a whole number, 0 or more, or null. Propose terms drafts it.
+  if (b.fee !== undefined) {
+    if (b.fee === null || b.fee === '') { fields.fee = null; } else {
+      const fee = Number(b.fee);
+      if (!Number.isInteger(fee) || fee < 0) return { error: 'fee must be a whole number of Prime Coins, 0 or more, or null' };
+      fields.fee = fee;
+    }
+  }
   return { fields };
 }
 
@@ -148,10 +157,10 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
 
     const f = parsed.fields;
     const [rows] = await models.sequelize.query(
-      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, status, created_at, updated_at)
-       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, 'pending', NOW(), NOW())
+      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at)
+       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, :fee, 'pending', NOW(), NOW())
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: {
         id: uuidv4(), eventId,
         description: f.description,
@@ -159,6 +168,7 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
         due_date: f.due_date ?? null,
         required: f.required !== false,
         owed_to: f.owed_to || 'host',
+        fee: f.fee ?? null,
       } }
     );
     // A brand-owed deliverable can change an Auto-drafted deal type (Task #2330).
@@ -194,7 +204,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
     if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
     const keys = Object.keys(parsed.fields);
     if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to)' });
+      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to, fee)' });
     }
 
     const event = await loadEvent(models.sequelize, showId, eventId);
@@ -206,7 +216,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
       `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
        WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: { ...parsed.fields, deliverableId, eventId } }
     );
     if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });

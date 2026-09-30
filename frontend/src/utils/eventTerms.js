@@ -206,15 +206,24 @@ export function buildDeliverableBody(draft) {
   const due = String(draft?.due_date || '').trim();
   if (type.length > DELIVERABLE_TYPE_MAX) return { error: `Type: at most ${DELIVERABLE_TYPE_MAX} characters` };
   if (due.length > DELIVERABLE_DUE_MAX) return { error: `Due: at most ${DELIVERABLE_DUE_MAX} characters` };
-  return {
-    body: {
-      description,
-      deliverable_type: type || null,
-      due_date: due || null,
-      required: draft?.required !== false,
-      owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
-    },
+  const body = {
+    description,
+    deliverable_type: type || null,
+    due_date: due || null,
+    required: draft?.required !== false,
+    owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
   };
+  // The fee (deal build PR 3, Task #2341), sent only when the form has one.
+  if (draft && Object.prototype.hasOwnProperty.call(draft, 'fee')) {
+    const raw = String(draft.fee ?? '').trim();
+    if (raw === '') body.fee = null;
+    else {
+      const fee = Number(raw);
+      if (!Number.isInteger(fee) || fee < 0) return { error: 'Fee: a whole number of Prime Coins, 0 or more' };
+      body.fee = fee;
+    }
+  }
+  return { body };
 }
 
 export function deliverableDraftFrom(d) {
@@ -224,6 +233,7 @@ export function deliverableDraftFrom(d) {
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
     owed_to: d?.owed_to === 'brand' ? 'brand' : 'host',
+    fee: d?.fee == null ? '' : String(d.fee),
   };
 }
 
@@ -329,4 +339,61 @@ export function buildDealTypeUpdate(event, next) {
   const value = next || null;
   if (value !== null && !DEAL_TYPES.includes(value)) return { body: null, unchanged: false, error: 'Choose one of the listed deal types.' };
   return { body: { deal_type: value }, unchanged: value === (event?.deal_type || null), error: null };
+}
+
+// ─── Pricing (deal build PR 3, Task #2341) ───────────────────────────────
+// Propose terms (POST .../propose-terms) drafts the appearance fee and each
+// deliverable's fee from the rate card (GET /deal-rates). The server records
+// the draft in automation.auto_drafted / drafted_values (rule 14): a number
+// reads "Auto-drafted · pricing v<N>" while it equals the drafted copy and
+// Edited once it differs.
+
+const coins = (n) => `${Number(n).toLocaleString('en-US')} coins`;
+
+function pricingNote(event, drafted, value) {
+  const version = event?.canon_consequences?.automation?.pricing_version ?? event?.pricing_version;
+  if (drafted === undefined || value == null) return null;
+  return Number(drafted) === Number(value) ? `Auto-drafted · pricing v${version}` : 'Edited';
+}
+
+/** { value, label, note } for the appearance fee. */
+export function describeAppearanceFee(event) {
+  const value = event?.appearance_fee ?? null;
+  const automation = event?.canon_consequences?.automation || {};
+  const drafted = automation.auto_drafted?.appearance_fee === 'pricing' ? automation.drafted_values?.appearance_fee : undefined;
+  return { value, label: value == null ? 'Not set' : coins(value), note: pricingNote(event, drafted, value) };
+}
+
+/** { value, label, note } for one deliverable's fee. */
+export function describeDeliverableFee(event, d) {
+  const value = d?.fee ?? null;
+  const automation = event?.canon_consequences?.automation || {};
+  const drafted = automation.auto_drafted?.deliverable_fees === 'pricing' ? automation.drafted_values?.deliverable_fees?.[d?.id] : undefined;
+  return { value, label: value == null ? null : `Fee ${coins(value)}`, note: pricingNote(event, drafted, value) };
+}
+
+export const PREMIUM_KIND_LABELS = { rush: 'Rush', usage: 'Usage', exclusivity: 'Exclusivity', paid_ad: 'Paid ad' };
+
+/**
+ * The premium choices a rate card offers, per kind: [{ kind, label,
+ * options: [{ key, percent }] }]. A premium with no percent (paid_ad) is
+ * listed with usable: false, since the server refuses it until it is set.
+ */
+export function premiumChoicesFrom(card) {
+  return Object.entries(card?.premiums || {}).map(([kind, keys]) => ({
+    kind,
+    label: PREMIUM_KIND_LABELS[kind] || kind,
+    options: Object.entries(keys).map(([key, percent]) => ({ key, percent, usable: percent != null })),
+  }));
+}
+
+/** The propose-terms body from the chosen premiums: { line: { kind: key } }. */
+export function buildProposeBody(selection) {
+  const toList = (chosen) => Object.entries(chosen || {}).filter(([, key]) => key).map(([kind, key]) => ({ kind, key }));
+  const deliverables = {};
+  for (const [id, chosen] of Object.entries(selection?.deliverables || {})) {
+    const list = toList(chosen);
+    if (list.length) deliverables[id] = list;
+  }
+  return { premiums: { appearance: toList(selection?.appearance), deliverables } };
 }

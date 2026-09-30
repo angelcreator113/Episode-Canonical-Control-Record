@@ -142,7 +142,7 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
 /** The event's live deliverables, oldest first. */
 async function listEventDeliverables(sequelize, eventId) {
   const [rows] = await sequelize.query(
-    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, status,
+    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status,
             completed_at, submitted_at, approved_at, episode_id, created_at, updated_at
      FROM event_deliverables
      WHERE event_id = :eventId AND deleted_at IS NULL

@@ -733,6 +733,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
       // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
       'deal_type',
+      // Appearance fee (deal build PR 3, Task #2341): Propose terms drafts it
+      // from the rate card; Evoni edits it here until the terms lock.
+      'appearance_fee',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -741,6 +744,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const integerFields = new Set([
       'prestige', 'cost_coins', 'strictness', 'deadline_minutes',
       'browse_pool_size', 'payment_amount', 'career_tier', 'source_profile_id',
+      'appearance_fee',
     ]);
     const uuidFields = new Set([
       'season_id', 'arc_id', 'scene_set_id', 'source_calendar_event_id',
@@ -807,6 +811,10 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         if (field === 'canon_consequences' && val !== null) {
           // Merged with the stored value just before the UPDATE (Task #1747).
           ccIncoming = val;
+        }
+
+        if (field === 'appearance_fee' && val !== null && Number(val) < 0) {
+          return res.status(400).json({ success: false, error: 'Invalid value for appearance_fee', message: 'appearance_fee must be 0 or more, or null' });
         }
 
         if (field === 'deal_type' && val !== null && !DEAL_TYPES.includes(val)) {

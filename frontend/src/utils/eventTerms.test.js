@@ -7,6 +7,7 @@ import {
   DELIVERABLE_STATUS_FLOW, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel,
   formatFulfilmentDate, deliverableTimeline,
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
+  describeAppearanceFee, describeDeliverableFee, premiumChoicesFrom, buildProposeBody,
 } from './eventTerms';
 
 describe('access requirements', () => {
@@ -85,7 +86,14 @@ describe('deliverable form', () => {
     expect(buildDeliverableBody({ description: ' Tagged post ', deliverable_type: ' ', due_date: '2026-11-07', required: false }))
       .toEqual({ body: { description: 'Tagged post', deliverable_type: null, due_date: '2026-11-07', required: false, owed_to: 'host' } });
     expect(buildDeliverableBody({ description: '' }).error).toBeTruthy();
-    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', due_date: '', required: true, owed_to: 'host' });
+    // The form carries a fee (Task #2341): empty in the draft, null in the body.
+    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', due_date: '', required: true, owed_to: 'host', fee: '' });
+    expect(buildDeliverableBody(deliverableDraftFrom(null)).error).toBeTruthy();
+    expect(buildDeliverableBody({ description: 'Reel', fee: '' }).body.fee).toBeNull();
+    expect(buildDeliverableBody({ description: 'Reel', fee: '125' }).body.fee).toBe(125);
+    expect(buildDeliverableBody({ description: 'Reel', fee: '12.5' }).error).toBeTruthy();
+    expect(buildDeliverableBody({ description: 'Reel', fee: '-1' }).error).toBeTruthy();
+    expect(deliverableDraftFrom({ description: 'Reel', fee: 125 }).fee).toBe('125');
     // T2 (Task #2294): owed_to is host or brand; anything else reads as host.
     expect(buildDeliverableBody({ description: 'Reel', owed_to: 'brand' }).body.owed_to).toBe('brand');
     expect(buildDeliverableBody({ description: 'Reel', owed_to: 'sponsor' }).body.owed_to).toBe('host');
@@ -160,5 +168,45 @@ describe('deal type (Task #2330)', () => {
     expect(buildDealTypeUpdate({ deal_type: 'gifted' }, 'gifted').unchanged).toBe(true);
     expect(buildDealTypeUpdate({ deal_type: 'gifted' }, '')).toEqual({ body: { deal_type: null }, unchanged: false, error: null });
     expect(buildDealTypeUpdate({}, 'sponsorship').error).toBeTruthy();
+  });
+});
+
+describe('pricing (Task #2341)', () => {
+  const drafted = (fee, draftedFee, fees = {}) => ({
+    appearance_fee: fee,
+    canon_consequences: { automation: {
+      pricing_version: 1,
+      auto_drafted: { appearance_fee: 'pricing', deliverable_fees: 'pricing' },
+      drafted_values: { appearance_fee: draftedFee, deliverable_fees: fees },
+    } },
+  });
+
+  test('appearance fee: Auto-drafted · pricing v1 while equal to the draft, Edited once changed, Not set when empty', () => {
+    expect(describeAppearanceFee(drafted(450, 450))).toEqual({ value: 450, label: '450 coins', note: 'Auto-drafted · pricing v1' });
+    expect(describeAppearanceFee(drafted(500, 450)).note).toBe('Edited');
+    expect(describeAppearanceFee({ appearance_fee: 1200 })).toEqual({ value: 1200, label: '1,200 coins', note: null });
+    expect(describeAppearanceFee({})).toEqual({ value: null, label: 'Not set', note: null });
+  });
+
+  test('deliverable fee: labelled per deliverable', () => {
+    const ev = drafted(0, 0, { d1: 270 });
+    expect(describeDeliverableFee(ev, { id: 'd1', fee: 270 })).toEqual({ value: 270, label: 'Fee 270 coins', note: 'Auto-drafted · pricing v1' });
+    expect(describeDeliverableFee(ev, { id: 'd1', fee: 300 }).note).toBe('Edited');
+    expect(describeDeliverableFee(ev, { id: 'd2', fee: null })).toEqual({ value: null, label: null, note: null });
+  });
+
+  test('premium choices from the card; a premium with no percent is not usable', () => {
+    const choices = premiumChoicesFrom({ premiums: { rush: { '48h': 10, '24h': 20 }, paid_ad: { whitelisting: null } } });
+    expect(choices).toEqual([
+      { kind: 'rush', label: 'Rush', options: [{ key: '48h', percent: 10, usable: true }, { key: '24h', percent: 20, usable: true }] },
+      { kind: 'paid_ad', label: 'Paid ad', options: [{ key: 'whitelisting', percent: null, usable: false }] },
+    ]);
+    expect(premiumChoicesFrom(null)).toEqual([]);
+  });
+
+  test('the propose body lists only chosen premiums, per line', () => {
+    expect(buildProposeBody({ appearance: { rush: '48h', usage: '' }, deliverables: { d1: { exclusivity: '30d' }, d2: { rush: '' } } }))
+      .toEqual({ premiums: { appearance: [{ kind: 'rush', key: '48h' }], deliverables: { d1: [{ kind: 'exclusivity', key: '30d' }] } } });
+    expect(buildProposeBody(undefined)).toEqual({ premiums: { appearance: [], deliverables: {} } });
   });
 });
