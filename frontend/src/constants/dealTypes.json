@@ -1,0 +1,12 @@
+{
+  "deal_type": [
+    "self_funded",
+    "invited_comped",
+    "gifted",
+    "paid_appearance",
+    "paid_deliverables",
+    "appearance_plus_deliverables",
+    "performance_booking",
+    "brand_partnership"
+  ]
+}

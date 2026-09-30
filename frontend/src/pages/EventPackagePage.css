@@ -1186,6 +1186,11 @@
   margin-left: 0;
 }
 .epp-term-value { font-size: 13px; }
+/* Deal type's rule 14 label (Task #2330). */
+.epp-term-state {
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
 .epp-term-note {
   margin: 6px 0 0;
   font-size: 11px;
@@ -1287,6 +1292,7 @@
 }
 .epp-term-field input,
 .epp-term-field textarea,
+.epp-term-field select,
 .epp-term-add input {
   width: 100%;
   box-sizing: border-box;

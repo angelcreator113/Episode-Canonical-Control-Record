@@ -9,6 +9,12 @@
  *   Restrictions        — event.restrictions, through the event PUT
  *   Compensation        — event.is_paid / payment_amount, through the event PUT
  *
+ * Deal type (deal build PR 2, Task #2330; docs/DEAL_DESIGN.md §2.2) sits
+ * above Compensation: event.deal_type, through the event PUT. The server
+ * drafts it at creation by a fixed rule, so it reads "Auto-drafted ·
+ * <source>" until Evoni changes it, then Edited (doctrine rule 14). It
+ * locks with the terms.
+ *
  * The Package owns the accepted terms (§8(t) item 2). Editing stops at
  * Start Episode (`locked`, the page's used_in_episode_id check), which is
  * also when the deliverable routes start refusing writes (409).
@@ -27,7 +33,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import {
-  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check,
+  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake,
 } from 'lucide-react';
 import api from '../../services/api';
 import {
@@ -37,6 +43,7 @@ import {
   buildDeliverableBody, deliverableDraftFrom, DELIVERABLE_OWED_TO_LABELS,
   DELIVERABLE_STATUS_LABELS, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel, deliverableTimeline,
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_TYPE_MAX, DELIVERABLE_DUE_MAX,
+  DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
 } from '../../utils/eventTerms';
 
 const deliverablesUrl = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/deliverables`;
@@ -157,7 +164,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [compDraft, setCompDraft] = useState(null);
   const [restrictionText, setRestrictionText] = useState('');
   const [restrictionError, setRestrictionError] = useState(null);
-  const [termSaving, setTermSaving] = useState(null); // 'requirements' | 'restrictions' | 'compensation'
+  const [dealDraft, setDealDraft] = useState(null); // null, or the chosen deal type ('' = none)
+  const [termSaving, setTermSaving] = useState(null); // 'requirements' | 'restrictions' | 'compensation' | 'deal type'
 
   const saveEventTerm = async (which, body, okMessage) => {
     if (locked || termSaving) return false;
@@ -192,6 +200,13 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
   const removeRestriction = (index) => {
     saveEventTerm('restrictions', buildRestrictionRemove(event, index).body, 'Restriction removed');
+  };
+
+  const dealType = describeDealType(event);
+  const dealUpdate = dealDraft !== null ? buildDealTypeUpdate(event, dealDraft) : null;
+  const saveDealType = async () => {
+    if (!dealUpdate || dealUpdate.unchanged || dealUpdate.error) return;
+    if (await saveEventTerm('deal type', dealUpdate.body, 'Deal type saved')) setDealDraft(null);
   };
 
   const compensation = describeCompensation(event);
@@ -434,6 +449,46 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             </div>
           )}
           {restrictionError && <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {restrictionError}</p>}
+        </div>
+
+        {/* Deal type */}
+        <div className="epp-term" data-testid="terms-deal-type">
+          <div className="epp-term-head">
+            <span className="epp-term-title"><Handshake size={14} aria-hidden="true" /> Deal type</span>
+            {!locked && dealDraft === null && (
+              <button type="button" className="epp-inline-link" data-testid="terms-deal-type-edit" onClick={() => setDealDraft(dealType.value || '')}>
+                <Pencil size={11} aria-hidden="true" /> Edit
+              </button>
+            )}
+          </div>
+          {dealDraft === null && (
+            <div className="epp-term-value" data-testid="terms-deal-type-summary">
+              {dealType.label}
+              {dealType.note && <span className="epp-term-state" data-testid="terms-deal-type-state"> · {dealType.note}</span>}
+            </div>
+          )}
+          {dealDraft !== null && (
+            <div className="epp-term-form">
+              <label className="epp-term-field">
+                <span>Deal type</span>
+                <select value={dealDraft} data-testid="terms-deal-type-select" onChange={(e) => setDealDraft(e.target.value)}>
+                  <option value="">Not set</option>
+                  {DEAL_TYPES.map((t) => <option key={t} value={t}>{DEAL_TYPE_LABELS[t] || t}</option>)}
+                </select>
+              </label>
+              {dealUpdate?.error && <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {dealUpdate.error}</p>}
+              <div className="epp-term-actions">
+                <button type="button" className="epp-btn epp-btn-small" onClick={() => setDealDraft(null)} disabled={termSaving === 'deal type'}>Cancel</button>
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid="terms-deal-type-save"
+                  onClick={saveDealType} disabled={!!termSaving || !dealUpdate || dealUpdate.unchanged || !!dealUpdate.error}
+                >
+                  {termSaving === 'deal type' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="epp-term-note">What kind of arrangement this is. It decides how the deal will pay; nothing is paid from it yet.</p>
         </div>
 
         {/* Compensation */}
