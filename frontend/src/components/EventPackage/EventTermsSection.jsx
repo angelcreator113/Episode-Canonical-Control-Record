@@ -15,6 +15,18 @@
  * <source>" until Evoni changes it, then Edited (doctrine rule 14). It
  * locks with the terms.
  *
+ * Deal price (deal build PR 3, Task #2341; docs/DEAL_DESIGN.md §12;
+ * Evoni's Deal PR 3 ruling, EVENT_EPISODE_FLOW.md §8(cc)) sits below it: the
+ * components the deal type carries (appearance fee, partnership base,
+ * performance fee — each its own event column, through the event PUT), the
+ * "also requires an appearance" switch for a brand partnership, the gifted
+ * value of a gifted deal, and each deliverable's fee (through the deliverable
+ * routes). "Propose terms" drafts them from the rate card (POST
+ * .../propose-terms), with the premiums Evoni picks for each component; the
+ * numbers read "Auto-drafted · pricing v<N>" until she changes them, then
+ * Edited. A missing price reads "Price required", and Start Episode refuses
+ * until it has one. All lock with the terms.
+ *
  * The Package owns the accepted terms (§8(t) item 2). Editing stops at
  * Start Episode (`locked`, the page's used_in_episode_id check), which is
  * also when the deliverable routes start refusing writes (409).
@@ -33,7 +45,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import {
-  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake,
+  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator,
 } from 'lucide-react';
 import api from '../../services/api';
 import {
@@ -42,8 +54,11 @@ import {
   describeCompensation, compensationDraftFrom, buildCompensationUpdate,
   buildDeliverableBody, deliverableDraftFrom, DELIVERABLE_OWED_TO_LABELS,
   DELIVERABLE_STATUS_LABELS, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel, deliverableTimeline,
-  RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_TYPE_MAX, DELIVERABLE_DUE_MAX,
+  RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_DUE_MAX,
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
+  DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
+  dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, missingPriceLabels,
+  buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
 } from '../../utils/eventTerms';
 
 const deliverablesUrl = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/deliverables`;
@@ -53,6 +68,8 @@ export const createDeliverableApi = (showId, eventId, body) => api.post(delivera
 export const updateDeliverableApi = (showId, eventId, id, body) => api.put(`${deliverablesUrl(showId, eventId)}/${id}`, body);
 export const deleteDeliverableApi = (showId, eventId, id) => api.delete(`${deliverablesUrl(showId, eventId)}/${id}`);
 export const advanceDeliverableApi = (showId, eventId, id, status) => api.post(`${deliverablesUrl(showId, eventId)}/${id}/status`, { status });
+export const rateCardApi = () => api.get('/api/v1/deal-rates');
+export const proposeTermsApi = (showId, eventId, body) => api.post(`/api/v1/world/${showId}/events/${eventId}/propose-terms`, body);
 
 function errorMessage(err, fallback) {
   return err?.response?.data?.error || err?.message || fallback;
@@ -144,6 +161,24 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     }
   };
 
+  // "No fee (0)" (Evoni, 2026-09-30): one click sets a deliverable that pays
+  // nothing to 0, so it no longer reads "Price required" or holds Start
+  // Episode. 0 is a price; a missing number is not.
+  const setNoFee = async (d) => {
+    if (locked || delivSaving) return;
+    setDelivSaving(true);
+    try {
+      await updateDeliverableApi(showId, eventId, d.id, { fee: 0 });
+      toast('Set to no fee (0)');
+      await loadDeliverables();
+    } catch (err) {
+      onDeliverableWriteError(err, 'Failed to set no fee');
+      toast(errorMessage(err, 'Failed to set no fee'));
+    } finally {
+      setDelivSaving(false);
+    }
+  };
+
   const removeDeliverable = async (d) => {
     if (locked || delivSaving) return;
     setDelivSaving(true);
@@ -208,6 +243,121 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     if (!dealUpdate || dealUpdate.unchanged || dealUpdate.error) return;
     if (await saveEventTerm('deal type', dealUpdate.body, 'Deal type saved')) setDealDraft(null);
   };
+
+  // ── Deal price (Task #2341) ──
+  const plan = dealPlanFor(event);
+  const missingPrices = missingPriceLabels(event, deliverables);
+  const [feeDraft, setFeeDraft] = useState(null); // null, or { field, value } for one component
+  const [pricing, setPricing] = useState(null); // null, or { card, selection, loading, error, gaps }
+  const [proposing, setProposing] = useState(false);
+
+  const saveComponentFee = async (label) => {
+    if (!feeDraft) return;
+    const built = buildComponentFeeUpdate(feeDraft.field, feeDraft.value);
+    if (built.error) { toast(`${label}: ${built.error}`); return; }
+    if (await saveEventTerm(label.toLowerCase(), built.body, `${label} saved`)) setFeeDraft(null);
+  };
+
+  const emptySelection = () => ({ components: {}, deliverables: {} });
+
+  const openPricing = async () => {
+    if (locked) return;
+    setPricing({ card: null, selection: emptySelection(), loading: true, error: null, gaps: [] });
+    try {
+      const res = await rateCardApi();
+      setPricing((p) => ({ ...p, card: res.data?.card || null, loading: false }));
+    } catch (err) {
+      console.error('[EventTerms] rate card load failed:', err);
+      setPricing((p) => ({ ...p, loading: false, error: errorMessage(err, 'Failed to load the rate card') }));
+    }
+  };
+
+  // Ruling 3: a premium is chosen for one component, and applies only to it.
+  const choosePremium = (group, line, kind, key) => setPricing((p) => {
+    const selection = { components: { ...p.selection.components }, deliverables: { ...p.selection.deliverables } };
+    selection[group][line] = { ...(selection[group][line] || {}), [kind]: key };
+    return { ...p, selection };
+  });
+
+  const runProposal = async () => {
+    if (locked || proposing || !pricing) return;
+    setProposing(true);
+    try {
+      const res = await proposeTermsApi(showId, eventId, buildProposeBody(pricing.selection));
+      const gaps = res.data?.proposal?.gaps || [];
+      toast(gaps.length ? 'Terms proposed; some lines need a price' : 'Terms proposed');
+      setPricing((p) => ({ ...p, error: null, gaps }));
+      await loadDeliverables();
+      if (onSaved) await onSaved();
+    } catch (err) {
+      console.error('[EventTerms] propose terms failed:', err);
+      setPricing((p) => ({ ...p, error: errorMessage(err, 'Failed to propose terms') }));
+      if (err?.response?.status === 409 && onSaved) onSaved();
+    } finally {
+      setProposing(false);
+    }
+  };
+
+  const premiumChoices = premiumChoicesFrom(pricing?.card);
+  const premiumSelects = (group, line, chosen) => (
+    <div className="epp-term-premiums" data-testid={`terms-premiums-${line}`}>
+      {premiumChoices.map((c) => (
+        <label key={c.kind} className="epp-term-field">
+          <span>{c.label}</span>
+          <select
+            value={chosen?.[c.kind] || ''} data-testid={`terms-premium-${line}-${c.kind}`}
+            onChange={(e) => choosePremium(group, line, c.kind, e.target.value)}
+          >
+            <option value="">None</option>
+            {c.options.map((o) => (
+              <option key={o.key} value={o.key} disabled={!o.usable}>
+                {o.key}{o.usable ? ` (+${o.percent}%)` : ' (set before use)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  );
+
+  // One component row: its number, its rule 14 note, and an Edit form.
+  const componentRow = (field, label, described, priced) => (
+    <div key={field} className="epp-term-component" data-testid={`terms-component-${field}`}>
+      <div className="epp-term-head">
+        <span className="epp-term-premium-title">{label}</span>
+        {!locked && feeDraft?.field !== field && (
+          <button
+            type="button" className="epp-inline-link" data-testid={`terms-component-edit-${field}`}
+            onClick={() => setFeeDraft({ field, value: described.value == null ? '' : String(described.value) })}
+          >
+            <Pencil size={11} aria-hidden="true" /> Edit
+          </button>
+        )}
+      </div>
+      {feeDraft?.field === field ? (
+        <div className="epp-term-form">
+          <label className="epp-term-field">
+            <span>{label} (coins)</span>
+            <input
+              type="number" min={0} step={1} inputMode="numeric" value={feeDraft.value} data-testid={`terms-component-input-${field}`}
+              onChange={(e) => setFeeDraft({ field, value: e.target.value })}
+            />
+          </label>
+          <div className="epp-term-actions">
+            <button type="button" className="epp-btn epp-btn-small" onClick={() => setFeeDraft(null)} disabled={!!termSaving}>Cancel</button>
+            <button type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid={`terms-component-save-${field}`} onClick={() => saveComponentFee(label)} disabled={!!termSaving}>
+              {termSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={`epp-term-value${priced && described.value == null ? ' is-price-required' : ''}`} data-testid={`terms-component-summary-${field}`}>
+          {described.label}
+          {described.note && <span className="epp-term-state"> · {described.note}</span>}
+        </div>
+      )}
+    </div>
+  );
 
   const compensation = describeCompensation(event);
   const compUpdate = compDraft ? buildCompensationUpdate(event, compDraft) : null;
@@ -299,7 +449,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                     <span className="epp-term-item-text">{d.description}</span>
                     <span className="epp-term-meta">
                       <span data-testid={`terms-deliverable-owed-${d.id}`}>{DELIVERABLE_OWED_TO_LABELS[d.owed_to === 'brand' ? 'brand' : 'host']}</span>
-                      {d.deliverable_type && <span>{d.deliverable_type}</span>}
+                      {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d.deliverable_type)}</span>}
+                      {(() => {
+                        const fee = describeDeliverableFee(event, d);
+                        return fee.label && (
+                          <span className={fee.priceRequired ? 'is-price-required' : undefined} data-testid={`terms-deliverable-fee-${d.id}`}>
+                            {fee.label}{fee.note ? ` · ${fee.note}` : ''}
+                          </span>
+                        );
+                      })()}
                       {d.due_date && <span>Due {d.due_date}</span>}
                       {d.required === false && <span>Optional</span>}
                       <span className={`epp-term-status is-${status}`} data-testid={`terms-deliverable-status-${d.id}`}>{DELIVERABLE_STATUS_LABELS[status]}</span>
@@ -327,6 +485,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                         ? <Loader2 size={12} className="epp-spin-icon" aria-hidden="true" />
                         : <Check size={12} aria-hidden="true" />}
                       {deliverableAdvanceLabel(next)}
+                    </button>
+                  )}
+                  {!locked && describeDeliverableFee(event, d).priceRequired && (
+                    <button
+                      type="button" className="epp-btn epp-btn-small" data-testid={`terms-deliverable-nofee-${d.id}`}
+                      onClick={() => setNoFee(d)} disabled={delivSaving}
+                    >
+                      No fee (0)
                     </button>
                   )}
                   {!locked && (
@@ -362,11 +528,13 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               <div className="epp-term-row">
                 <label className="epp-term-field">
                   <span>Type</span>
-                  <input
-                    type="text" maxLength={DELIVERABLE_TYPE_MAX} placeholder="post, story, appearance…"
-                    value={delivDraft.deliverable_type}
+                  <select
+                    value={delivDraft.deliverable_type} data-testid="terms-deliverable-type"
                     onChange={(e) => setDelivDraft((d) => ({ ...d, deliverable_type: e.target.value }))}
-                  />
+                  >
+                    <option value="">{delivDraft.legacy_type ? `${delivDraft.legacy_type} (choose a type)` : 'Choose a type'}</option>
+                    {DELIVERABLE_TYPES.map((t) => <option key={t} value={t}>{DELIVERABLE_TYPE_LABELS[t]}</option>)}
+                  </select>
                 </label>
                 <label className="epp-term-field">
                   <span>Due</span>
@@ -387,6 +555,20 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   <option value="brand">{DELIVERABLE_OWED_TO_LABELS.brand}</option>
                 </select>
               </label>
+              <label className="epp-term-field">
+                <span>Fee (coins)</span>
+                <input
+                  type="number" min={0} step={1} inputMode="numeric" value={delivDraft.fee} data-testid="terms-deliverable-fee"
+                  onChange={(e) => setDelivDraft((d) => ({ ...d, fee: e.target.value }))}
+                />
+              </label>
+              {plan.deliverables && !hasRateAnchor(delivDraft.deliverable_type) && (
+                <p className="epp-term-note" data-testid="terms-deliverable-manual-note">
+                  {delivDraft.deliverable_type === 'other'
+                    ? 'Other is never priced automatically: set its fee.'
+                    : 'Priced by hand: only a Reel or a Story Set (3) takes a rate from the card.'}
+                </p>
+              )}
               <label className="epp-term-check">
                 <input
                   type="checkbox" checked={delivDraft.required}
@@ -489,6 +671,84 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             </div>
           )}
           <p className="epp-term-note">What kind of arrangement this is. It decides how the deal will pay; nothing is paid from it yet.</p>
+        </div>
+
+        {/* Deal price (Task #2341) */}
+        <div className="epp-term" data-testid="terms-pricing">
+          <div className="epp-term-head">
+            <span className="epp-term-title"><Calculator size={14} aria-hidden="true" /> Deal price</span>
+            {!locked && !pricing && (
+              <button type="button" className="epp-inline-link" data-testid="terms-propose-open" onClick={openPricing} disabled={!plan.cash}>
+                <Calculator size={11} aria-hidden="true" /> Propose terms
+              </button>
+            )}
+          </div>
+          {!event?.deal_type && <div className="epp-empty" data-testid="terms-pricing-empty">Choose a deal type to price the deal.</div>}
+          {plan.known && !plan.cash && (
+            <p className="epp-term-note" data-testid="terms-no-cash">
+              {plan.giftedValue ? 'Gifted: no cash income. The gifted value is recorded, never paid.' : 'No cash income for this deal type.'}
+            </p>
+          )}
+          {plan.appearanceIfRequired && (
+            <label className="epp-term-check">
+              <input
+                type="checkbox" checked={event?.appearance_required === true} disabled={locked || !!termSaving}
+                data-testid="terms-appearance-required"
+                onChange={(e) => saveEventTerm('appearance', { appearance_required: e.target.checked }, e.target.checked ? 'Appearance added to the partnership' : 'Appearance removed from the partnership')}
+              />
+              The partnership also requires Lala to attend or appear (adds the appearance fee)
+            </label>
+          )}
+          {plan.components.map((c) => componentRow(c.field, c.label, describeComponentFee(event, c.field), true))}
+          {plan.giftedValue && componentRow('gifted_value', 'Gifted value', describeGiftedValue(event), false)}
+          {!locked && missingPrices.length > 0 && (
+            <p className="epp-term-error" data-testid="terms-price-missing">
+              <AlertCircle size={12} aria-hidden="true" /> Start Episode waits on a price for: {missingPrices.join(', ')}.
+            </p>
+          )}
+          {pricing && !locked && (
+            <div className="epp-term-form" data-testid="terms-propose-panel">
+              {pricing.loading && <p className="epp-term-note"><Loader2 size={12} className="epp-spin-icon" aria-hidden="true" /> Loading the rate card…</p>}
+              {!pricing.loading && pricing.card && (
+                <>
+                  <p className="epp-term-note">Rate card v{pricing.card.version}. Premiums add up, and apply only to the component they are chosen for.</p>
+                  {plan.components.map((c) => (
+                    <div key={c.key} className="epp-term-premium-line">
+                      <span className="epp-term-premium-title">{c.label}</span>
+                      {premiumSelects('components', c.key, pricing.selection.components[c.key])}
+                    </div>
+                  ))}
+                  {plan.deliverables && deliverables.filter((d) => hasRateAnchor(d.deliverable_type)).map((d) => (
+                    <div key={d.id} className="epp-term-premium-line">
+                      <span className="epp-term-premium-title">{d.description}</span>
+                      {premiumSelects('deliverables', d.id, pricing.selection.deliverables[d.id])}
+                    </div>
+                  ))}
+                </>
+              )}
+              {!pricing.loading && !pricing.card && !pricing.error && <p className="epp-term-note">There is no rate card yet.</p>}
+              {pricing.gaps.length > 0 && (
+                <ul className="epp-term-gaps" data-testid="terms-propose-gaps">
+                  {pricing.gaps.map((g) => <li key={g}>{g}</li>)}
+                </ul>
+              )}
+              {pricing.error && <p className="epp-term-error" data-testid="terms-propose-error"><AlertCircle size={12} aria-hidden="true" /> {pricing.error}</p>}
+              <div className="epp-term-actions">
+                <button type="button" className="epp-btn epp-btn-small" onClick={() => setPricing(null)} disabled={proposing}>Close</button>
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid="terms-propose-run"
+                  onClick={runProposal} disabled={proposing || pricing.loading || !pricing.card}
+                >
+                  {proposing ? 'Proposing…' : 'Propose'}
+                </button>
+              </div>
+            </div>
+          )}
+          {plan.cash && (
+            <p className="epp-term-note">
+              Rates are baselines, not fixed payouts: a proposal fills each component and each Reel or Story Set (3) from the rate card; Post, Photo Set and Other are priced by hand. Every number stays editable until the terms lock.
+            </p>
+          )}
         </div>
 
         {/* Compensation */}

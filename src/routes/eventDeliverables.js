@@ -13,7 +13,9 @@
  * POST   /api/v1/world/:showId/events/:eventId/deliverables/:deliverableId/status — Advance (Task #1815)
  *
  * The add/edit/remove routes edit only the terms themselves: description,
- * deliverable_type, due_date, required, owed_to (host | brand; Task #2294). The PUT refuses status and its
+ * deliverable_type (one of the fixed types — reel, story_set_3, post,
+ * photo_set, other — or null; Task #2341), due_date, required, owed_to
+ * (host | brand; Task #2294) and fee. The PUT refuses status and its
  * timestamps (400 DELIVERABLE_STATUS_NOT_EDITABLE).
  *
  * Fulfilment (slice 1b, §8(t) item 4) is the status POST alone: after
@@ -35,7 +37,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const {
   listEventDeliverables, validateDeliverableTransition, DELIVERABLE_STATUS_FLOW,
-  DESCRIPTION_MAX, TYPE_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO,
+  DESCRIPTION_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO, DELIVERABLE_TYPES,
 } = require('../services/eventTermsService');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 
@@ -48,7 +50,7 @@ const STATUS_CONFLICT_CODE = 'DELIVERABLE_STATUS_CONFLICT';
 const FULFILMENT_FIELDS = ['status', 'completed_at', 'submitted_at', 'approved_at'];
 
 const RETURNING = `RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`;
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`;
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -86,13 +88,23 @@ function readDeliverableBody(body, { partial }) {
     if (description.length > DESCRIPTION_MAX) return { error: `description must be at most ${DESCRIPTION_MAX} characters` };
     fields.description = description;
   }
-  for (const [key, max] of [['deliverable_type', TYPE_MAX], ['due_date', DUE_DATE_MAX]]) {
-    if (b[key] === undefined) continue;
-    if (b[key] === null) { fields[key] = null; continue; }
-    if (typeof b[key] !== 'string') return { error: `${key} must be a string or null` };
-    const v = b[key].trim();
-    if (v.length > max) return { error: `${key} must be at most ${max} characters` };
-    fields[key] = v || null;
+  // The fixed deliverable types (Evoni's Deal PR 3 ruling, QUESTION 2;
+  // Task #2341): one of DELIVERABLE_TYPES, or null. Free text is refused, so
+  // no price can depend on words in it.
+  if (b.deliverable_type !== undefined) {
+    if (b.deliverable_type !== null && !DELIVERABLE_TYPES.includes(b.deliverable_type)) {
+      return { error: `deliverable_type must be one of ${DELIVERABLE_TYPES.join(', ')}, or null` };
+    }
+    fields.deliverable_type = b.deliverable_type;
+  }
+  if (b.due_date !== undefined) {
+    if (b.due_date === null) fields.due_date = null;
+    else {
+      if (typeof b.due_date !== 'string') return { error: 'due_date must be a string or null' };
+      const v = b.due_date.trim();
+      if (v.length > DUE_DATE_MAX) return { error: `due_date must be at most ${DUE_DATE_MAX} characters` };
+      fields.due_date = v || null;
+    }
   }
   if (b.required !== undefined) {
     if (typeof b.required !== 'boolean') return { error: 'required must be true or false' };
@@ -102,6 +114,15 @@ function readDeliverableBody(body, { partial }) {
   if (b.owed_to !== undefined) {
     if (!DELIVERABLE_OWED_TO.includes(b.owed_to)) return { error: `owed_to must be one of ${DELIVERABLE_OWED_TO.join(', ')}` };
     fields.owed_to = b.owed_to;
+  }
+  // The deliverable's fee in Prime Coins, paid on approval (deal build PR 3,
+  // Task #2341): a whole number, 0 or more, or null. Propose terms drafts it.
+  if (b.fee !== undefined) {
+    if (b.fee === null || b.fee === '') { fields.fee = null; } else {
+      const fee = Number(b.fee);
+      if (!Number.isInteger(fee) || fee < 0) return { error: 'fee must be a whole number of Prime Coins, 0 or more, or null' };
+      fields.fee = fee;
+    }
   }
   return { fields };
 }
@@ -148,10 +169,10 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
 
     const f = parsed.fields;
     const [rows] = await models.sequelize.query(
-      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, status, created_at, updated_at)
-       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, 'pending', NOW(), NOW())
+      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at)
+       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, :fee, 'pending', NOW(), NOW())
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: {
         id: uuidv4(), eventId,
         description: f.description,
@@ -159,6 +180,7 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
         due_date: f.due_date ?? null,
         required: f.required !== false,
         owed_to: f.owed_to || 'host',
+        fee: f.fee ?? null,
       } }
     );
     // A brand-owed deliverable can change an Auto-drafted deal type (Task #2330).
@@ -194,7 +216,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
     if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
     const keys = Object.keys(parsed.fields);
     if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to)' });
+      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to, fee)' });
     }
 
     const event = await loadEvent(models.sequelize, showId, eventId);
@@ -206,7 +228,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
       `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
        WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
        RETURNING id, event_id, description, deliverable_type, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, created_at, updated_at`,
+                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: { ...parsed.fields, deliverableId, eventId } }
     );
     if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });

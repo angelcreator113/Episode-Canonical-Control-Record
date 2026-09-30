@@ -148,16 +148,31 @@ describe('GET', () => {
 describe('POST', () => {
   test('adds a pending deliverable', async () => {
     const res = await request(app).post(base('ev-open')).set(AUTH)
-      .send({ description: '  Walk the show ', deliverable_type: 'appearance', due_date: '2026-11-07', required: false, status: 'approved' });
+      .send({ description: '  Walk the show ', deliverable_type: 'other', due_date: '2026-11-07', required: false, status: 'approved' });
     expect(res.status).toBe(201);
     expect(res.body.deliverable).toMatchObject({
-      event_id: 'ev-open', description: 'Walk the show', deliverable_type: 'appearance',
+      event_id: 'ev-open', description: 'Walk the show', deliverable_type: 'other',
       due_date: '2026-11-07', required: false, status: 'pending',
     });
     // status is not writable: the INSERT hard-codes 'pending'.
     const insert = mockCalls.find((c) => /^INSERT INTO event_deliverables/.test(c.sql));
     expect(insert.sql).toMatch(/'pending'/);
     expect(insert.replacements).not.toHaveProperty('status');
+  });
+
+  // Evoni's Deal PR 3 ruling, QUESTION 2 (Task #2341): a fixed typed list;
+  // appearance is not a deliverable, and free text is refused.
+  test.each(['appearance', 'instagram_reel', 'Reel', 'stories', ''])('deliverable_type %j is refused: 400, nothing written', async (type) => {
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'A deliverable', deliverable_type: type });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/deliverable_type must be one of reel, story_set_3, post, photo_set, other, or null/);
+    expect(writes()).toHaveLength(0);
+  });
+
+  test.each(['reel', 'story_set_3', 'post', 'photo_set', 'other'])('deliverable_type %s is accepted', async (type) => {
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'A deliverable', deliverable_type: type });
+    expect(res.status).toBe(201);
+    expect(res.body.deliverable.deliverable_type).toBe(type);
   });
 
   test('a description is required', async () => {
