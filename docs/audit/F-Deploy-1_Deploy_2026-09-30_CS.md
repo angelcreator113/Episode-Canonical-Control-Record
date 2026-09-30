@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CS, 2026-09-30, backend and frontend, no migration, no dependency change, one plain restart. Evoni ran it herself with `scripts/deploy-prod.sh`, outside any agent session. Reopen terms (#2383) goes live, with the CQ and CR deploy records. Production reaches origin/main.* |
+| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CS, 2026-09-30, backend and frontend, no migration, no dependency change, one plain restart. Evoni ran it herself with `scripts/deploy-prod.sh`, outside any agent session. Reopen terms (#2383) goes live, with the CQ and CR deploy records. Production stops two commits short of origin/main: #2388 (image cost tracking, with a migration) and #2389 (docs) merged after the deploy.* |
 | --- |
 
 **Document version**
@@ -7,8 +7,9 @@ This is a new record. It is not a Fix Plan revision, and it is not an
 amendment of `F-Deploy-1_Deploy_2026-09-30_CR.md`, whose deploy this one
 follows. It edits no filed document.
 
-Basis: `origin/main` at `f9810a6d4fddec59b7369061ca9bfe20242de127` (#2385),
-read 2026-09-30. Deploy CS moved production to that same commit (§8).
+Basis: `origin/main` at `1993b94dc10e1cf3a68f206afafb5b944ae9f4f5` (#2389),
+read 2026-09-30. Deploy CS moved production to `f9810a6d` (#2385), two
+commits before it (§8).
 
 **Author**
 
@@ -165,21 +166,24 @@ None. The range carries no migration (§2, §4).
 
 ## §8. Basis statement
 
-**MEASURED.** Production's tree after Deploy CS is `f9810a6d` (#2385),
-which is `origin/main` at filing. Production is level with main.
+**MEASURED.** Production's tree after Deploy CS is `f9810a6d` (#2385).
+`origin/main` at filing is two commits ahead of it: #2388 (image cost
+tracking) and #2389 (the P10–P13 rulings record, docs) merged after the
+deploy.
 
 ```
-$ git log --oneline f9810a6d..origin/main | wc -l
-0
+$ git log --oneline f9810a6d..origin/main
+1993b94dc docs(flow): record episode visuals rulings P10–P13 in §8(w) [skip-automerge] (#2389)
+3e263a1fd feat(ai-cost): log and budget-gate every image generation [skip-automerge] (#2388)
 $ git log -1 --format='%H %ad %s' --date=short origin/main
-f9810a6d4fddec59b7369061ca9bfe20242de127 2026-09-30 docs(audit): deploy record CR [skip-automerge] (#2385)
+1993b94dc10e1cf3a68f206afafb5b944ae9f4f5 2026-09-30 docs(flow): record episode visuals rulings P10–P13 in §8(w) [skip-automerge] (#2389)
 $ git rev-parse --is-shallow-repository
 false
 ```
 
-**INFERRED:** #2388 (image cost tracking) was open at filing. It carries
-migration `20261001100000-add-image-cost-columns-to-ai-usage-logs`, so the
-deploy that takes it is a manual one per `DEVELOPMENT_WORKFLOW.md` §7.1.
+**INFERRED:** #2388 carries migration
+`20261001100000-add-image-cost-columns-to-ai-usage-logs`, so the deploy
+that takes it is a manual one per `DEVELOPMENT_WORKFLOW.md` §7.1.
 
 ## §9. What this document does not do
 
@@ -206,7 +210,8 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
 
 - **Continuity:** the tree agrees with Evoni's account (3 commits, 23 files,
   no migration, no package change), with no gap after CR. Production is at
-  `f9810a6d`, level with `origin/main` at filing.
+  `f9810a6d`, two commits behind `origin/main` (#2388 with a migration,
+  #2389 docs).
 - **Deploy:** `scripts/deploy-prod.sh`: fast-forward, backup, build, 0
   pending of 229, one restart (count 48). `/health` healthy and connected.
 - **CFO:** 89/100, 0 critical, 4 warnings.
