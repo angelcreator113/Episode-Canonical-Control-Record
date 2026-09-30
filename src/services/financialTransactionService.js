@@ -1,6 +1,6 @@
 'use strict';
 
-const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, EVENT_EXTRAS } = require('../utils/financialRates');
+const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, eventExtrasFor } = require('../utils/financialRates');
 const { withTransaction } = require('../utils/withTransaction');
 const { wholeCoins } = require('../utils/wholeCoins');
 const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
@@ -459,9 +459,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   };
 
   if (event) {
-    const { isPaid, eventCost, eventPayment } = normalizePaidFreeFlags(event);
+    const { isPaid, isDeal, eventCost, eventPayment } = normalizePaidFreeFlags(event);
 
-    // 6. Event entry cost (expense)
+    // 6. Event entry cost (expense). Never for a deal event (eventCost 0).
     if (eventCost > 0) {
       await addTx({
         type: 'expense', category: 'event_entry', amount: eventCost,
@@ -500,26 +500,33 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       }
     }
 
-    // 8. Styling extras (same extra model as financial preview)
-    const prestige = event.prestige || 5;
-    const drinks = EVENT_EXTRAS.drinks(prestige);
-    const valet = EVENT_EXTRAS.valet(prestige);
-    const photoBoothPrompt = (event.dress_code || '').toLowerCase();
-    // format first (§8(u) R5). The event_type fallback stays because
-    // /memories/generate-events writes format words into event_type
-    // (docs/EVENT_DRAFT_READ.md §5, disagreement 2); brand_deal is an
-    // event_type value, not a format, so it lives only there.
-    const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
-      || ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
-      || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
-    const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
-    const extras = drinks + valet + photoBooth;
-    if (extras > 0) {
-      await addTx({
-        type: 'expense', category: 'styling_extras', amount: extras,
-        description: `Styling, transport & extras (drinks ${drinks}, valet ${valet}${photoBooth > 0 ? `, photo ${photoBooth}` : ''})`,
-        source_type: 'event', source_id: event.id, source_name: event.name,
-      });
+    // 8. Extras. A legacy event pays them as one styling_extras row, by
+    // prestige (eventExtrasFor, financialRates.js). A deal event pays its
+    // itemised costs instead (deal build PR 4, Task #2365;
+    // docs/DEAL_DESIGN.md §5, Law 7): one expense per row Lala pays, each
+    // naming its row (Law 13). Rows the host or brand pays are comped and
+    // never charged (Law 6), and nothing is charged for cost_coins.
+    if (isDeal) {
+      const { listEventCosts, chargeableCosts } = require('./eventCostsService');
+      const costs = await listEventCosts(sequelize, event.id, { transaction });
+      for (const cost of chargeableCosts(costs)) {
+        await addTx({
+          type: 'expense', category: 'event_cost', amount: cost.amount,
+          description: `${cost.label || cost.kind} for "${event.name}"`,
+          source_type: 'event_cost', source_id: cost.id, source_name: event.name,
+          metadata: { kind: cost.kind, paid_by: cost.paid_by, label: cost.label || null },
+        });
+      }
+    } else {
+      const { drinks, valet, photo_booth: photoBooth } = eventExtrasFor(event);
+      const extras = drinks + valet + photoBooth;
+      if (extras > 0) {
+        await addTx({
+          type: 'expense', category: 'styling_extras', amount: extras,
+          description: `Styling, transport & extras (drinks ${drinks}, valet ${valet}${photoBooth > 0 ? `, photo ${photoBooth}` : ''})`,
+          source_type: 'event', source_id: event.id, source_name: event.name,
+        });
+      }
     }
 
     // 9. Event payment (income — if is_paid)

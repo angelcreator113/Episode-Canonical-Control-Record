@@ -41,6 +41,10 @@
  * on the terms, not on the Run Sheet's social task list; completing the
  * episode never moves them (§8(t) item 4).
  *
+ * Costs (deal build PR 4, Task #2365; docs/DEAL_DESIGN.md §5) sit below
+ * Deal price for a deal event: its itemised costs and who pays each
+ * (EventCostsTerm), locking with the terms.
+ *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -60,6 +64,7 @@ import {
   dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
 } from '../../utils/eventTerms';
+import EventCostsTerm from './EventCostsTerm';
 
 const deliverablesUrl = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/deliverables`;
 
@@ -250,6 +255,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [feeDraft, setFeeDraft] = useState(null); // null, or { field, value } for one component
   const [pricing, setPricing] = useState(null); // null, or { card, selection, loading, error, gaps }
   const [proposing, setProposing] = useState(false);
+  // Bumped after a proposal, which drafts a new deal's extras as cost rows.
+  const [costsKey, setCostsKey] = useState(0);
 
   const saveComponentFee = async (label) => {
     if (!feeDraft) return;
@@ -287,6 +294,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
       const gaps = res.data?.proposal?.gaps || [];
       toast(gaps.length ? 'Terms proposed; some lines need a price' : 'Terms proposed');
       setPricing((p) => ({ ...p, error: null, gaps }));
+      setCostsKey((k) => k + 1);
       await loadDeliverables();
       if (onSaved) await onSaved();
     } catch (err) {
@@ -750,6 +758,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             </p>
           )}
         </div>
+
+        {/* Costs (deal build PR 4, Task #2365): a deal event's itemised costs */}
+        {event?.deal_type && (
+          <EventCostsTerm
+            showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey}
+            onSaved={onSaved} onToast={onToast}
+          />
+        )}
 
         {/* Compensation */}
         <div className="epp-term" data-testid="terms-compensation">

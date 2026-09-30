@@ -109,14 +109,16 @@ function basicsItem(key, label, field) {
  * least misleading rule: satisfied when the event is a paid appearance,
  * free (cost 0), or has a cost other than the column default; a warning
  * when the cost equals the default (may never have been chosen) or, on a
- * row that somehow has none, when there is no cost at all. Its state is
- * 'stored', never 'set'.
+ * row that somehow has none, when there is no cost at all. A deal event is
+ * satisfied: its money is its Terms. Its state is 'stored', never 'set'.
  */
 export function moneyItem(stakes, event) {
   const kind = stakes.money.kind;
   const cost = Number(event.cost_coins);
   const isDefault = kind === 'cost' && cost === COLUMN_DEFAULTS.cost_coins;
-  const satisfied = kind === 'paid' || kind === 'free' || (kind === 'cost' && !isDefault);
+  // A deal (Task #2365) is priced under Terms, where a missing price holds
+  // Start Episode on its own; its cost_coins is difficulty only.
+  const satisfied = kind === 'deal' || kind === 'paid' || kind === 'free' || (kind === 'cost' && !isDefault);
   return item('money', 'Money', satisfied, {
     state: kind === 'missing' ? 'missing' : 'stored',
     note: kind === 'missing'

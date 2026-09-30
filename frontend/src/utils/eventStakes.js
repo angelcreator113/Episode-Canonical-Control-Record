@@ -136,11 +136,15 @@ function careerTier(v) {
  * row (financialTransactionService normalizePaidFreeFlags and the
  * financial-forecast route): a paid appearance costs nothing to attend and
  * pays payment_amount; otherwise cost_coins is the attendance cost, and 0
- * means free.
+ * means free. A deal event (deal_type set) is never charged cost_coins: its
+ * costs are the itemised rows under Terms (deal build PR 4, Task #2365).
  */
 export function describeEventMoney(event) {
   const ev = event || {};
   const cost = finiteNumber(ev.cost_coins);
+  if (ev.deal_type) {
+    return { kind: 'deal', summary: 'A deal: Lala pays only the costs listed under Terms, when the episode is completed.' };
+  }
   if (truthy.has(ev.is_paid)) {
     return { kind: 'paid', summary: 'A paid appearance: Lala is paid to attend, when the episode is finalized.' };
   }
@@ -231,13 +235,15 @@ export function resolveEventStakes(event) {
         : (!deadline && text(ev.deadline_type) ? `Stored as "${text(ev.deadline_type)}", which the projection does not recognise.` : null),
     },
     {
-      key: 'cost_coins', label: 'Cost',
+      // A deal keeps cost_coins as difficulty only (Law 0; Task #2365).
+      key: 'cost_coins', label: money.kind === 'deal' ? 'Difficulty' : 'Cost',
       state: cost === null ? 'missing' : 'stored',
-      display: cost === null ? null : `${cost} coins`,
+      display: cost === null ? null : (money.kind === 'deal' ? String(cost) : `${cost} coins`),
       readOnly: true,
       note: [
         cost === COLUMN_DEFAULTS.cost_coins ? 'Matches the column default (100): it may never have been chosen.' : null,
         money.kind === 'paid' && cost !== null && cost > 0 ? 'Not charged while the event is a paid appearance.' : null,
+        money.kind === 'deal' ? 'Not charged for a deal: its costs are itemised under Terms.' : null,
       ].filter(Boolean).join(' ') || null,
     },
   ];

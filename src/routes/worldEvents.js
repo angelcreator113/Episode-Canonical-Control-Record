@@ -3041,7 +3041,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     try {
       const [eventRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -3050,7 +3050,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
       const [fallbackRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards
+                outfit_pieces, canon_consequences, dress_code, rewards, deal_type
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -3098,24 +3098,42 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     }
 
     // ── Event extras (drinks / valet / photo booth) ──────────────────
-    const drinks = EVENT_EXTRAS.drinks(prestige);
-    const valet = EVENT_EXTRAS.valet(prestige);
-    // Photo booth only fires on events where it makes narrative sense —
-    // galas, premieres, launch parties (format, per Evoni's taxonomy
-    // ruling, 2026-09-22) or brand-deal events (event_type, the mechanic),
-    // or the dress code/presentation mentioning "red carpet". red_carpet
-    // is deliberately not a format value of its own — it stays a
-    // dress-code attribute (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)).
-    const photoBoothPrompt = (event.dress_code || '').toLowerCase();
-    const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
-      || event.event_type === 'brand_deal'
-      || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
-    const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
+    // A deal event (deal build PR 4, Task #2365) has no hidden extras and no
+    // cost_coins entry charge: its costs are its itemised event_costs rows,
+    // as Finalize charges them. A legacy event keeps both.
+    const { normalizePaidFreeFlags } = require('../utils/paidFreeFlags');
+    const { isDeal, eventCost } = normalizePaidFreeFlags(event);
+    let drinks = 0;
+    let valet = 0;
+    let photoBooth = 0;
+    let itemised = null;
+    if (isDeal) {
+      const { listEventCosts, costTotals } = require('../services/eventCostsService');
+      const costs = await listEventCosts(models.sequelize, event.id);
+      const totals = costTotals(costs);
+      itemised = {
+        costs: costs.map((c) => ({ id: c.id, kind: c.kind, label: c.label, amount: c.amount, paid_by: c.paid_by })),
+        lala_total: totals.lala,
+        comped_total: totals.comped,
+      };
+    } else {
+      drinks = EVENT_EXTRAS.drinks(prestige);
+      valet = EVENT_EXTRAS.valet(prestige);
+      // Photo booth only fires on events where it makes narrative sense —
+      // galas, premieres, launch parties (format, per Evoni's taxonomy
+      // ruling, 2026-09-22) or brand-deal events (event_type, the mechanic),
+      // or the dress code/presentation mentioning "red carpet". red_carpet
+      // is deliberately not a format value of its own — it stays a
+      // dress-code attribute (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)).
+      const photoBoothPrompt = (event.dress_code || '').toLowerCase();
+      const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
+        || event.event_type === 'brand_deal'
+        || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
+      photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
+    }
 
     const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
     const isPaid = truthy.has(event.is_paid);
-    const isFree = truthy.has(event.is_free);
-    const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event.cost_coins) || 0));
 
     // ── Income side ─────────────────────────────────────────────────
     const eventPayment = isPaid ? (parseFloat(event.payment_amount) || 0) : 0;
@@ -3166,6 +3184,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       safe: { tier_reward: 25, paid_bonus: 0, event_reward: 0, total: 25 },
       fail: { tier_reward: -25, paid_bonus: 0, event_reward: 0, total: -25 },
     };
+    const itemisedLala = itemised ? itemised.lala_total : 0;
     const expenses = {
       event_cost: eventCost,
       outfit_retail: outfitRetail,
@@ -3173,7 +3192,10 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       drinks_est: drinks,
       valet_est: valet,
       photo_booth_est: photoBooth,
-      total: eventCost + outfitRetail + outfitRentals + drinks + valet + photoBooth,
+      // A deal event's itemised costs (Task #2365): Lala's rows count here;
+      // comped rows are listed, never counted.
+      itemised,
+      total: eventCost + outfitRetail + outfitRentals + drinks + valet + photoBooth + itemisedLala,
     };
     const net = income.total - expenses.total;
 

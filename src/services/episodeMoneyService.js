@@ -41,8 +41,13 @@ async function findSourceEvent(sequelize, episodeId) {
   return fromEvent || null;
 }
 
-/** The accepted terms as expected lines (M2): never posted, never summed. */
-function expectedLines(event) {
+/**
+ * The accepted terms as expected lines (M2): never posted, never summed.
+ * A deal event has no entry cost; its expected costs are the itemised rows
+ * Lala pays (`costs`, deal build PR 4, Task #2365). Comped rows are not
+ * lines here: Lala never pays them.
+ */
+function expectedLines(event, costs = []) {
   if (!event) return [];
   const { normalizePaidFreeFlags } = require('./financialTransactionService');
   const { isPaid, eventCost, eventPayment } = normalizePaidFreeFlags(event);
@@ -52,6 +57,10 @@ function expectedLines(event) {
   }
   if (eventCost > 0) {
     lines.push({ kind: 'expense', label: 'Entry cost', amount: wholeCoins(eventCost), source: 'terms' });
+  }
+  const { chargeableCosts } = require('./eventCostsService');
+  for (const cost of chargeableCosts(costs)) {
+    lines.push({ kind: 'expense', label: cost.label || cost.kind, amount: wholeCoins(cost.amount), source: 'terms' });
   }
   return lines;
 }
@@ -94,6 +103,8 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const net = posted.reduce((sum, r) => sum + r.signed, 0);
 
   const event = await findSourceEvent(sequelize, episodeId);
+  const { isDealEvent, listEventCosts } = require('./eventCostsService');
+  const costs = isDealEvent(event) ? await listEventCosts(sequelize, event.id) : [];
   return {
     episode_id: episode.id,
     show_id: episode.show_id,
@@ -101,7 +112,7 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     rows: posted,
     net,
     event: event ? { id: event.id, name: event.name } : null,
-    expected: expectedLines(event),
+    expected: expectedLines(event, costs),
   };
 }
 
