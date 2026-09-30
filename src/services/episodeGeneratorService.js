@@ -22,6 +22,7 @@ const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = 
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
 const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../utils/socialTaskSource');
 const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
+const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('../utils/episodeTeaser');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after).
@@ -544,7 +545,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     nextNumber = (lastEpisode?.episode_number || 0) + 1;
   }
 
-  // ── 1. Generate Social-Media-Ready Title + Description ──
+  // ── 1. Generate Title + Internal Synopsis + Viewer Teaser (P12, P13) ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
   // ── 0b. Affordability guard ── (computeAffordabilityWarning)
   const affordabilityWarning = await computeAffordabilityWarning(models.sequelize, showId, event);
@@ -555,7 +556,15 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     ? JSON.parse(eventData.canon_consequences) : (eventData.canon_consequences || {}))?.automation || {};
 
   let episodeTitle = eventData.name || `Episode ${nextNumber}`;
+  // episodes.description is the internal synopsis of what happens (P13,
+  // Task #2386). Without an AI draft it falls back to the event's
+  // description, as before.
   let episodeDescription = eventData.description || `Based on: ${eventData.name}`;
+  // The viewer teaser (P12, Task #2386), drafted in the same Claude call from
+  // the event's concept (canon_consequences.automation.concept) and its
+  // description. With no AI draft it stays null: it is never copied from the
+  // event description, which is guest copy for attendees (rule 12).
+  let episodeTeaser = null;
   let episodeTags = [];
   let aiBeatOutline = [];
   // AI-drafted forward hook — the one-line tease that pulls viewers into
@@ -598,9 +607,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
         // beats which would otherwise truncate. Title+desc+tags together
         // are still well under half this budget.
         max_tokens: 1500,
-        messages: [{ role: 'user', content: `Generate a social-media-ready episode for "Styling Adventures with Lala" — title, description, tags, AND a draft beat outline so the creator has structure to work from before any script exists.
+        messages: [{ role: 'user', content: `Generate a social-media-ready episode for "Styling Adventures with Lala" — title, internal synopsis, viewer teaser, tags, AND a draft beat outline so the creator has structure to work from before any script exists.
 
 EVENT: ${eventData.name}
+EVENT CONCEPT: ${typeof autoData.concept === 'string' && autoData.concept.trim() ? autoData.concept.trim() : 'None specified'}
+EVENT DESCRIPTION (guest copy for attendees): ${eventData.description || 'None specified'}
 Type: ${eventData.event_type} | Prestige: ${prestige}/10
 Host: ${eventData.host || 'Unknown'}
 ${outfitContext}
@@ -611,7 +622,8 @@ Stakes: ${eventData.narrative_stakes || 'None specified'}
 Return JSON:
 {
   "title": "Clickable title (YouTube/TikTok style — curiosity gap, emotional hook, 60 chars max). Examples: 'I Wore a $200 Dress to a $10,000 Event', 'She Invited Me and THIS Happened', 'GRWM for the Most Important Night'",
-  "description": "2-3 sentence YouTube description with keywords. Mention the event, outfit, stakes. Make it searchable.",
+  "description": "${SYNOPSIS_INSTRUCTION}",
+  "teaser": "${TEASER_INSTRUCTION}",
   "tags": ["5-8 hashtags without #, lowercase, searchable terms like 'fashion', 'grwm', 'luxury event', 'outfit challenge'"],
   "beats": [
     { "beat_number": 1, "summary": "GRWM — Lala picks the outfit", "dramatic_function": "setup" },
@@ -635,6 +647,7 @@ Return ONLY JSON.` }],
         const parsed = JSON.parse(match[0]);
         episodeTitle = parsed.title || episodeTitle;
         episodeDescription = parsed.description || episodeDescription;
+        episodeTeaser = normalizeTeaser(parsed.teaser, { eventDescription: eventData.description });
         episodeTags = parsed.tags || [];
         // Beat outline: normalize each entry so the brief's JSONB always
         // holds the same shape regardless of small Claude formatting
@@ -684,6 +697,10 @@ Return ONLY JSON.` }],
       show_id: showId,
       title: episodeTitle,
       description: episodeDescription,
+      teaser: episodeTeaser,
+      // Saved copy of the draft: the teaser reads Auto-drafted while it
+      // still equals this (doctrine rule 14).
+      teaser_drafted: episodeTeaser,
       episode_number: nextNumber,
       status: 'draft',
       categories: episodeTags,

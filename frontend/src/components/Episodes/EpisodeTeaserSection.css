@@ -1,0 +1,145 @@
+/* EpisodeTeaserSection.css: viewer teaser card on the episode Overview (Task #2386). */
+
+.ets {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.ets.is-auto_drafted {
+  border-color: #e8dcb8;
+  background: #fffdf7;
+}
+
+.ets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.ets-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ets-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #B8962E;
+}
+
+.ets.is-edited .ets-state { color: #64748b; }
+.ets.is-missing .ets-state { color: #b45309; }
+
+.ets-head .ets-btn { margin-left: auto; }
+
+.ets-note {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.ets-text,
+.ets-preview {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #2C2C2C;
+  overflow-wrap: anywhere;
+}
+
+.ets-hook { color: #2C2C2C; }
+
+.ets-rest { color: #94a3b8; }
+
+.ets-preview {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #FAF7F0;
+  border-radius: 6px;
+}
+
+.ets-preview .ets-hook {
+  border-bottom: 2px solid #B8962E;
+}
+
+.ets-empty {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.ets-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.ets-counter {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #64748b;
+  font-family: 'DM Mono', monospace;
+}
+
+.ets-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+.ets-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ets-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ets-btn:disabled { opacity: 0.6; cursor: default; }
+
+.ets-btn-primary {
+  border-color: #B8962E;
+  background: #B8962E;
+  color: #fff;
+}
+
+.ets-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

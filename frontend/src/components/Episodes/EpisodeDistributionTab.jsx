@@ -221,7 +221,10 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
                     return merged;
                   });
                   setHasChanges(true);
-                  alert(`Generated for ${Object.keys(generated).length} platforms from episode data. Review and save.`);
+                  // Drafted from the viewer teaser when the episode has one
+                  // (P12, Task #2386); otherwise from the episode data.
+                  const fromTeaser = data.data?.context_used?.source === 'teaser';
+                  alert(`Generated for ${Object.keys(generated).length} platforms ${fromTeaser ? 'from the viewer teaser' : 'from episode data (this episode has no viewer teaser yet)'}. Review and save.`);
                 } else {
                   alert(data.error || 'Generation failed');
                 }
