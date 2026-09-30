@@ -890,7 +890,7 @@ export default function EventPackagePage() {
             Used by Episode {lockEpisode?.episode_number ?? '—'}{lockEpisode?.title ? `: ${lockEpisode.title}` : ''}.
             {termsReopen
               ? ' Its terms are reopened; the rest of this package stays read-only.'
-              : " This package is read-only; its terms can't change now."}
+              : ' This package is read-only; see Terms below to reopen its terms while the episode is a draft.'}
           </span>
           {lockEpisode?.id && (
             <Link
@@ -902,19 +902,6 @@ export default function EventPackagePage() {
           )}
         </div>
       )}
-
-      <TermsReopenPanel
-        showId={showId}
-        eventId={eventId}
-        locked={used}
-        reopen={termsReopen || null}
-        episode={lockEpisode}
-        offer={termsOffer}
-        onOffer={setTermsOffer}
-        onChanged={load}
-        onRegenerateInvitation={() => setInvitationRegenSignal((n) => n + 1)}
-        onToast={setToast}
-      />
 
       <div className="epp-sections">
         <section className="epp-section">
@@ -1257,6 +1244,22 @@ export default function EventPackagePage() {
             onToast={setToast}
           />
         )}
+
+        {/* Reopen terms (Task #2378) sits directly above the Terms it
+            reopens, where the lock label is (Evoni, 2026-09-30: the line
+            under the page banner was not found). */}
+        <TermsReopenPanel
+          showId={showId}
+          eventId={eventId}
+          locked={used}
+          reopen={termsReopen || null}
+          episode={lockEpisode}
+          offer={termsOffer}
+          onOffer={setTermsOffer}
+          onChanged={load}
+          onRegenerateInvitation={() => setInvitationRegenSignal((n) => n + 1)}
+          onToast={setToast}
+        />
 
         <EventTermsSection
           showId={showId}

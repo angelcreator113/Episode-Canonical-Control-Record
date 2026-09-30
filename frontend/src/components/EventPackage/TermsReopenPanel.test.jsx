@@ -56,6 +56,13 @@ describe('TermsReopenPanel (Task #2378)', () => {
     expect(screen.queryByTestId('terms-reopen-button')).toBeNull();
   });
 
+  test('says it is checking while the eligibility request is pending', () => {
+    api.get.mockReturnValue(new Promise(() => {}));
+    render(<Harness />);
+    expect(screen.getByTestId('terms-reopen-checking').textContent).toContain('Checking whether these terms can be reopened');
+    expect(screen.queryByTestId('terms-reopen-button')).toBeNull();
+  });
+
   test('renders nothing on an unlocked event', () => {
     const { container } = render(<Harness locked={false} />);
     expect(container.innerHTML).toBe('');
