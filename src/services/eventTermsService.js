@@ -36,6 +36,16 @@ const DELIVERABLE_STATUS_FLOW = ['pending', 'completed', 'submitted', 'approved'
 // Who a deliverable is owed to (T2, §8(bb); Task #2294). An Opportunity's
 // deliverables are a brand's; one entered by hand defaults to the host.
 const DELIVERABLE_OWED_TO = ['host', 'brand'];
+// The fixed deliverable types (Evoni's Deal PR 3 ruling, QUESTION 2;
+// docs/EVENT_EPISODE_FLOW.md §8(cc)): "Deliverables use a fixed typed list:
+// Reel, Story Set (3), Post, Photo Set, Other." The routes accept only these
+// (or null). A row written before the ruling, or copied from an opportunity,
+// may still hold free text; it reads as untyped and is never priced from its
+// words. Mirrored in frontend/src/constants/deliverableTypes.json.
+const DELIVERABLE_TYPES = ['reel', 'story_set_3', 'post', 'photo_set', 'other'];
+const DELIVERABLE_TYPE_LABELS = Object.freeze({
+  reel: 'Reel', story_set_3: 'Story Set (3)', post: 'Post', photo_set: 'Photo Set', other: 'Other',
+});
 const DELIVERABLE_STATUS_TIMESTAMP = {
   completed: 'completed_at',
   submitted: 'submitted_at',
@@ -142,7 +152,7 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
 /** The event's live deliverables, oldest first. */
 async function listEventDeliverables(sequelize, eventId) {
   const [rows] = await sequelize.query(
-    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, status,
+    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status,
             completed_at, submitted_at, approved_at, episode_id, created_at, updated_at
      FROM event_deliverables
      WHERE event_id = :eventId AND deleted_at IS NULL
@@ -279,4 +289,6 @@ module.exports = {
   TYPE_MAX,
   DUE_DATE_MAX,
   DELIVERABLE_OWED_TO,
+  DELIVERABLE_TYPES,
+  DELIVERABLE_TYPE_LABELS,
 };

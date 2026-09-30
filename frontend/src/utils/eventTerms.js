@@ -19,6 +19,8 @@
  * Pure; no I/O.
  */
 import dealTypesMirror from '../constants/dealTypes.json';
+import deliverableTypesMirror from '../constants/deliverableTypes.json';
+import dealPlansMirror from '../constants/dealPlans.json';
 
 // The access-requirement keys the next-event suggester checks (the
 // suggest-events route in src/routes/careerGoals.js) and the old editor
@@ -32,7 +34,6 @@ export const REQUIREMENT_KEYS = [
 export const RESTRICTION_TYPE_LABELS = { exclusivity: 'Exclusivity', other: 'Restriction' };
 export const RESTRICTION_MAX = 2000;
 export const DELIVERABLE_DESCRIPTION_MAX = 2000;
-export const DELIVERABLE_TYPE_MAX = 50;
 export const DELIVERABLE_DUE_MAX = 50;
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -204,26 +205,42 @@ export function buildDeliverableBody(draft) {
   if (description.length > DELIVERABLE_DESCRIPTION_MAX) return { error: `At most ${DELIVERABLE_DESCRIPTION_MAX} characters` };
   const type = String(draft?.deliverable_type || '').trim();
   const due = String(draft?.due_date || '').trim();
-  if (type.length > DELIVERABLE_TYPE_MAX) return { error: `Type: at most ${DELIVERABLE_TYPE_MAX} characters` };
+  if (type && !DELIVERABLE_TYPES.includes(type)) return { error: 'Type: choose one of the listed types' };
   if (due.length > DELIVERABLE_DUE_MAX) return { error: `Due: at most ${DELIVERABLE_DUE_MAX} characters` };
-  return {
-    body: {
-      description,
-      deliverable_type: type || null,
-      due_date: due || null,
-      required: draft?.required !== false,
-      owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
-    },
+  const body = {
+    description,
+    deliverable_type: type || null,
+    due_date: due || null,
+    required: draft?.required !== false,
+    owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
   };
+  // A row saved before the fixed list keeps its stored text until a type is
+  // chosen: the type is left out of the body rather than erased.
+  if (!type && draft?.legacy_type) delete body.deliverable_type;
+  // The fee (deal build PR 3, Task #2341), sent only when the form has one.
+  if (draft && Object.prototype.hasOwnProperty.call(draft, 'fee')) {
+    const raw = String(draft.fee ?? '').trim();
+    if (raw === '') body.fee = null;
+    else {
+      const fee = Number(raw);
+      if (!Number.isInteger(fee) || fee < 0) return { error: 'Fee: a whole number of Prime Coins, 0 or more' };
+      body.fee = fee;
+    }
+  }
+  return { body };
 }
 
 export function deliverableDraftFrom(d) {
+  const stored = d?.deliverable_type || '';
+  const typed = DELIVERABLE_TYPES.includes(stored);
   return {
     description: d?.description || '',
-    deliverable_type: d?.deliverable_type || '',
+    deliverable_type: typed ? stored : '',
+    legacy_type: !typed && stored ? stored : null,
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
     owed_to: d?.owed_to === 'brand' ? 'brand' : 'host',
+    fee: d?.fee == null ? '' : String(d.fee),
   };
 }
 
@@ -329,4 +346,154 @@ export function buildDealTypeUpdate(event, next) {
   const value = next || null;
   if (value !== null && !DEAL_TYPES.includes(value)) return { body: null, unchanged: false, error: 'Choose one of the listed deal types.' };
   return { body: { deal_type: value }, unchanged: value === (event?.deal_type || null), error: null };
+}
+
+// ─── Pricing (deal build PR 3, Task #2341) ───────────────────────────────
+// Evoni's Deal PR 3 ruling (2026-09-30; docs/EVENT_EPISODE_FLOW.md §8(cc)).
+// The deal type decides the components (ruling 4): the appearance fee, the
+// brand partnership base (its own component, ruling 1; the appearance is
+// added only when the partnership requires it) and the performance fee, each
+// in its own event column, plus a fee per deliverable. Deliverables use a
+// fixed typed list (ruling 2): Reel and Story Set (3) take an automatic
+// anchor; Post, Photo Set and Other are priced by hand, and Other never gets
+// an automatic price (ruling 6). A missing price reads "Price required", and
+// Start Episode refuses until it has one.
+//
+// Propose terms (POST .../propose-terms) drafts the numbers from the rate
+// card (GET /deal-rates). The server records the draft in
+// automation.auto_drafted / drafted_values (rule 14): a number reads
+// "Auto-drafted · pricing v<N>" while it equals the drafted copy and Edited
+// once it differs. The plans are mirrored from dealPricingService in
+// constants/dealPlans.json (pinned by tests/unit/services/dealPlanMirror.test.js).
+
+export const DELIVERABLE_TYPES = deliverableTypesMirror.deliverable_type;
+export const DELIVERABLE_TYPE_LABELS = {
+  reel: 'Reel', story_set_3: 'Story Set (3)', post: 'Post', photo_set: 'Photo Set', other: 'Other',
+};
+
+/** A deliverable's type as shown: its label, the stored text of an untyped row, or null. */
+export function deliverableTypeLabel(type) {
+  if (!type) return null;
+  return DELIVERABLE_TYPE_LABELS[type] || `${type} (no type chosen)`;
+}
+
+const COMPONENTS = dealPlansMirror.components;
+const PLANS = dealPlansMirror.plans;
+const DELIVERABLE_ANCHORS = dealPlansMirror.deliverable_anchors;
+const TRUE_LIKE = new Set([true, 'true', 1, '1']);
+
+/** The event's deal plan: { components: [{ key, field, label }], deliverables, cash, giftedValue, appearanceIfRequired }. */
+export function dealPlanFor(event) {
+  const plan = PLANS[event?.deal_type];
+  if (!plan) return { components: [], deliverables: false, cash: false, giftedValue: false, appearanceIfRequired: false, known: false };
+  const keys = [...plan.components];
+  if (plan.appearanceIfRequired && TRUE_LIKE.has(event?.appearance_required)) keys.push('appearance');
+  return {
+    components: keys.map((key) => ({ key, ...COMPONENTS[key] })),
+    deliverables: plan.deliverables,
+    cash: plan.cash,
+    giftedValue: !!plan.giftedValue,
+    appearanceIfRequired: !!plan.appearanceIfRequired,
+    known: true,
+  };
+}
+
+/** Whether a deliverable type takes an automatic anchor (Reel, Story Set (3)). */
+export function hasRateAnchor(type) {
+  return Object.prototype.hasOwnProperty.call(DELIVERABLE_ANCHORS, type || '');
+}
+
+const coins = (n) => `${Number(n).toLocaleString('en-US')} coins`;
+
+function pricingNote(event, drafted, value) {
+  const version = event?.canon_consequences?.automation?.pricing_version ?? event?.pricing_version;
+  if (drafted === undefined || value == null) return null;
+  return Number(drafted) === Number(value) ? `Auto-drafted · pricing v${version}` : 'Edited';
+}
+
+/** { value, label, note } for one event-level component (appearance_fee, partnership_base_fee, performance_fee). */
+export function describeComponentFee(event, field) {
+  const value = event?.[field] ?? null;
+  const automation = event?.canon_consequences?.automation || {};
+  const drafted = automation.auto_drafted?.[field] === 'pricing' ? automation.drafted_values?.[field] : undefined;
+  return { value, label: value == null ? 'Price required' : coins(value), note: pricingNote(event, drafted, value) };
+}
+
+/** { value, label, note } for the gifted value (ruling 4: recorded, never paid). */
+export function describeGiftedValue(event) {
+  const value = event?.gifted_value ?? null;
+  return { value, label: value == null ? 'Not recorded' : `${coins(value)} in gifts (not paid)`, note: null };
+}
+
+/**
+ * { value, label, note, priceRequired } for one deliverable's fee. On a deal
+ * that pays its deliverables, a missing fee is "Price required".
+ */
+export function describeDeliverableFee(event, d) {
+  const value = d?.fee ?? null;
+  const automation = event?.canon_consequences?.automation || {};
+  const drafted = automation.auto_drafted?.deliverable_fees === 'pricing' ? automation.drafted_values?.deliverable_fees?.[d?.id] : undefined;
+  const priceRequired = value == null && dealPlanFor(event).deliverables;
+  let label = null;
+  if (value != null) label = `Fee ${coins(value)}`;
+  else if (priceRequired) label = 'Price required';
+  return { value, label, note: pricingNote(event, drafted, value), priceRequired };
+}
+
+/** Mirror of dealPricingService.missingPrices: what Start Episode waits on, as labels. */
+export function missingPriceLabels(event, deliverables = []) {
+  const plan = dealPlanFor(event);
+  if (!plan.cash) return [];
+  const out = plan.components.filter((c) => event?.[c.field] == null).map((c) => c.label);
+  if (plan.deliverables) {
+    for (const d of Array.isArray(deliverables) ? deliverables : []) {
+      if (d?.fee == null) out.push(`"${d.description || DELIVERABLE_TYPE_LABELS[d.deliverable_type] || 'Deliverable'}"`);
+    }
+  }
+  return out;
+}
+
+/** The event PUT body for one component's typed value; { error } when it is not a whole number, 0 or more. */
+export function buildComponentFeeUpdate(field, raw) {
+  const text = String(raw ?? '').trim();
+  if (text === '') return { body: { [field]: null } };
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 0) return { error: 'A whole number of Prime Coins, 0 or more' };
+  return { body: { [field]: n } };
+}
+
+export const PREMIUM_KIND_LABELS = { rush: 'Rush', usage: 'Usage', exclusivity: 'Exclusivity', paid_ad: 'Paid ad' };
+
+/**
+ * The premium choices a rate card offers, per kind: [{ kind, label,
+ * options: [{ key, percent }] }]. A premium with no percent (paid_ad) is
+ * listed with usable: false, since the server refuses it until it is set.
+ */
+export function premiumChoicesFrom(card) {
+  return Object.entries(card?.premiums || {}).map(([kind, keys]) => ({
+    kind,
+    label: PREMIUM_KIND_LABELS[kind] || kind,
+    options: Object.entries(keys).map(([key, percent]) => ({ key, percent, usable: percent != null })),
+  }));
+}
+
+/**
+ * The propose-terms body from the chosen premiums (ruling 3: each applies
+ * only to its own component): { premiums: { <component>: [...], deliverables: { <id>: [...] } } }.
+ * Only components with a choice are sent.
+ */
+export function buildProposeBody(selection) {
+  const toList = (chosen) => Object.entries(chosen || {}).filter(([, key]) => key).map(([kind, key]) => ({ kind, key }));
+  const premiums = {};
+  for (const key of Object.keys(COMPONENTS)) {
+    const list = toList(selection?.components?.[key]);
+    if (list.length) premiums[key] = list;
+  }
+  const deliverables = {};
+  for (const [id, chosen] of Object.entries(selection?.deliverables || {})) {
+    const list = toList(chosen);
+    if (list.length) deliverables[id] = list;
+  }
+  premiums.deliverables = deliverables;
+  return { premiums };
 }

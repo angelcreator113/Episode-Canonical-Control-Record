@@ -33,6 +33,10 @@ const LOCKED_EVENT_FIELDS = {
   appearance_fee: 'compensation',
   bonus_terms: 'compensation',
   gifted_value: 'compensation',
+  // Deal components (deal build PR 3, Task #2341; Evoni's Deal PR 3 ruling).
+  partnership_base_fee: 'compensation',
+  performance_fee: 'compensation',
+  appearance_required: 'compensation',
   restrictions: 'restrictions',
   used_in_episode_id: 'its episode link',
 };
@@ -92,6 +96,9 @@ const comparable = {
     return parsed == null ? 'null' : stable(parsed);
   },
   gifted_value: (v) => wholeNumber(v),
+  partnership_base_fee: (v) => wholeNumber(v),
+  performance_fee: (v) => wholeNumber(v),
+  appearance_required: (v) => (TRUE_LIKE.has(v) ? 'true' : 'false'),
   restrictions: (v) => {
     const parsed = parseJson(v);
     if (parsed == null || (Array.isArray(parsed) && parsed.length === 0)) return '[]';
