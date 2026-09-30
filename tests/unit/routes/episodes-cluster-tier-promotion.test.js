@@ -59,8 +59,10 @@ const CP2_FILES = [
 // Per-file requireAuth occurrence counts captured at CP2 close.
 // Format: filename → count of `\brequireAuth\b` matches in file source.
 const REQUIRE_AUTH_COUNTS = {
-  // 78 at CP2 close; +1 for GET /:id/events (Task #1906, requireAuth).
-  'episodes.js': 79,
+  // 78 at CP2 close; +1 for GET /:id/events (Task #1906, requireAuth);
+  // +3 for GET /:id/title-card, POST /:id/title/approve, POST /:id/title-card
+  // (Task #2386, requireAuth).
+  'episodes.js': 82,
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth).
   'episodeBriefRoutes.js': 13,
   'episodeOrchestrationRoute.js': 2,
@@ -243,14 +245,15 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
   describe('CP2 aggregate consumer counts', () => {
     // 250 at CP2 close; +1 for episodes.js GET /:id/events (Task #1906);
     // +1 for uiOverlayRoutes.js PUT /:showId/phone-skin (Task #1964);
-    // +1 for episodeBriefRoutes.js POST /:episodeId/feed-moments/retry (Task #2220).
-    test('CP2 zone contains 253 total requireAuth references across 22 files', () => {
+    // +1 for episodeBriefRoutes.js POST /:episodeId/feed-moments/retry (Task #2220);
+    // +3 for episodes.js title approval + title card routes (Task #2386).
+    test('CP2 zone contains 256 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(253);
+      expect(total).toBe(256);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {
