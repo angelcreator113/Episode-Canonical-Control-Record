@@ -2893,6 +2893,17 @@ what the event invitation states about the deal; Task #2375 builds it
 
 > The invitation states the deal in the host's voice, in Prime Coins: what Lala is paid (fees, and each deliverable with its fee), what she pays (entry, if self-funded), what is covered and by whom (host or brand), and any bonus with its amount. Comped and gifted events say so without price talk.
 
+**Follow-up (Evoni, 2026-09-30),** on the three choices #2375 put to her:
+"I accept all three invitation choices (covered costs without amounts;
+comped/gifted without fees or bonus; Lala's other costs left out)." What
+each means:
+1. A cost the host or brand covers is named with who covers it, without
+   its amount.
+2. A comped or gifted event names its deliverables without fees and states
+   no bonus.
+3. Costs Lala pays, other than a self-funded deal's entry, are not stated
+   on the invitation.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
