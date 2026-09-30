@@ -608,6 +608,48 @@ async function normalizeColors(inputBuffer, options = {}) {
 // ─── TEXTURE ENHANCEMENT (HDR-STYLE) ─────────────────────────────────────────
 
 /**
+ * Texture-enhance's two sharpen passes, each in its own pipeline.
+ *
+ * A sharp pipeline holds one sharpen setting: a second .sharpen() on the
+ * same pipeline replaces the first, so the clarity pass never applied
+ * (Task #2340). The clarity pass is written out as raw pixels (no lossy
+ * re-encode) and the detail pass runs on them in a new pipeline.
+ * m1/m2: sharp's flat and jagged amounts (Task #2333).
+ *
+ * @param {Buffer} inputBuffer - Encoded input image
+ * @param {Object} options
+ * @param {number} [options.detailSharpen=1.5] - m1 of the detail pass
+ * @returns {Promise<import('sharp').Sharp>} a pipeline over the clarity
+ *   pass's raw output with the detail pass set and no output format chosen
+ */
+async function twoPassTextureSharpen(inputBuffer, { detailSharpen = 1.5 } = {}) {
+  // First pass: unsharp mask with larger radius for "clarity" effect
+  const { data, info } = await sharp(inputBuffer)
+    .sharpen({
+      sigma: 2.5,              // Larger sigma = more clarity-like effect
+      m1: 1.0,
+      m2: 0.5,
+    })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  // Second pass: fine detail sharpening
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
+    .sharpen({
+      sigma: 0.8,              // Small sigma for micro-details
+      m1: detailSharpen,
+      m2: 0.3,
+    });
+}
+
+// The format sharp infers for output from an input of this format: the same
+// format when sharp can write it to a buffer, otherwise PNG (e.g. SVG input).
+function outputFormatFor(inputFormat) {
+  const f = sharp.format[inputFormat];
+  return inputFormat !== 'raw' && f && f.output && f.output.buffer ? inputFormat : 'png';
+}
+
+/**
  * HDR-style enhancement to bring out fabric textures and details.
  * Useful for tweed, lace, embroidery, and detailed materials.
  *
@@ -632,25 +674,15 @@ async function enhanceTexture(inputBuffer, options = {}) {
 
   // Step 2: Blend original with inverse of blur for clarity
   // This is a simplified clarity/local contrast technique
-  let pipeline = sharp(inputBuffer);
-
-  // Apply unsharp mask with larger radius for "clarity" effect
-  // m1/m2: sharp's flat and jagged amounts (Task #2333).
-  pipeline = pipeline.sharpen({
-    sigma: 2.5,              // Larger sigma = more clarity-like effect
-    m1: 1.0,
-    m2: 0.5,
-  });
-
-  // Second pass: fine detail sharpening
-  pipeline = pipeline.sharpen({
-    sigma: 0.8,              // Small sigma for micro-details
-    m1: detailSharpen,
-    m2: 0.3,
-  });
+  // Clarity pass, then detail pass, as separate pipelines (Task #2340).
+  let pipeline = await twoPassTextureSharpen(inputBuffer, { detailSharpen });
 
   // Slight contrast boost for texture pop
   pipeline = pipeline.linear(microContrast, -(128 * (microContrast - 1)));
+
+  // The detail pass reads raw pixels, so name the output format that the
+  // single pipeline used to infer from the input.
+  pipeline = pipeline.toFormat(outputFormatFor(inputMeta.format));
 
   const outputBuffer = await pipeline.toBuffer();
   const outputMeta = await sharp(outputBuffer).metadata();
@@ -1172,6 +1204,7 @@ module.exports = {
   autoCenterCrop,
   normalizeColors,
   enhanceTexture,
+  twoPassTextureSharpen,
 
   // AI analysis functions
   extractColors,
