@@ -33,10 +33,11 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
+import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -479,16 +480,35 @@ function WorldAdmin() {
   // Events tab leads with the queue (Task #1763): the sections that used to
   // stack above it now sit below it, collapsed by default. Local state only —
   // every visit starts with them closed.
-  const [eventsWarningsOpen, setEventsWarningsOpen] = useState(false);
-  const [eventsDraftsOpen, setEventsDraftsOpen] = useState(false);
+  // The Events page redesign (Evoni, 2026-09-30) removed the panels that
+  // sat below the queue: Story Logic Warnings and its header badge, Draft
+  // Events, Ideas, the Episode → Event map and the totals. Only the display
+  // went: getSequenceWarnings, getDressCodeConflicts and their handlers stay.
+  // Ideas (Feed opportunities and event templates) opens as a drawer from
+  // the header; only the bottom panel went (Evoni, 2026-09-30).
   const [eventsIdeasOpen, setEventsIdeasOpen] = useState(false);
-  const eventsWarningsRef = useRef(null);
-  const eventsIdeasRef = useRef(null);
-  // Header shortcuts to the below-the-queue sections: open, then scroll to it
-  // (after the expand has rendered).
-  const revealEventsSection = (setOpen, ref) => {
-    setOpen(true);
-    requestAnimationFrame(() => ref.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  useEffect(() => {
+    if (!eventsIdeasOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setEventsIdeasOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [eventsIdeasOpen]);
+  // Events pagination: 9 cards a page, the page in the URL
+  // (?evpage=N) so it survives a refresh. Filters, search and sort run
+  // first and send the queue back to page 1.
+  const eventPage = parseEventPage(searchParams.get(EVENT_PAGE_PARAM));
+  const eventsGridRef = useRef(null);
+  const setEventPage = (n) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (n > 1) next.set(EVENT_PAGE_PARAM, String(n));
+      else next.delete(EVENT_PAGE_PARAM);
+      return next;
+    }, { replace: true });
+  };
+  const goToEventPage = (n) => {
+    setEventPage(n);
+    requestAnimationFrame(() => eventsGridRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
   };
   // The inline event editor renders above the queue, but it can be opened
   // from below it (a warning's Edit, a suggestion's + Create, a template).
@@ -1958,19 +1978,6 @@ The revised event should feel like a completely different experience from the si
               <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
               <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span>{worldEvents.length} events</span>
-                {/* Story logic warnings live below the queue, collapsed
-                    (Task #1763); this count keeps them visible from the
-                    header and jumps straight to them. */}
-                {(() => {
-                  const warningCount = getSequenceWarnings().length;
-                  return warningCount > 0 ? (
-                    <button type="button" className="wa-ev-warn-link" data-testid="events-warnings-link"
-                      onClick={() => revealEventsSection(setEventsWarningsOpen, eventsWarningsRef)}>
-                      <AlertTriangle size={12} aria-hidden="true" />
-                      {warningCount} story logic warning{warningCount === 1 ? '' : 's'}
-                    </button>
-                  ) : null;
-                })()}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative' }}>
@@ -2021,11 +2028,10 @@ The revised event should feel like a completely different experience from the si
               <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
                 <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New Event
               </button>
-              {/* Creation tools (opportunity pipeline + event ideas) moved
-                  below the queue into a collapsed section (Task #1763);
-                  this opens it and scrolls to it in one click. */}
-              <button type="button" data-testid="events-ideas-button"
-                onClick={() => revealEventsSection(setEventsIdeasOpen, eventsIdeasRef)}
+              {/* Creation tools (Feed opportunities and event templates) open
+                  in a drawer (Evoni, 2026-09-30). */}
+              <button type="button" data-testid="events-ideas-button" aria-haspopup="dialog" aria-expanded={eventsIdeasOpen}
+                onClick={() => setEventsIdeasOpen(true)}
                 style={S.smBtn} title="Feed opportunities and event ideas">
                 <Lightbulb size={14} style={{ verticalAlign: -2, marginRight: 4 }} aria-hidden="true" />Ideas
               </button>
@@ -2117,7 +2123,7 @@ The revised event should feel like a completely different experience from the si
 
           {/* Search + filter + sort bar */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events..."
+            <input type="text" value={eventSearch} onChange={e => { setEventSearch(e.target.value); setEventPage(1); }} placeholder="Search events..."
               style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
               {[
@@ -2131,7 +2137,7 @@ The revised event should feel like a completely different experience from the si
                   key, label: cfg.label, count: worldEvents.filter(e => computeEventState(e) === key).length,
                 })),
               ].map(f => (
-                <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
+                <button key={f.key} data-testid={`events-filter-${f.key}`} onClick={() => { setEventStatusFilter(f.key); setEventPage(1); }} style={{
                   padding: '4px 10px', border: 'none', borderRadius: 6,
                   background: eventStatusFilter === f.key ? '#6366f1' : 'transparent',
                   color: eventStatusFilter === f.key ? '#fff' : '#64748b',
@@ -2139,7 +2145,7 @@ The revised event should feel like a completely different experience from the si
                 }}>{f.label} ({f.count})</button>
               ))}
             </div>
-            <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: '#fff', cursor: 'pointer' }}>
+            <select value={eventSort} onChange={e => { setEventSort(e.target.value); setEventPage(1); }} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: '#fff', cursor: 'pointer' }}>
               <option value="name">Sort: Name</option>
               <option value="prestige">Sort: Prestige ↓</option>
               <option value="cost">Sort: Cost ↓</option>
@@ -2712,9 +2718,9 @@ The revised event should feel like a completely different experience from the si
             </label>
           </div>
 
-          {/* Events grid — filtered + sorted */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-            {worldEvents.filter(ev => {
+          {/* Events grid — filtered + sorted, then paged (Task #2360) */}
+          {(() => {
+            const visibleEvents = worldEvents.filter(ev => {
               const q = eventSearch.toLowerCase();
               const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
               // Filters by the same computed queue state the chips above
@@ -2728,7 +2734,14 @@ The revised event should feel like a completely different experience from the si
               if (eventSort === 'status') return (a.status || '').localeCompare(b.status || '');
               if (eventSort === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
               return (a.name || '').localeCompare(b.name || '');
-            }).map(ev => {
+            });
+            const { page, totalPages, pageItems } = paginateEvents(visibleEvents, eventPage);
+            // Wardrobe vs dress code conflicts show on the affected card.
+            const conflictsByEvent = new Map(getDressCodeConflicts().map(c => [c.event.id, c]));
+            return (
+          <>
+          <div ref={eventsGridRef} data-testid="events-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: 12, scrollMarginTop: 16 }}>
+            {pageItems.map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
               const isSelected = selectedEvents.has(ev.id);
               // Readiness by Event Package item (Task #1775, Evoni's gates
@@ -2752,7 +2765,7 @@ The revised event should feel like a completely different experience from the si
                 openPackage();
               };
               return (
-              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
+              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, minWidth: 0, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
@@ -2832,6 +2845,15 @@ The revised event should feel like a completely different experience from the si
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, color: stateCfg.color, background: stateCfg.bg, marginBottom: 8 }}>
                   {stateCfg.icon} {stateCfg.label}
                 </span>
+                {conflictsByEvent.has(ev.id) && (() => {
+                  const c = conflictsByEvent.get(ev.id);
+                  const detail = `Ep ${c.episode.episode_number} "${ev.name}" wants [${c.eventKeywords.join(', ')}] but the wardrobe has [${c.wardrobeKeywords.join(', ')}]`;
+                  return (
+                    <span className="wa-ev-conflict-chip" data-testid={`event-card-conflict-${ev.id}`} title={detail} aria-label={`Wardrobe conflict: ${detail}`}>
+                      <AlertTriangle size={11} aria-hidden="true" /> Wardrobe conflict
+                    </span>
+                  );
+                })()}
                 <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
                   {organizer.hasOrganizer ? (
                     <div>
@@ -2912,234 +2934,49 @@ The revised event should feel like a completely different experience from the si
               </div>
             )}
           </div>
-
-          {/* ── Below the queue (Task #1763) ── Everything that used to
-              stack above the queue: warnings, drafts, creation tools, then
-              the season overviews. Nothing here was removed. */}
-          <hr className="wa-ev-divider" aria-hidden="true" />
-
-          {/* Sequence validation warnings + AI Fix — below the queue and
-              collapsed by default, count always shown (Task #1763). The
-              header's "N story logic warnings" link opens this. */}
-          {(() => {
-            const warnings = getSequenceWarnings();
-            return warnings.length > 0 ? (
-              <div ref={eventsWarningsRef} data-testid="events-warnings" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12, scrollMarginTop: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: eventsWarningsOpen ? 8 : 0 }}>
-                  <button type="button" className="wa-ev-section-toggle" data-testid="events-warnings-toggle"
-                    aria-expanded={eventsWarningsOpen} onClick={() => setEventsWarningsOpen(o => !o)}
-                    style={{ color: '#b45309' }}>
-                    {eventsWarningsOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-                    Story Logic Warnings ({warnings.length})
-                  </button>
-                  {eventsWarningsOpen && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {/* Auto-Reorder moved to the Episodes tab's Season Arc
-                          view (Task #1648, docs/EVENT_EPISODE_FLOW.md §8(m)). */}
-                      <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
-                        🔄 Rebalance
-                      </button>
-                      <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
-                        padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                        color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
-                        fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
-                      }}>
-                        {aiFixLoading ? '⏳ Thinking...' : '✨ Amber Fix'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {eventsWarningsOpen && warnings.map((w, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
-                    <span style={{ flex: 1 }}>{w.msg}</span>
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                      {w.fixType === 'swap_episodes' && w.evA && w.evB && (
-                        <button onClick={() => handleSwapEpisodes(w.evA, w.evB, w.epA, w.epB)}
-                          style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          🔄 Swap
-                        </button>
-                      )}
-                      {w.fixType === 'merge' && w.dupA && w.dupB && (
-                        <button onClick={() => handleMergeDuplicates(w.dupA, w.dupB)}
-                          style={{ padding: '2px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          🔗 Merge
-                        </button>
-                      )}
-                      {w.fixType === 'fill' && w.ep && (
-                        <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
-                          style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✨ AI Create
-                        </button>
-                      )}
-                      {w.eventName && (
-                        <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
-                          style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✏️ Edit
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
-          {/* Amber's Suggestions — rendered as a sibling of the warnings
-              card, not inside it. Used to live nested under "Story Logic
-              Warnings" so when applying a suggestion cleared the last
-              warning, the entire wrapper unmounted and any remaining
-              suggestion cards vanished with it. Now it stands alone and
-              persists until you Apply each card or hit Dismiss. */}
-          {aiFixSuggestions && aiFixSuggestions.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions ({aiFixSuggestions.length})</div>
-              {aiFixSuggestions.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#faf5ff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
-                      {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
-                      {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
-                    {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                    {s.action === 'create' && (s.new_value || s.suggestion) && (
-                      <button onClick={() => {
-                        let data = {};
-                        if (s.new_value) {
-                          if (typeof s.new_value === 'object') data = s.new_value;
-                          else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
-                        }
-                        if (!data.name && s.suggestion) {
-                          try {
-                            const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
-                            if (match) data = { ...data, ...JSON.parse(match[0]) };
-                          } catch {}
-                        }
-                        if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
-                        if (data.type && !data.event_type) data.event_type = data.type;
-                        setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
-                        setEditingEvent('new');
-                        setAiFixSuggestions(prev => prev.filter(x => x !== s));
-                      }} style={{
-                        padding: '4px 12px', background: '#16a34a', color: '#fff',
-                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}>+ Create</button>
-                    )}
-                    {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
-                      <button onClick={() => applyAiFix(s)} style={{
-                        padding: '4px 12px', background: '#6366f1', color: '#fff',
-                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}>Apply</button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss all</button>
-            </div>
+          {totalPages > 1 && (
+            <nav className="wa-ev-pager" aria-label="Event pages" data-testid="events-pager">
+              <button type="button" className="wa-ev-pager-btn" data-testid="events-page-prev"
+                disabled={page <= 1} onClick={() => goToEventPage(page - 1)}>
+                Previous
+              </button>
+              {eventPageNumbers(page, totalPages).map((n, i) => (n === 'gap' ? (
+                <span key={`gap-${i}`} className="wa-ev-pager-gap" aria-hidden="true">…</span>
+              ) : (
+                <button key={n} type="button" data-testid={`events-page-${n}`}
+                  className={`wa-ev-pager-btn wa-ev-pager-num${n === page ? ' is-current' : ''}`}
+                  aria-current={n === page ? 'page' : undefined} aria-label={`Page ${n}`}
+                  onClick={() => goToEventPage(n)}>
+                  {n}
+                </button>
+              )))}
+              <button type="button" className="wa-ev-pager-btn" data-testid="events-page-next"
+                disabled={page >= totalPages} onClick={() => goToEventPage(page + 1)}>
+                Next
+              </button>
+              <span className="wa-ev-pager-status" data-testid="events-page-status">Page {page} of {totalPages}</span>
+            </nav>
           )}
-
-          {/* Wardrobe vs Dress Code conflicts */}
-          {(() => {
-            const conflicts = getDressCodeConflicts();
-            return conflicts.length > 0 ? (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>👗 Wardrobe Conflicts</div>
-                {conflicts.map((c, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 3 }}>
-                    Ep {c.episode.episode_number} "{c.event.name}" wants [{c.eventKeywords.join(', ')}] but wardrobe has [{c.wardrobeKeywords.join(', ')}]
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
-          {/* ── Draft Events Being Worked On ── Below the queue, collapsed by
-              default (Task #1763). Kept: it shows a completion % over six
-              detail fields (host, venue, date, dress code, description,
-              stakes), guest count and prestige, none of which the queue
-              cards show. */}
-          {(() => {
-            const draftEvents = worldEvents.filter(ev => ev.status === 'draft');
-            if (draftEvents.length === 0) return null;
-            return (
-              <div data-testid="events-drafts" style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: eventsDraftsOpen ? 10 : 0 }}>
-                  <button type="button" className="wa-ev-section-toggle" data-testid="events-drafts-toggle"
-                    aria-expanded={eventsDraftsOpen} onClick={() => setEventsDraftsOpen(o => !o)}>
-                    {eventsDraftsOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-                    Draft Events ({draftEvents.length})
-                  </button>
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Completion % — complete details and mark ready</span>
-                </div>
-                {eventsDraftsOpen && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {draftEvents.map(ev => {
-                      const auto = ev.canon_consequences?.automation;
-                      const host = ev.host || auto?.host_display_name || '';
-                      const venue = ev.venue_name || auto?.venue_name || '';
-                      const guestCount = auto?.guest_profiles?.length || 0;
-                      // Check completeness — check both top-level and automation fields
-                      const filled = [
-                        ev.host || auto?.host_display_name,
-                        ev.venue_name || auto?.venue_name,
-                        ev.event_date || auto?.event_date,
-                        ev.dress_code || auto?.dress_code,
-                        ev.description,
-                        ev.narrative_stakes,
-                      ].filter(Boolean).length;
-                      const total = 6;
-                      const pct = Math.round((filled / total) * 100);
-                      return (
-                        <div key={ev.id} onClick={() => setEventDetailModal(ev)} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: `4px solid ${pct === 100 ? '#22c55e' : '#f59e0b'}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'border-color 0.15s' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ev.name}</div>
-                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                {host && <span>👤 {host}</span>}
-                                {venue && <span>📍 {venue}</span>}
-                                {guestCount > 0 && <span>👥 {guestCount}</span>}
-                                {ev.event_date && <span>📅 {ev.event_date}</span>}
-                                <span>⭐ {ev.prestige || 5}</span>
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: pct === 100 ? '#16a34a' : '#f59e0b', marginBottom: 4 }}>{pct}% complete</div>
-                              <div style={{ width: 80, height: 4, background: '#e8e0d0', borderRadius: 2, overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#f59e0b', borderRadius: 2 }} />
-                              </div>
-                            </div>
-                          </div>
-                          {pct === 100 && (
-                            <div style={{ marginTop: 8, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-                              Ready to publish — open to mark as ready
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+          </>
             );
           })()}
 
-          {/* ── Ideas: Feed opportunities + event templates ── The creation
-              tools that used to sit above the queue, collapsed by default
-              below it (Task #1763). The header's "Ideas" button opens and
-              scrolls to this section; "+ New Event" is unchanged. */}
-          <div ref={eventsIdeasRef} data-testid="events-ideas" style={{ marginBottom: 16, scrollMarginTop: 16 }}>
-            <button type="button" className="wa-ev-section-toggle" data-testid="events-ideas-toggle"
-              aria-expanded={eventsIdeasOpen} onClick={() => setEventsIdeasOpen(o => !o)}
-              style={{ marginBottom: eventsIdeasOpen ? 10 : 0 }}>
-              {eventsIdeasOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-              Ideas — Feed opportunities &amp; event templates
-            </button>
-            {eventsIdeasOpen && (
-              <>
+          {/* Nothing sits below the queue now. The redesign (Evoni,
+              2026-09-30) removed Story Logic Warnings, Wardrobe Conflicts
+              (now a chip on the card), Draft Events, the Episode → Event
+              map, the coverage / difficulty / budget totals and the Season
+              Arc. Ideas opens as a drawer from the header. */}
+          {eventsIdeasOpen && (
+            <>
+              <div className="wa-ev-drawer-backdrop" data-testid="events-ideas-backdrop" onClick={() => setEventsIdeasOpen(false)} />
+              <aside className="wa-ev-drawer" role="dialog" aria-modal="true" aria-labelledby="events-ideas-title" data-testid="events-ideas">
+                <div className="wa-ev-drawer-head">
+                  <h3 id="events-ideas-title" className="wa-ev-drawer-title">Ideas — Feed opportunities &amp; event templates</h3>
+                  <button type="button" className="wa-ev-drawer-close" data-testid="events-ideas-close" aria-label="Close Ideas" onClick={() => setEventsIdeasOpen(false)}>
+                    <X size={18} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="wa-ev-drawer-body">
                 {/* ── Pipeline: Opportunities → Events ── */}
                 <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -3357,106 +3194,9 @@ The revised event should feel like a completely different experience from the si
                     );
                   })}
                 </div>
-              </>
-            )}
-          </div>
-
-          {/* Episode ↔ Event coverage map */}
-          {episodes.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Episode → Event Map</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {episodes.map(ep => {
-                  const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id === ep.id);
-                  const scriptEvent = !linkedEvent ? worldEvents.find(ev => ev.status === 'used' && ep.script_content?.includes(ev.name)) : null;
-                  const event = linkedEvent || scriptEvent;
-                  return (
-                    <div key={ep.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 10px', borderRadius: 8,
-                      background: event ? '#f8fdf8' : '#fffbeb',
-                      border: `1px solid ${event ? '#d1fae5' : '#fde68a'}`,
-                    }}>
-                      <div onClick={() => navigate(`/episodes/${ep.id}`)} style={{
-                        minWidth: 140, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#1a1a2e',
-                      }} title={`Go to ${ep.title}`}>
-                        <span style={{ color: '#94a3b8', marginRight: 4 }}>{ep.episode_number || '?'}.</span>
-                        {ep.title?.slice(0, 20) || 'Untitled'}{ep.title?.length > 20 ? '…' : ''}
-                      </div>
-                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>
-                      {event ? (
-                        <div onClick={() => setEventDetailModal(event)} style={{
-                          flex: 1, display: 'flex', alignItems: 'center', gap: 6,
-                          cursor: 'pointer', minWidth: 0,
-                        }} title="Click to see event details">
-                          <span style={{ fontSize: 14, flexShrink: 0 }}>{EVENT_TYPE_ICONS[event.event_type] || '📌'}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {event.name}
-                          </span>
-                          <span style={{ fontSize: 9, padding: '1px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>⭐{event.prestige}</span>
-                          {event.dress_code && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ff', color: '#7c3aed', borderRadius: 4, flexShrink: 0 }}>👗 {event.dress_code}</span>}
-                        </div>
-                      ) : (
-                        <span style={{ flex: 1, fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>No event assigned</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Budget tracker */}
-          {episodes.length > 0 && worldEvents.length > 0 && (
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Total Event Budget</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  🪙 {worldEvents.filter(ev => ev.status === 'used').reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / {worldEvents.reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()} total</span>
                 </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Avg Difficulty</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  {worldEvents.length > 0 ? (worldEvents.reduce((sum, ev) => sum + calcDifficulty(ev), 0) / worldEvents.length).toFixed(1) : '—'}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / 10</span>
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Coverage</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  {episodes.filter(ep => worldEvents.some(ev => ev.used_in_episode_id === ep.id)).length}/{episodes.length}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> episodes linked</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Season arc visualization */}
-          {episodes.length > 3 && worldEvents.some(ev => ev.used_in_episode_id) && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Season Arc — Difficulty Curve</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 60 }}>
-                {[...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
-                  const ev = worldEvents.find(e => e.used_in_episode_id === ep.id);
-                  const diff = ev ? calcDifficulty(ev) : 0;
-                  const dl = ev ? difficultyLabel(diff) : { bg: '#f1f5f9', color: '#cbd5e1' };
-                  const height = ev ? Math.max(8, (diff / 10) * 55) : 4;
-                  return (
-                    <div key={ep.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <div style={{ width: '100%', height, background: ev ? dl.color : '#e2e8f0', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease', opacity: ev ? 0.7 : 0.3 }}
-                        title={ev ? `Ep ${ep.episode_number}: ${ev.name} (${diff})` : `Ep ${ep.episode_number}: no event`} />
-                      <span style={{ fontSize: 7, color: '#94a3b8' }}>{ep.episode_number}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Easy</span>
-                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Hard</span>
-              </div>
-            </div>
+              </aside>
+            </>
           )}
 
         </div>
