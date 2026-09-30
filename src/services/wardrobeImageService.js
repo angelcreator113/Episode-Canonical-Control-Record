@@ -67,11 +67,13 @@ async function sharpEnhanceWardrobe(inputBuffer, options = {}) {
     console.log(`[WardrobeImage] Resizing to fit ${maxWidth}x${maxHeight}`);
   }
 
-  // Sharpening pass — optimized for fabric/clothing textures
+  // Sharpening pass — optimized for fabric/clothing textures.
+  // sharp reads m1 (flat areas) and m2 (jagged areas); the flat/jagged
+  // names used before were ignored (Task #2333).
   pipeline = pipeline.sharpen({
     sigma: sharpenSigma,
-    flat: sharpenFlat,
-    jagged: sharpenJagged,
+    m1: sharpenFlat,
+    m2: sharpenJagged,
   });
 
   // Slight contrast boost for clothing photography
@@ -134,10 +136,11 @@ async function generateThumbnail(inputBuffer, options = {}) {
       position: 'centre',
       kernel: sharp.kernel.lanczos3,
     })
+    // m1/m2: sharp's flat and jagged amounts (Task #2333).
     .sharpen({
       sigma: 0.5, // Light sharpening for small images
-      flat: 0.8,
-      jagged: 0.3,
+      m1: 0.8,
+      m2: 0.3,
     });
 
   let outputBuffer;
@@ -619,17 +622,18 @@ async function enhanceTexture(inputBuffer, options = {}) {
   let pipeline = sharp(inputBuffer);
 
   // Apply unsharp mask with larger radius for "clarity" effect
+  // m1/m2: sharp's flat and jagged amounts (Task #2333).
   pipeline = pipeline.sharpen({
     sigma: 2.5,              // Larger sigma = more clarity-like effect
-    flat: 1.0,
-    jagged: 0.5,
+    m1: 1.0,
+    m2: 0.5,
   });
 
   // Second pass: fine detail sharpening
   pipeline = pipeline.sharpen({
     sigma: 0.8,              // Small sigma for micro-details
-    flat: detailSharpen,
-    jagged: 0.3,
+    m1: detailSharpen,
+    m2: 0.3,
   });
 
   // Slight contrast boost for texture pop
