@@ -2851,6 +2851,12 @@ the first and only record of Evoni's answers on these points.
 `DEAL_DESIGN.md` §12 says what this changes, and deal build PR 3 (Task
 #2341) builds it, including one guarded migration for point 1.
 
+**Follow-up (Evoni, 2026-09-30),** on the three choices PR 3 put to her:
+"Deal PR 3: I accept all three of your choices (wider Start Episode check;
+the form should make "No fee (0)" one click; performance_fee its own
+column; old deliverables untyped until chosen)." `DEAL_DESIGN.md` §12
+records what each means.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:

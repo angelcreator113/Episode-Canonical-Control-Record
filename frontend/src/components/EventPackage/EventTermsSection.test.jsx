@@ -223,6 +223,23 @@ describe('EventTermsSection', () => {
     expect(screen.getByTestId('terms-price-missing').textContent).toContain('Start Episode waits on a price for: "One reel in the coat", "Host a Q&A".');
   });
 
+  test('pricing: "No fee (0)" sets a Price required deliverable to 0 in one click', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: TYPED, locked: false } });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true, deliverable: { ...TYPED[1], fee: 0 } } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-nofee-d2')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('terms-deliverable-nofee-d2'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-1/deliverables/d2', { fee: 0 }));
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  test('pricing: no "No fee (0)" on a line that already has a price', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [{ ...TYPED[0], fee: 125 }], locked: false } });
+    renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
+    await waitFor(() => expect(screen.getByText('One reel in the coat')).toBeTruthy());
+    expect(screen.queryByTestId('terms-deliverable-nofee-d1')).toBeNull();
+  });
+
   test('pricing: without a deal type nothing is priced; a no-cash deal says so and cannot propose', async () => {
     renderTerms();
     expect(screen.getByTestId('terms-pricing-empty').textContent).toBe('Choose a deal type to price the deal.');

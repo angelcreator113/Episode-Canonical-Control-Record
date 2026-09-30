@@ -757,12 +757,19 @@ holds the rules (`DEAL_PLANS`, `EVENT_COMPONENTS`, `DELIVERABLE_ANCHORS`,
   the list, before anything is written. A legacy event (no deal type) and a
   no-cash deal are never refused; a regenerate is not refused, since its
   terms are already locked.
-  - **Applied beyond "Other" (INFERRED, for Evoni to confirm):** the ruling
-    names Other. The gate applies "Missing is missing" to every priced
-    component and every deliverable of a deal that pays deliverables, so a
-    Post, Photo Set or untyped row with no fee also holds Start Episode, as
-    does a partnership base not offered at the tier. A deliverable meant to
-    pay nothing needs a fee of 0.
+  - **Applied beyond "Other":** the gate applies "Missing is missing" to
+    every priced component and every deliverable of a deal that pays
+    deliverables, so a Post, Photo Set or untyped row with no fee also holds
+    Start Episode, as does a partnership base not offered at the tier. A
+    deliverable meant to pay nothing takes a fee of 0: "No fee (0)" on the
+    row sets it in one click.
+- **Evoni's acceptance (2026-09-30)** of the three choices PR 3 put to her,
+  verbatim: "Deal PR 3: I accept all three of your choices (wider Start
+  Episode check; the form should make "No fee (0)" one click;
+  performance_fee its own column; old deliverables untyped until chosen)."
+  So the wider gate above, `performance_fee` as its own column, and legacy
+  deliverables reading as untyped until a type is chosen are ruled, and
+  "No fee (0)" is built.
 
 ---
 

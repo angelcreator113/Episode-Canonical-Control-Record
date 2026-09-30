@@ -161,6 +161,24 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     }
   };
 
+  // "No fee (0)" (Evoni, 2026-09-30): one click sets a deliverable that pays
+  // nothing to 0, so it no longer reads "Price required" or holds Start
+  // Episode. 0 is a price; a missing number is not.
+  const setNoFee = async (d) => {
+    if (locked || delivSaving) return;
+    setDelivSaving(true);
+    try {
+      await updateDeliverableApi(showId, eventId, d.id, { fee: 0 });
+      toast('Set to no fee (0)');
+      await loadDeliverables();
+    } catch (err) {
+      onDeliverableWriteError(err, 'Failed to set no fee');
+      toast(errorMessage(err, 'Failed to set no fee'));
+    } finally {
+      setDelivSaving(false);
+    }
+  };
+
   const removeDeliverable = async (d) => {
     if (locked || delivSaving) return;
     setDelivSaving(true);
@@ -467,6 +485,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                         ? <Loader2 size={12} className="epp-spin-icon" aria-hidden="true" />
                         : <Check size={12} aria-hidden="true" />}
                       {deliverableAdvanceLabel(next)}
+                    </button>
+                  )}
+                  {!locked && describeDeliverableFee(event, d).priceRequired && (
+                    <button
+                      type="button" className="epp-btn epp-btn-small" data-testid={`terms-deliverable-nofee-${d.id}`}
+                      onClick={() => setNoFee(d)} disabled={delivSaving}
+                    >
+                      No fee (0)
                     </button>
                   )}
                   {!locked && (
