@@ -11,6 +11,7 @@ import episodeService from '../services/episodeService';
 // true — the wrap transition or the header button, never on page load).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
+import EpisodeTitleCard from '../components/Episodes/EpisodeTitleCard';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // Lazy-loaded tab bodies — each becomes its own JS chunk that's only
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
@@ -700,6 +701,13 @@ const EpisodeDetail = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Title approval + title card (Task #2386, ruling P11): its own
+          strip under the header so it wraps at 375px and never crowds the
+          dense desktop header row. */}
+      <div className="ed-title-card-strip">
+        <EpisodeTitleCard episode={episode} />
       </div>
 
       {/* Main Content Wrapper */}
