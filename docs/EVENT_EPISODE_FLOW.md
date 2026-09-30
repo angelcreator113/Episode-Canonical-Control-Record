@@ -2760,6 +2760,14 @@ happened.
 (M6 was ruled by Evoni later on 2026-09-29, with the per-show reconciliation
 decisions, and added here; Task #2267.)
 
+**Event spending (Evoni, 2026-09-30).** Recorded verbatim in §8(cc) (the
+event cost split). For the Money tab: event spending (drinks, valet, photo
+booth and other things Lala chooses during the event) lives in the
+episode's Money tab, editable until Complete, each line quantity × unit
+price, auto-drafted from the event's extras as suggestions, and charged at
+Complete like other costs. Terms costs stay in the Event Package and lock
+at Start Episode.
+
 **Where these stand:**
 - M3 is added to D1 PR 3 (#2248). There, the wardrobe select, lock-outfit and
   purchase ledger rows record `episode_id` when the spend happens in an
@@ -2968,6 +2976,13 @@ its maximum at Start Episode, so the Career Checklist had no room.
 
 > Start Episode writes the lower goal count (2 for small or low-key events, 4 for major ones), leaving room for the Career Checklist up to the maximum.
 
+**Event cost split (Evoni, 2026-09-30).** Recorded verbatim. It divides
+the itemised event costs of deal build PR 4 (Task #2365; answer 2 above)
+into terms costs and event spending; the money side is also noted in
+§8(aa). Not yet built.
+
+> Event costs split in two. Terms costs (entry, ticket, travel, anything the deal itself involves) stay in the Event Package and lock at Start Episode. Event spending (drinks, valet, photo booth and other things Lala chooses during the event) lives in the episode's Money tab, editable until Complete, each line quantity × unit price, auto-drafted from the event's extras as suggestions, charged at Complete like other costs.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2989,6 +3004,7 @@ its maximum at Start Episode, so the Career Checklist had no room.
 - The invitation ruling (2026-09-30) is built by Task #2375.
 - D12 and T9 (2026-09-30) are built after P10–P12 (Task #2395); the T9
   follow-up is built into the T9 PR.
+- The event cost split (2026-09-30) is built after the D12/T9/P14 batch.
 
 ---
 
