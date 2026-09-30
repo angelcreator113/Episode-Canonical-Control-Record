@@ -1220,6 +1220,15 @@
   font-size: 11px;
   color: var(--lala-ink-muted, #6B6557);
 }
+/* Costs (Task #2365): two header links that wrap at 375px; a comped
+   amount is struck through, since Lala never pays it. */
+.epp-term-head-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 10px;
+}
+.epp-cost-comped { text-decoration: line-through; }
 /* Deal type's rule 14 label (Task #2330). */
 .epp-term-state {
   font-size: 11px;

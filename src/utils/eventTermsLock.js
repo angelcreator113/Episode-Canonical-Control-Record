@@ -13,7 +13,8 @@
  *      derived link older episodes carry; findLiveLinkedEpisode).
  * A link to a missing or soft-deleted episode does not lock.
  *
- * Deliverables have their own lock in routes/eventDeliverables.js.
+ * Deliverables have their own lock in routes/eventDeliverables.js. Itemised
+ * costs (routes/eventCosts.js, Task #2365) lock through findTermsLockEpisode.
  */
 
 const { findLiveLinkedEpisode } = require('./eventEpisodeLink');

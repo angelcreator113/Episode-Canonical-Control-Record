@@ -2857,6 +2857,13 @@ the form should make "No fee (0)" one click; performance_fee its own
 column; old deliverables untyped until chosen)." `DEAL_DESIGN.md` §12
 records what each means.
 
+**Deal PR 4 and PR 5 answers (Evoni, 2026-09-30),** on the two points
+deal build PR 4 (Task #2365) put to her. Recorded verbatim;
+`DEAL_DESIGN.md` §10.3 says what each builds:
+
+> 1. Partnership base and performance fee are paid at Complete, each under its own ledger name; one guarded migration extends the payout unique index. Ship it in the same deploy as #2303.
+> 2. Draft extras (and the first Propose terms) add an "Entry / ticket" cost: for self-funded deals, paid by Lala at the event's cost_coins, labelled "Auto-drafted · from event cost"; for invited/comped deals, the same line comped by the host. Elsewhere cost_coins stays difficulty only.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2870,6 +2877,9 @@ records what each means.
 - Retiring the tier reward joins the payout PR (§8 PR 5), per Evoni.
 - The Deal PR 3 ruling (2026-09-30) is built by deal build PR 3 (Task
   #2341); the admin rate editor is a later PR, per its point 5.
+- Answer 2 of 2026-09-30 (the drafted entry line) is built by deal build PR
+  4 (Task #2365); answer 1 (the partnership base and performance fee at
+  Complete) by PR 5, with its migration in the same deploy as #2303.
 
 ---
 

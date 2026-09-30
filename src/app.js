@@ -834,6 +834,16 @@ try {
   console.error('✗ Failed to load deal pricing routes:', e.message);
 }
 
+// Itemised event costs (deal build PR 4, Task #2365) —
+// /world/:showId/events/:eventId/costs[/:costId | /draft-extras]
+try {
+  const eventCostRoutes = require('./routes/eventCosts');
+  app.use('/api/v1', eventCostRoutes);
+  console.log('✓ Event cost routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load event cost routes:', e.message);
+}
+
 // World Studio routes (character ecosystem + intimate scene generator)
 const worldStudioRoutes = trackRouteLoad('worldStudio', () => require('./routes/worldStudio'));
 app.use('/api/v1', worldStudioRoutes);

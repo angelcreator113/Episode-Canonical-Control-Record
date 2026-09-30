@@ -1,0 +1,230 @@
+'use strict';
+
+/**
+ * Itemised event costs (deal build PR 4, Task #2365; docs/DEAL_DESIGN.md §5,
+ * Law 7).
+ *
+ * A deal event's costs are rows in event_costs, one per cost, each saying
+ * who pays it:
+ *   paid_by 'lala'           — Finalize charges it as its own expense
+ *                              (category event_cost, source_type
+ *                              'event_cost', source_id the row; Law 13);
+ *   paid_by 'host' | 'brand' — comped: recorded, never charged (Law 6).
+ *
+ * For a deal event Finalize no longer charges cost_coins as the entry cost
+ * (it stays as difficulty only, Law 0) nor the hidden styling_extras row.
+ * The extras (EVENT_EXTRAS: drinks, valet, photo booth) are drafted as
+ * `extras` rows instead, so every cost Lala pays is visible before it is
+ * charged, and Evoni can edit or delete each one.
+ *
+ * The entry line (Evoni, 2026-09-30, answer 2; DEAL_DESIGN.md §10.3): a
+ * self-funded deal is one where Lala pays to be in the room, so the draft
+ * also adds an "Entry / ticket" row at the event's cost_coins, paid by Lala.
+ * An invited/comped deal gets the same line comped by the host, so the
+ * saving is visible. No other deal type drafts it; elsewhere cost_coins
+ * stays difficulty only.
+ *
+ * A drafted row is recorded as other drafted values are (doctrine rule 14):
+ * automation.auto_drafted.costs = 'extras' and
+ * automation.drafted_values.costs = { <row id>: { key, amount, source } },
+ * source 'extras' or 'event_cost'. It reads "Auto-drafted · event extras"
+ * or "Auto-drafted · from event cost" until its amount changes, then
+ * Edited.
+ *
+ * Legacy events (deal_type null) keep cost_coins and styling_extras (D8).
+ * The rows lock with the terms (D4): the cost routes refuse a write once
+ * findTermsLockEpisode finds the episode.
+ */
+
+const { v4: uuidv4 } = require('uuid');
+const { COST_KINDS, COST_PAID_BY } = require('../models/EventCost');
+const { eventExtrasFor } = require('../utils/financialRates');
+
+const LABEL_MAX = 200;
+const EXTRAS_SOURCE = 'extras';
+const ENTRY_SOURCE = 'event_cost';
+
+// The entry line's payer by deal type (answer 2); other deal types draft none.
+const ENTRY_PAYER_BY_DEAL = Object.freeze({ self_funded: 'lala', invited_comped: 'host' });
+
+// The drafted extras, in order: key, label.
+const EXTRAS_LINES = Object.freeze([
+  { key: 'drinks', label: 'Drinks' },
+  { key: 'valet', label: 'Valet' },
+  { key: 'photo_booth', label: 'Photo booth' },
+]);
+
+const COST_COLUMNS = 'id, event_id, kind, label, amount, paid_by, created_at, updated_at';
+
+/** A deal event is one with a deal type; legacy events have none. */
+function isDealEvent(event) {
+  return Boolean(event && event.deal_type);
+}
+
+function parseJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch (err) {
+    console.error('[EventCosts] JSON parse failed:', err.message);
+    return fallback;
+  }
+}
+
+/** The event's live cost rows, oldest first. */
+async function listEventCosts(sequelize, eventId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `SELECT ${COST_COLUMNS} FROM event_costs
+      WHERE event_id = :eventId AND deleted_at IS NULL
+      ORDER BY created_at ASC, id ASC`,
+    { replacements: { eventId }, transaction }
+  );
+  return (rows || []).map((r) => ({ ...r, amount: Number(r.amount) || 0 }));
+}
+
+/**
+ * Validates a cost body. `partial` (PUT) allows any subset; POST needs a
+ * kind and an amount. Returns { fields } or { error }.
+ */
+function readCostBody(body, { partial }) {
+  const b = body && typeof body === 'object' ? body : {};
+  const fields = {};
+
+  if (b.kind !== undefined || !partial) {
+    if (!COST_KINDS.includes(b.kind)) return { error: `kind must be one of ${COST_KINDS.join(', ')}` };
+    fields.kind = b.kind;
+  }
+  if (b.label !== undefined) {
+    if (b.label === null) fields.label = null;
+    else {
+      if (typeof b.label !== 'string') return { error: 'label must be a string or null' };
+      const label = b.label.trim();
+      if (label.length > LABEL_MAX) return { error: `label must be at most ${LABEL_MAX} characters` };
+      fields.label = label || null;
+    }
+  }
+  if (b.amount !== undefined || !partial) {
+    const amount = Number(b.amount);
+    if (b.amount === null || b.amount === '' || !Number.isInteger(amount) || amount < 0) {
+      return { error: 'amount must be a whole number of Prime Coins, 0 or more' };
+    }
+    fields.amount = amount;
+  }
+  if (b.paid_by !== undefined) {
+    if (!COST_PAID_BY.includes(b.paid_by)) return { error: `paid_by must be one of ${COST_PAID_BY.join(', ')}` };
+    fields.paid_by = b.paid_by;
+  }
+  return { fields };
+}
+
+/** The ledger rows Finalize books for a deal event's costs: Lala's only. */
+function chargeableCosts(costs) {
+  return (costs || []).filter((c) => c.paid_by === 'lala' && (Number(c.amount) || 0) > 0);
+}
+
+/** Totals by who pays: { lala, comped }. */
+function costTotals(costs) {
+  let lala = 0; let comped = 0;
+  for (const c of costs || []) {
+    const amount = Number(c.amount) || 0;
+    if (c.paid_by === 'lala') lala += amount; else comped += amount;
+  }
+  return { lala, comped };
+}
+
+/**
+ * The lines a deal drafts, in order: the entry line (self-funded: Lala pays;
+ * invited/comped: comped by the host) at cost_coins, then the extras (Lala
+ * pays) by prestige. Zero amounts are left out.
+ * Returns [{ key, kind, label, amount, paid_by, source }].
+ */
+function draftedCostLines(event) {
+  const lines = [];
+  const entryPayer = ENTRY_PAYER_BY_DEAL[event?.deal_type];
+  const entry = Number(event?.cost_coins) || 0;
+  if (entryPayer && entry > 0) {
+    lines.push({ key: 'entry', kind: 'entry', label: 'Entry / ticket', amount: entry, paid_by: entryPayer, source: ENTRY_SOURCE });
+  }
+  const extras = eventExtrasFor(event);
+  for (const line of EXTRAS_LINES) {
+    const amount = extras[line.key] || 0;
+    if (amount > 0) lines.push({ key: line.key, kind: 'extras', label: line.label, amount, paid_by: 'lala', source: EXTRAS_SOURCE });
+  }
+  return lines;
+}
+
+/**
+ * Drafts the deal's cost lines (draftedCostLines), each once: a line
+ * already drafted and still live is not drafted again. Runs inside the
+ * caller's transaction, after the caller has checked the lock and taken the
+ * event row FOR UPDATE. Returns the rows it inserted.
+ */
+async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
+  const [eventRows] = await sequelize.query(
+    `SELECT id, deal_type, cost_coins, prestige, format, event_type, dress_code, canon_consequences
+       FROM world_events WHERE id = :eventId FOR UPDATE`,
+    { replacements: { eventId }, transaction }
+  );
+  const event = eventRows?.[0];
+  if (!event) return [];
+
+  const cc = parseJson(event.canon_consequences, {}) || {};
+  const automation = cc.automation || {};
+  const draftedCosts = { ...((automation.drafted_values || {}).costs || {}) };
+
+  const live = await listEventCosts(sequelize, eventId, { transaction });
+  const liveIds = new Set(live.map((c) => String(c.id)));
+  const liveDraftedKeys = new Set(
+    Object.entries(draftedCosts).filter(([id]) => liveIds.has(String(id))).map(([, v]) => v?.key)
+  );
+
+  const inserted = [];
+  for (const line of draftedCostLines(event)) {
+    if (liveDraftedKeys.has(line.key)) continue;
+    // clock_timestamp, not NOW(): NOW() is fixed for the transaction, and
+    // the rows list in the order they were drafted.
+    const [rows] = await sequelize.query(
+      `INSERT INTO event_costs (id, event_id, kind, label, amount, paid_by, created_at, updated_at)
+       VALUES (:id, :eventId, :kind, :label, :amount, :paid_by, clock_timestamp(), clock_timestamp())
+       RETURNING ${COST_COLUMNS}`,
+      { replacements: { id: uuidv4(), eventId, kind: line.kind, label: line.label, amount: line.amount, paid_by: line.paid_by }, transaction }
+    );
+    const row = rows?.[0];
+    if (row) {
+      draftedCosts[row.id] = { key: line.key, amount: line.amount, source: line.source };
+      inserted.push({ ...row, amount: Number(row.amount) || 0 });
+    }
+  }
+
+  if (inserted.length) {
+    const nextCc = {
+      ...cc,
+      automation: {
+        ...automation,
+        auto_drafted: { ...(automation.auto_drafted || {}), costs: EXTRAS_SOURCE },
+        drafted_values: { ...(automation.drafted_values || {}), costs: draftedCosts },
+      },
+    };
+    await sequelize.query(
+      'UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :eventId',
+      { replacements: { cc: JSON.stringify(nextCc), eventId }, transaction }
+    );
+  }
+  return inserted;
+}
+
+module.exports = {
+  COST_KINDS,
+  COST_PAID_BY,
+  LABEL_MAX,
+  EXTRAS_LINES,
+  EXTRAS_SOURCE,
+  ENTRY_SOURCE,
+  ENTRY_PAYER_BY_DEAL,
+  isDealEvent,
+  draftedCostLines,
+  listEventCosts,
+  readCostBody,
+  chargeableCosts,
+  costTotals,
+  draftExtrasCosts,
+};

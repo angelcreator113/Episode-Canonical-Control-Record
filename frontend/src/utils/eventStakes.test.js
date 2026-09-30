@@ -85,6 +85,8 @@ describe('describeEventMoney', () => {
     expect(describeEventMoney(full({ cost_coins: 0 })).kind).toBe('free');
     expect(describeEventMoney(full()).kind).toBe('cost');
     expect(describeEventMoney({ cost_coins: null }).kind).toBe('missing');
+    // A deal is never charged cost_coins (Task #2365).
+    expect(describeEventMoney(full({ deal_type: 'self_funded' })).kind).toBe('deal');
     for (const ev of [full({ is_paid: true, payment_amount: 400 }), full({ cost_coins: 0 }), full()]) {
       expect(describeEventMoney(ev).summary).not.toMatch(/\d/);
     }
@@ -201,5 +203,15 @@ describe('cost stays read-only (a default 100 cannot be told from a chosen 100)'
     expect(d).toMatchObject({ state: 'missing', display: null });
     expect(s.money.kind).toBe('missing');
     expect(s.money.summary).toBeNull();
+  });
+});
+
+describe('a deal event\'s cost_coins (Task #2365)', () => {
+  test('reads as Difficulty, not charged', () => {
+    const s = resolveEventStakes({ deal_type: 'paid_appearance', cost_coins: 250 });
+    const cost = s.details.find((d) => d.key === 'cost_coins');
+    expect(cost).toMatchObject({ label: 'Difficulty', display: '250' });
+    expect(cost.note).toMatch(/Not charged for a deal/);
+    expect(s.money.kind).toBe('deal');
   });
 });

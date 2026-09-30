@@ -12,7 +12,9 @@
  *   - the event's components the deal type carries (ruling 4):
  *     appearance_fee, partnership_base_fee, performance_fee, and
  *     pricing_version;
- *   - event_deliverables.fee for each Reel and Story Set (3) (ruling 2).
+ *   - event_deliverables.fee for each Reel and Story Set (3) (ruling 2);
+ *   - the event's extras as event_costs rows, once, while it has none (deal
+ *     build PR 4, Task #2365).
  * A line with no automatic price (Post, Photo Set, Other, untyped, or an
  * anchor not offered at the tier) keeps whatever number it has and reads
  * "Price required" until Evoni sets one (ruling 6).
@@ -38,6 +40,7 @@ const { requireAuth } = require('../middleware/auth');
 const { listEventDeliverables } = require('../services/eventTermsService');
 const { findTermsLockEpisode, termsLockedBody } = require('../utils/eventTermsLock');
 const { loadRateCard, proposeTerms, PRICING_SOURCE, EVENT_COMPONENTS } = require('../services/dealPricingService');
+const { listEventCosts, draftExtrasCosts } = require('../services/eventCostsService');
 
 async function getModels() {
   try { return require('../models'); } catch (err) {
@@ -151,6 +154,13 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
           { replacements: { id, fee, eventId }, transaction }
         );
       }
+      // The event's extras, drafted as cost rows Lala pays (deal build PR 4,
+      // Task #2365; DEAL_DESIGN.md §5): once, on a deal whose extras were
+      // never drafted and that has no cost rows, so a proposal never re-adds
+      // a row Evoni deleted. The Costs "Draft extras" button re-drafts on
+      // request.
+      const existingCosts = await listEventCosts(sequelize, eventId, { transaction });
+      if (!autoDrafted.costs && existingCosts.length === 0) await draftExtrasCosts(sequelize, eventId, { transaction });
     });
 
     const [updated] = await sequelize.query(
@@ -161,6 +171,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
       proposal,
       event: updated?.[0] || null,
       deliverables: await listEventDeliverables(sequelize, eventId),
+      costs: await listEventCosts(sequelize, eventId),
     });
   } catch (error) {
     console.error('Propose terms error:', error);

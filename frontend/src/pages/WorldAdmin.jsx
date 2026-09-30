@@ -1797,7 +1797,7 @@ The revised event should feel like a completely different experience from the si
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
                           <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
-                          <span style={S.eTag}>🪙 {linkedEvent.cost_coins}</span>
+                          <span style={S.eTag}>{linkedEvent.deal_type ? `Difficulty ${linkedEvent.cost_coins}` : `🪙 ${linkedEvent.cost_coins}`}</span>
                           <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
                           {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid</span>}
                           {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>🎯 {linkedEvent.career_milestone}</span>}
@@ -2313,7 +2313,7 @@ The revised event should feel like a completely different experience from the si
                 <FG label="Host (who's hosting)" value={eventForm.host || ''} onChange={v => setEventForm(p => ({ ...p, host: v }))} placeholder="Velour Society, Fashion Week Committee" />
                 <FG label="Brand Sponsor (optional)" value={eventForm.host_brand} onChange={v => setEventForm(p => ({ ...p, host_brand: v }))} placeholder="Velour, Chanel (leave empty if none)" />
                 <FG label="Prestige (1-10)" value={eventForm.prestige} onChange={v => setEventForm(p => ({ ...p, prestige: parseInt(v) || 5 }))} type="number" min={1} max={10} />
-                <FG label="Cost (coins)" value={eventForm.cost_coins} onChange={v => setEventForm(p => ({ ...p, cost_coins: parseInt(v) || 0 }))} type="number" min={0} disabled={eventForm.is_paid === 'free'} />
+                <FG label={eventForm.deal_type ? 'Difficulty' : 'Cost (coins)'} value={eventForm.cost_coins} onChange={v => setEventForm(p => ({ ...p, cost_coins: parseInt(v) || 0 }))} type="number" min={0} disabled={eventForm.is_paid === 'free'} />
                 <FG label="Strictness (1-10)" value={eventForm.strictness} onChange={v => setEventForm(p => ({ ...p, strictness: parseInt(v) || 5 }))} type="number" min={1} max={10} />
                 <div>
                   <label style={S.fLabel}>Deadline</label>
@@ -3356,7 +3356,7 @@ The revised event should feel like a completely different experience from the si
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={md.prestige} onChange={e => { setEventDetailModal({ ...md, prestige: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('prestige', parseInt(e.target.value) || 5)} style={S.sel} /></div>
-                    <div><label style={S.fLabel}>Cost 🪙</label><input type="number" min={0} value={md.cost_coins} onChange={e => { setEventDetailModal({ ...md, cost_coins: parseInt(e.target.value) || 0 }); }} onBlur={e => updateField('cost_coins', parseInt(e.target.value) || 0)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>{md.deal_type ? 'Difficulty' : 'Cost 🪙'}</label><input type="number" min={0} value={md.cost_coins} onChange={e => { setEventDetailModal({ ...md, cost_coins: parseInt(e.target.value) || 0 }); }} onBlur={e => updateField('cost_coins', parseInt(e.target.value) || 0)} style={S.sel} /></div>
                     <div><label style={S.fLabel}>Strictness</label><input type="number" min={1} max={10} value={md.strictness} onChange={e => { setEventDetailModal({ ...md, strictness: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('strictness', parseInt(e.target.value) || 5)} style={S.sel} /></div>
                     <div><label style={S.fLabel}>Deadline</label><select value={md.deadline_type} onChange={e => updateField('deadline_type', e.target.value)} style={S.sel}>{['none','low','medium','high','tonight','urgent'].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                   </div>
@@ -3758,6 +3758,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 ].filter(Boolean).join(', ')}
                               </div>
                             ) : null}
+                            {/* A deal event's itemised costs (Task #2365): Lala's
+                                rows count, comped rows are listed but never. */}
+                            {fc?.expenses?.itemised?.costs?.length > 0 && (
+                              <div style={{ fontSize: 9, color: '#dc262680' }} data-testid="forecast-itemised">
+                                Costs: {fc.expenses.itemised.lala_total}
+                                {fc.expenses.itemised.comped_total > 0 ? ` (comped ${fc.expenses.itemised.comped_total})` : ''}
+                              </div>
+                            )}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
