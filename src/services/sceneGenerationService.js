@@ -24,6 +24,7 @@ const path = require('path');
 const sharp = require('sharp');
 const artifactDetection = require('./artifactDetectionService');
 const sceneSpecService = require('./sceneSpecService');
+const imageCost = require('./imageCostService');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
@@ -263,6 +264,10 @@ async function startTextToImage(prompt, options = {}) {
 
       return { imageUrl, revisedPrompt: null };
     } catch (err) {
+      if (imageCost.isBudgetError(err)) {
+        console.error(`[SceneGen] Flux still refused: ${err.message}`);
+        throw err; // budget refusal: never retried
+      }
       const status = err.response?.status;
       const retryable = !status || status === 429 || status >= 500;
       if (err.response) {
@@ -422,16 +427,20 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       form.append('size', '1536x1024');
       form.append('quality', 'high');
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/images/edits',
-        form,
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            ...form.getHeaders(),
-          },
-          timeout: 180000,
-        }
+      // Budget-gated and logged to ai_usage_logs (Task #2387).
+      const response = await imageCost.runImageCall(
+        { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 },
+        () => axios.post(
+          'https://api.openai.com/v1/images/edits',
+          form,
+          {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              ...form.getHeaders(),
+            },
+            timeout: 180000,
+          }
+        ),
       );
 
       const b64 = response.data.data[0]?.b64_json;
@@ -472,6 +481,7 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.response?.data || err.message;
     console.error(`[SceneGen] Image generation error:`, detail);
+    if (imageCost.isBudgetError(err)) throw err; // keep the 429 and its message
     throw new Error(`Image generation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 }
@@ -1433,13 +1443,17 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
     form.append('size', '1536x1024');
     form.append('quality', 'high');
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/images/edits',
-      form,
-      {
-        headers: { 'Authorization': `Bearer ${apiKey}`, ...form.getHeaders() },
-        timeout: 180000,
-      }
+    // Budget-gated and logged to ai_usage_logs (Task #2387).
+    const response = await imageCost.runImageCall(
+      { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 },
+      () => axios.post(
+        'https://api.openai.com/v1/images/edits',
+        form,
+        {
+          headers: { 'Authorization': `Bearer ${apiKey}`, ...form.getHeaders() },
+          timeout: 180000,
+        }
+      ),
     );
 
     // Get the result and upload to S3
@@ -1465,6 +1479,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
     return resultUrl;
   } catch (err) {
     console.warn(`[SceneGen] Crop+outpaint failed for ${angleLabel}: ${err.message}`);
+    if (imageCost.isBudgetError(err)) throw err; // a refusal is not a fallback case
     return null;
   }
 }

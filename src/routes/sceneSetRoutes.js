@@ -10,6 +10,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
+const { isBudgetError } = require('../services/imageCostService');
 const artifactService    = require('../services/artifactDetectionService');
 const postProcessService = require('../services/postProcessingService');
 
@@ -1190,7 +1191,7 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/regenerate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2043,6 +2044,7 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
         await sceneGenService.generateAngle(angle, set, models);
       } catch (err) {
         console.error(`[BatchGen] Angle ${angle.angle_name} failed:`, err.message);
+        if (isBudgetError(err)) break; // budget reached: the rest would be refused too
       }
     }
     console.log(`[BatchGen] Completed batch generation for scene set: ${set.name}`);

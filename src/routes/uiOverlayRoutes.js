@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { requireAuth, authorize } = require('../middleware/auth');
+const { isBudgetError } = require('../services/imageCostService');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -338,7 +339,8 @@ router.post('/:showId/generate/:overlayType', requireAuth, async (req, res) => {
 
     return res.json({ success: true, data: { ...overlayType, url, bg_removed, asset_id: assetId, prompt_used } });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    console.error('[UIOverlay] generate failed:', err.message);
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
