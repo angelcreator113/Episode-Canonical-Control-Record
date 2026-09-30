@@ -2962,6 +2962,12 @@ Checklist were each limited separately, so a major event could show up to
 
 > The 2–3 / 4–6 limit applies to Lala's combined goal list (Start Episode goals plus Career Checklist); deliverables don't count toward it.
 
+**T9 second follow-up (Evoni, 2026-09-30).** Recorded verbatim. It
+answers what the combined limit left open: a well-described event reached
+its maximum at Start Episode, so the Career Checklist had no room.
+
+> Start Episode writes the lower goal count (2 for small or low-key events, 4 for major ones), leaving room for the Career Checklist up to the maximum.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
