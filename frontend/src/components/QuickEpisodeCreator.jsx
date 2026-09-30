@@ -543,7 +543,7 @@ Lala arrives at ${evName}.
         </div>
 
         <div style={S.field}>
-          <label style={S.label}>Episode Description</label>
+          <label style={S.label}>Synopsis (internal)</label>
           <textarea value={description} onChange={e => setDescription(e.target.value)}
             style={{ ...S.input, minHeight: 60, resize: 'vertical' }}
             placeholder="What's the narrative context? Where is Lala emotionally?" />

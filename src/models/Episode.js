@@ -29,7 +29,22 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(255),
         allowNull: false,
       },
+      // The internal synopsis of what happens (P13, Task #2386). Not viewer
+      // copy: the viewer-facing copy is `teaser`.
       description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      // Viewer teaser (P12, Task #2386): mystery-driven, never reveals the
+      // outcome, hook in the first 150 characters. Auto-drafted at Start
+      // Episode; editable through PUT /episodes/:id.
+      teaser: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      // Saved copy of the Start Episode draft. The teaser reads Auto-drafted
+      // while it equals this, Edited once it differs (doctrine rule 14).
+      teaser_drafted: {
         type: DataTypes.TEXT,
         allowNull: true,
       },

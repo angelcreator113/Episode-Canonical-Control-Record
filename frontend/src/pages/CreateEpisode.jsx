@@ -765,18 +765,18 @@ const CreateEpisode = () => {
             <div className="form-grid">
               {/* Description */}
               <div className="form-group">
-                <label htmlFor="description">Description</label>
+                <label htmlFor="description">Synopsis (internal)</label>
                 <textarea
                   id="description"
                   name="description"
                   className="form-input textarea"
                   value={formData.description}
                   onChange={handleChange}
-                  placeholder="What is this episode about?"
+                  placeholder="What happens in this episode?"
                   disabled={loading}
                   rows={4}
                 />
-                <div className="form-hint">Brief summary visible in search and listings</div>
+                <div className="form-hint">For the production team, not viewers. Viewers see the episode's teaser (P12, P13).</div>
               </div>
 
               {/* Tags */}

@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
+import EpisodeTeaserSection from './EpisodeTeaserSection';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
 // the array on every render. Order = display order.
@@ -104,7 +105,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [applyBusy, setApplyBusy] = useState(false);
   const [formData, setFormData] = useState({
     title: episode.title || '',
-    logline: episode.logline || episode.description || '',
+    // The internal synopsis (P13, Task #2386). Saved as `description`: the
+    // old `logline` key was not in the PUT whitelist, so edits were dropped.
+    description: episode.description || '',
     publish_date: episode.air_date || '',
     episode_intent: episode.episode_intent || '',
     creative_notes: episode.creative_notes || '',
@@ -410,7 +413,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </div>
         {[
           { key: 'title', label: 'Title', type: 'input', placeholder: 'Episode title...' },
-          { key: 'logline', label: 'Description', type: 'textarea', placeholder: 'Short description...', rows: 3 },
+          { key: 'description', label: 'Synopsis (internal)', type: 'textarea', placeholder: 'What happens in this episode (production only; viewers see the teaser)...', rows: 3 },
           { key: 'publish_date', label: 'Air Date', type: 'date' },
           { key: 'episode_intent', label: 'Intent', type: 'input', placeholder: 'Internal goal for this episode...' },
           { key: 'creative_notes', label: 'Creative Notes', type: 'textarea', placeholder: 'Tone, direction, things to remember...', rows: 4 },
@@ -460,10 +463,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>{episode.title}</h1>
-          {formData.logline && <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{formData.logline}</p>}
+          {formData.description && (
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5 }} data-testid="episode-synopsis">
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginRight: 6 }}>Synopsis (internal)</span>
+              {formData.description}
+            </p>
+          )}
         </div>
         <button onClick={() => setIsEditing(true)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>✏️ Edit</button>
       </div>
+
+      {/* Viewer teaser (P12, Task #2386) */}
+      <EpisodeTeaserSection episode={episode} onUpdate={onUpdate} />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>

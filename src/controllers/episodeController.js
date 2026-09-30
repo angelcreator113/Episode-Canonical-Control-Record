@@ -19,6 +19,7 @@ const ActivityService = require('../services/ActivityService');
 const NotificationService = require('../services/NotificationService');
 const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
+const { normalizeTeaser } = require('../utils/episodeTeaser');
 /* eslint-enable no-unused-vars */
 
 /**
@@ -505,6 +506,9 @@ module.exports = {
       script_content: true,
       thumbnail_url: true,
       distribution_metadata: true,
+      // Viewer teaser (P12, Task #2386). teaser_drafted is the Start Episode
+      // draft's saved copy and is never client-writable.
+      teaser: true,
     };
 
     const updateData = {};
@@ -517,6 +521,10 @@ module.exports = {
           updateData[field] = parseInt(updates[field]);
         } else if (field === 'air_date') {
           updateData.air_date = updates[field] ? new Date(updates[field]) : null;
+        } else if (field === 'teaser') {
+          // Trimmed and capped like the draft; empty clears it. The event
+          // description is not compared here: an edit is Evoni's call.
+          updateData.teaser = normalizeTeaser(updates.teaser);
         } else {
           updateData[field] = updates[field];
         }

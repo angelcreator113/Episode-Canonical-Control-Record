@@ -67,7 +67,7 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
 
   // Episode
   const [episode] = await sequelize.query(
-    `SELECT id, title, description, episode_number, air_date, categories, evaluation_json, total_income, total_expenses
+    `SELECT id, title, description, teaser, episode_number, air_date, categories, evaluation_json, total_income, total_expenses
      FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
@@ -122,6 +122,8 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
 
 // ─── BUILD CONTEXT STRING ────────────────────────────────────────────────────
 
+const teaserOf = (ep) => (typeof ep?.teaser === 'string' ? ep.teaser.trim() : '');
+
 function buildContextBlock(ctx) {
   const ep = ctx.episode;
   const ev = ctx.event;
@@ -137,7 +139,7 @@ Genre: ${ctx.show?.genre || 'reality/fashion'}
 ${ctx.arc ? `Season Arc: ${ctx.arc.name} — Phase: ${ctx.arc.phase_title || ctx.arc.current_phase}` : ''}
 
 EPISODE: ${ep.title} (Episode ${ep.episode_number})
-${ep.description ? `Synopsis: ${ep.description}` : ''}
+${teaserOf(ep) ? `VIEWER TEASER (the viewer-facing copy; draft every platform's copy from this): ${teaserOf(ep)}` : 'VIEWER TEASER: none written for this episode yet.'}
 ${ep.air_date ? `Air Date: ${new Date(ep.air_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}
 ${ep.categories?.length > 0 ? `Tags: ${(typeof ep.categories === 'string' ? JSON.parse(ep.categories) : ep.categories).join(', ')}` : ''}`;
 
@@ -157,9 +159,17 @@ ${pieces.map(p => `  - ${p.name}${p.brand ? ` by ${p.brand}` : ''} (${p.tier || 
 ${brands.length > 0 ? `Brands: ${brands.join(', ')}` : ''}`;
   }
 
+  // Internal background (P12/P13, Task #2386): the synopsis says what
+  // happens and the evaluation says how it ended. Both inform the copy but
+  // are never revealed in it.
+  const internal = [];
+  if (ep.description) internal.push(`Synopsis (what happens): ${ep.description}`);
   if (eval_) {
-    block += `\n\nEVALUATION: ${eval_.tier_final?.toUpperCase() || 'N/A'} (${eval_.score || 0}/100)
-${eval_.narrative_lines?.short || ''}`;
+    internal.push(`Evaluation: ${eval_.tier_final?.toUpperCase() || 'N/A'} (${eval_.score || 0}/100)${eval_.narrative_lines?.short ? ` ${eval_.narrative_lines.short}` : ''}`);
+  }
+  if (internal.length > 0) {
+    block += `\n\nINTERNAL BACKGROUND (production only, DO NOT REVEAL; never state or hint at the outcome, result, tier or score):
+${internal.join('\n')}`;
   }
 
   if (socialTotal > 0) {
@@ -174,17 +184,21 @@ ${eval_.narrative_lines?.short || ''}`;
   return block;
 }
 
-// ─── GENERATE PLATFORM DESCRIPTIONS ──────────────────────────────────────────
+// ─── BUILD THE PROMPT ────────────────────────────────────────────────────────
 
-async function generateDistribution(episodeId, showId, sequelize, options = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
-
-  const ctx = await gatherEpisodeContext(episodeId, showId, sequelize);
+/**
+ * The distribution prompt, pure (Task #2386). Distribution drafts platform
+ * copy from the episode's viewer teaser (P12); the synopsis (P13) and any
+ * evaluation are internal background it must not reveal. With no teaser it
+ * drafts from the episode data as before, and the prompt says so and still
+ * forbids revealing the outcome.
+ */
+function buildDistributionPrompt(ctx, platforms, showDefaults = {}) {
   const contextBlock = buildContextBlock(ctx);
-
-  // Get show-level defaults for hashtags
-  const showDefaults = ctx.showDefaults || {};
-  const platforms = options.platforms || ['youtube', 'tiktok', 'instagram', 'facebook'];
+  const teaser = teaserOf(ctx.episode);
+  const sourceRule = teaser
+    ? `SOURCE: Draft every platform's copy from the VIEWER TEASER above. Keep its mystery and its hook; adapt its voice to each platform. The first line of every caption or description carries the hook. Use the event, outfit, brands, host and venue for specific detail.`
+    : `SOURCE: This episode has no viewer teaser yet, so draft from the episode data above. Write it as a teaser: raise the question the episode answers without answering it, and put the hook in the first line.`;
 
   const platformPrompts = platforms.map(p => {
     const spec = PLATFORM_SPECS[p];
@@ -202,9 +216,13 @@ async function generateDistribution(episodeId, showId, sequelize, options = {}) 
 }`;
   }).join('\n\n');
 
-  const prompt = `You are a social media strategist writing platform-specific descriptions for an episode of a luxury fashion reality show.
+  return `You are a social media strategist writing platform-specific descriptions for an episode of a luxury fashion reality show.
 
 ${contextBlock}
+
+${sourceRule}
+
+NEVER REVEAL THE OUTCOME: no copy may state or hint at how the episode ends, whether Lala succeeds or fails, or any tier, score or result. The INTERNAL BACKGROUND is for your understanding only.
 
 Generate platform-specific content for each platform below. Every detail must come from the REAL data above — reference specific outfit pieces by name, mention actual brands, use the real event name, host, and venue. Nothing generic.
 
@@ -236,7 +254,20 @@ Return JSON:
   }
 }
 
-Return ONLY the JSON. Every description must reference SPECIFIC data from above (outfit pieces, brands, event name, host, venue, tier result).`;
+Return ONLY the JSON. Every description must reference SPECIFIC data from above (outfit pieces, brands, event name, host, venue), and none may reveal the outcome.`;
+}
+
+// ─── GENERATE PLATFORM DESCRIPTIONS ──────────────────────────────────────────
+
+async function generateDistribution(episodeId, showId, sequelize, options = {}) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const ctx = await gatherEpisodeContext(episodeId, showId, sequelize);
+
+  // Get show-level defaults for hashtags
+  const showDefaults = ctx.showDefaults || {};
+  const platforms = options.platforms || ['youtube', 'tiktok', 'instagram', 'facebook'];
+  const prompt = buildDistributionPrompt(ctx, platforms, showDefaults);
 
   const client = getClient();
   const response = await client.messages.create({
@@ -293,6 +324,9 @@ Return ONLY the JSON. Every description must reference SPECIFIC data from above 
       event: ctx.event?.name || null,
       outfit_pieces: (ctx.outfitPieces || []).length,
       evaluation_tier: ctx.evaluation?.tier_final || null,
+      // 'teaser' when the copy was drafted from the viewer teaser (P12),
+      // 'episode_data' when the episode had none.
+      source: teaserOf(ctx.episode) ? 'teaser' : 'episode_data',
       social_tasks_completed: (ctx.socialTasks || []).filter(t => t.completed).length,
     },
   };
@@ -311,6 +345,8 @@ async function saveShowDefaults(showId, defaults, sequelize) {
 module.exports = {
   PLATFORM_SPECS,
   gatherEpisodeContext,
+  buildContextBlock,
+  buildDistributionPrompt,
   generateDistribution,
   saveShowDefaults,
 };
