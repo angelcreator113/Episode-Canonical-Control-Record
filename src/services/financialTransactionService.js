@@ -483,7 +483,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           metadata: { tier: piece.tier, brand: piece.brand },
         });
       } else if (!piece.is_owned && !boughtPieceIds.has(String(piece.id))) {
-        const cost = parseFloat(piece.coin_cost) || parseFloat(piece.price) || 0;
+        // The story price, coin_cost, as select, purchase and lock charge
+        // (Task #2346). A snapshot written before coin_cost was stored has
+        // none and keeps the old fallback to price.
+        const cost = piece.coin_cost != null
+          ? (parseFloat(piece.coin_cost) || 0)
+          : (parseFloat(piece.price) || 0);
         if (cost > 0) {
           await addTx({
             type: 'expense', category: 'wardrobe_purchase', amount: cost,
