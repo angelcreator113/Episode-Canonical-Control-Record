@@ -8,9 +8,9 @@
  * suggestion: the upload form fills it only into an empty price field and
  * never overwrites a price that is already set.
  *
- * STARTER TABLE, pending Evoni's approval in the PR. Rows are the prompt's
- * item_type values; columns are the Wardrobe tier values
- * (basic | mid | luxury | elite).
+ * Evoni approved this starter table on 2026-09-30 ("#2347: I approve the
+ * starter price table."). Rows are the prompt's item_type values; columns
+ * are the Wardrobe tier values (basic | mid | luxury | elite).
  */
 
 const PRICE_TIERS = Object.freeze(['basic', 'mid', 'luxury', 'elite']);

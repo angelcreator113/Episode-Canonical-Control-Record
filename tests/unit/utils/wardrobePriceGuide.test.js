@@ -56,6 +56,10 @@ describe('the $150 floor is gone (Task #2347)', () => {
     expect(adminSrc.includes("'150.00'")).toBe(false);
   });
 
+  it('WorldAdmin suggests the coin cost from the price she set (suggestCoinCost)', () => {
+    expect(adminSrc.includes('coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice)')).toBe(true);
+  });
+
   it('WorldAdmin fills the AI price only into an empty price', () => {
     expect(adminSrc.includes('price: aiPrice || prev.price')).toBe(false);
     expect(adminSrc.includes('price: fillPrice(prev.price, aiPrice)')).toBe(true);

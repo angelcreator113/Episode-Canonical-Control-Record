@@ -36,7 +36,7 @@ import {
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
-import { parseAiPrice, fillPrice } from '../utils/wardrobeAutoFill';
+import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -6450,12 +6450,6 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         // A suggestion with no floor; it fills only an empty price (Task #2347).
                         const aiPrice = parseAiPrice(ai.price_estimate);
-                        // Coin cost — per user: "how much the outfit is", so default
-                        // to the AI's coin_cost if provided, else 1:1 with the dollar
-                        // price. Integer only since the Wardrobe model stores it as INT.
-                        const aiCoinCost = ai.coin_cost != null
-                          ? parseInt(String(ai.coin_cost).replace(/[^0-9]/g, ''), 10) || ''
-                          : (aiPrice ? parseInt(aiPrice, 10) : '');
                         setWardrobeUploadForm(prev => ({
                           ...prev,
                           name: ai.name || prev.name,
@@ -6473,7 +6467,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           // (i.e. we sent a showId). prev.X preserved so a second
                           // pass doesn't clobber values the user has tweaked.
                           ...(data.gameplay ? {
-                            coinCost: prev.coinCost || aiCoinCost,
+                            // Coin cost follows the price Evoni set, else the AI's
+                            // coin_cost or price; filled only when empty (Task #2347).
+                            coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice),
                             acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
                             lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
                             eraAlignment: prev.eraAlignment || ai.era_alignment || '',
