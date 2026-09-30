@@ -63,6 +63,7 @@ import {
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
   dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
+  BONUS_TIERS, BONUS_TIER_LABELS, describeBonusTerms, bonusDraftFrom, buildBonusTermsUpdate,
 } from '../../utils/eventTerms';
 import EventCostsTerm from './EventCostsTerm';
 
@@ -253,6 +254,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const plan = dealPlanFor(event);
   const missingPrices = missingPriceLabels(event, deliverables);
   const [feeDraft, setFeeDraft] = useState(null); // null, or { field, value } for one component
+  const [bonusDraft, setBonusDraft] = useState(null); // null, or { slay, pass, safe } strings
+  const [bonusError, setBonusError] = useState(null);
   const [pricing, setPricing] = useState(null); // null, or { card, selection, loading, error, gaps }
   const [proposing, setProposing] = useState(false);
   // Bumped after a proposal, which drafts a new deal's extras as cost rows.
@@ -263,6 +266,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     const built = buildComponentFeeUpdate(feeDraft.field, feeDraft.value);
     if (built.error) { toast(`${label}: ${built.error}`); return; }
     if (await saveEventTerm(label.toLowerCase(), built.body, `${label} saved`)) setFeeDraft(null);
+  };
+
+  // Performance bonus (deal build PR 5): only when the deal contains one.
+  const bonus = describeBonusTerms(event);
+  const saveBonus = async () => {
+    const built = buildBonusTermsUpdate(bonusDraft);
+    if (built.error) { setBonusError(built.error); return; }
+    setBonusError(null);
+    if (await saveEventTerm('performance bonus', built.body, 'Performance bonus saved')) setBonusDraft(null);
   };
 
   const emptySelection = () => ({ components: {}, deliverables: {} });
@@ -678,7 +690,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               </div>
             </div>
           )}
-          <p className="epp-term-note">What kind of arrangement this is. It decides how the deal will pay; nothing is paid from it yet.</p>
+          <p className="epp-term-note">What kind of arrangement this is. It decides how the deal pays: its fees at Complete, each deliverable's fee on approval.</p>
         </div>
 
         {/* Deal price (Task #2341) */}
@@ -709,6 +721,44 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
           )}
           {plan.components.map((c) => componentRow(c.field, c.label, describeComponentFee(event, c.field), true))}
           {plan.giftedValue && componentRow('gifted_value', 'Gifted value', describeGiftedValue(event), false)}
+          {plan.cash && (
+            <div className="epp-term-component" data-testid="terms-bonus">
+              <div className="epp-term-head">
+                <span className="epp-term-premium-title">Performance bonus</span>
+                {!locked && !bonusDraft && (
+                  <button type="button" className="epp-inline-link" data-testid="terms-bonus-edit" onClick={() => { setBonusError(null); setBonusDraft(bonusDraftFrom(event)); }}>
+                    <Pencil size={11} aria-hidden="true" /> Edit
+                  </button>
+                )}
+              </div>
+              {bonusDraft ? (
+                <div className="epp-term-form">
+                  <div className="epp-term-premiums">
+                    {BONUS_TIERS.map((t) => (
+                      <label key={t} className="epp-term-field">
+                        <span>If {BONUS_TIER_LABELS[t]} (coins)</span>
+                        <input
+                          type="number" min={1} step={1} inputMode="numeric" placeholder="None" value={bonusDraft[t]}
+                          data-testid={`terms-bonus-input-${t}`}
+                          onChange={(e) => setBonusDraft((d) => ({ ...d, [t]: e.target.value }))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  {bonusError && <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {bonusError}</p>}
+                  <div className="epp-term-actions">
+                    <button type="button" className="epp-btn epp-btn-small" onClick={() => setBonusDraft(null)} disabled={!!termSaving}>Cancel</button>
+                    <button type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid="terms-bonus-save" onClick={saveBonus} disabled={!!termSaving}>
+                      {termSaving === 'performance bonus' ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="epp-term-value" data-testid="terms-bonus-summary">{bonus.label}</div>
+              )}
+              <p className="epp-term-note">Paid at Complete only for a tier the deal names. A SLAY pays nothing on its own.</p>
+            </div>
+          )}
           {!locked && missingPrices.length > 0 && (
             <p className="epp-term-error" data-testid="terms-price-missing">
               <AlertCircle size={12} aria-hidden="true" /> Start Episode waits on a price for: {missingPrices.join(', ')}.
@@ -771,7 +821,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         <div className="epp-term" data-testid="terms-compensation">
           <div className="epp-term-head">
             <span className="epp-term-title"><Coins size={14} aria-hidden="true" /> Compensation</span>
-            {!locked && !compDraft && (
+            {!locked && !compDraft && !event?.deal_type && (
               <button type="button" className="epp-inline-link" data-testid="terms-compensation-edit" onClick={() => setCompDraft(compensationDraftFrom(event))}>
                 <Pencil size={11} aria-hidden="true" /> Edit
               </button>
@@ -809,7 +859,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               </div>
             </div>
           )}
-          <p className="epp-term-note">Contractual pay for the appearance. Rewards are separate and not edited here.</p>
+          <p className="epp-term-note" data-testid="terms-compensation-note">
+            {event?.deal_type
+              ? 'For a deal, pay comes from Deal price above; this older payment is not paid.'
+              : 'Contractual pay for the appearance. Rewards are separate and not edited here.'}
+          </p>
         </div>
       </div>
     </section>

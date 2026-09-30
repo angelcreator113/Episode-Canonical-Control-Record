@@ -283,15 +283,12 @@ function computeStatDeltas(evaluation, event, overrides = []) {
   const deltas = {};
 
   // ─── COIN ECONOMY ───
-  // Tier-based coin rewards
-  const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
-  deltas.coins = (tierCoinRewards[tier] || 0) - (e.cost || 0);
-
-  // Paid event bonus: extra coins for attending expensive events
-  if (e.cost > 0) {
-    const paidBonus = tier === 'slay' ? 50 : tier === 'pass' ? 25 : 0;
-    deltas.coins += paidBonus;
-  }
+  // A preview only: the entry cost. The tier reward (+150/+75/+25/−25) and
+  // the paid-event bonus are retired for every completion (Q12,
+  // EVENT_EPISODE_FLOW.md §8(cc); deal build PR 5, DEAL_DESIGN.md §11.2),
+  // so the tier no longer moves coins. Complete replaces this with the
+  // ledger's movement.
+  deltas.coins = 0 - (e.cost || 0);
 
   // Tier-based stat changes
   switch (tier) {

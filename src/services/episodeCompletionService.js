@@ -28,7 +28,6 @@ const {
 const { changeCoins, InsufficientCoinsError } = require('./coinBalanceGuard');
 const { EPISODE_EVENT_SQL, LALA_STATE_SQL, DEFAULT_LALA_STATE, buildOutfitScoreContext } = require('./outfitScoreContext');
 const { isSocialTaskRequired } = require('../utils/socialTaskSource');
-const { normalizePaidFreeFlags } = require('../utils/paidFreeFlags');
 
 // ─── SOCIAL TASK STAT BONUSES ────────────────────────────────────────────────
 // Completing social tasks should affect more than just coins
@@ -340,14 +339,15 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   }
 
   // ── 10b. Apply event.rewards on success ───────────────────────────────
-  // Creator-authored rewards from the event form (rewards.coins,
-  // .reputation, .brand_trust, .influence). Only granted on slay/pass
-  // tiers — failing the event shouldn't pay out the prize. Stat deltas
-  // (reputation/brand_trust/influence) flow into mergedDeltas alongside
-  // base/social/wardrobe; coins go through the financial pipeline as a
-  // separate transaction row, matching the tier_reward pattern below.
-  // Outcomes (narrative beats) are recorded in the history note further
-  // down, not as state changes.
+  // Creator-authored stat rewards from the event form (rewards.reputation,
+  // .brand_trust, .influence). Only granted on slay/pass tiers — failing
+  // the event shouldn't pay out the prize. They flow into mergedDeltas
+  // alongside base/social/wardrobe. rewards.coins pays nothing: the event
+  // reward retired with the tier reward (Evoni, 2026-09-29: "event_reward
+  // retires with the tier reward (Law 8: money only from accepted terms;
+  // legacy events keep payment_amount)"; deal build PR 5). Outcomes
+  // (narrative beats) are recorded in the history note further down, not
+  // as state changes.
   const eventRewards = (event && event.rewards && typeof event.rewards === 'object')
     ? (typeof event.rewards === 'string' ? (() => { try { return JSON.parse(event.rewards); } catch { return {}; } })() : event.rewards)
     : {};
@@ -359,16 +359,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     }
   }
 
-  // Replace evaluation coin delta with financial pipeline result
-  // Tier reward gets added as a transaction too
-  const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
-  const tierReward = tierCoinRewards[evalResult.tier_final] || 0;
-  // The paid bonus is gated on the normalised entry cost, the rule the
-  // financial forecast uses (normalizePaidFreeFlags: 0 for a paid or free
-  // event), not raw cost_coins (Task #2313). eventContext.cost stays the raw
-  // value: it is the evaluation's difficulty input.
-  const { eventCost: chargedEntryCost } = normalizePaidFreeFlags(event || {});
-  const paidBonus = (chargedEntryCost > 0) ? (evalResult.tier_final === 'slay' ? 50 : evalResult.tier_final === 'pass' ? 25 : 0) : 0;
+  // Coins come only from the ledger rows booked below: Finalize's, and a
+  // deal's payouts. The generic tier reward (+150/+75/+25/−25), the paid
+  // bonus and the event reward are retired for every completion (Q12,
+  // EVENT_EPISODE_FLOW.md §8(cc): "A SLAY does not automatically create
+  // Prime Coins … The generic tier reward … is retired for all
+  // completions"; "tier_paid_bonus retires too (Q12)"; deal build PR 5).
 
   // ── 10c–15. One transaction, idempotent (§8(x) D2, Task #2228) ──
   // Finalize, the reward rows, the coin change, the history row, the
@@ -404,53 +400,17 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     // ── 11. Finalize financials (coins come from here, not evaluation) ──
     financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction });
 
-    // Log tier reward as a financial transaction
-    if (tierReward !== 0) {
-      await db.query(
-        `INSERT INTO financial_transactions
-         (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
-         VALUES (:id, :showId, :episodeId, :eventId, :type, 'tier_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
-        { replacements: {
-          id: uuidv4(), showId, episodeId, eventId: event?.id || null,
-          type: tierReward > 0 ? 'income' : 'expense',
-          amount: Math.abs(tierReward),
-          desc: `${evalResult.tier_final.toUpperCase()} tier reward: ${tierReward > 0 ? '+' : ''}${tierReward} coins`,
-        }}
-      );
-    }
-
-    if (paidBonus > 0) {
-      await db.query(
-        `INSERT INTO financial_transactions
-         (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
-         VALUES (:id, :showId, :episodeId, :eventId, 'income', 'tier_paid_bonus', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
-        { replacements: {
-          id: uuidv4(), showId, episodeId, eventId: event?.id || null,
-          amount: paidBonus,
-          desc: `Paid event ${evalResult.tier_final.toUpperCase()} bonus: +${paidBonus} coins`,
-        }}
-      );
-    }
-
-    // Creator-authored coin reward from event.rewards.coins. Same shape as
-    // tier_reward — separate row so the financial ledger shows where every
-    // coin came from. Only fires on slay/pass to match stat-delta gating.
-    const eventRewardCoins = isSuccess ? (parseInt(eventRewards.coins, 10) || 0) : 0;
-    if (eventRewardCoins > 0) {
-      await db.query(
-        `INSERT INTO financial_transactions
-         (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
-         VALUES (:id, :showId, :episodeId, :eventId, 'income', 'event_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
-        { replacements: {
-          id: uuidv4(), showId, episodeId, eventId: event?.id || null,
-          amount: eventRewardCoins,
-          desc: `Event reward (${evalResult.tier_final.toUpperCase()}): +${eventRewardCoins} coins`,
-        }}
-      );
-    }
+    // ── 11a. Deal payouts (deal build PR 5; DEAL_DESIGN.md §4, §10.3) ──
+    // A deal event is paid its components at Complete accepted, each under
+    // its own ledger name, and a deal_bonus only when its accepted terms
+    // contain one for this tier. Once each (the payout unique index).
+    const { bookCompletionPayouts } = require('./dealPayoutService');
+    await bookCompletionPayouts(sequelize, {
+      showId, episodeId, event, tier: evalResult.tier_final, transaction,
+    });
 
     // Recompute coins from the ledger (D1): every row above, milestones and
-    // the event reward included. The coin delta is the ledger's movement
+    // the deal payouts included. The coin delta is the ledger's movement
     // across this completion; a finalize that already ran alone is in
     // ledgerBefore.
     const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
