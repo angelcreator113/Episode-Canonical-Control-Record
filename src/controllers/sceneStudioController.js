@@ -12,6 +12,7 @@ const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
 const inpaintingService = require('../services/inpaintingService');
+const { isBudgetError } = require('../services/imageCostService');
 
 // ── Migration check (cached per process) ──
 // Detects once whether Scene Studio columns exist, avoiding per-request describeTable calls.
@@ -1105,8 +1106,8 @@ exports.generateObject = async (req, res) => {
     res.json({ success: true, data: { options } });
   } catch (error) {
     console.error('Scene Studio generateObject error:', error);
-    // Rate limit errors return 429
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    // Rate limit and AI budget refusals return 429
+    const status = isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }
 };
@@ -1222,7 +1223,7 @@ exports.generateSceneSetObject = async (req, res) => {
     res.json({ success: true, data: { options } });
   } catch (error) {
     console.error('Scene Studio generateSceneSetObject error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    const status = isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }
 };
@@ -1276,7 +1277,7 @@ exports.regenerateBackground = async (req, res) => {
     });
   } catch (error) {
     console.error('Scene Studio regenerateBackground error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    const status = isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }
 };
@@ -1347,7 +1348,7 @@ exports.regenerateSceneSetBackground = async (req, res) => {
     });
   } catch (error) {
     console.error('Scene Studio regenerateSceneSetBackground error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    const status = isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }
 };
@@ -1718,7 +1719,7 @@ exports.generateDepth = async (req, res) => {
   } catch (error) {
     console.error('Scene Studio generateDepth error:', error);
     let status = 500;
-    if (error.message.includes('limit') || error.message.includes('in progress')) status = 429;
+    if (isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress')) status = 429;
     if (error.message.includes('not configured')) status = 503;
     res.status(status).json({ success: false, error: error.message });
   }
@@ -1775,7 +1776,7 @@ exports.generateAngleDepth = async (req, res) => {
   } catch (error) {
     console.error('Scene Studio generateAngleDepth error:', error);
     let status = 500;
-    if (error.message.includes('limit') || error.message.includes('in progress')) status = 429;
+    if (isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress')) status = 429;
     if (error.message.includes('not configured')) status = 503;
     res.status(status).json({ success: false, error: error.message });
   }

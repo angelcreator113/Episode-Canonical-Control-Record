@@ -18,6 +18,7 @@
 
 const axios = require('axios');
 const Replicate = require('replicate');
+const { trackReplicate, isBudgetError } = require('./imageCostService');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
@@ -84,7 +85,7 @@ async function runDepthEstimation(imageUrl) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const replicate = trackReplicate(new Replicate({ auth: REPLICATE_API_TOKEN })); // budget-gated + logged (#2387)
 
   console.log('[DepthEstimation] Creating prediction with DepthAnythingV2...');
 
@@ -101,6 +102,7 @@ async function runDepthEstimation(imageUrl) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
     console.error(`[DepthEstimation] Replicate API error (${status}):`, detail);
+    if (isBudgetError(err)) throw err; // keep the 429 and its message (#2387)
     throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 

@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
     model_name: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      comment: 'Anthropic model used (e.g. claude-sonnet-4-20250514)',
+      comment: 'Model used (e.g. claude-sonnet-4-20250514, fal-ai/flux-pro/v1.1)',
     },
     input_tokens: {
       type: DataTypes.INTEGER,
@@ -36,7 +36,8 @@ module.exports = (sequelize, DataTypes) => {
     cost_usd: {
       type: DataTypes.DECIMAL(10, 6),
       defaultValue: 0,
-      comment: 'Estimated cost in USD',
+      allowNull: true,
+      comment: 'Estimated cost in USD; NULL for an image call whose model has no price yet (#2387)',
     },
     duration_ms: {
       type: DataTypes.INTEGER,
@@ -50,6 +51,21 @@ module.exports = (sequelize, DataTypes) => {
     error_type: {
       type: DataTypes.STRING(100),
       allowNull: true,
+    },
+    provider: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Image rows only: fal | openai | replicate (#2387); NULL for Anthropic rows',
+    },
+    billing_unit: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      comment: 'Image rows only: megapixel | image (#2387)',
+    },
+    billed_units: {
+      type: DataTypes.DECIMAL(12, 4),
+      allowNull: true,
+      comment: 'Image rows only: billed quantity of billing_unit (#2387)',
     },
     created_at: {
       type: DataTypes.DATE,

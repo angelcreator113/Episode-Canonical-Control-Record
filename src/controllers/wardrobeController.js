@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const wardrobeImageService = require('../services/wardrobeImageService');
+const { isBudgetError } = require('../services/imageCostService');
 const { applyRemoveBgParams } = require('../services/removeBgParams');
 const { linkEpisodeWardrobe } = require('../services/episodeWardrobeLinks');
 
@@ -1134,7 +1135,8 @@ module.exports = {
    * invisible-mannequin pose — so amateur uploads start to look like the
    * vendor product shots that already exist in the library.
    *
-   * Cost: ~$0.04/call, charged against AI_DAILY_IMAGE_BUDGET_USD.
+   * Cost: fal-ai/flux-pro/kontext in imageCostService.RATE_TABLE, logged to
+   * ai_usage_logs and charged against AI_DAILY_IMAGE_BUDGET_USD (#2387).
    * Stored on a dedicated column pair (s3_key_regenerated / s3_url_regenerated)
    * so the original and background-removed variants are preserved untouched.
    */
@@ -1311,7 +1313,7 @@ module.exports = {
         }
       } catch (_) { /* best-effort status write */ }
 
-      return res.status(500).json({
+      return res.status(isBudgetError(error) ? 429 : 500).json({
         error: 'Failed to regenerate product shot',
         message: error.message,
         detail: status ? { status, body } : undefined,
@@ -1780,7 +1782,7 @@ module.exports = {
       });
     } catch (error) {
       console.error('❌ Error upscaling wardrobe item:', error);
-      res.status(500).json({
+      res.status(isBudgetError(error) ? 429 : 500).json({
         error: 'Failed to upscale image',
         message: error.message,
       });
