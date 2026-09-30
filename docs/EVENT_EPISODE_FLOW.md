@@ -2422,6 +2422,17 @@ of what happens.
 
 > An episode's task list can be approved; approving offers "Design task-list overlay" (cost shown) in the event's visual direction; it becomes an episode overlay placed on the tasks/deadline beat, replacing an earlier one.
 
+**P14's four choices, accepted** (Evoni, 2026-09-30: "I accept P14's four
+choices."). The build (Task #2395) made them without a ruling; they are
+now ruled:
+
+1. The list counts as approved while its content matches what was
+   approved; ticking tasks is not a change.
+2. The overlay type is the show's own task-list type if it has one,
+   otherwise `TodoListOverlay`.
+3. The background is portrait, because beat 9 shows on Lala's Phone.
+4. With no source event, it uses the invitation's default look.
+
 **(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
 only: no code is changed by this entry. The basis is
 `docs/EVENT_TERMS_MONEY_READ.md` (Task #2223, merged as `eeb710af` in
@@ -2944,6 +2955,13 @@ yet built.
 
 > T9. Lala's goal tasks scale with the event: 2–3 for small or low-key events, 4–6 for major ones; no fixed template lists.
 
+**T9 follow-up (Evoni, 2026-09-30).** Recorded verbatim. It answers the
+question the T9 build raised (the Start Episode goals and the Career
+Checklist were each limited separately, so a major event could show up to
+12 of Lala's own tasks):
+
+> The 2–3 / 4–6 limit applies to Lala's combined goal list (Start Episode goals plus Career Checklist); deliverables don't count toward it.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2963,7 +2981,8 @@ yet built.
 - The Reopen terms ruling (2026-09-30) is built after the CQ deploy (Task
   #2378).
 - The invitation ruling (2026-09-30) is built by Task #2375.
-- D12 and T9 (2026-09-30) are built after P10–P12 (Task #2395).
+- D12 and T9 (2026-09-30) are built after P10–P12 (Task #2395); the T9
+  follow-up is built into the T9 PR.
 
 ---
 
