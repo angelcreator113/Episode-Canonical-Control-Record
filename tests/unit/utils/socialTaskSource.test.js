@@ -18,9 +18,10 @@ const DELIVERABLE = { id: 'd-1', description: 'One reel in the coat', deliverabl
 
 describe('buildSocialTasks: no deliverables, nothing required', () => {
   test.each(EVENT_TYPES)('%s, with every platform and niche', (type) => {
-    const lists = [buildSocialTasks(type)];
+    const ctx = { event: { name: 'Gala Night' } };
+    const lists = [buildSocialTasks(type, null, [], ctx)];
     for (const platform of PLATFORMS) {
-      for (const content_category of CATEGORIES) lists.push(buildSocialTasks(type, { platform, content_category }));
+      for (const content_category of CATEGORIES) lists.push(buildSocialTasks(type, { platform, content_category }, [], ctx));
     }
     for (const tasks of lists) {
       expect(tasks.length).toBeGreaterThan(0);
@@ -37,10 +38,11 @@ describe('buildSocialTasks: no deliverables, nothing required', () => {
     expect(src).not.toMatch(/label: 'Sponsored Post/);
   });
 
-  test('a template keeps its goal/optional distinction', () => {
-    const byslot = Object.fromEntries(buildSocialTasks('invite').map((t) => [t.slot, t.task_source]));
-    expect(byslot.grwm).toBe('goal');
-    expect(byslot.go_live).toBe('optional');
+  // T9 (§8(cc); Task #2395) removed the fixed templates: the list is Lala's
+  // goals, written from the event's fields (tests/unit/utils/goalTasks.test.js).
+  test('every generated item is one of Lala\'s goals', () => {
+    const tasks = buildSocialTasks('invite', null, [], { event: { name: 'Gala', prestige: 8, venue_name: 'The Loft' } });
+    expect(tasks.map((t) => t.task_source)).toEqual(tasks.map(() => 'goal'));
   });
 });
 
@@ -106,9 +108,11 @@ describe('the four sources', () => {
   });
 
   test('every item of a list carries one of the four', () => {
-    const tasks = buildSocialTasks('invite', { platform: 'youtube', content_category: 'fashion' }, [], {
+    // T9: generated goals are all 'goal'; the Career Checklist adds the idea.
+    const tasks = withCareerTasks(buildSocialTasks('invite', { platform: 'youtube', content_category: 'fashion' }, [], {
+      event: { name: 'Gala Night' },
       deliverables: [DELIVERABLE, { ...DELIVERABLE, id: 'd-2', owed_to: 'brand' }],
-    });
+    }), [{ slot: 'idea', label: 'Maybe a live', task_source: 'optional' }]);
     for (const t of tasks) expect(TASK_SOURCES).toContain(socialTaskSource(t));
     expect(new Set(tasks.map(socialTaskSource))).toEqual(new Set(TASK_SOURCES));
   });

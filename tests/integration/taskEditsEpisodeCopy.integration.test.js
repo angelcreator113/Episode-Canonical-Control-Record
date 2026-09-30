@@ -135,6 +135,13 @@ const EPISODE_TASKS = [
 
   it('after Start Episode, Regenerate writes the episode\'s copy, keeping completion; the event copy is unchanged', async () => {
     const ids = await seed({ started: true });
+    // T9 (Task #2395): goals are written from the event's own fields, not a
+    // template, so this name-only event regenerates the name goals
+    // ('presence', 'recap'). A completed 'presence' task must carry (T6).
+    await run(`UPDATE episode_todo_lists SET social_tasks = CAST(:tasks AS jsonb) WHERE episode_id = :ep`, {
+      ...ids,
+      tasks: JSON.stringify([{ slot: 'presence', label: 'Post from Gala', timing: 'during', task_source: 'goal', required: false, completed: true }]),
+    });
     const res = await request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/generate-social-checklist`).set(auth()).send({ force: true });
     expect(res.status).toBe(200);
     expect(res.body.data.savedTo).toBe('episode');
@@ -142,7 +149,7 @@ const EPISODE_TASKS = [
 
     const saved = await episodeTasks(ids);
     expect(saved).toEqual(res.body.data.tasks);
-    expect(saved.find((t) => t.slot === 'grwm').completed).toBe(true);
+    expect(saved.find((t) => t.slot === 'presence').completed).toBe(true);
     expect(await eventTasks(ids)).toEqual(EVENT_TASKS);
   });
 });
