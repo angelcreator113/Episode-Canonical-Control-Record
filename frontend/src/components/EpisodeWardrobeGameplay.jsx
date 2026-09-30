@@ -724,7 +724,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · {activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}</div>
               </div>
-              <div style={{ display: 'flex', gap: 3 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {/* Task #2377: the Full Closet and Search offer every category
                     (Bottom even with a dress on, filled slots, and Other); the
                     event pool keeps its open-slot switcher. */}
@@ -906,7 +906,8 @@ const W = {
   eventTag: { padding: '2px 8px', background: 'rgba(194,24,91,0.1)', borderRadius: 5, fontSize: 10, color: '#880e4f' },
   lockedBanner: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: '#f0fdf4', border: '2px solid #bbf7d0', borderRadius: 12, marginBottom: 12 },
   unlockBtn: { marginLeft: 'auto', padding: '6px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#64748b' },
-  mainLayout: { display: 'flex', gap: 16, minHeight: 480 },
+  // flexWrap: at 375px the browse panel drops under the slots (Task #2377).
+  mainLayout: { display: 'flex', flexWrap: 'wrap', gap: 16, minHeight: 480 },
   slotsPanel: { flex: '0 0 250px', display: 'flex', flexDirection: 'column', gap: 6 },
   confidenceCard: { padding: 12, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 2 },
   synergyBar: { height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
@@ -915,8 +916,8 @@ const W = {
   removeBtn: { width: 22, height: 22, borderRadius: '50%', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   miniTier: (tier) => ({ padding: '1px 5px', borderRadius: 3, fontSize: 8, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
   lockBtn: { padding: '11px 18px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
-  browsePanel: { flex: 1, minWidth: 0 },
-  browseHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  browsePanel: { flex: '1 1 280px', minWidth: 0 },
+  browseHeader: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   slotSwitch: { width: 30, height: 30, borderRadius: 7, border: 'none', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   browseGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 },
   browseCard: { padding: 12, borderRadius: 12, background: '#fff', transition: 'all 0.15s' },
