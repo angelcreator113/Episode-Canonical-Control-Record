@@ -65,9 +65,12 @@ const RATE_TABLE = {
     inputImageTokenUsdPerMillion: 10,
     source: `${EVONI_OPENAI_2026_09_30}: high quality 1536x1024 $0.25 per image output, plus input image tokens at $10 per 1M for edits. Used by sceneGenerationService images/edits (generateDallEStill)`,
   },
-  // Task #2396. Output priced per image; the input-image-token rate for
-  // edits is not given yet (null, not 0): runImageCall logs the output price
-  // and warns that the input tokens are unpriced.
+  // Task #2396. The per-image output price ($0.20 at high 1536x1024) is the
+  // pre-call estimate the budget gate uses. After the call, runImageCall
+  // logs the reported output tokens at $32 per 1M in its place, plus input
+  // image tokens at $8 per 1M ($2 for cached ones); with no usage reported,
+  // the per-image estimate is logged. Prompt (text) input tokens have no
+  // rate yet (UNPRICED_NOTES in sceneModelComparisonService).
   // Sizes: 1024x1024, 1536x1024, 1024x1536 (and auto), quality low|medium|high,
   // on /v1/images/generations and /v1/images/edits — per search-result
   // summaries of developers.openai.com (models/gpt-image-1.5, images API
@@ -76,8 +79,10 @@ const RATE_TABLE = {
   'gpt-image-1.5': {
     provider: 'openai', model: 'gpt-image-1.5', unit: 'image', usd: null,
     bySizeQuality: { 'high:1536x1024': 0.20 },
-    inputImageTokenUsdPerMillion: null,
-    source: `Evoni, 2026-09-30 (Task #2396): high quality 1536x1024 $0.20 per image output. Input image tokens for edits: ${PRICE_NEEDED}. Used by sceneGenerationService (base still choice 'gpt-image-1.5', cropAndOutpaint)`,
+    inputImageTokenUsdPerMillion: 8,
+    cachedInputImageTokenUsdPerMillion: 2,
+    outputImageTokenUsdPerMillion: 32,
+    source: `Evoni, 2026-09-30 (Task #2396): high quality 1536x1024 $0.20 per image output (the pre-call estimate). Evoni, 2026-09-30: image input $8 per 1M tokens ($2 cached); output $32 per 1M. Used by sceneGenerationService (base still choice 'gpt-image-1.5', cropAndOutpaint)`,
   },
   // ── Replicate ─────────────────────────────────────────────────────────────
   'meta/sam-2-large': {
@@ -193,6 +198,8 @@ function estimateImageCost({ model, width, height, count = 1, provider = null, q
   return {
     model: rate.model, provider: rate.provider, unit: rate.unit, units, usd, priced, source: rate.source,
     inputImageTokenUsdPerMillion: rate.inputImageTokenUsdPerMillion || null,
+    cachedInputImageTokenUsdPerMillion: rate.cachedInputImageTokenUsdPerMillion || null,
+    outputImageTokenUsdPerMillion: rate.outputImageTokenUsdPerMillion || null,
     // The model bills input image tokens but the table has no rate for them.
     inputImageTokensUnpriced: Object.prototype.hasOwnProperty.call(rate, 'inputImageTokenUsdPerMillion')
       && typeof rate.inputImageTokenUsdPerMillion !== 'number',
@@ -297,9 +304,14 @@ async function assertImageBudget(estimate) {
  */
 async function logImageUsage({
   estimate, routeName, durationMs = null, isError = false, errorType = null, inputTokens = 0, extraUsd = 0,
+  outputTokens = 0, outputUsd = null,
 }) {
   let cost;
-  if (!estimate.priced) {
+  if (!isError && typeof outputUsd === 'number') {
+    // The response reported its output tokens and the model has a per-1M
+    // output rate: that replaces the per-image estimate.
+    cost = Math.round((outputUsd + (extraUsd || 0)) * 1e6) / 1e6;
+  } else if (!estimate.priced) {
     cost = null;
     console.warn(`[ImageCost] no price for ${estimate.model} (${estimate.provider || 'unknown provider'}) — logging cost_usd NULL; price needed (Task #2387)`);
   } else {
@@ -316,7 +328,7 @@ async function logImageUsage({
       route_name: routeName || 'unknown',
       model_name: String(estimate.model || 'unknown').slice(0, 100),
       input_tokens: inputTokens || 0,
-      output_tokens: 0,
+      output_tokens: outputTokens || 0,
       cost_usd: cost,
       duration_ms: durationMs,
       is_error: isError,
@@ -371,8 +383,10 @@ async function runImageCall(plan, fn) {
     throw err;
   }
   const input = inputImageTokenCost(estimate, result, { inputImages: Boolean(plan.inputImages) });
+  const output = outputImageTokenCost(estimate, result);
   const logged = await logImageUsage({
     estimate, routeName, durationMs: Date.now() - startedAt, inputTokens: input.tokens, extraUsd: input.usd,
+    outputTokens: output.tokens, outputUsd: output.usd,
   });
   if (typeof plan.onLogged === 'function') {
     try {
@@ -416,6 +430,27 @@ function inputImageTokenCost(estimate, result, { inputImages = false } = {}) {
     return { tokens, usd: 0, unpriced: true };
   }
   if (!rate || tokens <= 0) return { tokens: 0, usd: 0 };
+  // Cached input tokens (usage.input_tokens_details.cached_tokens) bill at
+  // the cached rate where the table has one. INFERRED: the reported cached
+  // tokens are counted as cached image tokens, at most the image tokens.
+  const cachedRate = estimate.cachedInputImageTokenUsdPerMillion;
+  const cached = cachedRate
+    ? Math.min(tokens, Number(usage.input_tokens_details.cached_tokens) || 0)
+    : 0;
+  return { tokens, cachedTokens: cached, usd: ((tokens - cached) * rate + cached * (cachedRate || 0)) / 1e6 };
+}
+
+/**
+ * The output image tokens a response reports (usage.output_tokens) and their
+ * cost at the model's per-1M output rate. usd is null when the model has no
+ * such rate or the response reports no output tokens; the per-image estimate
+ * is then what is logged.
+ */
+function outputImageTokenCost(estimate, result) {
+  const rate = estimate && estimate.outputImageTokenUsdPerMillion;
+  const usage = result && result.data && result.data.usage;
+  const tokens = Number(usage && usage.output_tokens) || 0;
+  if (!rate || tokens <= 0) return { tokens, usd: null };
   return { tokens, usd: (tokens * rate) / 1e6 };
 }
 
@@ -481,4 +516,5 @@ module.exports = {
   isBudgetError,
   readTodaySpend,
   inputImageTokenCost,
+  outputImageTokenCost,
 };
