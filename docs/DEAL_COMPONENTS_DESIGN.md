@@ -1,6 +1,6 @@
 # Deal components, drafted Terms and real deliverable formats (D13–D15)
 
-**Status:** DESIGN. Nothing here is built. It follows Evoni's rulings D13,
+**Status:** DESIGN, answered by Evoni on 2026-09-30 (§8, §9). Nothing here is built yet. It follows Evoni's rulings D13,
 D14 and D15 (2026-09-30), recorded verbatim in
 `docs/EVENT_EPISODE_FLOW.md` §8(cc). The decisions it proposes are marked
 PROPOSED. Where the rulings leave something open, the numbered questions in
@@ -286,6 +286,7 @@ as she left it, as D12's once-only drafting does for deliverables today.
 | Key | Label | Platform(s) | Quantity means |
 |---|---|---|---|
 | `instagram_reel` | Instagram Reel | instagram | reels |
+| `instagram_post` | Instagram post (single photo; answer 8) | instagram | posts |
 | `tiktok_video` | TikTok video | tiktok | videos |
 | `grwm_video` | GRWM video | tiktok or instagram | videos |
 | `instagram_stories` | Instagram Stories | instagram | stories |
@@ -314,7 +315,7 @@ its task `platform` becomes the real platform instead of the type key.
 |---|---|
 | `reel` | `instagram_reel`, instagram, ×1 |
 | `story_set_3` | `instagram_stories`, instagram, ×3 |
-| `post` | Question 8 (there is no single-image post in D15) |
+| `post` | `instagram_post`, instagram, ×1 (answer 8) |
 | `photo_set` | `carousel_post`, instagram, ×1 |
 | `other` / null | `other`, platform null, ×1 |
 
@@ -331,6 +332,7 @@ nearest 5 with halves rounding up (Question 9):
 | Format | × Reel | T1 | T2 | T3 | T4 | T5 |
 |---|---|---|---|---|---|---|
 | Instagram Reel | 1.0 | 75 | 125 | 225 | 325 | 450 |
+| Instagram post (single photo; answer 8) | 0.5 | 40 | 65 | 115 | 165 | 225 |
 | TikTok video | 1.0 | 75 | 125 | 225 | 325 | 450 |
 | GRWM video | 1.2 | 90 | 150 | 270 | 390 | 540 |
 | Carousel post | 0.6 | 45 | 75 | 135 | 195 | 270 |
@@ -384,39 +386,83 @@ D13's cost drafting never drafts extras into the Terms.
 - **Invitations already composited** keep the old wording. That is harmless,
   but a redesign changes them.
 
-## 8. Questions for Evoni
+## 8. Evoni's answers (2026-09-30)
 
-1. Are the six component keys and the one-to-one backfill mapping in §3.3
-   right? In particular: does `gifted` also mean entry covered, and does a
-   performance booking always include paid content, as today's plan
-   assumes?
-2. Are the derived labels in §3.2 right? For a combination that isn't
-   listed, is "Paid appearance + content + gifted" the style you want?
-3. Entry: when a deal is cash but `entry_covered` is not ticked, is there an
-   entry line at all? If so, who pays it: Lala, or is being paid to come
-   implicitly entry-covered?
-4. Can `partnership_base` be ticked without `paid_for_content`, i.e. a
-   partnership with no content?
-5. Suggested bonus: which deals "usually have one"? Is it partnership and
-   performance, as proposed? And what amounts: slay 20% and pass 10% of the
-   cash total, as proposed, or fixed per tier?
-6. Relationship goals: do they count toward T9's combined limit (2–3 /
-   4–6)? And how many at most per event: one or two, as proposed?
-7. Travel and accommodation: should the Terms draft them? And from what: a
-   distance or venue field that doesn't exist yet, or only by hand?
-8. The existing `post` type is not in D15's list. Should it become a
-   carousel post, a new "Instagram post", or stay as "Other"?
-9. Are the rounding rule (to the nearest 5, halves up) and the v2 anchors in
-   §5.3 approved as listed?
-10. Instagram Stories for N other than 3: a third of the 3-story anchor per
-    story, as proposed? Or a separate per-story anchor?
-11. Link in bio: price per started 7 days (10 days = 2 weeks), as proposed,
-    or pro rata?
-12. GRWM, Go Live and try-on/haul can go on more than one platform. Should
-    the same format on TikTok and Instagram cost the same, as proposed?
-13. When the components change after Evoni has edited some drafted values,
-    should the re-draft only fill what is still Auto-drafted, as proposed?
-    Or ask first?
+Recorded verbatim, numbered as the questions were. They are also recorded
+in `docs/EVENT_EPISODE_FLOW.md` §8(cc). Where an answer changes a PROPOSED
+decision above, §9 says what changes.
+
+1. Components are independent: gifted does not imply entry covered, and a performance booking does not imply paid content. Drafting may pre-tick "entry covered" when gifted is ticked, as a suggestion.
+2. Label style for other combinations: yes, join the parts.
+3. A cash deal without "entry covered" drafts no entry line; only self-funded deals draft an entry Lala pays.
+4. A partnership base can be ticked without paid content (a retainer).
+5. Suggested bonus on partnerships and performance bookings only: slay 20%, pass 10% of the cash total.
+6. Relationship goals count toward T9's limit; at most 2 per event.
+7. Travel and accommodation are drafted only when the event's location data says Lala travels; with no data, none are drafted.
+8. "Post" becomes a new format, "Instagram post" (single photo), at 0.5× the Reel anchor.
+9. Rounding to the nearest 5 and the new anchor table: approved.
+10. Instagram Stories for N slides: the 3-slide anchor ÷ 3 × N, rounded to the nearest 5.
+11. Link in bio is priced per started week.
+12. The same format costs the same on every platform, for now.
+13. Changing components re-drafts only what's still Auto-drafted, without asking.
+
+The questions they answer:
+
+1. Are the six component keys and the backfill mapping in §3.3 right? Does
+   `gifted` also mean entry covered, and does a performance booking always
+   include paid content?
+2. Are the derived labels in §3.2 right, and is joining the parts the style
+   for other combinations?
+3. When a deal is cash but `entry_covered` is not ticked, is there an entry
+   line, and who pays it?
+4. Can `partnership_base` be ticked without `paid_for_content`?
+5. Which deals usually have a suggested bonus, and how much?
+6. Do relationship goals count toward T9's limit, and how many per event?
+7. Should the Terms draft travel and accommodation, and from what?
+8. What does the existing `post` type become?
+9. Are the rounding rule and the v2 anchors approved?
+10. How are Instagram Stories priced for N other than 3?
+11. Is Link in bio priced per started week or pro rata?
+12. Does the same format cost the same on every platform?
+13. Does changing components re-draft only what is still Auto-drafted, or
+    ask first?
+
+## 9. What the answers change
+
+- **Components are independent (1, 4).**
+  - The backfill in §3.3 stands as written: it maps each old type to
+    exactly what that type did.
+  - New deals tick components freely:
+    - a performance booking can be unpaid for content;
+    - a partnership can be a retainer, meaning `partnership_base` alone.
+  - Drafting may pre-tick `entry_covered` when `gifted_items` is ticked,
+    as an Auto-drafted suggestion.
+  - `dealLabel`: `partnership_base` alone reads "Brand partnership
+    (retainer)" (INFERRED wording); `performance_fee` alone reads
+    "Performance booking".
+- **Entry (3).** An entry line is drafted only for a deal with no
+  components (self-funded), paid by Lala. `entry_covered` drafts the line
+  comped by the host. Any cash deal without `entry_covered` drafts none.
+- **Bonus (5).**
+  - A bonus is suggested only when `partnership_base` or `performance_fee`
+    is ticked.
+  - The amounts are slay 20% and pass 10% of the cash total, rounded to
+    the nearest 5; there is no safe bonus.
+  - "Cash total" (INFERRED) is the component fees plus the paid
+    deliverables' fees.
+- **Relationship goals (6).** At most 2 per event. They count toward T9's
+  combined limit, as Lala's own goals.
+- **Travel (7).** Travel and accommodation are drafted only when the
+  event's location data says Lala travels. Where that data lives, and what
+  "says Lala travels" means, is read from the code when D13 is built. With
+  no data, nothing is drafted.
+- **Formats (8, 10, 11, 12).**
+  - Add `instagram_post` (single photo, instagram) at 0.5× the Reel
+    anchor: 40/65/115/165/225. `post` migrates to it.
+  - Stories cost the 3-slide anchor ÷ 3 × N, rounded to the nearest 5.
+  - Link in bio is priced per started week.
+  - Platform does not change the price.
+- **Re-drafting (13)** is automatic, and touches only Auto-drafted values.
 
 ## What this note does not do
 

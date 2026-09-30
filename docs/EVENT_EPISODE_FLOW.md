@@ -2993,6 +2993,33 @@ the D series of §8(x). Not yet built; to be designed first, in
 
 > D15. Deliverables use real influencer formats, each with a platform and quantity and a plain one-line description: Instagram Reel, TikTok video, GRWM video, Instagram Stories (×N), carousel post, Go Live, link in bio (days), try-on/haul video, content for the brand (UGC). Labels read naturally ("1 TikTok GRWM, 3 Instagram Stories"); "Story Set (3)" is renamed "Instagram Stories (×3)". Rate anchors for the new formats start as proportions of the Reel anchor for my approval: TikTok 1.0×, GRWM 1.2×, carousel 0.6×, Go Live 1.5×, try-on/haul 1.0×, UGC 0.8× (usage priced on top), link in bio 0.3× per 7 days. The Tasks list uses the same format names.
 
+**Answers on D12, the costs and the D13–D15 design (Evoni, 2026-09-30).**
+Recorded verbatim.
+
+> D12's six choices: accepted as built (D13–D15 supersede the drafting).
+
+> glam and styling stay terms costs.
+
+> The extras migration plan for the cost split: accepted as proposed.
+
+The answers to the 13 questions of `docs/DEAL_COMPONENTS_DESIGN.md`,
+verbatim (the note's §8 lists the questions and §9 what each answer
+changes):
+
+> 1. Components are independent: gifted does not imply entry covered, and a performance booking does not imply paid content. Drafting may pre-tick "entry covered" when gifted is ticked, as a suggestion.
+> 2. Label style for other combinations: yes, join the parts.
+> 3. A cash deal without "entry covered" drafts no entry line; only self-funded deals draft an entry Lala pays.
+> 4. A partnership base can be ticked without paid content (a retainer).
+> 5. Suggested bonus on partnerships and performance bookings only: slay 20%, pass 10% of the cash total.
+> 6. Relationship goals count toward T9's limit; at most 2 per event.
+> 7. Travel and accommodation are drafted only when the event's location data says Lala travels; with no data, none are drafted.
+> 8. "Post" becomes a new format, "Instagram post" (single photo), at 0.5× the Reel anchor.
+> 9. Rounding to the nearest 5 and the new anchor table: approved.
+> 10. Instagram Stories for N slides: the 3-slide anchor ÷ 3 × N, rounded to the nearest 5.
+> 11. Link in bio is priced per started week.
+> 12. The same format costs the same on every platform, for now.
+> 13. Changing components re-drafts only what's still Auto-drafted, without asking.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -3016,8 +3043,8 @@ the D series of §8(x). Not yet built; to be designed first, in
   follow-up is built into the T9 PR.
 - The event cost split (2026-09-30) is built after the D12/T9/P14 batch.
 - D13, D14 and D15 (2026-09-30) are designed in
-  `docs/DEAL_COMPONENTS_DESIGN.md` and wait on Evoni's answers to its
-  questions before they are built.
+  `docs/DEAL_COMPONENTS_DESIGN.md`, answered the same day, and built in
+  its order (the event cost split before D13's drafting).
 
 ---
 
