@@ -10,8 +10,6 @@ ActivityLog	resource_type	missing-column
 ActivityLog	user_agent	missing-column
 ActivityLog	user_id	missing-column
 Asset	processing_metadata	missing-column
-Asset	processing_status	missing-column
-Asset	s3_key_processed	missing-column
 Asset	s3_url_enhanced	missing-column
 Asset	s3_url_no_bg	missing-column
 AssetLabel	-	no-table
@@ -70,7 +68,6 @@ SceneAngle	quality_score	missing-column
 SceneAngle	refined_prompt	missing-column
 SceneLayerConfiguration	-	no-table
 SceneLibrary	deleted_at	paranoid-no-deleted_at
-SceneSet	base_still_url	missing-column
 SceneTemplate	-	no-table
 SceneTemplate	deleted_at	canon-missing-column
 ScriptEditHistory	-	no-table
