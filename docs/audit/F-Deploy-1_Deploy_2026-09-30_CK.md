@@ -56,11 +56,24 @@ record.
    - CFO 11:26:37–11:26:40: **89/100**, **0 critical**, 4 warnings, "the
      first audit with no critical".
 
-**Real email test: not supplied.** Evoni's message carried "Real email
-test: [a notification arrived by Gmail / not yet sent]" with both options
-still in brackets. No choice was made, so this record claims neither. The
-nodemailer PR (#2339) asked for one real send after this deploy; that check
-is still open.
+**Real email test: failed (ATTESTED, supplied later).** Evoni's CK
+message carried "Real email test: [a notification arrived by Gmail / not
+yet sent]" with both options still in brackets. She ran the send later the
+same day, after Deploy CM (`F-Deploy-1_Deploy_2026-09-30_CM.md` §0), and it
+failed:
+
+> "534-5.7.9 Application-specific password required"
+
+- **ATTESTED (Evoni):** the failure is "pre-existing, not caused by
+  nodemailer 10". The Gmail account's password changed on 30 June, which
+  revokes its app passwords.
+- **INFERRED:** `534-5.7.9` is Gmail refusing the login itself, before any
+  message is built, so it does not depend on the nodemailer version.
+- **RULED, parked (Evoni, 2026-09-30):** "app emails need a Google app
+  password in .env; not wanted for now." The owed item is carried in the
+  CM record (§9) and `PROJECT_CONTEXT.md` §6.5.
+
+The one real send #2339 asked for was made, and it failed on credentials.
 
 **The order was right.** `npm ci` ran before the restart, as the PR asked,
 unlike CI's first restart (CI record §4).
@@ -240,7 +253,9 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
 - **Deploy:** manual: backup, fast-forward, `npm ci`, then one restart
   (count 40). `/health` healthy and connected.
 - **CFO:** 89/100, **0 critical**, 4 warnings; `dependency_audit` 0.
-- **Real email test:** not supplied; the check #2339 asked for is open.
+- **Real email test:** failed, "534-5.7.9 Application-specific password
+  required" (ATTESTED, run after CM); pre-existing per Evoni. The app
+  password is an owed item, parked by Evoni (§0).
 - Nothing is RULED here. The filing session made no host, AWS, database or
   Cognito contact.
 
