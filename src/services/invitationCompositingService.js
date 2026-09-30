@@ -812,6 +812,16 @@ async function compositeInvitationPDF(backgroundBuffer, event, { costs = null, d
   return final;
 }
 
+/**
+ * The font families checkFonts resolved (the invitation's luxury fonts, the
+ * system serif fallback, or Canvas's built-in serif), so other text layers
+ * composited onto an episode's images (the task-list overlay, P14, Task
+ * #2395) set type the way the invitation does. Call after checkFonts().
+ */
+function fontFamilies() {
+  return { header: HEADER_FONT, body: BODY_FONT };
+}
+
 module.exports = {
   compositeInvitation,
   compositeInvitationPDF,
@@ -819,4 +829,6 @@ module.exports = {
   describeInvitationMoney,
   detectTheme,
   checkFonts,
+  fontFamilies,
+  wrapText,
 };

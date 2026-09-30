@@ -37,7 +37,8 @@
  */
 
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
-const { placeOverlayOnFirstScene, normalizeOverlayKey } = require('./timelinePlacementService');
+const { normalizeOverlayKey } = require('./timelinePlacementService');
+const { findEpisodeBeat, placeOverlayOnBeat } = require('./episodeBeatPlacement');
 
 const INVITATION_SCREEN_ACTION = 'OPEN_LETTER_INVITE_OVERLAY';
 const INVITATION_BEAT = CANONICAL_BEATS.find((b) => b.screen_action === INVITATION_SCREEN_ACTION) || null;
@@ -76,68 +77,29 @@ async function resolveInvitationOverlayKey(sequelize, showId) {
 
 /** The episode's invitation beat (scene_plans row), or null. */
 async function findInvitationBeat(sequelize, episodeId) {
-  if (!INVITATION_BEAT || !episodeId) return null;
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT id, beat_number, beat_name FROM scene_plans
-        WHERE episode_id = :episodeId AND beat_number = :beatNumber AND deleted_at IS NULL
-        ORDER BY sort_order ASC, created_at ASC
-        LIMIT 1`,
-      { replacements: { episodeId, beatNumber: INVITATION_BEAT.number } }
-    );
-    return rows?.[0] || null;
-  } catch (err) {
-    console.warn('[episodeInvitationOverlay] invitation beat lookup failed:', err.message);
-    return null;
-  }
+  return findEpisodeBeat(sequelize, episodeId, INVITATION_BEAT, '[episodeInvitationOverlay]');
 }
 
 /**
  * Place (or move) the invitation on the episode's invitation beat; first
  * scene only when the episode has no invitation beat. Idempotent: one
  * placement per (episode, asset) — placeOverlayOnFirstScene's guard — and
- * an existing placement not yet on the beat is moved onto it.
+ * an existing placement not yet on the beat is moved onto it. The rule is
+ * episodeBeatPlacement.placeOverlayOnBeat's, shared with the task-list
+ * overlay (P14, Task #2395).
  */
 async function placeInvitationOnBeat(models, { episodeId, assetId }) {
-  if (!models?.TimelinePlacement || !episodeId || !assetId) return { placement: null, anchor: null, beat: null };
-  const beat = await findInvitationBeat(models.sequelize, episodeId);
-  const base = { kind: 'invitation', source: 'episode-invitation-overlay' };
-  let defaults;
-  if (beat) {
-    defaults = {
-      sceneId: null,
-      duration: 5,
-      zIndex: 20,
-      label: `Invitation — Beat ${beat.beat_number}: ${beat.beat_name || INVITATION_BEAT.name}`,
-      properties: {
-        ...base,
-        anchor: 'beat',
-        beat_number: beat.beat_number,
-        beat_name: beat.beat_name || INVITATION_BEAT.name,
-        scene_plan_id: beat.id,
-        screen_action: INVITATION_SCREEN_ACTION,
-      },
-    };
-  } else {
-    defaults = { duration: 5, zIndex: 20, properties: { ...base, anchor: 'first-scene' } };
-  }
-
-  let placement = await placeOverlayOnFirstScene(models, { episodeId, assetId, defaults });
-  if (placement && beat) {
-    const props = placement.properties || {};
-    if (props.anchor !== 'beat' || props.beat_number !== beat.beat_number || props.scene_plan_id !== beat.id) {
-      try {
-        placement = await placement.update({
-          scene_id: null,
-          label: defaults.label,
-          properties: { ...props, ...defaults.properties },
-        });
-      } catch (err) {
-        console.warn('[episodeInvitationOverlay] moving placement onto the invitation beat failed:', err.message);
-      }
-    }
-  }
-  return { placement, anchor: beat ? 'beat' : 'first-scene', beat };
+  return placeOverlayOnBeat(models, {
+    episodeId,
+    assetId,
+    canonicalBeat: INVITATION_BEAT,
+    label: 'Invitation',
+    kind: 'invitation',
+    source: 'episode-invitation-overlay',
+    duration: 5,
+    zIndex: 20,
+    logTag: '[episodeInvitationOverlay]',
+  });
 }
 
 /**
