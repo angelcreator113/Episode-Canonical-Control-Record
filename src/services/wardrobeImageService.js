@@ -350,38 +350,51 @@ async function addDropShadow(inputBuffer, options = {}) {
   const newWidth = inputMeta.width + padding * 2;
   const newHeight = inputMeta.height + padding * 2;
 
-  // Extract alpha channel to create shadow mask
-  const alphaBuffer = await sharp(inputBuffer)
-    .extractChannel(3)
-    .toBuffer();
+  // Task #2334: the shadow layer must be exactly newWidth × newHeight, or
+  // the final composite fails ("Image to composite must have same dimensions
+  // or smaller"). It used to be extended by 2 × padding and then also resized,
+  // and composited as a one-channel image with no alpha.
+  //
+  // The mask is the item's alpha placed on the padded canvas at the shadow
+  // offset. Extend adds exactly padding on each side in total, so no resize
+  // is needed. It is blurred on the canvas, so the blur can spread past the
+  // item's edge. An offset larger than the padding is clamped to it (a
+  // negative extend is refused).
+  const clampOffset = (v) => Math.max(-padding, Math.min(padding, Math.round(Number(v) || 0)));
+  const offsetX = clampOffset(shadowOffsetX);
+  const offsetY = clampOffset(shadowOffsetY);
+  const opacity = Math.max(0, Math.min(1, Number(shadowOpacity)));
+  const blurSigma = Number(shadowBlur);
 
-  // Create shadow: blur the alpha, tint black, reduce opacity
-  const shadowBuffer = await sharp(alphaBuffer)
-    .blur(shadowBlur)
+  // The alpha is written out on its own first: in a single sharp pipeline
+  // extend runs before extractChannel, so the padding would take the extend
+  // background's alpha (opaque) instead of 0.
+  const alphaOnly = await sharp(inputBuffer).extractChannel(3).png().toBuffer();
+  let maskPipeline = sharp(alphaOnly)
     .extend({
-      top: padding + shadowOffsetY,
-      bottom: padding - shadowOffsetY,
-      left: padding + shadowOffsetX,
-      right: padding - shadowOffsetX,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .resize(newWidth, newHeight, { fit: 'fill' })
+      top: padding + offsetY,
+      bottom: padding - offsetY,
+      left: padding + offsetX,
+      right: padding - offsetX,
+      background: { r: 0, g: 0, b: 0 },
+    });
+  if (blurSigma >= 0.3) maskPipeline = maskPipeline.blur(blurSigma);
+  const shadowMask = await sharp(await maskPipeline.png().toBuffer())
+    .linear(Number.isFinite(opacity) ? opacity : 0.25, 0)
     .toColourspace('b-w')
+    .png()
     .toBuffer();
 
-  // Create the shadow layer (black with variable opacity from alpha)
+  // The shadow layer: black, with the scaled mask as its alpha.
   const shadowLayer = await sharp({
     create: {
       width: newWidth,
       height: newHeight,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: shadowOpacity },
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
     },
   })
-    .composite([{
-      input: shadowBuffer,
-      blend: 'dest-in',
-    }])
+    .joinChannel(shadowMask)
     .png()
     .toBuffer();
 
