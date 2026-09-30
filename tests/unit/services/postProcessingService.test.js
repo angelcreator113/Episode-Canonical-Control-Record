@@ -139,10 +139,11 @@ describe('PostProcessingService', () => {
     it('should apply sharpening with default parameters', async () => {
       await sharpEnhanceStill(imageUrl);
 
+      // sharp reads m1/m2; flat/jagged were silently ignored (Task #2333).
       expect(mockSharpInstance.sharpen).toHaveBeenCalledWith({
         sigma: 1.2,
-        flat: 1.0,
-        jagged: 0.8,
+        m1: 1.0,
+        m2: 0.8,
       });
     });
 
@@ -161,8 +162,8 @@ describe('PostProcessingService', () => {
       expect(mockSharpInstance.resize).toHaveBeenCalledWith(3840, 2160, expect.any(Object));
       expect(mockSharpInstance.sharpen).toHaveBeenCalledWith({
         sigma: 2.0,
-        flat: 1.5,
-        jagged: 1.0,
+        m1: 1.5,
+        m2: 1.0,
       });
       expect(mockSharpInstance.jpeg).toHaveBeenCalledWith({
         quality: 90,
