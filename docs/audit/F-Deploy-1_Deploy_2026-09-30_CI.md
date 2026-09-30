@@ -1,3 +1,16 @@
+> **BANNER 1 — APP CHECK SUPPLIED (added 2026-09-30, after `6de09fe0`,
+> additive).**
+>
+> This record's body is preserved exactly as merged at `6de09fe0` (#2343) and
+> is not edited. Its "App check: not supplied" (§0, §Standing) is answered
+> here.
+>
+> **ATTESTED.** Evoni, 2026-09-30: "CI app check: I processed an image and it
+> looked normal."
+>
+> The check ran after the deploy, on sharp 0.35.5 (§0 step 4). It does not
+> say which image or which processing path was used.
+
 | **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CI, 2026-09-30, backend only, a dependency change (sharp 0.34.5 → 0.35.5), no migration, two restarts. Evoni ran it herself, outside any agent session, as a manual deploy because the range changed `package.json` and `package-lock.json`. The first restart ran before `npm ci`, so for about two minutes the new code ran on the old sharp; the one changed call behaves the same on both. The CFO's `dependency_audit` count falls from 2 to 1.* |
 | --- |
 

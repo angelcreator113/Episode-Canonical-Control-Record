@@ -3374,17 +3374,19 @@ router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
 
     // Load wardrobe items
     const [items] = await models.sequelize.query(
-      `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
+      `SELECT id, name, clothing_category, brand, tier, price, coin_cost, color, is_owned,
               acquisition_type, aesthetic_tags, event_types, occasion, season, era_alignment,
               s3_url, s3_url_processed, times_worn, last_worn_date
        FROM wardrobe WHERE id IN (:ids) AND deleted_at IS NULL`,
       { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'] } }
     );
 
-    // Build outfit pieces snapshot
+    // Build outfit pieces snapshot. coin_cost is the story price Finalize
+    // charges, as select, purchase and lock do (Task #2346); price is the
+    // real-world price, kept for display.
     const outfitPieces = items.map(i => ({
       id: i.id, name: i.name, category: i.clothing_category, brand: i.brand,
-      tier: i.tier, price: parseFloat(i.price) || 0, color: i.color,
+      tier: i.tier, price: parseFloat(i.price) || 0, coin_cost: Number(i.coin_cost) || 0, color: i.color,
       is_owned: i.is_owned, acquisition_type: i.acquisition_type,
       image_url: i.s3_url_processed || i.s3_url,
     }));
