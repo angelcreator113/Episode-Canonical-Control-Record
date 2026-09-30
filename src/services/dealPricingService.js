@@ -154,6 +154,84 @@ function applyPremiums(base, choices, card, label) {
 
 const hasChoices = (list) => Array.isArray(list) && list.length > 0;
 
+// ─── Drafted deliverables (ruling D12, Evoni, 2026-09-30; Task #2395) ────
+// "Propose terms drafts deliverables from the deal type, scaled to the job:
+// comped/invited/gifted none required; paid appearance attendance only,
+// optionally one Story set; paid deliverables 1–3 pieces, more at higher
+// tiers or fees; brand partnership a package (Reel + Story set, a Post at
+// higher tiers). Auto-drafted, editable, priced from the rate anchors."
+//
+// The mapping, by the event's career tier (1 Emerging, 2 Rising,
+// 3 Established, 4 Influential, 5 Elite). The tier is the signal: before
+// the draft a deliverables deal has no fee of its own to scale by.
+//   self_funded, invited_comped, gifted     none
+//   paid_appearance                         Story Set (3), optional (every tier)
+//   paid_deliverables                       T1–2 Reel; T3 Reel + Story Set;
+//                                           T4–5 Reel + Story Set + Post
+//   appearance_plus_deliverables,           one piece fewer than paid
+//   performance_booking                     deliverables, at least one:
+//                                           T1–3 Reel; T4–5 Reel + Story Set
+//   brand_partnership                       Reel + Story Set; T4–5 add a Post
+// INFERRED (D12 does not say): the tier cut-offs; the optional Story Set as
+// required: false; the two deal types D12 does not name; "higher tiers"
+// read as Influential and Elite for both the Post and the third piece.
+const DRAFTED_DELIVERABLES_SOURCE = 'deal';
+
+/** D12's mapping: [{ type, required? }] for a deal type at a tier. Pure. */
+function draftedDeliverableTypes(dealType, tier) {
+  const t = tierOf(tier);
+  switch (dealType) {
+    case 'paid_appearance':
+      return [{ type: 'story_set_3', required: false }];
+    case 'paid_deliverables':
+      if (t <= 2) return [{ type: 'reel' }];
+      if (t === 3) return [{ type: 'reel' }, { type: 'story_set_3' }];
+      return [{ type: 'reel' }, { type: 'story_set_3' }, { type: 'post' }];
+    case 'appearance_plus_deliverables':
+    case 'performance_booking':
+      return t <= 3 ? [{ type: 'reel' }] : [{ type: 'reel' }, { type: 'story_set_3' }];
+    case 'brand_partnership':
+      return t <= 3
+        ? [{ type: 'reel' }, { type: 'story_set_3' }]
+        : [{ type: 'reel' }, { type: 'story_set_3' }, { type: 'post' }];
+    default:
+      return [];
+  }
+}
+
+/**
+ * D12: the deliverables Propose terms drafts for a deal. Pure.
+ *   event: { deal_type, career_tier }
+ *   tier:  overrides event.career_tier
+ *   card:  the rate card (loadRateCard); without one no fee is drafted.
+ * Returns [{ deliverable_type, description, required, owed_to, fee }]. The
+ * fee is the anchor at the tier for Reel and Story Set (3) on a deal that
+ * pays its deliverables (rulings 2 and 4); null otherwise: "Price required"
+ * for a Post (priced by hand, ruling 2), and no fee at all on a paid
+ * appearance, which does not pay deliverables. owed_to is the brand on a
+ * brand partnership and the host otherwise (the hand-entry default), so a
+ * draft never re-drafts an Auto-drafted deal type (dealTypeDraftService's
+ * rule 2 reads brand-owed deliverables).
+ */
+function draftDeliverablesForDeal(event, { tier, card } = {}) {
+  const dealType = event?.deal_type;
+  const plan = DEAL_PLANS[dealType];
+  if (!plan) return [];
+  const t = tierOf(tier ?? event?.career_tier);
+  const owedTo = dealType === 'brand_partnership' ? 'brand' : 'host';
+  return draftedDeliverableTypes(dealType, t).map(({ type, required = true }) => {
+    const component = DELIVERABLE_ANCHORS[type] || null;
+    const anchor = plan.deliverables && component ? card?.anchors?.[component]?.[t] : null;
+    return {
+      deliverable_type: type,
+      description: DELIVERABLE_TYPE_LABELS[type],
+      required,
+      owed_to: owedTo,
+      fee: anchor == null ? null : anchor,
+    };
+  });
+}
+
 /**
  * The proposal for one event.
  *   event:        { deal_type, career_tier, appearance_required }
@@ -290,6 +368,7 @@ function dealPriceRequiredBody(err) {
 
 module.exports = {
   PRICING_SOURCE,
+  DRAFTED_DELIVERABLES_SOURCE,
   EVENT_COMPONENTS,
   DEAL_PLANS,
   DELIVERABLE_ANCHORS,
@@ -299,6 +378,8 @@ module.exports = {
   rateCardFrom,
   loadRateCard,
   proposeTerms,
+  draftedDeliverableTypes,
+  draftDeliverablesForDeal,
   missingPrices,
   findMissingPrices,
   dealPriceRequiredError,

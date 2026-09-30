@@ -440,6 +440,27 @@ export function describeDeliverableFee(event, d) {
   return { value, label, note: pricingNote(event, drafted, value), priceRequired };
 }
 
+// Ruling D12 (Evoni, 2026-09-30; Task #2395): Propose terms drafts the deal's
+// deliverables once, scaled to the job, and records each row in
+// automation.drafted_values.deliverables ({ <id>: { type, fee, description,
+// required } }) with auto_drafted.deliverables = 'deal'. A drafted row reads
+// "Auto-drafted · from deal" (doctrine rule 14) until its type, fee,
+// description or required changes, then Edited; a row never drafted, null.
+export const DELIVERABLE_DRAFT_SOURCE = 'deal';
+
+export function deliverableDraftNote(event, d) {
+  const automation = event?.canon_consequences?.automation || {};
+  if (automation.auto_drafted?.deliverables !== DELIVERABLE_DRAFT_SOURCE) return null;
+  const record = automation.drafted_values?.deliverables?.[d?.id];
+  if (!record) return null;
+  const sameFee = record.fee == null ? d.fee == null : d.fee != null && Number(record.fee) === Number(d.fee);
+  const same = (record.type ?? null) === (d.deliverable_type ?? null)
+    && sameFee
+    && (record.description ?? '') === (d.description ?? '')
+    && (record.required !== false) === (d.required !== false);
+  return same ? 'Auto-drafted · from deal' : 'Edited';
+}
+
 /** Mirror of dealPricingService.missingPrices: what Start Episode waits on, as labels. */
 export function missingPriceLabels(event, deliverables = []) {
   const plan = dealPlanFor(event);

@@ -14,7 +14,15 @@
  *     pricing_version;
  *   - event_deliverables.fee for each Reel and Story Set (3) (ruling 2);
  *   - the event's extras as event_costs rows, once, while it has none (deal
- *     build PR 4, Task #2365).
+ *     build PR 4, Task #2365);
+ *   - the deal's deliverables, scaled to the job (ruling D12, Task #2395;
+ *     dealPricingService.draftDeliverablesForDeal), once: only while the
+ *     event has no live deliverable and none were ever drafted, so a
+ *     proposal never re-adds a row Evoni deleted. Each drafted row is
+ *     recorded in automation.drafted_values.deliverables
+ *     ({ <id>: { type, fee, description, required } }) with
+ *     automation.auto_drafted.deliverables = 'deal', and reads
+ *     "Auto-drafted · from deal" until Evoni edits it.
  * A line with no automatic price (Post, Photo Set, Other, untyped, or an
  * anchor not offered at the tier) keeps whatever number it has and reads
  * "Price required" until Evoni sets one (ruling 6).
@@ -37,9 +45,11 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
-const { listEventDeliverables } = require('../services/eventTermsService');
+const { listEventDeliverables, insertDeliverableRow } = require('../services/eventTermsService');
 const { findTermsWriteLock, termsLockedBody } = require('../utils/eventTermsLock');
-const { loadRateCard, proposeTerms, PRICING_SOURCE, EVENT_COMPONENTS } = require('../services/dealPricingService');
+const {
+  loadRateCard, proposeTerms, draftDeliverablesForDeal, PRICING_SOURCE, DRAFTED_DELIVERABLES_SOURCE, EVENT_COMPONENTS,
+} = require('../services/dealPricingService');
 const { listEventCosts, draftExtrasCosts } = require('../services/eventCostsService');
 
 async function getModels() {
@@ -88,7 +98,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
     const premiums = req.body && typeof req.body.premiums === 'object' && req.body.premiums ? req.body.premiums : {};
 
     const [rows] = await sequelize.query(
-      `SELECT id, deal_type, career_tier, appearance_required FROM world_events
+      `SELECT id, deal_type, career_tier, appearance_required, canon_consequences FROM world_events
         WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { eventId, showId } }
     );
@@ -100,7 +110,16 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
 
     const deliverables = await listEventDeliverables(sequelize, eventId);
     const card = await loadRateCard(sequelize);
-    const proposal = proposeTerms({ event, deliverables, premiums, card });
+
+    // D12: the deal's deliverables, drafted once (see the header). Each
+    // draft is proposed under a stand-in id, so the proposal prices it and
+    // names its gaps; the stand-in becomes the row's id once it is written.
+    const draftsEverRecorded = (cc) => Boolean(cc?.automation?.auto_drafted?.deliverables);
+    const drafts = deliverables.length === 0 && !draftsEverRecorded(parseJson(event.canon_consequences, {}))
+      ? draftDeliverablesForDeal(event, { card }).map((d, i) => ({ ...d, id: `draft-${i}` }))
+      : [];
+
+    const proposal = proposeTerms({ event, deliverables: [...deliverables, ...drafts], premiums, card });
     if (!proposal.ok) return res.status(400).json({ success: false, error: proposal.error, errors: proposal.errors || [] });
 
     const pricedFees = Object.fromEntries(
@@ -116,6 +135,34 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
       const automation = cc.automation || {};
       const autoDrafted = { ...(automation.auto_drafted || {}) };
       const draftedValues = { ...(automation.drafted_values || {}) };
+
+      // Written under the row lock, and only if a concurrent write has not
+      // added a deliverable or a draft since the check above.
+      const idOfDraft = {};
+      if (drafts.length && !draftsEverRecorded(cc)
+        && (await listEventDeliverables(sequelize, eventId, { transaction })).length === 0) {
+        const recorded = { ...(draftedValues.deliverables || {}) };
+        for (const d of drafts) {
+          const fee = pricedFees[d.id] ?? null;
+          const row = await insertDeliverableRow(sequelize, eventId, { ...d, fee }, { transaction });
+          if (!row) continue;
+          idOfDraft[d.id] = row.id;
+          recorded[row.id] = { type: d.deliverable_type, fee, description: d.description, required: d.required };
+        }
+        if (Object.keys(idOfDraft).length) {
+          autoDrafted.deliverables = DRAFTED_DELIVERABLES_SOURCE;
+          draftedValues.deliverables = recorded;
+        }
+      }
+      // A stand-in that was not written is dropped; the rest take their ids.
+      for (const id of Object.keys(pricedFees)) {
+        if (!id.startsWith('draft-')) continue;
+        if (idOfDraft[id]) pricedFees[idOfDraft[id]] = pricedFees[id];
+        delete pricedFees[id];
+      }
+      proposal.deliverables = proposal.deliverables
+        .filter((l) => !String(l.id).startsWith('draft-') || idOfDraft[l.id])
+        .map((l) => (idOfDraft[l.id] ? { ...l, id: idOfDraft[l.id] } : l));
       const pricedComponents = Object.values(proposal.components).filter((c) => c.fee != null);
       for (const c of pricedComponents) {
         autoDrafted[c.field] = PRICING_SOURCE;

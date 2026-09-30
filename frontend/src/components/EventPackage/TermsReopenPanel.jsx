@@ -138,6 +138,10 @@ export default function TermsReopenPanel({
         </div>
       )}
 
+      {locked && !reopen && !eligibility && (
+        <p className="epp-reopen-why" data-testid="terms-reopen-checking">Checking whether these terms can be reopened…</p>
+      )}
+
       {locked && !reopen && eligibility && (
         eligibility.eligible ? (
           <div className="epp-reopen-row">
