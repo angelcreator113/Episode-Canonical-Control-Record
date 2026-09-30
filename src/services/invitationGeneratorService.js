@@ -21,6 +21,23 @@ const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const { detectTheme, buildInvitationContent, compositeInvitation, compositeInvitationPDF } = require('./invitationCompositingService');
+const { isDealEvent, listEventCosts } = require('./eventCostsService');
+
+/**
+ * A deal event's event_costs rows, so the invitation's money line can name
+ * the entry Lala pays (self_funded) or the host comps (invited_comped)
+ * (Task #2375). Legacy events, or a failed read, return null and the
+ * builder falls back to cost_coins.
+ */
+async function loadInvitationCosts(sequelize, event) {
+  if (!isDealEvent(event)) return null;
+  try {
+    return await listEventCosts(sequelize, event.id);
+  } catch (err) {
+    console.error('[InviteGen] event_costs read failed, invitation falls back to cost_coins:', err.message);
+    return null;
+  }
+}
 
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -314,7 +331,8 @@ async function generateInvitation(eventId, models, showId) {
   // Step 1: Claude writes the invitation prose (formal, elegant, personal)
   let invitationText = null;
   try {
-    invitationText = await buildInvitationContent(event);
+    const costs = await loadInvitationCosts(sequelize, event);
+    invitationText = await buildInvitationContent(event, { costs });
     console.log(`[InviteGen] Claude wrote prose: ${invitationText.opening?.slice(0, 50)}...`);
   } catch (proseErr) {
     console.warn('[InviteGen] Claude prose failed, using structured fallback:', proseErr.message);
@@ -449,7 +467,8 @@ async function exportInvitationPDF(eventId, models) {
   const bgBuffer = Buffer.from(response.data);
 
   // Re-composite at full quality for print
-  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event);
+  const costs = await loadInvitationCosts(sequelize, event);
+  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event, { costs });
   if (!pdfBuffer) throw new Error('Fonts not available for PDF export');
 
   return pdfBuffer;
