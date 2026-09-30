@@ -149,6 +149,34 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
   return rows.length;
 }
 
+/**
+ * Inserts one deliverable row, pending, with its fee, and returns it. For
+ * the drafts Propose terms writes (D12, Task #2395); runs in the caller's
+ * transaction. clock_timestamp, not NOW(): NOW() is fixed for the
+ * transaction, and the rows list in the order they were drafted.
+ */
+async function insertDeliverableRow(sequelize, eventId, row, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at)
+     VALUES (:id, :eventId, :description, :type, :due, :required, :owed, :fee, 'pending', clock_timestamp(), clock_timestamp())
+     RETURNING id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at`,
+    {
+      replacements: {
+        id: uuidv4(),
+        eventId,
+        description: String(row.description || '').slice(0, DESCRIPTION_MAX),
+        type: row.deliverable_type || null,
+        due: row.due_date || null,
+        required: row.required !== false,
+        owed: DELIVERABLE_OWED_TO.includes(row.owed_to) ? row.owed_to : 'host',
+        fee: row.fee ?? null,
+      },
+      transaction,
+    }
+  );
+  return rows?.[0] || null;
+}
+
 /** The event's live deliverables, oldest first. */
 async function listEventDeliverables(sequelize, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
@@ -281,6 +309,7 @@ module.exports = {
   restrictionsFromOpportunity,
   compensationFromOpportunity,
   insertEventDeliverables,
+  insertDeliverableRow,
   listEventDeliverables,
   stampDeliverablesEpisode,
   buildTermsSnapshot,

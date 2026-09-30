@@ -9,7 +9,7 @@ import {
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
   describeComponentFee, describeGiftedValue, describeDeliverableFee, premiumChoicesFrom, buildProposeBody,
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor, dealPlanFor,
-  missingPriceLabels, buildComponentFeeUpdate,
+  missingPriceLabels, buildComponentFeeUpdate, deliverableDraftNote,
 } from './eventTerms';
 
 describe('access requirements', () => {
@@ -280,5 +280,36 @@ describe('pricing (Task #2341)', () => {
       deliverables: { d1: [{ kind: 'exclusivity', key: '30d' }] },
     } });
     expect(buildProposeBody(undefined)).toEqual({ premiums: { deliverables: {} } });
+  });
+});
+
+describe('drafted deliverables (D12, Task #2395)', () => {
+  const record = { type: 'reel', fee: 125, description: 'Reel', required: true };
+  const post = { type: 'post', fee: null, description: 'Post', required: true };
+  const ev = (auto = 'deal') => ({
+    deal_type: 'brand_partnership',
+    canon_consequences: { automation: { auto_drafted: { deliverables: auto }, drafted_values: { deliverables: { d1: record, d2: post } } } },
+  });
+  const reel = { id: 'd1', deliverable_type: 'reel', fee: 125, description: 'Reel', required: true };
+  const postRow = { id: 'd2', deliverable_type: 'post', fee: null, description: 'Post', required: true };
+
+  test('reads Auto-drafted · from deal until edited', () => {
+    expect(deliverableDraftNote(ev(), reel)).toBe('Auto-drafted · from deal');
+    expect(deliverableDraftNote(ev(), postRow)).toBe('Auto-drafted · from deal');
+  });
+
+  test('an edit to its type, fee, description or required reads Edited', () => {
+    expect(deliverableDraftNote(ev(), { ...reel, fee: 150 })).toBe('Edited');
+    expect(deliverableDraftNote(ev(), { ...reel, fee: null })).toBe('Edited');
+    expect(deliverableDraftNote(ev(), { ...reel, deliverable_type: 'post' })).toBe('Edited');
+    expect(deliverableDraftNote(ev(), { ...reel, description: 'Reel in the coat' })).toBe('Edited');
+    expect(deliverableDraftNote(ev(), { ...reel, required: false })).toBe('Edited');
+    expect(deliverableDraftNote(ev(), { ...postRow, fee: 0 })).toBe('Edited');
+  });
+
+  test('a row never drafted, or an event with no deliverables draft, has no note', () => {
+    expect(deliverableDraftNote(ev(), { ...reel, id: 'd9' })).toBeNull();
+    expect(deliverableDraftNote(ev(null), reel)).toBeNull();
+    expect(deliverableDraftNote({}, reel)).toBeNull();
   });
 });
