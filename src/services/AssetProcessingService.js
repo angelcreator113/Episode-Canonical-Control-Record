@@ -174,7 +174,9 @@ class AssetProcessingService {
           saturation: 0.95,
         })
         .blur(0.5) // Gentle blur for smoothing
-        .sharpen(0.5) // Re-sharpen to maintain detail
+        // sharp 0.35 reads only the object form: sharpen(0.5) would now be the
+        // default mild sharpen, not sigma 0.5 (Task #2332).
+        .sharpen({ sigma: 0.5 }) // Re-sharpen to maintain detail
         .toBuffer();
 
       // Upload to S3
