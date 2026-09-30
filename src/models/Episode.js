@@ -177,6 +177,29 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      // Title approval and title card (Task #2386, ruling P11;
+      // services/episodeTitleCardService.js). Server-owned: PUT /episodes/:id
+      // never writes them.
+      title_approved_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When the title was approved; the approval holds while title_approved_value equals title',
+      },
+      title_approved_value: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'The title as approved',
+      },
+      title_card_asset_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'The current title card (assets.id)',
+      },
+      title_card_title: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'The title the current card was designed for; outdated when it differs from title',
+      },
     },
     {
       sequelize,

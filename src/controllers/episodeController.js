@@ -531,6 +531,15 @@ module.exports = {
       }
     });
 
+    // A changed title is no longer the approved one (Task #2386, ruling P11):
+    // the approval is cleared so the new title is approved again, and a card
+    // designed for the old title reads as outdated (title_card_title no longer
+    // matches), which offers a redesign. title_approved_value keeps the last
+    // approved title.
+    if ('title' in updateData && updateData.title !== oldValues.title && oldValues.title_approved_at) {
+      updateData.title_approved_at = null;
+    }
+
     await episode.update(updateData);
 
     // Log activity (existing logger) - wrapped in try-catch to prevent failures
