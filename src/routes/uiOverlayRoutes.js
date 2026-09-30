@@ -87,7 +87,7 @@ router.get('/:showId', requireAuth, async (req, res) => {
     // Map all overlay types to show which are generated vs missing
     // Use case-insensitive matching and check name patterns to handle
     // assets stored with different naming conventions
-    const status = allTypes.map(ot => {
+    let status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
@@ -146,13 +146,27 @@ router.get('/:showId', requireAuth, async (req, res) => {
       };
     });
 
+    // P10 (Evoni, 2026-09-30; Task #2386): an episode's Lala's Phone shows
+    // show-wide plus that episode's own — including the episode's invitation
+    // overlay (the event's current approved invitation, an INVITATION_LETTER
+    // asset). The Phone Hub (no episode_id) keeps show-wide overlays only.
+    if (episodeId) {
+      try {
+        const { loadEpisodeInvitationOverlay, mergeInvitationIntoOverlayStatus } = require('../services/episodeInvitationOverlayService');
+        const invitation = await loadEpisodeInvitationOverlay(models.sequelize, { showId, episodeId });
+        status = mergeInvitationIntoOverlayStatus(status, invitation);
+      } catch (invErr) {
+        console.error('[UIOverlay] Episode invitation overlay lookup failed:', invErr.message);
+      }
+    }
+
     const genStatus = generationStatus[showId] || null;
 
     return res.json({
       success: true,
       data: status,
       generated_count: status.filter(s => s.generated).length,
-      total: allTypes.length,
+      total: status.length,
       generation_status: genStatus,
     });
   } catch (err) {

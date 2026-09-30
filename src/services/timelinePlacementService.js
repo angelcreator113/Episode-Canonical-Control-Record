@@ -80,6 +80,7 @@ async function placeOverlayOnFirstScene(models, { episodeId, assetId, defaults =
     z_index: defaults.zIndex ?? 10,
     visual_role: defaults.visualRole || 'overlay',
     properties: defaults.properties || {},
+    ...(defaults.label ? { label: defaults.label } : {}),
   }).catch((err) => {
     // Auto-placement should never block the upstream action. Log and
     // move on — the creator can add it manually from the placements UI
