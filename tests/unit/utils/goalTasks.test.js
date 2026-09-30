@@ -115,6 +115,15 @@ describe('composeGoalTasks: written from the event, bounded by its scale', () =>
     expect(composeGoalTasks(goalFields({ ...FULL, prestige: 9 }), b, { upTo: b.min })).toHaveLength(4);
   });
 
+  test('excludeSlots: goals already on the list are skipped and the next ones written', () => {
+    const b = goalTaskScale({ prestige: 9 });
+    const fields = goalFields({ ...FULL, prestige: 9 });
+    const first = composeGoalTasks(fields, b, { upTo: b.min });
+    const next = composeGoalTasks(fields, b, { upTo: b.min, excludeSlots: first.map((t) => t.slot) });
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.some((t) => first.some((f) => f.slot === t.slot))).toBe(false);
+  });
+
   test('two different events get different goals', () => {
     const b = goalTaskScale({ prestige: 5 });
     const a = composeGoalTasks(goalFields(FULL), b).map((t) => t.label);
@@ -171,5 +180,58 @@ describe('buildSocialTasks: no fixed template lists (T9)', () => {
   test('outfit pieces name the look', () => {
     const tasks = buildSocialTasks('invite', null, [{ name: 'Silk slip', brand: 'Vela', category: 'dress' }], { event: { ...FULL, prestige: 9 } });
     expect(tasks.find((t) => t.slot === 'look').label).toBe('Get ready in the Silk slip by Vela');
+  });
+});
+
+describe('T9 follow-up: the limit is for Lala\'s combined goal list', () => {
+  const {
+    isLalaGoal, lalaGoalCount, remainingGoalRoom, capCombinedGoals,
+  } = require('../../../src/utils/goalTasks');
+  const goal = (slot, extra = {}) => ({ slot, label: slot, task_source: 'goal', required: false, ...extra });
+  const deliv = (i) => ({ slot: `deliverable_${i}`, label: `Reel ${i}`, deliverable_id: `d-${i}`, required: true, task_source: 'brand_deliverable' });
+  const major = goalTaskScale({ prestige: 9 });
+  const small = goalTaskScale({ prestige: 2 });
+
+  test('deliverables are not Lala\'s goals and are not counted', () => {
+    expect(isLalaGoal(deliv(1))).toBe(false);
+    expect(lalaGoalCount([goal('a'), goal('b'), deliv(1), deliv(2)])).toBe(2);
+  });
+
+  test('the room left is the maximum minus Lala\'s goals already on the list', () => {
+    expect(remainingGoalRoom([goal('a'), goal('b'), goal('c'), goal('d'), deliv(1)], major)).toEqual({ have: 4, room: 2, need: 0 });
+    expect(remainingGoalRoom([goal('a'), goal('b'), goal('c')], small)).toEqual({ have: 3, room: 0, need: 0 });
+    expect(remainingGoalRoom([goal('a')], small)).toEqual({ have: 1, room: 2, need: 1 });
+  });
+
+  test('a combined list over the maximum drops career ideas, then career goals; deliverables stay', () => {
+    const list = [
+      goal('look'), goal('arrival'), goal('host_moment'), goal('network'),
+      deliv(1), deliv(2),
+      goal('career_a', { generated_by: 'career' }),
+      goal('career_b', { generated_by: 'career', task_source: 'optional' }),
+      goal('career_c', { generated_by: 'career' }),
+    ];
+    const capped = capCombinedGoals(list, major);
+    expect(lalaGoalCount(capped)).toBe(6);
+    expect(capped.filter((t) => t.deliverable_id)).toHaveLength(2);
+    expect(capped.map((t) => t.slot)).not.toContain('career_b');
+    expect(capped.map((t) => t.slot)).toEqual(['look', 'arrival', 'host_moment', 'network', 'deliverable_1', 'deliverable_2', 'career_a', 'career_c']);
+  });
+
+  test('further over, career goals go after the ideas, still before Start Episode goals', () => {
+    const list = [
+      goal('look'), goal('arrival'), goal('host_moment'), goal('network'), goal('story'),
+      deliv(1),
+      goal('career_a', { generated_by: 'career' }),
+      goal('career_b', { generated_by: 'career', task_source: 'optional' }),
+      goal('career_c', { generated_by: 'career' }),
+    ];
+    const capped = capCombinedGoals(list, major);
+    expect(capped.map((t) => t.slot)).toEqual(['look', 'arrival', 'host_moment', 'network', 'story', 'deliverable_1', 'career_a']);
+  });
+
+  test('a list within the limit is returned unchanged', () => {
+    const list = [goal('a'), goal('b'), deliv(1)];
+    expect(capCombinedGoals(list, small)).toEqual(list);
   });
 });

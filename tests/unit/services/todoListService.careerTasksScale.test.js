@@ -78,3 +78,23 @@ describe('generateCareerTasks (T9)', () => {
     for (const t of major) expect(t).toMatchObject({ task_source: 'goal', required: false });
   });
 });
+
+describe('generateCareerTasks: room left on the combined list (T9 follow-up)', () => {
+  test('asks only for the room the Start Episode goals leave', async () => {
+    aiReturns(replies(2));
+    const tasks = await generateCareerTasks({ ...EVENT, prestige: 9 }, { room: 2, need: 0 });
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toMatch(/Write 1 to 2 career tasks/);
+    expect(tasks).toHaveLength(2);
+  });
+
+  test('a reply over the room is trimmed to it', async () => {
+    aiReturns(replies(5));
+    expect(await generateCareerTasks({ ...EVENT, prestige: 9 }, { room: 1, need: 0 })).toHaveLength(1);
+  });
+
+  test('no room: no AI call and no career items', async () => {
+    expect(await generateCareerTasks({ ...EVENT, prestige: 2 }, { room: 0, need: 0 })).toEqual([]);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+

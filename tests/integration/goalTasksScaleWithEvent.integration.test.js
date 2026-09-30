@@ -5,8 +5,8 @@
  *
  * Start Episode (generateEpisodeFromEvent) writes the episode's list with
  * goals written from the event's fields, their count set by its prestige;
- * the Career Checklist's Regenerate (generateCareerList) bounds the AI's
- * goals the same way. S3 and the AI client are mocked. The Career List
+ * the Career Checklist's Regenerate (generateCareerList) writes only the
+ * room left on Lala's combined goal list (T9 follow-up, 2026-09-30). S3 and the AI client are mocked. The Career List
  * asset row is seeded by SQL (see careerChecklistRegenerate.integration.test.js
  * for why Asset.create cannot run on the test database).
  */
@@ -127,32 +127,65 @@ const aiReturns = (n) => mockCreate.mockResolvedValueOnce({
     { id: uuid(), ep: episodeId, show: showId });
   }
 
-  it('Career Checklist: the AI\'s goals are trimmed to the event\'s maximum (small 3, major 6)', async () => {
-    for (const [prestige, max] of [[2, 3], [8, 6]]) {
+  // Keep only the first `keep` of Lala's goals on the stored list (the
+  // deliverables stay), as if the rest had been deleted by hand.
+  async function keepGoals(episodeId, keep) {
+    const [row] = await q(`SELECT social_tasks FROM episode_todo_lists WHERE episode_id = :ep`, { ep: episodeId });
+    let n = 0;
+    const kept = parse(row.social_tasks).filter((t) => t.deliverable_id || (n += 1) <= keep);
+    await run(`UPDATE episode_todo_lists SET social_tasks = :tasks WHERE episode_id = :ep`, { ep: episodeId, tasks: JSON.stringify(kept) });
+  }
+
+  // T9 follow-up (Evoni, 2026-09-30): "The 2–3 / 4–6 limit applies to Lala's
+  // combined goal list (Start Episode goals plus Career Checklist);
+  // deliverables don't count toward it."
+  it('Career Checklist: asks for the room left and holds the combined list to the maximum (small 3, major 6)', async () => {
+    for (const [prestige, max, prompt] of [[2, 3, /Write 1 to 2 career tasks/], [8, 6, /Write 3 to 5 career tasks/]]) {
       const ids = await seedEvent(prestige);
       const { episodeId } = await startEpisode(ids);
+      await keepGoals(episodeId, 1);
       await seedCareerAsset(episodeId, ids.show);
       mockCreate.mockReset();
       aiReturns(10);
       const { tasks } = await generateCareerList(episodeId, ids.show, models);
-      const career = tasks.filter((t) => t.generated_by === 'career');
-      expect(career).toHaveLength(max);
-      expect(mockCreate.mock.calls[0][0].messages[0].content).toMatch(prestige < 5 ? /Write 2 to 3 career tasks/ : /Write 4 to 6 career tasks/);
+      expect(mockCreate.mock.calls[0][0].messages[0].content).toMatch(prompt);
+      expect(tasks.filter((t) => t.generated_by === 'career')).toHaveLength(max - 1);
+      expect(goals(tasks)).toHaveLength(max);
       const [row] = await q(`SELECT social_tasks FROM episode_todo_lists WHERE episode_id = :ep`, { ep: episodeId });
-      expect(parse(row.social_tasks).filter((t) => t.generated_by === 'career')).toHaveLength(max);
+      expect(goals(parse(row.social_tasks))).toHaveLength(max);
     }
   });
 
-  it('Career Checklist: the AI fails, and the minimum is written from the event (small 2, major 4)', async () => {
+  it('Career Checklist: Start Episode already filled the maximum, so no AI call and no career items; deliverables are not counted', async () => {
+    const ids = await seedEvent(9);
+    await insertEventDeliverables(sequelize, ids.event, [
+      { description: 'One reel in the Maison Rue coat', deliverable_type: 'reel', required: true, owed_to: 'brand' },
+    ]);
+    const { episodeId, tasks: before } = await startEpisode(ids);
+    expect(goals(before)).toHaveLength(6);
+    await seedCareerAsset(episodeId, ids.show);
+    mockCreate.mockReset();
+    const { tasks } = await generateCareerList(episodeId, ids.show, models);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(tasks.filter((t) => t.generated_by === 'career')).toHaveLength(0);
+    expect(goals(tasks)).toHaveLength(6);
+    expect(tasks.filter((t) => t.required).map((t) => t.label)).toEqual(['One reel in the Maison Rue coat']);
+  });
+
+  it('Career Checklist: the AI fails, and the minimum is reached from the event\'s other fields, not repeated (small 2, major 4)', async () => {
     for (const [prestige, min] of [[3, 2], [9, 4]]) {
       const ids = await seedEvent(prestige);
       const { episodeId } = await startEpisode(ids);
+      await keepGoals(episodeId, 1);
       await seedCareerAsset(episodeId, ids.show);
       jest.spyOn(console, 'error').mockImplementation(() => {});
       const { tasks } = await generateCareerList(episodeId, ids.show, models);
       const career = tasks.filter((t) => t.generated_by === 'career');
-      expect(career).toHaveLength(min);
-      expect(career.map((t) => t.label).join(' | ')).not.toMatch(/Capture the moment everyone will talk about/);
+      expect(career).toHaveLength(min - 1);
+      expect(goals(tasks)).toHaveLength(min);
+      const labels = goals(tasks).map((t) => t.label);
+      expect(new Set(labels).size).toBe(labels.length);
+      expect(labels.join(' | ')).not.toMatch(/Capture the moment everyone will talk about/);
       for (const t of career) expect(t).toMatchObject({ task_source: 'goal', required: false });
     }
   });

@@ -207,11 +207,13 @@ function enforceGoalTaskBounds(tasks, bounds, where = 'goalTasks') {
 /**
  * Lala's goals for an event, written from its fields: the event-specific
  * goals up to `upTo` (default the maximum), then goals from its name only
- * while below the minimum, then bounded.
+ * while below the minimum, then bounded. Slots in `excludeSlots` (goals
+ * already on the list) are skipped.
  */
-function composeGoalTasks(fields, bounds, { upTo = bounds.max, where = 'goalTasks' } = {}) {
-  const goals = specificGoals(fields).slice(0, Math.min(upTo, bounds.max));
-  for (const g of nameGoals(fields)) {
+function composeGoalTasks(fields, bounds, { upTo = bounds.max, where = 'goalTasks', excludeSlots = [] } = {}) {
+  const skip = new Set(excludeSlots);
+  const goals = specificGoals(fields).filter((g) => !skip.has(g.slot)).slice(0, Math.min(upTo, bounds.max));
+  for (const g of nameGoals(fields).filter((x) => !skip.has(x.slot))) {
     if (goals.length >= bounds.min) break;
     if (!goals.some((x) => x.slot === g.slot)) goals.push(g);
   }
@@ -228,10 +230,64 @@ function composeGoalTasks(fields, bounds, { upTo = bounds.max, where = 'goalTask
   return enforceGoalTaskBounds(tasks, bounds, where);
 }
 
+/**
+ * T9 follow-up (Evoni, 2026-09-30): "The 2–3 / 4–6 limit applies to Lala's
+ * combined goal list (Start Episode goals plus Career Checklist);
+ * deliverables don't count toward it." Lala's own items are every task that
+ * is not a deliverable (no deliverable_id): her goals and optional ideas,
+ * from Start Episode and from the Career Checklist alike.
+ */
+function isLalaGoal(task) {
+  return Boolean(task) && !task.deliverable_id;
+}
+
+function lalaGoalCount(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).filter(isLalaGoal).length;
+}
+
+/**
+ * How many more of Lala's own items fit on a list: the event's maximum minus
+ * those already on it, never below 0. `need` is how many it still takes to
+ * reach the minimum.
+ */
+function remainingGoalRoom(tasks, bounds) {
+  const have = lalaGoalCount(tasks);
+  return { have, room: Math.max(0, bounds.max - have), need: Math.max(0, bounds.min - have) };
+}
+
+/**
+ * Hold a whole list to the event's maximum for Lala's own items. Deliverables
+ * are never dropped and never counted. Over the maximum, items are dropped
+ * from the end, optional ideas first, and the Career Checklist's before the
+ * Start Episode goals. Nothing is added.
+ */
+function capCombinedGoals(tasks, bounds, where = 'goalTasks') {
+  const list = Array.isArray(tasks) ? [...tasks] : [];
+  let over = lalaGoalCount(list) - bounds.max;
+  if (over <= 0) return list;
+  const rank = (t) => (t.generated_by === 'career' ? 0 : 2) + (t.task_source === 'optional' ? 0 : 1);
+  const droppable = list
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => isLalaGoal(t))
+    .sort((a, b) => rank(a.t) - rank(b.t) || b.i - a.i);
+  const drop = new Set();
+  for (const { i } of droppable) {
+    if (over <= 0) break;
+    drop.add(i);
+    over -= 1;
+  }
+  console.warn(`[${where}] Lala's combined goal list held to ${bounds.max} for a ${bounds.scale || 'this'} event; ${drop.size} item(s) dropped (T9)`);
+  return list.filter((_, i) => !drop.has(i));
+}
+
 module.exports = {
   GOAL_TASK_BOUNDS,
   goalTaskScale,
   goalFields,
   composeGoalTasks,
   enforceGoalTaskBounds,
+  isLalaGoal,
+  lalaGoalCount,
+  remainingGoalRoom,
+  capCombinedGoals,
 };

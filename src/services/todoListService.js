@@ -25,7 +25,9 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables } = require('./eventTermsService');
 const { withDeliverableTasks, withCareerTasks } = require('../utils/socialTaskSource');
-const { goalTaskScale, goalFields, composeGoalTasks, enforceGoalTaskBounds } = require('../utils/goalTasks');
+const {
+  goalTaskScale, goalFields, composeGoalTasks, enforceGoalTaskBounds, remainingGoalRoom, capCombinedGoals,
+} = require('../utils/goalTasks');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -643,9 +645,16 @@ const CAREER_ATTEMPTS = 2;
  * This is To-Do List #2 (UI.OVERLAY.CAREER_LIST) — separate from the
  * wardrobe shopping list (UI.OVERLAY.WARDROBE_LIST).
  */
-async function generateCareerTasks(event) {
-  const bounds = goalTaskScale(event);
-  const count = bounds.min === bounds.max ? `${bounds.min}` : `${bounds.min} to ${bounds.max}`;
+async function generateCareerTasks(event, { room = null, need = null, excludeSlots = [] } = {}) {
+  const scale = goalTaskScale(event);
+  // T9 follow-up (Evoni, 2026-09-30): the limit is for Lala's combined goal
+  // list, so the Career Checklist writes only the room the Start Episode
+  // goals leave (room) and at least what the minimum still needs (need).
+  const max = room == null ? scale.max : Math.min(scale.max, room);
+  const min = need == null ? scale.min : Math.min(max, need);
+  const bounds = { ...scale, min, max };
+  if (max <= 0) return [];
+  const count = min === max ? `${min}` : `${Math.max(1, min)} to ${max}`;
   const sizeLine = bounds.scale === 'major'
     ? 'a major event'
     : bounds.scale === 'small' ? 'a small or low-key event' : 'a mid-sized event';
@@ -726,7 +735,7 @@ Respond ONLY with a JSON array:
   // from its own fields (dress code, venue, host, brand, guests, format,
   // description, stakes, name); see src/utils/goalTasks.js.
   console.error('[CareerList] Generation failed; writing the event\'s minimum goals from its fields:', lastErr?.message);
-  return composeGoalTasks(goalFields(event), bounds, { upTo: bounds.min, where: 'CareerList' })
+  return composeGoalTasks(goalFields(event), bounds, { upTo: bounds.min, where: 'CareerList', excludeSlots })
     .map((t, i) => ({ ...t, order: i + 1 }));
 }
 
@@ -769,7 +778,20 @@ async function generateCareerList(episodeId, showId, models) {
   const onList = new Set(stored.map((t) => t?.deliverable_id).filter(Boolean));
   const missing = withDeliverableTasks([], deliverables).filter((t) => !onList.has(t.deliverable_id));
 
-  const tasks = withCareerTasks([...stored, ...missing], await generateCareerTasks(event));
+  // T9 follow-up: Lala's combined goal list (the Start Episode goals kept on
+  // the list plus the career items) stays within the event's limit;
+  // deliverables don't count. The previous career items are being replaced,
+  // so only the rest of the list uses up room.
+  const bounds = goalTaskScale(event);
+  const baseList = [...stored, ...missing].filter((t) => t?.generated_by !== 'career');
+  const { room, need } = remainingGoalRoom(baseList, bounds);
+  // A career item that repeats a goal already on the list (the fallback
+  // writes from the same event fields as Start Episode) is dropped.
+  const onListLabels = new Set(baseList.map((t) => String(t?.label || '').trim().toLowerCase()));
+  const careerTasks = (room > 0 ? await generateCareerTasks(event, { room, need, excludeSlots: baseList.map((t) => t?.slot).filter(Boolean) }) : [])
+    .filter((t) => !onListLabels.has(String(t.label || '').trim().toLowerCase()));
+  if (room === 0) console.log(`[CareerList] ${event.name}: the list already holds ${bounds.max} of Lala's goals; no career items added (T9)`);
+  const tasks = capCombinedGoals(withCareerTasks([...stored, ...missing], careerTasks), bounds, 'CareerList');
   if (todoRow) {
     await sequelize.query(
       'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
