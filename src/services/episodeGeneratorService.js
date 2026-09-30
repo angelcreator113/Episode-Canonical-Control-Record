@@ -37,6 +37,12 @@ const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('.
 // fields (src/utils/goalTasks.js), their count bounded by the event's
 // prestige: 2–3 small, 3–4 between, 4–6 major.
 //
+// T9 follow-ups (Evoni, 2026-09-30): the limit is for Lala's combined goal
+// list, and "Start Episode writes the lower goal count (2 for small or
+// low-key events, 4 for major ones), leaving room for the Career Checklist
+// up to the maximum." So this list is the event's minimum; the Career
+// Checklist (generateCareerList) fills the rest.
+//
 // No goal is required (T1, §8(bb); Task #2292): each is task_source 'goal'.
 // Only an accepted deliverable (an event_deliverables row, passed as
 // context.deliverables) makes a task required; see
@@ -51,7 +57,7 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], cont
   const event = context.event || {};
   const bounds = goalTaskScale(context.prestige !== undefined ? { prestige: context.prestige } : event);
   const fields = goalFields(event, context, hostProfile, outfitPieces);
-  const goals = composeGoalTasks(fields, bounds, { where: 'SocialTasks' });
+  const goals = composeGoalTasks(fields, bounds, { upTo: bounds.min, where: 'SocialTasks' });
   return withDeliverableTasks(goals, context.deliverables);
 }
 

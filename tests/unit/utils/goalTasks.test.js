@@ -165,8 +165,18 @@ describe('buildSocialTasks: no fixed template lists (T9)', () => {
 
   test('context.prestige (no event row yet) sets the scale', () => {
     const ctx = { event_name: 'Pop-up', venue_name: 'Loft', host_name: 'Ada', dress_code: 'Denim', guest_names: ['Bo'], description: 'Small. Fun.' };
-    expect(buildSocialTasks('invite', null, [], { ...ctx, prestige: 2 })).toHaveLength(3);
-    expect(buildSocialTasks('invite', null, [], { ...ctx, prestige: 9 }).length).toBeGreaterThanOrEqual(4);
+    expect(buildSocialTasks('invite', null, [], { ...ctx, prestige: 2 })).toHaveLength(2);
+    expect(buildSocialTasks('invite', null, [], { ...ctx, prestige: 9 }).length).toBeGreaterThanOrEqual(2);
+  });
+
+  // T9 follow-up (Evoni, 2026-09-30): "Start Episode writes the lower goal
+  // count (2 for small or low-key events, 4 for major ones), leaving room for
+  // the Career Checklist up to the maximum."
+  test('Start Episode writes the lower count: 2 small, 3 between, 4 major', () => {
+    const at = (prestige) => buildSocialTasks('invite', null, [], { event: { ...FULL, prestige } }).filter((t) => !t.deliverable_id);
+    expect(at(2)).toHaveLength(2);
+    expect(at(5)).toHaveLength(3);
+    expect(at(9)).toHaveLength(4);
   });
 
   test('deliverables sit outside the bounds and stay the only required tasks', () => {

@@ -654,7 +654,8 @@ async function generateCareerTasks(event, { room = null, need = null, excludeSlo
   const min = need == null ? scale.min : Math.min(max, need);
   const bounds = { ...scale, min, max };
   if (max <= 0) return [];
-  const count = min === max ? `${min}` : `${Math.max(1, min)} to ${max}`;
+  const low = Math.max(1, min);
+  const count = low >= max ? `${max}` : `${low} to ${max}`;
   const sizeLine = bounds.scale === 'major'
     ? 'a major event'
     : bounds.scale === 'small' ? 'a small or low-key event' : 'a mid-sized event';

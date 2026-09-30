@@ -156,20 +156,41 @@ const aiReturns = (n) => mockCreate.mockResolvedValueOnce({
     }
   });
 
-  it('Career Checklist: Start Episode already filled the maximum, so no AI call and no career items; deliverables are not counted', async () => {
-    const ids = await seedEvent(9);
-    await insertEventDeliverables(sequelize, ids.event, [
-      { description: 'One reel in the Maison Rue coat', deliverable_type: 'reel', required: true, owed_to: 'brand' },
-    ]);
-    const { episodeId, tasks: before } = await startEpisode(ids);
-    expect(goals(before)).toHaveLength(6);
+  // T9 follow-up (Evoni, 2026-09-30): "Start Episode writes the lower goal
+  // count (2 for small or low-key events, 4 for major ones), leaving room for
+  // the Career Checklist up to the maximum."
+  it('Start Episode writes the lower count; Regenerate fills the room up to the maximum; deliverables are not counted', async () => {
+    for (const [prestige, min, max, prompt] of [[2, 2, 3, /Write 1 career tasks/], [9, 4, 6, /Write 1 to 2 career tasks/]]) {
+      const ids = await seedEvent(prestige);
+      await insertEventDeliverables(sequelize, ids.event, [
+        { description: 'One reel in the Maison Rue coat', deliverable_type: 'reel', required: true, owed_to: 'brand' },
+      ]);
+      const { episodeId, tasks: before } = await startEpisode(ids);
+      expect(goals(before)).toHaveLength(min);
+      await seedCareerAsset(episodeId, ids.show);
+      mockCreate.mockReset();
+      aiReturns(10);
+      const { tasks } = await generateCareerList(episodeId, ids.show, models);
+      expect(mockCreate.mock.calls[0][0].messages[0].content).toMatch(prompt);
+      expect(tasks.filter((t) => t.generated_by === 'career')).toHaveLength(max - min);
+      expect(goals(tasks)).toHaveLength(max);
+      expect(tasks.filter((t) => t.required).map((t) => t.label)).toEqual(['One reel in the Maison Rue coat']);
+    }
+  });
+
+  it('Career Checklist: a list already at the maximum gets no AI call and no career items', async () => {
+    const ids = await seedEvent(2);
+    const { episodeId } = await startEpisode(ids);
+    // A third goal added by hand: the small event's maximum of 3.
+    const [row] = await q(`SELECT social_tasks FROM episode_todo_lists WHERE episode_id = :ep`, { ep: episodeId });
+    const list = [...parse(row.social_tasks), { slot: 'mine', label: 'My own goal', task_source: 'goal', required: false, completed: false }];
+    await run(`UPDATE episode_todo_lists SET social_tasks = :tasks WHERE episode_id = :ep`, { ep: episodeId, tasks: JSON.stringify(list) });
     await seedCareerAsset(episodeId, ids.show);
     mockCreate.mockReset();
     const { tasks } = await generateCareerList(episodeId, ids.show, models);
     expect(mockCreate).not.toHaveBeenCalled();
     expect(tasks.filter((t) => t.generated_by === 'career')).toHaveLength(0);
-    expect(goals(tasks)).toHaveLength(6);
-    expect(tasks.filter((t) => t.required).map((t) => t.label)).toEqual(['One reel in the Maison Rue coat']);
+    expect(goals(tasks)).toHaveLength(3);
   });
 
   it('Career Checklist: the AI fails, and the minimum is reached from the event\'s other fields, not repeated (small 2, major 4)', async () => {
