@@ -61,7 +61,7 @@ import {
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_DUE_MAX,
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
-  dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, missingPriceLabels,
+  dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableDraftNote, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
   BONUS_TIERS, BONUS_TIER_LABELS, describeBonusTerms, bonusDraftFrom, buildBonusTermsUpdate,
 } from '../../utils/eventTerms';
@@ -480,6 +480,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                       })()}
                       {d.due_date && <span>Due {d.due_date}</span>}
                       {d.required === false && <span>Optional</span>}
+                      {(() => {
+                        const draftNote = deliverableDraftNote(event, d);
+                        return draftNote && <span data-testid={`terms-deliverable-draft-${d.id}`}>{draftNote}</span>;
+                      })()}
                       <span className={`epp-term-status is-${status}`} data-testid={`terms-deliverable-status-${d.id}`}>{DELIVERABLE_STATUS_LABELS[status]}</span>
                     </span>
                     {timeline.length > 0 && (
