@@ -8,7 +8,7 @@
  * filter from the same sources the Event Package uses.
  */
 import { resolveEventOrganizer, resolveEventVenueAndDate } from './eventReadiness';
-import { DEAL_TYPES, DEAL_TYPE_LABELS } from './eventTerms';
+import { DEAL_TYPES, DEAL_TYPE_LABELS, dealLabelFor } from './eventTerms';
 
 /** The filter value for an event with no deal type yet. */
 export const DEAL_TYPE_NOT_SET = 'not_set';
@@ -33,10 +33,11 @@ export function eventCardMetaParts(event) {
   const organizerName = organizer.hasOrganizer
     ? (organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName)
     : null;
-  const dealType = event?.deal_type || null;
+  // D14: the deal's label is derived from its ticked components.
+  const dealLabel = dealLabelFor(event);
   const parts = [{ key: 'organizer', text: organizerName || 'No organizer', missing: !organizerName }];
   if (eventDate) parts.push({ key: 'date', text: String(eventDate), missing: false });
-  if (dealType) parts.push({ key: 'deal_type', text: DEAL_TYPE_LABELS[dealType] || dealType, missing: false });
+  if (dealLabel) parts.push({ key: 'deal_type', text: dealLabel, missing: false });
   return parts;
 }
 

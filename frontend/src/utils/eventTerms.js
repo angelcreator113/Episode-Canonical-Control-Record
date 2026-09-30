@@ -21,6 +21,7 @@
 import dealTypesMirror from '../constants/dealTypes.json';
 import deliverableTypesMirror from '../constants/deliverableTypes.json';
 import dealPlansMirror from '../constants/dealPlans.json';
+import dealComponentsMirror from '../constants/dealComponents.json';
 
 // The access-requirement keys the next-event suggester checks (the
 // suggest-events route in src/routes/careerGoals.js) and the old editor
@@ -334,8 +335,9 @@ export const DEAL_TYPE_LABELS = {
   invited_comped: 'Invited, comped',
   gifted: 'Gifted',
   paid_appearance: 'Paid appearance',
-  paid_deliverables: 'Paid deliverables',
-  appearance_plus_deliverables: 'Appearance plus deliverables',
+  // D14: the names the derived label gives these combinations (dealLabelFor).
+  paid_deliverables: 'Paid content',
+  appearance_plus_deliverables: 'Appearance plus content',
   performance_booking: 'Performance booking',
   brand_partnership: 'Brand partnership',
 };
@@ -366,6 +368,98 @@ export function buildDealTypeUpdate(event, next) {
   const value = next || null;
   if (value !== null && !DEAL_TYPES.includes(value)) return { body: null, unchanged: false, error: 'Choose one of the listed deal types.' };
   return { body: { deal_type: value }, unchanged: value === (event?.deal_type || null), error: null };
+}
+
+// ─── Deal components (ruling D14, 2026-09-30; build PR 3) ────────────────
+// A deal is the components Evoni ticks; its label is derived. Mirrored from
+// src/utils/dealComponents.js in constants/dealComponents.json (pinned by
+// tests/unit/utils/dealComponentsMirror.test.js). deal_components null is a
+// legacy event, [] a self-funded deal; an event written before the column
+// reads its deal_type through the one-to-one map.
+export const DEAL_COMPONENT_KEYS = dealComponentsMirror.keys;
+export const DEAL_COMPONENT_LABELS = dealComponentsMirror.labels;
+const CASH_COMPONENTS = dealComponentsMirror.cash;
+const COMPONENTS_BY_DEAL_TYPE = dealComponentsMirror.by_deal_type;
+
+const normalizeComponents = (list) => {
+  const set = new Set(Array.isArray(list) ? list : []);
+  return DEAL_COMPONENT_KEYS.filter((k) => set.has(k));
+};
+
+/** The event's components, or null for a legacy event. */
+export function componentsOf(event) {
+  let stored = event?.deal_components;
+  if (typeof stored === 'string') {
+    try { stored = JSON.parse(stored); } catch { stored = null; }
+  }
+  if (Array.isArray(stored)) return normalizeComponents(stored);
+  const base = COMPONENTS_BY_DEAL_TYPE[event?.deal_type];
+  if (!base) return null;
+  const list = [...base];
+  if (event.deal_type === 'brand_partnership' && TRUE_LIKE.has(event?.appearance_required)) list.push('paid_to_appear');
+  return normalizeComponents(list);
+}
+
+export function isDealEvent(event) {
+  return componentsOf(event) !== null;
+}
+
+/** The derived label (design note §3.2; answer 2: join the parts). Mirrors dealComponents.dealLabel. */
+export function dealLabelFor(eventOrComponents) {
+  const keys = Array.isArray(eventOrComponents) ? normalizeComponents(eventOrComponents) : componentsOf(eventOrComponents);
+  if (!keys) return null;
+  const has = (k) => keys.includes(k);
+  const money = keys.filter((k) => k !== 'entry_covered' && k !== 'gifted_items');
+  const gifted = has('gifted_items');
+  if (keys.length === 0) return 'Self-funded';
+  if (money.length === 0) return gifted ? 'Gifted' : 'Invited, comped';
+  const withGifted = (label) => (gifted ? `${label} + gifted` : label);
+  if (has('partnership_base')) return withGifted(money.length === 1 ? 'Brand partnership (retainer)' : 'Brand partnership');
+  const named = {
+    paid_to_appear: 'Paid appearance',
+    paid_for_content: 'Paid content',
+    'paid_to_appear+paid_for_content': 'Appearance plus content',
+    performance_fee: 'Performance booking',
+    'paid_for_content+performance_fee': 'Performance booking',
+  }[money.join('+')];
+  if (named) return withGifted(named);
+  const PART = { paid_to_appear: 'Paid appearance', paid_for_content: 'content', performance_fee: 'performance fee' };
+  return withGifted(money.map((k, i) => (i === 0 ? PART[k] : PART[k].toLowerCase())).join(' + '));
+}
+
+/**
+ * { components, label, state, note } for the Terms: state 'auto_drafted'
+ * while the components equal the drafted copy (drafted_values.deal_components,
+ * or before D14 the drafted deal type's components), 'edited' once they
+ * differ, 'set' with no draft, 'missing' for a legacy event.
+ */
+export function describeDealComponents(event) {
+  const components = componentsOf(event);
+  const automation = event?.canon_consequences?.automation || {};
+  const source = automation.auto_drafted?.deal_components || automation.auto_drafted?.deal_type || null;
+  const drafted = automation.drafted_values || {};
+  let draftedComponents = null;
+  if (Array.isArray(drafted.deal_components)) draftedComponents = normalizeComponents(drafted.deal_components);
+  else if (drafted.deal_type && COMPONENTS_BY_DEAL_TYPE[drafted.deal_type]) draftedComponents = componentsOf({ deal_type: drafted.deal_type, appearance_required: event?.appearance_required });
+  let state = components ? 'set' : 'missing';
+  if (components && source && draftedComponents) {
+    state = JSON.stringify(draftedComponents) === JSON.stringify(components) ? 'auto_drafted' : 'edited';
+  }
+  let note = null;
+  if (state === 'auto_drafted') note = `Auto-drafted · ${DEAL_TYPE_SOURCE_LABELS[source] || source}`;
+  else if (state === 'edited') note = 'Edited';
+  return { components, label: components ? dealLabelFor(components) : 'Not set', state, note };
+}
+
+/** The event PUT body for the ticked components (null clears the deal); unchanged when they equal the stored ones. */
+export function buildDealComponentsUpdate(event, next) {
+  if (next === null) return { body: { deal_components: null }, unchanged: componentsOf(event) === null, error: null };
+  if (!Array.isArray(next) || next.some((k) => !DEAL_COMPONENT_KEYS.includes(k))) {
+    return { body: null, unchanged: false, error: 'Tick only the listed components.' };
+  }
+  const value = normalizeComponents(next);
+  const current = componentsOf(event);
+  return { body: { deal_components: value }, unchanged: current !== null && JSON.stringify(current) === JSON.stringify(value), error: null };
 }
 
 // ─── Pricing (deal build PR 3, Task #2341) ───────────────────────────────
@@ -440,22 +534,30 @@ export function deliverablePhrase(d) {
 }
 
 const COMPONENTS = dealPlansMirror.components;
-const PLANS = dealPlansMirror.plans;
 const DELIVERABLE_ANCHORS = dealPlansMirror.deliverable_anchors;
 const TRUE_LIKE = new Set([true, 'true', 1, '1']);
 
-/** The event's deal plan: { components: [{ key, field, label }], deliverables, cash, giftedValue, appearanceIfRequired }. */
+/**
+ * The event's deal plan: { components: [{ key, field, label }], deliverables,
+ * cash, giftedValue, known }. Since D14 it comes from the ticked components
+ * (dealComponents.dealPlanOf on the server); for every deal type it equals
+ * the old per-type plan.
+ */
 export function dealPlanFor(event) {
-  const plan = PLANS[event?.deal_type];
-  if (!plan) return { components: [], deliverables: false, cash: false, giftedValue: false, appearanceIfRequired: false, known: false };
-  const keys = [...plan.components];
-  if (plan.appearanceIfRequired && TRUE_LIKE.has(event?.appearance_required)) keys.push('appearance');
+  const keys = componentsOf(event);
+  if (!keys) return { components: [], deliverables: false, cash: false, giftedValue: false, appearanceIfRequired: false, known: false };
+  const has = (k) => keys.includes(k);
+  const feeKeys = [
+    has('partnership_base') && 'partnership_base',
+    has('performance_fee') && 'performance',
+    has('paid_to_appear') && 'appearance',
+  ].filter(Boolean);
   return {
-    components: keys.map((key) => ({ key, ...COMPONENTS[key] })),
-    deliverables: plan.deliverables,
-    cash: plan.cash,
-    giftedValue: !!plan.giftedValue,
-    appearanceIfRequired: !!plan.appearanceIfRequired,
+    components: feeKeys.map((key) => ({ key, ...COMPONENTS[key] })),
+    deliverables: has('paid_for_content'),
+    cash: CASH_COMPONENTS.some(has),
+    giftedValue: has('gifted_items'),
+    appearanceIfRequired: false,
     known: true,
   };
 }

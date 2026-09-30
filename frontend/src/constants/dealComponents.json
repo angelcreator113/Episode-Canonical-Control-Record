@@ -1,0 +1,51 @@
+{
+  "keys": [
+    "paid_to_appear",
+    "paid_for_content",
+    "partnership_base",
+    "performance_fee",
+    "gifted_items",
+    "entry_covered"
+  ],
+  "labels": {
+    "paid_to_appear": "Paid to appear",
+    "paid_for_content": "Paid for content",
+    "partnership_base": "Partnership base",
+    "performance_fee": "Performance fee",
+    "gifted_items": "Gifted items",
+    "entry_covered": "Entry covered"
+  },
+  "cash": [
+    "paid_to_appear",
+    "paid_for_content",
+    "partnership_base",
+    "performance_fee"
+  ],
+  "by_deal_type": {
+    "self_funded": [],
+    "invited_comped": [
+      "entry_covered"
+    ],
+    "gifted": [
+      "gifted_items"
+    ],
+    "paid_appearance": [
+      "paid_to_appear"
+    ],
+    "paid_deliverables": [
+      "paid_for_content"
+    ],
+    "appearance_plus_deliverables": [
+      "paid_to_appear",
+      "paid_for_content"
+    ],
+    "performance_booking": [
+      "performance_fee",
+      "paid_for_content"
+    ],
+    "brand_partnership": [
+      "partnership_base",
+      "paid_for_content"
+    ]
+  }
+}

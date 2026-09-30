@@ -211,8 +211,16 @@ describe('EventTermsSection', () => {
     expect(screen.getByTestId('terms-component-summary-partnership_base_fee').textContent).toBe('900 coins');
     expect(screen.queryByTestId('terms-component-appearance_fee')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('terms-appearance-required'));
-    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ appearance_required: true }));
+    // D14: the appearance is its own ticked component, not a partnership flag.
+    expect(screen.queryByTestId('terms-appearance-required')).toBeNull();
+    expect(putEvent).not.toHaveBeenCalled();
+  });
+
+  test('D14: a partnership with Paid to appear ticked shows the appearance fee as well', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], locked: false } });
+    renderTerms({ event: { ...EVENT, deal_type: 'brand_partnership', deal_components: ['paid_to_appear', 'paid_for_content', 'partnership_base'], partnership_base_fee: 900 } });
+    expect(screen.getByTestId('terms-component-summary-partnership_base_fee').textContent).toBe('900 coins');
+    expect(screen.getByTestId('terms-component-appearance_fee')).toBeTruthy();
   });
 
   test('pricing: ruling 6 — a missing price reads Price required, and Start Episode is said to wait on it', async () => {
@@ -242,7 +250,7 @@ describe('EventTermsSection', () => {
 
   test('pricing: without a deal type nothing is priced; a no-cash deal says so and cannot propose', async () => {
     renderTerms();
-    expect(screen.getByTestId('terms-pricing-empty').textContent).toBe('Choose a deal type to price the deal.');
+    expect(screen.getByTestId('terms-pricing-empty').textContent).toBe('Tick what the deal includes to price it.');
     expect(screen.getByTestId('terms-propose-open').disabled).toBe(true);
   });
 
@@ -358,15 +366,35 @@ describe('EventTermsSection', () => {
     expect(screen.queryByTestId('terms-propose-open')).toBeNull();
   });
 
-  test('deal type: editing sends only deal_type through the event PUT', async () => {
+  test('D14: editing ticks components, shows the label they make, and sends only deal_components', async () => {
     const { putEvent } = renderTerms({ event: drafted('invited_comped') });
     fireEvent.click(screen.getByTestId('terms-deal-type-edit'));
-    const select = screen.getByTestId('terms-deal-type-select');
-    expect(select.value).toBe('invited_comped');
+    expect(screen.getByTestId('terms-deal-component-entry_covered').checked).toBe(true);
+    expect(screen.getByTestId('terms-deal-component-paid_to_appear').checked).toBe(false);
     expect(screen.getByTestId('terms-deal-type-save').disabled).toBe(true);
-    fireEvent.change(select, { target: { value: 'paid_appearance' } });
+    fireEvent.click(screen.getByTestId('terms-deal-component-paid_to_appear'));
+    fireEvent.click(screen.getByTestId('terms-deal-component-performance_fee'));
+    expect(screen.getByTestId('terms-deal-components-label').textContent).toBe('Reads as: Paid appearance + performance fee');
     fireEvent.click(screen.getByTestId('terms-deal-type-save'));
-    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ deal_type: 'paid_appearance' }));
+    await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ deal_components: ['paid_to_appear', 'performance_fee', 'entry_covered'] }));
+  });
+
+  test('D14: the summary names the ticked components; stored components win over deal_type', async () => {
+    renderTerms({ event: { ...EVENT, deal_type: 'brand_partnership', deal_components: ['partnership_base'] } });
+    expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Brand partnership (retainer)');
+    expect(screen.getByTestId('terms-deal-components-summary').textContent).toBe('Partnership base');
+  });
+
+  test('D14: a drafted components record reads Auto-drafted until the ticks differ', async () => {
+    const event = {
+      ...EVENT, deal_type: 'gifted', deal_components: ['gifted_items', 'entry_covered'],
+      canon_consequences: { automation: {
+        auto_drafted: { deal_type: 'opportunity', deal_components: 'opportunity' },
+        drafted_values: { deal_type: 'gifted', deal_components: ['gifted_items', 'entry_covered'] },
+      } },
+    };
+    renderTerms({ event });
+    expect(screen.getByTestId('terms-deal-type-summary').textContent).toBe('Gifted · Auto-drafted · opportunity');
   });
 
   test('before Start Episode: no fulfilment control', async () => {

@@ -336,3 +336,68 @@ describe('drafted deliverables (D12, Task #2395)', () => {
     expect(deliverableDraftNote({}, reel)).toBeNull();
   });
 });
+
+// ─── D14: deal components (2026-09-30) ───
+import {
+  componentsOf, isDealEvent, dealLabelFor, describeDealComponents, buildDealComponentsUpdate, DEAL_COMPONENT_KEYS,
+} from './eventTerms';
+
+describe('deal components (D14)', () => {
+  test('the column wins; else the deal type through the map; null is legacy', () => {
+    expect(componentsOf({ deal_components: ['performance_fee'], deal_type: 'performance_booking' })).toEqual(['performance_fee']);
+    expect(componentsOf({ deal_components: '["gifted_items"]' })).toEqual(['gifted_items']);
+    expect(componentsOf({ deal_type: 'brand_partnership', appearance_required: true })).toEqual(['paid_to_appear', 'paid_for_content', 'partnership_base']);
+    expect(componentsOf({ deal_type: null })).toBeNull();
+    expect(isDealEvent({ deal_components: [] })).toBe(true);
+    expect(isDealEvent({})).toBe(false);
+  });
+
+  // The same table as tests/unit/utils/dealComponents.test.js (the server's dealLabel).
+  test.each([
+    [[], 'Self-funded'],
+    [['entry_covered'], 'Invited, comped'],
+    [['gifted_items'], 'Gifted'],
+    [['gifted_items', 'entry_covered'], 'Gifted'],
+    [['paid_to_appear'], 'Paid appearance'],
+    [['paid_to_appear', 'entry_covered'], 'Paid appearance'],
+    [['paid_for_content'], 'Paid content'],
+    [['paid_to_appear', 'paid_for_content'], 'Appearance plus content'],
+    [['performance_fee'], 'Performance booking'],
+    [['performance_fee', 'paid_for_content'], 'Performance booking'],
+    [['partnership_base', 'paid_for_content'], 'Brand partnership'],
+    [['partnership_base'], 'Brand partnership (retainer)'],
+    [['partnership_base', 'paid_to_appear', 'paid_for_content'], 'Brand partnership'],
+    [['paid_to_appear', 'performance_fee'], 'Paid appearance + performance fee'],
+    [['paid_to_appear', 'paid_for_content', 'gifted_items'], 'Appearance plus content + gifted'],
+    [['paid_to_appear', 'paid_for_content', 'performance_fee'], 'Paid appearance + content + performance fee'],
+  ])('%j reads "%s"', (components, label) => {
+    expect(dealLabelFor(components)).toBe(label);
+  });
+
+  test('the plan follows the components: a retainer is cash with no paid content; appearance + performance pays both', () => {
+    expect(dealPlanFor({ deal_components: ['partnership_base'] })).toMatchObject({ cash: true, deliverables: false, known: true });
+    expect(dealPlanFor({ deal_components: ['paid_to_appear', 'performance_fee'] }).components.map((c) => c.field))
+      .toEqual(['performance_fee', 'appearance_fee']);
+    expect(dealPlanFor({ deal_components: ['gifted_items'] })).toMatchObject({ cash: false, giftedValue: true });
+  });
+
+  test('Auto-drafted while the ticks equal the drafted copy (or, before D14, the drafted deal type)', () => {
+    const cc = (drafted) => ({ canon_consequences: { automation: { auto_drafted: { deal_type: 'rule' }, drafted_values: drafted } } });
+    expect(describeDealComponents({ deal_type: 'invited_comped', ...cc({ deal_type: 'invited_comped' }) }))
+      .toMatchObject({ label: 'Invited, comped', state: 'auto_drafted', note: 'Auto-drafted · rule' });
+    expect(describeDealComponents({ deal_components: ['entry_covered', 'gifted_items'], ...cc({ deal_components: ['gifted_items', 'entry_covered'] }) }))
+      .toMatchObject({ state: 'auto_drafted' });
+    expect(describeDealComponents({ deal_components: ['gifted_items'], ...cc({ deal_components: ['gifted_items', 'entry_covered'] }) }))
+      .toMatchObject({ state: 'edited', note: 'Edited' });
+    expect(describeDealComponents({})).toMatchObject({ label: 'Not set', state: 'missing', note: null });
+  });
+
+  test('the PUT body: canonical order; unchanged when equal; an unknown key is refused', () => {
+    expect(buildDealComponentsUpdate({ deal_type: 'paid_appearance' }, ['entry_covered', 'paid_to_appear']))
+      .toEqual({ body: { deal_components: ['paid_to_appear', 'entry_covered'] }, unchanged: false, error: null });
+    expect(buildDealComponentsUpdate({ deal_type: 'paid_appearance' }, ['paid_to_appear']).unchanged).toBe(true);
+    expect(buildDealComponentsUpdate({}, ['vip']).error).toBe('Tick only the listed components.');
+    expect(buildDealComponentsUpdate({ deal_components: [] }, null)).toEqual({ body: { deal_components: null }, unchanged: false, error: null });
+    expect(DEAL_COMPONENT_KEYS).toHaveLength(6);
+  });
+});
