@@ -2856,9 +2856,22 @@ The revised event should feel like a completely different experience from the si
                   )}
                   {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
                 </div>
-                <button onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
-                  {stateCfg.primaryAction} <ArrowRight size={13} />
-                </button>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {/* A used event links both ways (Task #2356): its Event
+                      Package, now read-only, beside Open Episode. */}
+                  {state === 'used' && (
+                    <button
+                      data-testid={`event-card-view-package-${ev.id}`}
+                      onClick={e => { e.stopPropagation(); openPackage(); }}
+                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: '#fff', borderColor: stateCfg.color, color: stateCfg.color }}
+                    >
+                      View Event Package
+                    </button>
+                  )}
+                  <button onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
+                    {stateCfg.primaryAction} <ArrowRight size={13} />
+                  </button>
+                </div>
               </div>
               );
             })}

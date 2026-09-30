@@ -37,6 +37,7 @@ function renderQueue() {
       <Routes>
         <Route path="/shows/:id/world" element={<WorldAdmin />} />
         <Route path="/episodes/:episodeId" element={<LocationProbe />} />
+        <Route path="/shows/:showId/events/:eventId" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
   );
@@ -64,5 +65,19 @@ describe('WorldAdmin events queue — Open Episode lands on Overview', () => {
     fireEvent.click(within(card).getByRole('button', { name: /Open Episode/ }));
 
     await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-7?tab=overview'));
+  });
+
+  // Task #2356: a used event links both ways.
+  test('a Used event card shows View Event Package next to Open Episode', async () => {
+    renderQueue();
+    const card = await screen.findByTestId('event-card-ev-used');
+    await waitFor(() => expect(within(card).getByText(/Episode 7: Velour/)).toBeTruthy());
+
+    expect(within(card).getByRole('button', { name: /Open Episode/ })).toBeTruthy();
+    const view = within(card).getByTestId('event-card-view-package-ev-used');
+    expect(view.textContent).toBe('View Event Package');
+
+    fireEvent.click(view);
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/shows/show-1/events/ev-used'));
   });
 });

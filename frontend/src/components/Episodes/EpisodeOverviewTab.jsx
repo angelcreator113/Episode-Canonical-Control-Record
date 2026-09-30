@@ -612,6 +612,17 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                       {ev.dress_code && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#B8962E' }}>{ev.dress_code}</span>}
                       {ev.event_type && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#6366f1' }}>{ev.event_type}</span>}
                     </div>
+                    {/* Back to the event (Task #2356): its Event Package,
+                        read-only once Start Episode has locked the terms. */}
+                    {(ev.show_id || showId) && (
+                      <Link
+                        to={`/shows/${ev.show_id || showId}/events/${ev.id}`}
+                        data-testid={`overview-event-package-${ev.id}`}
+                        style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, color: '#8a6d1f', textDecoration: 'underline' }}
+                      >
+                        View Event Package →
+                      </Link>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <button

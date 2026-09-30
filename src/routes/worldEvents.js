@@ -238,6 +238,25 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       }).catch(() => null);
     }
 
+    // The episode whose Start Episode locked these terms (Task #2356), found
+    // the way the lock itself finds it (findTermsLockEpisode): the live brief
+    // that names this event first (§8(w) P2), else the used_in_episode_id
+    // stamp. The Event Package reads as read-only while this is set, so it
+    // never offers an edit the server would refuse.
+    let termsLockedBy = null;
+    try {
+      const lockEpisode = await findTermsLockEpisode(models.sequelize, event.id);
+      if (lockEpisode) {
+        termsLockedBy = {
+          id: lockEpisode.id,
+          episode_number: lockEpisode.episode_number ?? null,
+          title: lockEpisode.title ?? null,
+        };
+      }
+    } catch (lockErr) {
+      console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
+    }
+
     return res.json({
       success: true,
       event,
@@ -247,6 +266,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       venueLocation,
       invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
       usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
+      termsLockedBy,
     });
   } catch (error) {
     console.error('Get single event error:', error);
