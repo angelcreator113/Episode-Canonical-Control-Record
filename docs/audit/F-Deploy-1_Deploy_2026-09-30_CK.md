@@ -56,11 +56,12 @@ record.
    - CFO 11:26:37–11:26:40: **89/100**, **0 critical**, 4 warnings, "the
      first audit with no critical".
 
-**Real email test: not supplied.** Evoni's message carried "Real email
-test: [a notification arrived by Gmail / not yet sent]" with both options
-still in brackets. No choice was made, so this record claims neither. The
-nodemailer PR (#2339) asked for one real send after this deploy; that check
-is still open.
+**Real email test: passed (ATTESTED, supplied later).** Evoni's first
+message carried "Real email test: [a notification arrived by Gmail / not
+yet sent]" with both options still in brackets. In a later message the
+same day she gave the result: "email successful". That is the one real send
+the nodemailer PR (#2339) asked for after this deploy. This record does not
+observe the send; it records Evoni's word.
 
 **The order was right.** `npm ci` ran before the restart, as the PR asked,
 unlike CI's first restart (CI record §4).
@@ -240,7 +241,8 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
 - **Deploy:** manual: backup, fast-forward, `npm ci`, then one restart
   (count 40). `/health` healthy and connected.
 - **CFO:** 89/100, **0 critical**, 4 warnings; `dependency_audit` 0.
-- **Real email test:** not supplied; the check #2339 asked for is open.
+- **Real email test:** "email successful" (ATTESTED, supplied after the
+  deploy account); the check #2339 asked for is done.
 - Nothing is RULED here. The filing session made no host, AWS, database or
   Cognito contact.
 
