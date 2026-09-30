@@ -609,6 +609,29 @@ recorded as a ruling). Recorded verbatim here and in
 
 §12 says what this changes.
 
+### 10.3 Deal PR 4 and PR 5 answers (Evoni, 2026-09-30)
+
+Evoni's answers to the two points deal build PR 4 (Task #2365) put to her.
+Recorded verbatim here and in `docs/EVENT_EPISODE_FLOW.md` §8(cc):
+
+> 1. Partnership base and performance fee are paid at Complete, each under its own ledger name; one guarded migration extends the payout unique index. Ship it in the same deploy as #2303.
+> 2. Draft extras (and the first Propose terms) add an "Entry / ticket" cost: for self-funded deals, paid by Lala at the event's cost_coins, labelled "Auto-drafted · from event cost"; for invited/comped deals, the same line comped by the host. Elsewhere cost_coins stays difficulty only.
+
+Her reasons, as given: for 1, "both paid at Complete, each under its own
+name, with the one guarded migration to extend the payout index … so it's
+one manual migration deploy"; for 2, "A self-funded event is one where Lala
+pays to be in the room; that's the early-career story … For comped deals,
+draft the same line comped by host, so the saving is visible."
+
+- **Answer 2 is built by PR 4** (Task #2365): the drafted "Entry / ticket"
+  row (`kind 'entry'`), recorded in `automation.drafted_values.costs` with
+  `source 'event_cost'`. No other deal type drafts it.
+- **Answer 1 is built by PR 5** (the payouts): the partnership base and the
+  performance fee each get their own ledger category, booked at Complete
+  beside the appearance fee, and one guarded migration adds them to the
+  partial unique index of §4 (M-5). That migration ships in the same manual
+  deploy as #2303.
+
 ---
 
 ## 11. What the answers change (PROPOSED, following §10.1)

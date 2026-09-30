@@ -201,7 +201,13 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
                           <span style={{ padding: '1px 6px', background: '#f0fdf4', color: '#16a34a', borderRadius: 3, fontWeight: 600 }}>+{s.event.payment_amount} 🪙</span>
                         )}
                         {s.event.cost_coins > 0 && (
-                          <span style={{ padding: '1px 6px', background: s.affordable ? '#fefce8' : '#fef2f2', color: s.affordable ? '#854d0e' : '#dc2626', borderRadius: 3, fontWeight: 600 }}>cost {s.event.cost_coins} 🪙</span>
+                          s.event.deal_type ? (
+                            // A deal event is never charged cost_coins: it is
+                            // difficulty only (Law 0; Task #2365).
+                            <span style={{ padding: '1px 6px', background: '#f1f5f9', color: '#475569', borderRadius: 3, fontWeight: 600 }}>difficulty {s.event.cost_coins}</span>
+                          ) : (
+                            <span style={{ padding: '1px 6px', background: s.affordable ? '#fefce8' : '#fef2f2', color: s.affordable ? '#854d0e' : '#dc2626', borderRadius: 3, fontWeight: 600 }}>cost {s.event.cost_coins} 🪙</span>
+                          )
                         )}
                         {s.event.prestige != null && <span style={{ padding: '1px 6px', background: '#faf5ea', color: '#B8962E', borderRadius: 3 }}>★ {s.event.prestige}</span>}
                       </div>

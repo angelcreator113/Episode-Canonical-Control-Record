@@ -40,6 +40,29 @@ const EVENT_EXTRAS = {
   photo_booth: (prestige) => prestige >= 4 ? 30 + prestige * 15 : 0,       // 90 @ p4 → 180 @ p10
 };
 
+// Whether an event gets the photo booth extra: galas, premieres and brand
+// launches (format first, §8(u) R5), the event_type values
+// /memories/generate-events writes format words into, or a dress code that
+// mentions a red carpet or photos. Finalize and the drafted cost rows of a
+// deal event (Task #2365) share it, so the two never disagree.
+function wantsPhotoBooth(event) {
+  const ev = event || {};
+  const dressCode = (ev.dress_code || '').toLowerCase();
+  return ['gala', 'premiere', 'brand_launch'].includes(ev.format)
+    || ['gala', 'premiere', 'launch', 'brand_deal'].includes(ev.event_type)
+    || dressCode.includes('red carpet') || dressCode.includes('photo');
+}
+
+// The extras an event incurs, by prestige: { drinks, valet, photo_booth }.
+function eventExtrasFor(event) {
+  const prestige = Number(event?.prestige) || 5;
+  return {
+    drinks: EVENT_EXTRAS.drinks(prestige),
+    valet: EVENT_EXTRAS.valet(prestige),
+    photo_booth: wantsPhotoBooth(event) ? EVENT_EXTRAS.photo_booth(prestige) : 0,
+  };
+}
+
 // Rented / borrowed pieces cost a fraction of their retail. Kept conservative
 // (10%) so renting 5 pieces is still cheaper than owning one — encourages
 // rentals early game, ownership mid-late game.
@@ -56,6 +79,8 @@ module.exports = {
   DEFAULT_STARTING_BALANCE,
   DEFAULT_GOALS,
   EVENT_EXTRAS,
+  wantsPhotoBooth,
+  eventExtrasFor,
   RENTAL_RATE,
   CONTENT_REVENUE_PER_PRESTIGE,
 };

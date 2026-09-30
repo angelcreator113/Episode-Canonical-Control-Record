@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * An event's paid and free flags, as money reads them. A paid or free event
- * is never charged its entry cost, and only a paid event earns its payment.
+ * An event's paid and free flags, as money reads them. A paid, free or deal
+ * event is never charged its entry cost, and only a paid event earns its
+ * payment.
  *
  * Shared by Finalize (financialTransactionService), Complete's paid-bonus
  * gate (episodeCompletionService, Task #2313) and Episode Money's expected
@@ -13,9 +14,13 @@ function normalizePaidFreeFlags(event) {
   const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
   const isPaid = truthy.has(event?.is_paid);
   const isFree = truthy.has(event?.is_free);
-  const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event?.cost_coins) || 0));
+  // A deal event (deal_type set) is never charged cost_coins: it keeps it
+  // as difficulty only (Law 0), and its costs are its itemised event_costs
+  // rows (deal build PR 4, Task #2365; docs/DEAL_DESIGN.md §5).
+  const isDeal = Boolean(event?.deal_type);
+  const eventCost = (isDeal || isFree || isPaid) ? 0 : (Number(event?.cost_coins) || 0);
   const eventPayment = isPaid ? (parseFloat(event?.payment_amount) || 0) : 0;
-  return { isPaid, isFree, eventCost, eventPayment };
+  return { isPaid, isFree, isDeal, eventCost, eventPayment };
 }
 
 module.exports = { normalizePaidFreeFlags };
