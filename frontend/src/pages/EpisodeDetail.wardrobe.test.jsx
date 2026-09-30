@@ -127,7 +127,9 @@ describe('EpisodeDetail — Production → Wardrobe (Task #1906)', () => {
     renderAt('/episodes/ep-1?tab=wardrobe');
 
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events'));
-    expect(screen.getByText('No events linked to this episode')).toBeTruthy();
+    // The request can be made while the page still reads "Loading episode...";
+    // wait for the empty state to render rather than asserting at once.
+    expect(await screen.findByText('No events linked to this episode')).toBeTruthy();
   });
 
   // Task #2356: the header now reads /episodes/:id/events once on every
