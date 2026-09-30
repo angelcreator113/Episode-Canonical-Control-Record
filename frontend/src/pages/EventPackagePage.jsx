@@ -87,6 +87,7 @@ import {
 import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersion';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
+import EventOutfitPicker from '../components/EventOutfitPicker';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -176,6 +177,8 @@ export default function EventPackagePage() {
   // would be wiped before the next render; this component's own state
   // survives, since it's never itself unmounted by its own loading toggle.
   const [invitationApprovalInfo, setInvitationApprovalInfo] = useState(null);
+  // Style (Task #2376): the closet picker, open while choosing Lala's look.
+  const [outfitPickerOpen, setOutfitPickerOpen] = useState(false);
 
   // Change Organizer (Task #1761; was Change Host). One picker, two kinds.
   // brands: null = not fetched yet; brandsError = the list could not be
@@ -1193,12 +1196,44 @@ export default function EventPackagePage() {
             Terms area below as access requirements, one of the four kinds
             of term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1) — shown and
             edited in one place. */}
-        <section className="epp-section">
-          <h2 className="epp-section-title">Style</h2>
+        {/* Choosing Lala's look (Task #2376): before Start Episode the
+            outfit is chosen here, with the same closet picker (and PUT
+            /outfit, saved on world_events.outfit_pieces) as the Events
+            card's ⋯ menu. Once used it stays read-only, as the rest of the
+            package does. */}
+        <section className="epp-section" data-testid="style-section">
+          <div className="epp-section-header">
+            <h2 className="epp-section-title">Style</h2>
+            {!used && (
+              <button className="epp-btn epp-btn-small" onClick={() => setOutfitPickerOpen(true)} data-testid="style-choose-outfit">
+                <Shirt size={14} /> {outfitPieces.length ? 'Change outfit' : 'Choose outfit'}
+              </button>
+            )}
+          </div>
           <dl className="epp-fields">
-            <div><dt>Outfit</dt><dd>{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd></div>
+            <div>
+              <dt>Outfit</dt>
+              <dd data-testid="style-outfit-summary">{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd>
+              {outfitPieces.length > 0 && (
+                <dd className="epp-outfit-pieces">
+                  {outfitPieces.map((piece, i) => (
+                    <span key={piece.id || i} className="epp-outfit-piece">{piece.name || 'Unnamed piece'}</span>
+                  ))}
+                </dd>
+              )}
+            </div>
           </dl>
         </section>
+
+        {outfitPickerOpen && !used && (
+          <EventOutfitPicker
+            showId={showId}
+            event={event}
+            onClose={() => setOutfitPickerOpen(false)}
+            onSaved={() => { setOutfitPickerOpen(false); load(); }}
+            onToast={setToast}
+          />
+        )}
 
         <EventTermsSection
           showId={showId}
