@@ -1,0 +1,90 @@
+/* Episode title approval + title card (Task #2386, ruling P11). */
+
+.etc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 100%;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.etc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.etc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--lala-gold, #B8962E);
+  border-radius: 6px;
+  background: var(--lala-parchment, #FAF7F0);
+  color: var(--lala-gold, #B8962E);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.etc-btn-primary {
+  background: var(--lala-gold, #B8962E);
+  color: #FFFFFF;
+}
+
+.etc-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.etc-approved,
+.etc-outdated {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.etc-approved {
+  color: #2F7D4F;
+}
+
+.etc-outdated {
+  color: #A16207;
+}
+
+.etc-thumb {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+}
+
+.etc-thumb-outdated {
+  opacity: 0.55;
+}
+
+.etc-error {
+  margin: 0;
+  color: #B91C1C;
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .etc-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
