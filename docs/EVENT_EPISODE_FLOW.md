@@ -1405,6 +1405,11 @@ Producer Mode's). Auto-Reorder (episode sequencing) moves off this tab
 onto the Episodes tab's Season Arc view — event creation and episode
 sequencing are different jobs that happened to share a screen.
 
+*Later (Evoni, 2026-09-30; Task #2363):* Auto-Reorder is removed from the
+Season Arc view too. It moved started events to other episodes through
+`/inject`, which the terms lock (§8(x) D4) refuses; reordering belongs to
+future slots only, and a tool for that is a separate design.
+
 The header becomes a filter bar over the five states (`All · Needs Host
 · Needs Setup · Ready · Used · Archived`) plus **+ New Event** (opens
 `/shows/:showId/new-episode`, the existing choose-host flow) and a
