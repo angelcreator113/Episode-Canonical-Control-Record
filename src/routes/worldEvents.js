@@ -37,6 +37,8 @@ const { withDeliverableTasks } = require('../utils/socialTaskSource');
 const { careerTierFromLabel, careerTierFromReputation } = require('../utils/careerTiers');
 const { startedEpisodeFor, readEpisodeSocialTasks, writeEpisodeSocialTasks } = require('../services/episodeTaskCopyService');
 const { findTermsLockEpisode, changedLockedFields, termsLockedBody, episodeLabel, LOCKED_EVENT_FIELDS } = require('../utils/eventTermsLock');
+const { syncDraftedDealType } = require('../services/dealTypeDraftService');
+const { DEAL_TYPES } = require('../models/WorldEvent');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -543,6 +545,9 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         status: 'draft',
         ...savedLinks,
       });
+      // The deal type's first draft (Task #2330; dealTypeDraftService).
+      const dealDraft = await syncDraftedDealType(models.sequelize, event.id, { initial: true });
+      if (dealDraft.deal_type) event.set('deal_type', dealDraft.deal_type);
 
       return res.status(201).json({ success: true, event: event.toJSON() });
     }
@@ -615,6 +620,9 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       }
     );
 
+    // The deal type's first draft (Task #2330; dealTypeDraftService).
+    await syncDraftedDealType(models.sequelize, id, { initial: true });
+
     const [created] = await models.sequelize.query(
       `SELECT * FROM world_events WHERE id = :id`, { replacements: { id } }
     );
@@ -671,7 +679,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // with its stored value is not a change, so full-form saves still work.
     if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
       const [storedRows] = await models.sequelize.query(
-        `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id
+        `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id,
+                deal_type, appearance_fee, bonus_terms, gifted_value
            FROM world_events WHERE id = :eventId AND show_id = :showId`,
         { replacements: { eventId, showId } }
       );
@@ -721,6 +730,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // Host (Event Package page, Change Host — Task #1642). Durable FK to
       // social_profiles, integer PK (not a UUID) — see WorldEvent.js:97.
       'source_profile_id',
+      // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
+      // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
+      'deal_type',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -741,6 +753,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       'career_milestone', 'fail_consequence', 'success_unlock',
       'venue_name', 'venue_address', 'event_date', 'event_time',
       'theme', 'mood', 'floral_style', 'border_style',
+      'deal_type',
     ]);
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
@@ -794,6 +807,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         if (field === 'canon_consequences' && val !== null) {
           // Merged with the stored value just before the UPDATE (Task #1747).
           ccIncoming = val;
+        }
+
+        if (field === 'deal_type' && val !== null && !DEAL_TYPES.includes(val)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid value for deal_type',
+            message: `deal_type must be one of: ${DEAL_TYPES.join(', ')}, or null`,
+          });
         }
 
         if (field === 'restrictions' && val !== null) {
@@ -977,6 +998,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       } else {
         throw updateErr;
       }
+    }
+
+    // Deal type (Task #2330): an Auto-drafted deal type follows the rule's
+    // inputs, so a changed event type or brand re-drafts it. An Edited one,
+    // or one on a locked event, is left alone (dealTypeDraftService).
+    if (updates.event_type !== undefined || updates.host_brand !== undefined) {
+      await syncDraftedDealType(models.sequelize, eventId);
     }
 
     const [updated] = await models.sequelize.query(
@@ -1364,6 +1392,8 @@ router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => 
           },
         }
       );
+      // The deal type's first draft (Task #2330; dealTypeDraftService).
+      await syncDraftedDealType(models.sequelize, id, { initial: true });
       created.push({ id, name: ev.name });
     }
 
@@ -2782,6 +2812,13 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
         }
       }
       event = eventData;
+    }
+
+    // The deal type's first draft (Task #2330; dealTypeDraftService).
+    const dealDraft = await syncDraftedDealType(models.sequelize, event.id || eventData.id, { initial: true });
+    if (dealDraft.deal_type) {
+      if (typeof event.set === 'function') event.set('deal_type', dealDraft.deal_type);
+      else event.deal_type = dealDraft.deal_type;
     }
 
     res.status(201).json({ success: true, event: event.toJSON ? event.toJSON() : event });
