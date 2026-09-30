@@ -4,6 +4,7 @@ const controller = require('../controllers/wardrobeLibraryController');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const notifications = require('../services/notifications');
+const { priceGuideText } = require('../utils/wardrobePriceGuide');
 
 const FAKE_BRAND_PREFIXES = [
   'Maison', 'Atelier', 'House of', 'Studio', 'Velour', 'Aurelia', 'Lunette', 'Noveau',
@@ -254,6 +255,10 @@ router.post('/analyze-image', requireAuth, aiRateLimiter, upload.single('image')
     const base64 = processed.toString('base64');
     const mediaType = 'image/jpeg';
 
+    // Price guide by item_type and tier; no floor (Task #2347). The estimate
+    // is a suggestion the upload form fills only into an empty price.
+    const priceGuide = priceGuideText();
+
     // Two prompts: basic (current behavior) and gameplay (extended). Gameplay
     // mode gets more tokens since it's asking for 9 extra fields + 3 short
     // narrative blurbs.
@@ -269,11 +274,13 @@ Analyze this image and return JSON:
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
   "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
-  "price_estimate": "estimated retail price as a single number, minimum $150. This is a luxury fashion world — price as if sold at a high-end boutique. Examples: 250, 450, 1200",
+  "price_estimate": "estimated retail price in US dollars as a single number, from the PRICE GUIDE below for this item_type and tier",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
   "style_notes": "one sentence about what kind of person wears this and when"
 }
+
+${priceGuide}
 
 Return ONLY the JSON.`;
 
@@ -288,7 +295,7 @@ Return ONLY the JSON.`;
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
   "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
-  "price_estimate": "estimated retail price as a single number, minimum $150. Luxury-boutique pricing.",
+  "price_estimate": "estimated retail price in US dollars as a single number, from the PRICE GUIDE below for this item_type and tier",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
   "style_notes": "one sentence about what kind of person wears this and when",
@@ -303,6 +310,8 @@ Return ONLY the JSON.`;
   "lala_reaction_locked": "one short sentence in Lala's voice when she can't have it yet — aspirational, not whiny",
   "lala_reaction_reject": "one short sentence when it's wrong for the occasion — self-aware, funny"
 }
+
+${priceGuide}
 
 Return ONLY the JSON.`;
 
