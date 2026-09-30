@@ -25,7 +25,7 @@ import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import EpisodeTasksPanel from '../components/EpisodeTasksPanel';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
-import { calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
+import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
 import {
   hydrateEventForModal, sameEditorValue, changedFields, withoutOrganizerKeys, missingForMarkReady,
@@ -38,6 +38,7 @@ import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
+import { readinessCounts, eventCardMetaParts, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -423,6 +424,8 @@ function WorldAdmin() {
   const [generateTarget, setGenerateTarget] = useState(null);
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
+  // Deal-type filter, next to the status filters (Task #2361).
+  const [eventDealFilter, setEventDealFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
   // The stored row the Edit details modal opened with, plus every change it
   // has saved since (Task #1786). Its hydration is the baseline a save
@@ -2145,6 +2148,13 @@ The revised event should feel like a completely different experience from the si
                 }}>{f.label} ({f.count})</button>
               ))}
             </div>
+            <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
+              onChange={e => { setEventDealFilter(e.target.value); setEventPage(1); }}
+              style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? '#fff' : '#eef2ff', cursor: 'pointer', maxWidth: '100%' }}>
+              {dealTypeFilterOptions(worldEvents).map(o => (
+                <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
+              ))}
+            </select>
             <select value={eventSort} onChange={e => { setEventSort(e.target.value); setEventPage(1); }} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: '#fff', cursor: 'pointer' }}>
               <option value="name">Sort: Name</option>
               <option value="prestige">Sort: Prestige ↓</option>
@@ -2727,7 +2737,7 @@ The revised event should feel like a completely different experience from the si
               // count and the cards below display (Task #1648) — not the
               // raw world_events.status.
               const matchStatus = eventStatusFilter === 'all' || computeEventState(ev) === eventStatusFilter;
-              return matchSearch && matchStatus;
+              return matchSearch && matchStatus && matchesDealTypeFilter(ev, eventDealFilter);
             }).sort((a, b) => {
               if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
               if (eventSort === 'cost') return (b.cost_coins || 0) - (a.cost_coins || 0);
@@ -2751,8 +2761,8 @@ The revised event should feel like a completely different experience from the si
               const readiness = computeEventPackageReadiness(ev);
               const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
-              const organizer = resolveEventOrganizer(ev);
-              const venueDate = resolveEventVenueAndDate(ev);
+              const metaParts = eventCardMetaParts(ev);
+              const counts = readinessCounts(readiness);
               const missing = describeMissing(readiness.blocking);
               const toFinish = describeMissing(readiness.warnings, 'warning');
               const menuOpen = openEventMenuId === ev.id;
@@ -2771,7 +2781,7 @@ The revised event should feel like a completely different experience from the si
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
                       style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer', marginTop: 2 }} />
                   )}
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{ev.name}</h3>
                   <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                     <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94a3b8', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
@@ -2842,55 +2852,52 @@ The revised event should feel like a completely different experience from the si
                     )}
                   </div>
                 </div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, color: stateCfg.color, background: stateCfg.bg, marginBottom: 8 }}>
-                  {stateCfg.icon} {stateCfg.label}
-                </span>
-                {conflictsByEvent.has(ev.id) && (() => {
-                  const c = conflictsByEvent.get(ev.id);
-                  const detail = `Ep ${c.episode.episode_number} "${ev.name}" wants [${c.eventKeywords.join(', ')}] but the wardrobe has [${c.wardrobeKeywords.join(', ')}]`;
-                  return (
-                    <span className="wa-ev-conflict-chip" data-testid={`event-card-conflict-${ev.id}`} title={detail} aria-label={`Wardrobe conflict: ${detail}`}>
-                      <AlertTriangle size={11} aria-hidden="true" /> Wardrobe conflict
-                    </span>
-                  );
-                })()}
-                <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
-                  {organizer.hasOrganizer ? (
-                    <div>
-                      Organized by: {organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName}
-                      <span style={S.savedCopyTag}>{organizer.organizerKind === 'brand' ? 'Brand' : 'Creator'}</span>
-                      {organizer.organizerKind === 'brand' && organizer.hasCreator && (
-                        <span> · Hosted by: {organizer.creatorName}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ color: '#dc2626' }}>No organizer linked</div>
-                  )}
-                  {venueDate.venueName && (
-                    <div>Venue: {venueDate.venueName}{venueDate.venueNameFromSavedCopy && <span style={S.savedCopyTag}>saved copy</span>}</div>
-                  )}
-                  {(venueDate.eventDate || venueDate.eventTime) && (
-                    <div>Date: {venueDate.eventDate}{venueDate.eventTime ? ` · ${venueDate.eventTime}` : ''}{(venueDate.eventDateFromSavedCopy || venueDate.eventTimeFromSavedCopy) && <span style={S.savedCopyTag}>saved copy</span>}</div>
-                  )}
-                  {state === 'needs_setup' && missing.length > 0 && <div data-testid={`event-card-missing-${ev.id}`} style={{ color: '#b45309' }}>Missing: {missing.join(' · ')}</div>}
-                  {(state === 'needs_setup' || state === 'ready' || state === 'needs_organizer') && toFinish.length > 0 && (
-                    <div data-testid={`event-card-warnings-${ev.id}`} style={{ color: '#94a3b8' }}>Still to finish: {toFinish.join(' · ')}</div>
-                  )}
-                  {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
+                {/* Card (Task #2361, Evoni's redesign of 2026-09-30):
+                    organizer · date · deal type on one line, one status
+                    chip, a readiness bar, one primary button. */}
+                <div className="wa-ev-card-meta" data-testid={`event-card-meta-${ev.id}`} title={metaParts.map(p => p.text).join(' · ')}>
+                  {metaParts.map((p, i) => (
+                    <React.Fragment key={p.key}>
+                      {i > 0 && <span aria-hidden="true"> · </span>}
+                      <span className={p.missing ? 'wa-ev-card-meta-missing' : undefined}>{p.text}</span>
+                    </React.Fragment>
+                  ))}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div className="wa-ev-card-chips">
+                  <span data-testid={`event-card-status-${ev.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, color: stateCfg.color, background: stateCfg.bg }}>
+                    {stateCfg.icon} {stateCfg.label}
+                  </span>
+                  {conflictsByEvent.has(ev.id) && (() => {
+                    const c = conflictsByEvent.get(ev.id);
+                    const detail = `Ep ${c.episode.episode_number} "${ev.name}" wants [${c.eventKeywords.join(', ')}] but the wardrobe has [${c.wardrobeKeywords.join(', ')}]`;
+                    return (
+                      <span className="wa-ev-conflict-chip" data-testid={`event-card-conflict-${ev.id}`} title={detail} aria-label={`Wardrobe conflict: ${detail}`}>
+                        <AlertTriangle size={11} aria-hidden="true" /> Wardrobe conflict
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="wa-ev-readiness" data-testid={`event-card-readiness-${ev.id}`}
+                  title={[...missing.map(m => `Missing: ${m}`), ...toFinish.map(m => `Still to finish: ${m}`)].join('\n') || 'Every package item is ready'}>
+                  <div className="wa-ev-readiness-track" role="progressbar" aria-label="Event Package readiness"
+                    aria-valuemin={0} aria-valuemax={counts.total} aria-valuenow={counts.ready}>
+                    <div className="wa-ev-readiness-fill" style={{ width: `${counts.total ? Math.round((counts.ready / counts.total) * 100) : 0}%`, background: stateCfg.color }} />
+                  </div>
+                  <span className="wa-ev-readiness-label">{counts.ready} of {counts.total} ready</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {/* A used event links both ways (Task #2356): its Event
                       Package, now read-only, beside Open Episode. */}
                   {state === 'used' && (
-                    <button
-                      data-testid={`event-card-view-package-${ev.id}`}
+                    <button type="button" data-testid={`event-card-view-package-${ev.id}`}
                       onClick={e => { e.stopPropagation(); openPackage(); }}
-                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: '#fff', borderColor: stateCfg.color, color: stateCfg.color }}
-                    >
+                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: '#fff', borderColor: stateCfg.color, color: stateCfg.color }}>
                       View Event Package
                     </button>
                   )}
-                  <button onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
+                  <button type="button" data-testid={`event-card-primary-${ev.id}`}
+                    title={state === 'used' && linkedEpisode ? `Episode ${linkedEpisode.episode_number}: ${linkedEpisode.title || 'Untitled'}` : undefined}
+                    onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
                     {stateCfg.primaryAction} <ArrowRight size={13} />
                   </button>
                 </div>

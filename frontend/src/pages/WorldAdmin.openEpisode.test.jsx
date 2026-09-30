@@ -60,9 +60,12 @@ describe('WorldAdmin events queue — Open Episode lands on Overview', () => {
   test('a Used event card\'s Open Episode navigates to /episodes/:id?tab=overview', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-used');
-    await waitFor(() => expect(within(card).getByText(/Episode 7: Velour/)).toBeTruthy());
+    // The card no longer prints the episode title (Task #2361); the Open
+    // Episode button names it in its title once the episodes list loads.
+    const open = await within(card).findByTitle('Episode 7: Velour');
+    expect(open.textContent).toMatch(/Open Episode/);
 
-    fireEvent.click(within(card).getByRole('button', { name: /Open Episode/ }));
+    fireEvent.click(open);
 
     await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-7?tab=overview'));
   });
@@ -71,9 +74,7 @@ describe('WorldAdmin events queue — Open Episode lands on Overview', () => {
   test('a Used event card shows View Event Package next to Open Episode', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-used');
-    await waitFor(() => expect(within(card).getByText(/Episode 7: Velour/)).toBeTruthy());
-
-    expect(within(card).getByRole('button', { name: /Open Episode/ })).toBeTruthy();
+    expect((await within(card).findByTitle('Episode 7: Velour')).textContent).toMatch(/Open Episode/);
     const view = within(card).getByTestId('event-card-view-package-ev-used');
     expect(view.textContent).toBe('View Event Package');
 
