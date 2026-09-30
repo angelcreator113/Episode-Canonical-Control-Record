@@ -2887,6 +2887,12 @@ the proposed test; invitation and script regeneration are offered, not
 forced, with a reminder such as "Terms changed; the invitation mentions
 money. Regenerate?".
 
+**Invitation ruling (Evoni, 2026-09-30).** Recorded verbatim. It says
+what the event invitation states about the deal; Task #2375 builds it
+(`describeInvitationMoney` in `invitationCompositingService`).
+
+> The invitation states the deal in the host's voice, in Prime Coins: what Lala is paid (fees, and each deliverable with its fee), what she pays (entry, if self-funded), what is covered and by whom (host or brand), and any bonus with its amount. Comped and gifted events say so without price talk.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2905,6 +2911,7 @@ money. Regenerate?".
   Complete) by PR 5, with its migration in the same deploy as #2303.
 - The Reopen terms ruling (2026-09-30) is built after the CQ deploy (Task
   #2378).
+- The invitation ruling (2026-09-30) is built by Task #2375.
 
 ---
 
