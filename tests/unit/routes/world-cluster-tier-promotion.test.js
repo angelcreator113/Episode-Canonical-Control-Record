@@ -164,10 +164,18 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       );
     });
 
-    test('all 5 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // Task #2386 (P11) — the episode title card generator (an image call)
+    // gains aiRateLimiter; it was requireAuth only.
+    test('POST /episodes/:episodeId/generate-title-overlay uses requireAuth + aiRateLimiter (Task #2386)', () => {
+      expect(src).toMatch(
+        /router\.post\(['"]\/world\/:showId\/episodes\/:episodeId\/generate-title-overlay['"],\s*requireAuth,\s*aiRateLimiter,/,
+      );
+    });
+
+    test('all 6 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(5);
+      expect(matches.length).toBe(6);
     });
   });
 

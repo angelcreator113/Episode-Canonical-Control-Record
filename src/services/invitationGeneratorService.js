@@ -23,6 +23,7 @@ const { v4: uuidv4 } = require('uuid');
 const { detectTheme, buildInvitationContent, compositeInvitation, compositeInvitationPDF } = require('./invitationCompositingService');
 const { isDealEvent, listEventCosts } = require('./eventCostsService');
 const { listEventDeliverables } = require('./eventTermsService');
+const { deriveEventVisualDirection } = require('./eventVisualDirection');
 
 /**
  * A deal event's terms rows, so the invitation can state the deal (Task
@@ -54,80 +55,17 @@ const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── THEME PRESETS ────────────────────────────────────────────────────────────
-
-const THEME_PRESETS = {
-  'honey luxe': {
-    background: 'warm honey cream with golden silk texture, subtle amber glow emanating from center',
-    border: 'delicate ornamental gold foil border with honey-toned curved corners and fine filigree',
-    florals: 'soft honey-toned peonies and cream roses scattered in corners, light and delicate',
-    atmosphere: 'warm candlelight glow, golden hour warmth',
-  },
-  'avant-garde': {
-    background: 'ivory with subtle black marble veining, cool and precise',
-    border: 'thin asymmetric black border with single gold corner accent',
-    florals: 'single sculptural black orchid silhouette, minimal',
-    atmosphere: 'crisp studio lighting, high contrast',
-  },
-  'soft glam': {
-    background: 'blush pink with delicate silk sheen, rose gold undertones and gentle shimmer',
-    border: 'rose gold foil border with soft curved ornamental edges and small floral details',
-    florals: 'soft pink roses and white peonies, ethereal and romantic, corners and sides',
-    atmosphere: 'soft warm pink glow, dreamy and aspirational',
-  },
-  'romantic garden': {
-    background: 'soft sage green with ivory overlay, garden party elegance',
-    border: 'delicate floral wreath border in blush, ivory, and sage green',
-    florals: 'lush garden roses, ranunculus, eucalyptus, full bloom abundance',
-    atmosphere: 'dappled golden sunlight, outdoor warmth',
-  },
-  'luxury intimate': {
-    background: 'deep champagne with velvet texture suggestion, warm and enveloping',
-    border: 'thin double-line gold border, understated luxury',
-    florals: 'single camellia or gardenia, centered and minimal',
-    atmosphere: 'intimate candlelight glow, evening warmth, soft shadows',
-  },
-  'formal glamour': {
-    background: 'cream white with subtle pearl sheen, pristine and elevated',
-    border: 'ornate classical gold filigree border with corner medallions',
-    florals: 'white orchids and gold-tipped leaves, architectural placement',
-    atmosphere: 'crisp bright light with gold accents, formal and polished',
-  },
-  'chic minimal': {
-    background: 'pure cream, hairline texture, clean and breathable',
-    border: 'single thin black line border, architectural precision',
-    florals: 'single thin botanical line drawing, one corner only',
-    atmosphere: 'clean studio light, maximum negative space',
-  },
-  'power fashion': {
-    background: 'ivory with subtle black marble veining, statement material',
-    border: 'bold black border with gold corner accents, commanding',
-    florals: 'architectural black florals or none',
-    atmosphere: 'high-contrast editorial lighting, bold and confident',
-  },
-};
-
-const DEFAULT_THEME = {
-  background: 'soft cream ivory with subtle silk texture and marble undertone',
-  border: 'elegant gold foil border with ornamental curved edges and fine filigree details',
-  florals: 'soft blush roses and ivory peonies, delicately placed in corners',
-  atmosphere: 'warm golden light from center, luxurious and aspirational',
-};
+// The theme presets and the event's visual direction live in
+// eventVisualDirection.js (Task #2386), shared with the episode title card.
 
 // ─── DALL-E PROMPT (background only — no text) ────────────────────────────────
 
 function buildBackgroundPrompt(event) {
-  const themeName = detectTheme(event);
-  const themeConfig = (themeName && THEME_PRESETS[themeName]) || DEFAULT_THEME;
+  const themeConfig = deriveEventVisualDirection(event);
+  const richness = themeConfig.richness;
 
-  const prestige = event.prestige || 5;
-  const richness = prestige >= 8
-    ? 'Maximum luxury — gold accents are rich and opulent'
-    : prestige >= 5
-      ? 'Refined elegance — gold accents are tasteful and considered'
-      : 'Understated — minimal decoration, clean and simple';
-
-  const colorText = event.color_palette?.length > 0
-    ? `Color palette emphasis: ${event.color_palette.join(', ')}.`
+  const colorText = themeConfig.palette.length > 0
+    ? `Color palette emphasis: ${themeConfig.palette.join(', ')}.`
     : '';
 
   return `Create a luxury invitation card BACKGROUND as a flat graphic design, portrait orientation.

@@ -321,6 +321,52 @@ router.get('/:id/events', validateUUIDParam('id'), requireAuth, async (req, res)
   }
 });
 
+// ==================== TITLE APPROVAL + TITLE CARD (Task #2386, P11) ====================
+// services/episodeTitleCardService.js holds the rules; these handlers only
+// map its errors (TitleCardError status/code, image budget 429) to JSON.
+function sendTitleCardError(res, err, where) {
+  const { isBudgetError } = require('../services/imageCostService');
+  console.error(`[EpisodeTitleCard] ${where} failed:`, err.message);
+  const status = isBudgetError(err) ? 429 : (err.status && err.status < 600 ? err.status : 500);
+  return res.status(status).json({ success: false, error: err.message, code: err.code || null });
+}
+
+// Approval and card state, with the design/redesign offer and its estimate.
+router.get('/:id/title-card', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getTitleCardState } = require('../services/episodeTitleCardService');
+    const data = await getTitleCardState(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'GET /:id/title-card');
+  }
+});
+
+// Approve the current title. Body { title? }: the title the person saw.
+router.post('/:id/title/approve', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { approveTitle } = require('../services/episodeTitleCardService');
+    const data = await approveTitle(models, req.params.id, { expectedTitle: req.body?.title });
+    return res.json({ success: true, data, title_card_offer: data.offer });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'POST /:id/title/approve');
+  }
+});
+
+// Design (or redesign) the title card for the approved title.
+router.post('/:id/title-card', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { designTitleCard } = require('../services/episodeTitleCardService');
+    const data = await designTitleCard(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'POST /:id/title-card');
+  }
+});
+
 // Get single episode
 router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(episodeController.getEpisode));
 
