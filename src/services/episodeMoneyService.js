@@ -45,9 +45,11 @@ async function findSourceEvent(sequelize, episodeId) {
  * The accepted terms as expected lines (M2): never posted, never summed.
  * A deal event has no entry cost; its expected costs are the itemised rows
  * Lala pays (`costs`, deal build PR 4, Task #2365). Comped rows are not
- * lines here: Lala never pays them.
+ * lines here: Lala never pays them. Its expected income (deal build PR 5)
+ * is each component it is paid at Complete and each deliverable's content
+ * fee, paid on approval (`deliverables`).
  */
-function expectedLines(event, costs = []) {
+function expectedLines(event, costs = [], deliverables = []) {
   if (!event) return [];
   const { normalizePaidFreeFlags } = require('./financialTransactionService');
   const { isPaid, eventCost, eventPayment } = normalizePaidFreeFlags(event);
@@ -57,6 +59,16 @@ function expectedLines(event, costs = []) {
   }
   if (eventCost > 0) {
     lines.push({ kind: 'expense', label: 'Entry cost', amount: wholeCoins(eventCost), source: 'terms' });
+  }
+  const { completionPayouts, contentFeeFor } = require('./dealPayoutService');
+  for (const p of completionPayouts(event, null)) {
+    const label = p.category === 'appearance_fee' ? 'Appearance fee'
+      : p.category === 'partnership_base_fee' ? 'Partnership base' : 'Performance fee';
+    lines.push({ kind: 'income', label, amount: wholeCoins(p.amount), source: 'terms' });
+  }
+  for (const d of deliverables) {
+    const fee = contentFeeFor(event, d);
+    if (fee > 0) lines.push({ kind: 'income', label: `Content fee: ${d.description || 'deliverable'}`, amount: wholeCoins(fee), source: 'terms' });
   }
   const { chargeableCosts } = require('./eventCostsService');
   for (const cost of chargeableCosts(costs)) {
@@ -105,6 +117,8 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const event = await findSourceEvent(sequelize, episodeId);
   const { isDealEvent, listEventCosts } = require('./eventCostsService');
   const costs = isDealEvent(event) ? await listEventCosts(sequelize, event.id) : [];
+  const { listEventDeliverables } = require('./eventTermsService');
+  const deliverables = isDealEvent(event) ? await listEventDeliverables(sequelize, event.id) : [];
   return {
     episode_id: episode.id,
     show_id: episode.show_id,
@@ -112,7 +126,7 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     rows: posted,
     net,
     event: event ? { id: event.id, name: event.name } : null,
-    expected: expectedLines(event, costs),
+    expected: expectedLines(event, costs, deliverables),
   };
 }
 

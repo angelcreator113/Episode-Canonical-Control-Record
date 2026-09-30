@@ -2,8 +2,8 @@
 
 /**
  * An event's paid and free flags, as money reads them. A paid, free or deal
- * event is never charged its entry cost, and only a paid event earns its
- * payment.
+ * event is never charged its entry cost, and only a paid legacy event earns
+ * its payment; a deal event is paid its deal payouts instead.
  *
  * Shared by Finalize (financialTransactionService), Complete's paid-bonus
  * gate (episodeCompletionService, Task #2313) and Episode Money's expected
@@ -19,7 +19,10 @@ function normalizePaidFreeFlags(event) {
   // rows (deal build PR 4, Task #2365; docs/DEAL_DESIGN.md §5).
   const isDeal = Boolean(event?.deal_type);
   const eventCost = (isDeal || isFree || isPaid) ? 0 : (Number(event?.cost_coins) || 0);
-  const eventPayment = isPaid ? (parseFloat(event?.payment_amount) || 0) : 0;
+  // Nor is a deal event paid payment_amount (or its 10% content_revenue):
+  // it is paid its deal payouts instead (deal build PR 5, dealPayoutService;
+  // DEAL_DESIGN.md §4). Legacy events keep payment_amount (D8).
+  const eventPayment = (isPaid && !isDeal) ? (parseFloat(event?.payment_amount) || 0) : 0;
   return { isPaid, isFree, isDeal, eventCost, eventPayment };
 }
 

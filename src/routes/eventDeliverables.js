@@ -23,7 +23,9 @@
  * one step forward at a time, each move stamping its own timestamp
  * (completed_at, submitted_at, approved_at). The rules are
  * validateDeliverableTransition (eventTermsService.js). Completing an
- * episode never moves a deliverable.
+ * episode never moves a deliverable. Approval pays a deal's content fee
+ * (deal build PR 5, dealPayoutService.bookContentFee), in the same
+ * transaction as the move.
  *
  * Location: src/routes/eventDeliverables.js
  */
@@ -320,12 +322,27 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
 
     // check.timestampColumn comes from DELIVERABLE_STATUS_TIMESTAMP, never
     // from the request. The status guard makes the move compare-and-set.
-    const [rows] = await models.sequelize.query(
-      `UPDATE event_deliverables SET status = :to, ${check.timestampColumn} = NOW(), updated_at = NOW()
-       WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL AND status = :from
-       ${RETURNING}`,
-      { replacements: { to, from: deliverable.status, deliverableId, eventId } }
-    );
+    // The move to approved and its content fee (deal build PR 5;
+    // DEAL_DESIGN.md §4) commit together: a deal that pays deliverables pays
+    // the deliverable's fee once, when Evoni approves it (D6 keeps the move
+    // manual). A failed booking rolls the approval back.
+    const { sequelize } = models;
+    const { rows, contentFee } = await sequelize.transaction(async (transaction) => {
+      const [moved] = await sequelize.query(
+        `UPDATE event_deliverables SET status = :to, ${check.timestampColumn} = NOW(), updated_at = NOW()
+         WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL AND status = :from
+         ${RETURNING}`,
+        { replacements: { to, from: deliverable.status, deliverableId, eventId }, transaction }
+      );
+      if (!moved?.[0] || to !== 'approved') return { rows: moved, contentFee: null };
+      const [dealRows] = await sequelize.query(
+        `SELECT id, name, deal_type, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId`,
+        { replacements: { eventId }, transaction }
+      );
+      const { bookContentFee } = require('../services/dealPayoutService');
+      const fee = await bookContentFee(sequelize, { showId, event: dealRows?.[0], deliverable: moved[0], transaction });
+      return { rows: moved, contentFee: fee };
+    });
     if (!rows?.[0]) {
       return res.status(409).json({
         success: false,
@@ -333,7 +350,7 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
         error: 'The deliverable changed while this was being saved; reload and try again.',
       });
     }
-    return res.json({ success: true, deliverable: rows[0] });
+    return res.json({ success: true, deliverable: rows[0], content_fee: contentFee });
   } catch (error) {
     console.error('Advance event deliverable status error:', error);
     return res.status(500).json({ success: false, error: 'Failed to record deliverable status', message: error.message });

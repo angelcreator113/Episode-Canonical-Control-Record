@@ -2864,6 +2864,12 @@ deal build PR 4 (Task #2365) put to her. Recorded verbatim;
 > 1. Partnership base and performance fee are paid at Complete, each under its own ledger name; one guarded migration extends the payout unique index. Ship it in the same deploy as #2303.
 > 2. Draft extras (and the first Propose terms) add an "Entry / ticket" cost: for self-funded deals, paid by Lala at the event's cost_coins, labelled "Auto-drafted · from event cost"; for invited/comped deals, the same line comped by the host. Elsewhere cost_coins stays difficulty only.
 
+**Deal bonus ruling (Evoni, 2026-09-30),** on the shape deal build PR 5
+(Task #2368) proposed for `bonus_terms`. Recorded verbatim;
+`DEAL_DESIGN.md` §13 records what PR 5 builds:
+
+> A deal bonus is stored as amounts by evaluation tier, e.g. { slay: 200, pass: 100 }; it pays only the amount for the tier reached; FAIL never pays; editable under Deal price until Start Episode.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
