@@ -80,6 +80,10 @@ Design ruling by Evoni, 2026-09-28. The Character Registry becomes a cast list r
 - C7. No bulk deletion. Evoni reviews existing characters one by one: a Feed match is linked; a useful recurring character without a Feed profile is kept as a side character; an unused idea or duplicate is archived or deleted; a character already used in an episode is retired.
 - C8. The build waits until F-Reg-2's characterRegistry.js PRs (v1.2 R2) have merged.
 
+C9 was added by Evoni on 2026-09-30, recorded verbatim (her text opens "C."):
+
+- C9. "C. A character's episode history comes from a real episode cast link, filled as episodes are made from now on; for older episodes, name matching against scenes and event hosts fills the gap, and any unclear match is flagged for Evoni to decide."
+
 ## Governing principle
 
 Sidebar = workspaces and major hubs. Hub pages = navigation to specialist tools. Specialist tools = never expected to be memorized as standalone URLs.
