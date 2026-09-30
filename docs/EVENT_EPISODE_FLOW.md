@@ -2418,6 +2418,10 @@ and editable. Distribution drafts platform copy from the teaser.
 **P13.** The existing episode description remains the internal synopsis
 of what happens.
 
+**P14** (Evoni, 2026-09-30, Task #2395). Recorded verbatim. Not yet built.
+
+> An episode's task list can be approved; approving offers "Design task-list overlay" (cost shown) in the event's visual direction; it becomes an episode overlay placed on the tasks/deadline beat, replacing an earlier one.
+
 **(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
 only: no code is changed by this entry. The basis is
 `docs/EVENT_TERMS_MONEY_READ.md` (Task #2223, merged as `eeb710af` in
@@ -2932,6 +2936,14 @@ each means:
 3. Costs Lala pays, other than a self-funded deal's entry, are not stated
    on the invitation.
 
+**D12 and T9 (Evoni, 2026-09-30, Task #2395).** Recorded verbatim. D12
+continues the D series of §8(x); T9 continues the T series of §8(bb). Not
+yet built.
+
+> D12. Propose terms drafts deliverables from the deal type, scaled to the job: comped/invited/gifted none required; paid appearance attendance only, optionally one Story set; paid deliverables 1–3 pieces, more at higher tiers or fees; brand partnership a package (Reel + Story set, a Post at higher tiers). Auto-drafted, editable, priced from the rate anchors.
+
+> T9. Lala's goal tasks scale with the event: 2–3 for small or low-key events, 4–6 for major ones; no fixed template lists.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2951,6 +2963,7 @@ each means:
 - The Reopen terms ruling (2026-09-30) is built after the CQ deploy (Task
   #2378).
 - The invitation ruling (2026-09-30) is built by Task #2375.
+- D12 and T9 (2026-09-30) are built after P10–P12 (Task #2395).
 
 ---
 
