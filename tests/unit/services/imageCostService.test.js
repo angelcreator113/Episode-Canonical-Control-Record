@@ -97,8 +97,21 @@ describe('rate table and estimate', () => {
       expect(rate.source.length).toBeGreaterThan(0);
       expect(rate.usd === null || rate.usd > 0).toBe(true);
     }
-    expect(T['dall-e-3'].usd).toBeNull();
-    expect(T['gpt-image-1'].usd).toBeNull();
+    // OpenAI prices vary by quality and size (Evoni, 2026-09-30).
+    expect(T['dall-e-3'].bySizeQuality).toEqual({ 'hd:1024x1024': 0.08, 'hd:1792x1024': 0.12, 'hd:1024x1792': 0.12 });
+    expect(T['gpt-image-1']).toMatchObject({ bySizeQuality: { 'high:1536x1024': 0.25 }, inputImageTokenUsdPerMillion: 10 });
+    for (const key of Object.keys(T).filter((k) => T[k].provider === 'replicate')) expect(T[key].usd).toBeNull();
+  });
+
+  test('OpenAI: priced by quality and size; a combination without a price is unpriced', () => {
+    const { imageCost } = loadFresh();
+    const est = (model, width, height, quality) => imageCost.estimateImageCost({ model, width, height, quality });
+    expect(est('dall-e-3', 1024, 1024, 'hd')).toMatchObject({ usd: 0.08, priced: true });
+    expect(est('dall-e-3', 1792, 1024, 'hd')).toMatchObject({ usd: 0.12, priced: true });
+    expect(est('dall-e-3', 1024, 1792, 'hd')).toMatchObject({ usd: 0.12, priced: true });
+    expect(est('dall-e-3', 1024, 1024, 'standard')).toMatchObject({ usd: null, priced: false });
+    expect(est('gpt-image-1', 1536, 1024, 'high')).toMatchObject({ usd: 0.25, priced: true, inputImageTokenUsdPerMillion: 10 });
+    expect(est('gpt-image-1', 1024, 1024, 'medium')).toMatchObject({ usd: null, priced: false });
   });
 
   test('megapixels are rounded up per image; per-image models bill the count', () => {
@@ -145,10 +158,28 @@ describe('logging', () => {
     expect(mockRows.at(-1)).toMatchObject({ model_name: 'fal-ai/flux-pro/kontext', cost_usd: 0.04, billing_unit: 'image' });
   });
 
+  test('DALL-E 3 hd logs its size price', async () => {
+    axios.post.mockResolvedValue({ status: 200, data: { data: [{ url: 'https://openai/x.png' }] } });
+    const { imageGen } = loadFresh();
+    await imageGen.generateDallE('an invitation', { size: 'portrait' });
+    expect(mockRows.at(-1)).toMatchObject({ model_name: 'dall-e-3', cost_usd: 0.12, provider: 'openai', billing_unit: 'image' });
+  });
+
+  test('gpt-image-1 edits: $0.25 output plus input image tokens at $10 per 1M when usage is reported', async () => {
+    const { imageCost } = loadFresh();
+    const plan = { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 };
+    await imageCost.runImageCall(plan, async () => ({
+      data: { data: [{ b64_json: 'x' }], usage: { input_tokens: 1400, input_tokens_details: { image_tokens: 1300, text_tokens: 100 }, output_tokens: 6000 } },
+    }));
+    expect(mockRows.at(-1)).toMatchObject({ model_name: 'gpt-image-1', cost_usd: 0.263, input_tokens: 1300 });
+    await imageCost.runImageCall(plan, async () => ({ data: { data: [{ b64_json: 'x' }] } }));
+    expect(mockRows.at(-1)).toMatchObject({ cost_usd: 0.25, input_tokens: 0 });
+  });
+
   test('an unpriced model is logged with cost NULL and a warning, never 0', async () => {
     axios.post.mockResolvedValue({ status: 200, data: { data: [{ url: 'https://openai/x.png' }] } });
     const { imageGen } = loadFresh();
-    const result = await imageGen.generateDallE('an invitation', { size: 'portrait' });
+    const result = await imageGen.generateDallE('an invitation', { size: 'portrait', quality: 'standard' });
     expect(result.cost_estimate).toBeNull();
     expect(mockRows.at(-1)).toMatchObject({ model_name: 'dall-e-3', cost_usd: null, provider: 'openai', billing_unit: 'image' });
     expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/no price for dall-e-3.*cost_usd NULL/));

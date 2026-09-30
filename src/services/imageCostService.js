@@ -35,6 +35,7 @@
 
 const EVONI_2026_09_30 = 'Evoni, published rates as given 2026-09-30 (Task #2387)';
 const PRICE_NEEDED = 'price needed from Evoni (Task #2387); logged with cost_usd NULL';
+const EVONI_OPENAI_2026_09_30 = "Evoni, 2026-09-30, from OpenAI's published pricing (Task #2387)";
 
 // Keyed by the model id each call site sends. usd is per unit; null = no price yet.
 const RATE_TABLE = {
@@ -49,13 +50,20 @@ const RATE_TABLE = {
     provider: 'fal', model: 'fal-ai/flux-pro/kontext', unit: 'image', usd: 0.04, source: EVONI_2026_09_30,
   },
   // ── OpenAI ────────────────────────────────────────────────────────────────
+  // Priced per image by quality and size ('<quality>:<w>x<h>'); a
+  // combination not listed is unpriced (logged NULL with a warning).
   'dall-e-3': {
     provider: 'openai', model: 'dall-e-3', unit: 'image', usd: null,
-    source: `${PRICE_NEEDED}. imageGenerationService.generateDallE: 1792x1024 / 1024x1792 / 1024x1024, quality hd (or standard)`,
+    bySizeQuality: { 'hd:1024x1024': 0.08, 'hd:1792x1024': 0.12, 'hd:1024x1792': 0.12 },
+    source: `${EVONI_OPENAI_2026_09_30}: hd $0.08 at 1024x1024, $0.12 at 1792x1024 or 1024x1792. Standard quality: ${PRICE_NEEDED}. Used by imageGenerationService.generateDallE`,
   },
+  // Output priced per image by quality and size, plus input image tokens at
+  // $10 per 1M, added from the response's usage when it reports them.
   'gpt-image-1': {
     provider: 'openai', model: 'gpt-image-1', unit: 'image', usd: null,
-    source: `${PRICE_NEEDED}. sceneGenerationService images/edits (generateDallEStill, cropAndOutpaint): 1536x1024, quality high`,
+    bySizeQuality: { 'high:1536x1024': 0.25 },
+    inputImageTokenUsdPerMillion: 10,
+    source: `${EVONI_OPENAI_2026_09_30}: high quality 1536x1024 $0.25 per image output, plus input image tokens at $10 per 1M for edits. Used by sceneGenerationService images/edits (generateDallEStill, cropAndOutpaint)`,
   },
   // ── Replicate ─────────────────────────────────────────────────────────────
   'meta/sam-2-large': {
@@ -146,7 +154,7 @@ function lookupRate(model) {
  * @param {string} [p.provider] — provider to record when the model is not in the table
  * @returns {{ model, provider, unit, units, usd: number|null, priced: boolean, source }}
  */
-function estimateImageCost({ model, width, height, count = 1, provider = null } = {}) {
+function estimateImageCost({ model, width, height, count = 1, provider = null, quality = null } = {}) {
   const rate = lookupRate(model);
   const n = Math.max(1, Number(count) || 1);
   if (!rate) {
@@ -161,10 +169,16 @@ function estimateImageCost({ model, width, height, count = 1, provider = null } 
     const h = Number(height) || 1024;
     units = Math.max(1, Math.ceil((w * h) / 1e6)) * n;
   }
-  const priced = typeof rate.usd === 'number';
-  const usd = priced ? Math.round(rate.usd * units * 1e6) / 1e6 : null;
+  let perUnit = rate.usd;
+  if (rate.bySizeQuality) {
+    const key = `${quality || ''}:${Number(width) || 0}x${Number(height) || 0}`;
+    perUnit = typeof rate.bySizeQuality[key] === 'number' ? rate.bySizeQuality[key] : null;
+  }
+  const priced = typeof perUnit === 'number';
+  const usd = priced ? Math.round(perUnit * units * 1e6) / 1e6 : null;
   return {
     model: rate.model, provider: rate.provider, unit: rate.unit, units, usd, priced, source: rate.source,
+    inputImageTokenUsdPerMillion: rate.inputImageTokenUsdPerMillion || null,
   };
 }
 
@@ -264,13 +278,15 @@ async function assertImageBudget(estimate) {
  * for an unpriced one; a failed call on a priced model logs 0 (INFERRED:
  * providers do not bill a request that returned no image).
  */
-async function logImageUsage({ estimate, routeName, durationMs = null, isError = false, errorType = null }) {
+async function logImageUsage({
+  estimate, routeName, durationMs = null, isError = false, errorType = null, inputTokens = 0, extraUsd = 0,
+}) {
   let cost;
   if (!estimate.priced) {
     cost = null;
     console.warn(`[ImageCost] no price for ${estimate.model} (${estimate.provider || 'unknown provider'}) — logging cost_usd NULL; price needed (Task #2387)`);
   } else {
-    cost = isError ? 0 : estimate.usd;
+    cost = isError ? 0 : Math.round((estimate.usd + (extraUsd || 0)) * 1e6) / 1e6;
   }
   const t = loadTracker();
   const markPersisted = cost > 0 && t && typeof t.recordSpend === 'function'
@@ -282,7 +298,7 @@ async function logImageUsage({ estimate, routeName, durationMs = null, isError =
     await db.AIUsageLog.create({
       route_name: routeName || 'unknown',
       model_name: String(estimate.model || 'unknown').slice(0, 100),
-      input_tokens: 0,
+      input_tokens: inputTokens || 0,
       output_tokens: 0,
       cost_usd: cost,
       duration_ms: durationMs,
@@ -327,8 +343,25 @@ async function runImageCall(plan, fn) {
     });
     throw err;
   }
-  await logImageUsage({ estimate, routeName, durationMs: Date.now() - startedAt });
+  const input = inputImageTokenCost(estimate, result);
+  await logImageUsage({
+    estimate, routeName, durationMs: Date.now() - startedAt, inputTokens: input.tokens, extraUsd: input.usd,
+  });
   return result;
+}
+
+/**
+ * The input image tokens a response reports (OpenAI images: usage.
+ * input_tokens_details.image_tokens) and their cost at the model's
+ * per-1M rate. { tokens: 0, usd: 0 } when the model has no such rate or the
+ * response reports no usage.
+ */
+function inputImageTokenCost(estimate, result) {
+  const rate = estimate && estimate.inputImageTokenUsdPerMillion;
+  const usage = result && result.data && result.data.usage;
+  const tokens = Number(usage && usage.input_tokens_details && usage.input_tokens_details.image_tokens) || 0;
+  if (!rate || tokens <= 0) return { tokens: 0, usd: 0 };
+  return { tokens, usd: (tokens * rate) / 1e6 };
 }
 
 /**
@@ -392,4 +425,5 @@ module.exports = {
   getImageBudgetStatus,
   isBudgetError,
   readTodaySpend,
+  inputImageTokenCost,
 };

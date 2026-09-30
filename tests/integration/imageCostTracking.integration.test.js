@@ -74,7 +74,7 @@ function loadFresh() {
     const first = loadFresh();
     const provider = jest.fn(async () => 'ok');
     await first.runImageCall({ model: 'fal-ai/flux-pro/v1.1', width: 1024, height: 576, routeName: ROUTE }, provider);
-    await first.runImageCall({ model: 'gpt-image-1', width: 1536, height: 1024, routeName: ROUTE }, provider);
+    await first.runImageCall({ model: 'nightmareai/real-esrgan', provider: 'replicate', routeName: ROUTE }, provider);
     expect(provider).toHaveBeenCalledTimes(2);
 
     const rows = await sequelize.query(
@@ -84,9 +84,9 @@ function loadFresh() {
     );
     expect(rows).toEqual([
       { model_name: 'fal-ai/flux-pro/v1.1', cost_usd: '0.040000', provider: 'fal', billing_unit: 'megapixel', billed_units: '1.0000' },
-      { model_name: 'gpt-image-1', cost_usd: null, provider: 'openai', billing_unit: 'image', billed_units: '1.0000' },
+      { model_name: 'nightmareai/real-esrgan', cost_usd: null, provider: 'replicate', billing_unit: 'image', billed_units: '1.0000' },
     ]);
-    expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/no price for gpt-image-1/));
+    expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/no price for nightmareai\/real-esrgan/));
 
     // A new process: nothing in memory, only the table.
     const second = loadFresh();

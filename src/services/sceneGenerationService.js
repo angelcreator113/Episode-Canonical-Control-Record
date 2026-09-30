@@ -429,7 +429,7 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
 
       // Budget-gated and logged to ai_usage_logs (Task #2387).
       const response = await imageCost.runImageCall(
-        { model: 'gpt-image-1', width: 1536, height: 1024, count: 1 },
+        { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 },
         () => axios.post(
           'https://api.openai.com/v1/images/edits',
           form,
@@ -1445,7 +1445,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt)
 
     // Budget-gated and logged to ai_usage_logs (Task #2387).
     const response = await imageCost.runImageCall(
-      { model: 'gpt-image-1', width: targetW, height: targetH, count: 1 },
+      { model: 'gpt-image-1', width: 1536, height: 1024, quality: 'high', count: 1 },
       () => axios.post(
         'https://api.openai.com/v1/images/edits',
         form,

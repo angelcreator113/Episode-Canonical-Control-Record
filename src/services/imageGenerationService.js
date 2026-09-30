@@ -235,7 +235,7 @@ async function generateDallE(prompt, options = {}) {
   console.log(`[ImageGen] DALL-E 3 ${quality} | ${dalleSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
   const [width, height] = dalleSize.split('x').map(Number);
-  const plan = { model: 'dall-e-3', width, height, count: 1 };
+  const plan = { model: 'dall-e-3', width, height, quality, count: 1 };
 
   const response = await imageCost.runImageCall(plan, () => axios.post(
     'https://api.openai.com/v1/images/generations',
