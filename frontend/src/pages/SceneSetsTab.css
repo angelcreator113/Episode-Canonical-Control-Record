@@ -3826,3 +3826,163 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Base model choice + model comparison (Task #2396) ──────────────────── */
+.scene-sets-base-model {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--ss-ink);
+}
+
+.scene-sets-base-model select,
+.scene-sets-compare-field select,
+.scene-sets-compare-field textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  font: inherit;
+  background: #fff;
+}
+
+.scene-sets-compare {
+  background: var(--ss-parchment);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scene-sets-compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-sets-compare-head h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ss-ink);
+}
+
+.scene-sets-compare-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ss-muted);
+  padding: 4px;
+}
+
+.scene-sets-compare-hint,
+.scene-sets-compare-meta,
+.scene-sets-compare-unpriced {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.scene-sets-compare-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ss-ink);
+}
+
+.scene-sets-compare-estimate {
+  border: 1px solid var(--ss-gold);
+  background: var(--ss-gold-light);
+  border-radius: var(--ss-radius-md);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.scene-sets-compare-estimate ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.scene-sets-compare-total {
+  margin: 4px 0;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.scene-sets-compare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.scene-sets-compare-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scene-sets-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.scene-sets-compare-col {
+  background: #fff;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-md);
+  padding: 10px;
+  min-width: 0;
+}
+
+.scene-sets-compare-col h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+}
+
+.scene-sets-compare-still {
+  margin: 8px 0 0;
+}
+
+.scene-sets-compare-still img,
+.scene-sets-compare-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  /* contain, not cover: a 3:2 gpt-image still is shown whole beside 16:9 Flux */
+  object-fit: contain;
+  border-radius: var(--ss-radius-sm);
+  background: var(--ss-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ss-muted);
+}
+
+.scene-sets-compare-still figcaption {
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--ss-ink);
+}
+
+@media (max-width: 480px) {
+  .scene-sets-compare {
+    padding: 12px;
+  }
+  .scene-sets-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
