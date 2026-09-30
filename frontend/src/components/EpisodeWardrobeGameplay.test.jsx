@@ -474,3 +474,67 @@ describe('EpisodeWardrobeGameplay — the server scores the outfit (Task #1943)'
     expect(screen.getByTestId('synergy-score').textContent).toBe('—');
   });
 });
+
+// ─── Task #2377: the Full Closet shows every category, bottoms included ───
+
+describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () => {
+  const own = { ...base, is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined };
+  const FULL = [
+    { ...own, id: 'k-dress', name: 'Closet Dress', clothing_category: 'dress' },
+    { ...own, id: 'k-top', name: 'Closet Blouse', clothing_category: 'top' },
+    { ...own, id: 'k-bottom', name: 'Closet Trousers', clothing_category: 'bottom' },
+    { ...own, id: 'k-skirt', name: 'Closet Mini Skirt', clothing_category: 'Mini Skirt' },
+    { ...own, id: 'k-shoes', name: 'Closet Pumps', clothing_category: 'shoes' },
+    { ...own, id: 'k-acc', name: 'Closet Scarf', clothing_category: 'accessories' },
+    { ...own, id: 'k-jewel', name: 'Closet Pearls', clothing_category: 'jewelry' },
+    { ...own, id: 'k-perf', name: 'Closet Scent', clothing_category: 'perfume' },
+    { ...own, id: 'k-coat', name: 'Closet Trench', clothing_category: 'outerwear' },
+    { ...own, id: 'k-odd', name: 'Closet Mystery', clothing_category: 'costume piece' },
+  ];
+  // Two pages: 200 filler dresses first, then the real pieces — the old single
+  // limit=200 request never saw page 2.
+  const FILLER = Array.from({ length: 200 }, (_, i) => ({ ...own, id: `f${i}`, name: `Filler ${i}`, clothing_category: 'dress' }));
+  const ALL = [...FILLER, ...FULL];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => {
+      if (url.startsWith('/api/v1/wardrobe?show_id=')) {
+        const q = new URLSearchParams(url.split('?')[1]);
+        const limit = Number(q.get('limit'));
+        const page = Number(q.get('page') || 1);
+        return Promise.resolve({ data: { success: true, data: ALL.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: ALL.length } } });
+      }
+      return poolGet(url);
+    });
+  });
+
+  const EXPECT = [
+    ['Top', 'Closet Blouse'], ['Bottom', 'Closet Trousers'], ['Bottom', 'Closet Mini Skirt'],
+    ['Shoes', 'Closet Pumps'], ['Accessories', 'Closet Scarf'], ['Jewelry', 'Closet Pearls'],
+    ['Perfume', 'Closet Scent'], ['Other', 'Closet Trench'], ['Other', 'Closet Mystery'],
+  ];
+
+  test('pages past 200 items and shows every category, bottoms and Other included', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Closet Dress');
+    for (const [tab, name] of EXPECT) {
+      fireEvent.click(screen.getByRole('button', { name: tab }));
+      expect(await screen.findByText(name)).toBeTruthy();
+    }
+  });
+
+  test('the Bottom tab stays reachable with a dress equipped', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    fireEvent.click(await screen.findByText('Closet Dress'));
+    await waitFor(() => expect(screen.getAllByText('Closet Dress').length).toBe(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Bottom' }));
+    expect(await screen.findByText('Closet Trousers')).toBeTruthy();
+    expect(screen.getByText('Closet Mini Skirt')).toBeTruthy();
+  });
+});

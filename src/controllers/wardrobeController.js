@@ -513,7 +513,9 @@ module.exports = {
         const conditions = [];
         const replacements = {};
         if (colNames.has('deleted_at')) conditions.push('deleted_at IS NULL');
-        if (show_id && colNames.has('show_id')) { conditions.push('show_id = :show_id'); replacements.show_id = show_id; }
+        // Same scope as the ORM path: this show's items OR unscoped (null
+        // show_id) ones (Task #2377 — the fallback dropped unscoped items).
+        if (show_id && colNames.has('show_id')) { conditions.push('(show_id = :show_id OR show_id IS NULL)'); replacements.show_id = show_id; }
         if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
         if (category && colNames.has('clothing_category')) {
           const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
