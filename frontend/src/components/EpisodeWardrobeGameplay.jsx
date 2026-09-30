@@ -33,19 +33,12 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach } from '../utils/wardrobeReach';
-import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from '../lib/wardrobeSlots';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, gameSlotFor, fetchAllClosetItems } from '../lib/closetGrouping';
 
 // ─── CONSTANTS ───
 
-const SLOT_DEFS = [
-  { key: 'body', icon: '👗', label: 'Body', categories: ['dress'], required: true, desc: 'Dress or Top+Bottom' },
-  { key: 'top', icon: '👚', label: 'Top', categories: ['top'], required: false, desc: 'With bottom' },
-  { key: 'bottom', icon: '👖', label: 'Bottom', categories: ['bottom'], required: false, desc: 'With top' },
-  { key: 'shoes', icon: '👠', label: 'Shoes', categories: ['shoes'], required: true, desc: 'Required' },
-  { key: 'accessories', icon: '👜', label: 'Accessories', categories: ['accessory', 'bag'], required: false, desc: 'Optional' },
-  { key: 'jewelry', icon: '💍', label: 'Jewelry', categories: ['jewelry'], required: false, desc: 'Optional' },
-  { key: 'perfume', icon: '🌸', label: 'Perfume', categories: ['perfume'], required: false, desc: 'Optional' },
-];
+// Game slots and the category → slot resolution live in lib/closetGrouping
+// (Task #2377), built on the shared taxonomy in lib/wardrobeSlots.
 
 const TIER_STYLES = {
   basic: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b', emoji: '🧵' },
@@ -60,19 +53,6 @@ const ROLE_STYLES = {
   locked_tease: { bg: '#f8fafc', border: '#e2e8f0', label: '🔒 Locked', color: '#94a3b8' },
 };
 const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
-
-// A wardrobe item's game slot. Its clothing_category is resolved to a
-// canonical category through the shared taxonomy (lib/wardrobeSlots: exact,
-// then alias — 'accessories' → 'accessory', 'handbag' → 'bag', 'heels' →
-// 'shoes'), then to the slot whose categories list it. Null when the game has
-// no slot for it (outerwear).
-function gameSlotFor(clothingCategory) {
-  const n = String(clothingCategory || '').toLowerCase().trim();
-  if (!n) return null;
-  const canonical = CATEGORY_TO_SLOT[n] ? n : CATEGORY_ALIASES[n];
-  if (!canonical) return null;
-  return SLOT_DEFS.find(s => s.categories.includes(canonical))?.key || null;
-}
 
 // How long the draft score waits after the last slot change before asking
 // the server (Task #1943).
@@ -189,13 +169,6 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     error: "Couldn't score this outfit right now.",
   }[score.status] || 'None of these pieces could be scored.';
 
-  const filteredPool = useMemo(() => {
-    const slot = SLOT_DEFS.find(s => s.key === activeSlot);
-    if (!slot) return pool;
-    return pool.filter(item => gameSlotFor(item.clothing_category) === slot.key)
-      .sort((a, b) => b.match_score - a.match_score);
-  }, [pool, activeSlot]);
-
   // ─── Load pool ───
   const loadPool = useCallback(async () => {
     if (!showId) return;
@@ -283,8 +256,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     if (!showId || closetItems.length > 0) return;
     setClosetLoading(true);
     try {
-      const res = await api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`);
-      const items = res.data?.data || res.data?.items || res.data || [];
+      // Task #2377: every page, not one limit=200 request (which dropped the
+      // oldest items once a closet passed 200).
+      const items = await fetchAllClosetItems(api, showId);
       setClosetItems(Array.isArray(items) ? items.map(i => ({
         ...i,
         aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
@@ -435,7 +409,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // ─── v3: Browse items based on mode ───
   const filteredBrowseItems = useMemo(() => {
-    const inSlot = (item) => gameSlotFor(item.clothing_category) === activeSlot;
+    // Task #2377: the Other tab holds every item no game slot accepts
+    // (outerwear, unknown or missing category) so none vanish.
+    const inSlot = activeSlot === OTHER_GROUP.key
+      ? (item) => !gameSlotFor(item.clothing_category)
+      : (item) => gameSlotFor(item.clothing_category) === activeSlot;
 
     if (browseMode === 'pool') {
       return pool.filter(inSlot)
@@ -443,7 +421,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     }
     if (browseMode === 'closet') {
       return closetWithReach.filter(inSlot)
-        .sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || a.name.localeCompare(b.name));
+        .sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || String(a.name || '').localeCompare(String(b.name || '')));
     }
     if (browseMode === 'search' && searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -461,7 +439,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
     if (!item.can_select) { setError('Cannot equip a locked item — purchase or unlock it first'); return; }
-    const slotKey = gameSlotFor(item.clothing_category) || activeSlot;
+    const slotKey = gameSlotFor(item.clothing_category);
+    if (!slotKey) { setInspecting(item); return; } // Other: browse-only
 
     if (slotKey === 'body') {
       setFilledSlots(prev => ({ ...prev, body: item, top: undefined, bottom: undefined }));
@@ -720,7 +699,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 { key: 'closet', label: 'Full Closet' },
                 { key: 'search', label: 'Search' },
               ].map(m => (
-                <button key={m.key} onClick={() => { setBrowseMode(m.key); if (m.key !== 'pool' && closetItems.length === 0) loadCloset(); }}
+                <button key={m.key} onClick={() => { setBrowseMode(m.key); if (m.key === 'pool' && activeSlot === OTHER_GROUP.key) setActiveSlot('body'); if (m.key !== 'pool' && closetItems.length === 0) loadCloset(); }}
                   style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? '#fff' : 'transparent', color: browseMode === m.key ? '#6366f1' : '#64748b', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                   {m.label}
                 </button>
@@ -741,13 +720,19 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             <div style={W.browseHeader}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
-                  {CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕'} {activeSlot === 'body' ? 'Dress' : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
+                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · Click to equip</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · {activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}</div>
               </div>
               <div style={{ display: 'flex', gap: 3 }}>
-                {visibleSlots.filter(s => !filledSlots[s.key]).map(s => (
-                  <button key={s.key} onClick={() => setActiveSlot(s.key)}
+                {/* Task #2377: the Full Closet and Search offer every category
+                    (Bottom even with a dress on, filled slots, and Other); the
+                    event pool keeps its open-slot switcher. */}
+                {(browseMode === 'pool'
+                  ? visibleSlots.filter(s => !filledSlots[s.key])
+                  : [...SLOT_DEFS, OTHER_GROUP]
+                ).map(s => (
+                  <button key={s.key} onClick={() => setActiveSlot(s.key)} title={s.label} aria-label={s.label}
                     style={{ ...W.slotSwitch, background: activeSlot === s.key ? '#6366f1' : '#f1f5f9', color: activeSlot === s.key ? '#fff' : '#64748b' }}>
                     {s.icon}
                   </button>
@@ -816,9 +801,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   </div>
                 );
               })}
-              {filteredPool.length === 0 && (
+              {filteredBrowseItems.length === 0 && !(browseMode !== 'pool' && closetLoading) && !(browseMode === 'search' && !searchQuery.trim()) && (
                 <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 30, color: '#94a3b8' }}>
-                  <div style={{ fontSize: 24 }}>{SLOT_DEFS.find(s => s.key === activeSlot)?.icon || '👕'}</div>
+                  <div style={{ fontSize: 24 }}>{[...SLOT_DEFS, OTHER_GROUP].find(s => s.key === activeSlot)?.icon || '👕'}</div>
                   <div style={{ fontSize: 12, marginTop: 6 }}>No {activeSlot} items available</div>
                 </div>
               )}
