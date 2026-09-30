@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import SocialTaskBadge from '../SocialTaskBadge';
 import { isSocialTaskRequired } from '../../utils/socialTaskSource';
+import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
 
 /**
  * EpisodeTodoList
@@ -393,6 +394,14 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
           );
         })}
       </div>
+      )}
+
+      {/* P14 (Task #2395): approve the task list, design its overlay */}
+      {!isWardrobe && careerList && (
+        <EpisodeTaskListOverlay
+          episodeId={episodeId}
+          listKey={JSON.stringify((careerList.tasks || []).map((t) => [t.label, t.description, t.task_source, t.required]))}
+        />
       )}
 
       {error && (

@@ -158,6 +158,15 @@ router.get('/:showId', requireAuth, async (req, res) => {
       } catch (invErr) {
         console.error('[UIOverlay] Episode invitation overlay lookup failed:', invErr.message);
       }
+      // P14 (Evoni, 2026-09-30; Task #2395): the episode's task-list overlay
+      // (episode_todo_lists.task_overlay_asset_id) is one of its own.
+      try {
+        const { loadEpisodeTaskListOverlay, mergeTaskListIntoOverlayStatus } = require('../services/episodeTaskListOverlayService');
+        const taskList = await loadEpisodeTaskListOverlay(models.sequelize, { showId, episodeId });
+        status = mergeTaskListIntoOverlayStatus(status, taskList);
+      } catch (taskErr) {
+        console.error('[UIOverlay] Episode task-list overlay lookup failed:', taskErr.message);
+      }
     }
 
     const genStatus = generationStatus[showId] || null;
