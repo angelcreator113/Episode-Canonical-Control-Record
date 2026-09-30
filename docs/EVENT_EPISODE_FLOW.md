@@ -2390,6 +2390,34 @@ deliverables/restrictions, and source-event linkage must be rejected
 through ordinary event-edit routes rather than relying on the UI lock
 alone.
 
+**Episode visuals and copy rulings (Evoni, 2026-09-30, Task #2386).**
+Recorded verbatim, continuing the numbering. The basis is a read of the
+overlays, title card, episode description and Distribution code at
+`b7d80aa5`, summarised in Task #2386. Not yet built: each is its own PR,
+after the image cost-tracking fix.
+
+**P10.** An event's approved invitation is an episode overlay: tagged as
+the episode's invitation overlay, shown in that episode's overlays and
+placed on the invitation beat, whether approved before or after Start
+Episode. Regenerating and approving a new one replaces it. The Phone Hub
+keeps show-wide overlays only; an episode's Lala's Phone shows show-wide
+plus that episode's own.
+
+**P11.** An episode title can be approved. Approving it offers "Design
+title card" with its cost shown. The card uses the show's image style and
+the event's visual direction, so the invitation and title look like one
+production, and it belongs to that episode. Changing an approved title
+marks the card outdated and offers a redesign.
+
+**P12.** Each episode has a viewer teaser, separate from the event
+description (guest copy, rule 12): mystery-driven, never revealing the
+outcome, the hook in the first 150 characters. It's auto-drafted at Start
+Episode from the event's concept and description, labelled Auto-drafted,
+and editable. Distribution drafts platform copy from the teaser.
+
+**P13.** The existing episode description remains the internal synopsis
+of what happens.
+
 **(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
 only: no code is changed by this entry. The basis is
 `docs/EVENT_TERMS_MONEY_READ.md` (Task #2223, merged as `eeb710af` in
