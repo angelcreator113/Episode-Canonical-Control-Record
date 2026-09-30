@@ -2836,6 +2836,21 @@ stat point independently for every completed task."
 
 Both retire with the tier reward in the payout PR (§8 PR 5).
 
+**Deal PR 3 ruling (Evoni, 2026-09-30), "replacing the earlier draft
+answers".** Recorded verbatim, on the pricing rules `DEAL_DESIGN.md` §10.2
+lists. The earlier draft answers were never recorded as a ruling; this is
+the first and only record of Evoni's answers on these points.
+
+> 1. Modified. A Brand Partnership Base is its own guaranteed deal component, not an appearance fee. Required deliverables are priced on top. If the partnership also requires Lala to attend/appear, the Paid Appearance anchor is added separately.
+> 2. Yes, with correction. Deliverables use a fixed typed list: Reel, Story Set (3), Post, Photo Set, Other. Reel and Story Set receive automatic Career Rate Anchors in V1; Post, Photo Set and Other are manually priced. Appearance is not a deliverable—it is a separate deal component with its own payout trigger. No pricing behavior may depend on guessing words from free text.
+> 3. Additive. Multiple premiums affecting the same component are added, not compounded. +10% rush and +15% usage = +25%. A premium applies only to the component it affects and never increases unrelated components.
+> 4. Yes, with the full mapping. Paid Appearance starts with the Appearance anchor; Paid Deliverables with deliverable fees; Appearance + Deliverables with both; Performance Booking with the Performance anchor plus separately required deliverables; Brand Partnership with the Partnership Base plus required deliverables and an Appearance component only when appearance is actually required. Self-funded and invited/comped produce no income. Gifted produces no cash income but records gifted value.
+> 5. Later PR. Store and seed the versioned rate tables now so pricing is data-driven. Build the admin rate editor separately after the pricing and payout flow works end-to-end.
+> 6. "Other" never receives an automatic price. It shows "Price required", and the terms cannot lock (Start Episode refuses) until it has one. Missing is missing.
+
+`DEAL_DESIGN.md` §12 says what this changes, and deal build PR 3 (Task
+#2341) builds it, including one guarded migration for point 1.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:
@@ -2847,6 +2862,8 @@ Both retire with the tier reward in the payout PR (§8 PR 5).
 - Q8 is built by #2313 (PR #2315).
 - The deal build starts at `DEAL_DESIGN.md` §8 PR 1 (the schema).
 - Retiring the tier reward joins the payout PR (§8 PR 5), per Evoni.
+- The Deal PR 3 ruling (2026-09-30) is built by deal build PR 3 (Task
+  #2341); the admin rate editor is a later PR, per its point 5.
 
 ---
 

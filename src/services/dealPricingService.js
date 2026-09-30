@@ -1,68 +1,94 @@
 'use strict';
 
 /**
- * Deal pricing (deal build PR 3; docs/DEAL_DESIGN.md §3.2, §11.1; Task #2341).
+ * Deal pricing (deal build PR 3; docs/DEAL_DESIGN.md §3.2, §11.1, §12;
+ * Task #2341).
  *
- * Evoni's answer to QUESTION 4 (docs/EVENT_EPISODE_FLOW.md §8(cc)): "Adopt
- * five Career Rate Anchors ... Rates are baselines, not fixed payouts.
- * Actual compensation is assembled from deal type, deliverables, rights,
- * restrictions, urgency and other canonical deal terms."
+ * Evoni's answer to QUESTION 4 (docs/EVENT_EPISODE_FLOW.md §8(cc)): "Rates
+ * are baselines, not fixed payouts." Her Deal PR 3 ruling (2026-09-30, the
+ * same section) sets how a deal is assembled; each numbered point is cited
+ * where it is built:
  *
- * proposeTerms is pure. It reads the rate card (deal_rate_anchors and
- * deal_rate_premiums, one version) and returns a proposal: an appearance
- * fee and a fee per deliverable, each from its component's anchor at the
- * event's career tier, with the premiums chosen for that line only ("Premiums
- * apply only to the component they affect"). Nothing is paid from it: the
- * route writes the numbers onto the deal as a draft Evoni edits before the
- * terms lock, and payouts (PR 5) read the event's stored numbers, never the
- * card.
+ *   1. The brand partnership base is its own component, not an appearance
+ *      fee; the deliverables are priced on top; the appearance anchor is
+ *      added separately only when the partnership requires an appearance.
+ *   2. Deliverables use a fixed typed list. Reel and Story Set (3) take
+ *      their anchors; Post, Photo Set and Other are priced by hand. Appearance
+ *      is not a deliverable. No price depends on words in free text.
+ *   3. Premiums on one component add up (+10% and +15% is +25%) and apply
+ *      only to that component.
+ *   4. The deal type decides the components (DEAL_PLANS).
+ *   5. The rate card is data (deal_rate_anchors / deal_rate_premiums); the
+ *      editor is a later PR.
+ *   6. "Other" is never priced automatically: "Price required", and Start
+ *      Episode refuses until it has a price. "Missing is missing."
  *
- * Ruled (§11.1):
- *   - no prestige multiplier;
- *   - a null anchor means the component is not offered at that tier;
- *   - self-funded, comped and gifted deals create no cash income;
- *   - paid_ad has no percent yet, so it cannot be applied ("set before use").
+ * proposeTerms is pure. The route writes its numbers onto the deal as a
+ * draft Evoni edits until the terms lock; payouts (PR 5) read the event's
+ * stored numbers, never the card.
  *
- * PROPOSED here, for Evoni to confirm (each is one constant below):
- *   - DEAL_COMPONENTS: which anchor each deal type's appearance fee takes,
- *     and whether its deliverables are priced. brand_partnership_base is
- *     proposed as the partnership's base fee on appearance_fee.
- *   - DELIVERABLE_COMPONENTS: a deliverable_type containing "reel" takes the
- *     reel anchor; one containing "stor" takes stories_3 (the anchor for a
- *     set of three stories). Any other type has no anchor and is left for
- *     Evoni to price.
- *   - Premiums on one line add up (48h rush +10% and 30d usage +15% is
- *     +25%), then the line is rounded to whole Prime Coins.
- *   - No bonus is proposed: the anchors carry none, and a bonus exists only
- *     when the deal explicitly contains one (QUESTION 12).
+ * missingPrices is pure too: the priced components and deliverables of a
+ * deal that still have no number. Start Episode refuses while it is not
+ * empty (episodeGeneratorService.generateEpisodeFromEvent).
  */
+
+const { DELIVERABLE_TYPE_LABELS } = require('./eventTermsService');
 
 const PRICING_SOURCE = 'pricing';
 
-// deal type → { appearance: anchor component or null, deliverables: priced? }
-const DEAL_COMPONENTS = Object.freeze({
-  self_funded: { appearance: null, deliverables: false },
-  invited_comped: { appearance: null, deliverables: false },
-  gifted: { appearance: null, deliverables: false },
-  paid_appearance: { appearance: 'paid_appearance', deliverables: false },
-  paid_deliverables: { appearance: null, deliverables: true },
-  appearance_plus_deliverables: { appearance: 'paid_appearance', deliverables: true },
-  performance_booking: { appearance: 'performance_booking', deliverables: false },
-  brand_partnership: { appearance: 'brand_partnership_base', deliverables: true },
+// The event-level components (ruling 1 and 4): each is its own column, with
+// its own anchor on the rate card.
+const EVENT_COMPONENTS = Object.freeze({
+  appearance: { field: 'appearance_fee', anchor: 'paid_appearance', label: 'Appearance fee' },
+  partnership_base: { field: 'partnership_base_fee', anchor: 'brand_partnership_base', label: 'Partnership base' },
+  performance: { field: 'performance_fee', anchor: 'performance_booking', label: 'Performance fee' },
 });
 
-const NO_CASH_DEAL_TYPES = new Set(['self_funded', 'invited_comped', 'gifted']);
+// Ruling 4: which components each deal type has, and whether its
+// deliverables are priced. brand_partnership adds the appearance only when
+// the event's appearance_required is true (ruling 1).
+const DEAL_PLANS = Object.freeze({
+  self_funded: { components: [], deliverables: false, cash: false },
+  invited_comped: { components: [], deliverables: false, cash: false },
+  gifted: { components: [], deliverables: false, cash: false, giftedValue: true },
+  paid_appearance: { components: ['appearance'], deliverables: false, cash: true },
+  paid_deliverables: { components: [], deliverables: true, cash: true },
+  appearance_plus_deliverables: { components: ['appearance'], deliverables: true, cash: true },
+  performance_booking: { components: ['performance'], deliverables: true, cash: true },
+  brand_partnership: { components: ['partnership_base'], deliverables: true, cash: true, appearanceIfRequired: true },
+});
 
-function deliverableComponent(deliverableType) {
-  const t = String(deliverableType || '').toLowerCase();
-  if (t.includes('reel')) return 'reel';
-  if (t.includes('stor')) return 'stories_3';
-  return null;
+// Ruling 2: the only deliverable types with an automatic anchor in V1. Every
+// other type (post, photo_set, other) and any untyped row is priced by hand.
+const DELIVERABLE_ANCHORS = Object.freeze({ reel: 'reel', story_set_3: 'stories_3' });
+
+
+const TRUE_LIKE = new Set([true, 'true', 1, '1']);
+
+/** The component keys the event's deal carries, in display order. */
+function dealComponents(event) {
+  const plan = DEAL_PLANS[event?.deal_type];
+  if (!plan) return [];
+  const keys = [...plan.components];
+  if (plan.appearanceIfRequired && TRUE_LIKE.has(event?.appearance_required)) keys.push('appearance');
+  return keys;
 }
 
 function tierOf(careerTier) {
   const n = Math.trunc(Number(careerTier));
   return n >= 1 && n <= 5 ? n : 1;
+}
+
+function deliverableName(d) {
+  return `"${d?.description || DELIVERABLE_TYPE_LABELS[d?.deliverable_type] || 'Deliverable'}"`;
+}
+
+/** Why a deliverable has no automatic price, for "Price required". */
+function manualPriceReason(d) {
+  const type = d?.deliverable_type;
+  if (type === 'other') return 'Other is never priced automatically';
+  if (DELIVERABLE_TYPE_LABELS[type]) return `${DELIVERABLE_TYPE_LABELS[type]} is priced by hand`;
+  return 'no type is chosen';
 }
 
 /**
@@ -97,8 +123,10 @@ async function loadRateCard(sequelize, { transaction } = {}) {
 }
 
 /**
- * Apply the premiums chosen for one line. Returns { amount, applied, errors }.
- * choices: [{ kind, key }] — each must exist on the card with a percent.
+ * Ruling 3: the premiums chosen for one component add up (never compound),
+ * and the component is rounded once to whole Prime Coins. Returns
+ * { amount, applied, errors }. choices: [{ kind, key }], each on the card
+ * with a percent, one per kind.
  */
 function applyPremiums(base, choices, card, label) {
   const applied = [];
@@ -124,74 +152,155 @@ function applyPremiums(base, choices, card, label) {
   return { amount: Math.round(base * (1 + percent / 100)), applied, errors };
 }
 
+const hasChoices = (list) => Array.isArray(list) && list.length > 0;
+
 /**
  * The proposal for one event.
- *   event:        { deal_type, career_tier }
+ *   event:        { deal_type, career_tier, appearance_required }
  *   deliverables: [{ id, description, deliverable_type }]
- *   premiums:     { appearance: [{kind,key}], deliverables: { <id>: [{kind,key}] } }
- * Returns { ok, error?, pricing_version, career_tier, appearance, deliverables,
- * gaps, errors }. appearance and each deliverable carry
- * { component, anchor, fee, premiums, note }. A fee is null when there is no
- * anchor; gaps say why, for the Event Package to show.
+ *   premiums:     { appearance?, partnership_base?, performance?: [{kind,key}],
+ *                   deliverables?: { <id>: [{kind,key}] } }
+ * Returns { ok, error?, pricing_version, career_tier, deal_type, cash,
+ * components: { <key>: { field, anchor_component, anchor, fee, premiums, note } },
+ * deliverables: [{ id, component, anchor, fee, premiums, note, price_required }],
+ * gaps, note }. A fee of null is "Price required" (ruling 6): gaps say why.
  */
 function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
   const dealType = event?.deal_type || null;
   if (!dealType) return { ok: false, error: 'Choose a deal type before proposing terms.' };
-  const plan = DEAL_COMPONENTS[dealType];
+  const plan = DEAL_PLANS[dealType];
   if (!plan) return { ok: false, error: `Unknown deal type "${dealType}".` };
   if (!card) return { ok: false, error: 'There is no rate card yet, so no terms can be proposed.' };
 
   const tier = tierOf(event.career_tier);
   const gaps = [];
   const errors = [];
-  const noCash = NO_CASH_DEAL_TYPES.has(dealType);
+  const componentKeys = dealComponents(event);
+  const chosen = premiums && typeof premiums === 'object' ? premiums : {};
 
-  let appearance = { component: null, anchor: null, fee: noCash ? 0 : null, premiums: [], note: null };
-  if (noCash) {
-    appearance.note = 'No cash income for this deal type (QUESTION 4).';
-  } else if (plan.appearance) {
-    const anchor = card.anchors?.[plan.appearance]?.[tier];
-    if (anchor == null) {
-      appearance = { component: plan.appearance, anchor: null, fee: null, premiums: [], note: `${plan.appearance} is not offered at tier ${tier}.` };
-      gaps.push(appearance.note);
-    } else {
-      const priced = applyPremiums(anchor, premiums.appearance, card, 'Appearance fee');
-      errors.push(...priced.errors);
-      appearance = { component: plan.appearance, anchor, fee: priced.amount, premiums: priced.applied, note: null };
+  // Ruling 3: a premium never reaches a component the deal does not have.
+  for (const key of Object.keys(EVENT_COMPONENTS)) {
+    if (!componentKeys.includes(key) && hasChoices(chosen[key])) {
+      errors.push(`${EVENT_COMPONENTS[key].label}: this deal has no such component, so no premium applies to it.`);
     }
   }
 
-  const lines = (Array.isArray(deliverables) ? deliverables : []).map((d) => {
-    if (noCash || !plan.deliverables) {
-      return { id: d.id, component: null, anchor: null, fee: null, premiums: [], note: 'Not priced for this deal type.' };
-    }
-    const component = deliverableComponent(d.deliverable_type);
-    if (!component) {
-      const note = `"${d.description || d.deliverable_type || 'Deliverable'}" has no rate anchor; price it by hand.`;
-      gaps.push(note);
-      return { id: d.id, component: null, anchor: null, fee: null, premiums: [], note };
-    }
-    const anchor = card.anchors?.[component]?.[tier];
+  const components = {};
+  for (const key of componentKeys) {
+    const spec = EVENT_COMPONENTS[key];
+    const anchor = card.anchors?.[spec.anchor]?.[tier];
     if (anchor == null) {
-      const note = `${component} is not offered at tier ${tier}.`;
+      const note = `${spec.label}: price required (${spec.anchor} is not offered at tier ${tier}).`;
       gaps.push(note);
-      return { id: d.id, component, anchor: null, fee: null, premiums: [], note };
+      if (hasChoices(chosen[key])) errors.push(`${spec.label}: no anchor at tier ${tier}, so no premium applies.`);
+      components[key] = { field: spec.field, anchor_component: spec.anchor, anchor: null, fee: null, premiums: [], note };
+      continue;
     }
-    const priced = applyPremiums(anchor, premiums.deliverables?.[d.id], card, `"${d.description || component}"`);
+    const priced = applyPremiums(anchor, chosen[key], card, spec.label);
     errors.push(...priced.errors);
-    return { id: d.id, component, anchor, fee: priced.amount, premiums: priced.applied, note: null };
+    components[key] = { field: spec.field, anchor_component: spec.anchor, anchor, fee: priced.amount, premiums: priced.applied, note: null };
+  }
+
+  const chosenForLines = chosen.deliverables && typeof chosen.deliverables === 'object' ? chosen.deliverables : {};
+  const lines = (Array.isArray(deliverables) ? deliverables : []).map((d) => {
+    if (!plan.deliverables) {
+      if (hasChoices(chosenForLines[d.id])) errors.push(`${deliverableName(d)}: this deal does not pay its deliverables, so no premium applies.`);
+      return { id: d.id, component: null, anchor: null, fee: null, premiums: [], note: 'Not paid for this deal type.', price_required: false };
+    }
+    const component = DELIVERABLE_ANCHORS[d.deliverable_type] || null;
+    const anchor = component ? card.anchors?.[component]?.[tier] : null;
+    if (anchor == null) {
+      const reason = component ? `${component} is not offered at tier ${tier}` : manualPriceReason(d);
+      const note = `${deliverableName(d)}: price required (${reason}).`;
+      gaps.push(note);
+      if (hasChoices(chosenForLines[d.id])) errors.push(`${deliverableName(d)}: no rate anchor, so no premium applies.`);
+      return { id: d.id, component, anchor: null, fee: null, premiums: [], note, price_required: true };
+    }
+    const priced = applyPremiums(anchor, chosenForLines[d.id], card, deliverableName(d));
+    errors.push(...priced.errors);
+    return { id: d.id, component, anchor, fee: priced.amount, premiums: priced.applied, note: null, price_required: false };
   });
 
   if (errors.length) return { ok: false, error: errors.join(' '), errors };
-  return { ok: true, pricing_version: card.version, career_tier: tier, deal_type: dealType, appearance, deliverables: lines, gaps };
+
+  let note = null;
+  if (!plan.cash) {
+    note = plan.giftedValue
+      ? 'Gifted: no cash income. Record the gifted value on the deal.'
+      : 'No cash income for this deal type.';
+  }
+  return {
+    ok: true, pricing_version: card.version, career_tier: tier, deal_type: dealType, cash: plan.cash,
+    components, deliverables: lines, gaps, note,
+  };
+}
+
+/**
+ * Ruling 6, "Missing is missing": every priced component and every paid
+ * deliverable of the deal that still has no number. [] for a legacy event
+ * (no deal type) and for deal types with no cash income.
+ * Returns [{ kind: 'component' | 'deliverable', key, label }].
+ */
+function missingPrices(event, deliverables = []) {
+  const plan = DEAL_PLANS[event?.deal_type];
+  if (!plan || !plan.cash) return [];
+  const missing = [];
+  for (const key of dealComponents(event)) {
+    const spec = EVENT_COMPONENTS[key];
+    if (event[spec.field] == null) missing.push({ kind: 'component', key: spec.field, label: spec.label });
+  }
+  if (plan.deliverables) {
+    for (const d of Array.isArray(deliverables) ? deliverables : []) {
+      if (d?.fee == null) missing.push({ kind: 'deliverable', key: d.id, label: deliverableName(d) });
+    }
+  }
+  return missing;
+}
+
+/** missingPrices for a stored event, read from the database. */
+async function findMissingPrices(sequelize, eventId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `SELECT id, deal_type, appearance_fee, partnership_base_fee, performance_fee, appearance_required
+       FROM world_events WHERE id = :eventId AND deleted_at IS NULL LIMIT 1`,
+    { replacements: { eventId }, transaction }
+  );
+  const event = rows?.[0];
+  if (!event || !DEAL_PLANS[event.deal_type]?.cash) return [];
+  const [deliverables] = await sequelize.query(
+    `SELECT id, description, deliverable_type, fee FROM event_deliverables
+      WHERE event_id = :eventId AND deleted_at IS NULL ORDER BY created_at ASC`,
+    { replacements: { eventId }, transaction }
+  );
+  return missingPrices(event, deliverables);
+}
+
+const DEAL_PRICE_REQUIRED_CODE = 'DEAL_PRICE_REQUIRED';
+
+function dealPriceRequiredError(missing) {
+  const err = new Error(`Price required before Start Episode: ${missing.map((m) => m.label).join(', ')}.`);
+  err.code = DEAL_PRICE_REQUIRED_CODE;
+  err.missing = missing;
+  return err;
+}
+
+/** The 409 JSON body for a refused Start Episode. */
+function dealPriceRequiredBody(err) {
+  return { success: false, code: DEAL_PRICE_REQUIRED_CODE, error: err.message, missing: err.missing || [] };
 }
 
 module.exports = {
   PRICING_SOURCE,
-  DEAL_COMPONENTS,
-  NO_CASH_DEAL_TYPES,
-  deliverableComponent,
+  EVENT_COMPONENTS,
+  DEAL_PLANS,
+  DELIVERABLE_ANCHORS,
+  DELIVERABLE_TYPE_LABELS,
+  DEAL_PRICE_REQUIRED_CODE,
+  dealComponents,
   rateCardFrom,
   loadRateCard,
   proposeTerms,
+  missingPrices,
+  findMissingPrices,
+  dealPriceRequiredError,
+  dealPriceRequiredBody,
 };

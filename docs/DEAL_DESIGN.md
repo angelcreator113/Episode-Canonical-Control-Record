@@ -510,8 +510,8 @@ Evoni runs each one before the restart that needs it (the §7.1 path).
    - the auto-draft rule (§2.2);
    - the Event Package field, labelled per rule 14;
    - the lock additions.
-3. **Pricing:** `proposeTerms`, "Propose terms" in the Event Package, and the
-   admin pricing page.
+3. **Pricing:** `proposeTerms` and "Propose terms" in the Event Package. The
+   admin pricing page is a later PR (§10.2 point 5; §12).
 4. **Itemised costs:**
    - the `event_costs` editor;
    - Finalize charging them for deal events;
@@ -530,7 +530,8 @@ Evoni runs each one before the restart that needs it (the §7.1 path).
 
 **Then the goal-stat rule, per QUESTION 13.**
 
-PR 1 carries the only migrations. PRs 2–7 need no further schema.
+PR 1 carries the schema. PR 3 adds one guarded migration for §10.2 point 1
+(§12). PRs 4–7 need no further schema.
 
 ---
 
@@ -582,6 +583,31 @@ These are recorded verbatim in `docs/EVENT_EPISODE_FLOW.md` §8(cc).
 | 4 | Five Career Rate Anchors; the starting anchors and premiums are in §8(cc). "Rates are baselines, not fixed payouts." |
 | 12 | **Changed.** "A SLAY does not automatically create Prime Coins. A performance bonus is paid only when the accepted deal explicitly contains one … The generic tier reward (+150/+75/+25/−25) is retired for all completions from this ruling on." |
 | 13 | "B, with aggregation … Deliverables contribute to an episode/event outcome rather than granting a stat point independently for every completed task." |
+
+### 10.2 Deal PR 3 ruling (Evoni, 2026-09-30)
+
+Evoni's ruling on deal build PR 3's open pricing rules and the rate-card
+editor, "replacing the earlier draft answers" (those drafts were never
+recorded as a ruling). Recorded verbatim here and in
+`docs/EVENT_EPISODE_FLOW.md` §8(cc):
+
+| # | The open point | Ruling |
+|---|---|---|
+| 1 | What the brand partnership base is | "Modified." (below) |
+| 2 | How a deliverable finds its anchor | "Yes, with correction." (below) |
+| 3 | How premiums on one component combine | "Additive." (below) |
+| 4 | Which components each deal type carries | "Yes, with the full mapping." (below) |
+| 5 | Where the rate-card editor goes | "Later PR." (below) |
+| 6 | What "Other" is priced at | (below) |
+
+> 1. Modified. A Brand Partnership Base is its own guaranteed deal component, not an appearance fee. Required deliverables are priced on top. If the partnership also requires Lala to attend/appear, the Paid Appearance anchor is added separately.
+> 2. Yes, with correction. Deliverables use a fixed typed list: Reel, Story Set (3), Post, Photo Set, Other. Reel and Story Set receive automatic Career Rate Anchors in V1; Post, Photo Set and Other are manually priced. Appearance is not a deliverable—it is a separate deal component with its own payout trigger. No pricing behavior may depend on guessing words from free text.
+> 3. Additive. Multiple premiums affecting the same component are added, not compounded. +10% rush and +15% usage = +25%. A premium applies only to the component it affects and never increases unrelated components.
+> 4. Yes, with the full mapping. Paid Appearance starts with the Appearance anchor; Paid Deliverables with deliverable fees; Appearance + Deliverables with both; Performance Booking with the Performance anchor plus separately required deliverables; Brand Partnership with the Partnership Base plus required deliverables and an Appearance component only when appearance is actually required. Self-funded and invited/comped produce no income. Gifted produces no cash income but records gifted value.
+> 5. Later PR. Store and seed the versioned rate tables now so pricing is data-driven. Build the admin rate editor separately after the pricing and payout flow works end-to-end.
+> 6. "Other" never receives an automatic price. It shows "Price required", and the terms cannot lock (Start Episode refuses) until it has one. Missing is missing.
+
+§12 says what this changes.
 
 ---
 
@@ -676,6 +702,67 @@ These are recorded verbatim in `docs/EVENT_EPISODE_FLOW.md` §8(cc).
 - **M-1, M-2, M-4 and M-5** are as in §8.
 - **M-3 is replaced by** `deal_rate_anchors` and `deal_rate_premiums`, with
   version 1 seeded from §11.1. Its `down` drops both tables.
+
+---
+
+## 12. What the Deal PR 3 ruling changes (§10.2; built by PR 3, Task #2341)
+
+Each point cites the ruling's number. `src/services/dealPricingService.js`
+holds the rules (`DEAL_PLANS`, `EVENT_COMPONENTS`, `DELIVERABLE_ANCHORS`,
+`missingPrices`).
+
+- **The components (points 1 and 4).** Each is its own column on
+  `world_events`, with its own anchor:
+
+  | Component | Column | Anchor |
+  |---|---|---|
+  | Appearance | `appearance_fee` | `paid_appearance` |
+  | Partnership base | `partnership_base_fee` (new) | `brand_partnership_base` |
+  | Performance | `performance_fee` (new) | `performance_booking` |
+
+  | Deal type | Components | Deliverables paid |
+  |---|---|---|
+  | `paid_appearance` | Appearance | no |
+  | `paid_deliverables` | — | yes |
+  | `appearance_plus_deliverables` | Appearance | yes |
+  | `performance_booking` | Performance | yes |
+  | `brand_partnership` | Partnership base, plus Appearance only when `appearance_required` (new) | yes |
+  | `self_funded`, `invited_comped` | none: no income | no |
+  | `gifted` | none: no cash; `gifted_value` recorded | no |
+
+  §2.3's "`appearance_fee` (the booking fee)" for a performance booking is
+  replaced by `performance_fee`; §2.3's brand partnership now carries its
+  base as its own component.
+- **The migration (point 1).** `20260930120000-add-world-events-deal-components.js`:
+  `partnership_base_fee` INTEGER, `performance_fee` INTEGER (both null),
+  `appearance_required` BOOLEAN NOT NULL DEFAULT false. Guarded by
+  `describeTable`; `down` removes only these three. All three join
+  `LOCKED_EVENT_FIELDS` under "compensation".
+- **Deliverable types (point 2).** `event_deliverables.deliverable_type` is
+  one of `reel`, `story_set_3`, `post`, `photo_set`, `other`, or null; the
+  deliverable routes refuse anything else, `appearance` included.
+  - Reel takes the `reel` anchor and Story Set (3) the `stories_3` anchor.
+    Post, Photo Set and Other are priced by hand.
+  - A row written before the list (or copied from an opportunity) may hold
+    free text. It reads as untyped and is never priced from its words.
+- **Premiums (point 3).** They add on one component (+10% and +15% is +25%),
+  the component is rounded once, and a premium chosen for a component the
+  deal lacks, or for a hand-priced line, is refused.
+- **The editor (point 5).** The rate card stays read-only
+  (`GET /api/v1/deal-rates`); the admin editor is a later PR, after payouts
+  work end to end. This overrides §3.3 and §8's placement of it in PR 3.
+- **Missing is missing (point 6).** A component or paid deliverable with no
+  number reads "Price required". Start Episode (`generate-episode`,
+  `generate-episode-from-many`) refuses with 409 `DEAL_PRICE_REQUIRED` and
+  the list, before anything is written. A legacy event (no deal type) and a
+  no-cash deal are never refused; a regenerate is not refused, since its
+  terms are already locked.
+  - **Applied beyond "Other" (INFERRED, for Evoni to confirm):** the ruling
+    names Other. The gate applies "Missing is missing" to every priced
+    component and every deliverable of a deal that pays deliverables, so a
+    Post, Photo Set or untyped row with no fee also holds Start Episode, as
+    does a partnership base not offered at the tier. A deliverable meant to
+    pay nothing needs a fee of 0.
 
 ---
 

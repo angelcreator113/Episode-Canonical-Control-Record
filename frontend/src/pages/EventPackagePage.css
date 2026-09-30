@@ -1186,8 +1186,16 @@
   margin-left: 0;
 }
 .epp-term-value { font-size: 13px; }
-/* Pricing (Task #2341): premium pickers, one row per line. */
-.epp-term-head-actions { display: inline-flex; gap: 10px; }
+/* Deal price (Task #2341): one row per component, premium pickers per line. */
+.epp-term-component {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(184, 150, 46, 0.18);
+}
+/* "Price required" (ruling 6): a missing number, not a zero. */
+.is-price-required { color: #9a3412; font-weight: 600; }
 .epp-term-premium-line { display: flex; flex-direction: column; gap: 4px; }
 .epp-term-premium-title { font-size: 12px; color: var(--lala-ink, #2C2C2C); }
 .epp-term-premiums {

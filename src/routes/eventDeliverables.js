@@ -13,7 +13,9 @@
  * POST   /api/v1/world/:showId/events/:eventId/deliverables/:deliverableId/status — Advance (Task #1815)
  *
  * The add/edit/remove routes edit only the terms themselves: description,
- * deliverable_type, due_date, required, owed_to (host | brand; Task #2294). The PUT refuses status and its
+ * deliverable_type (one of the fixed types — reel, story_set_3, post,
+ * photo_set, other — or null; Task #2341), due_date, required, owed_to
+ * (host | brand; Task #2294) and fee. The PUT refuses status and its
  * timestamps (400 DELIVERABLE_STATUS_NOT_EDITABLE).
  *
  * Fulfilment (slice 1b, §8(t) item 4) is the status POST alone: after
@@ -35,7 +37,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const {
   listEventDeliverables, validateDeliverableTransition, DELIVERABLE_STATUS_FLOW,
-  DESCRIPTION_MAX, TYPE_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO,
+  DESCRIPTION_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO, DELIVERABLE_TYPES,
 } = require('../services/eventTermsService');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 
@@ -86,13 +88,23 @@ function readDeliverableBody(body, { partial }) {
     if (description.length > DESCRIPTION_MAX) return { error: `description must be at most ${DESCRIPTION_MAX} characters` };
     fields.description = description;
   }
-  for (const [key, max] of [['deliverable_type', TYPE_MAX], ['due_date', DUE_DATE_MAX]]) {
-    if (b[key] === undefined) continue;
-    if (b[key] === null) { fields[key] = null; continue; }
-    if (typeof b[key] !== 'string') return { error: `${key} must be a string or null` };
-    const v = b[key].trim();
-    if (v.length > max) return { error: `${key} must be at most ${max} characters` };
-    fields[key] = v || null;
+  // The fixed deliverable types (Evoni's Deal PR 3 ruling, QUESTION 2;
+  // Task #2341): one of DELIVERABLE_TYPES, or null. Free text is refused, so
+  // no price can depend on words in it.
+  if (b.deliverable_type !== undefined) {
+    if (b.deliverable_type !== null && !DELIVERABLE_TYPES.includes(b.deliverable_type)) {
+      return { error: `deliverable_type must be one of ${DELIVERABLE_TYPES.join(', ')}, or null` };
+    }
+    fields.deliverable_type = b.deliverable_type;
+  }
+  if (b.due_date !== undefined) {
+    if (b.due_date === null) fields.due_date = null;
+    else {
+      if (typeof b.due_date !== 'string') return { error: 'due_date must be a string or null' };
+      const v = b.due_date.trim();
+      if (v.length > DUE_DATE_MAX) return { error: `due_date must be at most ${DUE_DATE_MAX} characters` };
+      fields.due_date = v || null;
+    }
   }
   if (b.required !== undefined) {
     if (typeof b.required !== 'boolean') return { error: 'required must be true or false' };

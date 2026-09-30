@@ -6,19 +6,25 @@
  * POST /api/v1/world/:showId/events/:eventId/propose-terms   — draft the deal's numbers
  *
  * Propose terms (Evoni's QUESTION 4 answer, §8(cc): "Rates are baselines,
- * not fixed payouts") runs dealPricingService.proposeTerms and writes the
- * result onto the deal as a draft:
- *   - world_events.appearance_fee and pricing_version;
- *   - event_deliverables.fee, for each deliverable the card prices (a line
- *     with no anchor keeps whatever fee it has).
+ * not fixed payouts"; her Deal PR 3 ruling, the same section) runs
+ * dealPricingService.proposeTerms and writes the result onto the deal as a
+ * draft:
+ *   - the event's components the deal type carries (ruling 4):
+ *     appearance_fee, partnership_base_fee, performance_fee, and
+ *     pricing_version;
+ *   - event_deliverables.fee for each Reel and Story Set (3) (ruling 2).
+ * A line with no automatic price (Post, Photo Set, Other, untyped, or an
+ * anchor not offered at the tier) keeps whatever number it has and reads
+ * "Price required" until Evoni sets one (ruling 6).
  * The draft is recorded as the other drafted fields are (doctrine rule 14):
- * automation.auto_drafted.appearance_fee = 'pricing' with its copy in
+ * automation.auto_drafted.<field> = 'pricing' with its copy in
  * automation.drafted_values, and the priced deliverable fees in
  * automation.drafted_values.deliverable_fees ({ id: fee }). Evoni edits any
  * number through the event PUT and the deliverable PUT until the terms lock;
  * after the lock this route refuses with 409, like every terms write.
  *
- * Body: { premiums: { appearance: [{kind,key}], deliverables: { <id>: [{kind,key}] } } }
+ * Body: { premiums: { appearance?, partnership_base?, performance?: [{kind,key}],
+ *                     deliverables?: { <id>: [{kind,key}] } } }
  *
  * Location: src/routes/dealPricing.js
  */
@@ -31,7 +37,7 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { listEventDeliverables } = require('../services/eventTermsService');
 const { findTermsLockEpisode, termsLockedBody } = require('../utils/eventTermsLock');
-const { loadRateCard, proposeTerms, PRICING_SOURCE } = require('../services/dealPricingService');
+const { loadRateCard, proposeTerms, PRICING_SOURCE, EVENT_COMPONENTS } = require('../services/dealPricingService');
 
 async function getModels() {
   try { return require('../models'); } catch (err) {
@@ -79,7 +85,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
     const premiums = req.body && typeof req.body.premiums === 'object' && req.body.premiums ? req.body.premiums : {};
 
     const [rows] = await sequelize.query(
-      `SELECT id, deal_type, career_tier FROM world_events
+      `SELECT id, deal_type, career_tier, appearance_required FROM world_events
         WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { eventId, showId } }
     );
@@ -87,7 +93,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const lockEpisode = await findTermsLockEpisode(sequelize, eventId);
-    if (lockEpisode) return res.status(409).json(termsLockedBody(lockEpisode, ['appearance_fee']));
+    if (lockEpisode) return res.status(409).json(termsLockedBody(lockEpisode, Object.values(EVENT_COMPONENTS).map((c) => c.field)));
 
     const deliverables = await listEventDeliverables(sequelize, eventId);
     const card = await loadRateCard(sequelize);
@@ -107,9 +113,10 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
       const automation = cc.automation || {};
       const autoDrafted = { ...(automation.auto_drafted || {}) };
       const draftedValues = { ...(automation.drafted_values || {}) };
-      if (proposal.appearance.fee != null) {
-        autoDrafted.appearance_fee = PRICING_SOURCE;
-        draftedValues.appearance_fee = proposal.appearance.fee;
+      const pricedComponents = Object.values(proposal.components).filter((c) => c.fee != null);
+      for (const c of pricedComponents) {
+        autoDrafted[c.field] = PRICING_SOURCE;
+        draftedValues[c.field] = c.fee;
       }
       if (Object.keys(pricedFees).length) {
         autoDrafted.deliverable_fees = PRICING_SOURCE;
@@ -119,14 +126,23 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
         ...cc,
         automation: { ...automation, auto_drafted: autoDrafted, drafted_values: draftedValues, pricing_version: proposal.pricing_version },
       };
+      // Only the components the card priced are written; a "Price required"
+      // component keeps its number (field names come from EVENT_COMPONENTS,
+      // never from the request).
+      const setFees = pricedComponents.map((c) => `${c.field} = :${c.field}`).join(', ');
       await sequelize.query(
         `UPDATE world_events
-            SET appearance_fee = COALESCE(:appearanceFee, appearance_fee),
-                pricing_version = :version,
+            SET ${setFees ? `${setFees}, ` : ''}pricing_version = :version,
                 canon_consequences = :cc,
                 updated_at = NOW()
           WHERE id = :eventId`,
-        { replacements: { appearanceFee: proposal.appearance.fee, version: proposal.pricing_version, cc: JSON.stringify(nextCc), eventId }, transaction }
+        {
+          replacements: {
+            ...Object.fromEntries(pricedComponents.map((c) => [c.field, c.fee])),
+            version: proposal.pricing_version, cc: JSON.stringify(nextCc), eventId,
+          },
+          transaction,
+        }
       );
       for (const [id, fee] of Object.entries(pricedFees)) {
         await sequelize.query(
