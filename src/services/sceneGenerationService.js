@@ -6,7 +6,6 @@
  * v2.0 enhancements:
  *   - Fixed aspect ratio: 1920:1080 for both text_to_image and image_to_video
  *   - Added negative_prompt to suppress common artifacts
- *   - Condensed LALAVERSE_VISUAL_ANCHOR to ~600 chars for better prompt budget
  *   - Style reference image support for visual consistency
  *   - Single still generation per call (no multi-variation quality sort)
  *   - Camera motion control mapping for image_to_video
@@ -37,28 +36,16 @@ const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 const s3 = new S3Client({ region: AWS_REGION });
 const { buildSceneBrief, briefToPrompt, prepareSceneBrief } = require('./sceneBriefService');
 
-// ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
-
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Natural hero lighting. Materials: soft fabrics, glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
+// Ruling S4 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd), quoted
+// there): the injected generic style and lighting instructions are removed,
+// and lighting comes from the brief. The LalaVerse style anchor and the
+// per-angle modifiers (with their fixed lighting) are gone; each angle's
+// camera is the brief's (sceneBriefService.SHOT_CAMERAS).
+// tests/unit/services/sceneGenericText.test.js keeps that text out.
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
 const NEGATIVE_PROMPT = `person, people, human, figure, silhouette, body, face, hands, legs, shadow of a person, reflection of a person, neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, blurry, low resolution, oversaturated, chromatic aberration`;
-
-// ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
-
-const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot showing the FULL room from corner to corner. Camera pulled back to maximum width. Include ceiling, floor, and all walls visible. Extended panoramic view revealing the complete space and all furniture.',
-  CLOSET:       'Camera facing the wardrobe/closet area. Extend the view to show full-height clothing racks, shelving, and organized accessories. Soft warm glow on fabric textures. Show the full depth of the closet space as if the wall has been extended back.',
-  VANITY:       'Camera at vanity/dressing table area. Show the full mirror, surface details, beauty products, and surrounding decor. Extend the view to include adjacent shelving or wall art. Soft glamour lighting.',
-  WINDOW:       'Camera facing the window wall. Extend the view to show the FULL window and surrounding wall space. Natural golden light streaming in. Include curtains, window seat, or plants near the window. Show what is visible beyond the glass.',
-  DOORWAY:      'Camera at the doorway threshold, looking into the room from outside. Wide enough to show the full door frame and hallway. Sense of arrival — revealing the room from an outsider perspective. Extended view showing the transition between spaces.',
-  ESTABLISHING: 'Grand wide exterior or entrance shot. Camera pulled far back. Show the full facade, entrance, or grand interior from maximum distance. Include architectural details, landscaping, or approach path. The most expansive possible view.',
-  ACTION:       'Dynamic angle with sense of movement or event energy. Slightly asymmetric composition. Show the space as if someone just walked through it. Extended view capturing the flow of the room.',
-  CLOSE:        'Close-up shot on a signature surface, object, or detail. Intimate and personal. Show texture, material quality, and craftsmanship. Extend focus to include nearby complementary details.',
-  OVERHEAD:     'High overhead angle looking straight down. Reveal the full room layout, furniture arrangement, and floor pattern. Bird\'s-eye view showing the complete spatial relationships.',
-  OTHER:        'Unique compositional angle appropriate to this specific location. Extend the visible space beyond what the reference image shows.',
-};
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
 
@@ -143,7 +130,8 @@ function buildVideoPrompt(sceneSet, angleLabel, customCameraDirection) {
   const parts = [
     movementText,
     `Scene: ${sceneSet.name}.`,
-    'Maintain warm soft natural lighting. Photorealistic quality. No morphing. No text overlays.',
+    // S4: no lighting of its own; the image keeps the brief's.
+    'Keep the lighting of the image. Photorealistic quality. No morphing. No text overlays.',
   ];
 
   return parts.join(' ').trim();
@@ -2064,9 +2052,7 @@ module.exports = {
   pollTask,
   storeInS3,
   storeBufferInS3,
-  LALAVERSE_VISUAL_ANCHOR,
   NEGATIVE_PROMPT,
-  ANGLE_MODIFIERS,
   CAMERA_MOTION_MAP,
   VIDEO_DURATION_MAP,
   VIDEO_MOVEMENT_MODIFIERS,

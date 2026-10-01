@@ -148,7 +148,7 @@ Write a rich 2-3 sentence description that includes:
 - WINDOW VIEWS if applicable
 - Overall MOOD and atmosphere
 
-Be specific and visual — this description will directly generate images. Use the LalaVerse aesthetic: feminine, aspirational, warm tones, soft textures, Pinterest-worthy.
+Be specific and visual — this description will directly generate images. Describe this place as it is; add no style, mood or lighting that the name, type and notes do not give.
 Return ONLY the description paragraph, no labels or formatting.`,
       }],
     });

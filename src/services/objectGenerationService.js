@@ -28,11 +28,10 @@ const AWS_REGION     = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 
-// Visual style anchor (condensed for object generation)
-const OBJECT_STYLE_ANCHOR = 'Style: Final Fantasy softness, Pinterest-core femininity, magical realism. ' +
-  'Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow. ' +
-  'Materials: soft fabrics, light wood, glass, mirrors, shimmer. ' +
-  'Quality: sharp edges, clean silhouette, studio lighting.';
+// Ruling S4 (Evoni, 2026-09-30, extended to Scene Studio's objects on
+// 2026-10-01; EVENT_EPISODE_FLOW.md §8(dd)): no house style, colours or mood
+// are injected. An object is what was asked for, lit evenly and neutrally so
+// it takes the lighting of the scene it is placed in.
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -86,14 +85,13 @@ function buildObjectPrompt(userPrompt, styleHints) {
     'Isolated single object on a pure white background.',
     'Clean product photography style, centered, no shadows on background, no floor, no room context.',
     `Object: ${userPrompt}.`,
-    OBJECT_STYLE_ANCHOR,
   ];
 
   if (styleHints) {
     parts.push(`Additional style: ${styleHints}.`);
   }
 
-  parts.push('High resolution, sharp details, professional studio lighting.');
+  parts.push('High resolution, sharp details, clean silhouette. Even, neutral lighting with no colour cast.');
 
   return parts.join(' ').trim();
 }
@@ -103,7 +101,6 @@ function buildScenePrompt(userPrompt, styleHints) {
     `Scene: ${userPrompt}.`,
     'Wide establishing shot, cinematic composition, no people, no text, no UI elements.',
     'Photographic quality, 16:9 aspect ratio, high resolution.',
-    'Style: Pinterest-core femininity, luxury lifestyle, warm tones, editorial photography.',
   ];
 
   if (styleHints) {
@@ -339,4 +336,4 @@ async function generateObject(prompt, options = {}) {
   }
 }
 
-module.exports = { generateObject, checkRateLimit, removeBackground };
+module.exports = { generateObject, checkRateLimit, removeBackground, buildObjectPrompt, buildScenePrompt };
