@@ -806,7 +806,8 @@ function briefDb(models) {
  * that normally follow (the base-model comparison generates stills only).
  * options.eventId: the event chosen explicitly for this image (S1, S3);
  *   without one, the brief has no event layer.
- * options.overrides: { <brief line key>: text } (S2's "Your override").
+ * options.overrides: { <brief line key>: text } (S2's "Your override");
+ *   without it, the overrides of the base's last brief.
  *
  * The prompt is the set's Scene Brief (S1); the brief is kept on
  * base_generation.brief.
@@ -815,7 +816,10 @@ async function generateBaseScene(sceneSet, models, options = {}) {
   const { SceneSet } = models;
 
   const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
-    angleLabel: 'WIDE', eventId: options.eventId || null, overrides: options.overrides || {},
+    // Without overrides given, the base keeps the ones it was last generated
+    // with (S2: the brief shown before generating shows them).
+    angleLabel: 'WIDE', eventId: options.eventId || null,
+    overrides: options.overrides || sceneSet.base_generation?.brief?.overrides || {},
   });
   const prompt = briefToPrompt(brief);
 
@@ -1606,7 +1610,54 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
 
 // ─── ANGLE GENERATION ────────────────────────────────────────────────────────
 
-async function generateAngle(sceneAngle, sceneSet, models) {
+/**
+ * The Scene Brief options for an angle (S1): the shot's camera and required
+ * visible features (the SceneSpec camera contracts, else the anchor
+ * objects), continuity with the base, and the event and overrides chosen for
+ * the set's base. generateAngle and the brief shown before generating (S2,
+ * POST /scene-sets/:id/brief) both use it, so what is shown is what is sent.
+ * options.overrides replaces the base's overrides when given (S2's "Your
+ * override"). options.imageAnalysis: the base's analysis when generating;
+ * the preview reads only what the set already stores.
+ */
+function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrides = null } = {}) {
+  const angleLabel = sceneAngle.angle_label || 'WIDE';
+  const vl = sceneSet.visual_language || {};
+  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
+
+  // ── The shot's required visible features: the SceneSpec camera
+  // contracts (preferred), else the anchor objects ──
+  const spec = sceneSet.scene_spec;
+  let specConstraints = '';
+  if (spec?.camera_contracts && spec?.objects) {
+    specConstraints = sceneSpecService.buildAngleConstraints(spec, angleLabel);
+  }
+
+  // Build legacy anchors (used both as the fallback and as DALL-E hint)
+  const relevantAnchors = anchorObjects
+    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
+    .map(a => `${a.name} (${a.position}): ${a.description}`)
+    .slice(0, 5);
+
+  // The angle's Scene Brief (S1): the place, the event chosen for the set's
+  // base (if any), this shot, and the environment. Lighting comes from the
+  // brief; no state ambient or generic text is added.
+  const baseBrief = sceneSet.base_generation?.brief || null;
+  return {
+    options: {
+      angleLabel,
+      cameraDirection: sceneAngle.camera_direction || null,
+      requiredFeatures: specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null),
+      continuity: Boolean(sceneSet.base_still_url),
+      eventId: baseBrief?.event_id || null,
+      overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
+    },
+    relevantAnchors,
+    specConstraints,
+  };
+}
+
+async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const { SceneAngle, SceneSet } = models;
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
@@ -1631,38 +1682,10 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     }
   }
 
-  // Build blueprint-driven camera instruction
-  const vl = sceneSet.visual_language || {};
-  const _layoutMap = vl.layout_map || imageAnalysis?.layout_map || {};
-  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
-  const _cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
-
-  // ── The shot's required visible features: the SceneSpec camera
-  // contracts (preferred), else the anchor objects ──
-  const spec = sceneSet.scene_spec;
-  let specConstraints = '';
-  if (spec?.camera_contracts && spec?.objects) {
-    specConstraints = sceneSpecService.buildAngleConstraints(spec, angleLabel);
-  }
-
-  // Build legacy anchors (used both as the fallback and as DALL-E hint)
-  const relevantAnchors = anchorObjects
-    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
-    .map(a => `${a.name} (${a.position}): ${a.description}`)
-    .slice(0, 5);
-
-  // The prompt is the angle's Scene Brief (S1): the place, the event chosen
-  // for the set's base (if any), this shot, and the environment. Lighting
-  // comes from the brief; no state ambient or generic text is added.
-  const baseBrief = sceneSet.base_generation?.brief || null;
-  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
-    angleLabel,
-    cameraDirection: sceneAngle.camera_direction || null,
-    requiredFeatures: specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null),
-    continuity: Boolean(sceneSet.base_still_url),
-    eventId: baseBrief?.event_id || null,
-    overrides: baseBrief?.overrides || {},
+  const { options: briefOptions, relevantAnchors, specConstraints } = angleBriefOptions(sceneAngle, sceneSet, {
+    imageAnalysis, overrides: options.overrides,
   });
+  const brief = await prepareSceneBrief(briefDb(models), sceneSet, briefOptions);
   const prompt = briefToPrompt(brief);
   if (specConstraints) console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
 
@@ -1891,7 +1914,23 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
 
 // ─── HIGH-LEVEL: REGENERATE ANGLE WITH REFINED PROMPT ─────────────────────────
 
-async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models) {
+/**
+ * The Scene Brief options for a refined angle regeneration: the angle's
+ * camera label with continuity, and the base's event and overrides
+ * (options.overrides replaces those, S2). regenerateAngleRefined and the
+ * brief shown before it (POST /scene-sets/:id/brief with refine) share it.
+ */
+function refinedBriefOptions(sceneAngle, sceneSet, { overrides = null } = {}) {
+  const baseBrief = sceneSet.base_generation?.brief || null;
+  return {
+    angleLabel: sceneAngle.angle_label || 'WIDE',
+    continuity: true,
+    eventId: baseBrief?.event_id || null,
+    overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
+  };
+}
+
+async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models, options = {}) {
   const { SceneAngle, SceneSet } = models;
 
   if (!sceneSet.base_still_url) {
@@ -1899,10 +1938,9 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const baseBrief = sceneSet.base_generation?.brief || null;
-  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
-    angleLabel, continuity: true, eventId: baseBrief?.event_id || null, overrides: baseBrief?.overrides || {},
-  });
+  const brief = await prepareSceneBrief(briefDb(models), sceneSet, refinedBriefOptions(sceneAngle, sceneSet, {
+    overrides: options.overrides,
+  }));
   const basePrompt = briefToPrompt(brief);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
 
@@ -2015,6 +2053,8 @@ module.exports = {
   generateMoodVariants,
   MOOD_PRESETS,
   generateAngle,
+  angleBriefOptions,
+  refinedBriefOptions,
   generateAngleVideo,
   regenerateAngleRefined,
   generateBestVariation,

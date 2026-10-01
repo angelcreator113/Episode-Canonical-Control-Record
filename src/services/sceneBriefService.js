@@ -179,7 +179,7 @@ function buildSceneBrief({
   // ── The place (permanent) ──
   const guide = location?.effective_style_guide || parseJson(location?.style_guide, null) || {};
   const placeType = clean(location?.venue_type || location?.property_type || '').replace(/_/g, ' ');
-  add('place', 'identity', 'Place', sentence(`${clean(set.name || location?.name || 'The place')}${placeType ? `, a ${placeType}` : ''}`), 'venue', true);
+  add('place', 'identity', 'Place', sentence(`${clean(set.name || location?.name || 'The place')}${placeType ? `, ${/^[aeiou]/i.test(placeType) ? 'an' : 'a'} ${placeType}` : ''}`), 'venue', true);
   add('place', 'description', 'Description', sentence(set.canonical_description || location?.description), 'venue', true);
   if (guide.architecture) add('place', 'architecture', 'Architecture', sentence(`Architecture: ${listText(guide.architecture)}`), 'venue');
   const materials = materialsText(guide.materials);

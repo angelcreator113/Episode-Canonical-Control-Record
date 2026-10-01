@@ -3276,6 +3276,41 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
     - Venue prompts get only a 3-way time of day.
     - Weather appears nowhere.
 
+**What S2 built** (Task #2395):
+
+- **The brief, shown.** `POST /api/v1/scene-sets/:id/brief` (requireAuth,
+  read-only) returns the brief a generation would send, with its prompt.
+  - It covers the base (no `angle_id`), one angle (`angle_id`, the same
+    `angleBriefOptions` as `generateAngle`), or the artifact-review
+    regenerate (`refine`, the same `refinedBriefOptions` as
+    `regenerateAngleRefined`). So what is shown is what is sent.
+  - An edited, unsaved description can be shown (`canonical_description`)
+    without being saved.
+  - The base's estimate comes from its model's rate. An angle has none:
+    INFERRED, its provider path (crop and outpaint, or full generation) is
+    chosen at generation time.
+- **Before every paid scene-set generation.** `SceneBriefConfirm` opens
+  first. That covers "AI Generate", regenerate base, generate angle
+  (including the automatic one after adding an angle), generate all
+  angles, regenerate with a new description (cascade), and the artifact
+  review's regenerate.
+  - Each line is labelled "From venue", "From event" or "Your override".
+    With no event chosen, the event layer reads "No event chosen" (S3 adds
+    the choice).
+  - Missing essentials are listed at the top and flagged on their lines.
+    INFERRED: they do not block generating.
+  - A line can be edited (it becomes "Your override"), removed when it is
+    not essential, or reset. Confirming sends the overrides.
+- **Overrides travel with the generation.** The generate-base, angle
+  generate, generate-all-angles, cascade (through its job payload) and
+  angle regenerate routes take `overrides` ({ line key: text }), checked
+  by `readBriefOverrides`. The base keeps them on
+  `base_generation.brief.overrides`; its angles inherit them, and a base
+  regenerated with none given keeps its last ones.
+- INFERRED scope: venue generation (`venueGenerationService`) does not
+  build a Scene Brief yet, so it gets one with S5; mood and time variants
+  and Scene Studio's object and background calls do not use the brief.
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in

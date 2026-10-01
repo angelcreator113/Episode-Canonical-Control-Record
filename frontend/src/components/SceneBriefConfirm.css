@@ -1,0 +1,142 @@
+/* The Scene Brief before a paid generation (S2; SceneBriefConfirm). Prefix sbc-. */
+.sbc-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Above the scene-set modals (up to 10000), which can open it. */
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(44, 44, 44, 0.45);
+}
+.sbc-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 32px);
+  border-radius: 12px;
+  background: var(--lala-parchment, #FAF7F0);
+  color: var(--lala-ink, #2C2C2C);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  font-family: 'Lora', serif;
+  overflow: hidden;
+}
+.sbc-head, .sbc-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+.sbc-head { border-bottom: 1px solid #ece3c8; }
+.sbc-foot { border-top: 1px solid #ece3c8; justify-content: flex-end; align-items: center; }
+.sbc-title { margin: 0; font-size: 1.05rem; }
+.sbc-sub, .sbc-note, .sbc-loading { margin: 0; font-size: 0.82rem; color: #6b6b6b; }
+.sbc-error { margin: 0.5rem 1rem; color: #a3271f; font-size: 0.85rem; }
+.sbc-loading { padding: 1rem; }
+.sbc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.85rem 1rem;
+  overflow-y: auto;
+}
+.sbc-missing {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: #fff4e0;
+  border: 1px solid #f0d28a;
+  color: #7a4f00;
+  font-size: 0.83rem;
+}
+.sbc-layer-title {
+  margin: 0 0 0.35rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--lala-gold-hover, #A68324);
+}
+.sbc-lines, .sbc-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.sbc-rules li { font-size: 0.82rem; color: #555; }
+.sbc-line {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #ece3c8;
+  min-width: 0;
+}
+.sbc-line-missing { border-color: #e6a23c; background: #fffaf0; }
+.sbc-line-removed { background: transparent; border-style: dashed; }
+.sbc-line-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.sbc-line-label { font-weight: 600; font-size: 0.86rem; }
+/* A removed line shows its key ("ceiling"), not a label. */
+.sbc-line-removed .sbc-line-label { text-transform: capitalize; }
+.sbc-source, .sbc-flag {
+  padding: 0.02rem 0.45rem;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  border: 1px solid #ddd;
+  white-space: nowrap;
+}
+.sbc-source-venue { color: #3d5a80; border-color: #c4d3e6; background: #f1f5fa; }
+.sbc-source-event { color: #7a3e8e; border-color: #dcc6e4; background: #f8f1fa; }
+.sbc-source-override { color: #8a6d1f; border-color: #e8d9a8; background: #fdf8ee; }
+.sbc-flag { color: #a3271f; border-color: #f0b7b2; background: #fdf0ef; }
+.sbc-actions { margin-left: auto; display: inline-flex; gap: 0.15rem; }
+.sbc-text { margin: 0.25rem 0 0; font-size: 0.85rem; line-height: 1.4; overflow-wrap: anywhere; }
+.sbc-edit { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.35rem; }
+.sbc-edit textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem;
+  border: 1px solid #d9cba0;
+  border-radius: 6px;
+  resize: vertical;
+}
+.sbc-edit-actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
+.sbc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b6b6b;
+  cursor: pointer;
+}
+.sbc-icon:hover, .sbc-icon:focus-visible { background: #f3ecd8; color: var(--lala-ink, #2C2C2C); }
+.sbc-btn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  background: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sbc-btn-primary { background: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); color: #fff; }
+.sbc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+@media (max-width: 480px) {
+  .sbc-backdrop { padding: 0; align-items: stretch; }
+  .sbc-modal { max-height: 100vh; border-radius: 0; }
+}
