@@ -3702,6 +3702,24 @@ design note, with open questions, is `docs/SEASON_ARC_DESIGN_NOTE.md`.
 > A7. Only future slots can be reordered or re-planned; a slot whose episode has started is locked to that episode.
 >
 > A8. A Planning Insights view compares planned pressure with actual results per slot. Season money (spend, income, balance trend) comes from the ledger only, never from cost_coins.
+
+**Answers (Evoni, 2026-10-01)** to the design note's questions, recorded
+verbatim. The question numbers are `docs/SEASON_ARC_DESIGN_NOTE.md` §3's.
+Q4 and Q9–Q15 are still open.
+
+> Q1 Yes: the existing "Soft Luxury Ascension" season is Season 1; my current episode is slot 1.
+>
+> Q2 Remove Extend; phase boundaries can shift within the 24, only across slots that haven't started.
+>
+> Q3 Episode numbers restart each season, shown "S1 · E7"; the show-wide count stays internal.
+>
+> Q5 Yes: an event can be pencilled into a future slot and moved freely; it locks at Start Episode.
+>
+> Q6 Ask first: at a phase boundary show a summary of the phase completed and what changes, and Evoni confirms.
+>
+> Q7 Pressure is Low · Medium · High · Peak. Desired is set in the slot's intention; actual is derived from the evaluation tier, the episode's money net and the stress change.
+>
+> Q8 A repeat is the same format, host/brand or venue within the last 3 episodes; it warns, never blocks.
 ---
 
 ## 9. Owed before enforcement
