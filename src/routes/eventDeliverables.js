@@ -13,10 +13,11 @@
  * POST   /api/v1/world/:showId/events/:eventId/deliverables/:deliverableId/status — Advance (Task #1815)
  *
  * The add/edit/remove routes edit only the terms themselves: description,
- * deliverable_type (one of the fixed types — reel, story_set_3, post,
- * photo_set, other — or null; Task #2341), due_date, required, owed_to
- * (host | brand; Task #2294) and fee. The PUT refuses status and its
- * timestamps (400 DELIVERABLE_STATUS_NOT_EDITABLE).
+ * deliverable_type (one of the D15 formats in src/utils/deliverableFormats.js,
+ * or null), platform (one the format allows; defaulted when it has only one)
+ * and quantity (pieces, slides or days; ruling D15, 2026-09-30), due_date,
+ * required, owed_to (host | brand; Task #2294) and fee. The PUT refuses
+ * status and its timestamps (400 DELIVERABLE_STATUS_NOT_EDITABLE).
  *
  * Fulfilment (slice 1b, §8(t) item 4) is the status POST alone: after
  * Start Episode a row moves pending → completed → submitted → approved,
@@ -42,6 +43,9 @@ const {
   DESCRIPTION_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO, DELIVERABLE_TYPES,
 } = require('../services/eventTermsService');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
+const {
+  formatOf, PLATFORMS, QUANTITY_MIN, QUANTITY_MAX,
+} = require('../utils/deliverableFormats');
 const { reopenMarkerOf } = require('../utils/eventTermsLock');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
@@ -52,7 +56,7 @@ const STATUS_CONFLICT_CODE = 'DELIVERABLE_STATUS_CONFLICT';
 // Fulfilment fields: written only by the status POST.
 const FULFILMENT_FIELDS = ['status', 'completed_at', 'submitted_at', 'approved_at'];
 
-const RETURNING = `RETURNING id, event_id, description, deliverable_type, due_date, required, status,
+const RETURNING = `RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
                  completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`;
 
 async function getModels() {
@@ -106,6 +110,30 @@ function readDeliverableBody(body, { partial }) {
       return { error: `deliverable_type must be one of ${DELIVERABLE_TYPES.join(', ')}, or null` };
     }
     fields.deliverable_type = b.deliverable_type;
+  }
+  // D15: the platform, one the format allows (checked against the type when
+  // both are sent), or null. A format on one platform only takes it when the
+  // type is sent without one.
+  if (b.platform !== undefined) {
+    if (b.platform !== null && !PLATFORMS.includes(b.platform)) {
+      return { error: `platform must be one of ${PLATFORMS.join(', ')}, or null` };
+    }
+    fields.platform = b.platform;
+  }
+  const format = formatOf(fields.deliverable_type);
+  if (format && fields.platform != null && !format.platforms.includes(fields.platform)) {
+    return { error: `${format.label} is not on ${fields.platform}; choose ${format.platforms.join(' or ') || 'no platform'}` };
+  }
+  if (format && fields.platform === undefined && format.platforms.length <= 1) {
+    fields.platform = format.platforms[0] || null;
+  }
+  // D15: the quantity (pieces, slides or days), a whole number.
+  if (b.quantity !== undefined) {
+    const quantity = Number(b.quantity);
+    if (!Number.isInteger(quantity) || quantity < QUANTITY_MIN || quantity > QUANTITY_MAX) {
+      return { error: `quantity must be a whole number from ${QUANTITY_MIN} to ${QUANTITY_MAX}` };
+    }
+    fields.quantity = quantity;
   }
   if (b.due_date !== undefined) {
     if (b.due_date === null) fields.due_date = null;
@@ -179,14 +207,16 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
 
     const f = parsed.fields;
     const [rows] = await models.sequelize.query(
-      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at)
-       VALUES (:id, :eventId, :description, :deliverable_type, :due_date, :required, :owed_to, :fee, 'pending', NOW(), NOW())
-       RETURNING id, event_id, description, deliverable_type, due_date, required, status,
+      `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, fee, status, created_at, updated_at)
+       VALUES (:id, :eventId, :description, :deliverable_type, :platform, :quantity, :due_date, :required, :owed_to, :fee, 'pending', NOW(), NOW())
+       RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
                  completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: {
         id: uuidv4(), eventId,
         description: f.description,
         deliverable_type: f.deliverable_type ?? null,
+        platform: f.platform ?? null,
+        quantity: f.quantity ?? formatOf(f.deliverable_type)?.defaultQuantity ?? 1,
         due_date: f.due_date ?? null,
         required: f.required !== false,
         owed_to: f.owed_to || 'host',
@@ -226,7 +256,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
     if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
     const keys = Object.keys(parsed.fields);
     if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, due_date, required, owed_to, fee)' });
+      return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, platform, quantity, due_date, required, owed_to, fee)' });
     }
 
     const event = await loadEvent(models.sequelize, showId, eventId);
@@ -237,7 +267,7 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
     const [rows] = await models.sequelize.query(
       `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
        WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
-       RETURNING id, event_id, description, deliverable_type, due_date, required, status,
+       RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
                  completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
       { replacements: { ...parsed.fields, deliverableId, eventId } }
     );

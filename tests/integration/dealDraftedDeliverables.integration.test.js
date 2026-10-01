@@ -63,7 +63,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
   const propose = (ids, body = {}) => auth(request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/propose-terms`)).send(body);
   const deliverablesUrl = (ids) => `/api/v1/world/${ids.show}/events/${ids.event}/deliverables`;
   const rows = (ids) => q(
-    `SELECT id, deliverable_type, description, required, owed_to, fee FROM event_deliverables
+    `SELECT id, deliverable_type, platform, quantity, description, required, owed_to, fee FROM event_deliverables
       WHERE event_id = :event AND deleted_at IS NULL ORDER BY created_at ASC, id ASC`, ids);
   const automationOf = async (ids) => {
     const [e] = await q(`SELECT canon_consequences FROM world_events WHERE id = :event`, ids);
@@ -75,30 +75,30 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     ['self_funded', 3, []],
     ['invited_comped', 3, []],
     ['gifted', 3, []],
-    ['paid_appearance', 2, [{ type: 'story_set_3', required: false, owed_to: 'host', fee: null }]],
-    ['paid_deliverables', 1, [{ type: 'reel', required: true, owed_to: 'host', fee: 75 }]],
+    ['paid_appearance', 2, [{ type: 'instagram_stories', required: false, owed_to: 'host', fee: null }]],
+    ['paid_deliverables', 1, [{ type: 'instagram_reel', required: true, owed_to: 'host', fee: 75 }]],
     ['paid_deliverables', 3, [
-      { type: 'reel', required: true, owed_to: 'host', fee: 225 },
-      { type: 'story_set_3', required: true, owed_to: 'host', fee: 110 },
+      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 225 },
+      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 110 },
     ]],
     ['paid_deliverables', 5, [
-      { type: 'reel', required: true, owed_to: 'host', fee: 450 },
-      { type: 'story_set_3', required: true, owed_to: 'host', fee: 225 },
-      { type: 'post', required: true, owed_to: 'host', fee: null },
+      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 450 },
+      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 225 },
+      { type: 'instagram_post', required: true, owed_to: 'host', fee: 225 },
     ]],
     ['appearance_plus_deliverables', 4, [
-      { type: 'reel', required: true, owed_to: 'host', fee: 325 },
-      { type: 'story_set_3', required: true, owed_to: 'host', fee: 160 },
+      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 325 },
+      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 160 },
     ]],
-    ['performance_booking', 2, [{ type: 'reel', required: true, owed_to: 'host', fee: 125 }]],
+    ['performance_booking', 2, [{ type: 'instagram_reel', required: true, owed_to: 'host', fee: 125 }]],
     ['brand_partnership', 2, [
-      { type: 'reel', required: true, owed_to: 'brand', fee: 125 },
-      { type: 'story_set_3', required: true, owed_to: 'brand', fee: 60 },
+      { type: 'instagram_reel', required: true, owed_to: 'brand', fee: 125 },
+      { type: 'instagram_stories', required: true, owed_to: 'brand', fee: 60 },
     ]],
     ['brand_partnership', 4, [
-      { type: 'reel', required: true, owed_to: 'brand', fee: 325 },
-      { type: 'story_set_3', required: true, owed_to: 'brand', fee: 160 },
-      { type: 'post', required: true, owed_to: 'brand', fee: null },
+      { type: 'instagram_reel', required: true, owed_to: 'brand', fee: 325 },
+      { type: 'instagram_stories', required: true, owed_to: 'brand', fee: 160 },
+      { type: 'instagram_post', required: true, owed_to: 'brand', fee: 165 },
     ]],
   ];
 
@@ -117,13 +117,15 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     } else {
       expect(automation.auto_drafted.deliverables).toBe('deal');
       expect(automation.drafted_values.deliverables).toEqual(Object.fromEntries(drafted.map((r) => [
-        r.id, { type: r.deliverable_type, fee: r.fee, description: r.description, required: r.required },
+        r.id, {
+          type: r.deliverable_type, platform: r.platform, quantity: r.quantity,
+          fee: r.fee, description: r.description, required: r.required,
+        },
       ])));
-      // The proposal names the drafted rows by their ids, and a Post's gap.
+      // The proposal names the drafted rows by their ids; with card v2 every
+      // drafted format is priced (D15, answer 8), so there is no gap.
       expect(res.body.proposal.deliverables.map((l) => l.id)).toEqual(drafted.map((r) => r.id));
-      if (expected.some((e) => e.type === 'post')) {
-        expect(res.body.proposal.gaps).toContain('"Post": price required (Post is priced by hand).');
-      }
+      expect(res.body.proposal.gaps).toEqual([]);
     }
 
     // Re-proposing never duplicates.
@@ -157,7 +159,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const put = await auth(request(app).put(`${deliverablesUrl(ids)}/${reel.id}`)).send({ fee: 150 });
     expect(put.status).toBe(200);
     const record = (await automationOf(ids)).drafted_values.deliverables[reel.id];
-    expect(record).toEqual({ type: 'reel', fee: 125, description: 'Reel', required: true });
+    expect(record).toEqual({ type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 125, description: 'Instagram Reel', required: true });
     expect(put.body.deliverable.fee).not.toBe(record.fee);
   });
 

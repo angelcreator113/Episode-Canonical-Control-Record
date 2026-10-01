@@ -44,8 +44,24 @@ describe('deliverablesFromOpportunity', () => {
       ],
     });
     expect(rows).toEqual([
-      { description: 'Tagged post', deliverable_type: 'post', due_date: '2026-11-07', required: true, owed_to: 'brand' },
+      // D15: a pre-D15 key becomes its format (post → Instagram post, answer 8).
+      { description: 'Tagged post', deliverable_type: 'instagram_post', platform: 'instagram', quantity: 1, due_date: '2026-11-07', required: true, owed_to: 'brand' },
       { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' },
+    ]);
+  });
+
+  test('D15: a format key is kept, free text stays untyped', () => {
+    const rows = deliverablesFromOpportunity({
+      deliverables: [
+        { type: 'tiktok_video', description: 'Unboxing' },
+        { type: 'Sponsored story', description: 'Story mention' },
+        { type: 'story_set_3', description: 'Three stories' },
+      ],
+    });
+    expect(rows.map((r) => [r.deliverable_type, r.platform, r.quantity])).toEqual([
+      ['tiktok_video', undefined, undefined],
+      ['Sponsored story', undefined, undefined],
+      ['instagram_stories', 'instagram', 3],
     ]);
   });
 
@@ -103,6 +119,8 @@ describe('insertEventDeliverables', () => {
     expect(r.id0).not.toBe(r.id1);
     // T2 (Task #2294): owed_to is written per row; a row without one is the host's.
     expect(r).toMatchObject({ owed0: 'host', owed1: 'host' });
+    // D15: platform (a known one, else null) and quantity (default 1) per row.
+    expect(r).toMatchObject({ platform0: null, quantity0: 1, platform1: null, quantity1: 1 });
     expect(calls[0].sql).toMatch(/required, owed_to, status/);
   });
 
@@ -152,7 +170,7 @@ describe('buildTermsSnapshot', () => {
     );
     expect(snap).toEqual({
       access_requirements: { reputation_min: 3 },
-      deliverables: [{ id: 'd1', description: 'Tagged post', deliverable_type: 'post', due_date: null, required: true, owed_to: 'host', status: 'pending' }],
+      deliverables: [{ id: 'd1', description: 'Tagged post', deliverable_type: 'post', platform: null, quantity: 1, due_date: null, required: true, owed_to: 'host', status: 'pending' }],
       restrictions: [{ type: 'exclusivity', description: 'No rival brands' }],
       compensation: { is_paid: true, payment_amount: 1500 },
     });

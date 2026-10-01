@@ -12,9 +12,13 @@ const {
 } = require('../../../src/services/dealPricingService');
 const { ANCHORS, PREMIUMS } = require('../../../src/migrations/20260929200002-create-deal-rate-anchors');
 
+const { V2_NEW_ANCHORS } = require('../../../src/migrations/20261001160000-add-deliverable-formats');
+
+// Rate card v2 (D15): v1 plus the formats' anchors, so the Instagram post
+// is priced (answer 8).
 const card = rateCardFrom(
-  1,
-  Object.entries(ANCHORS).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
+  2,
+  Object.entries({ ...ANCHORS, ...V2_NEW_ANCHORS }).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
   PREMIUMS.map(([kind, key, percent]) => ({ kind, key, percent }))
 );
 
@@ -22,7 +26,9 @@ const types = (dealType, tier) => draftDeliverablesForDeal({ deal_type: dealType
   .map((d) => (d.required ? d.deliverable_type : `${d.deliverable_type}?`));
 
 describe('D12: the mapping, by deal type and tier', () => {
-  const R = 'reel'; const S = 'story_set_3'; const P = 'post';
+  // D15: drafted in the formats (Reel → Instagram Reel, Story Set (3) →
+  // Instagram Stories ×3, Post → Instagram post).
+  const R = 'instagram_reel'; const S = 'instagram_stories'; const P = 'instagram_post';
   const table = {
     //                             T1          T2          T3             T4                T5
     self_funded:                  [[],         [],         [],            [],               []],
@@ -57,31 +63,31 @@ describe('D12: the mapping, by deal type and tier', () => {
     expect(draftDeliverablesForDeal({ deal_type: null }, { card })).toEqual([]);
     expect(draftDeliverablesForDeal({ deal_type: 'barter' }, { card })).toEqual([]);
     // tierOf: out of range reads as Emerging.
-    expect(types('paid_deliverables', 9)).toEqual(['reel']);
+    expect(types('paid_deliverables', 9)).toEqual(['instagram_reel']);
     // tier option overrides the event's
     expect(draftDeliverablesForDeal({ deal_type: 'paid_deliverables', career_tier: 1 }, { tier: 4, card })).toHaveLength(3);
   });
 });
 
 describe('D12: priced from the rate anchors', () => {
-  it('Reel and Story Set take the anchor at the tier; a Post is "Price required" (ruling 2)', () => {
+  it('each format takes its anchor at the tier; the Instagram post at 0.5× the Reel (answer 8)', () => {
     expect(draftDeliverablesForDeal({ deal_type: 'paid_deliverables', career_tier: 4 }, { card })).toEqual([
-      { deliverable_type: 'reel', description: 'Reel', required: true, owed_to: 'host', fee: 325 },
-      { deliverable_type: 'story_set_3', description: 'Story Set (3)', required: true, owed_to: 'host', fee: 160 },
-      { deliverable_type: 'post', description: 'Post', required: true, owed_to: 'host', fee: null },
+      { deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, description: 'Instagram Reel', required: true, owed_to: 'host', fee: 325 },
+      { deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3, description: 'Instagram Stories (×3)', required: true, owed_to: 'host', fee: 160 },
+      { deliverable_type: 'instagram_post', platform: 'instagram', quantity: 1, description: 'Instagram post', required: true, owed_to: 'host', fee: 165 },
     ]);
   });
 
   it('a brand partnership owes its package to the brand', () => {
     expect(draftDeliverablesForDeal({ deal_type: 'brand_partnership', career_tier: 2 }, { card })).toEqual([
-      { deliverable_type: 'reel', description: 'Reel', required: true, owed_to: 'brand', fee: 125 },
-      { deliverable_type: 'story_set_3', description: 'Story Set (3)', required: true, owed_to: 'brand', fee: 60 },
+      { deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, description: 'Instagram Reel', required: true, owed_to: 'brand', fee: 125 },
+      { deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3, description: 'Instagram Stories (×3)', required: true, owed_to: 'brand', fee: 60 },
     ]);
   });
 
-  it('a paid appearance does not pay deliverables: its optional Story Set has no fee', () => {
+  it('a paid appearance does not pay deliverables: its optional Instagram Stories have no fee', () => {
     expect(draftDeliverablesForDeal({ deal_type: 'paid_appearance', career_tier: 3 }, { card })).toEqual([
-      { deliverable_type: 'story_set_3', description: 'Story Set (3)', required: false, owed_to: 'host', fee: null },
+      { deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3, description: 'Instagram Stories (×3)', required: false, owed_to: 'host', fee: null },
     ]);
   });
 

@@ -8,7 +8,7 @@ import {
   formatFulfilmentDate, deliverableTimeline,
   DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
   describeComponentFee, describeGiftedValue, describeDeliverableFee, premiumChoicesFrom, buildProposeBody,
-  DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor, dealPlanFor,
+  DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, deliverablePhrase, hasRateAnchor, dealPlanFor,
   missingPriceLabels, buildComponentFeeUpdate, deliverableDraftNote,
 } from './eventTerms';
 
@@ -89,7 +89,7 @@ describe('deliverable form', () => {
       .toEqual({ body: { description: 'Tagged post', deliverable_type: null, due_date: '2026-11-07', required: false, owed_to: 'host' } });
     expect(buildDeliverableBody({ description: '' }).error).toBeTruthy();
     // The form carries a fee (Task #2341): empty in the draft, null in the body.
-    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', legacy_type: null, due_date: '', required: true, owed_to: 'host', fee: '' });
+    expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', legacy_type: null, platform: '', quantity: '', due_date: '', required: true, owed_to: 'host', fee: '' });
     expect(buildDeliverableBody(deliverableDraftFrom(null)).error).toBeTruthy();
     expect(buildDeliverableBody({ description: 'Reel', fee: '' }).body.fee).toBeNull();
     expect(buildDeliverableBody({ description: 'Reel', fee: '125' }).body.fee).toBe(125);
@@ -173,29 +173,52 @@ describe('deal type (Task #2330)', () => {
   });
 });
 
-describe('deliverable types (Task #2341; Deal PR 3 ruling, point 2)', () => {
-  test('the fixed list, with its labels', () => {
-    expect(DELIVERABLE_TYPES).toEqual(['reel', 'story_set_3', 'post', 'photo_set', 'other']);
-    expect(DELIVERABLE_TYPES.map((t) => DELIVERABLE_TYPE_LABELS[t])).toEqual(['Reel', 'Story Set (3)', 'Post', 'Photo Set', 'Other']);
-    expect(deliverableTypeLabel('story_set_3')).toBe('Story Set (3)');
-    expect(deliverableTypeLabel('instagram_reel')).toBe('instagram_reel (no type chosen)');
+describe('deliverable formats (ruling D15, 2026-09-30; replacing the Deal PR 3 list)', () => {
+  test('the formats, with their labels; "Story Set (3)" is "Instagram Stories (×3)"', () => {
+    expect(DELIVERABLE_TYPES).toEqual(['instagram_reel', 'instagram_post', 'tiktok_video', 'grwm_video', 'instagram_stories',
+      'carousel_post', 'go_live', 'link_in_bio', 'try_on_haul', 'ugc', 'other']);
+    expect(DELIVERABLE_TYPE_LABELS.instagram_stories).toBe('Instagram Stories');
+    expect(deliverableTypeLabel({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('Instagram Stories (×3)');
+    expect(deliverableTypeLabel({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Link in bio (7 days)');
+    expect(deliverableTypeLabel('instagram_reel')).toBe('Instagram Reel');
+    expect(deliverableTypeLabel('reel')).toBe('reel (no type chosen)');
     expect(deliverableTypeLabel(null)).toBeNull();
   });
 
-  test('only Reel and Story Set (3) take an automatic anchor', () => {
-    expect(DELIVERABLE_TYPES.filter(hasRateAnchor)).toEqual(['reel', 'story_set_3']);
-    expect(hasRateAnchor('instagram_reel')).toBe(false);
+  test('labels read naturally, as the server writes them ("1 TikTok GRWM, 3 Instagram Stories")', () => {
+    expect(deliverablePhrase({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 1 })).toBe('1 TikTok GRWM');
+    expect(deliverablePhrase({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('3 Instagram Stories');
+    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', platform: 'tiktok', quantity: 10 })).toBe('Link in bio on TikTok (10 days)');
+    expect(deliverablePhrase({ deliverable_type: 'Sponsored post' })).toBeNull();
+  });
+
+  test('every format but Other takes an automatic anchor', () => {
+    expect(DELIVERABLE_TYPES.filter((t) => !hasRateAnchor(t))).toEqual(['other']);
+    expect(hasRateAnchor('reel')).toBe(false);
     expect(hasRateAnchor('')).toBe(false);
   });
 
   test('a type off the list is refused; an untyped legacy row keeps its text until a type is chosen', () => {
     expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'appearance' }).error).toBe('Type: choose one of the listed types');
-    expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'reel' }).body.deliverable_type).toBe('reel');
-    const legacy = deliverableDraftFrom({ description: 'Old reel', deliverable_type: 'instagram_reel' });
-    expect(legacy).toMatchObject({ deliverable_type: '', legacy_type: 'instagram_reel' });
+    expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'instagram_reel' }).body)
+      .toMatchObject({ deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1 });
+    const legacy = deliverableDraftFrom({ description: 'Old reel', deliverable_type: 'IG reel' });
+    expect(legacy).toMatchObject({ deliverable_type: '', legacy_type: 'IG reel', platform: '', quantity: '' });
     expect(buildDeliverableBody(legacy).body).not.toHaveProperty('deliverable_type');
-    expect(buildDeliverableBody({ ...legacy, deliverable_type: 'reel' }).body.deliverable_type).toBe('reel');
+    expect(buildDeliverableBody({ ...legacy, deliverable_type: 'instagram_reel' }).body.deliverable_type).toBe('instagram_reel');
     expect(deliverableDraftFrom({ description: 'Q&A', deliverable_type: 'other' })).toMatchObject({ deliverable_type: 'other', legacy_type: null });
+  });
+
+  test('platform and quantity: defaults, a platform the format is not on, and the quantity range', () => {
+    expect(deliverableDraftFrom({ description: 'Stories', deliverable_type: 'instagram_stories', quantity: 5 }))
+      .toMatchObject({ platform: 'instagram', quantity: '5' });
+    expect(buildDeliverableBody({ description: 'Stories', deliverable_type: 'instagram_stories', quantity: '' }).body.quantity).toBe(3);
+    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'grwm_video', platform: '' }).error).toBe('Platform: choose TikTok, Instagram, YouTube');
+    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'instagram_reel', platform: 'tiktok' }).error).toBe('Platform: Instagram Reel is on Instagram');
+    expect(buildDeliverableBody({ description: 'Bio', deliverable_type: 'link_in_bio', quantity: '0' }).error).toBe('Days: a whole number from 1 to 365');
+    expect(buildDeliverableBody({ description: 'Bio', deliverable_type: 'link_in_bio', platform: '', quantity: '14' }).body)
+      .toMatchObject({ platform: null, quantity: 14 });
+    expect(buildDeliverableBody({ description: 'UGC', deliverable_type: 'ugc', quantity: '2' }).body).toMatchObject({ platform: null, quantity: 2 });
   });
 });
 

@@ -12,7 +12,8 @@
  *   - the event's components the deal type carries (ruling 4):
  *     appearance_fee, partnership_base_fee, performance_fee, and
  *     pricing_version;
- *   - event_deliverables.fee for each Reel and Story Set (3) (ruling 2);
+ *   - event_deliverables.fee for each deliverable format with an anchor
+ *     (ruling 2; since D15 every format but Other);
  *   - the event's extras as event_costs rows, once, while it has none (deal
  *     build PR 4, Task #2365);
  *   - the deal's deliverables, scaled to the job (ruling D12, Task #2395;
@@ -147,7 +148,10 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
           const row = await insertDeliverableRow(sequelize, eventId, { ...d, fee }, { transaction });
           if (!row) continue;
           idOfDraft[d.id] = row.id;
-          recorded[row.id] = { type: d.deliverable_type, fee, description: d.description, required: d.required };
+          recorded[row.id] = {
+            type: d.deliverable_type, platform: d.platform ?? null, quantity: d.quantity ?? 1,
+            fee, description: d.description, required: d.required,
+          };
         }
         if (Object.keys(idOfDraft).length) {
           autoDrafted.deliverables = DRAFTED_DELIVERABLES_SOURCE;

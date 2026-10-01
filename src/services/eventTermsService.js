@@ -25,6 +25,9 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const {
+  DELIVERABLE_FORMATS, DELIVERABLE_TYPES, LEGACY_TYPE_MAP, PLATFORM_LABELS, QUANTITY_MIN, QUANTITY_MAX,
+} = require('../utils/deliverableFormats');
 
 const DESCRIPTION_MAX = 2000;
 const TYPE_MAX = 50;
@@ -36,16 +39,37 @@ const DELIVERABLE_STATUS_FLOW = ['pending', 'completed', 'submitted', 'approved'
 // Who a deliverable is owed to (T2, §8(bb); Task #2294). An Opportunity's
 // deliverables are a brand's; one entered by hand defaults to the host.
 const DELIVERABLE_OWED_TO = ['host', 'brand'];
-// The fixed deliverable types (Evoni's Deal PR 3 ruling, QUESTION 2;
-// docs/EVENT_EPISODE_FLOW.md §8(cc)): "Deliverables use a fixed typed list:
-// Reel, Story Set (3), Post, Photo Set, Other." The routes accept only these
-// (or null). A row written before the ruling, or copied from an opportunity,
-// may still hold free text; it reads as untyped and is never priced from its
-// words. Mirrored in frontend/src/constants/deliverableTypes.json.
-const DELIVERABLE_TYPES = ['reel', 'story_set_3', 'post', 'photo_set', 'other'];
-const DELIVERABLE_TYPE_LABELS = Object.freeze({
-  reel: 'Reel', story_set_3: 'Story Set (3)', post: 'Post', photo_set: 'Photo Set', other: 'Other',
-});
+// The fixed deliverable types are the D15 formats (ruling D15, 2026-09-30,
+// superseding the Deal PR 3 list Reel, Story Set (3), Post, Photo Set,
+// Other): src/utils/deliverableFormats.js. The routes accept only these (or
+// null). A row copied from an opportunity may still hold free text; it reads
+// as untyped and is never priced from its words. Mirrored in
+// frontend/src/constants/deliverableTypes.json.
+const DELIVERABLE_TYPE_LABELS = Object.freeze(
+  Object.fromEntries(Object.entries(DELIVERABLE_FORMATS).map(([k, f]) => [k, f.label]))
+);
+
+// An opportunity's type: a format key as it is, a pre-D15 key as its
+// format, anything else kept as free text (untyped).
+function formatFromOpportunityType(raw) {
+  const t = text(raw).slice(0, TYPE_MAX);
+  if (!t) return { deliverable_type: null };
+  if (DELIVERABLE_TYPES.includes(t)) return { deliverable_type: t };
+  const legacy = LEGACY_TYPE_MAP[t];
+  if (legacy) return { deliverable_type: legacy.deliverable_type, platform: legacy.platform, quantity: legacy.quantity };
+  return { deliverable_type: t };
+}
+
+/** A row's platform for writing: a known platform, else null. */
+function platformForRow(row) {
+  return row?.platform && PLATFORM_LABELS[row.platform] ? row.platform : null;
+}
+
+/** A row's quantity for writing: a whole number in range, else 1. */
+function quantityForRow(row) {
+  const n = Number(row?.quantity);
+  return Number.isInteger(n) && n >= QUANTITY_MIN && n <= QUANTITY_MAX ? n : 1;
+}
 const DELIVERABLE_STATUS_TIMESTAMP = {
   completed: 'completed_at',
   submitted: 'submitted_at',
@@ -89,7 +113,7 @@ function deliverablesFromOpportunity(opp) {
     if (!description) continue;
     rows.push({
       description: description.slice(0, DESCRIPTION_MAX),
-      deliverable_type: text(entry.type).slice(0, TYPE_MAX) || null,
+      ...formatFromOpportunityType(entry.type),
       due_date: text(entry.due_date).slice(0, DUE_DATE_MAX) || null,
       required: true,
       owed_to: 'brand',
@@ -139,10 +163,12 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
     replacements[`due${i}`] = row.due_date || null;
     replacements[`required${i}`] = row.required !== false;
     replacements[`owed${i}`] = DELIVERABLE_OWED_TO.includes(row.owed_to) ? row.owed_to : 'host';
-    return `(:id${i}, :event_id, :description${i}, :type${i}, :due${i}, :required${i}, :owed${i}, 'pending', NOW(), NOW())`;
+    replacements[`platform${i}`] = platformForRow(row);
+    replacements[`quantity${i}`] = quantityForRow(row);
+    return `(:id${i}, :event_id, :description${i}, :type${i}, :platform${i}, :quantity${i}, :due${i}, :required${i}, :owed${i}, 'pending', NOW(), NOW())`;
   });
   await sequelize.query(
-    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, status, created_at, updated_at)
+    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, status, created_at, updated_at)
      VALUES ${values.join(', ')}`,
     { replacements, transaction: options.transaction }
   );
@@ -157,15 +183,17 @@ async function insertEventDeliverables(sequelize, eventId, rows, options = {}) {
  */
 async function insertDeliverableRow(sequelize, eventId, row, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at)
-     VALUES (:id, :eventId, :description, :type, :due, :required, :owed, :fee, 'pending', clock_timestamp(), clock_timestamp())
-     RETURNING id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status, created_at, updated_at`,
+    `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, fee, status, created_at, updated_at)
+     VALUES (:id, :eventId, :description, :type, :platform, :quantity, :due, :required, :owed, :fee, 'pending', clock_timestamp(), clock_timestamp())
+     RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, fee, status, created_at, updated_at`,
     {
       replacements: {
         id: uuidv4(),
         eventId,
         description: String(row.description || '').slice(0, DESCRIPTION_MAX),
         type: row.deliverable_type || null,
+        platform: platformForRow(row),
+        quantity: quantityForRow(row),
         due: row.due_date || null,
         required: row.required !== false,
         owed: DELIVERABLE_OWED_TO.includes(row.owed_to) ? row.owed_to : 'host',
@@ -180,7 +208,7 @@ async function insertDeliverableRow(sequelize, eventId, row, { transaction } = {
 /** The event's live deliverables, oldest first. */
 async function listEventDeliverables(sequelize, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    `SELECT id, event_id, description, deliverable_type, due_date, required, owed_to, fee, status,
+    `SELECT id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, fee, status,
             completed_at, submitted_at, approved_at, episode_id, created_at, updated_at
      FROM event_deliverables
      WHERE event_id = :eventId AND deleted_at IS NULL
@@ -219,6 +247,8 @@ function buildTermsSnapshot(event, deliverables) {
       id: d.id,
       description: d.description,
       deliverable_type: d.deliverable_type || null,
+      platform: d.platform || null,
+      quantity: d.quantity == null ? 1 : Number(d.quantity),
       due_date: d.due_date || null,
       required: d.required !== false,
       owed_to: d.owed_to || 'host',

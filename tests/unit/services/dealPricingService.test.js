@@ -18,12 +18,24 @@ const card = rateCardFrom(
   PREMIUMS.map(([kind, key, percent]) => ({ kind, key, percent }))
 );
 
-const reel = { id: 'd-reel', description: 'One reel in the coat', deliverable_type: 'reel' };
-const stories = { id: 'd-stories', description: 'Three stories', deliverable_type: 'story_set_3' };
-const post = { id: 'd-post', description: 'A feed post', deliverable_type: 'post' };
-const photos = { id: 'd-photos', description: 'Lookbook shots', deliverable_type: 'photo_set' };
+// The D15 formats (2026-09-30): the Reel is an Instagram Reel, the Story Set
+// (3) Instagram Stories ×3, the Post an Instagram post, the Photo Set a
+// carousel post.
+const reel = { id: 'd-reel', description: 'One reel in the coat', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1 };
+const stories = { id: 'd-stories', description: 'Three stories', deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3 };
+const post = { id: 'd-post', description: 'A feed post', deliverable_type: 'instagram_post', platform: 'instagram', quantity: 1 };
+const photos = { id: 'd-photos', description: 'Lookbook shots', deliverable_type: 'carousel_post', platform: 'instagram', quantity: 1 };
 const other = { id: 'd-other', description: 'Host a Q&A', deliverable_type: 'other' };
-const legacy = { id: 'd-legacy', description: 'IG reel from the old form', deliverable_type: 'instagram_reel' };
+const legacy = { id: 'd-legacy', description: 'IG reel from the old form', deliverable_type: 'reel' };
+
+// Rate card version 2 (20261001160000-add-deliverable-formats.js): v1 plus
+// the formats' anchors.
+const { V2_NEW_ANCHORS } = require('../../../src/migrations/20261001160000-add-deliverable-formats');
+const card2 = rateCardFrom(
+  2,
+  Object.entries({ ...ANCHORS, ...V2_NEW_ANCHORS }).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
+  PREMIUMS.map(([kind, key, percent]) => ({ kind, key, percent }))
+);
 
 const fees = (p) => Object.fromEntries(Object.entries(p.components).map(([k, c]) => [k, c.fee]));
 
@@ -80,18 +92,34 @@ describe('proposeTerms', () => {
     expect(p.deliverables.map((l) => l.fee)).toEqual([325, 160]);
   });
 
-  it('ruling 2: Reel and Story Set (3) take their anchors; Post, Photo Set and Other are priced by hand', () => {
-    const p = proposeTerms({ event: { deal_type: 'appearance_plus_deliverables', career_tier: 2 }, deliverables: [reel, stories, post, photos, other], card });
+  it('ruling 2 as D15 extends it: every format takes its anchor on card v2; only Other is priced by hand', () => {
+    const p = proposeTerms({ event: { deal_type: 'appearance_plus_deliverables', career_tier: 2 }, deliverables: [reel, stories, post, photos, other], card: card2 });
+    expect(p.pricing_version).toBe(2);
     expect(fees(p)).toEqual({ appearance: 250 });
     expect(p.deliverables.map((l) => [l.id, l.component, l.fee, l.price_required])).toEqual([
       ['d-reel', 'reel', 125, false], ['d-stories', 'stories_3', 60, false],
-      ['d-post', null, null, true], ['d-photos', null, null, true], ['d-other', null, null, true],
+      ['d-post', 'instagram_post', 65, false], ['d-photos', 'carousel_post', 75, false], ['d-other', null, null, true],
     ]);
-    expect(p.gaps).toEqual([
-      '"A feed post": price required (Post is priced by hand).',
-      '"Lookbook shots": price required (Photo Set is priced by hand).',
-      '"Host a Q&A": price required (Other is never priced automatically).',
-    ]);
+    expect(p.gaps).toEqual(['"Host a Q&A": price required (Other is never priced automatically).']);
+  });
+
+  it('on card v1 (no format anchors yet) a new format is price required, and says why', () => {
+    const p = proposeTerms({ event: { deal_type: 'paid_deliverables', career_tier: 2 }, deliverables: [post], card });
+    expect(p.deliverables[0]).toMatchObject({ component: 'instagram_post', fee: null, price_required: true });
+    expect(p.gaps).toEqual(['"A feed post": price required (instagram_post is not offered at tier 2).']);
+  });
+
+  it('D15: quantity prices Stories per slide (answer 10) and link in bio per started week (answer 11)', () => {
+    const p = proposeTerms({
+      event: { deal_type: 'paid_deliverables', career_tier: 3 },
+      deliverables: [
+        { ...stories, id: 's5', quantity: 5 },
+        { id: 'bio', description: 'Bio link', deliverable_type: 'link_in_bio', platform: 'instagram', quantity: 10 },
+        { id: 'grwm', description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 },
+      ],
+      card: card2,
+    });
+    expect(p.deliverables.map((l) => l.fee)).toEqual([185, 140, 540]); // 110 ÷ 3 × 5 → 185; 70 × 2 weeks; 270 × 2
   });
 
   it('ruling 2: no price depends on words in free text', () => {
@@ -99,7 +127,11 @@ describe('proposeTerms', () => {
     const p = proposeTerms({ event: { deal_type: 'paid_deliverables', career_tier: 5 }, deliverables: [legacy, { ...reel, deliverable_type: 'Reel' }], card });
     expect(p.deliverables.map((l) => [l.component, l.fee])).toEqual([[null, null], [null, null]]);
     expect(p.gaps[0]).toBe('"IG reel from the old form": price required (no type is chosen).');
-    expect(DELIVERABLE_ANCHORS).toEqual({ reel: 'reel', story_set_3: 'stories_3' });
+    expect(DELIVERABLE_ANCHORS).toEqual({
+      instagram_reel: 'reel', instagram_post: 'instagram_post', tiktok_video: 'tiktok_video', grwm_video: 'grwm_video',
+      instagram_stories: 'stories_3', carousel_post: 'carousel_post', go_live: 'go_live', link_in_bio: 'link_in_bio_week',
+      try_on_haul: 'try_on_haul', ugc: 'ugc',
+    });
   });
 
   it('ruling 3: premiums on one component add, not compound, and touch nothing else', () => {

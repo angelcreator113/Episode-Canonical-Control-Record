@@ -59,9 +59,9 @@ describe('EventDeliverable', () => {
       expect(a[col].allowNull).toBe(true);
     }
     // owed_to arrived in its own migration (T2, Task #2294); fee in deal
-    // build PR 1 (Task #2319).
+    // build PR 1 (Task #2319); platform and quantity with D15's formats.
     const migration = ['20260924000000-add-event-terms.js', '20260929190000-add-event-deliverables-owed-to.js',
-      '20260929200001-add-event-deliverables-fee.js']
+      '20260929200001-add-event-deliverables-fee.js', '20261001160000-add-deliverable-formats.js']
       .map((f) => fs.readFileSync(path.join(ROOT, 'src', 'migrations', f), 'utf8')).join('\n');
     for (const col of Object.keys(a)) expect(migration).toMatch(new RegExp(`\\b${col}\\b`));
     expect(a.owed_to.allowNull).toBe(false);

@@ -214,6 +214,24 @@ export function buildDeliverableBody(draft) {
     required: draft?.required !== false,
     owed_to: draft?.owed_to === 'brand' ? 'brand' : 'host',
   };
+  // D15: the platform (one the format is on) and the quantity (pieces,
+  // slides or days), sent with a chosen format.
+  const format = DELIVERABLE_FORMATS[type];
+  if (format) {
+    const platforms = format.platforms;
+    const platform = String(draft?.platform || '').trim();
+    if (platform && !platforms.includes(platform)) return { error: `Platform: ${format.label} is on ${platforms.map((x) => PLATFORM_LABELS[x]).join(' or ')}` };
+    // A format that names its platform ("1 TikTok GRWM") needs one; the
+    // rest take their only platform, or none.
+    if (!platform && format.platformInPhrase) return { error: `Platform: choose ${platforms.map((x) => PLATFORM_LABELS[x]).join(', ')}` };
+    body.platform = platform || (platforms.length === 1 ? platforms[0] : null);
+    const raw = String(draft?.quantity ?? '').trim();
+    const quantity = raw === '' ? format.defaultQuantity : Number(raw);
+    if (!Number.isInteger(quantity) || quantity < QUANTITY.min || quantity > QUANTITY.max) {
+      return { error: `${quantityWord(format)}: a whole number from ${QUANTITY.min} to ${QUANTITY.max}` };
+    }
+    body.quantity = quantity;
+  }
   // A row saved before the fixed list keeps its stored text until a type is
   // chosen: the type is left out of the body rather than erased.
   if (!type && draft?.legacy_type) delete body.deliverable_type;
@@ -237,6 +255,8 @@ export function deliverableDraftFrom(d) {
     description: d?.description || '',
     deliverable_type: typed ? stored : '',
     legacy_type: !typed && stored ? stored : null,
+    platform: typed ? (d?.platform || (DELIVERABLE_FORMATS[stored].platforms.length === 1 ? DELIVERABLE_FORMATS[stored].platforms[0] : '')) : '',
+    quantity: typed ? String(d?.quantity ?? DELIVERABLE_FORMATS[stored].defaultQuantity) : '',
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
     owed_to: d?.owed_to === 'brand' ? 'brand' : 'host',
@@ -354,9 +374,9 @@ export function buildDealTypeUpdate(event, next) {
 // brand partnership base (its own component, ruling 1; the appearance is
 // added only when the partnership requires it) and the performance fee, each
 // in its own event column, plus a fee per deliverable. Deliverables use a
-// fixed typed list (ruling 2): Reel and Story Set (3) take an automatic
-// anchor; Post, Photo Set and Other are priced by hand, and Other never gets
-// an automatic price (ruling 6). A missing price reads "Price required", and
+// fixed typed list (ruling 2), since D15 the influencer formats: each takes
+// its automatic anchor except Other, which never gets an automatic price
+// (ruling 6). A missing price reads "Price required", and
 // Start Episode refuses until it has one.
 //
 // Propose terms (POST .../propose-terms) drafts the numbers from the rate
@@ -366,15 +386,57 @@ export function buildDealTypeUpdate(event, next) {
 // once it differs. The plans are mirrored from dealPricingService in
 // constants/dealPlans.json (pinned by tests/unit/services/dealPlanMirror.test.js).
 
+// The D15 formats (Evoni, 2026-09-30), mirrored from
+// src/utils/deliverableFormats.js (pinned by
+// tests/unit/services/deliverableTypeMirror.test.js).
 export const DELIVERABLE_TYPES = deliverableTypesMirror.deliverable_type;
-export const DELIVERABLE_TYPE_LABELS = {
-  reel: 'Reel', story_set_3: 'Story Set (3)', post: 'Post', photo_set: 'Photo Set', other: 'Other',
-};
+export const DELIVERABLE_FORMATS = deliverableTypesMirror.formats;
+export const PLATFORM_LABELS = deliverableTypesMirror.platform_labels;
+const QUANTITY = deliverableTypesMirror.quantity;
+export const DELIVERABLE_TYPE_LABELS = Object.fromEntries(
+  Object.entries(DELIVERABLE_FORMATS).map(([k, f]) => [k, f.label])
+);
 
-/** A deliverable's type as shown: its label, the stored text of an untyped row, or null. */
-export function deliverableTypeLabel(type) {
+/** What a format's quantity counts, as a form label: Quantity, Slides or Days. */
+export function quantityWord(format) {
+  if (format?.unit === 'day') return 'Days';
+  if (format?.unit === 'slide') return 'Slides';
+  return 'Quantity';
+}
+
+function quantityOf(d, f) {
+  const n = Math.trunc(Number(d?.quantity));
+  return Number.isFinite(n) && n >= 1 ? n : (f?.defaultQuantity || 1);
+}
+
+/**
+ * A deliverable's type as shown in the Terms. A row (or type key) of a
+ * format reads its label with its quantity ("Instagram Stories (×3)",
+ * "Link in bio (7 days)"); an untyped row its stored text; nothing, null.
+ */
+export function deliverableTypeLabel(dOrType) {
+  const d = typeof dOrType === 'string' ? { deliverable_type: dOrType } : dOrType;
+  const type = d?.deliverable_type;
   if (!type) return null;
-  return DELIVERABLE_TYPE_LABELS[type] || `${type} (no type chosen)`;
+  const f = DELIVERABLE_FORMATS[type];
+  if (!f) return `${type} (no type chosen)`;
+  const n = quantityOf(d, f);
+  if (f.unit === 'day') return `${f.label} (${n} ${n === 1 ? 'day' : 'days'})`;
+  return n > 1 ? `${f.label} (×${n})` : f.label;
+}
+
+/** The natural phrase ("1 TikTok GRWM", "3 Instagram Stories"), as the server writes it; null when untyped. */
+export function deliverablePhrase(d) {
+  const f = DELIVERABLE_FORMATS[d?.deliverable_type];
+  if (!f) return null;
+  const n = quantityOf(d, f);
+  const platform = d?.platform && PLATFORM_LABELS[d.platform] ? d.platform : (f.platforms.length === 1 ? f.platforms[0] : null);
+  if (f.unit === 'day') {
+    const on = platform && f.platforms.length > 1 ? ` on ${PLATFORM_LABELS[platform]}` : '';
+    return `Link in bio${on} (${n} ${n === 1 ? 'day' : 'days'})`;
+  }
+  const noun = n === 1 ? f.noun[0] : f.noun[1];
+  return `${n} ${f.platformInPhrase && platform ? `${PLATFORM_LABELS[platform]} ${noun}` : noun}`;
 }
 
 const COMPONENTS = dealPlansMirror.components;
@@ -398,7 +460,7 @@ export function dealPlanFor(event) {
   };
 }
 
-/** Whether a deliverable type takes an automatic anchor (Reel, Story Set (3)). */
+/** Whether a deliverable format takes an automatic anchor (every D15 format but Other). */
 export function hasRateAnchor(type) {
   return Object.prototype.hasOwnProperty.call(DELIVERABLE_ANCHORS, type || '');
 }
@@ -443,9 +505,10 @@ export function describeDeliverableFee(event, d) {
 // Ruling D12 (Evoni, 2026-09-30; Task #2395): Propose terms drafts the deal's
 // deliverables once, scaled to the job, and records each row in
 // automation.drafted_values.deliverables ({ <id>: { type, fee, description,
-// required } }) with auto_drafted.deliverables = 'deal'. A drafted row reads
-// "Auto-drafted · from deal" (doctrine rule 14) until its type, fee,
-// description or required changes, then Edited; a row never drafted, null.
+// required, and since D15 platform and quantity } }) with
+// auto_drafted.deliverables = 'deal'. A drafted row reads "Auto-drafted ·
+// from deal" (doctrine rule 14) until one of those changes, then Edited; a
+// row never drafted, null.
 export const DELIVERABLE_DRAFT_SOURCE = 'deal';
 
 export function deliverableDraftNote(event, d) {
@@ -454,8 +517,11 @@ export function deliverableDraftNote(event, d) {
   const record = automation.drafted_values?.deliverables?.[d?.id];
   if (!record) return null;
   const sameFee = record.fee == null ? d.fee == null : d.fee != null && Number(record.fee) === Number(d.fee);
+  // D15: a record written with a platform and quantity compares them too.
+  const samePlatform = record.platform === undefined || (record.platform ?? null) === (d.platform ?? null);
+  const sameQuantity = record.quantity === undefined || Number(record.quantity) === Number(d.quantity ?? 1);
   const same = (record.type ?? null) === (d.deliverable_type ?? null)
-    && sameFee
+    && sameFee && samePlatform && sameQuantity
     && (record.description ?? '') === (d.description ?? '')
     && (record.required !== false) === (d.required !== false);
   return same ? 'Auto-drafted · from deal' : 'Edited';
@@ -468,7 +534,7 @@ export function missingPriceLabels(event, deliverables = []) {
   const out = plan.components.filter((c) => event?.[c.field] == null).map((c) => c.label);
   if (plan.deliverables) {
     for (const d of Array.isArray(deliverables) ? deliverables : []) {
-      if (d?.fee == null) out.push(`"${d.description || DELIVERABLE_TYPE_LABELS[d.deliverable_type] || 'Deliverable'}"`);
+      if (d?.fee == null) out.push(`"${d.description || deliverableTypeLabel(d) || 'Deliverable'}"`);
     }
   }
   return out;
