@@ -5,8 +5,12 @@
  *   - completing an episode completes its linked opportunity (once), via
  *     careerPipelineService.onEpisodeCompleted, which no longer cascades into
  *     onOpportunityAdvanced and no longer credits episode income to coins goals;
- *   - step 17's +1 per active, non-deleted goal is the only goal advance;
  *   - goals step 17 completes spawn their unlocks_on_complete opportunities.
+ *
+ * Season Arc Q11 (Evoni, 2026-10-01; EVENT_EPISODE_FLOW.md §8(ff)) replaced
+ * step 17's +1 per goal: "each goal set from what it measures. Coins come
+ * from the ledger, other stats from Lala's state after the episode; custom
+ * goals are left unchanged." On every tier, with no success_unlock gate.
  *
  * sequelize.query and the model layer are mocked; no DB. The real
  * careerPipelineService runs against the mocked models.
@@ -168,32 +172,45 @@ describe('completeEpisode career hook (Task #1817)', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('advances every goal by exactly +1 — no metric-based increments, no income credit', async () => {
+  it('sets each goal from what it measures (Q11): coins from the ledger, stats from Lala after the episode', async () => {
     resetModels();
     const { sequelize, queries } = makeSequelize();
 
+    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
+
+    const byId = Object.fromEntries(goalUpdates(queries).map(q => [q.opts.replacements.id, q.opts.replacements]));
+    expect(byId['g-coins']).toEqual({ val: result.new_state.coins, status: 'active', id: 'g-coins' });
+    for (const [id, metric] of [['g-influence', 'influence'], ['g-reputation', 'reputation']]) {
+      if (byId[id]) expect(byId[id].val).toBe(result.new_state[metric]);
+      else expect(defaultGoals().find(g => g.id === id).current_value).toBe(result.new_state[metric]); // unchanged → no write
+    }
+    expect(mockModels.Opportunity.create).not.toHaveBeenCalled();
+  });
+
+  it('leaves custom and passive goals unchanged (Q11)', async () => {
+    resetModels();
+    const goals = [
+      { id: 'g-custom', title: 'Land a couture deal', priority: 1, type: 'primary', target_metric: 'custom', current_value: 9, target_value: 10, unlocks_on_complete: [], deleted_at: null },
+      { id: 'g-passive', title: 'Never drop below 100', priority: 3, type: 'passive', target_metric: 'coins', current_value: 0, target_value: 100, unlocks_on_complete: [], deleted_at: null },
+    ];
+    const { sequelize, queries } = makeSequelize({ goals });
+
     await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
-    const updates = goalUpdates(queries);
-    expect(updates.map(q => q.opts.replacements)).toEqual([
-      { val: 3, status: 'active', id: 'g-influence' },
-      { val: 4, status: 'active', id: 'g-reputation' },
-      { val: 101, status: 'active', id: 'g-coins' },
-    ]);
-    expect(mockModels.Opportunity.create).not.toHaveBeenCalled();
+    expect(goalUpdates(queries)).toHaveLength(0);
   });
 
   it('spawns unlocks_on_complete for a goal step 17 completes, and nothing for a goal it does not', async () => {
     resetModels();
     const goals = [
       {
-        id: 'g-finishing', title: 'Land a couture deal', priority: 1, target_metric: 'custom',
-        current_value: 9, target_value: 10, deleted_at: null,
+        id: 'g-finishing', title: 'Land a couture deal', priority: 1, target_metric: 'reputation',
+        current_value: 0, target_value: 1, deleted_at: null,
         unlocks_on_complete: ['Maison Belle contract', { type: 'editorial', description: 'Vogue feature', prestige: 9 }],
       },
       {
         id: 'g-midway', title: 'Grow influence', priority: 3, target_metric: 'influence',
-        current_value: 1, target_value: 10, deleted_at: null,
+        current_value: 1, target_value: 100, deleted_at: null,
         unlocks_on_complete: ['Should not spawn'],
       },
     ];
@@ -202,8 +219,8 @@ describe('completeEpisode career hook (Task #1817)', () => {
     const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
     expect(goalUpdates(queries).map(q => q.opts.replacements)).toEqual([
-      { val: 10, status: 'completed', id: 'g-finishing' },
-      { val: 2, status: 'active', id: 'g-midway' },
+      { val: result.new_state.reputation, status: 'completed', id: 'g-finishing' },
+      { val: result.new_state.influence, status: 'active', id: 'g-midway' },
     ]);
 
     const created = mockModels.Opportunity.create.mock.calls.map(c => c[0]);
@@ -222,8 +239,8 @@ describe('completeEpisode career hook (Task #1817)', () => {
   it('a failed unlock spawn is logged and does not fail completion', async () => {
     resetModels();
     const goals = [{
-      id: 'g-bad', title: 'Bad unlocks', priority: 3, target_metric: 'custom',
-      current_value: 9, target_value: 10, deleted_at: null, unlocks_on_complete: '{not json',
+      id: 'g-bad', title: 'Bad unlocks', priority: 3, target_metric: 'reputation',
+      current_value: 0, target_value: 1, deleted_at: null, unlocks_on_complete: '{not json',
     }];
     const { sequelize } = makeSequelize({ goals });
 
@@ -240,7 +257,7 @@ describe('completeEpisode career hook (Task #1817)', () => {
     resetModels();
     const goals = [
       ...defaultGoals(),
-      { id: 'g-deleted', title: 'Deleted goal', priority: 1, target_metric: 'custom', current_value: 9, target_value: 10, unlocks_on_complete: ['Ghost deal'], deleted_at: new Date('2026-09-01') },
+      { id: 'g-deleted', title: 'Deleted goal', priority: 1, target_metric: 'reputation', current_value: 0, target_value: 1, unlocks_on_complete: ['Ghost deal'], deleted_at: new Date('2026-09-01') },
     ];
     const { sequelize, queries } = makeSequelize({ goals });
 
@@ -250,18 +267,18 @@ describe('completeEpisode career hook (Task #1817)', () => {
     expect(goalSelect.sql).toMatch(/deleted_at IS NULL/);
     const ids = goalUpdates(queries).map(q => q.opts.replacements.id);
     expect(ids).not.toContain('g-deleted');
-    expect(ids).toHaveLength(3);
+    expect(ids).toContain('g-coins');
     expect(mockModels.Opportunity.create).not.toHaveBeenCalled();
   });
 
-  it('on safe/fail the goals are untouched but the opportunity is still completed', async () => {
+  it('on safe/fail the goals are still measured (Q11) and the opportunity is still completed', async () => {
     mockTier = 'fail';
     const opp = resetModels();
-    const { sequelize, queries } = makeSequelize();
+    const { sequelize, queries } = makeSequelize({ successUnlock: null });
 
-    await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
+    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
-    expect(goalUpdates(queries)).toHaveLength(0);
+    expect(goalUpdates(queries).find(q => q.opts.replacements.id === 'g-coins').opts.replacements.val).toBe(result.new_state.coins);
     expect(opp.update).toHaveBeenCalledTimes(1);
   });
 

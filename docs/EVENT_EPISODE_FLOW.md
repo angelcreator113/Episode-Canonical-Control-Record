@@ -3742,6 +3742,18 @@ accepted, as written:
 > Q15 Season-health score: fold it into Planning Insights as one line, using the slot outcome ranges instead of the fixed 1/4/2/1 targets.
 
 Every question in the design note is now answered.
+
+**Build choices accepted (Evoni, 2026-10-01)**, Season Arc PR 4, verbatim:
+"PR 4 choices accepted: the pressure formula as described; passive goals
+and untracked-stat goals left unchanged." So these are no longer INFERRED:
+- **Actual pressure (Q7)** is `derivePressure` (`seasonSlotService`): the
+  tier gives slay 0 · pass 1 · safe 2 · fail 3 points; a money loss adds 1
+  (2 below −1000); a stress rise of 2 or more adds 1 (2 at 4 or more).
+  0–1 is Low, 2–3 Medium, 4–5 High, 6 or more Peak.
+- **Goals on acceptance (Q11)** leave passive goals (such as "never let
+  coins drop below 100") and goals whose metric Lala's state does not carry
+  (followers, engagement rate, portfolio strength, consistency streak)
+  unchanged, as well as custom goals.
 ---
 
 ## 9. Owed before enforcement

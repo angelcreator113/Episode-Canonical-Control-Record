@@ -9,6 +9,22 @@ component name, with its line at `9df565d0` where it helps) unless marked
 No earlier Season Arc read exists in the repository: no file, and no branch
 carrying one, at this basis. This read replaces nothing.
 
+**Since this read (2026-10-01).** The build has changed what is described
+below; this read is not rewritten, so read it as the starting point.
+- **PR 1** (#2437): `season_slots` (24 per season) and the read-only
+  roadmap (`GET /world/:showId/season/roadmap`, `seasonSlotService`);
+  Extend (`/arc/extend`) is removed.
+- **PR 2** (#2439): an event can be pencilled into a future slot and moved;
+  an episode in no slot can be placed; Start Episode takes the pencilled or
+  earliest open slot and locks it.
+- **PR 3** (#2440): Start Episode snapshots the slot onto `episodes.season_context`;
+  the Overview's Season Position and both script generators read it. The
+  script writer's broken `show_arcs` query (§3) was fixed by #2436.
+- **PR 4**: accepting an episode records the slot's actual outcome and
+  pressure, sets career goals from what they measure (no more +1), and
+  calls `checkPhaseTransition`; at a phase boundary the roadmap asks
+  before advancing.
+
 ## Short answer
 
 - **What exists.** One `show_arcs` row per show, seeded by hand ("Seed

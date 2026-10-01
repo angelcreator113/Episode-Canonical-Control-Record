@@ -621,58 +621,72 @@ ${narrativeLines.short || ''}`,
   }
 
 
-  // \u2500\u2500 17. Career unlocks from episode brief (slay/pass only) \u2500\u2500
-  // The single goal advance on completion (+1 per active, non-deleted goal).
-  // Goals this step completes spawn their unlocks_on_complete via the shared
-  // careerPipelineService.spawnGoalUnlocks helper (Task #1817).
-  const careerSummary = { goals_completed: [], unlocks: [], opportunities_advanced: [] };
-  if (['slay', 'pass'].includes(evalResult.tier_final)) {
-    try {
-      const [brief] = await sequelize.query(
-        `SELECT career_context FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
-        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-      ).catch(() => []);
-      const careerCtx = typeof brief?.career_context === 'string'
-        ? JSON.parse(brief.career_context)
-        : (brief?.career_context || {});
-      if (careerCtx?.success_unlock) {
-        const goals = await sequelize.query(
-          `SELECT id, title, priority, current_value, target_value, unlocks_on_complete FROM career_goals
-           WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
-          { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-        ).catch(() => []);
-        for (const goal of goals || []) {
-          const newVal = Math.min((parseInt(goal.current_value) || 0) + 1, parseInt(goal.target_value) || 10);
-          const newStatus = newVal >= (parseInt(goal.target_value) || 10) ? 'completed' : 'active';
-          let goalWritten = true;
-          await sequelize.query(
-            `UPDATE career_goals SET current_value = :val, status = :status,
-             completed_at = CASE WHEN :status = 'completed' THEN NOW() ELSE completed_at END,
-             updated_at = NOW() WHERE id = :id`,
-            { replacements: { val: newVal, status: newStatus, id: goal.id } }
-          ).catch(err => {
-            goalWritten = false;
-            console.warn('[episodeCompletion] career_goals update failed:', err?.message);
-          });
+  // ── 17. Career goals, measured (Season Arc §8(ff) Q11) ──
+  // "replace '+1 to every goal' with each goal set from what it measures.
+  // Coins come from the ledger, other stats from Lala's state after the
+  // episode; custom goals are left unchanged." newState.coins is the ledger
+  // balance (synced in step 11). Passive goals ("never drop below") and
+  // metrics Lala's state does not carry are left unchanged too. Goals this
+  // step completes spawn their unlocks_on_complete (Task #1817).
+  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [] };
+  try {
+    const goals = await sequelize.query(
+      `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete FROM career_goals
+       WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    ).catch((err) => {
+      console.warn('[episodeComplete] career_goals load failed:', err?.message);
+      return [];
+    });
+    for (const goal of goals || []) {
+      if (goal.type === 'passive' || goal.target_metric === 'custom') continue;
+      const measured = Number(newState?.[goal.target_metric]);
+      if (!Number.isFinite(measured)) continue;
+      const target = Number(goal.target_value);
+      const newStatus = Number.isFinite(target) && measured >= target ? 'completed' : 'active';
+      if (Number(goal.current_value) === measured && newStatus === 'active') continue;
+      let goalWritten = true;
+      await sequelize.query(
+        `UPDATE career_goals SET current_value = :val, status = :status,
+         completed_at = CASE WHEN :status = 'completed' THEN NOW() ELSE completed_at END,
+         updated_at = NOW() WHERE id = :id`,
+        { replacements: { val: measured, status: newStatus, id: goal.id } }
+      ).catch(err => {
+        goalWritten = false;
+        console.warn('[episodeCompletion] career_goals update failed:', err?.message);
+      });
+      if (!goalWritten) continue;
+      careerSummary.goals_measured.push({ id: goal.id, metric: goal.target_metric, value: measured, status: newStatus });
 
-          // Only goals that transition to completed in this call spawn unlocks
-          // (the SELECT above only returns status = 'active' goals).
-          if (goalWritten && newStatus === 'completed') {
-            careerSummary.goals_completed.push({ id: goal.id, title: goal.title });
-            try {
-              const { spawnGoalUnlocks } = require('./careerPipelineService');
-              const spawned = await spawnGoalUnlocks(goal, showId, require('../models'));
-              careerSummary.unlocks.push(...spawned);
-            } catch (unlockErr) {
-              console.error('[EpisodeCompletion] Goal unlock spawn failed (non-blocking):', goal.id, unlockErr?.message);
-            }
-          }
+      // Only goals that transition to completed in this call spawn unlocks
+      // (the SELECT above only returns status = 'active' goals).
+      if (newStatus === 'completed') {
+        careerSummary.goals_completed.push({ id: goal.id, title: goal.title });
+        try {
+          const { spawnGoalUnlocks } = require('./careerPipelineService');
+          const spawned = await spawnGoalUnlocks(goal, showId, require('../models'));
+          careerSummary.unlocks.push(...spawned);
+        } catch (unlockErr) {
+          console.error('[EpisodeCompletion] Goal unlock spawn failed (non-blocking):', goal.id, unlockErr?.message);
         }
-        console.log(`[episodeComplete] Career unlocks applied for tier ${evalResult.tier_final}: ${careerCtx.success_unlock}`);
       }
-    } catch (careerErr) {
-      console.warn('[episodeComplete] Career unlock failed (non-blocking):', careerErr.message);
     }
+  } catch (careerErr) {
+    console.warn('[episodeComplete] Career goals failed (non-blocking):', careerErr.message);
+  }
+
+  // ── 17b. The season (Season Arc §8(ff) A6, Q6, Q7) ──
+  // The episode's slot records its actual outcome and pressure, and the
+  // season checks for a phase boundary (checkPhaseTransition); at a
+  // boundary nothing advances, the roadmap asks first.
+  let season = null;
+  try {
+    const { recordSlotOutcome } = require('./seasonSlotService');
+    const moneyNet = (financialResult?.summary?.total_income || 0) - (financialResult?.summary?.total_expenses || 0);
+    const stressDelta = (Number(newState?.stress) || 0) - (Number(currentStats?.stress) || 0);
+    season = await recordSlotOutcome(sequelize, { showId, episodeId, tier: evalResult.tier_final, moneyNet, stressDelta });
+  } catch (seasonErr) {
+    console.error('[EpisodeCompletion] Season slot outcome failed (non-blocking):', seasonErr?.message);
   }
 
   // ── 18. Complete the linked opportunity (Task #1817) ──
@@ -731,6 +745,7 @@ ${narrativeLines.short || ''}`,
     transactions: (financialResult.transactions || []).length,
     career: careerSummary,
     event_sync: eventSync,
+    season,
   };
 }
 
