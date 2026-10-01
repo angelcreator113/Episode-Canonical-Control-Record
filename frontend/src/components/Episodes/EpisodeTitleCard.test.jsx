@@ -37,7 +37,7 @@ describe('EpisodeTitleCard', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Approve title/ }));
     expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/title/approve', { title: 'Gala Night' });
-    expect(await screen.findByRole('button', { name: 'Design title card — est. $0.04' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Full-screen framed card — est. $0.04' })).toBeTruthy();
     expect(screen.getByTestId('etc-approved')).toBeTruthy();
   });
 
@@ -51,11 +51,11 @@ describe('EpisodeTitleCard', () => {
     }));
     render(<EpisodeTitleCard episode={EPISODE} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Design title card/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Full-screen framed card/ }));
     expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/title-card');
     const img = await screen.findByTestId('etc-thumb');
     expect(img.getAttribute('src')).toBe('https://img/card.png');
-    expect(screen.queryByRole('button', { name: /Design title card/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Full-screen framed card/ })).toBeNull();
   });
 
   test('outdated card: "Title changed — card outdated" and a redesign that approves the new title first', async () => {
@@ -88,7 +88,7 @@ describe('EpisodeTitleCard', () => {
     }));
     render(<EpisodeTitleCard episode={EPISODE} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Design title card — est. price not set' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Full-screen framed card — est. price not set' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Daily image budget reached.');
   });
 

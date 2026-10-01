@@ -22,6 +22,8 @@ function loadFonts() {
     const reg = (file, family, weight, style) => {
       const p = path.join(FONT_DIR, file);
       if (fs.existsSync(p)) registerFont(p, { family, weight, style });
+      // The fonts are committed (src/assets/fonts/invitation); a missing one is a deploy fault.
+      else console.error(`[PhoneScreen] FONT FILE MISSING: ${p}; a fallback font is used. Redeploy src/assets/fonts/invitation.`);
     };
     reg('LibreBaskerville-Regular.ttf', 'LibreBaskerville', 'normal', 'normal');
     reg('LibreBaskerville-Bold.ttf', 'LibreBaskerville', 'bold', 'normal');

@@ -367,6 +367,50 @@ router.post('/:id/title-card', validateUUIDParam('id'), requireAuth, aiRateLimit
   }
 });
 
+// ==================== TITLE OVERLAY (P11 as amended, 2026-09-30) ====================
+// services/episodeTitleOverlayService.js holds the rules: the title in real
+// typefaces as a transparent PNG; lettering styles at no image cost; the AI
+// flourish is the one image call (its estimate is in GET /:id/title-card).
+
+// The lettering variants for the approved title, as previews (no image cost).
+router.get('/:id/title-overlay/variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getTitleOverlayVariants } = require('../services/episodeTitleOverlayService');
+    const data = await getTitleOverlayVariants(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'GET /:id/title-overlay/variants');
+  }
+});
+
+// Save the overlay: body { variant, band: { enabled, opacity }, flourish? false }.
+router.post('/:id/title-overlay', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { saveTitleOverlay } = require('../services/episodeTitleOverlayService');
+    const body = req.body || {};
+    const data = await saveTitleOverlay(models, req.params.id, {
+      variant: body.variant, band: body.band, flourish: body.flourish === false ? false : undefined,
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'POST /:id/title-overlay');
+  }
+});
+
+// Add the optional AI flourish behind the letters (its cost was shown).
+router.post('/:id/title-overlay/flourish', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { addTitleFlourish } = require('../services/episodeTitleOverlayService');
+    const data = await addTitleFlourish(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'POST /:id/title-overlay/flourish');
+  }
+});
+
 // ==================== TASK LIST APPROVAL + TASK-LIST OVERLAY (Task #2395, P14) ====================
 // services/episodeTaskListOverlayService.js holds the rules; these handlers
 // only map its errors (TaskListOverlayError status/code, image budget 429).
