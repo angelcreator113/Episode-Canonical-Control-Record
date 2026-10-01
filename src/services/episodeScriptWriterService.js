@@ -369,18 +369,43 @@ async function loadScriptContext(episodeId, showId, models) {
  */
 // The episode's place in the season (§8(ff) A5): "S1 · E7", its phase and
 // the slot's intention. Empty when the episode has no season context.
+// A10: "The script writer receives all purposes, primary first", each with
+// the story thread it continues.
 function buildSeasonPositionBlock(sc) {
   if (!sc || !sc.label) return '';
   const phase = sc.phase?.title ? `Phase ${sc.phase.number}: ${sc.phase.title}` : `Phase ${sc.phase?.number ?? '?'}`;
   let block = `═══ SEASON POSITION ═══\n${sc.label} — ${phase}${sc.position_in_phase ? `, episode ${sc.position_in_phase} of the phase` : ''}\n`;
-  if (sc.story_purpose) block += `Story purpose: ${sc.story_purpose}\n`;
+  const purposes = seasonPurposes(sc);
+  if (purposes.length === 1) {
+    block += `Story purpose: ${purposes[0].text}\n`;
+    if (purposes[0].story_thread) block += `Story thread it continues: ${purposes[0].story_thread}\n`;
+  } else if (purposes.length > 1) {
+    block += 'Story purposes (primary first):\n';
+    purposes.forEach((p, i) => {
+      block += `${i + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (continues the thread "${p.story_thread}")` : ''}\n`;
+    });
+  }
   if (sc.career_focus) block += `Career focus: ${sc.career_focus}\n`;
   if (sc.desired_pressure) block += `Desired pressure: ${sc.desired_pressure}\n`;
-  if (sc.story_thread) block += `Story thread it continues: ${sc.story_thread}\n`;
   const range = sc.outcome_range;
   if (range && (range.min || range.max)) block += `Hoped-for outcome: ${range.min || '?'} to ${range.max || '?'}\n`;
-  block += 'SCRIPT DIRECTIVE: This episode serves its place in the season; the story purpose above is what it is for.\n';
+  block += purposes.length > 1
+    ? 'SCRIPT DIRECTIVE: This episode serves its place in the season; the primary purpose leads, and the others are woven in.\n'
+    : 'SCRIPT DIRECTIVE: This episode serves its place in the season; the story purpose above is what it is for.\n';
   return block;
+}
+
+/**
+ * A10: the snapshot's purposes, primary first. A snapshot written before
+ * A10 has only story_purpose and story_thread.
+ */
+function seasonPurposes(sc) {
+  // A purpose may name only a thread; it then reads as continuing that thread.
+  const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
+    .filter((p) => p && (p.text || p.story_thread))
+    .map((p) => (p.text ? p : { ...p, text: `Continue the thread "${p.story_thread}"`, story_thread: null }));
+  if (list.length) return [...list.filter((p) => p.primary), ...list.filter((p) => !p.primary)];
+  return sc?.story_purpose ? [{ text: sc.story_purpose, primary: true, story_thread: sc.story_thread || null }] : [];
 }
 
 function buildFullPrompt(context) {

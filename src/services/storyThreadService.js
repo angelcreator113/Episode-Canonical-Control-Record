@@ -53,7 +53,9 @@ async function listThreads(sequelize, showId) {
     `SELECT t.id, t.title, t.description, t.status, t.source, t.seed_text, t.opened_episode_id,
             t.last_advanced_episode_id, t.last_advanced_at, t.closed_at, t.reopened_at, t.created_at,
             COALESCE((SELECT array_agg(s.slot_number ORDER BY s.slot_number) FROM season_slots s
-                       WHERE s.story_thread_id = t.id AND s.deleted_at IS NULL), '{}') AS slot_numbers
+                       WHERE s.deleted_at IS NULL AND (s.story_thread_id = t.id OR t.id::text IN (
+                         SELECT p->>'story_thread_id' FROM jsonb_array_elements(COALESCE(s.story_purposes, '[]'::jsonb)) p))
+                     ), '{}') AS slot_numbers
        FROM show_story_threads t
       WHERE t.show_id = :showId AND t.deleted_at IS NULL
       ORDER BY (t.status = 'closed') ASC, t.created_at DESC`,
@@ -167,19 +169,29 @@ async function assertThreadChoosable(sequelize, showId, threadId) {
 }
 
 /**
- * Acceptance (A6, Q9): the thread the episode's slot continues is marked
- * advanced. A closed thread is left closed. Returns the thread id, or null.
+ * Acceptance (A6, Q9): every thread the episode's slot continues is marked
+ * advanced: the primary purpose's and, since A10, each other purpose's. A
+ * closed thread is left closed. Returns the advanced ids, the primary's
+ * thread first.
  */
-async function advanceSlotThread(sequelize, { showId, episodeId }) {
+async function advanceSlotThreads(sequelize, { showId, episodeId }) {
   const [rows] = await sequelize.query(
     `UPDATE show_story_threads t
         SET status = 'advanced', last_advanced_episode_id = :episodeId, last_advanced_at = NOW(), updated_at = NOW()
        FROM season_slots s
       WHERE s.episode_id = :episodeId AND s.show_id = :showId AND s.deleted_at IS NULL
-        AND t.id = s.story_thread_id AND t.deleted_at IS NULL AND t.status <> 'closed'
-      RETURNING t.id`,
+        AND (t.id = s.story_thread_id OR t.id::text IN (
+                SELECT p->>'story_thread_id' FROM jsonb_array_elements(COALESCE(s.story_purposes, '[]'::jsonb)) p))
+        AND t.deleted_at IS NULL AND t.status <> 'closed'
+      RETURNING t.id, (t.id = s.story_thread_id) AS is_primary`,
     { replacements: { showId, episodeId } });
-  return rows.length ? rows[0].id : null;
+  return [...rows.filter((r) => r.is_primary), ...rows.filter((r) => !r.is_primary)].map((r) => r.id);
+}
+
+/** The primary purpose's thread advanced at acceptance, or null (kept for callers of one thread). */
+async function advanceSlotThread(sequelize, { showId, episodeId }) {
+  const ids = await advanceSlotThreads(sequelize, { showId, episodeId });
+  return ids[0] || null;
 }
 
 module.exports = {
@@ -194,4 +206,5 @@ module.exports = {
   reopenThread,
   assertThreadChoosable,
   advanceSlotThread,
+  advanceSlotThreads,
 };

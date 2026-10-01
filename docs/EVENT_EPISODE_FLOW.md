@@ -3810,6 +3810,33 @@ all five in §8(ff)." So these are no longer INFERRED:
    /api/v1/season-rhythm/season-health/:showId`, the 1/4/2/1 grade) stays
    on the backend; the page no longer calls it.
 
+**Season Arc rulings A9 and A10 (Evoni, 2026-10-01)**, recorded verbatim;
+built as one PR after Episode Money Phase B PR 4. They refine A3 (the
+intention) and A7 (locks: "Reorder and re-plan act only on slots with no
+started episode"), which stands for reordering and re-planning; A9 opens
+only the started slot's own intention.
+
+> A9. A started slot's intention stays editable while its episode is a draft; saving updates the episode's season snapshot (and the brief's intent/allowed outcomes per Q10). It locks for good when the episode is accepted.
+>
+> A10. A slot can hold up to three story purposes, one marked primary, each optionally tied to a story thread. Desired pressure and the outcome range stay single per slot. The script writer receives all purposes, primary first; the roadmap card shows the primary with "+N more".
+
+**Build choices accepted (Evoni, 2026-10-01)**, A9/A10, verbatim: "A9/A10's
+six as listed." The six, and the storage they rest on:
+1. Drafting with AI stays future-only; a started slot is edited by hand.
+2. An AI draft (one story purpose) replaces only the primary's text and
+   keeps the other purposes and every purpose's thread.
+3. Acceptance advances the thread of every purpose, primary first; a closed
+   thread stays closed.
+4. The episode Overview and the Event Package still show only the primary
+   purpose; the script writer and the grounded script get all of them.
+5. Saving a started slot rewrites the episode's season snapshot in full
+   (`season_context`) and the brief's designed intent and allowed outcomes.
+6. A purpose may name only a thread with no text; the script writer reads
+   it as "Continue the thread …".
+7. Storage: `season_slots.story_purposes` (JSONB, primary first);
+   `story_purpose` and `story_thread_id` stay as the primary's mirror, and
+   the migration fills `story_purposes` from them.
+
 **(gg) Episode Money, Phase B (Evoni, 2026-10-01).** Recorded verbatim.
 Nothing is built yet. Phase B of §8(aa) M5; it builds on M1–M6 and the
 event spending ruling (§8(aa), §8(cc)). The design note, reading today's

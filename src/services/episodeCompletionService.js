@@ -685,10 +685,13 @@ ${narrativeLines.short || ''}`,
     const moneyNet = (financialResult?.summary?.total_income || 0) - (financialResult?.summary?.total_expenses || 0);
     const stressDelta = (Number(newState?.stress) || 0) - (Number(currentStats?.stress) || 0);
     season = await recordSlotOutcome(sequelize, { showId, episodeId, tier: evalResult.tier_final, moneyNet, stressDelta });
-    // The thread the slot continues is marked advanced (A6, Q9).
+    // The threads the slot continues are marked advanced (A6, Q9): the
+    // primary purpose's and, since A10, each other purpose's.
     if (season) {
-      const { advanceSlotThread } = require('./storyThreadService');
-      season.story_thread_advanced = await advanceSlotThread(sequelize, { showId, episodeId });
+      const { advanceSlotThreads } = require('./storyThreadService');
+      const advanced = await advanceSlotThreads(sequelize, { showId, episodeId });
+      season.story_thread_advanced = advanced[0] || null;
+      season.story_threads_advanced = advanced;
     }
   } catch (seasonErr) {
     console.error('[EpisodeCompletion] Season slot outcome failed (non-blocking):', seasonErr?.message);
