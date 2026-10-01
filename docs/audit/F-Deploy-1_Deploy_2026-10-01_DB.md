@@ -56,8 +56,11 @@ prefixes left out):
 7. **CFO.** 20:22:41–20:22:45: **89/100**, 0 critical, **4 warnings**,
    4059 ms.
 
-**App check: not checked yet** (Evoni). Nothing in this record says the
-deployed features work or fail in production.
+**App check: not checked yet** (Evoni), verbatim: "DB app check: not
+checked yet (record it so; I'll add it later if I check Planning
+Insights)." Nothing in this record says the deployed features work or
+fail in production. If she checks Planning Insights, her account is added
+as a dated banner, read newest-first.
 
 ## §1. Identity and continuity
 
@@ -227,7 +230,8 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
   the AI key present, one restart (count 58), ready, `/health` healthy and
   connected.
 - **CFO:** 89/100, 0 critical, 4 warnings, unchanged from DA.
-- **App check:** not done yet (Evoni).
+- **App check:** not done yet (Evoni); a later check of Planning
+  Insights would be added as a banner.
 - **Season Arc:** all eight build PRs are live.
 - Nothing is RULED here. The filing session made no host, AWS, database or
   Cognito contact.
