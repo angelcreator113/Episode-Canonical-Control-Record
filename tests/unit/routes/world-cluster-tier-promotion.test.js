@@ -41,7 +41,7 @@ const CP3_FILES = [
 // Per-file ref counts captured at CP3 close.
 // requireAuth count = imports (1) + handler-level invocations (Tier 1 only).
 // For worldStudio: 1 import + 34 mutations.
-// worldEvents.js: 67, not the CP3-close 62 — Task #1642 added
+// worldEvents.js: 68, not the CP3-close 62 — Task #1642 added
 // GET /world/:showId/events/:eventId (requireAuth), the Event Package
 // page's single-event read; Task #1670 added
 // POST /world/:showId/events/:eventId/suggest-names (requireAuth +
@@ -51,11 +51,13 @@ const CP3_FILES = [
 // POST /world/:showId/events/:eventId/venue-brief (requireAuth, the
 // venue's Scene Brief, read-only); Episode Money Phase B PR 2 (§8(gg) MB4)
 // added GET /world/:showId/events/:eventId/money-preview (requireAuth, the
-// event's money warnings before Start Episode, read-only); no other CP3-zone
-// route changed.
+// event's money warnings before Start Episode, read-only); F2 (Evoni,
+// 2026-10-01) added POST /world/:showId/events/:eventId/scene-set-link
+// (requireAuth, the Retry for an attached event's scene set); no other
+// CP3-zone route changed.
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 67,
+  'worldEvents.js': 68,
   'worldStudio.js': 35,
   'worldTemperatureRoutes.js': 3,
 };
@@ -293,14 +295,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
   });
 
   describe('CP3 zone aggregate consumer counts', () => {
-    // 110, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
-    test('CP3 zone contains 110 total requireAuth references across 4 files (4 imports + 106 handlers)', () => {
+    // 111, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
+    test('CP3 zone contains 111 total requireAuth references across 4 files (4 imports + 107 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(110);
+      expect(total).toBe(111);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {

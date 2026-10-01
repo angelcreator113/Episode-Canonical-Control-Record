@@ -1279,89 +1279,70 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     const injection = eventTag + '\n' + (locationTag ? locationTag + '\n' : '');
     script = script.substring(0, insertIdx) + injection + script.substring(insertIdx);
 
-    // Save
-    await episode.update({ script_content: script.trim() });
-
-    // Mark event as used — try with times_used, fall back without
-    try {
+    // F2 (Evoni, 2026-10-01): the required links (the script's tag, the
+    // event's episode, its invitation's episode) commit together or not at
+    // all. The scene-set link runs in a savepoint: if it can't be made, the
+    // event is still attached and the response says the scene set needs
+    // reconnecting, with POST .../scene-set-link to retry.
+    const { linkEventSceneSet, STATUS } = require('../services/eventSceneSetLinkService');
+    const sceneSet = await models.sequelize.transaction(async (t) => {
+      await episode.update({ script_content: script.trim() }, { transaction: t });
       await models.sequelize.query(
         `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { episodeId: episode_id, eventId } }
+        { replacements: { episodeId: episode_id, eventId }, transaction: t }
       );
-    } catch {
-      await models.sequelize.query(
-        `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { episodeId: episode_id, eventId } }
-      );
-    }
-
-    // If this event has an approved invitation, stamp the episode_id on the asset
-    if (event.invitation_asset_id) {
-      try {
+      // If this event has an approved invitation, stamp the episode_id on the asset
+      if (event.invitation_asset_id) {
         await models.sequelize.query(
           `UPDATE assets SET episode_id = :episodeId, updated_at = NOW()
            WHERE id = :assetId AND deleted_at IS NULL`,
-          { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id } }
+          { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id }, transaction: t }
         );
-      } catch { /* asset_scope/episode_id columns may not exist */ }
-    }
-
-    // Auto-link episode to event's scene set if the event has one
-    let sceneSetLinked = false;
-    if (event.scene_set_id) {
-      try {
-        // Link the scene set to this episode via scene_set_episodes junction table
-        await models.sequelize.query(
-          `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), :sceneSetId, :episodeId, NOW(), NOW())
-           ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
-          { replacements: { sceneSetId: event.scene_set_id, episodeId: episode_id } }
-        );
-        sceneSetLinked = true;
-      } catch (ssErr) {
-        console.warn('Failed to auto-link scene set to episode:', ssErr.message);
       }
-    }
-
-    // Auto-match scene set from location_hint via world_locations if no scene_set_id
-    if (!event.scene_set_id && event.location_hint) {
-      try {
-        const [matchingSets] = await models.sequelize.query(
-          `SELECT ss.id FROM scene_sets ss
-           JOIN world_locations wl ON wl.id = ss.world_location_id
-           WHERE wl.name ILIKE :hint AND wl.deleted_at IS NULL AND ss.deleted_at IS NULL
-           LIMIT 1`,
-          { replacements: { hint: `%${event.location_hint.split(',')[0].trim()}%` } }
-        );
-        if (matchingSets.length > 0) {
-          await models.sequelize.query(
-            `UPDATE world_events SET scene_set_id = :ssId, updated_at = NOW() WHERE id = :eventId`,
-            { replacements: { ssId: matchingSets[0].id, eventId } }
-          );
-          await models.sequelize.query(
-            `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, created_at, updated_at)
-             VALUES (gen_random_uuid(), :sceneSetId, :episodeId, NOW(), NOW())
-             ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
-            { replacements: { sceneSetId: matchingSets[0].id, episodeId: episode_id } }
-          );
-          sceneSetLinked = true;
-        }
-      } catch (locErr) {
-        console.warn('Failed to auto-match scene set from location:', locErr.message);
-      }
-    }
+      return linkEventSceneSet(models.sequelize, { event, episodeId: episode_id, transaction: t });
+    });
+    const sceneSetLinked = sceneSet.status === STATUS.LINKED;
 
     return res.json({
       success: true,
+      attached: true,
       event_tag: eventTag,
       location_tag: locationTag || null,
+      scene_set: sceneSet,
       scene_set_linked: sceneSetLinked,
       episode_id,
-      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}`,
+      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}`,
     });
   } catch (error) {
     console.error('Inject event error:', error);
     return res.status(500).json({ success: false, error: 'Failed to inject event', message: error.message });
+  }
+});
+
+// POST /api/v1/world/:showId/events/:eventId/scene-set-link — Retry linking
+// an attached event's scene set to its episode (F2). 409 when the event is
+// not attached to an episode. The response's scene_set says what happened.
+router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const [[event]] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
+      { replacements: { eventId, showId } }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    if (!event.used_in_episode_id) {
+      return res.status(409).json({ success: false, code: 'EVENT_NOT_ATTACHED', error: 'This event is not attached to an episode.' });
+    }
+    const { linkEventSceneSet } = require('../services/eventSceneSetLinkService');
+    const sceneSet = await models.sequelize.transaction((t) => linkEventSceneSet(models.sequelize, {
+      event, episodeId: event.used_in_episode_id, transaction: t,
+    }));
+    return res.json({ success: true, episode_id: event.used_in_episode_id, scene_set: sceneSet });
+  } catch (error) {
+    console.error('Scene set link error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to link the scene set', message: error.message });
   }
 });
 
