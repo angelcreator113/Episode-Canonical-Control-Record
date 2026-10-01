@@ -39,6 +39,9 @@ export const lockSceneStyleApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/lock-style`, payload);
 export const learnSceneLocationApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/learn-location`, payload);
+// S6: the World Location's approved base, approved from Scene Sets.
+export const approveBaseApi = (setId) => apiClient.post(`${API_BASE}/scene-sets/${setId}/approve-base`, {});
+export const unapproveBaseApi = (setId) => apiClient.delete(`${API_BASE}/scene-sets/${setId}/approve-base`);
 export const promoteToBaseApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/promote-to-base`, payload);
 export const setCoverAngleApi = (setId, payload) =>
@@ -484,6 +487,56 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
+/**
+ * The approved base row on a scene set card (S6, Evoni 2026-10-01: "Nothing
+ * is approved automatically; Evoni approves each base from Scene Sets.").
+ */
+export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} }) {
+  const [busy, setBusy] = useState(false);
+  const act = async (call, done) => {
+    setBusy(true);
+    try {
+      await call(set.id);
+      onToast(done);
+      onRefresh();
+    } catch (err) {
+      console.error('[SceneSets] approved base change failed:', err);
+      onToast(err.response?.data?.error || err.message || 'Failed', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (set.base_approved) {
+    return (
+      <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
+        <span className="scene-sets-approved-badge"><ShieldCheck size={11} /> Approved base</span>
+        <button type="button" className="scene-sets-approved-btn" disabled={busy}
+          onClick={() => act(unapproveBaseApi, `${set.name} is no longer the approved base`)}>
+          Un-approve
+        </button>
+      </div>
+    );
+  }
+  if (set.location_approved_base) {
+    return (
+      <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
+        <span className="scene-sets-approved-note">Event versions here are made from this location's approved base.</span>
+      </div>
+    );
+  }
+  if (set.world_location_id && set.base_still_url) {
+    return (
+      <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
+        <button type="button" className="scene-sets-approved-btn" disabled={busy}
+          onClick={() => act(approveBaseApi, `${set.name} is now the location's approved base`)}>
+          <ShieldCheck size={11} /> Approve as the location's base
+        </button>
+      </div>
+    );
+  }
+  return null;
+}
+
 const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
@@ -788,9 +841,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                   style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
                   onClick={e => e.stopPropagation()}
                 >
-                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }}>
-                    <Upload size={12} /> {hasBase ? 'Replace Base Image' : 'Upload Base Image'}
-                  </button>
+                  {/* S6: an approved base is not replaced until it is un-approved. */}
+                  {!set.base_approved && (
+                    <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }}>
+                      <Upload size={12} /> {hasBase ? 'Replace Base Image' : 'Upload Base Image'}
+                    </button>
+                  )}
                   {hasBase && (
                     <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
                       <Pencil size={12} /> Edit Description
@@ -815,7 +871,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                       <Sparkles size={12} /> {seeding ? 'Analyzing...' : 'Suggest Angles'}
                     </button>
                   )}
-                  {hasBase && sortedAngles.some(a => a.still_image_url) && (
+                  {hasBase && !set.base_approved && sortedAngles.some(a => a.still_image_url) && (
                     <button onClick={async () => {
                       setShowMenu(false);
                       const targetAngle = selectedAngle?.still_image_url
@@ -895,6 +951,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
               }}>{set.scene_type.replace('_', ' ')}</span>
             </div>
           )}
+
+          {/* S6: the location's approved permanent base. Evoni approves it
+              here; nothing is approved by itself. Event versions at the
+              location are made from it, and it is not replaced until it is
+              un-approved. */}
+          <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
 
           {/* Compact metadata */}
           <div className="scene-sets-card-meta-line">

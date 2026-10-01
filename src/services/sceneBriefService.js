@@ -41,9 +41,26 @@
  *     nothing stores it yet).
  *   - overrides: { <key>: text } replaces a line (source 'override'); an
  *     empty text removes it.
+ *
+ * Event dressing (ruling S6, Evoni 2026-09-30, with her answers of
+ * 2026-10-01): "A recurring location keeps one approved permanent base
+ * image; event-dressed versions are made from it, so the place stays
+ * recognisable across episodes." and "Event-dressed versions are made by
+ * editing the approved base with only the event layer, using Flux Kontext
+ * by default, priced and shown in the brief." When the location has an
+ * approved base, an event is chosen, and the brief is for another set's
+ * base (WIDE), the brief's mode is 'event_dressing': it names the approved
+ * base, and its prompt sends only the event layer, as an edit of that
+ * image. Otherwise the mode is 'full'.
  */
 
 const BRIEF_VERSION = 1;
+const MODES = Object.freeze(['full', 'event_dressing']);
+
+// The edit a dressed version asks of the approved base (S6): the place
+// stays as it is; only the event layer is added.
+const DRESSING_KEEP = 'Edit this photograph of the place. Keep the place exactly as it is: the same architecture, walls, floor, windows, furniture, layout, lighting and camera. Add only the event dressing below.';
+const DRESSING_END = 'Change nothing else.';
 const SOURCES = Object.freeze(['venue', 'event', 'override']);
 const LAYERS = Object.freeze(['place', 'event', 'shot', 'environment']);
 
@@ -250,12 +267,22 @@ function buildSceneBrief({
   const missing = kept.filter((l) => l.essential && !l.text).map((l) => ({ layer: l.layer, key: l.key, label: l.label }));
   if (!location) missing.unshift({ layer: 'place', key: 'world_location', label: 'World Location' });
 
+  // S6: an event-dressed version of the location's approved base.
+  const dressing = Boolean(
+    location?.approved_base_image_url && event && angle === 'WIDE' && !continuity
+    && (!set.id || set.id !== location.approved_base_scene_set_id)
+  );
+
   return {
     version: BRIEF_VERSION,
     scene_set_id: set.id || null,
     world_location_id: location?.id || set.world_location_id || null,
     event_id: event?.id || null,
     angle,
+    mode: dressing ? 'event_dressing' : 'full',
+    approved_base: dressing
+      ? { scene_set_id: location.approved_base_scene_set_id || null, image_url: location.approved_base_image_url }
+      : null,
     lines: kept,
     rules: [...BRIEF_RULES],
     missing,
@@ -285,9 +312,17 @@ function readBriefOverrides(raw) {
   return { value };
 }
 
-/** The prompt a brief sends: the rules, then the place, event, shot and environment. */
+/**
+ * The prompt a brief sends: the rules, then the place, event, shot and
+ * environment. An event-dressed version (S6) sends the rules and only the
+ * event layer, as an edit of the approved base.
+ */
 function briefToPrompt(brief) {
   const byLayer = (layer) => (brief?.lines || []).filter((l) => l.layer === layer && l.text).map((l) => l.text);
+  if (brief?.mode === 'event_dressing') {
+    return [...(brief.rules || BRIEF_RULES), DRESSING_KEEP, ...byLayer('event'), DRESSING_END]
+      .join(' ').replace(/\s+/g, ' ').trim();
+  }
   const parts = [
     ...(brief?.rules || BRIEF_RULES),
     ...byLayer('place'),
@@ -305,7 +340,7 @@ async function loadBriefLocation(sequelize, worldLocationId, { transaction } = {
   if (!worldLocationId) return null;
   const [rows] = await sequelize.query(
     `SELECT id, name, description, location_type, parent_location_id, city, district, venue_type, venue_details,
-            style_guide, floor_plan, property_type
+            style_guide, floor_plan, property_type, approved_base_scene_set_id, approved_base_image_url
        FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
     { replacements: { id: worldLocationId }, transaction }
   );
@@ -357,6 +392,8 @@ async function prepareSceneBrief(sequelize, sceneSet, options = {}) {
 
 module.exports = {
   BRIEF_VERSION,
+  MODES,
+  DRESSING_KEEP,
   SOURCES,
   LAYERS,
   BRIEF_RULES,

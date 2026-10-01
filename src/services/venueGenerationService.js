@@ -50,7 +50,7 @@ async function uploadToS3(buffer, folder, suffix) {
 // interior is the set's base (WIDE); the exterior is its establishing angle.
 
 const { buildSceneBrief, briefToPrompt, loadBriefLocation, loadBriefEvent } = require('./sceneBriefService');
-const { estimateGenerationCost } = require('./imageGenerationService');
+const { estimateGenerationCost, estimateImageFromImageCost, generateImageFromImage } = require('./imageGenerationService');
 
 const VENUE_IMAGE_OPTIONS = Object.freeze({ size: 'landscape', quality: 'hd', useCase: 'venue' });
 const EXTERIOR_CAMERA = "Exterior: the building's full facade and entrance from the street, with the street and its surroundings.";
@@ -106,12 +106,17 @@ async function prepareVenueBriefs(sequelize, event, { overrides = {} } = {}) {
   const exterior = buildSceneBrief({
     sceneSet: draft, location, event: chosen, angleLabel: 'ESTABLISHING', cameraDirection: EXTERIOR_CAMERA, overrides: exteriorOverrides,
   });
+  // S6: with an approved base at the venue, the interior is its
+  // event-dressed version (a Flux Kontext edit), priced as such.
   const one = estimateGenerationCost(VENUE_IMAGE_OPTIONS);
+  const interiorCost = interior.mode === 'event_dressing' ? estimateImageFromImageCost() : one;
+  const priced = [interiorCost, one].every((e) => typeof e.usd === 'number');
   const estimate = {
-    usd: typeof one.usd === 'number' ? Math.round(one.usd * 2 * 1e4) / 1e4 : null,
-    priced: Boolean(one.priced),
+    usd: priced ? Math.round((interiorCost.usd + one.usd) * 1e4) / 1e4 : null,
+    priced: priced && Boolean(interiorCost.priced && one.priced),
     images: 2,
     model: one.model,
+    interior_model: interiorCost.model,
   };
   return { draft, location, interior, exterior, estimate };
 }
@@ -129,9 +134,12 @@ async function generateVenueImages(event, models, options = {}) {
 
   console.log(`[VenueGen] Generating venue for: ${draft.name} (location ${draft.world_location_id || 'none'})`);
 
-  // Generate single interior image
-  console.log('[VenueGen] Generating interior image...');
-  const imageUrl = await generateImageUrl(interiorPrompt, VENUE_IMAGE_OPTIONS);
+  // Generate single interior image: an edit of the venue's approved base
+  // when it has one (S6), else from the brief.
+  console.log(`[VenueGen] Generating interior image${interior.mode === 'event_dressing' ? ' (event dressing of the approved base)' : ''}...`);
+  const imageUrl = interior.mode === 'event_dressing'
+    ? (await generateImageFromImage(interior.approved_base.image_url, interiorPrompt, { size: 'landscape' })).url
+    : await generateImageUrl(interiorPrompt, VENUE_IMAGE_OPTIONS);
 
   if (!imageUrl) throw new Error('Image generation failed — no URL returned');
 

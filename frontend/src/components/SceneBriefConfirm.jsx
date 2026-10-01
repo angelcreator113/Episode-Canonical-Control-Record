@@ -179,6 +179,16 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
               </div>
             )}
             {note && <p className="sbc-note">{note}</p>}
+            {brief.mode === 'event_dressing' && brief.approved_base && (
+              // S6: an event-dressed version of the location's approved base.
+              <div className="sbc-dressing" data-testid="sbc-dressing">
+                {brief.approved_base.image_url && <img src={brief.approved_base.image_url} alt="The approved base" />}
+                <p>
+                  Made from this location's approved base image with Flux Kontext. Only the event layer is sent;
+                  the place, the shot and the environment come from the image.
+                </p>
+              </div>
+            )}
 
             {LAYERS.map((layer) => {
               const lines = brief.lines.filter((l) => l.layer === layer);

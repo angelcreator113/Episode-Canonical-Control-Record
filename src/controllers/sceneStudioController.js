@@ -13,6 +13,7 @@ const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
 const inpaintingService = require('../services/inpaintingService');
 const { isBudgetError } = require('../services/imageCostService');
+const approvedBaseService = require('../services/approvedBaseService');
 
 // ── Migration check (cached per process) ──
 // Detects once whether Scene Studio columns exist, avoiding per-request describeTable calls.
@@ -1292,6 +1293,12 @@ exports.regenerateSceneSetBackground = async (req, res) => {
     });
     if (!sceneSet) {
       return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+    // S6: a restyle replaces the base; an approved base is not replaced
+    // until Evoni un-approves it.
+    const refusal = await approvedBaseService.baseReplaceRefusal(sequelize, id);
+    if (refusal) {
+      return res.status(refusal.status).json({ success: false, error: refusal.error, approved_base_of: refusal.approved_base_of });
     }
 
     let targetAngle = null;

@@ -162,3 +162,23 @@
   color: inherit;
   font: inherit;
 }
+
+/* An event-dressed version of the approved base (S6). */
+.sbc-dressing {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: #f1f8f4;
+  border: 1px solid #b9dcc6;
+  font-size: 0.83rem;
+}
+.sbc-dressing img {
+  width: 72px;
+  height: 48px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.sbc-dressing p { margin: 0; min-width: 0; }

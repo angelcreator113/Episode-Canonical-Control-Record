@@ -35,6 +35,7 @@ const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 const { buildSceneBrief, briefToPrompt, prepareSceneBrief } = require('./sceneBriefService');
+const { assertBaseReplaceable } = require('./approvedBaseService');
 
 // Ruling S4 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd), quoted
 // there): the injected generic style and lighting instructions are removed,
@@ -498,6 +499,30 @@ function estimateBaseStillCost(modelKey) {
   });
 }
 
+// S6 (Evoni, 2026-10-01): "Event-dressed versions are made by editing the
+// approved base with only the event layer, using Flux Kontext by default,
+// priced and shown in the brief; revisit after the model comparison."
+const SCENE_DRESSING_MODEL = Object.freeze({ key: 'flux-kontext', model: 'fal-ai/flux-pro/kontext', provider: 'fal' });
+
+/** Rate-table estimate of one event-dressed version (an edit of the approved base). */
+function estimateDressingCost() {
+  return require('./imageGenerationService').estimateImageFromImageCost();
+}
+
+/** An event-dressed version: the approved base edited with the event layer only (S6). */
+async function generateDressedStill(sceneSet, prompt, approvedBaseUrl) {
+  const costs = createCostCollector(`dressed still ${sceneSet.id} (${SCENE_DRESSING_MODEL.key})`);
+  const { generateImageFromImage } = require('./imageGenerationService');
+  const result = await generateImageFromImage(approvedBaseUrl, prompt, { size: 'landscape', onLogged: costs.onLogged });
+  const stillUrl = await downloadAndStoreStill(result.url, sceneSet.id, 'base');
+  return {
+    stillUrl,
+    cost: costs.value(),
+    usageLogIds: costs.usageLogIds,
+    inputTokensUnpriced: costs.inputTokensUnpriced,
+  };
+}
+
 /**
  * Collects what runImageCall logged for a generation's provider calls, so
  * the record it produced carries the logged cost (Task #2396).
@@ -804,6 +829,9 @@ function briefDb(models) {
 async function generateBaseScene(sceneSet, models, options = {}) {
   const { SceneSet } = models;
 
+  // S6: an approved base is never replaced until Evoni un-approves it.
+  await assertBaseReplaceable(briefDb(models), sceneSet.id);
+
   const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
     // Without overrides given, the base keeps the ones it was last generated
     // with (S2: the brief shown before generating shows them).
@@ -819,12 +847,19 @@ async function generateBaseScene(sceneSet, models, options = {}) {
   );
 
   try {
-    const modelKey = resolveBaseModel(sceneSet);
-    const cfg = SCENE_BASE_MODELS[modelKey];
-    const estimate = estimateBaseStillCost(modelKey);
-    console.log(`[SceneGen] Starting base still for: ${sceneSet.name} (${modelKey}, ${cfg.width}x${cfg.height})`);
+    // S6: an event-dressed version edits the location's approved base with
+    // Flux Kontext; any other base is generated with the set's model.
+    const dressing = brief.mode === 'event_dressing';
+    const modelKey = dressing ? SCENE_DRESSING_MODEL.key : resolveBaseModel(sceneSet);
+    const cfg = dressing
+      ? { ...SCENE_DRESSING_MODEL, width: null, height: null, quality: null }
+      : SCENE_BASE_MODELS[modelKey];
+    const estimate = dressing ? estimateDressingCost() : estimateBaseStillCost(modelKey);
+    console.log(`[SceneGen] Starting base still for: ${sceneSet.name} (${modelKey}${dressing ? ', event dressing of the approved base' : `, ${cfg.width}x${cfg.height}`})`);
 
-    const { stillUrl, cost, usageLogIds, inputTokensUnpriced } = await generateBaseStill(sceneSet, prompt, modelKey);
+    const { stillUrl, cost, usageLogIds, inputTokensUnpriced } = dressing
+      ? await generateDressedStill(sceneSet, prompt, brief.approved_base.image_url)
+      : await generateBaseStill(sceneSet, prompt, modelKey);
     const lockedSeed = null;
 
     // Clean up old base still from S3 (best-effort)
@@ -2058,6 +2093,8 @@ module.exports = {
   VIDEO_MOVEMENT_MODIFIERS,
   // Task #2396: base still model choice, true recorded costs
   SCENE_BASE_MODELS,
+  SCENE_DRESSING_MODEL,
+  estimateDressingCost,
   OUTPAINT_MODEL,
   isBaseModelKey,
   defaultBaseModel,

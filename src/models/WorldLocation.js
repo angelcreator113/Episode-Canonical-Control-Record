@@ -107,6 +107,10 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'penthouse, mansion, apartment, townhouse, studio',
     },
+    // The approved permanent base image (S6; migration 20261001220000).
+    approved_base_scene_set_id: { type: DataTypes.UUID, allowNull: true },
+    approved_base_image_url: { type: DataTypes.TEXT, allowNull: true },
+    approved_base_at: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'world_locations',
     timestamps: true,

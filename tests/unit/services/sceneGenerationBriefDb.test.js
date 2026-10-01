@@ -22,7 +22,9 @@ jest.mock('../../../src/services/sceneBriefService', () => ({
 const sceneGen = require('../../../src/services/sceneGenerationService');
 
 describe('the Scene Brief reads through the models\' connection', () => {
-  const db = { query: jest.fn() };
+  // S6: generateBaseScene first asks, through the same connection, whether
+  // the set's base is an approved base; here none is.
+  const db = { query: jest.fn(async () => [[]]) };
   const SceneSet = { sequelize: db, update: jest.fn(async () => [1]), increment: jest.fn() };
   const SceneAngle = { sequelize: db, update: jest.fn(async () => [1]) };
   const set = { id: 'set-1', show_id: 'show-1', world_location_id: 'loc-1', base_still_url: 'https://img/base.png' };
@@ -47,6 +49,7 @@ describe('the Scene Brief reads through the models\' connection', () => {
   test('generateBaseScene with { SceneSet, SceneAngle } (the worker) passes the connection', async () => {
     await expect(sceneGen.generateBaseScene(set, { SceneSet, SceneAngle })).rejects.toBe(STOP);
     expect(mockPrepare.mock.calls[0][0]).toBe(db);
+    expect(db.query.mock.calls[0][0]).toMatch(/approved_base_scene_set_id = :id/);
   });
 
   test('regenerateAngleRefined with { SceneAngle, SceneSet } (the queue and the route) passes the connection', async () => {
