@@ -25,9 +25,7 @@ jest.mock('../../../src/services/artifactDetectionService', () => ({
 const {
   buildPrompt,
   buildVideoPrompt,
-  LALAVERSE_VISUAL_ANCHOR,
   NEGATIVE_PROMPT,
-  ANGLE_MODIFIERS,
   CAMERA_MOTION_MAP,
   VIDEO_DURATION_MAP,
   VIDEO_MOVEMENT_MODIFIERS,
@@ -46,17 +44,6 @@ const makeSceneSet = (overrides = {}) => ({
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 describe('SceneGenerationService', () => {
-  describe('LALAVERSE_VISUAL_ANCHOR', () => {
-    it('should be a non-empty string', () => {
-      expect(typeof LALAVERSE_VISUAL_ANCHOR).toBe('string');
-      expect(LALAVERSE_VISUAL_ANCHOR.length).toBeGreaterThan(0);
-    });
-
-    it('should be under 700 chars (condensed budget)', () => {
-      expect(LALAVERSE_VISUAL_ANCHOR.length).toBeLessThanOrEqual(700);
-    });
-  });
-
   describe('NEGATIVE_PROMPT', () => {
     it('should be a non-empty string', () => {
       expect(typeof NEGATIVE_PROMPT).toBe('string');
@@ -70,29 +57,9 @@ describe('SceneGenerationService', () => {
     });
   });
 
-  describe('ANGLE_MODIFIERS', () => {
-    const expectedLabels = [
-      'WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY',
-      'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER',
-    ];
-
-    it('should have entries for all expected angle labels', () => {
-      expectedLabels.forEach((label) => {
-        expect(ANGLE_MODIFIERS).toHaveProperty(label);
-      });
-    });
-
-    it('should have non-empty string values for every label', () => {
-      Object.entries(ANGLE_MODIFIERS).forEach(([key, value]) => {
-        expect(typeof value).toBe('string');
-        expect(value.length).toBeGreaterThan(0);
-      });
-    });
-  });
-
   describe('CAMERA_MOTION_MAP', () => {
-    it('should cover the same labels as ANGLE_MODIFIERS', () => {
-      const angleKeys = Object.keys(ANGLE_MODIFIERS);
+    it('should cover the same labels as the brief\'s cameras', () => {
+      const angleKeys = Object.keys(SHOT_CAMERAS);
       angleKeys.forEach((key) => {
         expect(CAMERA_MOTION_MAP).toHaveProperty(key);
       });
@@ -107,8 +74,8 @@ describe('SceneGenerationService', () => {
   });
 
   describe('VIDEO_DURATION_MAP', () => {
-    it('should cover the same labels as ANGLE_MODIFIERS', () => {
-      const angleKeys = Object.keys(ANGLE_MODIFIERS);
+    it('should cover the same labels as the brief\'s cameras', () => {
+      const angleKeys = Object.keys(SHOT_CAMERAS);
       angleKeys.forEach((key) => {
         expect(VIDEO_DURATION_MAP).toHaveProperty(key);
       });
@@ -123,8 +90,8 @@ describe('SceneGenerationService', () => {
   });
 
   describe('VIDEO_MOVEMENT_MODIFIERS', () => {
-    it('should cover the same labels as ANGLE_MODIFIERS', () => {
-      const angleKeys = Object.keys(ANGLE_MODIFIERS);
+    it('should cover the same labels as the brief\'s cameras', () => {
+      const angleKeys = Object.keys(SHOT_CAMERAS);
       angleKeys.forEach((key) => {
         expect(VIDEO_MOVEMENT_MODIFIERS).toHaveProperty(key);
       });
@@ -179,7 +146,7 @@ describe('SceneGenerationService', () => {
       const custom = 'Low angle looking up at chandelier, dramatic perspective.';
       const result = buildPrompt(makeSceneSet(), 'WIDE', custom);
       expect(result).toContain(custom);
-      expect(result).not.toContain(ANGLE_MODIFIERS.WIDE);
+      expect(result).not.toContain(SHOT_CAMERAS.WIDE);
     });
 
     it('should include the quality suffix', () => {
@@ -239,7 +206,7 @@ describe('SceneGenerationService', () => {
     });
 
     it('should produce valid prompts for every angle label', () => {
-      const labels = Object.keys(ANGLE_MODIFIERS);
+      const labels = Object.keys(SHOT_CAMERAS);
       labels.forEach((label) => {
         const result = buildPrompt(makeSceneSet(), label);
         expect(result.length).toBeLessThanOrEqual(3500);
@@ -282,9 +249,10 @@ describe('SceneGenerationService', () => {
       expect(result).not.toContain(VIDEO_MOVEMENT_MODIFIERS.CLOSE);
     });
 
-    it('should NOT contain the full LALAVERSE anchor (video prompts are short)', () => {
+    it('should carry no lighting or style of its own (S4)', () => {
       const result = buildVideoPrompt(makeSceneSet(), 'WIDE');
-      expect(result).not.toContain(LALAVERSE_VISUAL_ANCHOR);
+      expect(result).not.toMatch(/natural lighting|warm|feminine|Pinterest/i);
+      expect(result).toContain('Keep the lighting of the image.');
     });
 
     it('should NOT include the canonical_description (scene already in base image)', () => {

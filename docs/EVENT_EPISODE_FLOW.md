@@ -3474,6 +3474,35 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   longer links the first scene set found at that location
   (`SceneSet.findOne`, no order); a set named in the request is kept.
 
+**What S4 built** (Task #2395). S1 had already taken the generic text out
+of every scene-set image prompt (the brief is the whole prompt). S4 removes
+what was left:
+
+- `LALAVERSE_VISUAL_ANCHOR` ("Final Fantasy softness, Pinterest-core
+  femininity…") and `ANGLE_MODIFIERS`, whose CLOSET, VANITY and WINDOW
+  lines carried fixed lighting. Neither was sent any more. Each angle's
+  camera is the brief's (`SHOT_CAMERAS`), with no lighting.
+- The angle video prompt (`buildVideoPrompt`) said "Maintain warm soft
+  natural lighting". It now says "Keep the lighting of the image".
+- The description writer (`POST /scene-sets/ai-describe`) asked for "the
+  LalaVerse aesthetic: feminine, aspirational, warm tones, soft textures,
+  Pinterest-worthy"; its text becomes the place's description. It now
+  asks for the place as it is, with no style, mood or lighting not given.
+- Venue generation's category look-up and templates (`buildVenueIdentity`,
+  unused since S5).
+- `tests/unit/services/sceneGenericText.test.js` keeps that text out of
+  the brief, scene-set generation, venue generation and the scene-set
+  routes.
+
+**Not changed** (INFERRED scope; each is a separate path):
+- Scene Studio's object generation keeps its style anchor
+  (`objectGenerationService.OBJECT_STYLE_ANCHOR`).
+- The restyle, mood and season variants are presets chosen explicitly.
+- `NEGATIVE_PROMPT` is never sent.
+- WorldAdmin's event template `venue_theme` is template text Evoni picks.
+  It reaches a venue only as the set's description when the location has
+  none (S5).
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in

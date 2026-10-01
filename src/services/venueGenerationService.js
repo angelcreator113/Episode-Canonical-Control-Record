@@ -9,6 +9,9 @@
  *
  * Auto-creates a SceneSet with both images as angles.
  * Links to the event and WorldLocation.
+ *
+ * S4: the category look-up and prompt templates (buildVenueIdentity) are
+ * gone; both images come from Scene Briefs (S5, below).
  */
 
 const axios = require('axios');
@@ -18,53 +21,6 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const s3 = new S3Client({ region: AWS_REGION });
-
-// ─── VENUE IDENTITY BUILDER ─────────────────────────────────────────────────
-
-function buildVenueIdentity(event) {
-  const auto = event.canon_consequences?.automation || {};
-  const prestige = event.prestige || 5;
-  const venueName = auto.venue_name || event.venue_name || event.name;
-  const venueAddress = auto.venue_address || event.venue_address || '';
-  const category = auto.content_category || event.category || 'creator_economy';
-  const mood = auto.mood || event.mood || 'aspirational';
-  const hostArchetype = auto.host_archetype || '';
-
-  // Derive architectural style from prestige + category
-  const VENUE_AESTHETICS = {
-    fashion:         { low: 'converted loft, raw concrete, industrial lighting', high: 'glass atrium gallery, marble floors, designer furniture' },
-    beauty:          { low: 'cozy salon with neon signs, pink walls', high: 'luxury spa resort, crystal chandeliers, white marble' },
-    music:           { low: 'underground club, graffiti walls, colored lights', high: 'intimate jazz lounge, velvet curtains, warm wood' },
-    food:            { low: 'street food market, fairy lights, communal tables', high: 'private dining room, michelin-star decor, candlelight' },
-    lifestyle:       { low: 'rooftop garden, string lights, mismatched furniture', high: 'penthouse terrace, infinity pool views, sunset' },
-    creator_economy: { low: 'coworking space, exposed brick, whiteboards', high: 'members-only creative club, art on walls, designer seating' },
-    creative:        { low: 'artist studio, paint-splattered floors, skylights', high: 'museum-quality gallery, white walls, dramatic lighting' },
-    drama:           { low: 'dimly lit bar, red velvet booths, mirrors', high: 'grand ballroom, gold accents, theatrical lighting' },
-  };
-
-  const catAesthetic = VENUE_AESTHETICS[category.toLowerCase()] || VENUE_AESTHETICS.creator_economy;
-  const aesthetic = prestige >= 7 ? catAesthetic.high : catAesthetic.low;
-
-  // Parse neighborhood from address
-  const neighborhood = venueAddress.split(',').slice(1).join(',').trim() || 'creative district';
-
-  // Time of day from event_time
-  const eventTime = auto.event_time || event.event_time || '19:00';
-  const hour = parseInt(eventTime.split(':')[0]) || 19;
-  const timeOfDay = hour >= 20 ? 'night, city lights' : hour >= 17 ? 'golden hour, warm sunset light' : 'afternoon, natural light';
-
-  return {
-    venueName,
-    venueAddress,
-    neighborhood,
-    aesthetic,
-    prestige,
-    category,
-    mood,
-    timeOfDay,
-    hostArchetype,
-  };
-}
 
 // ─── IMAGE GENERATION (via unified service) ────────────────────────────────
 
@@ -299,7 +255,6 @@ async function generateVenueImages(event, models, options = {}) {
 
 module.exports = {
   generateVenueImages,
-  buildVenueIdentity,
   prepareVenueBriefs,
   venueDraftSet,
   venueLocationId,
