@@ -5,12 +5,15 @@
  * Through the real routes and Finalize:
  *   - a deal event's costs are edited through /costs, each row saying who
  *     pays it; a legacy event refuses them; the rows lock with the terms;
- *   - the extras are drafted as rows Lala pays, once each (rule 14 record),
- *     by the Costs button and once by Propose terms;
+ *   - the entry line is drafted once (rule 14 record), by the Costs button
+ *     and once by Propose terms; the extras no longer are (they are event
+ *     spending since the event cost split, 2026-09-30;
+ *     episodeSpending.integration.test.js);
  *   - Finalize charges a deal event each row Lala pays, never a comped row,
  *     and neither cost_coins nor styling_extras; a legacy event is charged
  *     as before;
- *   - the forecast shows the same itemised costs.
+ *   - the forecast shows the same itemised costs, and the extras estimate
+ *     as event spending.
  */
 jest.unmock('uuid');
 
@@ -127,30 +130,26 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect((await listCosts(ids)).body).toMatchObject({ costs: [], deal: false });
   });
 
-  it('drafts the extras as rows Lala pays, each once, recorded as drafted (rule 14)', async () => {
-    // A paid appearance drafts no entry line (answer 2: only self-funded and comped deals).
-    const ids = await seed();
-    const first = await draftExtras(ids);
-    expect(first.status).toBe(200);
-    expect(first.body.costs.map((c) => [c.kind, c.label, c.amount, c.paid_by])).toEqual([
-      ['extras', 'Drinks', 100, 'lala'],
-      ['extras', 'Valet', 55, 'lala'],
-      ['extras', 'Photo booth', 150, 'lala'],
-    ]);
+  it('drafts the entry line once, recorded as drafted (rule 14); no extras since the split', async () => {
+    // A paid appearance drafts no entry line (answer 2), and no extras now.
+    const paid = await seed();
+    const none = await draftExtras(paid);
+    expect(none.status).toBe(200);
+    expect(none.body.costs).toEqual([]);
 
+    const ids = await seed({ dealType: 'self_funded' });
+    const first = await draftExtras(ids);
+    expect(first.body.costs.map((c) => [c.kind, c.label, c.amount, c.paid_by])).toEqual([['entry', 'Entry / ticket', 100, 'lala']]);
     const [event] = await q(`SELECT canon_consequences FROM world_events WHERE id = :event`, ids);
     const automation = asJson(event.canon_consequences).automation;
     expect(automation.auto_drafted.costs).toBe('extras');
-    expect(Object.values(automation.drafted_values.costs).map((v) => v.key).sort()).toEqual(['drinks', 'photo_booth', 'valet']);
+    expect(Object.values(automation.drafted_values.costs).map((v) => v.key)).toEqual(['entry']);
 
-    // Again: nothing new. After a drafted row is removed, the button drafts
-    // that one back.
+    // Again: nothing new. After the drafted row is removed, the button drafts it back.
     expect((await draftExtras(ids)).body.drafted).toEqual([]);
-    const valet = first.body.costs.find((c) => c.label === 'Valet');
-    await auth(request(app).delete(`${costsUrl(ids)}/${valet.id}`));
+    await auth(request(app).delete(`${costsUrl(ids)}/${first.body.costs[0].id}`));
     const again = await draftExtras(ids);
-    expect(again.body.drafted.map((c) => c.label)).toEqual(['Valet']);
-    expect(again.body.costs).toHaveLength(3);
+    expect(again.body.drafted.map((c) => c.label)).toEqual(['Entry / ticket']);
   });
 
   it('answer 2: a self-funded deal drafts an Entry / ticket line Lala pays at the event cost; a comped deal, comped by the host', async () => {
@@ -159,9 +158,6 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect(res.status).toBe(200);
     expect(res.body.costs.map((c) => [c.kind, c.label, c.amount, c.paid_by])).toEqual([
       ['entry', 'Entry / ticket', 100, 'lala'],
-      ['extras', 'Drinks', 100, 'lala'],
-      ['extras', 'Valet', 55, 'lala'],
-      ['extras', 'Photo booth', 150, 'lala'],
     ]);
     const [event] = await q(`SELECT canon_consequences FROM world_events WHERE id = :event`, selfFunded);
     const records = Object.values(asJson(event.canon_consequences).automation.drafted_values.costs);
@@ -171,18 +167,19 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const compedRes = await draftExtras(comped);
     expect(compedRes.body.costs[0]).toMatchObject({ kind: 'entry', label: 'Entry / ticket', amount: 100, paid_by: 'host' });
 
-    // Charged at Finalize: the self-funded entry is; the comped one is not.
+    // Charged at Finalize: the comped entry is not (and an episode with no
+    // spending lines is charged nothing for extras).
     await startEpisode(comped);
     await finalizeEpisodeFinancials(comped.ep, comped.show, sequelize);
-    expect((await ledger(comped)).map((r) => r.amount)).toEqual([55, 100, 150]);
+    expect(await ledger(comped)).toEqual([]);
   });
 
-  it('Propose terms drafts the extras once, and never re-adds them after Evoni removes them', async () => {
-    const ids = await seed({ dealType: 'paid_appearance', tier: 1 });
+  it('Propose terms drafts the entry line once, and never re-adds it after Evoni removes it', async () => {
+    const ids = await seed({ dealType: 'self_funded', tier: 1 });
     const propose = () => auth(request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/propose-terms`)).send({});
     const res = await propose();
     expect(res.status).toBe(200);
-    expect(res.body.costs.map((c) => c.label)).toEqual(['Drinks', 'Valet', 'Photo booth']);
+    expect(res.body.costs.map((c) => c.label)).toEqual(['Entry / ticket']);
 
     for (const c of res.body.costs) await auth(request(app).delete(`${costsUrl(ids)}/${c.id}`));
     const second = await propose();
@@ -238,7 +235,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     ]);
   });
 
-  it('the forecast shows a deal event\'s itemised costs in place of the entry cost and extras', async () => {
+  it('the forecast shows a deal event\'s itemised costs in place of the entry cost, and the extras as spending', async () => {
     const ids = await seed();
     await addCost(ids, { kind: 'travel', label: 'Car', amount: 80 });
     await addCost(ids, { kind: 'accommodation', label: 'Hotel', amount: 400, paid_by: 'host' });
@@ -246,9 +243,14 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const res = await auth(request(app).get(`/api/v1/world/${ids.show}/events/${ids.event}/financial-forecast`));
     expect(res.status).toBe(200);
     const { expenses } = res.body.forecast || res.body;
-    expect(expenses).toMatchObject({ event_cost: 0, drinks_est: 0, valet_est: 0, photo_booth_est: 0 });
+    expect(expenses).toMatchObject({ event_cost: 0, drinks_est: 100, valet_est: 55, photo_booth_est: 150 });
     expect(expenses.itemised).toMatchObject({ lala_total: 80, comped_total: 400 });
     expect(expenses.itemised.costs).toHaveLength(2);
-    expect(expenses.total).toBe(expenses.outfit_retail + expenses.outfit_rentals + 80);
+    expect(expenses.total).toBe(expenses.outfit_retail + expenses.outfit_rentals + 80 + 305);
+
+    // An extras row drafted before the split is the estimate: no double count.
+    await addCost(ids, { kind: 'extras', label: 'Drinks', amount: 90 });
+    const after = (await auth(request(app).get(`/api/v1/world/${ids.show}/events/${ids.event}/financial-forecast`))).body;
+    expect((after.forecast || after).expenses).toMatchObject({ drinks_est: 0, valet_est: 0, photo_booth_est: 0 });
   });
 });

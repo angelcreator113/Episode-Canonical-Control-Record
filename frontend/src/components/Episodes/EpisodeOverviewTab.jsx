@@ -903,7 +903,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
               // today: event_payment, brand_deal_bonus, social_task_reward,
               // tier_reward, tier_paid_bonus, event_reward, event_entry,
               // wardrobe_purchase, wardrobe_rental, styling_extras,
-              // event_cost, the deal payouts (appearance_fee,
+              // event_cost, event_spending, the deal payouts (appearance_fee,
               // partnership_base_fee, performance_fee, content_fee,
               // deal_bonus), milestone, manual_adjustment. tier_reward,
               // tier_paid_bonus and event_reward are retired (Q12) but keep
@@ -914,7 +914,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 milestone: '🎯', event_entry: '🎟️', wardrobe_purchase: '👗',
                 wardrobe_rental: '👗', styling_extras: '🥂', manual_adjustment: '✏️',
                 // A deal event's itemised costs (Task #2365) and payouts (deal build PR 5).
-                event_cost: '🧾', appearance_fee: '💼', partnership_base_fee: '🤝',
+                event_cost: '🧾', event_spending: '🥂', appearance_fee: '💼', partnership_base_fee: '🤝',
                 performance_fee: '🎤', content_fee: '📸', deal_bonus: '🏅', seed: '🌱',
               };
               const fmt = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toLocaleString()}`;

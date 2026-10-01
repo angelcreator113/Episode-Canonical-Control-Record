@@ -598,6 +598,13 @@ Return ONLY JSON.` }],
       await syncCoinsAfterEpisodeChange(models.sequelize, showId, { transaction });
     }
 
+    // Event spending (the event cost split ruling, 2026-09-30): the
+    // episode's Money tab lines, drafted once, in this transaction. The
+    // event's extras cost rows are carried here, else a replaced episode's
+    // lines are copied, else the event's extras are drafted as suggestions.
+    const { draftEpisodeSpending } = require('./episodeSpendingService');
+    await draftEpisodeSpending(models.sequelize, { event, episodeId: episode.id, replacingEpisodeId, transaction });
+
     await stampEventUsed(models.sequelize, eventId, episode.id, { transaction });
     return { episode, brief };
   });

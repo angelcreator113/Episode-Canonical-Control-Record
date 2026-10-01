@@ -90,6 +90,6 @@ describe('eventCostsService (Task #2365)', () => {
     }
     expect(draftedCostLines({ cost_coins: 0, prestige: 2, deal_type: 'self_funded' })).toEqual([]);
     expect(draftedCostLines({ cost_coins: 50, prestige: 8, format: 'gala', deal_type: 'self_funded' }).map((l) => l.key))
-      .toEqual(['entry', 'drinks', 'valet', 'photo_booth']);
+      .toEqual(['entry']); // the extras are event spending since the split (2026-09-30)
   });
 });
