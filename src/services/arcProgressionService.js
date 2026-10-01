@@ -488,6 +488,7 @@ async function getArcContext(showId, models) {
 module.exports = {
   seedArc,
   checkPhaseTransition,
+  getPhaseGoalStatus,
   advancePhase,
   getArcContext,
   computeEmotionalTemperature,

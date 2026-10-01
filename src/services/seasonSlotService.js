@@ -16,6 +16,15 @@
  *   A5. "Start Episode snapshots the season context onto the episode. The
  *   Overview shows its season position and purpose, and the script
  *   generator receives that context."
+ *   A6. "Accepting a completed episode updates the season: it records the
+ *   actual outcome on its slot, [...] checks whether a phase boundary is
+ *   reached (checkPhaseTransition, currently never called), and readies the
+ *   next slot."
+ *   Q6. "Ask first: at a phase boundary show a summary of the phase
+ *   completed and what changes, and Evoni confirms."
+ *   Q7. "Pressure is Low · Medium · High · Peak. Desired is set in the
+ *   slot's intention; actual is derived from the evaluation tier, the
+ *   episode's money net and the stress change."
  *   A7. "Only future slots can be reordered or re-planned; a slot whose
  *   episode has started is locked to that episode."
  *   Q4 (accepted). Existing episodes in no slot are listed "for you to place
@@ -78,6 +87,56 @@ function slotState({ episode, event }) {
   if (episode) return episode.evaluation_status === 'accepted' ? SLOT_STATES.DONE : SLOT_STATES.IN_PRODUCTION;
   if (event) return SLOT_STATES.EVENT_READY;
   return SLOT_STATES.NEEDS_EVENT;
+}
+
+const PRESSURE_LEVELS = ['Low', 'Medium', 'High', 'Peak'];
+const TIER_PRESSURE = { slay: 0, pass: 1, safe: 2, fail: 3 };
+
+/**
+ * The pressure an episode actually put on Lala (Q7), from its evaluation
+ * tier, its money net and her stress change. Points: tier slay 0 · pass 1 ·
+ * safe 2 · fail 3; money net below 0 +1, below −1000 +2; stress up by 2 or
+ * more +1, by 4 or more +2. Total 0–1 Low, 2–3 Medium, 4–5 High, 6+ Peak.
+ */
+function derivePressure({ tier, moneyNet = 0, stressDelta = 0 }) {
+  let points = TIER_PRESSURE[tier] ?? 1;
+  if (moneyNet < -1000) points += 2;
+  else if (moneyNet < 0) points += 1;
+  if (stressDelta >= 4) points += 2;
+  else if (stressDelta >= 2) points += 1;
+  if (points >= 6) return 'Peak';
+  if (points >= 4) return 'High';
+  if (points >= 2) return 'Medium';
+  return 'Low';
+}
+
+/**
+ * Accepting an episode (A6): its slot records the actual outcome and
+ * pressure, and the season checks for a phase boundary through
+ * checkPhaseTransition, which also moves show_arcs.current_episode to the
+ * slot. At a boundary nothing advances: the roadmap asks first (Q6).
+ * Returns { slot_number, actual_outcome, actual_pressure, phase_boundary },
+ * or null when the episode is in no slot.
+ */
+async function recordSlotOutcome(sequelize, { showId, episodeId, tier, moneyNet, stressDelta }) {
+  const pressure = derivePressure({ tier, moneyNet, stressDelta });
+  const [rows] = await sequelize.query(
+    `UPDATE season_slots SET actual_outcome = :tier, actual_pressure = :pressure, accepted_at = NOW(), updated_at = NOW()
+      WHERE episode_id = :episodeId AND show_id = :showId AND deleted_at IS NULL
+      RETURNING slot_number, phase`,
+    { replacements: { tier, pressure, episodeId, showId } });
+  if (!rows.length) return null;
+  const slotNumber = rows[0].slot_number;
+  const { checkPhaseTransition } = require('./arcProgressionService');
+  const transition = await checkPhaseTransition(showId, slotNumber, { sequelize });
+  return {
+    slot_number: slotNumber,
+    actual_outcome: tier,
+    actual_pressure: pressure,
+    phase_boundary: transition
+      ? { phase: transition.current_phase?.phase, title: transition.current_phase?.title, next_phase: transition.next_phase?.title || null }
+      : null,
+  };
 }
 
 /** Creates an arc's 24 empty slots when it has none. Returns how many were created. */
@@ -179,6 +238,40 @@ async function getRoadmap(sequelize, showId) {
       ORDER BY ev.name ASC`,
     { replacements: { showId, arcId: arc.id } });
 
+  // The next slot to fill (A6 "readies the next slot"): the earliest slot
+  // with no episode.
+  const nextSlot = slots.find((sl) => !sl.episode);
+
+  // A phase boundary (Q6, ask first): every slot of the current phase is
+  // done and the phase is still active. The summary says what the phase
+  // did and what advancing changes; advancing stays Evoni's action.
+  let phaseBoundary = null;
+  const current = phases.find((p) => p.phase === Number(arc.current_phase));
+  if (current && current.status !== 'completed' && current.slots.length > 0
+      && current.slots.every((sl) => sl.state === SLOT_STATES.DONE)) {
+    const outcomes = current.slots.reduce((acc, sl) => {
+      const tier = sl.result.actual_outcome || 'unknown';
+      acc[tier] = (acc[tier] || 0) + 1;
+      return acc;
+    }, {});
+    const next = phases.find((p) => p.phase === current.phase + 1) || null;
+    let goals = null;
+    try {
+      const { getPhaseGoalStatus } = require('./arcProgressionService');
+      const status = await getPhaseGoalStatus(showId, current, { sequelize });
+      goals = { total: status.total, completed: status.completed, unmet: status.active_remaining, warning: status.warning_message || null };
+    } catch (err) {
+      console.error('[seasonSlotService] phase goal status failed:', err.message);
+    }
+    phaseBoundary = {
+      phase: current.phase,
+      title: current.title,
+      next_phase: next ? { phase: next.phase, title: next.title, tagline: next.tagline } : null,
+      outcomes,
+      goals,
+    };
+  }
+
   const counts = Object.values(SLOT_STATES).reduce((acc, state) => {
     acc[state] = slots.filter((s) => s.state === state).length;
     return acc;
@@ -192,6 +285,8 @@ async function getRoadmap(sequelize, showId) {
     phases,
     unslotted_episodes: unslotted,
     available_events: availableEvents,
+    next_slot_number: nextSlot ? nextSlot.slot_number : null,
+    phase_boundary: phaseBoundary,
   };
 }
 
@@ -386,4 +481,7 @@ module.exports = {
   placeEpisode,
   assignOnStart,
   snapshotEpisode,
+  PRESSURE_LEVELS,
+  derivePressure,
+  recordSlotOutcome,
 };

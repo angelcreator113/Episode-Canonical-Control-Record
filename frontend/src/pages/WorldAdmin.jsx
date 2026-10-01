@@ -7192,7 +7192,8 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 // Season Arc roadmap (§8(ff) A2): the season's 24 slots in three phases,
 // each slot showing its state, numbered "S1 · E7" (Q3). A future slot can
 // have an event pencilled in, moved freely (Q5); an episode in no slot can
-// be placed in an open one (Q4). A started slot is locked (A7).
+// be placed in an open one (Q4). A started slot is locked (A7). When every
+// slot of the current phase is done, a summary asks before advancing (Q6).
 const SLOT_STATE_CONFIG = {
   done:          { label: 'Done',            color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
   in_production: { label: 'In production',   color: '#B8962E', bg: '#faf5ea', border: 'rgba(184,150,46,0.35)' },
@@ -7202,7 +7203,7 @@ const SLOT_STATE_CONFIG = {
 
 const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#334155', minWidth: 0 };
 
-function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast }) {
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance }) {
   const [busySlot, setBusySlot] = useState(null);
   if (!roadmap) return null;
   const { phases = [], counts = {}, unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
@@ -7238,6 +7239,42 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast }) {
         {roadmap.slot_count} episode slots · {Object.keys(SLOT_STATE_CONFIG).map((key) => `${counts[key] || 0} ${SLOT_STATE_CONFIG[key].label.toLowerCase()}`).join(' · ')}
       </p>
 
+      {roadmap.phase_boundary && (() => {
+        const pb = roadmap.phase_boundary;
+        const outcomeText = Object.entries(pb.outcomes || {}).map(([tier, n]) => `${n} ${tier}`).join(' · ');
+        return (
+          <div data-testid="season-phase-boundary" style={{ marginBottom: 16, padding: '12px 14px', background: '#faf5ea', border: '1px solid rgba(184,150,46,0.35)', borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Phase {pb.phase}: {pb.title} is complete</div>
+            {outcomeText && <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>Results: {outcomeText}</div>}
+            {pb.goals && (
+              <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+                Goals: {pb.goals.completed} of {pb.goals.total} complete{pb.goals.unmet > 0 ? `; ${pb.goals.unmet} unmet will be carried as narrative debt` : ''}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+              {pb.next_phase
+                ? `Advancing opens Phase ${pb.next_phase.phase}: ${pb.next_phase.title}${pb.next_phase.tagline ? ` (“${pb.next_phase.tagline}”)` : ''} and activates its goals.`
+                : 'Advancing completes the season.'}
+            </div>
+            {advanceWarning ? (
+              <div data-testid="season-phase-confirm" style={{ marginTop: 10, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>{advanceWarning.warning}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button onClick={onConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: '#f59e0b' }}>
+                    {advancing ? 'Advancing...' : 'Confirm: advance and carry the debt'}
+                  </button>
+                  <button onClick={onCancelAdvance} style={S.secBtn}>Cancel</button>
+                </div>
+              </div>
+            ) : onAdvance && (
+              <button onClick={onAdvance} disabled={advancing} style={{ ...S.primaryBtn, marginTop: 10 }}>
+                {advancing ? 'Advancing...' : pb.next_phase ? `Advance to Phase ${pb.next_phase.phase}` : 'Complete the season'}
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
       {phases.map((phase) => (
         <div key={phase.phase} style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 8 }}>
@@ -7259,6 +7296,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>{slot.label}</span>
                     {slot.locked && <span title="Started: locked to its episode" style={{ fontSize: 10, color: '#94a3b8' }}>Locked</span>}
+                    {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span style={{ fontSize: 10, fontWeight: 700, color: '#B8962E' }}>Next</span>}
                   </div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: cfg.color, marginTop: 4 }}>{cfg.label}</div>
                   {what && (
@@ -7501,7 +7539,8 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       </div>
 
       {/* Roadmap — the season's 24 slots */}
-      <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} />
+      <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
+        advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)} />
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>

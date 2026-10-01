@@ -156,4 +156,52 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('S1 · E3'));
     confirm.mockRestore();
   });
+
+  test('marks the next open slot (A6)', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: { ...ROADMAP, next_slot_number: 2 } } };
+      return { data: {} };
+    });
+    renderAt('season');
+
+    expect(within(await screen.findByTestId('season-slot-2')).getByText('Next')).toBeTruthy();
+    expect(within(screen.getByTestId('season-slot-3')).queryByText('Next')).toBeNull();
+  });
+
+  test('at a phase boundary it shows the summary and asks before advancing (Q6)', async () => {
+    const boundary = {
+      phase: 1, title: 'Foundation',
+      next_phase: { phase: 2, title: 'Ascension', tagline: 'Climb the ladder' },
+      outcomes: { pass: 5, slay: 1, fail: 2 },
+      goals: { total: 4, completed: 3, unmet: 1, warning: 'Save 2,000 coins is unmet' },
+    };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: { ...ROADMAP, phase_boundary: boundary } } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc/advance') {
+        return { data: { data: { needs_confirmation: true, warning: 'Phase "Foundation" has 1 incomplete primary goal(s).' } } };
+      }
+      return { data: {} };
+    });
+    renderAt('season');
+
+    const card = await screen.findByTestId('season-phase-boundary');
+    expect(within(card).getByText('Phase 1: Foundation is complete')).toBeTruthy();
+    expect(within(card).getByText('Results: 5 pass · 1 slay · 2 fail')).toBeTruthy();
+    expect(within(card).getByText(/3 of 4 complete; 1 unmet will be carried as narrative debt/)).toBeTruthy();
+    expect(within(card).getByText(/Advancing opens Phase 2: Ascension/)).toBeTruthy();
+    expect(vi.mocked(api.post).mock.calls.filter(([url]) => /\/arc\/advance/.test(url))).toEqual([]);
+
+    fireEvent.click(within(card).getByText('Advance to Phase 2'));
+    const confirmBox = await screen.findByTestId('season-phase-confirm');
+    expect(within(confirmBox).getByText(/1 incomplete primary goal/)).toBeTruthy();
+    expect(vi.mocked(api.post).mock.calls.some(([url]) => url === '/api/v1/world/show-1/arc/advance/confirm')).toBe(false);
+
+    fireEvent.click(within(confirmBox).getByText('Confirm: advance and carry the debt'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/arc/advance/confirm'));
+  });
 });
