@@ -11,7 +11,7 @@ import episodeService from '../services/episodeService';
 // true — the wrap transition or the header button, never on page load).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
-import EpisodeTitleCard from '../components/Episodes/EpisodeTitleCard';
+import EpisodeTitleChip from '../components/Episodes/EpisodeTitleChip';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // Lazy-loaded tab bodies — each becomes its own JS chunk that's only
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
@@ -24,6 +24,7 @@ const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobe
 const EpisodeProductionChecklist = lazy(() => import('../components/Episodes/EpisodeProductionChecklist'));
 const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
 const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
+const EpisodeOverlaysTab = lazy(() => import('../components/Episodes/EpisodeOverlaysTab'));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
@@ -98,6 +99,8 @@ const EpisodeDetail = () => {
       // §8(aa) M1: Money follows Wardrobe (Episode Money Phase A, #2278).
       { key: 'money', label: 'Money' },
       { key: 'phone', label: 'Phone' },
+      // P15: every on-screen piece of the episode.
+      { key: 'overlays', label: 'Overlays' },
       { key: 'checklist', label: 'Production Checklist' },
     ]},
     { key: 'results', icon: '👑', label: 'Results', subs: [
@@ -115,6 +118,7 @@ const EpisodeDetail = () => {
       'wardrobe': ['production', 'wardrobe'],
       'money': ['production', 'money'],
       'phone': ['production', 'phone'],
+      'overlays': ['production', 'overlays'],
       'checklist': ['production', 'checklist'],
       'production': ['production', 'assets'],
       'evaluation': ['results', 'evaluation'],
@@ -211,6 +215,15 @@ const EpisodeDetail = () => {
     setActiveTabState('production');
     setEpSubTab('money');
     setSearchParams({ tab: 'money' });
+  };
+  // P15: the banner's title chip opens Production → Overlays; the tab bumps
+  // overlaysVersion after an action so the chip reloads.
+  const [overlaysVersion, setOverlaysVersion] = useState(0);
+  const bumpOverlays = useCallback(() => setOverlaysVersion((v) => v + 1), []);
+  const openOverlaysTab = () => {
+    setActiveTabState('production');
+    setEpSubTab('overlays');
+    setSearchParams({ tab: 'overlays' });
   };
 
   const [showMoreActions, setShowMoreActions] = useState(false);
@@ -629,6 +642,14 @@ const EpisodeDetail = () => {
                 <span aria-hidden="true">→</span>
               </Link>
             )}
+            {/* P15: the title's status; opens Production → Overlays. Its own
+                line too, so it shows at 375px. */}
+            <EpisodeTitleChip
+              episodeId={episode.id}
+              title={episode.title}
+              version={overlaysVersion}
+              onOpen={openOverlaysTab}
+            />
           </div>
         </div>
         <div className="ed-header-actions">
@@ -701,13 +722,6 @@ const EpisodeDetail = () => {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Title approval + title card (Task #2386, ruling P11): its own
-          strip under the header so it wraps at 375px and never crowds the
-          dense desktop header row. */}
-      <div className="ed-title-card-strip">
-        <EpisodeTitleCard episode={episode} />
       </div>
 
       {/* Main Content Wrapper */}
@@ -929,6 +943,15 @@ const EpisodeDetail = () => {
         {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
         {tabKey === 'production.money' && (
           <EpisodeMoneyTab episode={episode} showId={episode?.show_id || episode?.showId} />
+        )}
+
+        {/* Overlays Tab — P15: every on-screen piece of the episode */}
+        {tabKey === 'production.overlays' && (
+          <EpisodeOverlaysTab
+            episode={episode}
+            showId={episode?.show_id || episode?.showId}
+            onChanged={bumpOverlays}
+          />
         )}
 
         {/* Checklist Tab */}

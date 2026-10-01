@@ -2460,6 +2460,51 @@ now ruled:
 3. The background is portrait, because beat 9 shows on Lala's Phone.
 4. With no source event, it uses the invitation's default look.
 
+**P15** (Evoni, 2026-09-30). Recorded verbatim:
+
+> Production gains an Overlays tab holding every on-screen piece of the episode: the title overlay and full-screen framed card, the invitation, and the task-list overlay, each with its preview, status (approved, outdated, not made), placed beat, and actions with costs shown; the show-wide overlays the episode uses are listed read-only with a link to the Phone Hub. The banner shows a small title status chip that opens the tab instead of the card image.
+
+What was built (`episodeOverlaysService`, `GET /api/v1/episodes/:id/overlays`;
+the episode page's Production → Overlays sub-tab, `EpisodeOverlaysTab`; the
+banner's `EpisodeTitleChip`):
+
+- **One read for the tab.** The route returns four pieces: the title
+  overlay, the full-screen framed card, the invitation and the task-list
+  overlay. It composes the states their own services already return
+  (`getTitleCardState`, `loadEpisodeInvitationOverlay`,
+  `getTaskListOverlayState`). Each piece carries its preview, status,
+  placed beat and the cost of its paid action. The route only reads;
+  every action stays on the piece's own route.
+- **Status.** A piece is *not made* with no current piece and *outdated*
+  when it was made for content that has since changed (the title, the
+  task list). Otherwise it is *approved*. INFERRED: the invitation has no
+  saved outdated state (the terms-reopen relock offer is transient), so it
+  is approved or not made.
+- **Placed beat.** This is read from the piece's live
+  `timeline_placements` row, where `episodeBeatPlacement` writes the beat
+  number and name. The task list falls back to its asset's beat metadata.
+  The tab shows "Placed on Beat N: Name", or "Not placed" with the beat
+  the piece goes on. INFERRED: no rule places the title overlay or the
+  framed card on a beat, so both read "Not placed" until one is ruled.
+- **Actions with costs.**
+  - The title pieces use the title panel (`EpisodeTitleCard`): approve,
+    lettering styles and band at no cost, the flourish and the framed card
+    with their estimates.
+  - The task list uses `EpisodeTaskListOverlay`: approve, and design with
+    its estimate.
+  - The invitation is made in its Event Package. The tab links there and
+    shows the generate or regenerate estimate, priced from the
+    invitation's image options.
+- **Show-wide overlays.** The overlays the episode uses come from the
+  Lala's Phone read (`GET /api/v1/ui-overlays/:showId?episode_id=`), keeping
+  only those that are made and are not the episode's own. They are listed
+  read-only, with "Edit in the Phone Hub" linking to the show's Phone Hub.
+- **Banner chip.** The title card strip under the banner is replaced by a
+  chip, "Title · Approved / Outdated / Not made", which opens Production →
+  Overlays (`?tab=overlays`). INFERRED: it shows the title overlay's
+  status, or the framed card's when only the card was made. It sits on its
+  own line, so it shows at 375px.
+
 **(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
 only: no code is changed by this entry. The basis is
 `docs/EVENT_TERMS_MONEY_READ.md` (Task #2223, merged as `eeb710af` in
