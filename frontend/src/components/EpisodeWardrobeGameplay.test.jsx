@@ -680,3 +680,88 @@ describe('EpisodeWardrobeGameplay — several accessories and jewellery (W2)', (
     expect(within(slotCard('jewelry')).getByText('Linked Earrings')).toBeTruthy();
   });
 });
+
+// ─── W1 (Evoni, 2026-10-01): "Wardrobe pieces can be linked as a matching
+// set; choosing the set equips every piece in its own slot at once, and the
+// set shows as one look. Pieces stay individually choosable." ───
+describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
+  const own = { ...base, is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined };
+  const SET = { outfit_set_id: 'set-floral', outfit_set_name: 'Floral Corset Set' };
+  const CLOSET = [
+    { ...own, id: 'f-top', name: 'Floral Corset', clothing_category: 'top', ...SET },
+    { ...own, id: 'f-skirt', name: 'Floral Skirt', clothing_category: 'bottom', ...SET },
+    { ...own, id: 'f-ear', name: 'Floral Earrings', clothing_category: 'earrings', ...SET },
+    { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET },
+    { ...own, id: 'x-dress', name: 'Black Gown', clothing_category: 'dress' },
+    { ...own, id: 'x-shoes', name: 'Gold Heels', clothing_category: 'shoes' },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?show_id=')
+      ? Promise.resolve({ data: { success: true, data: CLOSET, pagination: { page: 1, limit: 200, total: CLOSET.length } } })
+      : poolGet(url)));
+  });
+
+  const openSets = async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Black Gown');
+    fireEvent.click(screen.getByRole('button', { name: 'Sets' }));
+    return screen.findByTestId('matching-set-set-floral');
+  };
+  const slotCard = (key) => screen.getByTestId(`slot-${key}`);
+
+  test('the Sets group shows the set as one card with its pieces', async () => {
+    const card = await openSets();
+    expect(within(card).getByText('Floral Corset Set')).toBeTruthy();
+    expect(within(card).getByText('4 pieces')).toBeTruthy();
+    expect(screen.getByText('1 set · Wear a set to equip every piece')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sets' }).textContent).toContain('1');
+  });
+
+  test('choosing the set equips every piece in its own slot at once, and shows the look', async () => {
+    const card = await openSets();
+    fireEvent.click(within(card).getByRole('button', { name: 'Wear the set' }));
+    await waitFor(() => expect(within(slotCard('top')).getByText('Floral Corset')).toBeTruthy());
+    expect(within(slotCard('bottom')).getByText('Floral Skirt')).toBeTruthy();
+    expect(within(slotCard('jewelry')).getByText('Floral Earrings')).toBeTruthy();
+    expect(within(slotCard('jewelry')).getByText('Floral Choker')).toBeTruthy();
+    expect(screen.getByTestId('outfit-look').textContent).toBe('Look: Floral Corset Set');
+    expect(within(card).getByText('✓ Wearing')).toBeTruthy();
+  });
+
+  test('a set replaces a dress with its separates; pieces stay choosable one by one', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    fireEvent.click(await screen.findByText('Black Gown'));
+    await waitFor(() => expect(within(slotCard('body')).getByText('Black Gown')).toBeTruthy());
+    // One piece of the set on its own, from All.
+    fireEvent.click(screen.getByText('Floral Earrings'));
+    await waitFor(() => expect(within(slotCard('jewelry')).getByText('Floral Earrings')).toBeTruthy());
+    expect(screen.queryByTestId('outfit-look')).toBeNull();
+    expect(screen.getByTestId('closet-set-f-ear').textContent).toBe('🔗 Floral Corset Set');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sets' }));
+    fireEvent.click(within(await screen.findByTestId('matching-set-set-floral')).getByRole('button', { name: 'Wear the set' }));
+    await waitFor(() => expect(within(slotCard('top')).getByText('Floral Corset')).toBeTruthy());
+    expect(screen.queryByTestId('slot-body')).toBeNull(); // separates replace the dress
+    expect(within(slotCard('jewelry')).getAllByText('Floral Earrings')).toHaveLength(1);
+  });
+
+  test('a locked piece is left out and said so', async () => {
+    CLOSET[3] = { ...CLOSET[3], is_owned: false, lock_type: 'coin', coin_cost: 9999, is_visible: true };
+    try {
+      const card = await openSets();
+      fireEvent.click(within(card).getByRole('button', { name: 'Wear the set' }));
+      await waitFor(() => expect(within(slotCard('top')).getByText('Floral Corset')).toBeTruthy());
+      expect(within(slotCard('jewelry')).queryByText('Floral Choker')).toBeNull();
+      expect(await screen.findByText(/1 piece left out \(locked\): Floral Choker/)).toBeTruthy();
+    } finally {
+      CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
+    }
+  });
+});

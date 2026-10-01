@@ -96,6 +96,148 @@ router.get('/staging', requireAuth, asyncHandler(wardrobeController.getStagingIt
 // fall outside the 5-slot taxonomy. Call with ?show_id=... to scope.
 // Used by the Wardrobe tab to render the "Unassigned (N)" warning card.
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// Matching sets (W1, Evoni 2026-10-01; EVENT_EPISODE_FLOW.md §8(ee)):
+// "Wardrobe pieces can be linked as a matching set; choosing the set equips
+// every piece in its own slot at once, and the set shows as one look.
+// Pieces stay individually choosable."
+// A matching set is the pieces sharing wardrobe.outfit_set_id, named by
+// outfit_set_name (columns since migration 20260217000001). A piece is in at
+// most one set: linking it into another moves it. The closet list returns
+// both columns, so the styling game groups sets from the pieces it reads.
+// ═══════════════════════════════════════════
+
+const MATCHING_SET_NAME_MAX = 255;
+
+/** { value: { name, ids } } or { error } for a matching-set body. */
+function readMatchingSetBody(body, { requireIds = true } = {}) {
+  const b = body && typeof body === 'object' ? body : {};
+  const out = {};
+  if (b.name !== undefined || requireIds) {
+    const name = typeof b.name === 'string' ? b.name.trim() : '';
+    if (!name) return { error: 'name is required' };
+    if (name.length > MATCHING_SET_NAME_MAX) return { error: `name must be at most ${MATCHING_SET_NAME_MAX} characters` };
+    out.name = name;
+  }
+  if (b.wardrobe_ids !== undefined || requireIds) {
+    if (!Array.isArray(b.wardrobe_ids)) return { error: 'wardrobe_ids must be an array of wardrobe ids' };
+    const ids = [...new Set(b.wardrobe_ids.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()))];
+    if (ids.length < 2) return { error: 'a matching set links at least two pieces' };
+    if (ids.length > 50) return { error: 'a matching set links at most 50 pieces' };
+    out.ids = ids;
+  }
+  return { value: out };
+}
+
+/** The live pieces among ids for the show (or show-less); missing ids listed. */
+async function findSetPieces(models, ids, showId, transaction) {
+  const { Op } = models.Sequelize;
+  const where = { id: { [Op.in]: ids }, deleted_at: null };
+  if (showId) where.show_id = { [Op.or]: [showId, null] };
+  const rows = await models.Wardrobe.findAll({ where, attributes: ['id', 'name', 'clothing_category'], transaction });
+  const found = new Set(rows.map((r) => String(r.id)));
+  return { rows, missing: ids.filter((id) => !found.has(id)) };
+}
+
+async function matchingSetPieces(models, setId, transaction) {
+  return models.Wardrobe.findAll({
+    where: { outfit_set_id: setId, deleted_at: null },
+    attributes: ['id', 'name', 'clothing_category', 'outfit_set_id', 'outfit_set_name'],
+    order: [['name', 'ASC'], ['id', 'ASC']],
+    transaction,
+  });
+}
+
+// POST /api/v1/wardrobe/matching-sets  { show_id?, name, wardrobe_ids }
+router.post('/matching-sets', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const read = readMatchingSetBody(req.body);
+    if (read.error) return res.status(400).json({ success: false, error: read.error });
+    const setId = uuidv4();
+    const data = await models.sequelize.transaction(async (transaction) => {
+      const { missing } = await findSetPieces(models, read.value.ids, req.body.show_id || null, transaction);
+      if (missing.length) {
+        const err = new Error(`Not in this show's wardrobe: ${missing.join(', ')}`);
+        err.status = 400;
+        throw err;
+      }
+      await models.Wardrobe.update(
+        { outfit_set_id: setId, outfit_set_name: read.value.name },
+        { where: { id: read.value.ids, deleted_at: null }, transaction }
+      );
+      return { id: setId, name: read.value.name, pieces: await matchingSetPieces(models, setId, transaction) };
+    });
+    return res.status(201).json({ success: true, data });
+  } catch (err) {
+    console.error('[matching-sets] create failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/wardrobe/matching-sets/:setId  { name?, wardrobe_ids? }
+// wardrobe_ids replaces the members: pieces left out are unlinked.
+router.put('/matching-sets/:setId', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const read = readMatchingSetBody(req.body, { requireIds: false });
+    if (read.error) return res.status(400).json({ success: false, error: read.error });
+    const { setId } = req.params;
+    const data = await models.sequelize.transaction(async (transaction) => {
+      const current = await matchingSetPieces(models, setId, transaction);
+      if (!current.length) {
+        const err = new Error('Matching set not found');
+        err.status = 404;
+        throw err;
+      }
+      const name = read.value.name || current[0].outfit_set_name;
+      if (read.value.ids) {
+        const { missing } = await findSetPieces(models, read.value.ids, req.body.show_id || null, transaction);
+        if (missing.length) {
+          const err = new Error(`Not in this show's wardrobe: ${missing.join(', ')}`);
+          err.status = 400;
+          throw err;
+        }
+        const keep = new Set(read.value.ids);
+        const drop = current.map((p) => String(p.id)).filter((id) => !keep.has(id));
+        if (drop.length) {
+          await models.Wardrobe.update({ outfit_set_id: null, outfit_set_name: null }, { where: { id: drop }, transaction });
+        }
+        await models.Wardrobe.update(
+          { outfit_set_id: setId, outfit_set_name: name },
+          { where: { id: read.value.ids, deleted_at: null }, transaction }
+        );
+      } else {
+        await models.Wardrobe.update({ outfit_set_name: name }, { where: { outfit_set_id: setId, deleted_at: null }, transaction });
+      }
+      return { id: setId, name, pieces: await matchingSetPieces(models, setId, transaction) };
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[matching-sets] update failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/v1/wardrobe/matching-sets/:setId — unlinks every piece; the pieces stay.
+router.delete('/matching-sets/:setId', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const [unlinked] = await models.Wardrobe.update(
+      { outfit_set_id: null, outfit_set_name: null },
+      { where: { outfit_set_id: req.params.setId, deleted_at: null } }
+    );
+    if (!unlinked) return res.status(404).json({ success: false, error: 'Matching set not found' });
+    return res.json({ success: true, data: { id: req.params.setId, unlinked } });
+  } catch (err) {
+    console.error('[matching-sets] delete failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/categories-audit', requireAuth, async (req, res) => {
   try {
     const { show_id } = req.query;
