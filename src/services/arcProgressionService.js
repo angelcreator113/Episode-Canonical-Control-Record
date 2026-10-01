@@ -128,7 +128,11 @@ async function seedArc(showId, models) {
     } }
   );
 
-  return { exists: false, arc_id: arcId, phases: phases.length };
+  // The season's 24 empty slots (Season Arc, §8(ff) A2).
+  const { ensureSeasonSlots } = require('./seasonSlotService');
+  const slots = await ensureSeasonSlots(sequelize, { id: arcId, show_id: showId, season_number: 1, phases });
+
+  return { exists: false, arc_id: arcId, phases: phases.length, slots };
 }
 
 // ── CHECK PHASE TRANSITION ──────────────────────────────────────────────────

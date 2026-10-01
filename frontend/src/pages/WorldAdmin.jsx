@@ -7189,15 +7189,93 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
+// Season Arc roadmap (§8(ff) A2): the season's 24 slots in three phases,
+// each slot showing its state. Read-only; numbered "S1 · E7" (Q3).
+const SLOT_STATE_CONFIG = {
+  done:          { label: 'Done',            color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
+  in_production: { label: 'In production',   color: '#B8962E', bg: '#faf5ea', border: 'rgba(184,150,46,0.35)' },
+  event_ready:   { label: 'Event ready',     color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
+  needs_event:   { label: 'Needs an event',  color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
+};
+
+function SeasonRoadmap({ roadmap, S }) {
+  if (!roadmap) return null;
+  const { phases = [], counts = {}, unslotted_episodes: unslotted = [] } = roadmap;
+
+  return (
+    <div style={S.card} data-testid="season-roadmap">
+      <h3 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Roadmap · Season {roadmap.season_number}</h3>
+      <p style={{ ...S.muted, margin: '0 0 12px', fontSize: 12 }}>
+        {roadmap.slot_count} episode slots · {Object.keys(SLOT_STATE_CONFIG).map((key) => `${counts[key] || 0} ${SLOT_STATE_CONFIG[key].label.toLowerCase()}`).join(' · ')}
+      </p>
+
+      {phases.map((phase) => (
+        <div key={phase.phase} style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 8 }}>
+            Phase {phase.phase} · {phase.title}
+            <span style={{ fontWeight: 400, color: '#94a3b8' }}> · E{phase.episode_start}–E{phase.episode_end}</span>
+          </div>
+          {/* auto-fit, not auto-fill: responsive.css §12 forces auto-fill grids to one
+              column under 400px, but two 130px slots fit a phone without overflow. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+            {phase.slots.map((slot) => {
+              const cfg = SLOT_STATE_CONFIG[slot.state] || SLOT_STATE_CONFIG.needs_event;
+              const what = slot.episode?.title || slot.event?.name || null;
+              return (
+                <div
+                  key={slot.id}
+                  data-testid={`season-slot-${slot.slot_number}`}
+                  style={{ border: `1px solid ${cfg.border}`, background: cfg.bg, borderRadius: 10, padding: '8px 10px', minWidth: 0 }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>{slot.label}</span>
+                    {slot.locked && <span title="Started: locked to its episode" style={{ fontSize: 10, color: '#94a3b8' }}>Locked</span>}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: cfg.color, marginTop: 4 }}>{cfg.label}</div>
+                  {what && (
+                    <div style={{ fontSize: 11, color: '#334155', marginTop: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }} title={what}>
+                      {what}
+                    </div>
+                  )}
+                  {slot.intention?.story_purpose && (
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{slot.intention.story_purpose}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {unslotted.length > 0 && (
+        <div data-testid="season-unslotted" style={{ marginTop: 4, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>
+            Not in a slot ({unslotted.length})
+          </div>
+          <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 6px' }}>
+            These episodes are not placed on the roadmap yet.
+          </p>
+          {unslotted.map((ep) => (
+            <div key={ep.id} style={{ fontSize: 12, color: '#334155', padding: '2px 0' }}>
+              {ep.title || 'Untitled episode'}
+              <span style={{ color: '#94a3b8' }}> · {ep.evaluation_status === 'accepted' ? 'done' : (ep.status || 'draft')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
-  const [extending, setExtending] = useState(false);
   const [warning, setWarning] = useState(null);
   const [goals, setGoals] = useState([]);
   const [rhythm, setRhythm] = useState(null);
+  const [roadmap, setRoadmap] = useState(null);
 
   const loadArc = useCallback(async () => {
     setLoading(true);
@@ -7215,6 +7293,15 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       const r = await api.get(`/api/v1/season-rhythm/season-health/${showId}`);
       setRhythm(r.data);
     } catch { /* skip */ }
+
+    // The season's 24 slots (Season Arc §8(ff) A2)
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
+      setRoadmap(r.data.roadmap || null);
+    } catch (err) {
+      console.error('Season roadmap load failed:', err);
+      setRoadmap(null);
+    }
 
     setLoading(false);
   }, [showId]);
@@ -7262,18 +7349,6 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       alert(err.response?.data?.error || err.message);
     }
     setAdvancing(false);
-  };
-
-  const handleExtend = async () => {
-    setExtending(true);
-    try {
-      await api.post(`/api/v1/world/${showId}/arc/extend`, { extend_by: 2, reason: 'Showrunner extension' });
-      await loadArc();
-      if (setToast) setToast('Phase extended by 2 episodes');
-    } catch (err) {
-      alert(err.response?.data?.error || err.message);
-    }
-    setExtending(false);
   };
 
   if (loading) return <div style={S.center}>Loading season data...</div>;
@@ -7367,6 +7442,9 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
         </div>
       </div>
 
+      {/* Roadmap — the season's 24 slots */}
+      <SeasonRoadmap roadmap={roadmap} S={S} />
+
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>
         {phases.map(phase => {
@@ -7452,9 +7530,6 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={handleAdvance} disabled={advancing} style={S.primaryBtn}>
             {advancing ? 'Advancing...' : `Advance to Phase ${arc.current_phase + 1}`}
-          </button>
-          <button onClick={handleExtend} disabled={extending} style={S.secBtn}>
-            {extending ? 'Extending...' : 'Extend Current Phase (+2 episodes)'}
           </button>
         </div>
         <p style={{ ...S.muted, marginTop: 8, fontSize: 11 }}>

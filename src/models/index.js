@@ -153,6 +153,7 @@ let DealRatePremium; // Deal rate premiums (Task #2319)
 let EventCost; // An event's itemised costs (Task #2319)
 let EpisodeSpendingLine; // An episode's event spending (cost split ruling, 2026-09-30)
 let ShowArc; // Narrative arc with phases, debt, progression
+let SeasonSlot; // A season's 24 episode slots (Season Arc, §8(ff))
 let Opportunity; // Career opportunity pipeline
 let CareerGoal; // Multi-goal career tension system
 let CharacterState; // F-Stats-1 keystone: stats consolidation (Phase A G2)
@@ -420,6 +421,7 @@ try {
   EventCost = require('./EventCost')(sequelize);
   EpisodeSpendingLine = require('./EpisodeSpendingLine')(sequelize);
   ShowArc = require('./ShowArc')(sequelize);
+  SeasonSlot = require('./SeasonSlot')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
   CareerGoal = require('./CareerGoal')(sequelize);
   CharacterState = require('./CharacterState')(sequelize);
@@ -582,6 +584,7 @@ const requiredModels = {
   EventCost,
   EpisodeSpendingLine,
   ShowArc,
+  SeasonSlot,
   Opportunity,
   CareerGoal,
   CharacterState,
@@ -852,6 +855,9 @@ if (EventCost && EventCost.associate) {
 }
 if (ShowArc && ShowArc.associate) {
   ShowArc.associate(requiredModels);
+}
+if (SeasonSlot && SeasonSlot.associate) {
+  SeasonSlot.associate(requiredModels);
 }
 if (Opportunity && Opportunity.associate) {
   Opportunity.associate(requiredModels);
@@ -2093,6 +2099,7 @@ module.exports.DealRatePremium = DealRatePremium;
 module.exports.EventCost = EventCost;
 module.exports.EpisodeSpendingLine = EpisodeSpendingLine;
 module.exports.ShowArc = ShowArc;
+module.exports.SeasonSlot = SeasonSlot;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;
 module.exports.CharacterState = CharacterState;

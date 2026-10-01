@@ -10,7 +10,11 @@
  * POST   /world/:showId/arc/advance/confirm — Force advance after warning acknowledged
  * GET    /world/:showId/arc/context      — Get arc context for AI prompt injection
  * PUT    /world/:showId/arc/phase/:phase — Update phase settings (override feed behavior, etc.)
- * POST   /world/:showId/arc/extend       — Extend current phase (delay transition)
+ * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2)
+ *
+ * Extend (lengthen the current phase, pushing the season past 24) is removed:
+ * "Remove Extend; phase boundaries can shift within the 24, only across slots
+ * that haven't started." (Evoni, 2026-10-01, §8(ff) Q2)
  */
 
 const express = require('express');
@@ -165,61 +169,15 @@ router.put('/world/:showId/arc/phase/:phase', requireAuth, async (req, res) => {
   }
 });
 
-// POST /world/:showId/arc/extend — extend current phase by N episodes
-router.post('/world/:showId/arc/extend', requireAuth, async (req, res) => {
+// GET /world/:showId/season/roadmap — the Season Arc roadmap (§8(ff) A2), read-only
+router.get('/world/:showId/season/roadmap', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { showId } = req.params;
-    const { extend_by = 2, reason } = req.body;
-
-    const [arcRows] = await models.sequelize.query(
-      `SELECT id, phases, current_phase, progression_log FROM show_arcs
-       WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
-      { replacements: { showId } }
-    );
-    if (!arcRows?.length) return res.status(404).json({ error: 'No active arc' });
-
-    const arc = arcRows[0];
-    const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : [...arc.phases];
-    const currentIdx = phases.findIndex(p => p.phase === arc.current_phase);
-    const currentPhase = phases[currentIdx];
-
-    const oldEnd = currentPhase.episode_end;
-    currentPhase.episode_end += extend_by;
-
-    // Shift subsequent phases
-    for (let i = currentIdx + 1; i < phases.length; i++) {
-      phases[i].episode_start += extend_by;
-      phases[i].episode_end += extend_by;
-    }
-
-    // Update arc episode_end
-    const newArcEnd = phases[phases.length - 1].episode_end;
-
-    const log = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : [...(arc.progression_log || [])];
-    log.push({
-      from_phase: currentPhase.phase, to_phase: currentPhase.phase,
-      triggered_by: 'manual',
-      trigger_reason: `Phase extended by ${extend_by} episodes: ${reason || 'showrunner decision'}`,
-      timestamp: new Date().toISOString(),
-    });
-
-    await models.sequelize.query(
-      `UPDATE show_arcs SET phases = :phases, episode_end = :arcEnd,
-       progression_log = :log, updated_at = NOW() WHERE id = :id`,
-      { replacements: {
-        phases: JSON.stringify(phases), arcEnd: newArcEnd,
-        log: JSON.stringify(log), id: arc.id,
-      } }
-    );
-
-    return res.json({
-      success: true,
-      message: `Phase "${currentPhase.title}" extended from episode ${oldEnd} to ${currentPhase.episode_end}`,
-      phase: currentPhase,
-      arc_episode_end: newArcEnd,
-    });
+    const { getRoadmap } = require('../services/seasonSlotService');
+    const roadmap = await getRoadmap(models.sequelize, req.params.showId);
+    return res.json({ success: true, roadmap });
   } catch (err) {
+    console.error('[ArcRoutes] season roadmap error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

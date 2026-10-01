@@ -28,6 +28,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const ids = { show: uuid(), location: uuid(), set: uuid(), otherSet: uuid() };
 
   beforeAll(async () => {
+    // The SceneSet model's columns that only a dead migration tree adds, so
+    // the test database lacks them unless an earlier file added them (as
+    // approvedBase.integration.test.js does); this file must not rely on
+    // running after it.
+    await sequelize.query(`ALTER TABLE scene_sets
+      ADD COLUMN IF NOT EXISTS style_reference_url text,
+      ADD COLUMN IF NOT EXISTS negative_prompt text,
+      ADD COLUMN IF NOT EXISTS variation_count integer DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS cover_angle_id uuid`);
     token = TokenService.generateTokenPair({
       id: 'test-user-event-scene-s7', email: 'user@event-scene-s7.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;

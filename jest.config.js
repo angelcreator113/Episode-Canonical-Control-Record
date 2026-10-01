@@ -77,5 +77,12 @@ module.exports = {
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   detectOpenHandles: false,
+  // One worker, so test files still run one at a time against the shared
+  // test database. The worker is restarted once it holds more than this
+  // after a file: each test file that loads src/app.js leaves ~25 MB that
+  // is never collected, and the single in-band process (npm test used
+  // --runInBand) reached the 5 GB heap limit in CI (#2437, run 36893913676).
+  // Setting a limit makes Jest use a real worker even at maxWorkers 1.
   maxWorkers: 1,
+  workerIdleMemoryLimit: '1536MB',
 };
