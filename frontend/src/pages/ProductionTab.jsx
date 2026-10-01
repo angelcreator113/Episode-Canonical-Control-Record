@@ -220,7 +220,7 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
     { icon: '💝', label: 'Events Library',    route: `/shows/${showId}/world?tab=events&from=universe` },
     { icon: '👑', label: 'Characters Admin',  route: `/shows/${showId}/world?tab=characters&from=universe` },
     { icon: '⚙️', label: 'Show Settings',    route: `/shows/${showId}/settings` },
-    { icon: '👗', label: 'Wardrobe',          route: `/shows/${showId}/world?tab=wardrobe&from=universe` },
+    { icon: '👗', label: 'Wardrobe',          route: `/shows/${showId}/world?tab=wardrobe-items&from=universe` },
   ] : [];
 
   /* ── No shows fallback ──────────────────────────────────────── */

@@ -54,7 +54,7 @@ function StudioTab({ show, episodes = [] }) {
   // Getting started steps
   const gettingStarted = [
     { icon: '💌', label: 'Create events in Producer Mode', done: (stats?.events || 0) > 0, route: `/shows/${showId}/world?tab=events`, detail: stats?.events ? `${stats.events} events` : 'Start here' },
-    { icon: '👗', label: 'Upload wardrobe items', done: (stats?.wardrobe || 0) >= 3, route: `/shows/${showId}/world?tab=wardrobe`, detail: stats?.wardrobe ? `${stats.wardrobe} items` : 'Add items' },
+    { icon: '👗', label: 'Upload wardrobe items', done: (stats?.wardrobe || 0) >= 3, route: `/shows/${showId}/world?tab=wardrobe-items`, detail: stats?.wardrobe ? `${stats.wardrobe} items` : 'Add items' },
     { icon: '🎬', label: 'Generate an episode from an event', done: episodes.length > 0, route: `/shows/${showId}/world?tab=events`, detail: episodes.length ? `${episodes.length} episodes` : 'Inject event → generate' },
     { icon: '🚀', label: 'Set up distribution platforms', done: !!show.distribution_defaults, route: `/shows/${showId}?tab=distribution`, detail: show.distribution_defaults ? 'Configured' : 'YouTube, TikTok, IG, FB' },
     { icon: '👑', label: 'Complete your first episode', done: (stats?.completed || 0) > 0, route: `/shows/${showId}/world?tab=events`, detail: stats?.completed ? `${stats.completed} completed` : 'Evaluate + finalize' },
