@@ -621,6 +621,16 @@ Return ONLY JSON.` }],
     return { episode, brief };
   });
 
+  // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
+  // pencilled into, else the earliest open slot, and the slot locks. Logged,
+  // never fatal: an episode left in no slot is listed on the roadmap to place.
+  try {
+    const { assignOnStart } = require('./seasonSlotService');
+    await assignOnStart(models.sequelize, { showId, eventId, episodeId: episode.id, replacingEpisodeId });
+  } catch (slotErr) {
+    console.error('[EpisodeGenerator] Season slot assignment failed (non-blocking):', slotErr.message);
+  }
+
   // Stamp the episode on the event's deliverables (Task #1814). Logged,
   // never fatal: the snapshot above already holds them.
   if (eventDeliverables.length > 0) {

@@ -1,7 +1,7 @@
 // ============================================================================
 // UNIT TESTS — arcRoutes.js (Step 3 CP7 — PROMOTE, no AI)
 // ============================================================================
-// 7 handlers all Tier 1. Lazy-noop fallback at L19-25 removed.
+// 9 handlers all Tier 1. Lazy-noop fallback at L19-25 removed.
 
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +13,7 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
     expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
-  describe('All 7 handlers carry requireAuth', () => {
+  describe('All 9 handlers carry requireAuth', () => {
     [
       ['get', '/world/:showId/arc'],
       ['post', '/world/:showId/arc/seed'],
@@ -22,6 +22,8 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
       ['get', '/world/:showId/arc/context'],
       ['put', '/world/:showId/arc/phase/:phase'],
       ['get', '/world/:showId/season/roadmap'],
+      ['put', '/world/:showId/season/slots/:slotId/event'],
+      ['put', '/world/:showId/season/slots/:slotId/episode'],
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} → requireAuth`, () => {
         const re = new RegExp(`router\\.${verb}\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*async`);

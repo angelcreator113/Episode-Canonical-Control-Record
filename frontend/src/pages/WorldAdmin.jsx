@@ -7190,7 +7190,9 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
 // Season Arc roadmap (§8(ff) A2): the season's 24 slots in three phases,
-// each slot showing its state. Read-only; numbered "S1 · E7" (Q3).
+// each slot showing its state, numbered "S1 · E7" (Q3). A future slot can
+// have an event pencilled in, moved freely (Q5); an episode in no slot can
+// be placed in an open one (Q4). A started slot is locked (A7).
 const SLOT_STATE_CONFIG = {
   done:          { label: 'Done',            color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
   in_production: { label: 'In production',   color: '#B8962E', bg: '#faf5ea', border: 'rgba(184,150,46,0.35)' },
@@ -7198,9 +7200,36 @@ const SLOT_STATE_CONFIG = {
   needs_event:   { label: 'Needs an event',  color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
 };
 
-function SeasonRoadmap({ roadmap, S }) {
+const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#334155', minWidth: 0 };
+
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast }) {
+  const [busySlot, setBusySlot] = useState(null);
   if (!roadmap) return null;
-  const { phases = [], counts = {}, unslotted_episodes: unslotted = [] } = roadmap;
+  const { phases = [], counts = {}, unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
+  const openSlots = phases.flatMap((p) => p.slots).filter((sl) => !sl.locked);
+
+  const save = async (slotId, path, body, done) => {
+    setBusySlot(slotId);
+    try {
+      await api.put(`/api/v1/world/${showId}/season/slots/${slotId}/${path}`, body);
+      if (setToast) setToast(done);
+      if (onChanged) await onChanged();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setBusySlot(null);
+  };
+  const pencil = (slot, value) => {
+    if (value === '') return;
+    const eventId = value === '__clear__' ? null : value;
+    save(slot.id, 'event', { event_id: eventId }, eventId ? `Pencilled into ${slot.label}` : `${slot.label} cleared`);
+  };
+  const place = (episode, slotId) => {
+    if (!slotId) return;
+    const slot = openSlots.find((sl) => sl.id === slotId);
+    if (!window.confirm(`Place "${episode.title || 'this episode'}" in ${slot?.label}? The slot then locks to it.`)) return;
+    save(slotId, 'episode', { episode_id: episode.id }, `Placed in ${slot?.label}`);
+  };
 
   return (
     <div style={S.card} data-testid="season-roadmap">
@@ -7237,6 +7266,20 @@ function SeasonRoadmap({ roadmap, S }) {
                       {what}
                     </div>
                   )}
+                  {!slot.locked && (
+                    <select
+                      aria-label={`Pencil an event into ${slot.label}`}
+                      data-testid={`season-pencil-${slot.slot_number}`}
+                      value=""
+                      disabled={busySlot === slot.id}
+                      onChange={(e) => pencil(slot, e.target.value)}
+                      style={slotSelectStyle}
+                    >
+                      <option value="">{slot.event ? 'Change event…' : 'Pencil an event…'}</option>
+                      {available.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+                      {slot.event && <option value="__clear__">Clear this slot</option>}
+                    </select>
+                  )}
                   {slot.intention?.story_purpose && (
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{slot.intention.story_purpose}</div>
                   )}
@@ -7253,12 +7296,22 @@ function SeasonRoadmap({ roadmap, S }) {
             Not in a slot ({unslotted.length})
           </div>
           <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 6px' }}>
-            These episodes are not placed on the roadmap yet.
+            These episodes are not placed on the roadmap yet. Place one, or leave it unslotted.
           </p>
           {unslotted.map((ep) => (
-            <div key={ep.id} style={{ fontSize: 12, color: '#334155', padding: '2px 0' }}>
+            <div key={ep.id} style={{ fontSize: 12, color: '#334155', padding: '4px 0' }}>
               {ep.title || 'Untitled episode'}
               <span style={{ color: '#94a3b8' }}> · {ep.evaluation_status === 'accepted' ? 'done' : (ep.status || 'draft')}</span>
+              <select
+                aria-label={`Place ${ep.title || 'episode'} in a slot`}
+                data-testid={`season-place-${ep.id}`}
+                value=""
+                onChange={(e) => place(ep, e.target.value)}
+                style={{ ...slotSelectStyle, maxWidth: 220, display: 'block' }}
+              >
+                <option value="">Place in…</option>
+                {openSlots.map((sl) => <option key={sl.id} value={sl.id}>{sl.label}{sl.event ? ` (${sl.event.name})` : ''}</option>)}
+              </select>
             </div>
           ))}
         </div>
@@ -7277,6 +7330,18 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [rhythm, setRhythm] = useState(null);
   const [roadmap, setRoadmap] = useState(null);
 
+  // The season's 24 slots (Season Arc §8(ff) A2); reloaded alone after a
+  // pencil or placement so the tab does not blank.
+  const loadRoadmap = useCallback(async () => {
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
+      setRoadmap(r.data.roadmap || null);
+    } catch (err) {
+      console.error('Season roadmap load failed:', err);
+      setRoadmap(null);
+    }
+  }, [showId]);
+
   const loadArc = useCallback(async () => {
     setLoading(true);
     try {
@@ -7294,17 +7359,10 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       setRhythm(r.data);
     } catch { /* skip */ }
 
-    // The season's 24 slots (Season Arc §8(ff) A2)
-    try {
-      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
-      setRoadmap(r.data.roadmap || null);
-    } catch (err) {
-      console.error('Season roadmap load failed:', err);
-      setRoadmap(null);
-    }
+    await loadRoadmap();
 
     setLoading(false);
-  }, [showId]);
+  }, [showId, loadRoadmap]);
 
   useEffect(() => { loadArc(); }, [loadArc]);
 
@@ -7443,7 +7501,7 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       </div>
 
       {/* Roadmap — the season's 24 slots */}
-      <SeasonRoadmap roadmap={roadmap} S={S} />
+      <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} />
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>

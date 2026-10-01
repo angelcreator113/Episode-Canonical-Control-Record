@@ -5,7 +5,7 @@
  * (Q4); Extend is removed (Q2).
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -54,6 +54,7 @@ const ROADMAP = {
     { phase: 3, title: 'Legacy', episode_start: 17, episode_end: 24, slots: [17, 18, 19, 20, 21, 22, 23, 24].map(slot) },
   ],
   unslotted_episodes: [{ id: 'ep-old', title: 'Pilot Test', status: 'draft', evaluation_status: null }],
+  available_events: [{ id: 'ev-9', name: 'Gallery Night', status: 'draft' }],
 };
 
 function renderAt(tab) {
@@ -79,6 +80,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
       return { data: {} };
     });
     vi.mocked(api.post).mockResolvedValue({ data: {} });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
   });
 
   test('shows the 24 slots by phase, each with its S1 · E label and state', async () => {
@@ -118,5 +120,40 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     expect(screen.queryByText(/Extend/i)).toBeNull();
     const extends_ = vi.mocked(api.post).mock.calls.filter(([url]) => /\/arc\/extend$/.test(url));
     expect(extends_).toEqual([]);
+  });
+
+  test('a future slot can have an event pencilled in, moved or cleared (Q5); a started slot cannot', async () => {
+    renderAt('season');
+    await screen.findByTestId('season-roadmap');
+
+    expect(screen.queryByTestId('season-pencil-1')).toBeNull(); // E1 is locked to its episode
+
+    fireEvent.change(screen.getByTestId('season-pencil-4'), { target: { value: 'ev-9' } });
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/season/slots/slot-4/event', { event_id: 'ev-9' }));
+
+    const second = screen.getByTestId('season-pencil-2');
+    expect(within(second).getByText('Clear this slot')).toBeTruthy();
+    fireEvent.change(second, { target: { value: '__clear__' } });
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/season/slots/slot-2/event', { event_id: null }));
+
+    // The roadmap reloads after each change.
+    const reloads = vi.mocked(api.get).mock.calls.filter(([url]) => url === '/api/v1/world/show-1/season/roadmap');
+    expect(reloads.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('an episode in no slot can be placed in an open slot after a confirm (Q4)', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt('season');
+
+    const select = await screen.findByTestId('season-place-ep-old');
+    expect(within(select).queryByText('S1 · E1')).toBeNull(); // locked slots are not offered
+    fireEvent.change(select, { target: { value: 'slot-3' } });
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/api/v1/world/show-1/season/slots/slot-3/episode', { episode_id: 'ep-old' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('S1 · E3'));
+    confirm.mockRestore();
   });
 });
