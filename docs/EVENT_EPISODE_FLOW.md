@@ -3809,6 +3809,24 @@ all five in §8(ff)." So these are no longer INFERRED:
 5. **The old season-health route** (`GET
    /api/v1/season-rhythm/season-health/:showId`, the 1/4/2/1 grade) stays
    on the backend; the page no longer calls it.
+
+**(gg) Episode Money, Phase B (Evoni, 2026-10-01).** Recorded verbatim.
+Nothing is built yet. Phase B of §8(aa) M5; it builds on M1–M6 and the
+event spending ruling (§8(aa), §8(cc)). The design note, reading today's
+code against these rulings, with open questions, is
+`docs/EPISODE_MONEY_PHASE_B_NOTE.md`.
+
+> MB1. Every money line of an episode (deal payouts, deliverable fees, bonus, terms costs, event spending) shows one state: Planned (from the accepted terms or spending lines, its trigger not yet reached), Pending (its trigger reached but not yet posted, e.g. a deliverable submitted awaiting approval), or Posted (a ledger row exists, linked by its source).
+>
+> MB2. Each line shows its trigger ("at Complete", "on approval", "if SLAY"), who pays or covers it, and its amount. Planned and Pending never enter the ledger or the balance (M2).
+>
+> MB3. The Money tab shows the episode's projected net (posted + pending + planned) and Lala's projected balance after the episode, beside her actual balance. The header chip stays the actual balance.
+>
+> MB4. If the projected balance would go below zero, or event spending exceeds what Lala has, the Money tab and Start Episode/Complete warn early with the shortfall; existing refusals at Complete stay.
+>
+> MB5. The episode Overview gets a Money card (M1): actual net so far, projected net, and how many lines are still planned or pending.
+>
+> MB6. After Complete, a reconciliation view compares planned with posted per line and highlights differences (a bonus not earned, a spending line changed).
 ---
 
 ## 9. Owed before enforcement
