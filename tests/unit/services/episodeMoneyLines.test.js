@@ -2,7 +2,9 @@
  * Episode Money, Phase B (§8(gg) MB1–MB3 and Evoni's answers): the pure
  * line builder, episodeMoneyLines.
  */
-const { plannedLines, buildMoneyLines, moneyWarnings, STATES, WARNING_CODES } = require('../../../src/services/episodeMoneyLines');
+const {
+  plannedLines, buildMoneyLines, moneyWarnings, planSnapshot, reconcile, STATES, WARNING_CODES, RECON,
+} = require('../../../src/services/episodeMoneyLines');
 
 describe('episodeMoneyLines', () => {
   test('a legacy unpaid event: its entry cost is a line Lala pays at Complete', () => {
@@ -102,6 +104,54 @@ describe('episodeMoneyLines', () => {
         { ...cost('c', 500), covered: true, state: STATES.COVERED },
       ];
       expect(moneyWarnings({ lines, balance: 10, projection: { projected_balance: 10 } })).toEqual([]);
+    });
+  });
+
+  describe('planSnapshot and reconcile (MB6, Q7)', () => {
+    const line = (over) => ({
+      kind: 'income', category: 'appearance_fee', amount: 100, conditional: false, covered: false, state: STATES.PLANNED, ...over,
+    });
+
+    test('the snapshot keeps each line\'s plan fields and the balance', () => {
+      const snap = planSnapshot({ lines: [line({ key: 'a', label: 'Fee', signed: 100, posted: null })], balance: 500, takenAt: '2026-10-01T00:00:00.000Z' });
+      expect(snap).toEqual({
+        taken_at: '2026-10-01T00:00:00.000Z',
+        balance: 500,
+        lines: [{ key: 'a', kind: 'income', category: 'appearance_fee', label: 'Fee', amount: 100, conditional: false, covered: false, state: STATES.PLANNED }],
+      });
+    });
+
+    test('marks a bonus not earned, one earned, a fee outstanding, a line removed, a covered cost and an unplanned row', () => {
+      const plan = [
+        line({ key: 'bonus-slay', label: 'Bonus (SLAY)', category: 'deal_bonus', amount: 200, conditional: true, tier: 'slay' }),
+        line({ key: 'bonus-pass', label: 'Bonus (PASS)', category: 'deal_bonus', amount: 50, conditional: true, tier: 'pass' }),
+        line({ key: 'fee', label: 'Content fee', category: 'content_fee', amount: 120 }),
+        line({ key: 'gone', label: 'Valet', kind: 'expense', category: 'event_spending', amount: 20 }),
+        line({ key: 'ticket', label: 'Ticket', kind: 'expense', category: 'event_cost', amount: 0, covered: true, covered_amount: 40 }),
+      ];
+      const current = [
+        { ...plan[0], state: STATES.NOT_EARNED, posted: null },
+        { ...plan[1], state: STATES.POSTED, posted: { amount: 50, signed: 50 } },
+        { ...plan[2], state: STATES.PENDING, posted: null },
+        { ...plan[4], state: STATES.COVERED, posted: null },
+      ];
+      const unplanned = [{ id: 'r9', category: 'wardrobe_purchase', description: 'Purchase: Gown', signed: -90 }];
+
+      const { rows, totals, highlighted } = reconcile({ plan, lines: current, unplanned });
+      const status = Object.fromEntries(rows.map((r) => [r.label, r.status]));
+      expect(status).toEqual({
+        'Bonus (SLAY)': RECON.NOT_EARNED,
+        'Bonus (PASS)': RECON.EARNED,
+        'Content fee': RECON.OUTSTANDING,
+        Valet: RECON.REMOVED,
+        Ticket: RECON.COVERED,
+        'Purchase: Gown': RECON.UNPLANNED,
+      });
+      expect(rows.find((r) => r.label === 'Content fee').pending).toBe(true);
+      expect(rows.find((r) => r.label === 'Bonus (SLAY)')).toEqual(expect.objectContaining({ planned: 0, planned_conditional: 200, posted: null }));
+      // Conditional bonuses are never in the planned net (Q3); the earned one is posted.
+      expect(totals).toEqual({ planned_net: 120 - 20, posted_net: 50 - 90, difference: (50 - 90) - (120 - 20) });
+      expect(highlighted).toBe(4); // not earned, outstanding, removed, unplanned
     });
   });
 });

@@ -113,12 +113,12 @@ async function spendingView(sequelize, episodeId) {
  *   episode_id, show_id, balance, rows, net,
  *   event: null | { id, name }, expected,
  *   spending: { lines, total, editable },
- *   lines, unplanned, projection, warnings
+ *   lines, unplanned, projection, warnings, reconciliation
  * }>} null when the episode is missing, deleted, or of another show.
  */
 async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const [episode] = await sequelize.query(
-    'SELECT id, show_id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    'SELECT id, show_id, money_plan FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   if (!episode || String(episode.show_id) !== String(showId)) return null;
@@ -184,7 +184,52 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     projection,
     // MB4: early warnings, never blocking.
     warnings: moneyWarnings({ lines, projection, balance }),
+    // MB6: after Complete, the plan saved at Start Episode beside what posted.
+    reconciliation: spending.editable ? null : reconciliationFor(episode.money_plan, { lines, unplanned }),
   };
+}
+
+function parsePlan(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch (err) {
+    console.error('[EpisodeMoney] money_plan JSON parse failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * MB6 (Q7): compare the plan saved at Start Episode with what posted. An
+ * episode started before the plan was saved has none; it is compared with
+ * its lines as they stand, and `basis` says so.
+ */
+function reconciliationFor(moneyPlan, { lines, unplanned }) {
+  const { reconcile } = require('./episodeMoneyLines');
+  const saved = parsePlan(moneyPlan);
+  const plan = saved && Array.isArray(saved.lines) ? saved.lines : lines;
+  return {
+    basis: saved && Array.isArray(saved.lines) ? 'start_episode' : 'current',
+    planned_at: saved?.taken_at || null,
+    ...reconcile({ plan, lines, unplanned }),
+  };
+}
+
+/**
+ * MB6 (Q7): saves the episode's money lines as they stand at Start Episode
+ * on episodes.money_plan. Runs after Start Episode's transaction (its
+ * spending lines are drafted and its deliverables stamped by then); a
+ * failure is the caller's to log. Returns the plan, or null when the episode
+ * is not found.
+ */
+async function snapshotMoneyPlan(sequelize, { showId, episodeId }) {
+  const money = await getEpisodeMoney(sequelize, { showId, episodeId });
+  if (!money) return null;
+  const { planSnapshot } = require('./episodeMoneyLines');
+  const plan = planSnapshot({ lines: money.lines, balance: money.balance });
+  await sequelize.query(
+    'UPDATE episodes SET money_plan = CAST(:plan AS jsonb), updated_at = NOW() WHERE id = :episodeId',
+    { replacements: { plan: JSON.stringify(plan), episodeId } });
+  return plan;
 }
 
 /**
@@ -212,4 +257,4 @@ async function eventMoneyPreview(sequelize, { showId, event, episodeId = null, t
   return { balance, lines, projection, warnings: moneyWarnings({ lines, projection, balance }) };
 }
 
-module.exports = { getEpisodeMoney, eventMoneyPreview, findSourceEvent, expectedLines };
+module.exports = { getEpisodeMoney, eventMoneyPreview, snapshotMoneyPlan, findSourceEvent, expectedLines };

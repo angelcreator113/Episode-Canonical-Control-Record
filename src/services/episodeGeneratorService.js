@@ -643,6 +643,16 @@ Return ONLY JSON.` }],
     }
   }
 
+  // Episode Money Phase B, MB6 (§8(gg), Q7): save the money plan as it
+  // stands at Start Episode, for the reconciliation after Complete. Logged,
+  // never fatal: an episode with no plan is compared with its current lines.
+  try {
+    const { snapshotMoneyPlan } = require('./episodeMoneyService');
+    await snapshotMoneyPlan(models.sequelize, { showId, episodeId: episode.id });
+  } catch (planErr) {
+    console.error('[EpisodeGenerator] Money plan snapshot failed (non-blocking):', planErr.message);
+  }
+
   // ── 2b. Auto-place required UI overlays on the timeline ──
   // The event's required_ui_overlays array (default
   // ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'])

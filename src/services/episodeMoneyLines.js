@@ -234,6 +234,12 @@ function plannedLines({ event, costs = [], deliverables = [], spending = [], had
       trigger: TRIGGERS.COMPLETE,
       payer: LALA,
       source: { type: 'event_spending', id: line.id },
+      // MB6 (Q7): a spending line's change from its draft is shown in the
+      // reconciliation.
+      quantity: line.quantity,
+      unit_price: line.unit_price,
+      drafted: line.drafted_quantity == null || line.drafted_unit_price == null
+        ? null : { quantity: line.drafted_quantity, unit_price: line.drafted_unit_price },
     });
   }
 
@@ -383,4 +389,134 @@ function moneyWarnings({ lines = [], projection, balance = 0 }) {
   return warnings;
 }
 
-module.exports = { STATES, TRIGGERS, WARNING_CODES, plannedLines, buildMoneyLines, moneyWarnings };
+// ─── MB6: the plan at Start Episode, and the reconciliation after Complete ───
+
+const PLAN_FIELDS = ['key', 'kind', 'category', 'label', 'amount', 'trigger', 'payer', 'conditional',
+  'covered', 'covered_amount', 'tier', 'state', 'source', 'quantity', 'unit_price', 'drafted'];
+
+/** The plan saved on the episode at Start Episode (Q7): its lines as they stand, nothing posted yet. */
+function planSnapshot({ lines = [], balance = 0, takenAt = new Date() }) {
+  return {
+    taken_at: takenAt instanceof Date ? takenAt.toISOString() : takenAt,
+    balance,
+    lines: lines.map((l) => PLAN_FIELDS.reduce((o, f) => {
+      if (l[f] !== undefined) o[f] = l[f];
+      return o;
+    }, {})),
+  };
+}
+
+const RECON = Object.freeze({
+  AS_PLANNED: 'as_planned',
+  CHANGED: 'changed',
+  NOT_EARNED: 'not_earned',
+  EARNED: 'earned',
+  OUTSTANDING: 'outstanding',
+  ADDED: 'added',
+  REMOVED: 'removed',
+  COVERED: 'covered',
+  UNPLANNED: 'unplanned',
+});
+
+const signedOf = (kind, amount) => (kind === 'income' ? amount : -amount);
+
+/**
+ * MB6 (Q7, accepted): per line, the plan saved at Start Episode beside what
+ * posted, marking a bonus not earned, a line changed, added or removed, and
+ * a fee still outstanding; a spending line also shows its change from its
+ * draft. Pure.
+ *
+ * plan: the saved snapshot's lines (or, with no snapshot, the lines as they
+ * stand: `basis` says which). lines: the current lines from buildMoneyLines.
+ * unplanned: posted rows no line matches.
+ * Returns { rows, totals, highlighted }.
+ */
+function reconcile({ plan = [], lines = [], unplanned = [] }) {
+  const current = new Map(lines.map((l) => [l.key, l]));
+  const seen = new Set();
+  const rows = [];
+
+  for (const p of plan) {
+    seen.add(p.key);
+    const now = current.get(p.key) || null;
+    const planned = p.covered ? 0 : signedOf(p.kind, p.amount);
+    const posted = now?.posted ? now.posted.signed : null;
+    let status;
+    if (p.covered) status = RECON.COVERED;
+    else if (p.conditional) status = now?.state === STATES.POSTED ? RECON.EARNED : RECON.NOT_EARNED;
+    else if (posted != null) status = posted === planned ? RECON.AS_PLANNED : RECON.CHANGED;
+    else if (now && (now.state === STATES.PLANNED || now.state === STATES.PENDING)) status = RECON.OUTSTANDING;
+    else status = RECON.REMOVED;
+
+    const row = {
+      key: p.key,
+      label: now?.label || p.label,
+      category: p.category,
+      kind: p.kind,
+      conditional: Boolean(p.conditional),
+      planned: p.conditional ? 0 : planned,
+      planned_conditional: p.conditional ? signedOf(p.kind, p.amount) : null,
+      posted,
+      difference: posted == null || p.covered || p.conditional ? null : posted - planned,
+      status,
+    };
+    if (now && now.state === STATES.PENDING) row.pending = true;
+    // A spending line: its change from its draft (Q7).
+    const draft = p.drafted || now?.drafted || null;
+    const quantity = now?.quantity ?? p.quantity;
+    const unitPrice = now?.unit_price ?? p.unit_price;
+    if (p.category === 'event_spending' && draft && (draft.quantity !== quantity || draft.unit_price !== unitPrice)) {
+      row.draft_change = { from: draft, to: { quantity, unit_price: unitPrice } };
+    }
+    rows.push(row);
+  }
+
+  // Lines that were not in the plan: added after Start Episode.
+  for (const l of lines) {
+    if (seen.has(l.key) || l.covered) continue;
+    rows.push({
+      key: l.key,
+      label: l.label,
+      category: l.category,
+      kind: l.kind,
+      conditional: Boolean(l.conditional),
+      planned: 0,
+      planned_conditional: null,
+      posted: l.posted ? l.posted.signed : null,
+      difference: l.posted ? l.posted.signed : null,
+      status: l.conditional && l.state !== STATES.POSTED ? RECON.NOT_EARNED : RECON.ADDED,
+      ...(l.state === STATES.PENDING ? { pending: true } : {}),
+    });
+  }
+
+  // Posted rows no line matches (wardrobe, milestones): posted, not planned.
+  for (const r of unplanned) {
+    rows.push({
+      key: `row|${r.id}`,
+      label: r.description || String(r.category || '').replace(/_/g, ' '),
+      category: r.category,
+      kind: Number(r.signed) >= 0 ? 'income' : 'expense',
+      conditional: false,
+      planned: 0,
+      planned_conditional: null,
+      posted: Number(r.signed) || 0,
+      difference: Number(r.signed) || 0,
+      status: RECON.UNPLANNED,
+    });
+  }
+
+  const sum = (key) => rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
+  const plannedNet = sum('planned');
+  const postedNet = sum('posted');
+  const quiet = new Set([RECON.AS_PLANNED, RECON.COVERED, RECON.EARNED]);
+  return {
+    rows,
+    totals: { planned_net: plannedNet, posted_net: postedNet, difference: postedNet - plannedNet },
+    highlighted: rows.filter((r) => !quiet.has(r.status) || r.draft_change).length,
+  };
+}
+
+module.exports = {
+  STATES, TRIGGERS, WARNING_CODES, RECON,
+  plannedLines, buildMoneyLines, moneyWarnings, planSnapshot, reconcile,
+};

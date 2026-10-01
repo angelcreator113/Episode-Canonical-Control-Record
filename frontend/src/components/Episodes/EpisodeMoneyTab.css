@@ -431,3 +431,63 @@
   font-size: 11px;
   color: #8A6A20;
 }
+
+/* MB6 (§8(gg), Q7): the reconciliation after Complete. */
+.em-recon {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'label chip'
+    'figures figures'
+    'note note';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+}
+
+.em-recon:first-child {
+  border-top: none;
+}
+
+.em-recon .em-line-label { grid-area: label; }
+.em-recon .em-chip { grid-area: chip; }
+
+.em-recon-diff {
+  background: #FFF6DC;
+}
+
+.em-recon-figures {
+  grid-area: figures;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-recon-note {
+  grid-area: note;
+  font-size: 11px;
+  font-style: italic;
+  color: #8A5A00;
+}
+
+.em-recon-chip-changed,
+.em-recon-chip-not_earned,
+.em-recon-chip-removed,
+.em-recon-chip-added,
+.em-recon-chip-unplanned,
+.em-recon-chip-outstanding { color: #8A5A00; border-color: #E9C46A; background: #FFF6DC; }
+.em-recon-chip-as_planned,
+.em-recon-chip-earned { color: var(--em-positive); border-color: #A9D3B8; background: #EAF5EE; }
+
+.em-recon-totals {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-align: right;
+  color: var(--lala-ink-muted, #6B6557);
+}

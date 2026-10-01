@@ -111,6 +111,52 @@ describe('EpisodeMoneyTab', () => {
     expect(screen.queryByTestId('em-warnings')).toBeNull();
   });
 
+  test('after Complete, the reconciliation compares each line with the plan saved at Start Episode (MB6)', async () => {
+    const reconciliation = {
+      basis: 'start_episode',
+      planned_at: '2026-10-01T18:00:00.000Z',
+      highlighted: 3,
+      totals: { planned_net: 360, posted_net: 280, difference: -80 },
+      rows: [
+        { key: 'appearance_fee|ev-1', label: 'Appearance fee', planned: 450, posted: 450, difference: 0, status: 'as_planned' },
+        { key: 'deal_bonus|ev-1|slay', label: 'Bonus (SLAY)', planned: 0, planned_conditional: 200, posted: null, difference: null, status: 'not_earned', conditional: true },
+        { key: 'event_spending|s-1', label: 'Champagne × 3', planned: -30, posted: -45, difference: -15, status: 'changed',
+          draft_change: { from: { quantity: 2, unit_price: 15 }, to: { quantity: 3, unit_price: 15 } } },
+        { key: 'content_fee|d-1', label: 'Content fee: One reel', planned: 120, posted: null, difference: null, status: 'outstanding', pending: true },
+      ],
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation }) } });
+    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+
+    const section = await screen.findByTestId('em-reconciliation');
+    expect(section.textContent).toContain('Each line as planned at Start Episode');
+    expect(section.textContent).toContain('3 differences highlighted.');
+    const bonus = screen.getByTestId('em-recon-deal_bonus|ev-1|slay');
+    expect(bonus.textContent).toContain('Not earned');
+    expect(bonus.textContent).toContain('Planned +200 if earned');
+    expect(bonus.className).toContain('em-recon-diff');
+    const champagne = screen.getByTestId('em-recon-event_spending|s-1');
+    expect(champagne.textContent).toContain('Changed');
+    expect(champagne.textContent).toContain('Difference −15');
+    expect(champagne.textContent).toContain('Changed from its draft: 2 × 15 → 3 × 15');
+    expect(screen.getByTestId('em-recon-content_fee|d-1').textContent).toContain('Outstanding · pending');
+    expect(screen.getByTestId('em-recon-appearance_fee|ev-1').className).not.toContain('em-recon-diff');
+    expect(screen.getByTestId('em-recon-totals').textContent).toBe('Planned net +360 · posted net +280 · difference −80');
+  });
+
+  test('with no saved plan the reconciliation says it compares with the plan as it stands; before Complete there is none', async () => {
+    const reconciliation = { basis: 'current', planned_at: null, highlighted: 0, totals: { planned_net: 0, posted_net: 0, difference: 0 }, rows: [] };
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation }) } });
+    const { unmount } = render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    expect((await screen.findByTestId('em-reconciliation')).textContent).toContain('No plan was saved at Start Episode for this episode');
+    unmount();
+
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation: null }) } });
+    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    await screen.findByTestId('em-lines');
+    expect(screen.queryByTestId('em-reconciliation')).toBeNull();
+  });
+
   test('empty states in plain words', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { data: money({ event: null, lines: [], unplanned: [], projection: { ...money().projection, conditional: [] } }) },
