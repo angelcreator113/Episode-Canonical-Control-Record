@@ -11,6 +11,8 @@
  * GET    /world/:showId/arc/context      — Get arc context for AI prompt injection
  * PUT    /world/:showId/arc/phase/:phase — Update phase settings (override feed behavior, etc.)
  * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2)
+ * PUT    /world/:showId/season/slots/:slotId/event   — Pencil an event into a future slot, or clear it (Q5)
+ * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -179,6 +181,41 @@ router.get('/world/:showId/season/roadmap', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[ArcRoutes] season roadmap error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+function sendSlotError(res, err, label) {
+  if (err.status && err.code) return res.status(err.status).json({ error: err.message, code: err.code });
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err.message });
+}
+
+// PUT /world/:showId/season/slots/:slotId/event — pencil an event in (§8(ff) Q5)
+// Body: { event_id } (null clears). Only future slots; the event moves freely.
+router.put('/world/:showId/season/slots/:slotId/event', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { pencilEvent } = require('../services/seasonSlotService');
+    const eventId = req.body?.event_id || null;
+    const result = await pencilEvent(models.sequelize, req.params.showId, req.params.slotId, eventId);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'pencil event');
+  }
+});
+
+// PUT /world/:showId/season/slots/:slotId/episode — place an existing episode (§8(ff) Q4)
+// Body: { episode_id }. Only an open slot; the slot then locks to the episode (A7).
+router.put('/world/:showId/season/slots/:slotId/episode', requireAuth, async (req, res) => {
+  try {
+    const episodeId = req.body?.episode_id;
+    if (!episodeId) return res.status(400).json({ error: 'episode_id is required' });
+    const models = require('../models');
+    const { placeEpisode } = require('../services/seasonSlotService');
+    const result = await placeEpisode(models.sequelize, req.params.showId, req.params.slotId, episodeId);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'place episode');
   }
 });
 
