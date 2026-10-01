@@ -3548,15 +3548,18 @@ what was left:
     the image, and is priced from Kontext's rate.
   - Venue generation (S5) does the same for its interior. Its exterior is
     still generated in full.
-  - INFERRED:
+  - RULED (Evoni, 2026-10-01, accepting the build's choices: "uploads
+    refused over an approved base; no event = full generation; the
+    approved set is never dressed"):
     - with no event chosen, a base is generated in full;
-    - the approved set's own brief is never a dressed version;
-    - the model is revisited after the model comparison.
+    - the approved set's own brief is never a dressed version.
+  - The model is revisited after the model comparison (answer 2).
 - **Never replaced while approved (answer 3).** These are refused with a
   409 naming the location while the set's base is approved:
   - regenerate base (`generate-base`), the cascade, promote-to-base;
   - Scene Studio's restyle (`regenerate-background`);
-  - upload-base. INFERRED: upload also replaces the base.
+  - upload-base. RULED (Evoni, 2026-10-01): uploads are refused over an
+    approved base.
 
   `generateBaseScene` refuses as well (`ApprovedBaseError`), which covers
   the worker. The card hides "Replace Base Image" and "Use … as Base"
