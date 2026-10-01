@@ -3705,7 +3705,7 @@ design note, with open questions, is `docs/SEASON_ARC_DESIGN_NOTE.md`.
 
 **Answers (Evoni, 2026-10-01)** to the design note's questions, recorded
 verbatim. The question numbers are `docs/SEASON_ARC_DESIGN_NOTE.md` §3's.
-Q4 and Q9–Q15 are still open.
+Q4 and Q9–Q15 follow below.
 
 > Q1 Yes: the existing "Soft Luxury Ascension" season is Season 1; my current episode is slot 1.
 >
@@ -3720,6 +3720,28 @@ Q4 and Q9–Q15 are still open.
 > Q7 Pressure is Low · Medium · High · Peak. Desired is set in the slot's intention; actual is derived from the evaluation tier, the episode's money net and the stress change.
 >
 > Q8 A repeat is the same format, host/brand or venue within the last 3 episodes; it warns, never blocks.
+
+**Answers, second set (Evoni, 2026-10-01)**, verbatim: "I accept your
+recommendations for Q4 and Q9–Q15 as written." The recommendations she
+accepted, as written:
+
+> Q4 Existing episodes: fill slots in `episode_number` order, counting your current episode as slot 1. List any other existing episode for you to place or leave unslotted, rather than guess.
+>
+> Q9 Story threads: you create and name them; drafts are offered from `seeds_future_events`. Acceptance can mark one "advanced", and only you close one.
+>
+> Q10 Outcome range: a tier range (e.g. "pass to slay") that also sets the brief's `designed_intent` and `allowed_outcomes` at Start Episode, so there's one source.
+>
+> Q11 Goals on acceptance: replace "+1 to every goal" with each goal set from what it measures. Coins come from the ledger, other stats from Lala's state after the episode; custom goals are left unchanged.
+>
+> Q12 Drafting cost: draft only the next open slot, on acceptance and on demand, not all 24 at once.
+>
+> Q13 Planning Insights' money: per slot, with phase totals. The balance trend counts every ledger row, so deals and purchases between episodes show.
+>
+> Q14 `cost_coins` elsewhere: take the Episode Ledger's `cost_coins` tag out in the Insights PR. Leave the other `cost_coins` uses for a separate ruling.
+>
+> Q15 Season-health score: fold it into Planning Insights as one line, using the slot outcome ranges instead of the fixed 1/4/2/1 targets.
+
+Every question in the design note is now answered.
 ---
 
 ## 9. Owed before enforcement
