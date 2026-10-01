@@ -3453,6 +3453,8 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   - The venue's own sets come first, under "At <venue>": its World
     Location's, event locations first, then by name. The show's other sets
     follow, by name; a set with no image says so.
+  - `GET /scene-sets` returns every show's sets, so another show's set is
+    left out unless it is at the venue.
   - Choosing saves the event's `scene_set_id`.
   - Before S7 the picker listed only the venue's own sets, and only once a
     venue was set. A set can now be chosen with no venue; one is created

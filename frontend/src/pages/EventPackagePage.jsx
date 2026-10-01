@@ -165,12 +165,14 @@ function fmtBasicsValue(key, value) {
 /**
  * The scene sets offered for an event (S7, Evoni 2026-10-01): the venue's
  * own sets first (its World Location's; event locations before others),
- * then the show's other sets, each by name.
+ * then the show's other sets, each by name. GET /scene-sets returns every
+ * show's sets, so another show's set is left out unless it is the venue's.
  */
-export function orderSceneSetsForEvent(sets, venueLocationId) {
+export function orderSceneSetsForEvent(sets, venueLocationId, showId = null) {
   const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
-  const list = (sets || []).filter((x) => x && x.id);
-  const atVenue = venueLocationId ? list.filter((x) => x.world_location_id === venueLocationId) : [];
+  const atThisVenue = (x) => Boolean(venueLocationId) && x.world_location_id === venueLocationId;
+  const list = (sets || []).filter((x) => x && x.id && (!showId || x.show_id === showId || atThisVenue(x)));
+  const atVenue = list.filter(atThisVenue);
   const others = list.filter((x) => !atVenue.includes(x)).sort(byName);
   atVenue.sort((a, b) => {
     const ea = a.scene_type === 'EVENT_LOCATION' ? 0 : 1;
@@ -893,7 +895,7 @@ export default function EventPackagePage() {
     return (l.name || '').toLowerCase().includes(q) || (l.city || '').toLowerCase().includes(q);
   });
 
-  const pickerGroups = orderSceneSetsForEvent(pickerSets, sceneVenue?.id || null);
+  const pickerGroups = orderSceneSetsForEvent(pickerSets, sceneVenue?.id || null, showId);
 
   return (
     <div className="epp-page">

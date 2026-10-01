@@ -24,11 +24,14 @@ const EVENT = {
   venue_location_id: 'loc-1', venue_name: 'The Glasshouse', updated_at: '2026-10-01T10:00:00.000Z',
   canon_consequences: { automation: {} },
 };
+// GET /scene-sets returns every show's sets: another show's set is left out
+// unless it is at the venue.
 const SETS = [
-  { id: 'set-other-b', name: 'Bistro', scene_type: 'OTHER', world_location_id: 'loc-9', base_still_url: 'x.jpg' },
-  { id: 'set-venue-room', name: 'Glasshouse Lounge', scene_type: 'OTHER', world_location_id: 'loc-1', base_still_url: 'y.jpg' },
-  { id: 'set-other-a', name: 'Atelier', scene_type: 'HOME_BASE', world_location_id: null, base_still_url: null },
-  { id: 'set-venue-hall', name: 'Glasshouse Hall', scene_type: 'EVENT_LOCATION', world_location_id: 'loc-1', base_still_url: null },
+  { id: 'set-other-b', name: 'Bistro', scene_type: 'OTHER', show_id: 'show-1', world_location_id: 'loc-9', base_still_url: 'x.jpg' },
+  { id: 'set-venue-room', name: 'Glasshouse Lounge', scene_type: 'OTHER', show_id: 'show-2', world_location_id: 'loc-1', base_still_url: 'y.jpg' },
+  { id: 'set-other-a', name: 'Atelier', scene_type: 'HOME_BASE', show_id: 'show-1', world_location_id: null, base_still_url: null },
+  { id: 'set-venue-hall', name: 'Glasshouse Hall', scene_type: 'EVENT_LOCATION', show_id: 'show-1', world_location_id: 'loc-1', base_still_url: null },
+  { id: 'set-foreign', name: 'Another Show Loft', scene_type: 'OTHER', show_id: 'show-2', world_location_id: 'loc-7', base_still_url: 'z.jpg' },
 ];
 const BRIEF = {
   version: 1, scene_set_id: 'set-new', world_location_id: 'loc-1', event_id: 'ev-1', angle: 'WIDE',
@@ -156,10 +159,12 @@ describe('Place: the scene set for the event (S7)', () => {
   });
 
   test('orderSceneSetsForEvent and sceneSetPath', () => {
-    const { atVenue, others } = orderSceneSetsForEvent(SETS, 'loc-1');
+    const { atVenue, others } = orderSceneSetsForEvent(SETS, 'loc-1', 'show-1');
     expect(atVenue.map((x) => x.id)).toEqual(['set-venue-hall', 'set-venue-room']);
     expect(others.map((x) => x.id)).toEqual(['set-other-a', 'set-other-b']);
-    expect(orderSceneSetsForEvent(SETS, null).atVenue).toEqual([]);
+    expect(orderSceneSetsForEvent(SETS, null, 'show-1')).toEqual({
+      atVenue: [], others: [expect.objectContaining({ id: 'set-other-a' }), expect.objectContaining({ id: 'set-other-b' }), expect.objectContaining({ id: 'set-venue-hall' })],
+    });
     expect(orderSceneSetsForEvent(null, 'loc-1')).toEqual({ atVenue: [], others: [] });
     expect(sceneSetPath('show-1', 'set-1')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
   });
