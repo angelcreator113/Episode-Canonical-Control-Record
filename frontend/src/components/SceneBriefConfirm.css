@@ -140,3 +140,25 @@
   .sbc-backdrop { padding: 0; align-items: stretch; }
   .sbc-modal { max-height: 100vh; border-radius: 0; }
 }
+
+/* The event choice on a base brief (S3). */
+.sbc-event-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+}
+.sbc-event-choice select {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #d9cba0;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}

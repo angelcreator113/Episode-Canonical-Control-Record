@@ -113,9 +113,12 @@ async function processJob(job) {
         if (!set) throw new Error(`Scene set ${job.scene_set_id} not found`);
 
         // Step 1: Generate base, with the brief overrides the person confirmed
-        // (S2); the angles inherit them from the base's brief.
+        // (S2) and the event they chose (S3; none given: the base's last
+        // choice); the angles inherit both from the base's brief.
         const overrides = job.payload?.overrides;
-        const baseResult = await sceneGenService.generateBaseScene(set, models, overrides ? { overrides } : {});
+        const baseOptions = overrides ? { overrides } : {};
+        if (job.payload && 'event_id' in job.payload) baseOptions.eventId = job.payload.event_id;
+        const baseResult = await sceneGenService.generateBaseScene(set, models, baseOptions);
 
         // Step 2: Generate all angles sequentially
         const angleResults = [];

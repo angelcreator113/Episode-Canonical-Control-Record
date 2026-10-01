@@ -805,7 +805,8 @@ function briefDb(models) {
  * options.skipAnalysis: skip the Claude Vision analysis and style auto-lock
  * that normally follow (the base-model comparison generates stills only).
  * options.eventId: the event chosen explicitly for this image (S1, S3);
- *   without one, the brief has no event layer.
+ *   null for none. Not given: the event of the base's last brief (chosen
+ *   explicitly then), never an event found by matching.
  * options.overrides: { <brief line key>: text } (S2's "Your override");
  *   without it, the overrides of the base's last brief.
  *
@@ -818,7 +819,8 @@ async function generateBaseScene(sceneSet, models, options = {}) {
   const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
     // Without overrides given, the base keeps the ones it was last generated
     // with (S2: the brief shown before generating shows them).
-    angleLabel: 'WIDE', eventId: options.eventId || null,
+    angleLabel: 'WIDE',
+    eventId: options.eventId !== undefined ? options.eventId : (sceneSet.base_generation?.brief?.event_id || null),
     overrides: options.overrides || sceneSet.base_generation?.brief?.overrides || {},
   });
   const prompt = briefToPrompt(brief);
