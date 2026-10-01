@@ -3683,6 +3683,67 @@ INFERRED:
   pieces (W1).
 ---
 
+**(ff) Season Arc (Evoni, 2026-10-01).** Recorded verbatim. Nothing is
+built yet. The read of today's code is `docs/SEASON_ARC_READ.md`; the
+design note, with open questions, is `docs/SEASON_ARC_DESIGN_NOTE.md`.
+
+> A1. Season Arc is Prime Studios' plan for where Lala's career and story go across a season. Events say what's next, episodes say what happened, Season Arc says where it's all going.
+>
+> A2. A season has 24 episode slots in three phases: Foundation (1–8), Ascension (9–16), Legacy (17–24). The Season Arc page centres on this roadmap, each slot showing its state: done, in production, event ready, needs an event.
+>
+> A3. Each future slot can carry an intention: story purpose, career focus, desired pressure, the story thread it continues, and the outcome range hoped for. Intentions are auto-drafted from the phase and the season so far, labelled, and editable.
+>
+> A4. The next slot's intention, with Lala's current state (balance, goals, narrative debt, recent formats, people and places), drives next-event suggestions and avoids repetition. The Event Package shows a small read-only Season Context block (season, phase, slot, purpose). Season Arc provides intent; the Event Package owns the event's facts.
+>
+> A5. Start Episode snapshots the season context onto the episode. The Overview shows its season position and purpose, and the script generator receives that context.
+>
+> A6. Accepting a completed episode updates the season: it records the actual outcome on its slot, updates career goals, story threads and narrative debt, checks whether a phase boundary is reached (checkPhaseTransition, currently never called), and readies the next slot.
+>
+> A7. Only future slots can be reordered or re-planned; a slot whose episode has started is locked to that episode.
+>
+> A8. A Planning Insights view compares planned pressure with actual results per slot. Season money (spend, income, balance trend) comes from the ledger only, never from cost_coins.
+
+**Answers (Evoni, 2026-10-01)** to the design note's questions, recorded
+verbatim. The question numbers are `docs/SEASON_ARC_DESIGN_NOTE.md` §3's.
+Q4 and Q9–Q15 follow below.
+
+> Q1 Yes: the existing "Soft Luxury Ascension" season is Season 1; my current episode is slot 1.
+>
+> Q2 Remove Extend; phase boundaries can shift within the 24, only across slots that haven't started.
+>
+> Q3 Episode numbers restart each season, shown "S1 · E7"; the show-wide count stays internal.
+>
+> Q5 Yes: an event can be pencilled into a future slot and moved freely; it locks at Start Episode.
+>
+> Q6 Ask first: at a phase boundary show a summary of the phase completed and what changes, and Evoni confirms.
+>
+> Q7 Pressure is Low · Medium · High · Peak. Desired is set in the slot's intention; actual is derived from the evaluation tier, the episode's money net and the stress change.
+>
+> Q8 A repeat is the same format, host/brand or venue within the last 3 episodes; it warns, never blocks.
+
+**Answers, second set (Evoni, 2026-10-01)**, verbatim: "I accept your
+recommendations for Q4 and Q9–Q15 as written." The recommendations she
+accepted, as written:
+
+> Q4 Existing episodes: fill slots in `episode_number` order, counting your current episode as slot 1. List any other existing episode for you to place or leave unslotted, rather than guess.
+>
+> Q9 Story threads: you create and name them; drafts are offered from `seeds_future_events`. Acceptance can mark one "advanced", and only you close one.
+>
+> Q10 Outcome range: a tier range (e.g. "pass to slay") that also sets the brief's `designed_intent` and `allowed_outcomes` at Start Episode, so there's one source.
+>
+> Q11 Goals on acceptance: replace "+1 to every goal" with each goal set from what it measures. Coins come from the ledger, other stats from Lala's state after the episode; custom goals are left unchanged.
+>
+> Q12 Drafting cost: draft only the next open slot, on acceptance and on demand, not all 24 at once.
+>
+> Q13 Planning Insights' money: per slot, with phase totals. The balance trend counts every ledger row, so deals and purchases between episodes show.
+>
+> Q14 `cost_coins` elsewhere: take the Episode Ledger's `cost_coins` tag out in the Insights PR. Leave the other `cost_coins` uses for a separate ruling.
+>
+> Q15 Season-health score: fold it into Planning Insights as one line, using the slot outcome ranges instead of the fixed 1/4/2/1 targets.
+
+Every question in the design note is now answered.
+---
+
 ## 9. Owed before enforcement
 
 Located, not investigated beyond locating them, per this issue's scope.
