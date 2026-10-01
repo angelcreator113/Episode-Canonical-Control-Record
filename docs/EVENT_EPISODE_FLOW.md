@@ -3045,6 +3045,147 @@ changes):
 - D13, D14 and D15 (2026-09-30) are designed in
   `docs/DEAL_COMPONENTS_DESIGN.md`, answered the same day, and built in
   its order (the event cost split before D13's drafting).
+- S1–S6 (2026-09-30, §8(dd)) are built after D13, one PR each; the scene
+  model comparison is held until S1–S4 ship.
+
+**(dd) Scene image rulings (Evoni, 2026-09-30).** Recorded verbatim; built
+after D13, one PR each.
+
+> S1. Every scene image is generated from one Scene Brief with three layers:
+> the place (permanent: the World Location's architecture, materials,
+> layout, equipment, approved reference images, and its district for
+> neighbourhood and window views; map display colours never recolour
+> buildings); the event (temporary: the explicitly chosen event's concept,
+> activity setup, colours as décor and props); the shot (camera, required
+> visible features, clear space for character overlays). Environment (time,
+> weather, season) applies throughout. No people are generated.
+>
+> S2. The Scene Brief is shown before any paid generation, each line
+> labelled "From venue", "From event", or "Your override", with missing
+> essentials flagged.
+>
+> S3. Generating for an event requires choosing that event explicitly;
+> never the first match.
+>
+> S4. Remove the injected generic instructions ("feminine aesthetic", "soft
+> natural lighting"); lighting comes from the brief.
+>
+> S5. Venue generation saves the full brief and the world_location_id, and
+> never overwrites a location's style guide.
+>
+> S6. A recurring location keeps one approved permanent base image;
+> event-dressed versions are made from it, so the place stays recognisable
+> across episodes.
+>
+> Hold the scene model comparison until S1–S4 ship.
+
+**What the code does today: the review's claims, checked.** The checks were
+read at `origin/main` `69ec4ac2` (2026-10-01), by function name, with line
+numbers at that SHA. Each is MEASURED unless marked otherwise.
+
+1. **No single brief: true.** Each path builds its own prompt string.
+   - `sceneGenerationService.buildPrompt` (`:116`) reads only the scene set
+     itself: its name, `canonical_description`, `time_of_day`, `season` and
+     `visual_language.room_properties`, plus a camera modifier.
+   - `generateAngle` prepends the camera direction (a second time), the
+     spec's state ambient and the anchor objects.
+   - `cropAndOutpaint` and `generateGptImageStill` each add their own
+     prefix.
+   - Venue generation (`venueGenerationService.buildVenueIdentity` and
+     `generateVenueImages`) writes its own interior and exterior templates
+     from event fields.
+2. **Map display colours recolouring buildings: not found.**
+   - The map colours are frontend styling constants (`DreamMap`), and
+     `WorldLocation` has no colour field.
+   - No prompt reads a map, city or district colour.
+   - What does override a place's look today is hard-coded text: the
+     venue category look-up in `buildVenueIdentity` (for example "cozy
+     salon with neon signs, pink walls"). S1's rule still stands for the
+     brief to come.
+3. **World Location data unused: true.**
+   - Neither the scene services nor the venue service read a World
+     Location's `style_guide`, `floor_plan`, `sensory_details`,
+     `venue_details`, district or parent.
+   - The only references used are the scene set's own `base_still_url`
+     and `style_reference_url`; the Flux text-to-image path ignores the
+     latter.
+   - The venue path's "neighbourhood" is parsed from the address string,
+     defaulting to "creative district".
+   - The WINDOW angle says only "Show what is visible beyond the glass."
+4. **First matching event: partly true.**
+   - `loadEventContext` (`:852`) takes the scene set's first event with
+     `LIMIT 1` and no order (its `scene_set_episodes` fallback likewise).
+   - But `buildPrompt` never reads it: its parameter is `_eventContext`,
+     unused. So no event information reaches a scene-set prompt at all
+     today.
+   - Venue generation (`POST /world/:showId/events/:eventId/generate-venue`)
+     does use the event named in its URL.
+   - Related first-match choices:
+     - creating an event with only `venue_location_id` links the first
+       scene set at that location (`SceneSet.findOne`, no order);
+     - event automation picks a venue location by heuristics
+       (`eventAutomationService`).
+5. **"feminine aesthetic" / "soft natural lighting": true.**
+   - `buildPrompt` (`:186`) appends "Photorealistic cinematic quality.
+     Pinterest-worthy feminine aesthetic. Soft natural lighting." to every
+     base, angle, outpaint, refined regeneration, preview and stored
+     prompt, and to the model comparison's sets.
+   - `buildVideoPrompt` adds "Maintain warm soft natural lighting."
+   - Other fixed lighting and style text, whatever the brief:
+     - the `ANGLE_MODIFIERS` lighting (CLOSET "Soft warm glow", VANITY
+       "Soft glamour lighting", WINDOW "Natural golden light streaming
+       in");
+     - the venue templates' "magical, aspirational", "alive and
+       aspirational" and "cinematic and aspirational";
+     - the description writer's "LalaVerse aesthetic: feminine,
+       aspirational, warm tones…" (`sceneSetRoutes`), which lands in
+       `canonical_description`;
+     - a WorldAdmin event template's `venue_theme`.
+6. **People: the claim as stated is wrong; it is weaker than claimed.**
+   - `buildPrompt` opens with "Empty room, no people, …", and the venue
+     prompts say "No text, no logos, no people."
+   - But `NEGATIVE_PROMPT` ("person, people, human…") is never sent to a
+     provider.
+   - Some positive text invites people: the ACTION angle's "as if someone
+     just walked through it"; the venue's "where fashion creators and
+     influencers gather — make it feel alive" and "valet area".
+7. **No brief before paid generation: true.**
+   - "AI Generate" (`SceneSetsTab`) and the venue buttons (`WorldAdmin`)
+     generate with no confirm step, and "Mark Ready" triggers venue
+     generation itself.
+   - A preview-prompt route exists (`GET /scene-sets/:id/preview-prompt`),
+     but its frontend handler is wired to no button.
+   - The only confirm step is the ADMIN model comparison's cost estimate.
+8. **Venue generation saves no brief or location: true.**
+   - Its `SceneSet.create` writes name, type, a one-line
+     `canonical_description`, `base_still_url`, `show_id` and status.
+   - There is no `world_location_id`, no stored prompt, and no angle
+     prompts.
+9. **Style guide overwritten: true.**
+   - `generateVenueImages` replaces the whole of `world_locations.style_guide`
+     with `{ venue_url, generated_for_event }` whenever the event's
+     automation names a `venue_location_id`.
+   - That wipes any materials, palette or architecture recorded there.
+10. **No approved permanent base: true.**
+    - There is no approved flag on scene sets, angles or locations.
+    - `base_still_url` is replaced by any regeneration, by promote-to-base
+      and by Scene Studio restyle.
+    - The generate-base 409 guard checks `base_runway_seed`, which an AI
+      base writes as null, so it never fires after one.
+    - Venue generation makes a new scene set and new text-to-image stills
+      per event.
+    - Angles do derive from their own set's base (crop and outpaint, or
+      edits), but only within one set.
+11. **Environment: partly true.**
+    - Time and season reach scene-set prompts as fixed sentences.
+    - Venue prompts get only a 3-way time of day.
+    - Weather appears nowhere.
+
+**The scene model comparison (held).** `sceneModelComparisonService`, the
+`/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
+and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in
+`SceneSetsTab` (#2401). Held means not run and not extended; the per-set
+base model choice it shares with base generation stays.
 
 ---
 
