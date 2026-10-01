@@ -4573,6 +4573,30 @@ router.get('/world/:showId/episodes/:episodeId/money', requireAuth, async (req, 
   }
 });
 
+// GET /world/:showId/events/:eventId/money-preview — Episode Money Phase B,
+// MB4 (§8(gg)): before Start Episode, the event's plan as money lines, the
+// projection and the early warnings against Lala's ledger balance.
+// Read-only; it never blocks Start Episode.
+router.get('/world/:showId/events/:eventId/money-preview', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    const { eventMoneyPreview } = require('../services/episodeMoneyService');
+    const preview = await eventMoneyPreview(models.sequelize, {
+      showId, event, episodeId: event.used_in_episode_id || null,
+    });
+    return res.json({ success: true, data: preview });
+  } catch (err) {
+    console.error('[Financials] Event money preview error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /world/:showId/balance — current coin balance
 router.get('/world/:showId/balance', requireAuth, async (req, res) => {
   try {

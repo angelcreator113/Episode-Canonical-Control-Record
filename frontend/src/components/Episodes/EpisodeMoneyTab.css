@@ -396,3 +396,38 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* MB4 (§8(gg)): early warnings, never blocking. */
+.em-warnings {
+  padding: 10px 12px;
+  border: 1px solid #E9C46A;
+  border-radius: var(--lala-radius, 8px);
+  background: #FFF6DC;
+  color: #6B4A00;
+  font-size: 13px;
+}
+
+.em-warnings-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.em-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.em-warnings li {
+  overflow-wrap: anywhere;
+}
+
+.em-warnings-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #8A6A20;
+}

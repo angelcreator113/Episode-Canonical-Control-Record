@@ -379,7 +379,7 @@ async function relockTerms(sequelize, { showId, eventId, user }) {
     const deliverables = await listEventDeliverables(sequelize, eventId, { transaction });
     const costs = await listEventCosts(sequelize, eventId, { transaction });
     const wardrobeItems = await loadFinancialWardrobeItems(sequelize, showId, { transaction });
-    const affordabilityWarning = await computeAffordabilityWarning(sequelize, showId, event, { transaction });
+    const affordabilityWarning = await computeAffordabilityWarning(sequelize, showId, event, { transaction, episodeId });
     const [briefRows] = await sequelize.query(
       `SELECT id, event_metadata FROM episode_briefs
         WHERE episode_id = :episodeId AND deleted_at IS NULL

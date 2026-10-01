@@ -93,6 +93,24 @@ describe('EpisodeMoneyTab', () => {
     expect(screen.getByTestId('em-unplanned-r9').textContent).toContain('Posted, not planned');
   });
 
+  test('money warnings show first, with the shortfall, and block nothing (MB4)', async () => {
+    const warnings = [{ code: 'COSTS_EXCEED_BALANCE', shortfall: 50, message: 'Event spending (150) is more than Lala has (100): 50 short before any income arrives.' }];
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ warnings }) } });
+    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+
+    const banner = await screen.findByTestId('em-warnings');
+    expect(banner.getAttribute('role')).toBe('alert');
+    expect(banner.textContent).toContain('50 short before any income arrives');
+    expect(banner.textContent).toContain('nothing is blocked here');
+  });
+
+  test('no warnings, no banner', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ warnings: [] }) } });
+    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    await screen.findByTestId('em-lines');
+    expect(screen.queryByTestId('em-warnings')).toBeNull();
+  });
+
   test('empty states in plain words', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { data: money({ event: null, lines: [], unplanned: [], projection: { ...money().projection, conditional: [] } }) },

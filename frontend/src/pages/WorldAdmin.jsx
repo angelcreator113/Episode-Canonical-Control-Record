@@ -41,6 +41,7 @@ import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobePr
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
 import { readinessCounts, eventCardMetaParts, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
+import { completeMoneyWarning } from '../utils/moneyWarnings';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -4205,6 +4206,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   {md.used_in_episode_id && md.status !== 'draft' && (
                     <button onClick={async () => {
                       if (!window.confirm(`Complete "${md.name}"?\n\nThis will:\n• Evaluate the episode (outfit + event + character state)\n• Apply social task bonuses (reputation, influence)\n• Finalize all financial transactions\n• Update Lala's character stats\n• Mark event as filmed`)) return;
+                      // MB4 (§8(gg)): warn early on money; never blocks.
+                      const moneyWarning = await completeMoneyWarning(showId, md.used_in_episode_id);
+                      if (moneyWarning && !window.confirm(moneyWarning)) return;
                       try {
                         const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/complete`);
                         if (res.data.success) {

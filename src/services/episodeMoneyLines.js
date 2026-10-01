@@ -334,4 +334,53 @@ function buildMoneyLines({ plan, rows = [], balance = 0, completed = false }) {
   };
 }
 
-module.exports = { STATES, TRIGGERS, plannedLines, buildMoneyLines };
+const WARNING_CODES = Object.freeze({
+  PROJECTED_BELOW_ZERO: 'PROJECTED_BELOW_ZERO',
+  COSTS_EXCEED_BALANCE: 'COSTS_EXCEED_BALANCE',
+});
+
+/**
+ * MB4's early warnings (Q6, accepted as recommended): warn when either goes
+ * below zero, with the shortfall:
+ *   (a) the projected balance after the episode (MB3);
+ *   (b) Lala's actual balance minus this episode's open costs and spending,
+ *       without its income ("if the income does not arrive"). Event
+ *       spending is named when it alone exceeds what she has.
+ * Warnings never block; Complete's refusals stay as they are.
+ * Returns [] or [{ code, shortfall, message, ... }].
+ */
+function moneyWarnings({ lines = [], projection, balance = 0 }) {
+  const warnings = [];
+  const open = lines.filter((l) => !l.covered && !l.conditional
+    && (l.state === STATES.PLANNED || l.state === STATES.PENDING) && l.kind === 'expense');
+  const openCosts = open.reduce((s, l) => s + l.amount, 0);
+  const openSpending = open.filter((l) => l.category === 'event_spending').reduce((s, l) => s + l.amount, 0);
+
+  if (projection && projection.projected_balance < 0) {
+    const shortfall = -projection.projected_balance;
+    warnings.push({
+      code: WARNING_CODES.PROJECTED_BELOW_ZERO,
+      shortfall,
+      projected_balance: projection.projected_balance,
+      message: `After this episode Lala's balance is projected at ${projection.projected_balance}: ${shortfall} short.`,
+    });
+  }
+  if (openCosts > 0 && balance - openCosts < 0) {
+    const shortfall = openCosts - balance;
+    const spendingAlone = openSpending > balance;
+    warnings.push({
+      code: WARNING_CODES.COSTS_EXCEED_BALANCE,
+      shortfall,
+      costs: openCosts,
+      spending: openSpending,
+      have: balance,
+      spending_alone: spendingAlone,
+      message: spendingAlone
+        ? `Event spending (${openSpending}) is more than Lala has (${balance}): ${openSpending - balance} short before any income arrives.`
+        : `This episode's costs and spending (${openCosts}) are more than Lala has (${balance}): ${shortfall} short if the income does not arrive.`,
+    });
+  }
+  return warnings;
+}
+
+module.exports = { STATES, TRIGGERS, WARNING_CODES, plannedLines, buildMoneyLines, moneyWarnings };

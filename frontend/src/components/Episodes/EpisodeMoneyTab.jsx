@@ -24,13 +24,14 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Coins, Receipt, TrendingUp } from 'lucide-react';
+import { Coins, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import EpisodeSpendingSection from './EpisodeSpendingSection';
 import './EpisodeMoneyTab.css';
 
 export const getEpisodeMoneyApi = (showId, episodeId) =>
   api.get(`/api/v1/world/${showId}/episodes/${episodeId}/money`).then((r) => r.data?.data);
+
 
 const coins = (n) => Number(n || 0).toLocaleString();
 const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(Math.abs(n))}`;
@@ -94,8 +95,19 @@ export default function EpisodeMoneyTab({ episode, showId }) {
   const lines = money.lines || [];
   const unplanned = money.unplanned || [];
 
+  const warnings = money.warnings || [];
+
   return (
     <div className="em-tab">
+      {warnings.length > 0 && (
+        <div className="em-warnings" role="alert" data-testid="em-warnings">
+          <div className="em-warnings-head"><AlertTriangle size={14} aria-hidden /> Money warning</div>
+          <ul>
+            {warnings.map((w) => <li key={w.code} data-testid={`em-warning-${w.code}`}>{w.message}</li>)}
+          </ul>
+          <p className="em-warnings-note">A warning only: nothing is blocked here. Complete still refuses a completion that takes Lala below zero.</p>
+        </div>
+      )}
       <div className="em-summary">
         <div className="em-card" data-testid="em-balance">
           <div className="em-card-label"><Coins size={14} aria-hidden /> Lala's balance</div>

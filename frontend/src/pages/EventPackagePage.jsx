@@ -224,6 +224,9 @@ export default function EventPackagePage() {
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [seasonContext, setSeasonContext] = useState(null);
+  // Episode Money Phase B, MB4 (§8(gg)): the money warnings Start Episode
+  // shows early, from Lala's ledger balance and the event's whole plan.
+  const [moneyPreview, setMoneyPreview] = useState(null);
   // Owned here, not inside InvitationButton (Task #1668): load() below sets
   // loading=true while it refetches, which unmounts this page's whole JSX
   // subtree — including InvitationButton — until it resolves. Local state
@@ -344,6 +347,18 @@ export default function EventPackagePage() {
     return () => { cancelled = true; };
   }, [showId, eventId]);
 
+  // MB4: the event's money warnings before Start Episode; reloaded with the
+  // event (its costs and terms can change here). Never blocks the page.
+  useEffect(() => {
+    const ev = data?.event;
+    if (!ev || ev.used_in_episode_id) { setMoneyPreview(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/world/${showId}/events/${eventId}/money-preview`)
+      .then((res) => { if (!cancelled) setMoneyPreview(res.data?.data || null); })
+      .catch((err) => { console.error('[EventPackage] money preview load failed:', err); });
+    return () => { cancelled = true; };
+  }, [showId, eventId, data]);
+
   // Every event save on this page goes through here. A refusal (409,
   // EVENT_CHANGED) reloads the page so the person sees what changed; the
   // caller's own catch shows the route's message.
@@ -455,8 +470,10 @@ export default function EventPackagePage() {
   // P2, else the used_in_episode_id stamp), so the page never offers an edit
   // the server would refuse.
   const used = !!event.used_in_episode_id || !!termsLockedBy;
+  const moneyWarnings = moneyPreview?.warnings || [];
   const lockEpisode = termsLockedBy || usedInEpisode || null;
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
+  const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics
@@ -898,7 +915,7 @@ export default function EventPackagePage() {
   // open it asks first (Start Anyway); with none it starts directly.
   const requestStartEpisode = () => {
     if (!gatesMet || used || starting) return;
-    if (readiness.warningItems.length) setStartConfirmOpen(true);
+    if (readiness.warningItems.length || moneyWarnings.length) setStartConfirmOpen(true);
     else handleStartEpisode();
   };
 
@@ -1499,6 +1516,15 @@ export default function EventPackagePage() {
               );
             })}
           </ul>
+          {!used && moneyWarnings.length > 0 && (
+            <div className="epp-money-warnings" role="note" data-testid="money-warnings">
+              <div className="epp-money-warnings-head"><AlertTriangle size={13} aria-hidden="true" /> Money</div>
+              <ul>
+                {moneyWarnings.map((w) => <li key={w.code} data-testid={`money-warning-${w.code}`}>{w.message}</li>)}
+              </ul>
+              <p className="epp-money-warnings-note">A warning only: Start Episode stays open.</p>
+            </div>
+          )}
         </section>
       </div>
 
@@ -1529,7 +1555,7 @@ export default function EventPackagePage() {
         <div className="epp-modal-backdrop" onClick={() => { if (!starting) setStartConfirmOpen(false); }}>
           <div className="epp-modal epp-start-confirm" role="dialog" aria-label="Start Episode with warnings" data-testid="start-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
-              <h3><AlertTriangle size={15} aria-hidden="true" /> Start with {readiness.warningItems.length} warning{readiness.warningItems.length === 1 ? '' : 's'}?</h3>
+              <h3><AlertTriangle size={15} aria-hidden="true" /> Start with {confirmCount} warning{confirmCount === 1 ? '' : 's'}?</h3>
               <button className="epp-icon-btn" onClick={() => setStartConfirmOpen(false)} aria-label="Close" disabled={starting}>
                 <X size={16} />
               </button>
@@ -1539,6 +1565,12 @@ export default function EventPackagePage() {
                 <li key={`${w.section}.${w.key}`} data-testid={`start-warning-${w.section}-${w.key}`}>
                   <div className="epp-start-warning-head">{w.sectionLabel}: {w.label}{w.note ? <span className="epp-rsection-note"> · {w.note}</span> : null}</div>
                   {w.consequence && <div className="epp-start-warning-consequence">{w.consequence}</div>}
+                </li>
+              ))}
+              {moneyWarnings.map((w) => (
+                <li key={w.code} data-testid={`start-money-warning-${w.code}`}>
+                  <div className="epp-start-warning-head">Money: {w.code === 'PROJECTED_BELOW_ZERO' ? 'projected balance below zero' : 'costs exceed her balance'}</div>
+                  <div className="epp-start-warning-consequence">{w.message}</div>
                 </li>
               ))}
             </ul>

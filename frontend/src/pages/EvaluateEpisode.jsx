@@ -26,6 +26,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
+import { completeMoneyWarning } from '../utils/moneyWarnings';
 
 // ─── TIER CONFIG ───
 const TIER_CONFIG = {
@@ -194,6 +195,9 @@ function EvaluateEpisode() {
 
   // ─── ACCEPT ───
   const handleAccept = useCallback(async () => {
+    // MB4 (§8(gg)): warn early on money before Complete; never blocks.
+    const moneyWarning = await completeMoneyWarning(episode?.show_id, episodeId);
+    if (moneyWarning && !window.confirm(moneyWarning)) return;
     setAccepting(true);
     setError(null);
     try {
