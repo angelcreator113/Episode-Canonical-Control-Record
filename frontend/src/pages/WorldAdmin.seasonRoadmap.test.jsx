@@ -327,4 +327,66 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
         expect.objectContaining({ story_thread_id: 'th-1' })));
     });
   });
+
+  describe('Planning Insights (§8(ff) A8, Q13, Q15, PR 8)', () => {
+    const INSIGHTS = {
+      season_number: 1,
+      health: { accepted: 3, with_range: 2, in_range: 1, without_range: 1 },
+      money: {
+        season: { income: 300, spend: 120, net: 180 },
+        balance: 1130,
+        trend: [
+          { amount: 1000, balance_after: 1000, between_episodes: true, slot_label: null },
+          { amount: 300, balance_after: 1300, between_episodes: false, slot_label: 'S1 · E1' },
+          { amount: -120, balance_after: 1180, between_episodes: false, slot_label: 'S1 · E1' },
+          { amount: -50, balance_after: 1130, between_episodes: true, slot_label: null },
+        ],
+      },
+      phases: [{
+        phase: 1, title: 'Foundation', totals: { income: 300, spend: 120, net: 180 }, unplanned_count: 6,
+        slots: [
+          { slot_number: 1, label: 'S1 · E1', episode: { id: 'ep-1', title: 'Gala Night' },
+            planned: { desired_pressure: 'Medium', outcome_range: { min: 'pass', max: 'slay' } },
+            actual: { outcome: 'pass', pressure: 'High' }, pressure_delta: 1, outcome_in_range: true,
+            money: { income: 300, spend: 120, net: 180 } },
+          { slot_number: 4, label: 'S1 · E4', episode: null,
+            planned: { desired_pressure: 'Low', outcome_range: null },
+            actual: { outcome: null, pressure: null }, pressure_delta: null, outcome_in_range: null, money: null },
+        ],
+      }],
+    };
+    beforeEach(() => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+        if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
+        if (url === '/api/v1/world/show-1/season/insights') return { data: { insights: INSIGHTS } };
+        return { data: {} };
+      });
+    });
+
+    test('shows the season-health line from the outcome ranges, and no longer reads the 1/4/2/1 grade', async () => {
+      renderAt('season');
+
+      const health = await screen.findByTestId('season-health');
+      expect(health.textContent).toBe('Season health: 1 of 2 accepted episodes landed in their planned outcome range · 1 had no range planned');
+      expect(vi.mocked(api.get).mock.calls.some(([url]) => url.includes('season-rhythm'))).toBe(false);
+    });
+
+    test('per slot, the plan beside the result and its ledger money; phase totals; the balance trend', async () => {
+      renderAt('season');
+
+      const one = await screen.findByTestId('insights-slot-1');
+      expect(one.textContent).toContain('S1 · E1 · Gala Night');
+      expect(one.textContent).toContain('Planned: Medium · pass to slay');
+      expect(one.textContent).toContain('Actual: pass · High · 1 step above plan · in range');
+      expect(one.textContent).toContain('Income 300 · spend 120 · net +180');
+      expect(screen.getByTestId('insights-slot-4').textContent).toContain('Actual: not accepted yet');
+      const phase = screen.getByTestId('insights-phase-1');
+      expect(phase.textContent).toContain('Phase 1 · Foundation');
+      expect(phase.textContent).toContain('6 slots with nothing planned yet');
+      expect(screen.getByTestId('season-money').textContent).toContain('1,130');
+      expect(screen.getByRole('img', { name: 'Balance trend from 1,000 to 1,130' })).toBeTruthy();
+      expect(screen.getByTestId('planning-insights').textContent).toContain('2 between episodes');
+    });
+  });
 });

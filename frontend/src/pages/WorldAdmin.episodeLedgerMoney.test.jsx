@@ -2,6 +2,7 @@
  * Producer Mode → Episodes → Episode Ledger reads each episode's P&L and the
  * totals from the ledger (§8(aa) M4; Episode Money Phase A, Task #2278):
  * /financial-summary's by_episode, not episodes.total_income/total_expenses.
+ * Its event reference shows no cost_coins tag (§8(ff) Q14, Season Arc PR 8).
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -64,5 +65,25 @@ describe('Episode Ledger reads the ledger (#2278)', () => {
     expect(pnl.textContent).toContain('100');
     expect(pnl.textContent).toContain('200');
     expect(pnl.textContent).not.toContain('999');
+  });
+
+  test('the event reference carries no 🪙 cost_coins tag (§8(ff) Q14)', async () => {
+    const withScript = { ...EPISODE, script_content: 'Lala arrives at the Rose Gala. Then the Press Day pitch.' };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/episodes?show_id=show-1')) return { data: { episodes: [withScript] } };
+      if (url === '/api/v1/world/show-1/events') {
+        return { data: { events: [{ id: 'ev-1', name: 'Rose Gala', prestige: 7, cost_coins: 4321, strictness: 5 }] } };
+      }
+      if (url === '/api/v1/shows/show-1/financial-summary') return { data: { by_episode: [] } };
+      return { data: {} };
+    });
+    renderLedger();
+    fireEvent.click(await screen.findByText('Gala Night'));
+
+    const reference = (await screen.findByText('💌 Event')).parentElement;
+    expect(reference.textContent).toContain('Rose Gala');
+    expect(reference.textContent).toContain('⭐ 7');
+    expect(reference.textContent).not.toContain('4321');
+    expect(reference.textContent).not.toContain('🪙');
   });
 });

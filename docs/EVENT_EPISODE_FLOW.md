@@ -3791,6 +3791,24 @@ into PR 7." The four choices as put to her, with her rulings:
    (`narrative_chain.seeds_future_events`, deleted episodes left out); a
    seed already made into a thread is not offered again. Accepted.
 4. **A thread can be renamed or re-described at any time.** Accepted.
+
+**Build choices accepted (Evoni, 2026-10-01)**, Season Arc PR 8 (Planning
+Insights), verbatim: "PR 8 choices accepted (Evoni, 2026-10-01), record
+all five in §8(ff)." So these are no longer INFERRED:
+1. **A deal keeps "Difficulty N"** in the Episode Ledger's event
+   reference. It reads `cost_coins` but is not money; only the 🪙
+   `cost_coins` tag is removed (Q14).
+2. **The balance trend returns the newest 300 ledger rows**
+   (`planningInsightsService.TREND_LIMIT`); the running balance still
+   counts every row.
+3. **Slots with no plan and no result are counted per phase** ("6 slots
+   with nothing planned yet"), not listed.
+4. **The season-health line (Q15)** counts accepted episodes whose slot
+   had a planned outcome range, and how many of those landed inside it;
+   accepted episodes without a range are counted separately.
+5. **The old season-health route** (`GET
+   /api/v1/season-rhythm/season-health/:showId`, the 1/4/2/1 grade) stays
+   on the backend; the page no longer calls it.
 ---
 
 ## 9. Owed before enforcement

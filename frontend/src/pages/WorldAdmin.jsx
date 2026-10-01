@@ -1826,7 +1826,8 @@ The revised event should feel like a completely different experience from the si
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
                           <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
-                          <span style={S.eTag}>{linkedEvent.deal_type ? `Difficulty ${linkedEvent.cost_coins}` : `🪙 ${linkedEvent.cost_coins}`}</span>
+                          {/* No 🪙 cost_coins tag (§8(ff) Q14): the Episode Ledger's money is the ledger's. A deal's difficulty is not money. */}
+                          {linkedEvent.deal_type && <span style={S.eTag}>Difficulty {linkedEvent.cost_coins}</span>}
                           <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
                           {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid</span>}
                           {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>🎯 {linkedEvent.career_milestone}</span>}
@@ -7189,6 +7190,123 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
+// Planning Insights (§8(ff) A8, Q13, Q15): per slot the plan beside the
+// result and its money; phase totals; the balance trend over every ledger
+// row; the season-health line. Money is from the ledger, never cost_coins.
+const coins = (n) => `${n < 0 ? '−' : ''}${Math.abs(Math.round(n || 0)).toLocaleString()}`;
+const signedCoins = (n) => `${n > 0 ? '+' : ''}${coins(n)}`;
+
+function pressureNote(delta) {
+  if (delta == null) return null;
+  if (delta === 0) return { text: 'pressure on plan', color: '#15803d' };
+  const steps = Math.abs(delta);
+  return { text: `${steps} step${steps > 1 ? 's' : ''} ${delta > 0 ? 'above' : 'below'} plan`, color: '#b45309' };
+}
+
+function BalanceTrend({ trend }) {
+  if (!trend || trend.length < 2) return null;
+  const W = 300; const H = 60; const pad = 4;
+  const values = trend.map((t) => t.balance_after);
+  const min = Math.min(...values); const max = Math.max(...values);
+  const span = max - min || 1;
+  const x = (i) => pad + (i * (W - pad * 2)) / (trend.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - pad * 2)) / span;
+  const path = trend.map((t, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(t.balance_after).toFixed(1)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img"
+      aria-label={`Balance trend from ${coins(values[0])} to ${coins(values[values.length - 1])}`} style={{ display: 'block' }}>
+      <path d={path} fill="none" stroke="#B8962E" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      {trend.map((t, i) => t.between_episodes && (
+        <circle key={i} cx={x(i)} cy={y(t.balance_after)} r="2.5" fill="#6366f1" />
+      ))}
+    </svg>
+  );
+}
+
+function PlanningInsights({ insights, S }) {
+  if (!insights) return null;
+  const { health, money, phases } = insights;
+  const trend = money.trend || [];
+  const between = trend.filter((t) => t.between_episodes).length;
+  const healthLine = health.accepted === 0
+    ? 'No accepted episodes yet.'
+    : `${health.in_range} of ${health.with_range} accepted episode${health.with_range === 1 ? ' landed in its' : 's landed in their'} planned outcome range`
+      + (health.without_range ? ` · ${health.without_range} had no range planned` : '');
+  const stat = (label, value, color) => (
+    <div style={{ flex: '1 1 70px', minWidth: 0 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: color || '#1a1a2e' }}>{value}</div>
+      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+    </div>
+  );
+  return (
+    <div style={S.card} data-testid="planning-insights">
+      <h3 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Planning Insights</h3>
+      <p style={{ ...S.muted, margin: '0 0 10px', fontSize: 12 }}>
+        Each slot's plan beside what happened. Money comes from the ledger only.
+      </p>
+      <div data-testid="season-health" style={{ fontSize: 13, color: '#1a1a2e', marginBottom: 12 }}>
+        <strong>Season health:</strong> {healthLine}
+      </div>
+
+      <div data-testid="season-money" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        {stat('Income', coins(money.season.income), '#15803d')}
+        {stat('Spend', coins(money.season.spend), '#dc2626')}
+        {stat('Net', signedCoins(money.season.net))}
+        {money.balance != null && stat('Balance', coins(money.balance), '#B8962E')}
+      </div>
+      {trend.length >= 2 && (
+        <div style={{ marginBottom: 12 }}>
+          <BalanceTrend trend={trend} />
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+            Balance after each of {trend.length} ledger row{trend.length === 1 ? '' : 's'}
+            {between > 0 && <> · <span style={{ color: '#6366f1' }}>●</span> {between} between episodes</>}
+          </div>
+        </div>
+      )}
+
+      {phases.map((p) => (
+        <div key={p.phase} data-testid={`insights-phase-${p.phase}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, marginTop: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>Phase {p.phase}{p.title ? ` · ${p.title}` : ''}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+            Income {coins(p.totals.income)} · spend {coins(p.totals.spend)} · net {signedCoins(p.totals.net)}
+          </div>
+          {p.slots.map((sl) => {
+            const pn = pressureNote(sl.pressure_delta);
+            const range = sl.planned.outcome_range;
+            return (
+              <div key={sl.slot_number} data-testid={`insights-slot-${sl.slot_number}`} style={{ padding: '6px 0', fontSize: 12, borderTop: '1px dashed #f1f5f9' }}>
+                <div style={{ fontWeight: 600, color: '#1a1a2e', overflowWrap: 'anywhere' }}>
+                  {sl.label}{sl.episode ? ` · ${sl.episode.title || 'Untitled'}` : ''}
+                </div>
+                <div style={{ color: '#64748b' }}>
+                  Planned: {sl.planned.desired_pressure || 'no pressure set'}{range ? ` · ${range.min === range.max ? range.min : `${range.min} to ${range.max}`}` : ''}
+                </div>
+                <div style={{ color: '#64748b' }}>
+                  Actual: {sl.actual.outcome ? `${sl.actual.outcome} · ${sl.actual.pressure || '—'}` : 'not accepted yet'}
+                  {pn && <span style={{ color: pn.color, fontWeight: 600 }}> · {pn.text}</span>}
+                  {sl.outcome_in_range != null && (
+                    <span style={{ color: sl.outcome_in_range ? '#15803d' : '#dc2626', fontWeight: 600 }}> · {sl.outcome_in_range ? 'in range' : 'outside range'}</span>
+                  )}
+                </div>
+                {sl.money && (
+                  <div style={{ color: '#475569' }}>
+                    Income {coins(sl.money.income)} · spend {coins(sl.money.spend)} · net {signedCoins(sl.money.net)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {p.unplanned_count > 0 && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              {p.unplanned_count} slot{p.unplanned_count === 1 ? '' : 's'} with nothing planned yet
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Story threads (§8(ff) A3, A6, Q9): "you create and name them; drafts
 // are offered from seeds_future_events. Acceptance can mark one
 // "advanced", and only you close one."
@@ -7608,8 +7726,8 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [advancing, setAdvancing] = useState(false);
   const [warning, setWarning] = useState(null);
   const [goals, setGoals] = useState([]);
-  const [rhythm, setRhythm] = useState(null);
   const [roadmap, setRoadmap] = useState(null);
+  const [insights, setInsights] = useState(null);
   const [threadData, setThreadData] = useState({ threads: [], drafts: [] });
 
   // The season's 24 slots (Season Arc §8(ff) A2); reloaded alone after a
@@ -7629,6 +7747,15 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
     } catch (err) {
       console.error('Story threads load failed:', err);
     }
+    // Planning Insights (§8(ff) A8). The season-health score is one line in
+    // it, from the slot outcome ranges (Q15); the old 1/4/2/1 grade is not read.
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/season/insights`);
+      setInsights(r.data.insights || null);
+    } catch (err) {
+      console.error('Planning Insights load failed:', err);
+      setInsights(null);
+    }
   }, [showId]);
 
   const loadArc = useCallback(async () => {
@@ -7641,11 +7768,6 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
     try {
       const r = await api.get(`/api/v1/world/${showId}/goals?status=active`);
       setGoals(r.data.goals || []);
-    } catch { /* skip */ }
-
-    try {
-      const r = await api.get(`/api/v1/season-rhythm/season-health/${showId}`);
-      setRhythm(r.data);
     } catch { /* skip */ }
 
     await loadRoadmap();
@@ -7798,6 +7920,8 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
         <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
           onChanged={loadRoadmap} setToast={setToast} />
       )}
+
+      <PlanningInsights insights={insights} S={S} />
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>
