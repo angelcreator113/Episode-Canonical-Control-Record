@@ -215,3 +215,35 @@ describe('choosing the event on the brief (S3)', () => {
     expect(eventOptions(null)).toEqual([]);
   });
 });
+
+describe('a brief that is not a scene set\'s: venue generation (S5)', () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.post).mockReset();
+    vi.mocked(apiClient.get).mockReset();
+  });
+
+  test('requestBrief is asked (once, even inline), with no event choice; overrides re-ask it; confirm hands over no event', async () => {
+    const asks = [];
+    const onConfirm = vi.fn();
+    render(
+      <SceneBriefConfirm
+        title="Generate the venue"
+        requestBrief={(body) => { asks.push(body); return ok({ target: { kind: 'venue' }, brief: BRIEF({ event_id: 'ev-1' }), estimate: { usd: 0.1, priced: true, images: 2 } }); }}
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />
+    );
+    await screen.findByTestId('sbc-line-architecture');
+    expect(asks).toEqual([{}]);
+    expect(apiClient.post).not.toHaveBeenCalled();
+    expect(apiClient.get).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('sbc-event')).toBeNull();
+    expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.10');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Architecture' }));
+    await waitFor(() => expect(asks).toHaveLength(2));
+    expect(asks[1]).toEqual({ overrides: { architecture: '' } });
+    fireEvent.click(screen.getByTestId('sbc-confirm'));
+    expect(onConfirm).toHaveBeenCalledWith({ architecture: '' }, {});
+  });
+});

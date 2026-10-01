@@ -3403,6 +3403,48 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   - On the Scene Sets page, generate, regenerate and cascade send the
     event chosen (null for none).
 
+**What S5 built** (Task #2395):
+
+- **Venue generation is made from Scene Briefs.**
+  `venueGenerationService.prepareVenueBriefs` builds two briefs for the
+  event named in the route (S3) at the event's venue World Location
+  (`venue_location_id`, else its automation copy):
+  - the interior, the set's base (WIDE);
+  - the exterior, an ESTABLISHING angle whose camera is the street-side
+    facade (`EXTERIOR_CAMERA`).
+
+  Overrides apply to both, except a camera override, which is the
+  interior's. The old prompt templates and the category look-up are no
+  longer sent. `buildVenueIdentity` is still exported and is no longer
+  called; S4 removes it with the other generic text.
+- **It saves the full brief and the `world_location_id`.** The new scene
+  set keeps:
+  - its World Location;
+  - `base_generation.brief` (the interior's) and
+    `base_generation.exterior_brief`;
+  - the prompts sent: `base_runway_prompt`, and each angle's
+    `runway_prompt`.
+
+  The set's description is the location's own. Only a venue whose location
+  has no description takes the event template's venue theme as the set's
+  description.
+- **It never writes the location's style guide.** The old replacement of
+  `world_locations.style_guide` with `{ venue_url, generated_for_event }`
+  is gone.
+- **The brief before it is paid for (S2).**
+  - `POST /world/:showId/events/:eventId/venue-brief` (requireAuth,
+    read-only) returns both briefs and the estimate for the two images.
+  - `generate-venue` takes the confirmed `overrides` and now has
+    `aiRateLimiter`.
+  - In the event editor, "Generate Venue Images" opens the venue's brief
+    and generates on confirm.
+  - For a linked scene set with no image, the button opens that set's base
+    brief with this event chosen, and generates its base. The old call
+    there was skipped because the event already had a scene set.
+- **Mark Ready no longer starts a paid generation by itself.** With no
+  venue, it opens the venue's brief. RULED (Evoni, 2026-10-01): "Mark
+  Ready opening the venue brief is accepted."
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in

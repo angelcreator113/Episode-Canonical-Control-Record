@@ -263,6 +263,28 @@ function buildSceneBrief({
   };
 }
 
+// S2: the "Your override" lines the person set on the brief they were shown:
+// { <brief line key>: text }; an empty text removes the line. { value } when
+// absent (null) or valid, { error } otherwise. Used by the scene-set routes
+// and venue generation (S5).
+const BRIEF_OVERRIDE_MAX_KEYS = 40;
+const BRIEF_OVERRIDE_MAX_LEN = 1000;
+function readBriefOverrides(raw) {
+  if (raw === undefined || raw === null) return { value: null };
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'overrides must be an object of { line key: text }' };
+  const entries = Object.entries(raw);
+  if (entries.length > BRIEF_OVERRIDE_MAX_KEYS) return { error: `at most ${BRIEF_OVERRIDE_MAX_KEYS} overrides` };
+  const value = {};
+  for (const [key, text] of entries) {
+    if (!/^[a-z0-9_.-]{1,64}$/i.test(key)) return { error: `override key "${key}" is not a brief line key` };
+    if (text !== null && typeof text !== 'string') return { error: `override "${key}" must be text` };
+    const t = String(text ?? '');
+    if (t.length > BRIEF_OVERRIDE_MAX_LEN) return { error: `override "${key}" must be at most ${BRIEF_OVERRIDE_MAX_LEN} characters` };
+    value[key] = t;
+  }
+  return { value };
+}
+
 /** The prompt a brief sends: the rules, then the place, event, shot and environment. */
 function briefToPrompt(brief) {
   const byLayer = (layer) => (brief?.lines || []).filter((l) => l.layer === layer && l.text).map((l) => l.text);
@@ -346,4 +368,5 @@ module.exports = {
   loadBriefLocation,
   loadBriefEvent,
   prepareSceneBrief,
+  readBriefOverrides,
 };

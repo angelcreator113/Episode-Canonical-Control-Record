@@ -3342,15 +3342,56 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
   }
 });
 
+// POST /world/:showId/events/:eventId/venue-brief — the Scene Briefs a venue
+// generation would send (S2, S5), read-only: the interior (the set's base)
+// and the exterior, for this event at its venue World Location, with the
+// estimate for the two images. Body: { overrides? }.
+router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { readBriefOverrides, briefToPrompt } = require('../services/sceneBriefService');
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    const { prepareVenueBriefs } = require('../services/venueGenerationService');
+    const { draft, interior, exterior, estimate } = await prepareVenueBriefs(models.sequelize, event, { overrides: briefOverrides.value || {} });
+    return res.json({
+      success: true,
+      data: {
+        target: { kind: 'venue', event_id: event.id, scene_set_name: draft.name, world_location_id: draft.world_location_id },
+        brief: interior,
+        prompt: briefToPrompt(interior),
+        exterior_brief: exterior,
+        exterior_prompt: briefToPrompt(exterior),
+        estimate,
+      },
+    });
+  } catch (err) {
+    console.error('[VenueGen] venue-brief error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
-// Body: { force?: boolean } — when `force` is true the endpoint regenerates
+// Body: { force?: boolean, overrides? } — when `force` is true the endpoint regenerates
 // even if the event already has a scene_set_id attached. Otherwise it skips
 // and returns the existing scene set so the "Mark Ready" flow doesn't clobber
-// a venue the user deliberately picked.
-router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, async (req, res) => {
+// a venue the user deliberately picked. overrides: the "Your override" lines
+// confirmed on the venue's brief (S2, S5).
+router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const force = req.body?.force === true;
+    const { readBriefOverrides } = require('../services/sceneBriefService');
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -3399,7 +3440,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, async 
     event.show_id = showId;
 
     const { generateVenueImages } = require('../services/venueGenerationService');
-    const result = await generateVenueImages(event, models);
+    const result = await generateVenueImages(event, models, { overrides: briefOverrides.value || {} });
 
     return res.json({
       success: true,
