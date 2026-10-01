@@ -1500,13 +1500,22 @@ router.get('/:id/preview-prompt', validateUUIDParam('id'), requireAuth, async (r
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
-    const prompt = sceneGenService.buildPrompt(set, angleLabel);
+    // The Scene Brief (S1): the place from the set and its World Location,
+    // the event only when one is named (?event_id=), the shot, the environment.
+    const { prepareSceneBrief, briefToPrompt } = require('../services/sceneBriefService');
+    const brief = await prepareSceneBrief(SceneSet.sequelize, set, {
+      angleLabel,
+      continuity: angleLabel !== 'WIDE' && angleLabel !== 'OTHER',
+      eventId: req.query.event_id || null,
+    });
+    const prompt = briefToPrompt(brief);
     const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
     const negativePrompt = sceneGenService.NEGATIVE_PROMPT;
 
     res.json({
       success: true,
       data: {
+        brief,
         prompt,
         videoPrompt,
         negativePrompt,

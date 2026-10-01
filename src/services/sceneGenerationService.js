@@ -35,6 +35,7 @@ const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_B
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
+const { buildSceneBrief, briefToPrompt, prepareSceneBrief } = require('./sceneBriefService');
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
@@ -113,82 +114,20 @@ const _ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, _eventContext = null) {
-  const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
-
-  // User description is the MOST important part — use the full text
-  const description = (sceneSet.canonical_description || '').trim();
-
-  // Build prompt with description first, boilerplate minimal
-  // IMPORTANT: avoid label-like text (LOCATION:, CAMERA:, etc.) that DALL-E renders literally
-  const parts = [
-    'Empty room, no people, no text, no labels, no annotations, no watermarks.',
-    `${sceneSet.name}.`,
-    description,
-  ];
-
-  // Time/season as natural descriptions, not labels
-  const timeOfDay = sceneSet.time_of_day;
-  const season = sceneSet.season;
-  if (timeOfDay) {
-    const timeDescriptions = {
-      morning: 'Soft golden morning light streaming through windows.',
-      afternoon: 'Bright natural daylight with even illumination.',
-      golden_hour: 'Warm golden-hour light casting long soft shadows.',
-      evening: 'Warm amber evening light with table lamps and soft glow.',
-      night: 'Nighttime lighting with accent lamps and city glow through windows.',
-    };
-    parts.push(timeDescriptions[timeOfDay] || '');
-  }
-  if (season) {
-    const seasonDescriptions = {
-      spring: 'Spring atmosphere with pastel accents and blooming flowers visible outside.',
-      summer: 'Summer atmosphere with golden light and open windows.',
-      fall: 'Autumn atmosphere with warm amber tones and rich textures.',
-      winter: 'Winter atmosphere with cool blue-white light and frosty windows.',
-    };
-    parts.push(seasonDescriptions[season] || '');
-  }
-
-  // Room properties affect spatial rendering
-  const rp = sceneSet.visual_language?.room_properties;
-  if (rp) {
-    const rpParts = [];
-    if (rp.room_size) {
-      const sizeDescriptions = {
-        compact: 'Compact cozy room with furniture close together.',
-        medium: 'Medium-sized room with moderate space between furniture.',
-        spacious: 'Spacious room with generous open floor space and wide sight lines.',
-        grand: 'Grand expansive space with high ceilings and vast floor area.',
-      };
-      rpParts.push(sizeDescriptions[rp.room_size] || '');
-    }
-    if (rp.ceiling_height && rp.ceiling_height !== 'standard') {
-      const ceilingDesc = { tall: 'Tall ceilings.', vaulted: 'Vaulted cathedral ceilings.', double_height: 'Double-height ceilings with dramatic vertical space.' };
-      rpParts.push(ceilingDesc[rp.ceiling_height] || '');
-    }
-    if (rp.room_shape && rp.room_shape !== 'rectangular') {
-      const shapeDesc = { square: 'Square room layout.', l_shaped: 'L-shaped room with two distinct areas.', open_plan: 'Open plan layout flowing into adjacent spaces.' };
-      rpParts.push(shapeDesc[rp.room_shape] || '');
-    }
-    const rpText = rpParts.filter(Boolean).join(' ');
-    if (rpText) parts.push(rpText);
-  }
-
-  // Camera direction as natural text
-  parts.push(cameraText);
-
-  // For non-WIDE angles
-  if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
-    parts.push('Same room as the reference image. Same wall colors, furniture, and decor. Only the camera position changed.');
-  }
-
-  parts.push('Photorealistic cinematic quality. Pinterest-worthy feminine aesthetic. Soft natural lighting.');
-
-  const full = parts.filter(Boolean).join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // DALL-E handles up to 4000 chars — give the description room to breathe
-  return full.length > 3500 ? full.slice(0, 3497) + '...' : full;
+/**
+ * The prompt for a scene set's image, from its Scene Brief (ruling S1,
+ * 2026-09-30; sceneBriefService). This synchronous form builds the brief
+ * from the scene set alone; generation (generateBaseScene, generateAngle,
+ * regenerateAngleRefined) loads the World Location, and an event only when
+ * one is chosen explicitly, with prepareSceneBrief. No generic style or
+ * lighting text is added: lighting comes from the brief.
+ */
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+  const angle = String(angleLabel || 'WIDE').toUpperCase();
+  return briefToPrompt(buildSceneBrief({
+    sceneSet, angleLabel: angle, cameraDirection: customCameraDirection,
+    continuity: angle !== 'WIDE' && angle !== 'OTHER',
+  }));
 }
 
 /**
@@ -847,35 +786,6 @@ async function deleteOldS3Asset(url) {
     console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
   }
 }
-// ─── EVENT CONTEXT LOADER ────────────────────────────────────────────────────
-
-async function loadEventContext(sceneSet, models) {
-  try {
-    const sequelize = models.sequelize;
-    // Find events linked to this scene set
-    const [events] = await sequelize.query(
-      `SELECT location_hint, dress_code, prestige, name FROM world_events
-       WHERE scene_set_id = :sceneSetId AND deleted_at IS NULL LIMIT 1`,
-      { replacements: { sceneSetId: sceneSet.id } }
-    );
-    if (events.length > 0) return events[0];
-
-    // Fallback: find events linked to episodes that use this scene set
-    const [epEvents] = await sequelize.query(
-      `SELECT we.location_hint, we.dress_code, we.prestige, we.name
-       FROM world_events we
-       JOIN scene_set_episodes sse ON sse.episode_id = we.used_in_episode_id
-       WHERE sse.scene_set_id = :sceneSetId AND we.deleted_at IS NULL AND sse.deleted_at IS NULL
-       LIMIT 1`,
-      { replacements: { sceneSetId: sceneSet.id } }
-    );
-    if (epEvents.length > 0) return epEvents[0];
-  } catch (e) {
-    // Tables may not exist yet
-  }
-  return null;
-}
-
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 /**
@@ -884,12 +794,20 @@ async function loadEventContext(sceneSet, models) {
  *
  * options.skipAnalysis: skip the Claude Vision analysis and style auto-lock
  * that normally follow (the base-model comparison generates stills only).
+ * options.eventId: the event chosen explicitly for this image (S1, S3);
+ *   without one, the brief has no event layer.
+ * options.overrides: { <brief line key>: text } (S2's "Your override").
+ *
+ * The prompt is the set's Scene Brief (S1); the brief is kept on
+ * base_generation.brief.
  */
 async function generateBaseScene(sceneSet, models, options = {}) {
   const { SceneSet } = models;
 
-  const eventContext = await loadEventContext(sceneSet, models);
-  const prompt = buildPrompt(sceneSet, 'WIDE', null, eventContext);
+  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+    angleLabel: 'WIDE', eventId: options.eventId || null, overrides: options.overrides || {},
+  });
+  const prompt = briefToPrompt(brief);
 
   await SceneSet.update(
     { generation_status: 'generating', base_runway_prompt: prompt },
@@ -929,6 +847,7 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       usage_log_ids: usageLogIds,
       input_tokens_unpriced: inputTokensUnpriced,
       generated_at: new Date().toISOString(),
+      brief,
     };
     await SceneSet.update({
       base_runway_seed: lockedSeed,
@@ -1708,44 +1627,34 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
   const _cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
 
-  // Build the prompt using blueprint data
-  const eventContext = await loadEventContext(sceneSet, models);
-  let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
-
-  // Add camera direction
-  if (sceneAngle.camera_direction) {
-    prompt = `${sceneAngle.camera_direction}. ${prompt}`;
-  }
-
-  // ── SceneSpec camera contracts (preferred) or fallback to anchor_objects ──
+  // ── The shot's required visible features: the SceneSpec camera
+  // contracts (preferred), else the anchor objects ──
   const spec = sceneSet.scene_spec;
   let specConstraints = '';
   if (spec?.camera_contracts && spec?.objects) {
     specConstraints = sceneSpecService.buildAngleConstraints(spec, angleLabel);
-
-    // Add state-driven ambient if time_of_day is set
-    const timeOfDay = sceneSet.time_of_day;
-    if (timeOfDay) {
-      const ambient = sceneSpecService.buildStateAmbient(spec, timeOfDay);
-      if (ambient) {
-        prompt = `${ambient} ${prompt}`;
-      }
-    }
   }
 
-  // Build legacy anchors (used both as prompt fallback and as DALL-E hint)
+  // Build legacy anchors (used both as the fallback and as DALL-E hint)
   const relevantAnchors = anchorObjects
     .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
     .map(a => `${a.name} (${a.position}): ${a.description}`)
     .slice(0, 5);
 
-  if (specConstraints) {
-    prompt = `${specConstraints}\n\n${prompt}`;
-    console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
-  } else if (relevantAnchors.length > 0) {
-    // Fallback to legacy anchor_objects when no spec
-    prompt = `These objects MUST appear: ${relevantAnchors.join('; ')}. ${prompt}`;
-  }
+  // The prompt is the angle's Scene Brief (S1): the place, the event chosen
+  // for the set's base (if any), this shot, and the environment. Lighting
+  // comes from the brief; no state ambient or generic text is added.
+  const baseBrief = sceneSet.base_generation?.brief || null;
+  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+    angleLabel,
+    cameraDirection: sceneAngle.camera_direction || null,
+    requiredFeatures: specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null),
+    continuity: Boolean(sceneSet.base_still_url),
+    eventId: baseBrief?.event_id || null,
+    overrides: baseBrief?.overrides || {},
+  });
+  const prompt = briefToPrompt(brief);
+  if (specConstraints) console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
 
   // Keep base-image conditioning on by default. Only disable it for known
   // non-spatial composites where continuity checks are meaningless.
@@ -1980,8 +1889,11 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const eventContext = await loadEventContext(sceneSet, models);
-  const basePrompt = buildPrompt(sceneSet, angleLabel, null, eventContext);
+  const baseBrief = sceneSet.base_generation?.brief || null;
+  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+    angleLabel, continuity: true, eventId: baseBrief?.event_id || null, overrides: baseBrief?.overrides || {},
+  });
+  const basePrompt = briefToPrompt(brief);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
 
   await SceneAngle.update(
