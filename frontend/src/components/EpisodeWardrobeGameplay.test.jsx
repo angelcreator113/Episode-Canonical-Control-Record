@@ -528,6 +528,54 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
     }
   });
 
+  // W3 (Evoni, 2026-10-01): "Full Closet still doesn't show all my pieces".
+  test('W3: the Full Closet opens on All: every piece at once, each with its stored category, and the count of the whole closet', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    expect(await screen.findByText('Closet Mystery')).toBeTruthy();
+    for (const [, name] of EXPECT) expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByText('Closet Dress')).toBeTruthy();
+    expect(screen.getByTestId('closet-count').textContent).toBe(`${ALL.length} of ${ALL.length} pieces`);
+    expect(screen.getByTestId('closet-category-k-odd').textContent).toBe('costume piece · Other');
+    expect(screen.getByTestId('closet-category-k-skirt').textContent).toBe('Mini Skirt · Bottom');
+    // The group switches carry their counts.
+    expect(screen.getByRole('button', { name: 'Other' }).textContent).toContain('2');
+    expect(screen.getByRole('button', { name: 'All' }).textContent).toContain(String(ALL.length));
+  });
+
+  test('W3: reopening the Full Closet reloads it, so a piece added since appears', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Closet Mystery');
+    ALL.push({ ...own, id: 'k-new', name: 'Closet Newcomer', clothing_category: 'top' });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'For This Event' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+      expect(await screen.findByText('Closet Newcomer')).toBeTruthy();
+    } finally {
+      ALL.pop();
+    }
+  });
+
+  test('W3: a closet that fails to load says so, instead of showing an empty group', async () => {
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?show_id=')
+      ? Promise.reject(new Error('network down')) : poolGet(url)));
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    expect((await screen.findByTestId('closet-error')).textContent).toMatch(/couldn't load the closet/i);
+  });
+
+  test('W3: fewer pieces loaded than the closet holds is flagged', async () => {
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?show_id=')
+      ? Promise.resolve({ data: { success: true, data: FULL, pagination: { page: 1, limit: 200, total: FULL.length + 3 } } })
+      : poolGet(url)));
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    expect((await screen.findByTestId('closet-count')).textContent).toBe(`${FULL.length} of ${FULL.length + 3} pieces — some did not load`);
+  });
+
   test('the Bottom tab stays reachable with a dress equipped', async () => {
     await renderGame();
     fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
