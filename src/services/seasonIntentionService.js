@@ -17,7 +17,8 @@
  *   Q12 (accepted). "draft only the next open slot, on acceptance and on
  *   demand, not all 24 at once."
  *
- * The story thread joins the intention with story threads (build PR 7).
+ * The story thread (A3) is chosen from the show's threads that are not
+ * closed (storyThreadService, build PR 7); a draft never changes it.
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -69,12 +70,15 @@ function normaliseIntention(body = {}) {
     }
     range = { min, max };
   }
-  return {
+  const out = {
     story_purpose: text(body.story_purpose, 1000),
     career_focus: text(body.career_focus, 300),
     desired_pressure: pressure,
     outcome_range: range,
   };
+  // Only when given: a draft (and an edit that leaves it out) keeps the thread.
+  if (body.story_thread_id !== undefined) out.story_thread_id = body.story_thread_id || null;
+  return out;
 }
 
 /** Q10: the brief fields an outcome range sets. Null when there is no range. */
@@ -98,13 +102,16 @@ async function loadFutureSlot(sequelize, showId, slotId, transaction) {
 }
 
 async function writeIntention(sequelize, slotId, intention, source) {
+  const setThread = intention.story_thread_id !== undefined;
   await sequelize.query(
     `UPDATE season_slots SET story_purpose = :story_purpose, career_focus = :career_focus,
             desired_pressure = :desired_pressure, outcome_range = CAST(:outcome_range AS jsonb),
+            ${setThread ? 'story_thread_id = :story_thread_id,' : ''}
             intention_source = :source, updated_at = NOW()
       WHERE id = :slotId`,
     { replacements: {
       ...intention,
+      story_thread_id: setThread ? intention.story_thread_id : null,
       outcome_range: intention.outcome_range ? JSON.stringify(intention.outcome_range) : null,
       source, slotId,
     } });
@@ -114,6 +121,10 @@ async function writeIntention(sequelize, slotId, intention, source) {
 async function saveIntention(sequelize, showId, slotId, body) {
   const intention = normaliseIntention(body);
   const slot = await loadFutureSlot(sequelize, showId, slotId);
+  if (intention.story_thread_id) {
+    const { assertThreadChoosable } = require('./storyThreadService');
+    await assertThreadChoosable(sequelize, showId, intention.story_thread_id);
+  }
   await writeIntention(sequelize, slotId, intention, SOURCES.EDITED);
   return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.EDITED } };
 }
@@ -142,7 +153,11 @@ async function draftingContext(sequelize, showId, slot) {
       WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY priority ASC LIMIT 8`,
     { replacements: { showId } }).catch((err) => { console.error('[seasonIntention] goals load failed:', err.message); return [[]]; });
   const debt = parse(arc?.narrative_debt, []);
-  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [] };
+  const [threads] = await sequelize.query(
+    `SELECT title FROM show_story_threads WHERE show_id = :showId AND status <> 'closed' AND deleted_at IS NULL
+      ORDER BY created_at DESC LIMIT 8`,
+    { replacements: { showId } }).catch((err) => { console.error('[seasonIntention] threads load failed:', err.message); return [[]]; });
+  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads };
 }
 
 function buildDraftPrompt(slot, ctx) {
@@ -154,6 +169,7 @@ function buildDraftPrompt(slot, ctx) {
     ? ctx.goals.map((g) => `- ${g.title} (${g.target_metric} ${g.current_value}/${g.target_value})`).join('\n')
     : '- None active.';
   const debt = ctx.debt.length ? ctx.debt.map((d) => `- ${d.narrative_weight || d.goal_title}`).join('\n') : '- None.';
+  const threads = (ctx.threads || []).length ? ctx.threads.map((t) => `- ${t.title}`).join('\n') : '- None.';
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
 Draft the intention for episode slot ${label} of the season "${ctx.arc?.title || 'Season 1'}".
@@ -167,6 +183,9 @@ ${goals}
 
 Narrative debt she carries:
 ${debt}
+
+Open story threads:
+${threads}
 
 Return JSON only:
 {

@@ -3775,6 +3775,22 @@ debt shown but not scored yet)." So these are no longer INFERRED:
   brand, venue within the last three episodes) −6 with a warning, never a
   block.
 - **Narrative debt** is shown with the suggestions but not scored yet.
+
+**Build choices (Evoni, 2026-10-01)**, Season Arc PR 7 (story threads),
+verbatim: "1) a closed thread can be reopened by Evoni (with confirm),
+keeping its history; 2) accepted; 3) accepted; 4) accepted. Build reopen
+into PR 7." The four choices as put to her, with her rulings:
+1. **Reopen.** Proposed: closing is final. Ruled: Evoni can reopen a
+   closed thread, after a confirm, and it keeps its history. Built as
+   `storyThreadService.reopenThread`: the thread returns to "advanced" if
+   an accepted episode had advanced it, else to "open"; `closed_at` and
+   the last advance are kept and `reopened_at` is set.
+2. **An "advanced" thread can still be chosen** for later slots, so one
+   thread runs across several episodes. Accepted.
+3. **Drafts come from the seeds of the show's live episodes' briefs**
+   (`narrative_chain.seeds_future_events`, deleted episodes left out); a
+   seed already made into a thread is not offered again. Accepted.
+4. **A thread can be renamed or re-described at any time.** Accepted.
 ---
 
 ## 9. Owed before enforcement

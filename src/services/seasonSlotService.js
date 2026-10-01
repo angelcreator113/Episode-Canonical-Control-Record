@@ -224,6 +224,7 @@ async function getRoadmap(sequelize, showId) {
   const [rows] = await sequelize.query(
     `SELECT s.id, s.slot_number, s.phase, s.season_number, s.locked_at,
             s.story_purpose, s.career_focus, s.desired_pressure, s.outcome_range, s.intention_source,
+            st.id AS thread_id, st.title AS thread_title, st.status AS thread_status,
             s.actual_outcome, s.actual_pressure,
             ep.id AS episode_id, ep.title AS episode_title, ep.status AS episode_status,
             ep.evaluation_status AS episode_evaluation_status,
@@ -231,6 +232,7 @@ async function getRoadmap(sequelize, showId) {
        FROM season_slots s
        LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
        LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
+       LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
       WHERE s.arc_id = :arcId AND s.deleted_at IS NULL
       ORDER BY s.slot_number ASC`,
     { replacements: { arcId: arc.id } });
@@ -255,6 +257,7 @@ async function getRoadmap(sequelize, showId) {
         career_focus: r.career_focus,
         desired_pressure: r.desired_pressure,
         outcome_range: parseJson(r.outcome_range, null),
+        story_thread: r.thread_id ? { id: r.thread_id, title: r.thread_title, status: r.thread_status } : null,
         source: r.intention_source,
       },
       result: { actual_outcome: r.actual_outcome, actual_pressure: r.actual_pressure },
@@ -351,8 +354,9 @@ async function getRoadmap(sequelize, showId) {
 async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
   const [[slot]] = await sequelize.query(
     `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.career_focus, s.desired_pressure,
-            s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.phases
+            s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.phases, st.title AS thread_title
        FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id
+       LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
       WHERE s.id = :slotId`,
     { replacements: { slotId }, transaction });
   if (!slot) return null;
@@ -376,6 +380,7 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
     career_focus: slot.career_focus || null,
     desired_pressure: slot.desired_pressure || null,
     outcome_range: parseJson(slot.outcome_range, null),
+    story_thread: slot.thread_title || null,
     snapshotted_at: new Date().toISOString(),
   };
   await sequelize.query(
