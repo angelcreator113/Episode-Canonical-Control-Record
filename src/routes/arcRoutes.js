@@ -21,6 +21,7 @@
  * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
  * POST   /world/:showId/season/threads/:threadId/reopen — Reopen a closed one, keeping its history
+ * GET    /world/:showId/season/insights — Planning Insights: plan beside result, money from the ledger (A8, Q13, Q15)
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -189,6 +190,21 @@ router.get('/world/:showId/season/roadmap', requireAuth, async (req, res) => {
     return res.json({ success: true, roadmap });
   } catch (err) {
     console.error('[ArcRoutes] season roadmap error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /world/:showId/season/insights — Planning Insights (§8(ff) A8, Q13,
+// Q15), read-only: per slot the plan beside the result, money from the
+// ledger with phase totals, the balance trend, the season-health line.
+router.get('/world/:showId/season/insights', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getInsights } = require('../services/planningInsightsService');
+    const insights = await getInsights(models.sequelize, req.params.showId);
+    return res.json({ success: true, insights });
+  } catch (err) {
+    console.error('[ArcRoutes] season insights error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
