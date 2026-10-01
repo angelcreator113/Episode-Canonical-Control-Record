@@ -21,6 +21,7 @@ RECORD. Standings:
 - **ATTESTED**: Evoni's account of her terminal, as she gave it.
 - **MEASURED**: what this repository shows, with output pasted.
 - **INFERRED**: marked where used.
+- **RULED**: Evoni's decision, quoted.
 
 Nothing is upgraded. This document closes no keystone and discharges no
 owed item. It mints no FD, XK or PE number, and it rules on nothing.
@@ -36,8 +37,9 @@ as in the CW, CX and CY records.
 **The account's source.** Evoni's request to file CZ carried a
 "[paste the CZ summary]" placeholder instead of a summary. This record is
 filed from the script output she pasted twice earlier the same afternoon,
-headed "Deploy (Evoni, 2026-10-01, via scripts/deploy-prod.sh)". If the
-summary she meant differs, a banner or an amendment corrects this record.
+headed "Deploy (Evoni, 2026-10-01, via scripts/deploy-prod.sh)". She
+confirmed it before filing (RULED, verbatim): "The CZ summary you used is
+the right one."
 
 ## §0. Evoni's account, as given
 
@@ -259,9 +261,10 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
   connected.
 - **CFO:** 89/100, 0 critical, 4 warnings, unchanged from CY.
 - **App check:** not done yet (Evoni).
-- **Source of the account:** the script output Evoni pasted, since the
-  filing request held a placeholder instead of a summary.
-- Nothing is RULED here. The filing session made no host, AWS, database or
+- **Source of the account:** the script output Evoni pasted, which she
+  confirmed is the CZ summary.
+- Nothing is RULED here beyond Evoni's confirmation of the account's
+  source. The filing session made no host, AWS, database or
   Cognito contact.
 
 *Type: deploy record. Rules: nothing. Mints: nothing. Discharges: nothing.
