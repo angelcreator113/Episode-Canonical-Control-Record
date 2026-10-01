@@ -1558,3 +1558,26 @@
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+
+/* The scene set for the event (S7): the picker's groups, the create note,
+   and the chosen set's link in Place (read-only after Start Episode). */
+.epp-modal-group-title {
+  padding: 8px 12px 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7a52;
+}
+.epp-inline-create-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+.epp-scene-set-link {
+  color: var(--lala-gold, #B8962E);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}

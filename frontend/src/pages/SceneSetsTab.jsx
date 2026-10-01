@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import apiClient from '../services/api';
 import './SceneSetsTab.css';
@@ -483,7 +484,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -734,7 +735,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   };
 
   return (
-    <div className="scene-sets-card">
+    <div className={`scene-sets-card${focused ? ' scene-sets-card-focused' : ''}`} data-scene-set-id={set.id}>
       {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
         className={`scene-sets-card-preview${heroImage ? ' has-image' : ''}`}
@@ -2307,6 +2308,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 export default function SceneSetsTab() {
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
+  // ?set=<id> opens the page on that set (S7: the Event Package links to
+  // the event's chosen set): scrolled into view and outlined.
+  const [searchParams] = useSearchParams();
+  const focusSetId = searchParams.get('set');
   const [error, setError] = useState(null);
   const [generatingIds, setGeneratingIds] = useState(new Set());
   const [generationProgressMap, setGenerationProgressMap] = useState({});
@@ -2369,6 +2374,12 @@ export default function SceneSetsTab() {
   }, []);
 
   useEffect(() => { fetchSets(); }, [fetchSets]);
+
+  useEffect(() => {
+    if (!focusSetId || loading || !/^[\w-]+$/.test(focusSetId)) return;
+    const el = document.querySelector(`[data-scene-set-id="${focusSetId}"]`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focusSetId, loading, sets]);
 
   // Fetch shows for selectors
   useEffect(() => {
@@ -3207,12 +3218,16 @@ export default function SceneSetsTab() {
       )}
 
       {/* Grid */}
+      {!loading && focusSetId && !sets.some((s) => s.id === focusSetId) && (
+        <p className="scene-sets-focus-missing" data-testid="scene-sets-focus-missing">That scene set was not found.</p>
+      )}
       {!loading && filtered.length > 0 && (
         <div className="scene-sets-grid">
           {filtered.map(set => (
             <SceneSetCard
               key={set.id}
               set={set}
+              focused={set.id === focusSetId}
               onGenerateBase={handleGenerateBase}
               onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}

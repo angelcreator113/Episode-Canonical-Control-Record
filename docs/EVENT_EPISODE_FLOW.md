@@ -3445,6 +3445,35 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   venue, it opens the venue's brief. RULED (Evoni, 2026-10-01): "Mark
   Ready opening the venue brief is accepted."
 
+**What S7 built** (Task #2395):
+
+- **Choosing.** In the Event Package's Place section, "Choose scene set" /
+  "Change scene set" open a picker of every scene set of the show
+  (`orderSceneSetsForEvent`).
+  - The venue's own sets come first, under "At <venue>": its World
+    Location's, event locations first, then by name. The show's other sets
+    follow, by name; a set with no image says so.
+  - `GET /scene-sets` returns every show's sets, so another show's set is
+    left out unless it is at the venue.
+  - Choosing saves the event's `scene_set_id`.
+  - Before S7 the picker listed only the venue's own sets, and only once a
+    venue was set. A set can now be chosen with no venue; one is created
+    only for a venue.
+- **Creating one for the venue.** "Create a scene set for <venue>" (named
+  after the venue, editable) creates an EVENT_LOCATION set at the venue's
+  World Location (S5) and chooses it for the event.
+  - Its base brief then opens with this event chosen (S3) and the cost.
+    The base is generated on confirm, with the event chosen there.
+  - Cancelling keeps the set chosen and generates nothing.
+- **After Start Episode.** The chosen set is shown read-only: its name
+  links to it, with no Change. The link opens Producer Mode → Assets →
+  Scene Sets on that set (`?tab=scene-sets&set=<id>`, outlined).
+  - The link shows before Start Episode too.
+  - An unknown set says it was not found.
+- **No set by matching.** Creating an event with a `venue_location_id` no
+  longer links the first scene set found at that location
+  (`SceneSet.findOne`, no order); a set named in the request is kept.
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in
