@@ -171,3 +171,56 @@ export async function fetchClosetWithTotal(api, showId, { pageSize = CLOSET_PAGE
   }
   return { items: all, total: serverTotal };
 }
+
+// ─── W1 (Evoni, 2026-10-01): matching sets ───
+// "Wardrobe pieces can be linked as a matching set; choosing the set equips
+// every piece in its own slot at once, and the set shows as one look.
+// Pieces stay individually choosable." A set is the pieces sharing
+// outfit_set_id (named outfit_set_name; POST /api/v1/wardrobe/matching-sets).
+export const SETS_GROUP = { key: 'sets', icon: '🔗', label: 'Sets', categories: [], required: false, desc: 'Matching sets' };
+
+/** The matching sets among closet items: [{ id, name, pieces }], by name. */
+export function matchingSetsFrom(items) {
+  const byId = new Map();
+  for (const item of items || []) {
+    const id = item?.outfit_set_id;
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, { id, name: item.outfit_set_name || 'Matching set', pieces: [] });
+    byId.get(id).pieces.push(item);
+  }
+  return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/**
+ * The slots after equipping one piece (pure): a dress clears top and
+ * bottom, a top or bottom clears the dress, Accessories and Jewelry add
+ * beside the rest (W2), any other slot is replaced. A piece with no game
+ * slot changes nothing.
+ */
+export function equipInto(filled, item) {
+  const slotKey = gameSlotFor(item?.clothing_category);
+  if (!slotKey) return filled;
+  if (MULTI_SLOTS.has(slotKey)) {
+    const worn = slotPieces(filled, slotKey);
+    return worn.some((p) => p.id === item.id) ? filled : { ...filled, [slotKey]: [...worn, item] };
+  }
+  if (slotKey === 'body') return { ...filled, body: item, top: undefined, bottom: undefined };
+  if (slotKey === 'top' || slotKey === 'bottom') return { ...filled, [slotKey]: item, body: undefined };
+  return { ...filled, [slotKey]: item };
+}
+
+/**
+ * The looks being worn: a set shows as one look once two or more of its
+ * pieces are on. [{ id, name, worn }].
+ */
+export function wornLooks(filled) {
+  const byId = new Map();
+  for (const { item } of outfitPieces(filled)) {
+    const id = item?.outfit_set_id;
+    if (!id) continue;
+    const look = byId.get(id) || { id, name: item.outfit_set_name || 'Matching set', worn: 0 };
+    look.worn += 1;
+    byId.set(id, look);
+  }
+  return [...byId.values()].filter((l) => l.worn >= 2);
+}

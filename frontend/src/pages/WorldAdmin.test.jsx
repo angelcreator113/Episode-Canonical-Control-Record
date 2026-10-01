@@ -48,6 +48,7 @@ import {
   bulkWardrobeOpApi,
   uploadWardrobeApi,
   createOutfitSetApi,
+  createMatchingSetApi,
 } from './WorldAdmin';
 
 describe('WorldAdmin — Track 6 CP13 module-scope helpers', () => {
@@ -113,6 +114,15 @@ describe('WorldAdmin — Track 6 CP13 module-scope helpers', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: { episodes: [] } } });
     await getWardrobeUsageApi('w-1');
     expect(api.get).toHaveBeenCalledWith('/api/v1/wardrobe/w-1/usage');
+  });
+
+  // W1 (Evoni, 2026-10-01): Create set links the pieces as a matching set.
+  test('createMatchingSetApi POST on /wardrobe/matching-sets', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, data: { id: 'set-1', name: 'Floral' } } });
+    const payload = { name: 'Floral', wardrobe_ids: ['a', 'b'], show_id: 's-1' };
+    const out = await createMatchingSetApi(payload);
+    expect(api.post).toHaveBeenCalledWith('/api/v1/wardrobe/matching-sets', payload);
+    expect(out.data.id).toBe('set-1');
   });
 
   // ── Site 11: createOutfitSetApi ─────────────────────────────────────────

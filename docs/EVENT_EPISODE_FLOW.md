@@ -3441,6 +3441,38 @@ database access.
   Lala Suggests picks one piece per slot, as before.
 - INFERRED: no cap per slot. The outfit score endpoint's 20-piece draft
   cap (`MAX_DRAFT_PIECES`) still applies to the whole outfit.
+
+**W1, what was built.**
+
+- **A matching set.** A matching set is the pieces sharing
+  `wardrobe.outfit_set_id`, named by `outfit_set_name`. Both columns are
+  from migration `20260217000001`, so W1 adds no migration.
+  - `POST /api/v1/wardrobe/matching-sets` (`{ show_id, name, wardrobe_ids }`,
+    at least two pieces) links pieces.
+  - `PUT /api/v1/wardrobe/matching-sets/:setId` renames the set, or
+    replaces its pieces; pieces left out are unlinked.
+  - `DELETE /api/v1/wardrobe/matching-sets/:setId` unlinks every piece and
+    keeps the pieces.
+  - All three are requireAuth.
+  - INFERRED: a piece is in one set at most; linking it into another moves
+    it.
+- **Linking pieces.** World Admin's wardrobe "Create set" (select pieces,
+  then 👗 Create set) now links them as a matching set. Each linked piece
+  shows "🔗 <set name>".
+  - It still writes the outfit calendar's set (`/api/v1/outfit-sets`), and
+    a failure there does not undo the link.
+  - That table is created only by a dead migration tree (`migrations/`),
+    so the matching set does not depend on it.
+- **In the styling game.** The Full Closet has a **Sets** group: one card
+  per set, with its pieces.
+  - "Wear the set" equips every selectable piece in its own slot at once,
+    through the same rule as one piece (`equipInto`). The set's separates
+    replace a dress, and its jewellery adds to Jewelry.
+  - A locked piece, or one with no game slot, is left out, and the message
+    names it.
+  - Two or more pieces of a set worn show as one look: "Look: <set name>".
+  - Each piece stays choosable on its own, and its card shows the set it
+    belongs to.
 ---
 
 ## 9. Owed before enforcement

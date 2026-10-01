@@ -90,6 +90,10 @@ export const bulkWardrobeOpApi = (endpoint, payload) =>
   api.post(endpoint, payload).then((r) => r.data);
 export const uploadWardrobeApi = (formData) =>
   api.post('/api/v1/wardrobe', formData).then((r) => r.data);
+// W1 (Evoni, 2026-10-01): link the selected pieces as a matching set. The
+// styling game reads the link (outfit_set_id) from the pieces themselves.
+export const createMatchingSetApi = (payload) =>
+  api.post('/api/v1/wardrobe/matching-sets', payload).then((r) => r.data);
 export const createOutfitSetApi = (payload) =>
   api.post('/api/v1/outfit-sets', payload).then((r) => r.data);
 
@@ -5704,6 +5708,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {item.color && <span> · {item.color}</span>}
                         {item.vendor && <span> · {item.vendor}</span>}
                       </div>
+                      {/* W1: a piece linked into a matching set says which. */}
+                      {item.outfit_set_id && (
+                        <div data-testid={`wardrobe-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 4 }}>🔗 {item.outfit_set_name || 'Matching set'}</div>
+                      )}
                       {/* List mode: the 80px image is too small for the overlay,
                           so the processing state sits under the category line. */}
                       {isListMode && processingState === PROCESSING_STATES.PROCESSING && (
@@ -6691,11 +6699,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !creatingOutfitSet && setShowCreateOutfitSet(false)}>
                 <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create Outfit Set</h3>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create Matching Set</h3>
                     <button onClick={() => setShowCreateOutfitSet(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
                     {selectedWardrobeIds.size} pieces selected
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                    In the styling game, choosing the set equips every piece in its own slot at once; each piece can still be chosen on its own. A piece already in another set moves to this one.
                   </div>
                   {/* Piece chips — visual confirmation of what goes into the set. */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
@@ -6732,12 +6743,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             const item = wardrobeItems.find(w => w.id === id);
                             return item ? { id: item.id, name: item.name, category: item.clothing_category || item.itemType, image: item.s3_url_processed || item.s3_url } : null;
                           }).filter(Boolean);
+                          // W1: the pieces are linked as a matching set first; the
+                          // styling game equips them together from that link.
+                          let linked;
                           try {
-                            await createOutfitSetApi({ name: outfitSetName.trim(), character: 'Lala', items: payloadItems, show_id: showId });
+                            linked = await createMatchingSetApi({ name: outfitSetName.trim(), wardrobe_ids: selectedArr, show_id: showId });
                           } catch (httpErr) {
                             throw new Error(httpErr.response?.data?.error || 'Create failed');
                           }
-                          setToast(`Outfit set "${outfitSetName.trim()}" created`);
+                          const setId = linked?.data?.id;
+                          const setName = linked?.data?.name || outfitSetName.trim();
+                          setWardrobeItems(prev => prev.map(w => (selectedArr.includes(w.id) ? { ...w, outfit_set_id: setId, outfit_set_name: setName } : w)));
+                          // The outfit calendar still reads outfit sets; its copy is
+                          // kept as before, and a failure there does not undo the link.
+                          try {
+                            await createOutfitSetApi({ name: setName, character: 'Lala', items: payloadItems, show_id: showId });
+                          } catch (httpErr) {
+                            console.error('[WorldAdmin] the outfit calendar copy of the set was not saved:', httpErr);
+                          }
+                          setToast(`Matching set "${setName}" linked`);
                           setShowCreateOutfitSet(false);
                           setSelectedWardrobeIds(new Set());
                         } catch (err) { setToast('Failed to create set: ' + err.message); }

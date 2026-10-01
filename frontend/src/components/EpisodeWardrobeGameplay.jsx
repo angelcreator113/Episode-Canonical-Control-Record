@@ -33,7 +33,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach } from '../utils/wardrobeReach';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
 
 // ─── CONSTANTS ───
 
@@ -283,7 +283,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // W3: pieces per closet group, for the switcher's counts.
   const closetGroupCounts = useMemo(() => {
-    const counts = { [ALL_GROUP.key]: closetItems.length };
+    const counts = { [ALL_GROUP.key]: closetItems.length, [SETS_GROUP.key]: matchingSetsFrom(closetItems).length };
     for (const item of closetItems) {
       const key = closetGroupFor(item.clothing_category);
       counts[key] = (counts[key] || 0) + 1;
@@ -429,6 +429,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const filteredBrowseItems = useMemo(() => {
     // Task #2377: the Other tab holds every item no game slot accepts
     // (outerwear, unknown or missing category) so none vanish.
+    if (activeSlot === SETS_GROUP.key) return []; // W1: the Sets group lists sets, not pieces
     const inSlot = activeSlot === ALL_GROUP.key
       ? () => true
       : activeSlot === OTHER_GROUP.key
@@ -461,21 +462,33 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     if (!item.can_select) { setError('Cannot equip a locked item — purchase or unlock it first'); return; }
     const slotKey = gameSlotFor(item.clothing_category);
     if (!slotKey) { setInspecting(item); return; } // Other: browse-only
-
-    if (MULTI_SLOTS.has(slotKey)) {
-      // W2: added beside the pieces already worn there.
-      setFilledSlots(prev => {
-        const worn = slotPieces(prev, slotKey);
-        return worn.some(p => p.id === item.id) ? prev : { ...prev, [slotKey]: [...worn, item] };
-      });
-    } else if (slotKey === 'body') {
-      setFilledSlots(prev => ({ ...prev, body: item, top: undefined, bottom: undefined }));
-    } else if (slotKey === 'top' || slotKey === 'bottom') {
-      setFilledSlots(prev => ({ ...prev, [slotKey]: item, body: undefined }));
-    } else {
-      setFilledSlots(prev => ({ ...prev, [slotKey]: item }));
-    }
+    // One rule for a piece and a set (equipInto): a dress clears top and
+    // bottom, and the reverse; Accessories and Jewelry add beside the rest (W2).
+    setFilledSlots(prev => equipInto(prev, item));
     setInspecting(null);
+  };
+
+  // W1: the closet's matching sets, and wearing one: every selectable piece
+  // into its own slot at once. A locked piece, or one with no game slot, is
+  // left out and named.
+  const matchingSets = useMemo(() => matchingSetsFrom(closetWithReach), [closetWithReach]);
+  const looks = useMemo(() => wornLooks(filledSlots), [filledSlots]);
+  const wearSet = (set) => {
+    const locked = set.pieces.filter(p => !p.can_select);
+    const noSlot = set.pieces.filter(p => p.can_select && !gameSlotFor(p.clothing_category));
+    const wearable = set.pieces.filter(p => p.can_select && gameSlotFor(p.clothing_category));
+    // The body (a dress, or the separates) first, so the rest add to it.
+    const order = ['body', 'top', 'bottom'];
+    wearable.sort((a, b) => {
+      const ia = order.indexOf(gameSlotFor(a.clothing_category));
+      const ib = order.indexOf(gameSlotFor(b.clothing_category));
+      return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib);
+    });
+    setFilledSlots(prev => wearable.reduce((acc, piece) => equipInto(acc, piece), prev));
+    const notes = [];
+    if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (locked): ${locked.map(p => p.name).join(', ')}`);
+    if (noSlot.length) notes.push(`${noSlot.length} piece${noSlot.length === 1 ? '' : 's'} left out (no game slot): ${noSlot.map(p => p.name).join(', ')}`);
+    setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
   };
 
   // W2: in a multi slot, one piece comes off (itemId); the rest stay.
@@ -662,6 +675,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               )}
             </div>
 
+            {/* W1: a matching set worn shows as one look. */}
+            {looks.map(look => (
+              <div key={look.id} data-testid="outfit-look" style={{ padding: '6px 10px', marginBottom: 6, borderRadius: 8, background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#6d28d9', fontSize: 12, fontWeight: 700 }}>
+                {`Look: ${look.name}`}
+              </div>
+            ))}
+
             {/* Slots */}
             {visibleSlots.map(slot => {
               // W2: Accessories and Jewelry hold several pieces; the rest one.
@@ -775,9 +795,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             <div style={W.browseHeader}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
-                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : activeSlot === ALL_GROUP.key ? ALL_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : activeSlot === ALL_GROUP.key ? ALL_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
+                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : activeSlot === ALL_GROUP.key ? ALL_GROUP.icon : activeSlot === SETS_GROUP.key ? SETS_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : activeSlot === ALL_GROUP.key ? ALL_GROUP.label : activeSlot === SETS_GROUP.key ? SETS_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · {activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{activeSlot === SETS_GROUP.key
+                  ? `${matchingSets.length} set${matchingSets.length === 1 ? '' : 's'} · Wear a set to equip every piece`
+                  : `${filteredBrowseItems.length} items · ${activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}`}</div>
                 {browseMode === 'closet' && !closetLoading && !closetError && (
                   <div data-testid="closet-count" style={{ fontSize: 11, color: closetTotal != null && closetTotal > closetItems.length ? '#b91c1c' : '#94a3b8' }}>
                     {`${closetItems.length} of ${closetTotal ?? closetItems.length} pieces${closetTotal != null && closetTotal > closetItems.length ? ' — some did not load' : ''}`}
@@ -790,7 +812,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     event pool keeps its open-slot switcher. */}
                 {(browseMode === 'pool'
                   ? visibleSlots.filter(s => MULTI_SLOTS.has(s.key) || !filledSlots[s.key])
-                  : [ALL_GROUP, ...SLOT_DEFS, OTHER_GROUP]
+                  : [ALL_GROUP, SETS_GROUP, ...SLOT_DEFS, OTHER_GROUP]
                 ).map(s => (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)} title={s.label} aria-label={s.label}
                     style={{ ...W.slotSwitch, background: activeSlot === s.key ? '#6366f1' : '#f1f5f9', color: activeSlot === s.key ? '#fff' : '#64748b' }}>
@@ -803,6 +825,37 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             </div>
 
             <div style={W.browseGrid}>
+              {/* W1: each matching set as one look; Wear the set equips every piece. */}
+              {browseMode !== 'pool' && activeSlot === SETS_GROUP.key && matchingSets.map(set => {
+                const wornIds = new Set(outfitPieces(filledSlots).map(({ item: w }) => w.id));
+                const wearing = set.pieces.every(p => wornIds.has(p.id));
+                return (
+                  <div key={set.id} data-testid={`matching-set-${set.id}`} style={{ ...W.browseCard, gridColumn: '1/-1', border: '1px solid #ddd6fe' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{set.name}</div>
+                        <div style={{ fontSize: 10, color: '#94a3b8' }}>{`${set.pieces.length} pieces`}</div>
+                      </div>
+                      {wearing
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>✓ Wearing</span>
+                        : <button type="button" onClick={() => wearSet(set)} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Wear the set</button>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {set.pieces.map(p => (
+                        <div key={p.id} title={p.name} style={{ width: 56, textAlign: 'center', opacity: p.can_select ? 1 : 0.45 }}>
+                          <GarmentImage item={p} fallback={CAT_ICONS[p.clothing_category] || '👕'} size={48} />
+                          <div style={{ fontSize: 9, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {browseMode !== 'pool' && activeSlot === SETS_GROUP.key && matchingSets.length === 0 && !closetLoading && (
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 24, color: '#94a3b8', fontSize: 12 }}>
+                  No matching sets yet. Link pieces as a set in the show's Wardrobe (select pieces, then Create set).
+                </div>
+              )}
               {filteredBrowseItems.map((item, idx) => {
                 const ts = TIER_STYLES[item.tier] || TIER_STYLES.basic;
                 const rs = ROLE_STYLES[item.pool_role] || ROLE_STYLES.safe;
@@ -833,6 +886,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
+                    {item.outfit_set_id && (
+                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2 }}>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</div>
+                    )}
                     {browseMode !== 'pool' && (
                       <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>
                         {`${item.clothing_category || 'no category'} · ${[...SLOT_DEFS, OTHER_GROUP].find(g => g.key === closetGroupFor(item.clothing_category))?.label || 'Other'}`}
@@ -868,7 +924,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   </div>
                 );
               })}
-              {filteredBrowseItems.length === 0 && !(browseMode !== 'pool' && closetLoading) && !(browseMode === 'search' && !searchQuery.trim()) && (
+              {filteredBrowseItems.length === 0 && activeSlot !== SETS_GROUP.key && !(browseMode !== 'pool' && closetLoading) && !(browseMode === 'search' && !searchQuery.trim()) && (
                 <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 30, color: '#94a3b8' }}>
                   <div style={{ fontSize: 24 }}>{[...SLOT_DEFS, OTHER_GROUP].find(s => s.key === activeSlot)?.icon || '👕'}</div>
                   <div style={{ fontSize: 12, marginTop: 6 }}>No {activeSlot} items available</div>
