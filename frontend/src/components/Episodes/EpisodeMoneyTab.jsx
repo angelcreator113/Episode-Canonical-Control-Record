@@ -13,11 +13,18 @@
  * - Event spending (the event cost split ruling, 2026-09-30): the lines Lala
  *   buys during the event, edited here until Complete (EpisodeSpendingSection).
  *
- * No planned or pending states (Phase B) and no recap (Phase C).
+ * Phase B (§8(gg) MB1–MB3 and Evoni's answers, 2026-10-01): one list of
+ * the episode's money lines, each with its trigger, who pays or covers it,
+ * its amount and its state (Planned, Pending, Posted); posted rows no line
+ * matches are "Posted, not planned". Beside the actual balance: the
+ * projected net (posted + pending + planned) and Lala's projected balance
+ * after this episode. A conditional bonus is never counted; it shows as
+ * "+ up to X if SLAY" beside the net. The header chip stays the actual
+ * balance. No recap (Phase C).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Coins, Receipt, CalendarClock } from 'lucide-react';
+import { Coins, Receipt, TrendingUp } from 'lucide-react';
 import api from '../../services/api';
 import EpisodeSpendingSection from './EpisodeSpendingSection';
 import './EpisodeMoneyTab.css';
@@ -32,6 +39,25 @@ const day = (date) => {
   const d = new Date(date);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
+
+const tone = (n) => (n > 0 ? 'em-pos' : n < 0 ? 'em-neg' : '');
+
+const STATE_LABELS = {
+  planned: 'Planned',
+  pending: 'Pending',
+  posted: 'Posted',
+  not_earned: 'Not earned',
+  covered: 'Covered',
+};
+
+// Who pays or covers the line (MB2).
+function payerText(line) {
+  const who = line.payer?.who;
+  const name = line.payer?.name || (who === 'brand' ? 'the brand' : who === 'host' ? 'the host' : null);
+  if (line.covered) return `Covered by ${name || 'the host'}${line.covered_amount ? ` (${coins(line.covered_amount)})` : ''}`;
+  if (who === 'lala') return 'Lala pays';
+  return name ? `Paid by ${name}` : 'Paid by the host';
+}
 
 export default function EpisodeMoneyTab({ episode, showId }) {
   const [money, setMoney] = useState(null);
@@ -64,6 +90,10 @@ export default function EpisodeMoneyTab({ episode, showId }) {
   if (error) return <div className="em-empty em-error">{error}</div>;
   if (!money) return <div className="em-empty">Loading money…</div>;
 
+  const projection = money.projection || null;
+  const lines = money.lines || [];
+  const unplanned = money.unplanned || [];
+
   return (
     <div className="em-tab">
       <div className="em-summary">
@@ -72,49 +102,70 @@ export default function EpisodeMoneyTab({ episode, showId }) {
           <div className="em-card-value">{coins(money.balance)} 🪙</div>
           <div className="em-card-note">Across the whole show, from the ledger.</div>
         </div>
+        {projection && (
+          <div className="em-card" data-testid="em-projected-balance">
+            <div className="em-card-label"><TrendingUp size={14} aria-hidden /> After this episode</div>
+            <div className={`em-card-value ${projection.projected_balance < 0 ? 'em-neg' : ''}`}>{coins(projection.projected_balance)} 🪙</div>
+            <div className="em-card-note">Projected: her balance plus this episode's pending and planned lines.</div>
+          </div>
+        )}
         <div className="em-card" data-testid="em-net">
           <div className="em-card-label"><Receipt size={14} aria-hidden /> This episode's net</div>
-          <div className={`em-card-value ${money.net > 0 ? 'em-pos' : money.net < 0 ? 'em-neg' : ''}`}>{signed(money.net)}</div>
-          <div className="em-card-note">The sum of the rows posted below.</div>
+          {projection ? (
+            <>
+              <div className={`em-card-value ${tone(projection.projected_net)}`}>{signed(projection.projected_net)}</div>
+              <div className="em-card-note">Projected. Posted so far: {signed(projection.posted_net)}.</div>
+              {projection.conditional.length > 0 && (
+                <div className="em-conditional" data-testid="em-conditional">
+                  {projection.conditional.map((c) => (
+                    <span key={c.tier} className="em-chip em-chip-conditional">+ up to {coins(c.amount)} if {c.tier.toUpperCase()}</span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className={`em-card-value ${tone(money.net)}`}>{signed(money.net)}</div>
+              <div className="em-card-note">The sum of the posted rows.</div>
+            </>
+          )}
         </div>
       </div>
 
       <section className="em-section">
-        <h3 className="em-heading">Posted</h3>
-        {money.rows.length === 0 ? (
-          <div className="em-empty">Nothing has posted for this episode yet.</div>
-        ) : (
-          <ul className="em-rows">
-            {money.rows.map((r) => (
-              <li key={r.id} className="em-row">
-                <span className="em-row-date">{day(r.date)}</span>
-                <span className="em-row-category">{label(r.category)}</span>
-                <span className="em-row-desc">{r.description || '—'}</span>
-                <span className={`em-row-amount ${r.signed > 0 ? 'em-pos' : 'em-neg'}`}>{signed(r.signed)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="em-section">
-        <h3 className="em-heading"><CalendarClock size={14} aria-hidden /> Expected</h3>
+        <h3 className="em-heading">Money lines</h3>
         <p className="em-explain">
-          From the source event's accepted terms{money.event ? ` (${money.event.name})` : ''}. Expected lines are
-          not posted and are not in the balance or the net.
+          Each line from the accepted terms{money.event ? ` of ${money.event.name}` : ''} and the event spending.
+          Planned and pending lines are not in the ledger or the balance.
         </p>
-        {money.expected.length === 0 ? (
+        {lines.length === 0 && unplanned.length === 0 ? (
           <div className="em-empty">
-            {money.event ? 'The accepted terms carry no payment or entry cost.' : 'This episode has no source event, so nothing is expected.'}
+            {money.event ? 'The accepted terms carry no money, and nothing has posted.' : 'This episode has no source event, and nothing has posted.'}
           </div>
         ) : (
-          <ul className="em-rows">
-            {money.expected.map((x) => (
-              <li key={`${x.kind}-${x.label}`} className="em-row em-row-expected">
-                <span className="em-row-date">Expected</span>
-                <span className="em-row-category">{x.label}</span>
-                <span className="em-row-desc">From the terms</span>
-                <span className="em-row-amount">{signed(x.kind === 'income' ? x.amount : -x.amount)}</span>
+          <ul className="em-rows" data-testid="em-lines">
+            {lines.map((l) => (
+              <li key={l.key} className={`em-line em-line-${l.state}`} data-testid={`em-line-${l.key}`}>
+                <span className="em-line-label">{l.label}</span>
+                <span className={`em-line-amount ${l.covered || l.state === 'not_earned' ? '' : tone(l.signed)}`}>
+                  {l.covered ? '0' : signed(l.signed)}
+                </span>
+                <span className="em-line-meta">
+                  <span className={`em-chip em-chip-${l.state}`}>{STATE_LABELS[l.state] || l.state}</span>
+                  {l.trigger && <span>{l.trigger}</span>}
+                  <span>{payerText(l)}</span>
+                </span>
+              </li>
+            ))}
+            {unplanned.map((r) => (
+              <li key={r.id} className="em-line em-line-posted" data-testid={`em-unplanned-${r.id}`}>
+                <span className="em-line-label">{r.description || label(r.category)}</span>
+                <span className={`em-line-amount ${tone(r.signed)}`}>{signed(r.signed)}</span>
+                <span className="em-line-meta">
+                  <span className="em-chip em-chip-posted">Posted, not planned</span>
+                  <span>{label(r.category)}</span>
+                  <span>{day(r.date)}</span>
+                </span>
               </li>
             ))}
           </ul>
