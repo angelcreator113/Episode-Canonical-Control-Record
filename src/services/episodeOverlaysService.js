@@ -18,10 +18,14 @@
  *   - approved  — made for the current, approved content.
  * Placed beat: the piece's live timeline_placements row (episodeBeatPlacement
  * writes beat_number/beat_name into its properties); null when not placed.
+ * The title overlay goes on Beat 1, the invitation on Beat 5, the task list
+ * on Beat 9; the framed card stays unplaced unless placed by hand (Evoni,
+ * 2026-09-30).
  */
 
 const imageGen = require('./imageGenerationService');
 const { getTitleCardState } = require('./episodeTitleCardService');
+const { TITLE_OVERLAY_BEAT } = require('./episodeTitleOverlayService');
 const { getTaskListOverlayState, estimateTaskListOverlay, TASK_LIST_BEAT } = require('./episodeTaskListOverlayService');
 const { loadEpisodeInvitationOverlay, INVITATION_BEAT } = require('./episodeInvitationOverlayService');
 
@@ -78,6 +82,7 @@ function overlayPieces({ title, taskList, invitation, event, placements = {}, es
     asset_id: overlay?.asset_id || null,
     made_for: overlay?.designed_for || null,
     beat: beatOf(overlay?.asset_id),
+    expected_beat: TITLE_OVERLAY_BEAT ? { number: TITLE_OVERLAY_BEAT.number, name: TITLE_OVERLAY_BEAT.name } : null,
     cost: {
       free: 'Lettering styles and the backing band cost nothing.',
       paid: title?.overlay_offer?.offered ? { action: 'Decorative flourish', estimate: title.overlay_offer.flourish_estimate || null } : null,

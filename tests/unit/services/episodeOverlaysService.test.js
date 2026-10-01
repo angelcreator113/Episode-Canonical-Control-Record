@@ -45,6 +45,8 @@ describe('episodeOverlaysService (P15)', () => {
     expect(invitation.event).toEqual({ id: 'ev', show_id: 'sh', name: 'Velour Launch' });
     expect(taskList.cost.paid).toEqual({ action: 'Design the overlay', estimate: est(0.08) });
     expect(taskList.expected_beat.number).toBe(9);
+    expect(overlay.expected_beat).toEqual({ number: 1, name: 'Opening Ritual' });
+    expect(card.expected_beat).toBeUndefined();
     expect(pieces.every((p) => p.beat === null)).toBe(true);
   });
 

@@ -6,6 +6,9 @@
  *   - a saved title overlay is approved; a changed title makes it outdated;
  *     the banner chip follows it;
  *   - the event's approved invitation is approved and shows its placed beat;
+ *   - a saved title overlay is placed on Beat 1 (the opening) and a restyle
+ *     moves the placement to the new overlay; the framed card stays unplaced
+ *     (Evoni, 2026-09-30);
  *   - an unknown episode is 404; the route needs a login.
  * The test database has no timeline_placements table (only a dead migration
  * tree creates it), so this suite creates it when missing and drops it
@@ -69,6 +72,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     for (const k of Object.keys(savedEnv)) { if (savedEnv[k] !== undefined) process.env[k] = savedEnv[k]; }
     for (const show of shows) {
       const eps = '(SELECT id FROM episodes WHERE show_id = :show)';
+      await run(`DELETE FROM scene_plans WHERE episode_id IN ${eps}`, { show }).catch((err) => console.warn('cleanup scene_plans:', err.message));
       await run(`DELETE FROM timeline_placements WHERE episode_id IN ${eps}`, { show }).catch((err) => console.warn('cleanup placements:', err.message));
       await run(`UPDATE world_events SET invitation_asset_id = NULL WHERE show_id = :show`, { show });
       await run('DELETE FROM assets WHERE show_id = :show', { show });
@@ -151,6 +155,27 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
       beat: { number: 5, name: 'Reveal', anchor: 'beat', label: 'Invitation — Beat 5: Reveal' },
     });
     expect(pieces.invitation.cost.paid.action).toBe('Regenerate the invitation');
+  });
+
+  it('the title overlay is placed on Beat 1; a restyle moves the placement; the framed card stays unplaced', async () => {
+    const ids = await seed();
+    await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, sort_order, created_at, updated_at)
+               VALUES (gen_random_uuid(), :ep, 1, 'Opening Ritual', 1, NOW(), NOW())`, ids);
+    expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title/approve`)).send({ title: 'Gala Night' })).status).toBe(200);
+    expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay`)).send({ variant: 'classic' })).status).toBe(200);
+
+    let pieces = byKey(await overlays(ids));
+    expect(pieces.title_overlay.beat).toEqual({ number: 1, name: 'Opening Ritual', anchor: 'beat', label: 'Title Overlay — Beat 1: Opening Ritual' });
+    expect(pieces.title_overlay.expected_beat).toEqual({ number: 1, name: 'Opening Ritual' });
+    expect(pieces.framed_card.beat).toBeNull();
+    const first = pieces.title_overlay.asset_id;
+
+    expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay`)).send({ variant: 'engraved' })).status).toBe(200);
+    pieces = byKey(await overlays(ids));
+    expect(pieces.title_overlay.asset_id).not.toBe(first);
+    expect(pieces.title_overlay.beat.number).toBe(1);
+    const live = await q(`SELECT asset_id FROM timeline_placements WHERE episode_id = :ep AND deleted_at IS NULL`, ids);
+    expect(live.map((r) => r.asset_id)).toEqual([pieces.title_overlay.asset_id]);
   });
 
   it('an unknown episode is 404; no login is 401', async () => {

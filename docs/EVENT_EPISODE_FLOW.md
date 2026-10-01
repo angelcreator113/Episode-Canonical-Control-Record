@@ -2477,15 +2477,16 @@ banner's `EpisodeTitleChip`):
   every action stays on the piece's own route.
 - **Status.** A piece is *not made* with no current piece and *outdated*
   when it was made for content that has since changed (the title, the
-  task list). Otherwise it is *approved*. INFERRED: the invitation has no
-  saved outdated state (the terms-reopen relock offer is transient), so it
-  is approved or not made.
+  task list). Otherwise it is *approved*. The invitation has no saved
+  outdated state (the terms-reopen relock offer is transient), so it is
+  approved or not made (choice 1 below, accepted).
 - **Placed beat.** This is read from the piece's live
   `timeline_placements` row, where `episodeBeatPlacement` writes the beat
   number and name. The task list falls back to its asset's beat metadata.
   The tab shows "Placed on Beat N: Name", or "Not placed" with the beat
-  the piece goes on. INFERRED: no rule places the title overlay or the
-  framed card on a beat, so both read "Not placed" until one is ruled.
+  the piece goes on. Saving the title overlay places it on Beat 1, and a
+  restyle moves the placement to the new overlay. The framed card is not
+  placed (choice 2 below, as ruled).
 - **Actions with costs.**
   - The title pieces use the title panel (`EpisodeTitleCard`): approve,
     lettering styles and band at no cost, the flourish and the framed card
@@ -2501,9 +2502,19 @@ banner's `EpisodeTitleChip`):
   read-only, with "Edit in the Phone Hub" linking to the show's Phone Hub.
 - **Banner chip.** The title card strip under the banner is replaced by a
   chip, "Title · Approved / Outdated / Not made", which opens Production →
-  Overlays (`?tab=overlays`). INFERRED: it shows the title overlay's
-  status, or the framed card's when only the card was made. It sits on its
-  own line, so it shows at 375px.
+  Overlays (`?tab=overlays`). It shows the title overlay's status, or the
+  framed card's when only the card was made (choice 3 below, accepted). It
+  sits on its own line, so it shows at 375px.
+
+**P15's three choices, ruled** (Evoni, 2026-09-30: "P15 choices: 1 and 3
+accepted. 2: the title overlay is placed on Beat 1 (the opening); the
+framed card stays unplaced unless I place it."):
+
+1. The invitation shows approved or not made; it has no outdated state.
+2. The title overlay is placed on Beat 1 (the opening). The framed card
+   stays unplaced unless Evoni places it.
+3. The banner chip shows the title overlay's status, or the framed card's
+   when only the card was made.
 
 **(x) Money and deal rulings (Evoni, 2026-09-29, Task #2227).** Docs
 only: no code is changed by this entry. The basis is
