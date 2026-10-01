@@ -290,6 +290,11 @@ module.exports = (sequelize) => {
     partnership_base_fee: { type: DataTypes.INTEGER, allowNull: true },
     performance_fee: { type: DataTypes.INTEGER, allowNull: true },
     appearance_required: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // D14 (2026-09-30; migration 20261001170000): the ticked deal
+    // components, the deal's source of truth (src/utils/dealComponents.js).
+    // NULL is a legacy event, [] a self-funded deal; deal_type and
+    // appearance_required are their derived copy for one release.
+    deal_components: { type: DataTypes.JSONB, allowNull: true },
     // Access requirements — what Lala must have to take part (today:
     // reputation_min, brand_trust_min, coins_min). One of the four kinds of
     // term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1); never holds

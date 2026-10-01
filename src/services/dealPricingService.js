@@ -19,7 +19,10 @@
  *      (v2); only Other is priced by hand.
  *   3. Premiums on one component add up (+10% and +15% is +25%) and apply
  *      only to that component.
- *   4. The deal type decides the components (DEAL_PLANS).
+ *   4. The deal type decides the components (DEAL_PLANS). Since D14
+ *      (2026-09-30) the deal's ticked components do: planFor(event) reads
+ *      world_events.deal_components (src/utils/dealComponents.js), falling
+ *      back to deal_type for an event written before the column.
  *   5. The rate card is data (deal_rate_anchors / deal_rate_premiums); the
  *      editor is a later PR.
  *   6. "Other" is never priced automatically: "Price required", and Start
@@ -38,6 +41,10 @@ const { DELIVERABLE_TYPE_LABELS } = require('./eventTermsService');
 const {
   DELIVERABLE_FORMATS, formatOf, formatAnchorPrice, deliverableTypeLabel,
 } = require('../utils/deliverableFormats');
+
+const {
+  dealPlanOf, dealTypeFromComponents,
+} = require('../utils/dealComponents');
 
 const PRICING_SOURCE = 'pricing';
 
@@ -72,15 +79,21 @@ const DELIVERABLE_ANCHORS = Object.freeze(Object.fromEntries(
 ));
 
 
-const TRUE_LIKE = new Set([true, 'true', 1, '1']);
 
-/** The component keys the event's deal carries, in display order. */
+/**
+ * The event's plan (D14): { components, deliverables, cash, giftedValue,
+ * entryCovered, selfFunded, keys } from its ticked components, or null for
+ * a legacy event. For every deal type it equals DEAL_PLANS (with the
+ * appearance when a partnership requires it), because the backfill is
+ * one-to-one.
+ */
+function planFor(event) {
+  return dealPlanOf(event);
+}
+
+/** The fee component keys the event's deal carries, in display order. */
 function dealComponents(event) {
-  const plan = DEAL_PLANS[event?.deal_type];
-  if (!plan) return [];
-  const keys = [...plan.components];
-  if (plan.appearanceIfRequired && TRUE_LIKE.has(event?.appearance_required)) keys.push('appearance');
-  return keys;
+  return planFor(event)?.components || [];
 }
 
 function tierOf(careerTier) {
@@ -228,11 +241,13 @@ function draftedDeliverableTypes(dealType, tier) {
  * rule 2 reads brand-owed deliverables).
  */
 function draftDeliverablesForDeal(event, { tier, card } = {}) {
-  const dealType = event?.deal_type;
-  const plan = DEAL_PLANS[dealType];
+  const plan = planFor(event);
   if (!plan) return [];
+  // D12's mapping is by deal type; since D14 that is the type the
+  // components derive (dealTypeFromComponents). D13 replaces this drafting.
+  const dealType = dealTypeFromComponents(plan.keys).deal_type;
   const t = tierOf(tier ?? event?.career_tier);
-  const owedTo = dealType === 'brand_partnership' ? 'brand' : 'host';
+  const owedTo = plan.keys.includes('partnership_base') ? 'brand' : 'host';
   return draftedDeliverableTypes(dealType, t).map(({ type, quantity, required = true }) => {
     const format = formatOf(type);
     const row = {
@@ -263,10 +278,13 @@ function draftDeliverablesForDeal(event, { tier, card } = {}) {
  * gaps, note }. A fee of null is "Price required" (ruling 6): gaps say why.
  */
 function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
-  const dealType = event?.deal_type || null;
-  if (!dealType) return { ok: false, error: 'Choose a deal type before proposing terms.' };
-  const plan = DEAL_PLANS[dealType];
-  if (!plan) return { ok: false, error: `Unknown deal type "${dealType}".` };
+  const plan = planFor(event);
+  if (!plan) {
+    return event?.deal_type
+      ? { ok: false, error: `Unknown deal type "${event.deal_type}".` }
+      : { ok: false, error: 'Choose a deal type before proposing terms.' };
+  }
+  const dealType = dealTypeFromComponents(plan.keys).deal_type;
   if (!card) return { ok: false, error: 'There is no rate card yet, so no terms can be proposed.' };
 
   const tier = tierOf(event.career_tier);
@@ -327,7 +345,7 @@ function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
       : 'No cash income for this deal type.';
   }
   return {
-    ok: true, pricing_version: card.version, career_tier: tier, deal_type: dealType, cash: plan.cash,
+    ok: true, pricing_version: card.version, career_tier: tier, deal_type: dealType, deal_components: plan.keys, cash: plan.cash,
     components, deliverables: lines, gaps, note,
   };
 }
@@ -339,7 +357,7 @@ function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
  * Returns [{ kind: 'component' | 'deliverable', key, label }].
  */
 function missingPrices(event, deliverables = []) {
-  const plan = DEAL_PLANS[event?.deal_type];
+  const plan = planFor(event);
   if (!plan || !plan.cash) return [];
   const missing = [];
   for (const key of dealComponents(event)) {
@@ -357,12 +375,12 @@ function missingPrices(event, deliverables = []) {
 /** missingPrices for a stored event, read from the database. */
 async function findMissingPrices(sequelize, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    `SELECT id, deal_type, appearance_fee, partnership_base_fee, performance_fee, appearance_required
+    `SELECT id, deal_type, deal_components, appearance_fee, partnership_base_fee, performance_fee, appearance_required
        FROM world_events WHERE id = :eventId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { eventId }, transaction }
   );
   const event = rows?.[0];
-  if (!event || !DEAL_PLANS[event.deal_type]?.cash) return [];
+  if (!event || !planFor(event)?.cash) return [];
   const [deliverables] = await sequelize.query(
     `SELECT id, description, deliverable_type, fee FROM event_deliverables
       WHERE event_id = :eventId AND deleted_at IS NULL ORDER BY created_at ASC`,
@@ -390,6 +408,7 @@ module.exports = {
   DRAFTED_DELIVERABLES_SOURCE,
   EVENT_COMPONENTS,
   DEAL_PLANS,
+  planFor,
   DELIVERABLE_ANCHORS,
   DELIVERABLE_TYPE_LABELS,
   DEAL_PRICE_REQUIRED_CODE,

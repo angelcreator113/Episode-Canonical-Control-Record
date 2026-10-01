@@ -25,9 +25,29 @@
  * re-runs the rule (syncDraftedDealType). An Edited value, a locked event and
  * an event created before this PR (no draft recorded; D8, no backfill) are
  * never touched.
+ *
+ * D14 (2026-09-30): the deal is its ticked components
+ * (world_events.deal_components, src/utils/dealComponents.js). The rule
+ * still picks a deal type; the draft writes its components (the one-to-one
+ * map) and the type as their derived copy, recorded as
+ * auto_drafted/drafted_values.deal_components beside deal_type. Answer 1:
+ * "Drafting may pre-tick 'entry covered' when gifted is ticked, as a
+ * suggestion", so a drafted gifted deal also ticks entry_covered. Edited
+ * means the components differ from the drafted copy.
  */
 
 const { findTermsLockEpisode } = require('../utils/eventTermsLock');
+const {
+  componentsFromDealType, componentsOf, dealTypeFromComponents, normalizeComponents,
+} = require('../utils/dealComponents');
+
+/** The components a drafted deal type ticks (answer 1: gifted pre-ticks entry covered). */
+function draftedComponentsFor(dealType) {
+  const base = componentsFromDealType(dealType) || [];
+  return normalizeComponents(dealType === 'gifted' ? [...base, 'entry_covered'] : base);
+}
+
+const sameList = (a, b) => JSON.stringify(normalizeComponents(a || [])) === JSON.stringify(normalizeComponents(b || []));
 
 const DEAL_TYPE_SOURCES = Object.freeze({ OPPORTUNITY: 'opportunity', RULE: 'rule' });
 
@@ -85,7 +105,7 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
   try {
     return await sequelize.transaction(async (transaction) => {
       const [rows] = await sequelize.query(
-        `SELECT id, event_type, host_brand, opportunity_id, deal_type, canon_consequences
+        `SELECT id, event_type, host_brand, opportunity_id, deal_type, deal_components, appearance_required, canon_consequences
            FROM world_events WHERE id = :eventId AND deleted_at IS NULL FOR UPDATE`,
         { replacements: { eventId }, transaction }
       );
@@ -94,14 +114,19 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
 
       const cc = parseJson(event.canon_consequences, {}) || {};
       const automation = cc.automation || {};
-      const draftedSource = automation.auto_drafted?.deal_type;
+      const draftedSource = automation.auto_drafted?.deal_components || automation.auto_drafted?.deal_type;
       const draftedValue = automation.drafted_values?.deal_type;
+      const draftedComponents = automation.drafted_values?.deal_components;
+      const current = componentsOf(event);
 
       if (initial) {
-        if (event.deal_type != null && !draftedSource) return { skipped: 'set_by_creator' };
+        if (current != null && !draftedSource) return { skipped: 'set_by_creator' };
       } else {
         if (!draftedSource) return { skipped: 'not_drafted' };
-        if (event.deal_type !== draftedValue) return { skipped: 'edited' };
+        const edited = Array.isArray(draftedComponents)
+          ? !sameList(current, draftedComponents)
+          : event.deal_type !== draftedValue;
+        if (edited) return { skipped: 'edited' };
       }
 
       if (await findTermsLockEpisode(sequelize, eventId, { transaction })) return { skipped: 'locked' };
@@ -125,7 +150,9 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
         opportunity_type: opportunityType,
         deliverables,
       });
-      if (!initial && draft.deal_type === event.deal_type && draft.source === draftedSource) {
+      const components = draftedComponentsFor(draft.deal_type);
+      const derived = dealTypeFromComponents(components);
+      if (!initial && sameList(components, current) && draft.source === draftedSource) {
         return { skipped: 'unchanged' };
       }
 
@@ -133,16 +160,24 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
         ...cc,
         automation: {
           ...automation,
-          auto_drafted: { ...(automation.auto_drafted || {}), deal_type: draft.source },
-          drafted_values: { ...(automation.drafted_values || {}), deal_type: draft.deal_type },
+          auto_drafted: { ...(automation.auto_drafted || {}), deal_type: draft.source, deal_components: draft.source },
+          drafted_values: { ...(automation.drafted_values || {}), deal_type: derived.deal_type, deal_components: components },
         },
       };
       await sequelize.query(
-        `UPDATE world_events SET deal_type = :dealType, canon_consequences = :cc, updated_at = NOW()
+        `UPDATE world_events
+            SET deal_type = :dealType, deal_components = CAST(:components AS JSONB),
+                appearance_required = :appearanceRequired, canon_consequences = :cc, updated_at = NOW()
           WHERE id = :eventId`,
-        { replacements: { dealType: draft.deal_type, cc: JSON.stringify(nextCc), eventId }, transaction }
+        {
+          replacements: {
+            dealType: derived.deal_type, components: JSON.stringify(components),
+            appearanceRequired: derived.appearance_required, cc: JSON.stringify(nextCc), eventId,
+          },
+          transaction,
+        }
       );
-      return draft;
+      return { ...draft, deal_type: derived.deal_type, deal_components: components };
     });
   } catch (err) {
     console.error(`[DealTypeDraft] draft for event ${eventId} failed:`, err.message);
@@ -151,6 +186,7 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
 }
 
 module.exports = {
+  draftedComponentsFor,
   DEAL_TYPE_SOURCES,
   OPPORTUNITY_DEAL_TYPES,
   draftDealType,

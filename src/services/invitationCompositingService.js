@@ -30,7 +30,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const Anthropic = require('@anthropic-ai/sdk');
-const { DEAL_PLANS } = require('./dealPricingService');
+const { dealPlanOf, isDealEvent } = require('../utils/dealComponents');
 
 // ─── FONT MANAGEMENT ──────────────────────────────────────────────────────────
 
@@ -393,8 +393,11 @@ function bonusSentence(event) {
 function describeInvitationMoney(event, { costs = null, deliverables = null } = {}) {
   const e = event || {};
 
-  if (e.deal_type) {
-    const plan = DEAL_PLANS[e.deal_type];
+  // D14: the plan comes from the deal's ticked components (its deal_type
+  // for an event written before them). Build PR 3 writes one sentence per
+  // component; until then each backfilled deal type reads as it did.
+  if (isDealEvent(e) || e.deal_type) {
+    const plan = dealPlanOf(e);
     const done = (kind, sentences) => {
       const text = sentences.filter(Boolean).join(' ');
       return { kind, text, sentence: text };
@@ -403,9 +406,9 @@ function describeInvitationMoney(event, { costs = null, deliverables = null } = 
     if (!plan) return done('neutral', ['The terms will be confirmed.']);
 
     // Comped and gifted: say so, without price talk.
-    if (e.deal_type === 'invited_comped' || e.deal_type === 'gifted') {
+    if (!plan.cash && (plan.entryCovered || plan.giftedValue)) {
       return done('comped', [
-        e.deal_type === 'gifted'
+        plan.giftedValue
           ? 'You attend as our gifted guest, with our compliments.'
           : 'You attend as our guest, with our compliments.',
         ...coveredSentences(e, costs),
@@ -424,7 +427,7 @@ function describeInvitationMoney(event, { costs = null, deliverables = null } = 
       if (plan.deliverables) sentences.push(deliverableSentence(e, deliverables, { withFees: true }));
       if (!fees.length && !(plan.deliverables && sentences.some(Boolean))) sentences.push('Your fee will be confirmed.');
     } else {
-      if (e.deal_type === 'self_funded') {
+      if (plan.selfFunded) {
         const paid = entryTotal(costs, ['lala']);
         const entry = positiveNumber(paid === null ? e.cost_coins : paid);
         if (entry) { kind = 'cost'; sentences.push(`Entry is ${coins(entry)}, paid by you.`); }
@@ -483,7 +486,7 @@ async function buildInvitationContent(event, { costs = null, deliverables = null
 
   // A deal event's deliverables are stated in its terms (invitation ruling,
   // 2026-09-30); the old hint stays for legacy events only.
-  const hasDeliverable = !event.deal_type && (event.event_type === 'brand_deal' || event.event_type === 'deliverable');
+  const hasDeliverable = !isDealEvent(event) && (event.event_type === 'brand_deal' || event.event_type === 'deliverable');
   const deliverableText = hasDeliverable
     ? (event.success_unlock?.split(',')[0]?.trim() || 'content creation required')
     : null;
@@ -514,7 +517,7 @@ Date: ${eventDate || 'TBD'}
 Time: ${eventTime || 'Evening'}
 Dress Code: ${event.dress_code || 'elegant'}
 Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
-${event.deal_type ? 'Terms (the host speaking, in Prime Coins)' : 'Investment'}: ${investmentText}
+${isDealEvent(event) ? 'Terms (the host speaking, in Prime Coins)' : 'Investment'}: ${investmentText}
 Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
 ${deliverableText ? `Deliverable: ${deliverableText}` : ''}
 Notable Guests: ${guestNames || 'select attendees'}
@@ -528,7 +531,7 @@ PART 1 — OPENING (1-2 sentences, 20-35 words):
 A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
 
 PART 2 — BODY (3-6 sentences, 50-110 words):
-Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the ${event.deal_type ? 'terms' : 'investment'}, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. ${event.deal_type
+Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the ${isDealEvent(event) ? 'terms' : 'investment'}, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. ${isDealEvent(event)
   ? 'State the terms in the host\'s voice ("we"), as given under Terms: every amount exactly as written, in Prime Coins, and every item named — what Lala is paid, what she pays, what is covered and by whom, and any bonus. Never invent, round, merge or drop an amount. If the terms say she attends as a guest or gifted guest, say so and mention no price at all.'
   : 'Mention the money terms naturally, exactly as given under Investment (what Lala earns, that she is comped, or what entry costs); never invent a price.'} If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
 

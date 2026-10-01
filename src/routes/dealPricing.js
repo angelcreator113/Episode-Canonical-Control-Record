@@ -99,7 +99,7 @@ router.post('/world/:showId/events/:eventId/propose-terms', requireAuth, async (
     const premiums = req.body && typeof req.body.premiums === 'object' && req.body.premiums ? req.body.premiums : {};
 
     const [rows] = await sequelize.query(
-      `SELECT id, deal_type, career_tier, appearance_required, canon_consequences FROM world_events
+      `SELECT id, deal_type, deal_components, career_tier, appearance_required, canon_consequences FROM world_events
         WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { eventId, showId } }
     );

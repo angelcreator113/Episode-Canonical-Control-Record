@@ -46,6 +46,8 @@ const LOCKED_EVENT_FIELDS = {
   // with the rest of the compensation. The deliverable routes hold their own
   // lock for each deliverable's fee.
   deal_type: 'compensation',
+  // D14 (2026-09-30): the ticked components, the deal's source of truth.
+  deal_components: 'compensation',
   appearance_fee: 'compensation',
   bonus_terms: 'compensation',
   gifted_value: 'compensation',
@@ -187,6 +189,13 @@ const comparable = {
   is_paid: (v) => (TRUE_LIKE.has(v) ? 'true' : 'false'),
   payment_amount: (v) => wholeNumber(v),
   deal_type: (v) => (v == null || v === '' ? 'null' : String(v)),
+  // Compared in canonical order, so the same ticks in another order are no change.
+  deal_components: (v) => {
+    const parsed = parseJson(v);
+    if (!Array.isArray(parsed)) return 'null';
+    const { normalizeComponents } = require('./dealComponents');
+    return JSON.stringify(normalizeComponents(parsed));
+  },
   appearance_fee: (v) => wholeNumber(v),
   bonus_terms: (v) => {
     const parsed = parseJson(v);
