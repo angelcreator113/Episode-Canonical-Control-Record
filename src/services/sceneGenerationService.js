@@ -789,6 +789,16 @@ async function deleteOldS3Asset(url) {
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 /**
+ * The database handle for the Scene Brief's reads. Some callers pass only
+ * { SceneSet, SceneAngle } (the generation worker, the refinement queue, the
+ * angle regenerate route); a Sequelize model carries its connection, so the
+ * brief still reads the set's World Location and chosen event.
+ */
+function briefDb(models) {
+  return models?.sequelize || models?.SceneSet?.sequelize || models?.SceneAngle?.sequelize || null;
+}
+
+/**
  * Generate a scene set's base still with the set's model choice
  * (scene_sets.base_model, else the default — resolveBaseModel; Task #2396).
  *
@@ -804,7 +814,7 @@ async function deleteOldS3Asset(url) {
 async function generateBaseScene(sceneSet, models, options = {}) {
   const { SceneSet } = models;
 
-  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
     angleLabel: 'WIDE', eventId: options.eventId || null, overrides: options.overrides || {},
   });
   const prompt = briefToPrompt(brief);
@@ -1645,7 +1655,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   // for the set's base (if any), this shot, and the environment. Lighting
   // comes from the brief; no state ambient or generic text is added.
   const baseBrief = sceneSet.base_generation?.brief || null;
-  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
     angleLabel,
     cameraDirection: sceneAngle.camera_direction || null,
     requiredFeatures: specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null),
@@ -1890,7 +1900,7 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const baseBrief = sceneSet.base_generation?.brief || null;
-  const brief = await prepareSceneBrief(models.sequelize, sceneSet, {
+  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
     angleLabel, continuity: true, eventId: baseBrief?.event_id || null, overrides: baseBrief?.overrides || {},
   });
   const basePrompt = briefToPrompt(brief);
@@ -1994,6 +2004,7 @@ function sleep(ms) {
 
 module.exports = {
   buildPrompt,
+  briefDb,
   buildVideoPrompt,
   generateBaseScene,
   analyzeBaseImage,
