@@ -3848,6 +3848,20 @@ So, beside MB1's Planned, Pending and Posted (`episodeMoneyLines.STATES`):
 - **Covered:** a terms cost the host or brand comps is listed with its own
   state, "Covered by <host or brand> (amount)", at 0 to Lala and outside
   every total.
+
+**Build choices accepted (Evoni, 2026-10-01)**, Phase B PR 4 (MB6, the
+plan and the reconciliation), verbatim: "Money PR 4's four (plan taken
+only at Start Episode; no backfill, with the note; unplanned rows listed;
+Outstanding/pending fees after Complete)". So:
+1. **The plan is taken only at Start Episode** (and Regenerate, the same
+   path), into `episodes.money_plan`; relocking terms does not retake it.
+2. **No backfill.** An episode started before the plan was saved is
+   compared with its lines as they stand, and the Reconciliation section
+   says so (`basis: 'current'`).
+3. **Unplanned rows are listed:** a posted row that matches no planned
+   line is shown as "Posted, not planned" and counted in the posted net.
+4. **Outstanding after Complete:** a fee still pending or planned after
+   Complete is "Outstanding", marked pending when its row is pending.
 ---
 
 ## 9. Owed before enforcement
