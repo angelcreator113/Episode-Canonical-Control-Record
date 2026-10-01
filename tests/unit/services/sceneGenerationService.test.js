@@ -32,6 +32,7 @@ const {
   VIDEO_DURATION_MAP,
   VIDEO_MOVEMENT_MODIFIERS,
 } = require('../../../src/services/sceneGenerationService');
+const { SHOT_CAMERAS } = require('../../../src/services/sceneBriefService');
 
 // ─── Test fixtures ──────────────────────────────────────────────────────────
 
@@ -140,9 +141,11 @@ describe('SceneGenerationService', () => {
   // ─── buildPrompt ────────────────────────────────────────────────────────
 
   describe('buildPrompt', () => {
-    it('should include the LALAVERSE visual anchor', () => {
+    it('is built from the Scene Brief: the no-people rule first, no generic style or lighting text (S1, S4)', () => {
       const result = buildPrompt(makeSceneSet());
-      expect(result).toContain('Pinterest-worthy feminine aesthetic');
+      expect(result.startsWith('An empty space with no people')).toBe(true);
+      expect(result).not.toContain('feminine aesthetic');
+      expect(result).not.toContain('Soft natural lighting');
     });
 
     it('should include the scene set name as LOCATION', () => {
@@ -157,7 +160,7 @@ describe('SceneGenerationService', () => {
 
     it('should include the camera direction for the angle label', () => {
       const result = buildPrompt(makeSceneSet(), 'VANITY');
-      expect(result).toContain(ANGLE_MODIFIERS.VANITY);
+      expect(result).toContain(SHOT_CAMERAS.VANITY);
     });
 
     it('should default to WIDE when no angle label provided', () => {
@@ -182,8 +185,8 @@ describe('SceneGenerationService', () => {
     it('should include the quality suffix', () => {
       // Use short description to avoid 1000 char truncation cutting off the suffix
       const result = buildPrompt(makeSceneSet({ canonical_description: '' }));
-      expect(result).toContain('Photorealistic cinematic quality');
-      expect(result).toContain('no text');
+      expect(result).toContain('Photorealistic.');
+      expect(result).toContain('No text');
     });
 
     it('should collapse whitespace and newlines', () => {
@@ -232,7 +235,7 @@ describe('SceneGenerationService', () => {
       const sceneSet = makeSceneSet({ canonical_description: '' });
       const result = buildPrompt(sceneSet);
       expect(typeof result).toBe('string');
-      expect(result).toContain('Empty room');
+      expect(result).toContain('no people');
     });
 
     it('should produce valid prompts for every angle label', () => {
@@ -242,7 +245,7 @@ describe('SceneGenerationService', () => {
         expect(result.length).toBeLessThanOrEqual(3500);
         expect(result.length).toBeGreaterThan(0);
         // Each angle's modifier text should appear in the prompt
-        expect(result).toContain(ANGLE_MODIFIERS[label].slice(0, 20));
+        expect(result).toContain(SHOT_CAMERAS[label].slice(0, 20));
       });
     });
   });
