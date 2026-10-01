@@ -333,6 +333,20 @@ async function loadScriptContext(episodeId, showId, models) {
     console.error('[ScriptWriter] season arc context failed (non-blocking):', err.message);
   }
 
+  // 13b. This episode's season position (§8(ff) A5): the slot's context,
+  // snapshotted onto the episode at Start Episode.
+  context.seasonPosition = null;
+  try {
+    const [row] = await sequelize.query(
+      'SELECT season_context FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const sc = row?.season_context;
+    context.seasonPosition = (typeof sc === 'string' ? JSON.parse(sc) : sc) || null;
+  } catch (err) {
+    console.error('[ScriptWriter] season position failed (non-blocking):', err.message);
+  }
+
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
   try {
@@ -353,6 +367,21 @@ async function loadScriptContext(episodeId, showId, models) {
 /**
  * Build the full prompt for Claude
  */
+// The episode's place in the season (§8(ff) A5): "S1 · E7", its phase and
+// the slot's intention. Empty when the episode has no season context.
+function buildSeasonPositionBlock(sc) {
+  if (!sc || !sc.label) return '';
+  const phase = sc.phase?.title ? `Phase ${sc.phase.number}: ${sc.phase.title}` : `Phase ${sc.phase?.number ?? '?'}`;
+  let block = `═══ SEASON POSITION ═══\n${sc.label} — ${phase}${sc.position_in_phase ? `, episode ${sc.position_in_phase} of the phase` : ''}\n`;
+  if (sc.story_purpose) block += `Story purpose: ${sc.story_purpose}\n`;
+  if (sc.career_focus) block += `Career focus: ${sc.career_focus}\n`;
+  if (sc.desired_pressure) block += `Desired pressure: ${sc.desired_pressure}\n`;
+  const range = sc.outcome_range;
+  if (range && (range.min || range.max)) block += `Hoped-for outcome: ${range.min || '?'} to ${range.max || '?'}\n`;
+  block += 'SCRIPT DIRECTIVE: This episode serves its place in the season; the story purpose above is what it is for.\n';
+  return block;
+}
+
 function buildFullPrompt(context) {
   const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, opportunities, worldState } = context;
 
@@ -604,6 +633,7 @@ ${(() => {
     if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;
     arcBlock += 'SCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n';
   }
+  arcBlock += buildSeasonPositionBlock(context.seasonPosition);
 
   // Designed intent direction
   let intentBlock = '';
@@ -864,4 +894,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock };
