@@ -39,6 +39,8 @@ const { PRESSURE_LEVELS } = require('./seasonSlotService');
 // Lowest to highest.
 const OUTCOME_TIERS = ['fail', 'safe', 'pass', 'slay'];
 const MAX_PURPOSES = 3;
+// A started slot's draft reads its episode's script up to this many characters.
+const SCRIPT_EXCERPT = 4000;
 const MODELS = ['claude-haiku-4-5-20251001'];
 const SOURCES = Object.freeze({ DRAFTED: 'auto-drafted', EDITED: 'edited' });
 
@@ -136,12 +138,28 @@ function parsePurposes(value) {
 
 /**
  * A slot's purposes as stored, primary first; a slot written before A10 has
- * only story_purpose and story_thread_id.
+ * only story_purpose and story_thread_id. Each carries its source (Edited or
+ * Auto-drafted); one stored without it takes the slot's.
  */
 function purposesOf(slot) {
+  const fallback = slot?.intention_source === SOURCES.EDITED ? SOURCES.EDITED : SOURCES.DRAFTED;
+  const withSource = (p) => ({ ...p, source: p.source === SOURCES.EDITED || p.source === SOURCES.DRAFTED ? p.source : fallback });
   const stored = parsePurposes(slot?.story_purposes);
-  if (stored.length) return [...stored.filter((p) => p.primary), ...stored.filter((p) => !p.primary)];
-  return slot?.story_purpose ? [{ text: slot.story_purpose, primary: true, story_thread_id: slot.story_thread_id || null }] : [];
+  if (stored.length) return [...stored.filter((p) => p.primary), ...stored.filter((p) => !p.primary)].map(withSource);
+  return slot?.story_purpose ? [withSource({ text: slot.story_purpose, primary: true, story_thread_id: slot.story_thread_id || null })] : [];
+}
+
+/**
+ * The sources of purposes Evoni saves: one she left as it was drafted (same
+ * text and thread) stays Auto-drafted; any other is Edited.
+ */
+function markSaved(purposes, current) {
+  const drafted = current.filter((p) => p.source === SOURCES.DRAFTED);
+  return purposes.map((p) => ({
+    ...p,
+    source: drafted.some((d) => d.text === p.text && (d.story_thread_id || null) === (p.story_thread_id || null))
+      ? SOURCES.DRAFTED : SOURCES.EDITED,
+  }));
 }
 
 /** Q10: the brief fields an outcome range sets. Null when there is no range. */
@@ -161,6 +179,7 @@ async function loadEditableSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
     `SELECT s.id, s.arc_id, s.slot_number, s.phase, s.season_number, s.episode_id, s.locked_at, s.accepted_at,
             s.intention_source, s.story_purpose, s.story_purposes, s.story_thread_id,
+            s.career_focus, s.desired_pressure, s.outcome_range,
             ep.id AS live_episode_id, ep.evaluation_status
        FROM season_slots s
        LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
@@ -177,40 +196,32 @@ async function loadEditableSlot(sequelize, showId, slotId, transaction) {
   return slot;
 }
 
-async function loadFutureSlot(sequelize, showId, slotId, transaction) {
-  const [[slot]] = await sequelize.query(
-    `SELECT id, arc_id, slot_number, phase, season_number, episode_id, locked_at, intention_source
-       FROM season_slots WHERE id = :slotId AND show_id = :showId AND deleted_at IS NULL`,
-    { replacements: { slotId, showId }, transaction });
-  if (!slot) throw new SeasonIntentionError('Slot not found', 404, 'SEASON_SLOT_NOT_FOUND');
-  if (slot.episode_id || slot.locked_at) {
-    throw new SeasonIntentionError(`E${slot.slot_number} has started: its intention is locked with it`, 409, 'SEASON_SLOT_LOCKED');
-  }
-  return slot;
-}
-
 /**
  * The purposes to store. Given purposes (A10) replace them all. A single
  * story_purpose (a draft, or an older client) replaces the primary's text,
  * and its thread when one is given, keeping the other purposes.
  */
-async function purposesToWrite(sequelize, slotId, intention) {
-  if (intention.story_purposes !== undefined) return intention.story_purposes;
+async function purposesToWrite(sequelize, slotId, intention, source) {
   const [[slot]] = await sequelize.query(
-    'SELECT story_purpose, story_purposes, story_thread_id FROM season_slots WHERE id = :slotId',
+    'SELECT story_purpose, story_purposes, story_thread_id, intention_source FROM season_slots WHERE id = :slotId',
     { replacements: { slotId } });
   const current = purposesOf(slot);
+  if (intention.story_purposes !== undefined) {
+    return source === SOURCES.EDITED
+      ? markSaved(intention.story_purposes, current)
+      : intention.story_purposes.map((p) => ({ ...p, source }));
+  }
   const others = current.filter((p) => !p.primary);
   if (!intention.story_purpose) {
     return others.map((p, i) => ({ ...p, primary: i === 0 }));
   }
   const primary = current.find((p) => p.primary);
   const thread = intention.story_thread_id !== undefined ? intention.story_thread_id : (primary?.story_thread_id || null);
-  return [{ text: intention.story_purpose, primary: true, story_thread_id: thread || null }, ...others];
+  return [{ text: intention.story_purpose, primary: true, story_thread_id: thread || null, source }, ...others];
 }
 
 async function writeIntention(sequelize, slotId, intention, source) {
-  const purposes = await purposesToWrite(sequelize, slotId, intention);
+  const purposes = await purposesToWrite(sequelize, slotId, intention, source);
   const primary = purposes[0] || null;
   await sequelize.query(
     `UPDATE season_slots SET story_purpose = :story_purpose, story_purposes = CAST(:story_purposes AS jsonb),
@@ -347,17 +358,111 @@ function parseDraft(raw) {
 }
 
 /**
- * Drafts a future slot's intention (A3) with Haiku (logged and budget-gated
- * by aiCostTracker), labelled Auto-drafted. An Edited intention is replaced
- * only with force (Evoni's confirm).
+ * A9, as changed (Evoni, 2026-10-01): a started slot whose episode is a draft
+ * is drafted from that episode: its event, and its script so far.
+ */
+async function startedEpisodeContext(sequelize, episodeId) {
+  const [[episode]] = await sequelize.query(
+    'SELECT title, script_content FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId } });
+  const [[event]] = await sequelize.query(
+    `SELECT name, event_type, host, venue_name, dress_code, description FROM world_events
+      WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+    { replacements: { episodeId } });
+  const script = String(episode?.script_content || '').trim();
+  return {
+    title: episode?.title || null,
+    event: event || null,
+    script: script.length > SCRIPT_EXCERPT ? `${script.slice(0, SCRIPT_EXCERPT)}\n[…]` : script,
+  };
+}
+
+function startedEpisodeBlock(started) {
+  const ev = started.event;
+  const eventLine = ev
+    ? `${ev.name}${ev.event_type ? ` (${ev.event_type})` : ''}${ev.host ? `, hosted by ${ev.host}` : ''}${ev.venue_name ? ` at ${ev.venue_name}` : ''}${ev.dress_code ? `; dress code: ${ev.dress_code}` : ''}${ev.description ? `. ${ev.description}` : ''}`
+    : 'None attached.';
+  return `
+
+This episode has already started. Draft the intention that fits what it is, from its event and its script:
+Episode: ${started.title ? `"${started.title}"` : 'untitled'}
+Event: ${eventLine}
+Script so far:
+${started.script || '(no script yet)'}`;
+}
+
+/**
+ * A started slot's draft: purposes Evoni edited are never overwritten. The
+ * drafted purpose takes the place of the first purpose that is not hers (its
+ * thread kept), else is added when there is room, else is left out. Career
+ * focus, pressure and range are filled from the draft unless Evoni edited the
+ * intention and the field is already set.
+ */
+function mergeStartedDraft(slot, intention) {
+  const purposes = purposesOf(slot).map((p) => ({ ...p }));
+  let placed = null;
+  if (intention.story_purpose) {
+    const open = purposes.findIndex((p) => p.source !== SOURCES.EDITED);
+    if (open >= 0) {
+      purposes[open] = { ...purposes[open], text: intention.story_purpose, source: SOURCES.DRAFTED };
+      placed = purposes[open].primary ? 'primary' : 'replaced';
+    } else if (purposes.length < MAX_PURPOSES) {
+      purposes.push({ text: intention.story_purpose, primary: purposes.length === 0, story_thread_id: null, source: SOURCES.DRAFTED });
+      placed = 'added';
+    }
+  }
+  const edited = slot.intention_source === SOURCES.EDITED;
+  const keep = (field, value) => (edited && slot[field] != null && slot[field] !== '' ? slot[field] : value);
+  return {
+    purposes,
+    placed,
+    kept_edited: purposes.filter((p) => p.source === SOURCES.EDITED).length,
+    career_focus: keep('career_focus', intention.career_focus),
+    desired_pressure: keep('desired_pressure', intention.desired_pressure),
+    outcome_range: keep('outcome_range', intention.outcome_range),
+    source: edited || purposes.some((p) => p.source === SOURCES.EDITED) ? SOURCES.EDITED : SOURCES.DRAFTED,
+  };
+}
+
+async function writeStartedDraft(sequelize, slot, intention) {
+  const merged = mergeStartedDraft(slot, intention);
+  const primary = merged.purposes[0] || null;
+  const range = typeof merged.outcome_range === 'string' ? merged.outcome_range : (merged.outcome_range ? JSON.stringify(merged.outcome_range) : null);
+  await sequelize.query(
+    `UPDATE season_slots SET story_purpose = :story_purpose, story_purposes = CAST(:story_purposes AS jsonb),
+            story_thread_id = :story_thread_id, career_focus = :career_focus,
+            desired_pressure = :desired_pressure, outcome_range = CAST(:outcome_range AS jsonb),
+            intention_source = :source, updated_at = NOW()
+      WHERE id = :slotId`,
+    { replacements: {
+      story_purpose: primary?.text || null,
+      story_purposes: merged.purposes.length ? JSON.stringify(merged.purposes) : null,
+      story_thread_id: primary?.story_thread_id || null,
+      career_focus: merged.career_focus || null,
+      desired_pressure: merged.desired_pressure || null,
+      outcome_range: range,
+      source: merged.source,
+      slotId: slot.id,
+    } });
+  return merged;
+}
+
+/**
+ * Drafts a slot's intention (A3) with Haiku (logged and budget-gated by
+ * aiCostTracker), labelled Auto-drafted. A future slot: an Edited intention
+ * is replaced only with force (Evoni's confirm). A started slot whose episode
+ * is a draft (A9, as changed 2026-10-01): drafted from its episode's event
+ * and script, never overwriting purposes Evoni edited, and the episode's
+ * season snapshot is updated. Refused once the episode is accepted.
  */
 async function draftIntention(sequelize, showId, slotId, { force = false, anthropic = null } = {}) {
-  const slot = await loadFutureSlot(sequelize, showId, slotId);
-  if (slot.intention_source === SOURCES.EDITED && !force) {
+  const slot = await loadEditableSlot(sequelize, showId, slotId);
+  if (!slot.started && slot.intention_source === SOURCES.EDITED && !force) {
     throw new SeasonIntentionError(`E${slot.slot_number}'s intention was edited; redrafting would replace it`, 409, 'SEASON_INTENTION_EDITED');
   }
   const ctx = await draftingContext(sequelize, showId, slot);
-  const prompt = buildDraftPrompt(slot, ctx);
+  let prompt = buildDraftPrompt(slot, ctx);
+  if (slot.started) prompt += startedEpisodeBlock(await startedEpisodeContext(sequelize, slot.live_episode_id));
   const api = anthropic || getClient();
   let lastErr = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -368,6 +473,26 @@ async function draftIntention(sequelize, showId, slotId, { force = false, anthro
         messages: [{ role: 'user', content: prompt }],
       });
       const intention = parseDraft(response?.content?.[0]?.text);
+      if (slot.started) {
+        const merged = await writeStartedDraft(sequelize, slot, intention);
+        const { snapshotEpisode } = require('./seasonSlotService');
+        const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
+        return {
+          slot_number: slot.slot_number,
+          started: true,
+          placed: merged.placed,
+          kept_edited: merged.kept_edited,
+          season_context: seasonContext,
+          intention: {
+            story_purposes: merged.purposes,
+            story_purpose: merged.purposes[0]?.text || null,
+            career_focus: merged.career_focus || null,
+            desired_pressure: merged.desired_pressure || null,
+            outcome_range: merged.outcome_range || null,
+            source: merged.source,
+          },
+        };
+      }
       await writeIntention(sequelize, slotId, intention, SOURCES.DRAFTED);
       return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.DRAFTED } };
     } catch (err) {

@@ -246,12 +246,36 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     fireEvent.click(screen.getByTestId('season-intention-1'));
     const editor = await screen.findByTestId('season-intention-editor');
     expect(within(editor).getByTestId('season-intention-started').textContent).toMatch(/editable while its episode is a draft/);
-    expect(within(editor).queryByText('Draft with AI')).toBeNull();
     fireEvent.change(within(editor).getByLabelText('Story purpose 1'), { target: { value: 'Her first gala, on borrowed shoes' } });
     fireEvent.click(within(editor).getByText('Save'));
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-1/intention',
       expect.objectContaining({ story_purposes: [{ text: 'Her first gala, on borrowed shoes', primary: true, story_thread_id: null }] })));
+  });
+
+  test('a started slot can be drafted with AI from its episode, with no confirm and no force (A9 as changed)', async () => {
+    const started = { ...ROADMAP, phases: ROADMAP.phases.map((p, i) => (i === 0 ? {
+      ...p, slots: p.slots.map((sl) => (sl.slot_number === 1
+        ? { ...sl, intention_editable: true, intention: { story_purpose: 'Her first gala', source: 'edited' } } : sl)),
+    } : p)) };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: started } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, started: true, placed: 'added', kept_edited: 1 } });
+    const confirm = vi.spyOn(window, 'confirm');
+    renderAt('season');
+
+    fireEvent.click(await screen.findByTestId('season-intention-1'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    expect(within(editor).getByTestId('season-intention-started').textContent).toMatch(/Draft with AI reads its event and script and keeps the purposes you edited/);
+    fireEvent.click(within(editor).getByText('Draft with AI'));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-1/intention/draft', {}));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(await screen.findByText('S1 · E1 intention drafted from its episode; 1 edited purpose kept')).toBeTruthy();
+    confirm.mockRestore();
   });
 
   test('a slot holds up to three purposes with one primary; the card shows the primary with "+N more" (A10)', async () => {

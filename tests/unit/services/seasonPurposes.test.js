@@ -30,9 +30,13 @@ describe('normalisePurposes (A10)', () => {
     expect(() => normalisePurposes([{ text: 'A', primary: true }, { text: 'B', primary: true }])).toThrow(/Only one/);
   });
 
-  test('a slot written before A10 reads as one primary purpose', () => {
+  test('a slot written before A10 reads as one primary purpose, with the slot\'s source', () => {
     expect(purposesOf({ story_purpose: 'Old', story_thread_id: 't-1', story_purposes: null }))
-      .toEqual([{ text: 'Old', primary: true, story_thread_id: 't-1' }]);
+      .toEqual([{ text: 'Old', primary: true, story_thread_id: 't-1', source: 'auto-drafted' }]);
+    expect(purposesOf({ story_purpose: 'Mine', story_purposes: null, intention_source: 'edited' })[0].source).toBe('edited');
+    // A purpose stored without a source takes the slot's; one stored with it keeps its own.
+    expect(purposesOf({ intention_source: 'edited', story_purposes: [{ text: 'A', primary: true }, { text: 'B', source: 'auto-drafted' }] })
+      .map((p) => p.source)).toEqual(['edited', 'auto-drafted']);
     expect(purposesOf({ story_purpose: null })).toEqual([]);
   });
 });

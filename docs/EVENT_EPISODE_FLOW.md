@@ -3837,6 +3837,32 @@ six as listed." The six, and the storage they rest on:
    `story_purpose` and `story_thread_id` stay as the primary's mirror, and
    the migration fills `story_purposes` from them.
 
+**Change to A9 choice 1 (Evoni, 2026-10-01)**, recorded verbatim; it
+replaces choice 1 above:
+
+> Draft with AI is also allowed on a started slot while its episode is a draft, drafting from the episode's event and script; it never overwrites purposes I've edited.
+
+Build choices in its PR, proposed and awaiting Evoni's acceptance:
+1. **Which purposes are hers.** Each purpose in `story_purposes` carries
+   its source, Edited or Auto-drafted. A purpose Evoni saves unchanged from
+   its draft (same text and thread) stays Auto-drafted; any other she saves
+   is Edited. One stored before this has the slot's `intention_source`.
+2. **Where the draft goes.** The drafted purpose takes the place of the
+   first purpose that is not hers (primary first; its thread kept), else is
+   added as a further purpose when there is room, else is left out and the
+   toast says so. Her purposes are never changed, primary included.
+3. **The other fields.** Career focus, desired pressure and the outcome
+   range are taken from the draft, except a field Evoni set on an Edited
+   intention, which is kept.
+4. **What it reads.** The episode's title, its event (name, type, host,
+   venue, dress code, description) and its script up to 4,000 characters,
+   with the phase and the season so far, as a future slot's draft does.
+5. **After it.** The episode's season snapshot and the brief's intent and
+   allowed outcomes are updated, as a save does (A9, choice 5). No confirm
+   and no `force`: nothing of hers is replaced. A future slot keeps its
+   confirm before replacing an Edited intention. Refused once the episode is
+   accepted.
+
 **(gg) Episode Money, Phase B (Evoni, 2026-10-01).** Recorded verbatim.
 Nothing is built yet. Phase B of §8(aa) M5; it builds on M1–M6 and the
 event spending ruling (§8(aa), §8(cc)). The design note, reading today's
