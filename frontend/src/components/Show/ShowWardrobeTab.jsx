@@ -60,7 +60,7 @@ function ShowWardrobeTab({ show }) {
             {items.length} items · ${totalValue.toLocaleString()} total value
           </p>
         </div>
-        <button onClick={() => navigate(`/shows/${show.id}/world?tab=wardrobe`)} style={{
+        <button onClick={() => navigate(`/shows/${show.id}/world?tab=wardrobe-items`)} style={{
           padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff',
           fontSize: 13, fontWeight: 600, cursor: 'pointer',
         }}>

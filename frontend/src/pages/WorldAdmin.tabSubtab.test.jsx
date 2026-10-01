@@ -73,3 +73,19 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Episode Ledger')).toBe(false);
   });
 });
+
+describe('WorldAdmin ?tab=wardrobe-items (the show page\'s wardrobe links)', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+  });
+
+  test('opens Assets → Wardrobe', async () => {
+    renderAt('wardrobe-items');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Wardrobe' })).toBeTruthy());
+    expect(isActive('Wardrobe')).toBe(true);
+    expect(isActive('Scene Sets')).toBe(false);
+  });
+});
