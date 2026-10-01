@@ -43,6 +43,10 @@ const { deriveEventVisualDirection } = require('./eventVisualDirection');
 
 const TITLE_OVERLAY_ROLE = 'UI.OVERLAY.EPISODE_TITLE_TEXT';
 const FLOURISH_ROLE = 'UI.OVERLAY.EPISODE_TITLE_FLOURISH';
+// P15's beat ruling (Evoni, 2026-09-30): "the title overlay is placed on
+// Beat 1 (the opening); the framed card stays unplaced unless I place it."
+const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+const TITLE_OVERLAY_BEAT = CANONICAL_BEATS.find((b) => b.number === 1) || null;
 const WIDTH = 1920;
 const HEIGHT = 1080;
 const PREVIEW_SCALE = 0.5;
@@ -444,11 +448,25 @@ async function writeOverlay(models, ep, style) {
         showId: ep.show_id, episodeId: ep.id, metadata: JSON.stringify(metadata),
       }, transaction }
     );
-    await sequelize.query(
+    const [old] = await sequelize.query(
       `UPDATE assets SET deleted_at = NOW(), updated_at = NOW()
-        WHERE episode_id = :episodeId AND asset_role = :role AND deleted_at IS NULL AND id <> :assetId`,
+        WHERE episode_id = :episodeId AND asset_role = :role AND deleted_at IS NULL AND id <> :assetId
+        RETURNING id`,
       { replacements: { episodeId: ep.id, role: TITLE_OVERLAY_ROLE, assetId }, transaction }
     );
+    // The replaced overlay leaves the timeline with it.
+    const replaced = (old || []).map((r) => r.id);
+    const [[reg]] = await sequelize.query(
+      "SELECT to_regclass('public.timeline_placements') IS NOT NULL AS present",
+      { transaction }
+    );
+    if (replaced.length > 0 && reg?.present) {
+      await sequelize.query(
+        `UPDATE timeline_placements SET deleted_at = NOW(), updated_at = NOW()
+          WHERE episode_id = :episodeId AND asset_id IN (:replaced) AND deleted_at IS NULL`,
+        { replacements: { episodeId: ep.id, replaced }, transaction }
+      );
+    }
     await sequelize.query(
       `UPDATE episodes SET title_overlay_asset_id = :assetId, title_overlay_title = :title,
               title_overlay_style = :style, updated_at = NOW()
@@ -456,6 +474,25 @@ async function writeOverlay(models, ep, style) {
       { replacements: { assetId, title: ep.title, style: JSON.stringify(style), episodeId: ep.id }, transaction }
     );
   });
+  const { placeOverlayOnBeat } = require('./episodeBeatPlacement');
+  try {
+    await placeOverlayOnBeat(models, {
+      episodeId: ep.id,
+      assetId,
+      canonicalBeat: TITLE_OVERLAY_BEAT,
+      label: 'Title Overlay',
+      kind: 'title_overlay',
+      source: 'episode-title-overlay',
+      duration: 5,
+      zIndex: 30,
+      logTag: '[TitleOverlay]',
+    });
+  } catch (err) {
+    // The overlay is saved; a failed placement is added by hand from the
+    // timeline, so it does not undo the save.
+    console.error('[TitleOverlay] placing the overlay on the opening beat failed:', err.message);
+  }
+
   const after = await loadEpisode(sequelize, ep.id);
   return titleOverlayState(after, { s3_url_processed: url });
 }
@@ -520,6 +557,7 @@ async function getTitleOverlayState(models, episodeId) {
 
 module.exports = {
   TITLE_OVERLAY_ROLE,
+  TITLE_OVERLAY_BEAT,
   FLOURISH_ROLE,
   FLOURISH_OPTIONS,
   VARIANTS,

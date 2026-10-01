@@ -411,6 +411,24 @@ router.post('/:id/title-overlay/flourish', validateUUIDParam('id'), requireAuth,
   }
 });
 
+// ==================== EPISODE OVERLAYS (P15) ====================
+// Production's Overlays tab: every on-screen piece the episode owns (title
+// overlay, framed card, invitation, task-list overlay) with its preview,
+// status, placed beat and the cost of its paid action. Read-only; each
+// piece's actions stay on its own route.
+router.get('/:id/overlays', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getEpisodeOverlays } = require('../services/episodeOverlaysService');
+    const data = await getEpisodeOverlays(models, req.params.id);
+    if (!data) return res.status(404).json({ success: false, error: 'Episode not found' });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[EpisodeOverlays] GET /:id/overlays failed:', err.message);
+    return res.status(err.status && err.status < 600 ? err.status : 500).json({ success: false, error: err.message });
+  }
+});
+
 // ==================== TASK LIST APPROVAL + TASK-LIST OVERLAY (Task #2395, P14) ====================
 // services/episodeTaskListOverlayService.js holds the rules; these handlers
 // only map its errors (TaskListOverlayError status/code, image budget 429).
