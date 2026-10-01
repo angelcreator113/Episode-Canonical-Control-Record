@@ -6,6 +6,7 @@ import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
+import EpisodeMoneyCard from './EpisodeMoneyCard';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
 // the array on every render. Order = display order.
@@ -373,7 +374,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const ledgerExpense = ledger.transactions.filter(t => ['expense', 'deduction'].includes(t.type));
   const ledgerIncomeTotal = ledgerIncome.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const ledgerExpenseTotal = ledgerExpense.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-  const ledgerNet = ledgerIncomeTotal - ledgerExpenseTotal;
   const hasFinancials = ledger.transactions.length > 0;
   // Episode P&L — when the episode has real ledger transactions, prefer
   // those (post-completion truth). Otherwise fall back to the columns
@@ -393,7 +393,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const netIsPrediction = !hasFinancials && !isAccepted && (income !== 0 || expenses !== 0);
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
-  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials;
+  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials || !!showId;
   const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
@@ -914,71 +914,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 </div>
               )}
             </div>
-            {hasFinancials && (() => {
-              // Episode financial ledger — every transaction tagged with
-              // this episode_id, grouped income vs expense, with the net
-              // P&L for the episode. Sits below the 3-up Stakes cards so
-              // the totals on the stat strip up top have a "where did
-              // this come from" companion view. Categories that ship
-              // today: event_payment, brand_deal_bonus, social_task_reward,
-              // tier_reward, tier_paid_bonus, event_reward, event_entry,
-              // wardrobe_purchase, wardrobe_rental, styling_extras,
-              // event_cost, event_spending, the deal payouts (appearance_fee,
-              // partnership_base_fee, performance_fee, content_fee,
-              // deal_bonus), milestone, manual_adjustment. tier_reward,
-              // tier_paid_bonus and event_reward are retired (Q12) but keep
-              // their icons for any row already written.
-              const categoryIcons = {
-                event_payment: '💼', brand_deal_bonus: '🤝', social_task_reward: '📱',
-                tier_reward: '👑', tier_paid_bonus: '✨', event_reward: '🏆',
-                milestone: '🎯', event_entry: '🎟️', wardrobe_purchase: '👗',
-                wardrobe_rental: '👗', styling_extras: '🥂', manual_adjustment: '✏️',
-                // A deal event's itemised costs (Task #2365) and payouts (deal build PR 5).
-                event_cost: '🧾', event_spending: '🥂', appearance_fee: '💼', partnership_base_fee: '🤝',
-                performance_fee: '🎤', content_fee: '📸', deal_bonus: '🏅', seed: '🌱',
-              };
-              const fmt = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toLocaleString()}`;
-              const labelFor = (cat) => (cat || 'other').replace(/_/g, ' ');
-              const Row = ({ tx }) => {
-                const isIncome = ['income', 'reward'].includes(tx.type);
-                const sign = isIncome ? '+' : '−';
-                const color = isIncome ? '#16a34a' : '#dc2626';
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid #f1f5f9', fontSize: 11 }}>
-                    <span style={{ fontSize: 13 }}>{categoryIcons[tx.category] || '◦'}</span>
-                    <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 500 }}>{tx.description || labelFor(tx.category)}</span>
-                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}>{labelFor(tx.category)}</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color, minWidth: 70, textAlign: 'right' }}>{sign}{Math.abs(parseFloat(tx.amount) || 0).toLocaleString()} 🪙</span>
-                  </div>
-                );
-              };
-              return (
-                <div style={{ ...S.card, marginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={S.label}>💰 Episode Financials</span>
-                    <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 700, color: ledgerNet >= 0 ? '#16a34a' : '#dc2626' }}>
-                      Net {fmt(ledgerNet)} 🪙
-                    </span>
-                  </div>
-                  {ledgerIncome.length > 0 && (
-                    <div style={{ marginBottom: ledgerExpense.length ? 10 : 0 }}>
-                      <div style={{ fontSize: 9, color: '#16a34a', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
-                        Income · {fmt(ledgerIncomeTotal)} 🪙
-                      </div>
-                      {ledgerIncome.map(tx => <Row key={tx.id} tx={tx} />)}
-                    </div>
-                  )}
-                  {ledgerExpense.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 9, color: '#dc2626', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
-                        Expenses · −{ledgerExpenseTotal.toLocaleString()} 🪙
-                      </div>
-                      {ledgerExpense.map(tx => <Row key={tx.id} tx={tx} />)}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {/* The Money card (§8(gg) MB5, Q10): it replaces the ledger list;
+                the Money tab is the one full view. */}
+            {showId && <EpisodeMoneyCard showId={showId} episodeId={episode.id} />}
           </SectionBand>
         );
       })()}
