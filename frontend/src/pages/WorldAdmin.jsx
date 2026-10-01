@@ -643,19 +643,51 @@ function WorldAdmin() {
     if (successMsg) { const t = setTimeout(() => { setSuccessMsg(null); setLastGeneratedEpisodeId(null); }, 5000); return () => clearTimeout(t); }
   }, [successMsg]);
 
+  // "Generate Venue Images" (F1, Evoni, 2026-10-01). An event whose scene set
+  // is attached but not in this page's list: when that set has its image,
+  // nothing is generated and the toast says so; otherwise the brief opens (S2)
+  // for its missing base, or for a new venue when the set no longer exists.
+  const startVenueGeneration = async (ask) => {
+    const setId = ask.event.scene_set_id;
+    if (setId) {
+      try {
+        const r = await api.get(`/api/v1/scene-sets/${setId}`);
+        const set = r.data?.data;
+        if (set?.base_still_url) {
+          setToast(`Venue images already available: “${set.name}” has its image. Nothing generated.`);
+          setSceneSets((prev) => (prev.some((s) => s.id === set.id) ? prev : [set, ...prev]));
+          return;
+        }
+      } catch (err) {
+        if (err.response?.status !== 404) {
+          console.error('[WorldAdmin] attached scene set check failed:', err);
+          setToast('Could not check the attached scene set: ' + (err.response?.data?.error || err.message));
+          return;
+        }
+      }
+    }
+    setVenueBriefAsk({ kind: 'venue', ...ask });
+  };
+
   // Venue generation for an event, with the overrides confirmed on its
-  // brief (S5). It runs about two minutes; the toast says so.
+  // brief (S5). It runs about two minutes; the toast says so, then says
+  // what happened: generated, already available, or failed (F1).
   const runVenueGeneration = async ({ event, onDone }, overrides) => {
     setToast('Generating the venue: about two minutes…');
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/generate-venue`, { overrides });
-      if (res.data.success) {
-        setToast(res.data.skipped ? 'Kept the attached venue.' : 'Venue images created! Scene set linked.');
-        if (!res.data.skipped && res.data.data?.scene_set_id && onDone) onDone(res.data.data.scene_set_id);
-        loadData();
+      const d = res.data.data || {};
+      if (res.data.success && res.data.outcome === 'already_available') {
+        setToast(`Venue images already available${d.venue_name ? ` for “${d.venue_name}”` : ''}. Nothing generated.`);
+      } else if (res.data.success && res.data.outcome === 'generated') {
+        setToast(d.kind === 'base'
+          ? `Venue image generated for “${d.venue_name}”.`
+          : 'Venue images generated. Scene set linked.');
+        if (d.scene_set_id && onDone) onDone(d.scene_set_id);
       } else {
-        setToast(res.data.error || 'Venue generation failed');
+        setToast('Venue generation failed: ' + (res.data.error || 'no image was made'));
       }
+      loadData();
     } catch (err) {
       console.error('[WorldAdmin] venue generation failed:', err);
       setToast('Venue generation failed: ' + (err.response?.data?.error || err.message || 'Request timed out — try again'));
@@ -3498,8 +3530,7 @@ The revised event should feel like a completely different experience from the si
                         <button
                           // The venue's brief first (S2, S5); generating
                           // links the new scene set to this event.
-                          onClick={() => setVenueBriefAsk({
-                            kind: 'venue',
+                          onClick={() => startVenueGeneration({
                             event: md,
                             onDone: (sceneSetId) => {
                               // The server already linked it; record it as
@@ -7177,7 +7208,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {venueBriefAsk?.kind === 'venue' && (
         <SceneBriefConfirm
           title={`Generate the venue for “${venueBriefAsk.event.name}”`}
-          note="Two images: the interior from this brief, then the exterior of the same place from the street. The new scene set is linked to this event."
+          note={(d) => (d.target?.kind === 'base'
+            ? `This event's scene set “${d.target.scene_set_name}” has no image yet: its base is made from this brief, for this event. The set stays linked.`
+            : 'Two images: the interior from this brief, then the exterior of the same place from the street. The new scene set is linked to this event.')}
           requestBrief={(body) => api.post(`/api/v1/world/${showId}/events/${venueBriefAsk.event.id}/venue-brief`, body)}
           onCancel={() => setVenueBriefAsk(null)}
           onConfirm={(overrides) => {
@@ -7204,16 +7237,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ═══ FLOATING TOAST NOTIFICATION ═══ */}
       {toast && (
+        // One toast for every message on this page (F1, Evoni, 2026-10-01:
+        // outcomes are reported honestly). It once always read "💉✅ Event
+        // tag injected into script" on green, a failure included; now it
+        // shows the message alone, a failure in red.
         <div style={S.toastOverlay}>
-          <div style={S.toastBox}>
-            <div style={{ fontSize: 32, marginBottom: 6 }}>💉✅</div>
+          <div role="status" data-testid="wa-toast" data-tone={isFailureToast(toast) ? 'failed' : 'info'}
+            style={{ ...S.toastBox, ...(isFailureToast(toast) ? S.toastBoxFailed : null) }}>
             <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.3px' }}>{toast}</div>
-            <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>Event tag injected into script</div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// A toast reporting a failure: shown in red (F1).
+const FAILURE_TOAST = /\b(fail(ed|ure)?|error|could not|couldn't|can't|refused|not configured)\b/i;
+function isFailureToast(text) {
+  return FAILURE_TOAST.test(String(text || ''));
 }
 
 // ─── Form Group helper ───
@@ -8237,7 +8279,8 @@ const S = {
   sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
   deltaBadge: (v) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
   toastOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, pointerEvents: 'none' },
-  toastBox: { padding: '20px 40px', background: 'linear-gradient(135deg, #16a34a, #059669)', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(22,163,74,0.4)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
+  toastBox: { padding: '20px 40px', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', background: '#2C2C2C', color: '#FAF7F0', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(0,0,0,0.3)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
+  toastBoxFailed: { background: '#B42318', boxShadow: '0 12px 40px rgba(180,35,24,0.35)' },
   evCard: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' },
   eTag: { padding: '2px 8px', background: 'rgba(184,150,46,0.08)', borderRadius: 6, fontSize: 11, color: '#B8962E', fontWeight: 500 },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },

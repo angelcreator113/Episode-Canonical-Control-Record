@@ -62,6 +62,8 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
  * @param {string} [angleId]       — an angle's brief; the base's without it
  * @param {string} title           — "Generate base image"
  * @param {string} [note]          — e.g. "Each angle uses this brief with its own camera."
+ *                                   Or a function of the loaded brief data, for a note that
+ *                                   depends on what the brief is for.
  * @param {string} [description]   — an edited, unsaved description to show
  * @param {boolean} [refine]       — the artifact-review regenerate's brief
  * @param {string} [showId]        — the set's show, whose events are offered (S3)
@@ -145,6 +147,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
   const brief = data?.brief;
   const missing = brief?.missing || [];
   const cost = estimateText(data?.estimate);
+  const noteText = typeof note === 'function' ? (data ? note(data) : null) : note;
   // Removed lines are gone from the brief; they are listed so they can be restored.
   const removed = Object.entries(overrides || {})
     .filter(([key, text]) => !text && !(brief?.lines || []).some((l) => l.key === key));
@@ -178,7 +181,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                 <span>Missing essentials: {missing.map((m) => m.label).join(', ')}. You can still generate.</span>
               </div>
             )}
-            {note && <p className="sbc-note">{note}</p>}
+            {noteText && <p className="sbc-note" data-testid="sbc-note">{noteText}</p>}
             {brief.mode === 'event_dressing' && brief.approved_base && (
               // S6: an event-dressed version of the location's approved base.
               <div className="sbc-dressing" data-testid="sbc-dressing">

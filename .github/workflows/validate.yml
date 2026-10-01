@@ -56,6 +56,27 @@ jobs:
       - name: Schema agreement (step 2, model vs migrations)
         run: node scripts/check-schema-agreement.js --step2-baseline scripts/schema-agreement-step2.baseline
 
+  # ESLint (npm run lint: eslint src/ tests/, then the silent-catch lint).
+  # Added after "spec is not defined" in sceneGenerationService.js reached
+  # production: no-undef reported it, but no CI job ran ESLint.
+  eslint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
   tests:
     name: Tests
     runs-on: ubuntu-latest
