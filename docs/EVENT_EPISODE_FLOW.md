@@ -3510,6 +3510,58 @@ what was left:
   It reaches a venue only as the set's description when the location has
   none (S5).
 
+**S6, Evoni's answers** (2026-10-01), recorded verbatim:
+
+> 1. The approved base lives on the World Location (a field naming its approved base image); migration accepted.
+> 2. Event-dressed versions are made by editing the approved base with only the event layer, using Flux Kontext by default, priced and shown in the brief; revisit after the model comparison.
+> 3. Regenerate, promote-to-base and restyle refuse to replace an approved base until Evoni un-approves it.
+> 4. Nothing is approved automatically; Evoni approves each base from Scene Sets.
+
+**What S6 built** (Task #2395):
+
+- **The approved base (answer 1).** Migration `20261001220000` adds
+  `world_locations.approved_base_scene_set_id`, `approved_base_image_url`
+  and `approved_base_at`. All three are nullable, with no default and no
+  backfill (answer 4).
+- **Approving (answer 4).**
+  - `POST /scene-sets/:id/approve-base` approves a set's base for its
+    World Location. It needs a location and a base image.
+  - A location keeps one approved base: approving another set's is refused
+    (409) until the first is un-approved.
+  - `DELETE /scene-sets/:id/approve-base` un-approves it.
+  - Scene Sets shows the row on each card (`ApprovedBaseRow`):
+    - "Approve as the location's base";
+    - "Approved base" with Un-approve;
+    - on another set at an approved location, "Event versions here are
+      made from this location's approved base".
+  - `GET /scene-sets` and `GET /scene-sets/:id` carry `base_approved` and
+    `location_approved_base`.
+- **Event-dressed versions (answer 2).** A base brief at a location with
+  an approved base, with an event chosen (S3), for another set, has mode
+  `event_dressing`.
+  - Its prompt sends the rules, the keep-the-place instruction
+    (`DRESSING_KEEP`) and only the event layer.
+  - The generation edits the approved base image with Flux Kontext
+    (`SCENE_DRESSING_MODEL`, `fal-ai/flux-pro/kontext`). It is recorded
+    on `base_generation` with that model and the brief.
+  - The brief shows "Made from this location's approved base image" with
+    the image, and is priced from Kontext's rate.
+  - Venue generation (S5) does the same for its interior. Its exterior is
+    still generated in full.
+  - INFERRED:
+    - with no event chosen, a base is generated in full;
+    - the approved set's own brief is never a dressed version;
+    - the model is revisited after the model comparison.
+- **Never replaced while approved (answer 3).** These are refused with a
+  409 naming the location while the set's base is approved:
+  - regenerate base (`generate-base`), the cascade, promote-to-base;
+  - Scene Studio's restyle (`regenerate-background`);
+  - upload-base. INFERRED: upload also replaces the base.
+
+  `generateBaseScene` refuses as well (`ApprovedBaseError`), which covers
+  the worker. The card hides "Replace Base Image" and "Use … as Base"
+  while approved.
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in

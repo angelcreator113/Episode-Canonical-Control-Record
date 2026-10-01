@@ -38,6 +38,34 @@ async function readBriefEvent(raw, set) {
   return { value: event.id };
 }
 
+// S6: an approved base is refused replacement (regenerate, cascade,
+// promote-to-base, upload) until Evoni un-approves it. Sends the 409 and
+// returns true when refused.
+const approvedBase = require('../services/approvedBaseService');
+async function refuseApprovedBase(res, set) {
+  const refusal = await approvedBase.baseReplaceRefusal(SceneSet.sequelize, set.id);
+  if (!refusal) return false;
+  res.status(refusal.status).json({ success: false, error: refusal.error, approved_base_of: refusal.approved_base_of });
+  return true;
+}
+
+// S6: each set's approval, for Scene Sets: base_approved (its base is its
+// World Location's approved base) and location_approved_base (that
+// location's approved base, { scene_set_id, image_url }, or null).
+async function withApprovals(sets) {
+  const list = (sets || []).map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
+  try {
+    const approvals = await approvedBase.approvalsForSets(SceneSet.sequelize, list);
+    return list.map((x) => {
+      const a = x.world_location_id ? approvals.get(x.world_location_id) || null : null;
+      return { ...x, base_approved: Boolean(a && a.scene_set_id === x.id), location_approved_base: a };
+    });
+  } catch (err) {
+    console.warn('[SceneSets] approved bases not read:', err.message);
+    return list;
+  }
+}
+
 function getAnthropicClient() {
   if (!anthropicClient) {
     anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -112,7 +140,8 @@ router.get('/', requireAuth, async (req, res) => {
         return res.json({ success: true, count: 0, data: [], note: minErr.message });
       }
     }
-    res.json({ success: true, count: (sets || []).length, data: sets || [] });
+    const data = await withApprovals(sets || []);
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     console.error('Scene Sets GET / error:', err);
     res.json({ success: true, count: 0, data: [], note: err.message });
@@ -365,7 +394,8 @@ router.get('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       order: [[{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    res.json({ success: true, data: set });
+    const [data] = await withApprovals([set]);
+    res.json({ success: true, data });
   } catch (err) {
     console.error('Scene Sets GET /:id error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -588,6 +618,7 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadScen
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (await refuseApprovedBase(res, set)) return;
     const uploaded = [
       ...(req.files?.images || []),
       ...(req.files?.image || []),
@@ -800,15 +831,26 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
         seed: set.base_runway_seed,
       });
     }
+    if (await refuseApprovedBase(res, set)) return;
 
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
     const briefEvent = await readBriefEvent(req.body?.event_id, set);
     if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
-    // The key the set's base model needs (Task #2396).
-    const baseModelKey = sceneGenService.resolveBaseModel(set);
-    const missingKeys = modelComparison.missingProviderKeys([baseModelKey]);
+    // The key the generation needs: the set's base model (Task #2396), or
+    // Flux Kontext for an event-dressed version of an approved base (S6).
+    const { prepareSceneBrief } = require('../services/sceneBriefService');
+    const planned = await prepareSceneBrief(SceneSet.sequelize, set, {
+      angleLabel: 'WIDE',
+      eventId: briefEvent.value !== undefined ? briefEvent.value : (set.base_generation?.brief?.event_id || null),
+      overrides: briefOverrides.value || set.base_generation?.brief?.overrides || {},
+    });
+    if (planned.mode === 'event_dressing' && !process.env.FAL_KEY) {
+      return res.status(503).json({ success: false, error: 'An event-dressed version uses Flux Kontext, which needs FAL_KEY, which is not configured.' });
+    }
+    const baseModelKey = planned.mode === 'event_dressing' ? sceneGenService.SCENE_DRESSING_MODEL.key : sceneGenService.resolveBaseModel(set);
+    const missingKeys = planned.mode === 'event_dressing' ? [] : modelComparison.missingProviderKeys([baseModelKey]);
     if (missingKeys.length) {
       return res.status(503).json({ success: false, error: `Base model ${baseModelKey} needs ${missingKeys.join(', ')}, which is not configured.` });
     }
@@ -1574,11 +1616,19 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
         eventId: briefEvent.value !== undefined ? briefEvent.value : (saved?.event_id || null),
         overrides: briefOverrides.value || saved?.overrides || {},
       };
-      const modelKey = sceneGenService.resolveBaseModel(set);
-      const e = sceneGenService.estimateBaseStillCost(modelKey);
-      estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: modelKey };
     }
     const brief = await prepareSceneBrief(SceneSet.sequelize, draft, options);
+    if (!angle) {
+      // S6: an event-dressed version is priced as its Flux Kontext edit.
+      if (brief.mode === 'event_dressing') {
+        const e = sceneGenService.estimateDressingCost();
+        estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: sceneGenService.SCENE_DRESSING_MODEL.key };
+      } else {
+        const modelKey = sceneGenService.resolveBaseModel(set);
+        const e = sceneGenService.estimateBaseStillCost(modelKey);
+        estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: modelKey };
+      }
+    }
     res.json({
       success: true,
       data: {
@@ -1669,6 +1719,7 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (await refuseApprovedBase(res, set)) return;
 
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
@@ -1793,11 +1844,44 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, async (re
 
 // ─── POST /:id/promote-to-base  — use an angle image as the new base ────────
 
+// ─── POST/DELETE /:id/approve-base  — the location's approved base (S6) ─────
+// Evoni approves a set's base as its World Location's permanent base from
+// Scene Sets (answer 4); nothing is approved automatically. Event-dressed
+// versions at that location are then made from it, and the base is not
+// replaced until it is un-approved (answer 3).
+
+router.post('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const result = await approvedBase.approveBase(SceneSet.sequelize, set);
+    if (result.error) return res.status(result.status).json({ success: false, error: result.error });
+    res.json({ success: true, data: { approved_base: result.location } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/approve-base error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const result = await approvedBase.unapproveBase(SceneSet.sequelize, set);
+    if (result.error) return res.status(result.status).json({ success: false, error: result.error });
+    res.json({ success: true, data: { unapproved: result.location } });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/approve-base error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
+    if (await refuseApprovedBase(res, set)) return;
     const { angle_id } = req.body;
     if (!angle_id) return res.status(400).json({ success: false, error: 'angle_id is required' });
 

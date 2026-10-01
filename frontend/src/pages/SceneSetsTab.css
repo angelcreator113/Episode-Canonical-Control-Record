@@ -3997,3 +3997,43 @@
   font-size: 13px;
   color: #a3271f;
 }
+
+/* The location's approved base (S6). */
+.scene-sets-approved-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.scene-sets-approved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #ecfdf5;
+  color: #047857;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.scene-sets-approved-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid #d9cba0;
+  border-radius: 4px;
+  background: #fff;
+  color: #7a5c12;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+}
+.scene-sets-approved-btn:disabled { opacity: 0.6; cursor: default; }
+.scene-sets-approved-note {
+  font-size: 11px;
+  color: #6b6b6b;
+}
