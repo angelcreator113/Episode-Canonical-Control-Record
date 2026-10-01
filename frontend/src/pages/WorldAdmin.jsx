@@ -24,6 +24,7 @@ import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import EpisodeTasksPanel from '../components/EpisodeTasksPanel';
 import EventOutfitPicker from '../components/EventOutfitPicker';
+import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
@@ -424,6 +425,9 @@ function WorldAdmin() {
   // Deal-type filter, next to the status filters (Task #2361).
   const [eventDealFilter, setEventDealFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  // The Scene Brief before a venue or base generation from an event (S2, S3,
+  // S5): { kind: 'venue', event, onDone } | { kind: 'base', event, set }.
+  const [venueBriefAsk, setVenueBriefAsk] = useState(null);
   // The stored row the Edit details modal opened with, plus every change it
   // has saved since (Task #1786). Its hydration is the baseline a save
   // compares against, so only edited fields are sent. Cleared on close so a
@@ -633,6 +637,38 @@ function WorldAdmin() {
   useEffect(() => {
     if (successMsg) { const t = setTimeout(() => { setSuccessMsg(null); setLastGeneratedEpisodeId(null); }, 5000); return () => clearTimeout(t); }
   }, [successMsg]);
+
+  // Venue generation for an event, with the overrides confirmed on its
+  // brief (S5). It runs about two minutes; the toast says so.
+  const runVenueGeneration = async ({ event, onDone }, overrides) => {
+    setToast('Generating the venue: about two minutes…');
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/generate-venue`, { overrides });
+      if (res.data.success) {
+        setToast(res.data.skipped ? 'Kept the attached venue.' : 'Venue images created! Scene set linked.');
+        if (!res.data.skipped && res.data.data?.scene_set_id && onDone) onDone(res.data.data.scene_set_id);
+        loadData();
+      } else {
+        setToast(res.data.error || 'Venue generation failed');
+      }
+    } catch (err) {
+      console.error('[WorldAdmin] venue generation failed:', err);
+      setToast('Venue generation failed: ' + (err.response?.data?.error || err.message || 'Request timed out — try again'));
+    }
+  };
+
+  // A linked scene set's base, for the event chosen on its brief (S3).
+  const runEventBaseGeneration = async ({ set }, overrides, eventId) => {
+    try {
+      const body = eventId === undefined ? { overrides } : { overrides, event_id: eventId };
+      await api.post(`/api/v1/scene-sets/${set.id}/generate-base`, body);
+      setToast(`Generating the base image for “${set.name}”…`);
+      loadData();
+    } catch (err) {
+      console.error('[WorldAdmin] base generation failed:', err);
+      setToast('Failed: ' + (err.response?.data?.error || err.message));
+    }
+  };
 
   const loadData = async () => {
     setLoading(true); setError(null);
@@ -3382,17 +3418,10 @@ The revised event should feel like a completely different experience from the si
                             {!linkedScene.base_still_url && (
                               <div style={{ padding: '0 10px 8px' }}>
                                 <button
-                                  onClick={async (e) => {
-                                    const btn = e.target;
-                                    btn.disabled = true;
-                                    btn.textContent = 'Generating... (~2 min)';
-                                    try {
-                                      const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                                      if (res.data.success) { setToast('Venue images generated!'); loadData(); }
-                                    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                                    btn.disabled = false;
-                                    btn.textContent = 'Generate Venue Images';
-                                  }}
+                                  // The linked set's base, made for this event (S3)
+                                  // from its brief (S2); the old call skipped,
+                                  // as the event already has a scene set.
+                                  onClick={() => setVenueBriefAsk({ kind: 'base', event: md, set: linkedScene })}
                                   style={{ width: '100%', padding: '5px 10px', borderRadius: 6, border: '1px dashed #22c55e', background: 'transparent', color: '#16a34a', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
                                 >
                                   Generate Venue Images
@@ -3437,28 +3466,18 @@ The revised event should feel like a completely different experience from the si
                       {/* Generate Venue button — creates exterior + interior + scene set */}
                       {!linkedScene && (
                         <button
-                          onClick={async (e) => {
-                            const btn = e.target;
-                            btn.disabled = true;
-                            btn.textContent = 'Generating exterior... (this takes ~2 min)';
-                            try {
-                              const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                              if (res.data.success) {
-                                setToast('Venue images created! Scene set linked.');
-                                if (res.data.data?.scene_set_id) {
-                                  // The server already linked it; record it as
-                                  // saved so 💾 Save does not resend it.
-                                  recordSaved({ scene_set_id: res.data.data.scene_set_id });
-                                  setEventDetailModal({ ...md, scene_set_id: res.data.data.scene_set_id });
-                                }
-                                loadData();
-                              }
-                            } catch (err) {
-                              setToast('Venue generation failed: ' + (err.response?.data?.error || err.message || 'Request timed out — try again'));
-                            }
-                            btn.disabled = false;
-                            btn.textContent = 'Generate Venue Images';
-                          }}
+                          // The venue's brief first (S2, S5); generating
+                          // links the new scene set to this event.
+                          onClick={() => setVenueBriefAsk({
+                            kind: 'venue',
+                            event: md,
+                            onDone: (sceneSetId) => {
+                              // The server already linked it; record it as
+                              // saved so 💾 Save does not resend it.
+                              recordSaved({ scene_set_id: sceneSetId });
+                              setEventDetailModal((cur) => (cur && cur.id === md.id ? { ...cur, scene_set_id: sceneSetId } : cur));
+                            },
+                          })}
                           style={{ marginTop: 6, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px dashed #6366f1', background: '#eef2ff', color: '#6366f1', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
                         >
                           Generate Venue Images
@@ -4121,7 +4140,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       // (the backend also guards this, but skipping the call
                       // entirely saves a round-trip and makes the UX honest).
                       const hasVenue = !!(md.scene_set_id || md.venue_location_id);
-                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Mark the event ready${Object.keys(pending).length ? ' and save your unsaved edits' : ''}\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move out of Drafts`;
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Mark the event ready${Object.keys(pending).length ? ' and save your unsaved edits' : ''}\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Show the venue\'s brief, to generate its images'}\n• Move out of Drafts`;
                       if (!window.confirm(summary)) return;
                       try {
                         // Mark ready, plus only the edits this modal has not
@@ -4152,14 +4171,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 setToast(`Ready! Checklist done. Kept attached venue.`);
                                 loadData();
                               } else {
-                                setToast(`Ready! Checklist done. Generating venue images...`);
-                                try {
-                                  const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                                  if (venueRes.data.success) {
-                                    setToast(venueRes.data.skipped ? `Ready! Kept attached venue.` : `Venue images + scene set created!`);
-                                    loadData();
-                                  }
-                                } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
+                                // A paid venue generation shows its brief
+                                // first (S2, S5): Mark Ready opens it.
+                                setToast('Ready! Checklist done. Check the venue\'s brief to generate it.');
+                                loadData();
+                                setVenueBriefAsk({ kind: 'venue', event: updated });
                               }
                             }
                           } catch { /* non-blocking — checklist can be generated later */ }
@@ -7112,6 +7128,34 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             }) : <p style={S.muted}>No decisions logged yet.</p>}
           </div>
         </div>
+      )}
+
+      {venueBriefAsk?.kind === 'venue' && (
+        <SceneBriefConfirm
+          title={`Generate the venue for “${venueBriefAsk.event.name}”`}
+          note="Two images: the interior from this brief, then the exterior of the same place from the street. The new scene set is linked to this event."
+          requestBrief={(body) => api.post(`/api/v1/world/${showId}/events/${venueBriefAsk.event.id}/venue-brief`, body)}
+          onCancel={() => setVenueBriefAsk(null)}
+          onConfirm={(overrides) => {
+            const ask = venueBriefAsk;
+            setVenueBriefAsk(null);
+            runVenueGeneration(ask, overrides);
+          }}
+        />
+      )}
+      {venueBriefAsk?.kind === 'base' && (
+        <SceneBriefConfirm
+          setId={venueBriefAsk.set.id}
+          showId={showId}
+          eventId={venueBriefAsk.event.id}
+          title={`Generate the base image for “${venueBriefAsk.set.name}”`}
+          onCancel={() => setVenueBriefAsk(null)}
+          onConfirm={(overrides, choice) => {
+            const ask = venueBriefAsk;
+            setVenueBriefAsk(null);
+            runEventBaseGeneration(ask, overrides, choice?.eventId);
+          }}
+        />
       )}
 
       {/* ═══ FLOATING TOAST NOTIFICATION ═══ */}

@@ -84,54 +84,105 @@ async function uploadToS3(buffer, folder, suffix) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
+// ─── THE VENUE'S SCENE BRIEFS (S5) ──────────────────────────────────────────
+//
+// Ruling S5 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd)): "Venue
+// generation saves the full brief and the world_location_id, and never
+// overwrites a location's style guide." The interior and exterior are made
+// from Scene Briefs (S1) for the event named in the route (S3): the place is
+// the event's venue World Location, the event layer is this event. The
+// interior is the set's base (WIDE); the exterior is its establishing angle.
+
+const { buildSceneBrief, briefToPrompt, loadBriefLocation, loadBriefEvent } = require('./sceneBriefService');
+const { estimateGenerationCost } = require('./imageGenerationService');
+
+const VENUE_IMAGE_OPTIONS = Object.freeze({ size: 'landscape', quality: 'hd', useCase: 'venue' });
+const EXTERIOR_CAMERA = "Exterior: the building's full facade and entrance from the street, with the street and its surroundings.";
+
+const cleanText = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+
+function automationOf(event) {
+  const cc = event?.canon_consequences;
+  const parsed = typeof cc === 'string' ? (() => {
+    try { return JSON.parse(cc); } catch (err) {
+      console.warn('[VenueGen] canon_consequences is not JSON:', err.message);
+      return {};
+    }
+  })() : (cc || {});
+  return parsed.automation || {};
+}
+
+/** The event's venue World Location id: its own field, else its automation copy. */
+function venueLocationId(event) {
+  return event?.venue_location_id || automationOf(event).venue_location_id || null;
+}
+
+/**
+ * The scene set a venue generation makes, before it is saved: the venue's
+ * name and World Location. Its description is the location's own (read by
+ * the brief); only a venue with no location description takes the event
+ * template's venue theme as the set's description.
+ */
+function venueDraftSet(event, location) {
+  const auto = automationOf(event);
+  const name = cleanText(location?.name || auto.venue_name || event.venue_name || event.name) || 'Venue';
+  return {
+    id: null,
+    name,
+    scene_type: 'EVENT_LOCATION',
+    show_id: event.show_id || null,
+    world_location_id: location?.id || null,
+    canonical_description: location?.description ? null : (cleanText(auto.venue_theme || event.location_hint) || null),
+  };
+}
+
+/**
+ * The interior and exterior briefs, and the estimate for the two images.
+ * overrides apply to both, except a camera override, which is the interior's.
+ */
+async function prepareVenueBriefs(sequelize, event, { overrides = {} } = {}) {
+  const location = await loadBriefLocation(sequelize, venueLocationId(event));
+  const chosen = await loadBriefEvent(sequelize, event.id, event.show_id);
+  const draft = venueDraftSet(event, location);
+  const over = overrides && typeof overrides === 'object' ? overrides : {};
+  const { camera: _interiorCamera, ...exteriorOverrides } = over;
+  const interior = buildSceneBrief({ sceneSet: draft, location, event: chosen, angleLabel: 'WIDE', overrides: over });
+  const exterior = buildSceneBrief({
+    sceneSet: draft, location, event: chosen, angleLabel: 'ESTABLISHING', cameraDirection: EXTERIOR_CAMERA, overrides: exteriorOverrides,
+  });
+  const one = estimateGenerationCost(VENUE_IMAGE_OPTIONS);
+  const estimate = {
+    usd: typeof one.usd === 'number' ? Math.round(one.usd * 2 * 1e4) / 1e4 : null,
+    priced: Boolean(one.priced),
+    images: 2,
+    model: one.model,
+  };
+  return { draft, location, interior, exterior, estimate };
+}
+
 // ─── MAIN: GENERATE VENUE IMAGES ────────────────────────────────────────────
 
-async function generateVenueImages(event, models) {
-  const identity = buildVenueIdentity(event);
-  const auto = event.canon_consequences?.automation || {};
-  const venueTheme = auto.venue_theme || event.location_hint || null;
+/**
+ * options.overrides: { <brief line key>: text }, the "Your override" lines
+ * confirmed on the venue's brief (S2).
+ */
+async function generateVenueImages(event, models, options = {}) {
+  const { draft, interior, exterior } = await prepareVenueBriefs(models.sequelize, event, { overrides: options.overrides || {} });
+  const interiorPrompt = briefToPrompt(interior);
+  const exteriorPrompt = briefToPrompt(exterior);
 
-  console.log(`[VenueGen] Generating venue for: ${identity.venueName} (prestige ${identity.prestige}, ${identity.category})`);
-  if (venueTheme) console.log(`[VenueGen] Using venue theme: ${venueTheme.slice(0, 80)}...`);
-
-  let venuePrompt;
-  if (venueTheme) {
-    // Use the specific venue theme from the template
-    venuePrompt = `Photorealistic interior photograph of a luxury event venue.
-Theme: ${venueTheme}
-Prestige level: ${identity.prestige}/10. Mood: ${identity.mood}.
-The space is decorated and ready for an exclusive event during ${identity.timeOfDay}.
-This is a fantasy dream world venue in the LalaVerse — make it feel magical, aspirational, and unique.
-No text, no logos, no people. Luxury interior design photography. Landscape orientation.`;
-  } else {
-    // Fallback to generic venue generation
-    const sharedStyle = `Architectural style: ${identity.aesthetic}. Located in ${identity.neighborhood}. Mood: ${identity.mood}. Prestige level: ${identity.prestige}/10.`;
-    venuePrompt = `Photorealistic interior photograph of "${identity.venueName}", a ${identity.category} venue.
-${sharedStyle}
-Show the main event space decorated and ready for guests during ${identity.timeOfDay}.
-Include: ambient lighting, seating arrangement, decorative details, atmosphere that communicates the venue's personality.
-This is where fashion creators and influencers gather — make it feel alive and aspirational.
-No text, no logos, no people. Interior design photography. Landscape orientation.`;
-  }
+  console.log(`[VenueGen] Generating venue for: ${draft.name} (location ${draft.world_location_id || 'none'})`);
 
   // Generate single interior image
   console.log('[VenueGen] Generating interior image...');
-  const imageUrl = await generateImageUrl(venuePrompt, { size: 'landscape', quality: 'hd', useCase: 'venue' });
+  const imageUrl = await generateImageUrl(interiorPrompt, VENUE_IMAGE_OPTIONS);
 
   if (!imageUrl) throw new Error('Image generation failed — no URL returned');
-
-  // Generate exterior image
-  const exteriorPrompt = `Photorealistic exterior photograph of "${identity.venueName}", a ${identity.category} venue.
-Located at ${identity.venueAddress || identity.neighborhood}. Architectural style: ${identity.aesthetic}.
-Show the building facade, entrance, and street view during ${identity.timeOfDay}.
-${identity.prestige >= 7 ? 'Luxury venue entrance with elegant signage, valet area, dramatic architectural facade.' : 'Stylish building exterior with distinctive entrance, street-level view, urban context.'}
-This is a fantasy dream world venue in the LalaVerse — make it feel cinematic and aspirational.
-No text, no logos, no people. Architectural exterior photography. Landscape orientation.`;
 
   let exteriorUrl = null;
   try {
     console.log('[VenueGen] Generating exterior image...');
-    exteriorUrl = await generateImageUrl(exteriorPrompt, { size: 'landscape', quality: 'hd', useCase: 'venue' });
+    exteriorUrl = await generateImageUrl(exteriorPrompt, VENUE_IMAGE_OPTIONS);
   } catch (err) {
     console.warn('[VenueGen] Exterior generation failed (non-blocking):', err.message);
   }
@@ -155,22 +206,37 @@ No text, no logos, no people. Architectural exterior photography. Landscape orie
       const extBuffer = await downloadImage(exteriorUrl);
       exteriorS3Url = await uploadToS3(extBuffer, eventFolder, 'exterior');
       console.log('[VenueGen] Uploaded exterior to S3');
-    } catch { exteriorS3Url = exteriorUrl; }
+    } catch (err) {
+      console.warn('[VenueGen] Exterior upload failed; keeping the provider URL:', err.message);
+      exteriorS3Url = exteriorUrl;
+    }
   } else {
     exteriorS3Url = exteriorUrl;
   }
 
-  // Create Scene Set with interior + exterior angles
+  // The Scene Set: the venue's World Location, and the full briefs (S5).
   let sceneSet = null;
   if (models.SceneSet) {
     try {
+      const id = uuidv4();
+      const generatedAt = new Date().toISOString();
       sceneSet = await models.SceneSet.create({
-        name: identity.venueName,
-        scene_type: 'EVENT_LOCATION',
-        canonical_description: `${identity.venueName} — ${identity.aesthetic}. ${identity.neighborhood}.`,
+        id,
+        name: draft.name,
+        scene_type: draft.scene_type,
+        canonical_description: draft.canonical_description,
+        world_location_id: draft.world_location_id,
         base_still_url: s3Url,
+        base_runway_prompt: interiorPrompt,
         show_id: event.show_id,
         generation_status: 'complete',
+        base_generation: {
+          source: 'venue_generation',
+          generated_for_event: event.id,
+          generated_at: generatedAt,
+          brief: { ...interior, scene_set_id: id },
+          exterior_brief: exteriorS3Url ? { ...exterior, scene_set_id: id } : null,
+        },
       });
 
       if (models.SceneAngle) {
@@ -178,9 +244,10 @@ No text, no logos, no people. Architectural exterior photography. Landscape orie
         if (exteriorS3Url) {
           await models.SceneAngle.create({
             scene_set_id: sceneSet.id,
-            angle_name: `${identity.venueName} — Exterior`,
+            angle_name: `${draft.name} — Exterior`,
             angle_label: 'ESTABLISHING',
             still_image_url: exteriorS3Url,
+            runway_prompt: exteriorPrompt,
             generation_status: 'complete',
             camera_motion: 'slow_pan_right',
             video_duration: 10,
@@ -191,47 +258,50 @@ No text, no logos, no people. Architectural exterior photography. Landscape orie
         // Interior wide shot
         await models.SceneAngle.create({
           scene_set_id: sceneSet.id,
-          angle_name: `${identity.venueName} — Event Space`,
+          angle_name: `${draft.name} — Event Space`,
           angle_label: 'interior_wide',
           still_image_url: s3Url,
+          runway_prompt: interiorPrompt,
           generation_status: 'complete',
           sort_order: 1,
         });
       }
 
-      console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${identity.venueName} (${exteriorS3Url ? 'exterior + interior' : 'interior only'})`);
+      console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${draft.name} (${exteriorS3Url ? 'exterior + interior' : 'interior only'})`);
     } catch (err) {
       console.warn('[VenueGen] Scene set creation failed:', err.message);
     }
   }
 
-  // Link scene set to event
+  // Link the scene set to the event it was made for (named in the route).
   if (sceneSet) {
     try {
       await models.sequelize.query(
         'UPDATE world_events SET scene_set_id = :sceneSetId, updated_at = NOW() WHERE id = :eventId',
         { replacements: { sceneSetId: sceneSet.id, eventId: event.id } }
       );
-    } catch { /* non-blocking */ }
+    } catch (err) {
+      console.warn('[VenueGen] Linking the scene set to the event failed:', err.message);
+    }
   }
 
-  // Update WorldLocation if it exists
-  try {
-    const auto = event.canon_consequences?.automation || {};
-    if (auto.venue_location_id && models.WorldLocation) {
-      await models.WorldLocation.update(
-        { style_guide: { venue_url: s3Url, generated_for_event: event.id } },
-        { where: { id: auto.venue_location_id } }
-      ).catch(err => { console.warn('[VenueGen] WorldLocation style_guide update failed:', err?.message); });
-    }
-  } catch { /* non-blocking */ }
+  // The World Location's style guide is never written here (S5): the place
+  // is read from it, and the venue image lives on the scene set.
 
   return {
     venue_url: s3Url,
     exterior_url: exteriorS3Url,
     scene_set_id: sceneSet?.id || null,
-    venue_identity: identity,
+    world_location_id: draft.world_location_id,
+    brief: interior,
   };
 }
 
-module.exports = { generateVenueImages, buildVenueIdentity };
+module.exports = {
+  generateVenueImages,
+  buildVenueIdentity,
+  prepareVenueBriefs,
+  venueDraftSet,
+  venueLocationId,
+  EXTERIOR_CAMERA,
+};

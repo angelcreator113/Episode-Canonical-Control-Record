@@ -18,7 +18,7 @@
  * base's, shown and not chosen here. Confirm hands the choice over too.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 import apiClient from '../services/api';
@@ -67,18 +67,25 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
  * @param {string} [showId]        — the set's show, whose events are offered (S3)
  * @param {string|null} [eventId]  — the event to open the base brief on (S3);
  *                                   not given: the base's own
+ * @param {Function} [requestBrief] — (body) => request, for a brief that is not
+ *                                   a scene set's: venue generation's (S5), made
+ *                                   for its event, so no event choice is offered
  * @param {Function} onConfirm     — (overrides, { eventId }) => void; eventId
  *                                   only for a base brief (null: no event)
  * @param {Function} onCancel
  */
-export default function SceneBriefConfirm({ setId, angleId = null, title, note = null, description, refine = false, showId = null, eventId, onConfirm, onCancel }) {
+export default function SceneBriefConfirm({ setId, angleId = null, title, note = null, description, refine = false, showId = null, eventId, requestBrief = null, onConfirm, onCancel }) {
   const [data, setData] = useState(null);
   const [overrides, setOverrides] = useState(null); // null until the first brief says what is saved
   const [editing, setEditing] = useState(null); // { key, text }
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState(null);
-  const isBase = !angleId;
+  const fixedEvent = Boolean(requestBrief);
+  const isBase = !angleId && !fixedEvent;
+  // The latest requestBrief, so a caller's inline function does not re-ask.
+  const requestRef = useRef(requestBrief);
+  requestRef.current = requestBrief;
 
   // chosen: the event to ask the brief for (S3); undefined asks for the base's own.
   const load = useCallback(async (next, chosen) => {
@@ -87,10 +94,10 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
       const body = {};
       if (angleId) body.angle_id = angleId;
       if (refine) body.refine = true;
-      if (!angleId && chosen !== undefined) body.event_id = chosen || null;
+      if (isBase && chosen !== undefined) body.event_id = chosen || null;
       if (next) body.overrides = next;
       if (typeof description === 'string') body.canonical_description = description;
-      const res = await sceneBriefApi(setId, body);
+      const res = requestRef.current ? await requestRef.current(body) : await sceneBriefApi(setId, body);
       const d = res.data?.data || null;
       setData(d);
       if (!next) setOverrides(d?.brief?.overrides || {});
@@ -101,7 +108,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
     } finally {
       setLoading(false);
     }
-  }, [setId, angleId, description, refine]);
+  }, [setId, angleId, description, refine, isBase]);
 
   useEffect(() => { load(null, eventId); }, [load, eventId]);
 
@@ -193,6 +200,8 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                     {eventOptions(events).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                   </select>
                 </label>
+              ) : fixedEvent ? (
+                <p className="sbc-note" data-testid="sbc-event-fixed">Made for this event.</p>
               ) : (
                 <p className="sbc-note" data-testid="sbc-event-from-base">The angles take the event their base was made for.</p>
               ));
