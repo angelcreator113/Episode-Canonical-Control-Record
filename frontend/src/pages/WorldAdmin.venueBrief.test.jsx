@@ -95,6 +95,76 @@ describe('WorldAdmin: venue generation shows its brief first (S2, S5)', () => {
     expect(posted('/generate-venue')).toHaveLength(0);
   });
 
+  // F1 (Evoni, 2026-10-01): an event whose scene set is attached but not in
+  // the page's list. The old call was skipped by the backend and the toast
+  // said the venue was kept, with no image made.
+  describe('an attached scene set not in the list (F1)', () => {
+    const toast = (text) => screen.findByText(text, { exact: false });
+    beforeEach(() => { events = [{ ...BASE_EVENT, scene_set_id: 'set-x' }]; });
+
+    test('with no image: its base brief is shown with its note; the generated image is reported', async () => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/events') return { data: { events } };
+        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
+        if (url === '/api/v1/scene-sets/set-x') return { data: { success: true, data: { id: 'set-x', name: 'Old Glasshouse', base_still_url: null } } };
+        return { data: {} };
+      });
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url.endsWith('/venue-brief')) return { data: { success: true, data: { target: { kind: 'base', scene_set_id: 'set-x', scene_set_name: 'Old Glasshouse' }, brief: BRIEF, estimate: { usd: 0.04, priced: true, images: 1 } } } };
+        if (url.endsWith('/generate-venue')) return { data: { success: true, outcome: 'generated', data: { kind: 'base', scene_set_id: 'set-x', venue_name: 'Old Glasshouse' } } };
+        return { data: { success: true, data: {} } };
+      });
+      renderEditor();
+      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
+
+      expect((await screen.findByTestId('sbc-note')).textContent).toMatch(/“Old Glasshouse” has no image yet/);
+      expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.04');
+      fireEvent.click(screen.getByTestId('sbc-confirm'));
+
+      expect(await toast('Venue image generated for “Old Glasshouse”.')).toBeTruthy();
+    });
+
+    test('with its image: already available; no brief, nothing generated', async () => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/events') return { data: { events } };
+        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
+        if (url === '/api/v1/scene-sets/set-x') return { data: { success: true, data: { id: 'set-x', name: 'Old Glasshouse', base_still_url: 'https://cdn/x.jpg' } } };
+        return { data: {} };
+      });
+      renderEditor();
+      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
+
+      expect(await toast('Venue images already available: “Old Glasshouse” has its image. Nothing generated.')).toBeTruthy();
+      expect(screen.getByTestId('wa-toast').textContent).not.toMatch(/injected/);
+      expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
+      expect(posted('/venue-brief')).toHaveLength(0);
+      expect(posted('/generate-venue')).toHaveLength(0);
+    });
+
+    test('a generation that made nothing, or failed, is never reported as generated', async () => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/events') return { data: { events } };
+        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
+        if (url === '/api/v1/scene-sets/set-x') throw Object.assign(new Error('gone'), { response: { status: 404 } });
+        return { data: {} };
+      });
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url.endsWith('/venue-brief')) return { data: { success: true, data: { target: { kind: 'venue' }, brief: BRIEF, estimate: { usd: 0.1, priced: true, images: 2 } } } };
+        if (url.endsWith('/generate-venue')) throw Object.assign(new Error('500'), { response: { status: 500, data: { success: false, outcome: 'failed', error: 'provider down' } } });
+        return { data: { success: true, data: {} } };
+      });
+      renderEditor();
+      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
+      fireEvent.click(await screen.findByTestId('sbc-confirm'));
+
+      expect(await toast('Venue generation failed: provider down')).toBeTruthy();
+      // Reported as a failure: in red, never as an injected success.
+      const box = screen.getByTestId('wa-toast');
+      expect(box.dataset.tone).toBe('failed');
+      expect(box.textContent).not.toMatch(/injected|✅/);
+    });
+  });
+
   test('Mark Ready with no venue opens the venue\'s brief instead of generating', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderEditor();
