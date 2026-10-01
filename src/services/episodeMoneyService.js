@@ -12,6 +12,12 @@
  *   added to the balance or the net.
  *
  * Phase A has no planned or pending states (Phase B) and no recap (Phase C).
+ *
+ * Event spending (the event cost split ruling, 2026-09-30): the episode's
+ * spending lines (episodeSpendingService), each quantity × unit price with
+ * its Auto-drafted or Edited state, editable until Complete. They are
+ * returned as `spending`, apart from `expected` (the terms), and never added
+ * to the balance or the net until Complete charges them.
  */
 
 const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
@@ -77,10 +83,32 @@ function expectedLines(event, costs = [], deliverables = []) {
   return lines;
 }
 
+/** The episode's event spending: its lines, their total, and whether they can still be edited. */
+async function spendingView(sequelize, episodeId) {
+  const { listSpending, spendingDraftState, isEpisodeCompleted } = require('./episodeSpendingService');
+  const lines = (await listSpending(sequelize, episodeId)).map((l) => ({
+    id: l.id,
+    label: l.label,
+    quantity: l.quantity,
+    unit_price: l.unit_price,
+    total: l.total,
+    source: l.source,
+    draft_state: spendingDraftState(l),
+    drafted_quantity: l.drafted_quantity,
+    drafted_unit_price: l.drafted_unit_price,
+  }));
+  return {
+    lines,
+    total: lines.reduce((sum, l) => sum + l.total, 0),
+    editable: !(await isEpisodeCompleted(sequelize, episodeId)),
+  };
+}
+
 /**
  * @returns {Promise<null | {
  *   episode_id, show_id, balance, rows, net,
- *   event: null | { id, name }, expected
+ *   event: null | { id, name }, expected,
+ *   spending: { lines, total, editable }
  * }>} null when the episode is missing, deleted, or of another show.
  */
 async function getEpisodeMoney(sequelize, { showId, episodeId }) {
@@ -127,6 +155,7 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     net,
     event: event ? { id: event.id, name: event.name } : null,
     expected: expectedLines(event, costs, deliverables),
+    spending: await spendingView(sequelize, episodeId),
   };
 }
 

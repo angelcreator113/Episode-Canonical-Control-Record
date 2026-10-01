@@ -844,6 +844,16 @@ try {
   console.error('✗ Failed to load event cost routes:', e.message);
 }
 
+// Event spending (the event cost split ruling, 2026-09-30) —
+// /world/:showId/episodes/:episodeId/spending[/:lineId]
+try {
+  const episodeSpendingRoutes = require('./routes/episodeSpending');
+  app.use('/api/v1', episodeSpendingRoutes);
+  console.log('✓ Episode spending routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load episode spending routes:', e.message);
+}
+
 // Reopen terms (Task #2378) — /world/:showId/events/:eventId/terms/
 // reopen-eligibility | reopen | relock
 try {

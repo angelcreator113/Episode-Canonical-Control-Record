@@ -57,10 +57,16 @@ describe('Task #1640 — worldEvents.js routes accept category/format, not just 
   });
 
   test('the photo-booth check reads event.format for format-shaped values, not event.event_type', () => {
-    const checkBlock = ROUTE_SRC.match(/const wantsPhotoBooth = [\s\S]*?;/);
-    expect(checkBlock).not.toBeNull();
-    expect(checkBlock[0]).toMatch(/\['gala', 'premiere', 'brand_launch'\]\.includes\(event\.format\)/);
-    expect(checkBlock[0]).not.toMatch(/includes\(event\.event_type\)/);
+    // Since the event cost split (2026-09-30) the forecast estimates the
+    // extras with the same eventExtrasFor Start Episode drafts from, and
+    // selects format for it.
+    expect(ROUTE_SRC).toMatch(/eventExtrasFor\(event\)/);
+    expect(ROUTE_SRC).toMatch(/dress_code, format, rewards/);
+    const { wantsPhotoBooth } = require('../../../src/utils/financialRates');
+    for (const format of ['gala', 'premiere', 'brand_launch']) {
+      expect(wantsPhotoBooth({ format, event_type: 'invite' })).toBe(true);
+    }
+    expect(wantsPhotoBooth({ format: 'dinner', event_type: 'invite' })).toBe(false);
   });
 });
 

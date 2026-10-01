@@ -151,6 +151,7 @@ let EventDeliverable; // What Lala owes an event (Task #1814)
 let DealRateAnchor; // Career Rate Anchors (deal build PR 1, Task #2319)
 let DealRatePremium; // Deal rate premiums (Task #2319)
 let EventCost; // An event's itemised costs (Task #2319)
+let EpisodeSpendingLine; // An episode's event spending (cost split ruling, 2026-09-30)
 let ShowArc; // Narrative arc with phases, debt, progression
 let Opportunity; // Career opportunity pipeline
 let CareerGoal; // Multi-goal career tension system
@@ -417,6 +418,7 @@ try {
   DealRateAnchor = require('./DealRateAnchor')(sequelize);
   DealRatePremium = require('./DealRatePremium')(sequelize);
   EventCost = require('./EventCost')(sequelize);
+  EpisodeSpendingLine = require('./EpisodeSpendingLine')(sequelize);
   ShowArc = require('./ShowArc')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
   CareerGoal = require('./CareerGoal')(sequelize);
@@ -578,6 +580,7 @@ const requiredModels = {
   DealRateAnchor,
   DealRatePremium,
   EventCost,
+  EpisodeSpendingLine,
   ShowArc,
   Opportunity,
   CareerGoal,
@@ -840,6 +843,9 @@ if (FeedMoment && FeedMoment.associate) {
 }
 if (EventDeliverable && EventDeliverable.associate) {
   EventDeliverable.associate(requiredModels);
+}
+if (EpisodeSpendingLine && EpisodeSpendingLine.associate) {
+  EpisodeSpendingLine.associate(requiredModels);
 }
 if (EventCost && EventCost.associate) {
   EventCost.associate(requiredModels);
@@ -2085,6 +2091,7 @@ module.exports.EventDeliverable = EventDeliverable;
 module.exports.DealRateAnchor = DealRateAnchor;
 module.exports.DealRatePremium = DealRatePremium;
 module.exports.EventCost = EventCost;
+module.exports.EpisodeSpendingLine = EpisodeSpendingLine;
 module.exports.ShowArc = ShowArc;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;

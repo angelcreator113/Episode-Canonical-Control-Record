@@ -514,7 +514,7 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
         COALESCE(SUM(CASE WHEN ft.type IN ('income', 'reward') THEN ft.amount ELSE 0 END), 0)::bigint AS income,
         COALESCE(SUM(CASE WHEN ft.type IN ('expense', 'deduction') THEN ft.amount ELSE 0 END), 0)::bigint AS expenses,
         COALESCE(SUM(CASE WHEN ft.category IN ('wardrobe_purchase','wardrobe_rental') THEN ft.amount ELSE 0 END), 0)::bigint AS outfit_cost,
-        COALESCE(SUM(CASE WHEN ft.category = 'event_cost' THEN ft.amount ELSE 0 END), 0)::bigint AS event_cost,
+        COALESCE(SUM(CASE WHEN ft.category IN ('event_cost','event_spending') THEN ft.amount ELSE 0 END), 0)::bigint AS event_cost,
         COALESCE(SUM(CASE WHEN ft.category = 'social_task_reward' THEN ft.amount ELSE 0 END), 0)::bigint AS task_rewards,
         COUNT(ft.id)::int AS tx_count
        FROM episodes e

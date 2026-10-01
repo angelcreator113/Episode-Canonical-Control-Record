@@ -13,9 +13,14 @@
  *
  * For a deal event Finalize no longer charges cost_coins as the entry cost
  * (it stays as difficulty only, Law 0) nor the hidden styling_extras row.
- * The extras (EVENT_EXTRAS: drinks, valet, photo booth) are drafted as
- * `extras` rows instead, so every cost Lala pays is visible before it is
- * charged, and Evoni can edit or delete each one.
+ *
+ * The event cost split (Evoni, 2026-09-30, §8(cc)): these rows are the
+ * terms costs (entry, ticket, travel, anything the deal itself involves).
+ * The extras (drinks, valet, photo booth) are event spending now, lines on
+ * the episode's Money tab (episodeSpendingService), so the draft here no
+ * longer adds them. An `extras` row still on an event (drafted before the
+ * split, or added by hand) is carried into the episode's spending at Start
+ * Episode.
  *
  * The entry line (Evoni, 2026-09-30, answer 2; DEAL_DESIGN.md §10.3): a
  * self-funded deal is one where Lala pays to be in the room, so the draft
@@ -38,7 +43,6 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { COST_KINDS, COST_PAID_BY } = require('../models/EventCost');
-const { eventExtrasFor } = require('../utils/financialRates');
 
 const LABEL_MAX = 200;
 const EXTRAS_SOURCE = 'extras';
@@ -147,9 +151,10 @@ function costTotals(costs) {
 }
 
 /**
- * The lines a deal drafts, in order: the entry line (self-funded: Lala pays;
- * invited/comped: comped by the host) at cost_coins, then the extras (Lala
- * pays) by prestige. Zero amounts are left out.
+ * The terms lines a deal drafts: the entry line (self-funded: Lala pays;
+ * entry covered: comped by the host) at cost_coins, when above 0. The
+ * extras are no longer drafted here: they are event spending, drafted at
+ * Start Episode (the event cost split, 2026-09-30).
  * Returns [{ key, kind, label, amount, paid_by, source }].
  */
 function draftedCostLines(event) {
@@ -158,11 +163,6 @@ function draftedCostLines(event) {
   const entry = Number(event?.cost_coins) || 0;
   if (entryPayer && entry > 0) {
     lines.push({ key: 'entry', kind: 'entry', label: 'Entry / ticket', amount: entry, paid_by: entryPayer, source: ENTRY_SOURCE });
-  }
-  const extras = eventExtrasFor(event);
-  for (const line of EXTRAS_LINES) {
-    const amount = extras[line.key] || 0;
-    if (amount > 0) lines.push({ key: line.key, kind: 'extras', label: line.label, amount, paid_by: 'lala', source: EXTRAS_SOURCE });
   }
   return lines;
 }

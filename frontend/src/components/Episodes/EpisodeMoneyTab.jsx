@@ -1,6 +1,6 @@
 /**
  * Production → Money: Episode Money, Phase A (docs/EVENT_EPISODE_FLOW.md
- * §8(aa) M1–M5; Task #2278). Read-only.
+ * §8(aa) M1–M5; Task #2278). The ledger view is read-only.
  *
  * Everything comes from the ledger (M4) through
  * GET /world/:showId/episodes/:episodeId/money:
@@ -10,12 +10,16 @@
  * - "Expected" lines from the source event's accepted terms. They are never
  *   posted and never added to the balance (M2).
  *
+ * - Event spending (the event cost split ruling, 2026-09-30): the lines Lala
+ *   buys during the event, edited here until Complete (EpisodeSpendingSection).
+ *
  * No planned or pending states (Phase B) and no recap (Phase C).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Coins, Receipt, CalendarClock } from 'lucide-react';
 import api from '../../services/api';
+import EpisodeSpendingSection from './EpisodeSpendingSection';
 import './EpisodeMoneyTab.css';
 
 export const getEpisodeMoneyApi = (showId, episodeId) =>
@@ -32,6 +36,15 @@ const day = (date) => {
 export default function EpisodeMoneyTab({ episode, showId }) {
   const [money, setMoney] = useState(null);
   const [error, setError] = useState(null);
+
+  // After a spending write: reload quietly, keeping the view on screen.
+  const reload = useCallback(async () => {
+    try {
+      setMoney(await getEpisodeMoneyApi(showId, episode.id));
+    } catch (err) {
+      console.error('[EpisodeMoneyTab] reload failed:', err);
+    }
+  }, [showId, episode?.id]);
 
   useEffect(() => {
     if (!showId || !episode?.id) return undefined;
@@ -107,6 +120,10 @@ export default function EpisodeMoneyTab({ episode, showId }) {
           </ul>
         )}
       </section>
+
+      {money.spending && (
+        <EpisodeSpendingSection showId={showId} episodeId={episode.id} spending={money.spending} onChanged={reload} />
+      )}
     </div>
   );
 }

@@ -10,9 +10,17 @@
  * 2026-09-30); a drafted row reads "Auto-drafted · event extras" or
  * "Auto-drafted · from event cost" until its amount changes, then Edited
  * (doctrine rule 14).
+ *
+ * The event cost split (Evoni, 2026-09-30): the extras are event spending,
+ * edited on the episode's Money tab, so a new terms cost is never of kind
+ * extras (TERMS_COST_KINDS); an extras row drafted before the split still
+ * shows here and moves to the episode's spending at Start Episode.
  */
 
 export const COST_KINDS = ['entry', 'travel', 'glam', 'styling', 'accommodation', 'extras', 'other'];
+
+// The kinds a terms cost can be given: every kind but extras (event spending).
+export const TERMS_COST_KINDS = COST_KINDS.filter((k) => k !== 'extras');
 
 export const COST_KIND_LABELS = {
   entry: 'Entry',
