@@ -107,7 +107,7 @@
 4	src/services/episodeCompletionService.js	).catch(() => []);
 5	src/services/episodeCompletionService.js	} catch { /* non-blocking */ }
 1	src/services/episodeGeneratorService.js	} catch { /* scene_sets query failed — no scene sets linked */ }
-13	src/services/episodeScriptWriterService.js	} catch { /* non-blocking */ }
+11	src/services/episodeScriptWriterService.js	} catch { /* non-blocking */ }
 1	src/services/episodeScriptWriterService.js	}).catch(() => null);
 1	src/services/episodeScriptWriterService.js	}).then(b => b?.toJSON()).catch(() => null);
 1	src/services/episodeScriptWriterService.js	}).then(plans => plans.map(p => p.toJSON())).catch(() => []);
