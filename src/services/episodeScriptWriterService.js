@@ -376,6 +376,7 @@ function buildSeasonPositionBlock(sc) {
   if (sc.story_purpose) block += `Story purpose: ${sc.story_purpose}\n`;
   if (sc.career_focus) block += `Career focus: ${sc.career_focus}\n`;
   if (sc.desired_pressure) block += `Desired pressure: ${sc.desired_pressure}\n`;
+  if (sc.story_thread) block += `Story thread it continues: ${sc.story_thread}\n`;
   const range = sc.outcome_range;
   if (range && (range.min || range.max)) block += `Hoped-for outcome: ${range.min || '?'} to ${range.max || '?'}\n`;
   block += 'SCRIPT DIRECTIVE: This episode serves its place in the season; the story purpose above is what it is for.\n';

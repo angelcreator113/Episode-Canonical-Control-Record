@@ -7189,6 +7189,107 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
+// Story threads (§8(ff) A3, A6, Q9): "you create and name them; drafts
+// are offered from seeds_future_events. Acceptance can mark one
+// "advanced", and only you close one."
+const THREAD_STATUS = {
+  open: { label: 'Open', color: '#4f46e5' },
+  advanced: { label: 'Advanced', color: '#15803d' },
+  closed: { label: 'Closed', color: '#94a3b8' },
+};
+
+function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6 };
+
+  const create = async (body, done) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/season/threads`, body);
+      if (setToast) setToast(done);
+      if (onChanged) await onChanged();
+      return true;
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async () => {
+    if (!title.trim()) return;
+    if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); }
+  };
+  const fromDraft = async (draft) => {
+    const name = window.prompt('Name this story thread', draft.seed_text.slice(0, 120));
+    if (!name || !name.trim()) return;
+    await create({ title: name, seed_text: draft.seed_text, episode_id: draft.episode_id }, 'Story thread added');
+  };
+  const close = async (thread) => {
+    if (!window.confirm(`Close "${thread.title}"? A closed thread can no longer be chosen for a slot.`)) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/season/threads/${thread.id}/close`);
+      if (setToast) setToast('Story thread closed');
+      if (onChanged) await onChanged();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div style={S.card} data-testid="story-threads">
+      <h3 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Story threads</h3>
+      <p style={{ ...S.muted, margin: '0 0 12px', fontSize: 12 }}>
+        You create and name them; a slot's intention says which one it continues, and accepting its episode marks the thread advanced. Only you close one.
+      </p>
+      {threads.length === 0 && <p style={{ ...S.muted, fontSize: 12 }}>No story threads yet.</p>}
+      {threads.map((t) => {
+        const st = THREAD_STATUS[t.status] || THREAD_STATUS.open;
+        return (
+          <div key={t.id} data-testid={`story-thread-${t.id}`} style={{ padding: '8px 0', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.status === 'closed' ? '#94a3b8' : '#1a1a2e' }}>{t.title}</div>
+              {t.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{t.description}</div>}
+              <div style={{ fontSize: 11, marginTop: 2 }}>
+                <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
+                {Array.isArray(t.slot_numbers) && t.slot_numbers.length > 0 && <span style={{ color: '#94a3b8' }}> · in {t.slot_numbers.map((n) => `E${n}`).join(', ')}</span>}
+                {t.source === 'seed' && <span style={{ color: '#94a3b8' }}> · from a seed</span>}
+              </div>
+            </div>
+            {t.status !== 'closed' && (
+              <button onClick={() => close(t)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Close</button>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+        <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} />
+        <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
+        <button onClick={add} disabled={busy || !title.trim()} style={{ ...S.primaryBtn, marginTop: 6 }}>Add thread</button>
+      </div>
+
+      {drafts.length > 0 && (
+        <div data-testid="story-thread-drafts" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Drafts from your episodes' seeds</div>
+          {drafts.map((d) => (
+            <div key={d.seed_text} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: '#334155', flex: '1 1 200px', minWidth: 0 }}>
+                {d.seed_text}{d.episode_title && <span style={{ color: '#94a3b8' }}> · {d.episode_title}</span>}
+              </span>
+              <button onClick={() => fromDraft(d)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Make a thread</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Season Arc roadmap (§8(ff) A2): the season's 24 slots in three phases,
 // each slot showing its state, numbered "S1 · E7" (Q3). A future slot can
 // have an event pencilled in, moved freely (Q5); an episode in no slot can
@@ -7207,7 +7308,7 @@ const OUTCOME_OPTIONS = ['fail', 'safe', 'pass', 'slay'];
 // A future slot's intention (§8(ff) A3): story purpose, career focus,
 // desired pressure (Q7) and the outcome range hoped for (Q10). Labelled
 // Auto-drafted or Edited; Draft asks before replacing an edit.
-function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast }) {
+function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast, threads = [] }) {
   const init = slot.intention || {};
   const [form, setForm] = useState({
     story_purpose: init.story_purpose || '',
@@ -7215,6 +7316,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast 
     desired_pressure: init.desired_pressure || '',
     min: init.outcome_range?.min || '',
     max: init.outcome_range?.max || '',
+    story_thread_id: init.story_thread?.id || '',
   });
   const [busy, setBusy] = useState(null);
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 4 };
@@ -7229,6 +7331,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast 
         career_focus: form.career_focus,
         desired_pressure: form.desired_pressure || null,
         outcome_range: form.min || form.max ? { min: form.min || form.max, max: form.max || form.min } : null,
+        story_thread_id: form.story_thread_id || null,
       });
       if (setToast) setToast(`${slot.label} intention saved`);
       if (onSaved) await onSaved();
@@ -7271,6 +7374,14 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast 
           {PRESSURE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
       </label>
+      <label style={label}>Story thread it continues
+        <select aria-label="Story thread" value={form.story_thread_id} onChange={set('story_thread_id')} style={field}>
+          <option value="">None</option>
+          {threads.filter((t) => t.status !== 'closed' || t.id === form.story_thread_id).map((t) => (
+            <option key={t.id} value={t.id}>{t.title}{t.status === 'closed' ? ' (closed)' : ''}</option>
+          ))}
+        </select>
+      </label>
       <span style={label}>Outcome range hoped for</span>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <select aria-label="Lowest outcome" value={form.min} onChange={set('min')} style={{ ...field, marginTop: 0 }}>
@@ -7294,7 +7405,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast 
 
 const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#334155', minWidth: 0 };
 
-function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance }) {
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, threads = [] }) {
   const [busySlot, setBusySlot] = useState(null);
   const [editingSlotId, setEditingSlotId] = useState(null);
   if (!roadmap) return null;
@@ -7416,6 +7527,9 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                       {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: '#94a3b8' }}> · Auto-drafted</span>}
                     </div>
                   )}
+                  {slot.intention?.story_thread && (
+                    <div style={{ fontSize: 10, color: '#4f46e5', marginTop: 4 }}>Thread: {slot.intention.story_thread.title}</div>
+                  )}
                   {!slot.locked && (
                     <button
                       data-testid={`season-intention-${slot.slot_number}`}
@@ -7433,7 +7547,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
             const editing = phase.slots.find((sl) => sl.id === editingSlotId);
             return editing ? (
               <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
-                onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} />
+                onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
             ) : null;
           })()}
         </div>
@@ -7478,6 +7592,7 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [goals, setGoals] = useState([]);
   const [rhythm, setRhythm] = useState(null);
   const [roadmap, setRoadmap] = useState(null);
+  const [threadData, setThreadData] = useState({ threads: [], drafts: [] });
 
   // The season's 24 slots (Season Arc §8(ff) A2); reloaded alone after a
   // pencil or placement so the tab does not blank.
@@ -7488,6 +7603,13 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
     } catch (err) {
       console.error('Season roadmap load failed:', err);
       setRoadmap(null);
+    }
+    // Story threads (§8(ff) Q9)
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/season/threads`);
+      setThreadData({ threads: r.data.threads || [], drafts: r.data.drafts || [] });
+    } catch (err) {
+      console.error('Story threads load failed:', err);
     }
   }, [showId]);
 
@@ -7651,7 +7773,13 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
 
       {/* Roadmap — the season's 24 slots */}
       <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
-        advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)} />
+        advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)}
+        threads={threadData.threads} />
+
+      {roadmap && (
+        <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
+          onChanged={loadRoadmap} setToast={setToast} />
+      )}
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>

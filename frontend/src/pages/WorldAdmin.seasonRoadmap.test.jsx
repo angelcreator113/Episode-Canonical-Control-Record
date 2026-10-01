@@ -222,7 +222,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-3/intention', {
       story_purpose: 'Lala bluffs her way in', career_focus: 'reputation', desired_pressure: 'High',
-      outcome_range: { min: 'pass', max: 'slay' },
+      outcome_range: { min: 'pass', max: 'slay' }, story_thread_id: null,
     }));
   });
 
@@ -246,5 +246,68 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-4/intention/draft', { force: true }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('was edited'));
     confirm.mockRestore();
+  });
+
+  describe('story threads (§8(ff) A3, Q9)', () => {
+    const THREADS = {
+      threads: [
+        { id: 'th-1', title: 'The rival from E1', description: 'She keeps showing up', status: 'open', source: 'evoni', slot_numbers: [3] },
+        { id: 'th-2', title: 'Old debt', status: 'closed', source: 'seed', slot_numbers: [] },
+      ],
+      drafts: [{ seed_text: 'Maison Belle calls back', episode_id: 'ep-1', episode_title: 'Gala Night' }],
+    };
+    beforeEach(() => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+        if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
+        if (url === '/api/v1/world/show-1/season/threads') return { data: THREADS };
+        return { data: {} };
+      });
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    });
+
+    test('lists threads with their status and slots; only open ones can be closed, after a confirm', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderAt('season');
+
+      const card = await screen.findByTestId('story-threads');
+      const open = within(card).getByTestId('story-thread-th-1');
+      expect(open.textContent).toMatch(/The rival from E1/);
+      expect(open.textContent).toMatch(/Open · in E3/);
+      expect(within(within(card).getByTestId('story-thread-th-2')).queryByText('Close')).toBeNull();
+
+      fireEvent.click(within(open).getByText('Close'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-1/close'));
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Close "The rival from E1"?'));
+      confirm.mockRestore();
+    });
+
+    test('Evoni creates and names a thread, by hand or from a seed draft', async () => {
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Maison Belle returns');
+      renderAt('season');
+
+      const card = await screen.findByTestId('story-threads');
+      fireEvent.change(within(card).getByLabelText('New thread title'), { target: { value: 'Her mother\'s visit' } });
+      fireEvent.click(within(card).getByText('Add thread'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads', { title: 'Her mother\'s visit', description: '' }));
+
+      fireEvent.click(within(screen.getByTestId('story-thread-drafts')).getByText('Make a thread'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads',
+        { title: 'Maison Belle returns', seed_text: 'Maison Belle calls back', episode_id: 'ep-1' }));
+      prompt.mockRestore();
+    });
+
+    test('a slot\'s intention can name the thread it continues; closed threads are not offered', async () => {
+      renderAt('season');
+      fireEvent.click(await screen.findByTestId('season-intention-5'));
+      const editor = await screen.findByTestId('season-intention-editor');
+      const select = within(editor).getByLabelText('Story thread');
+      expect(within(select).queryByText('Old debt')).toBeNull();
+      fireEvent.change(select, { target: { value: 'th-1' } });
+      fireEvent.click(within(editor).getByText('Save'));
+
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-5/intention',
+        expect.objectContaining({ story_thread_id: 'th-1' })));
+    });
   });
 });

@@ -16,6 +16,10 @@
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
  * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12)
  * GET    /world/:showId/season/event/:eventId — The Event Package's Season Context (A4), read-only
+ * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9)
+ * POST   /world/:showId/season/threads           — Create and name a thread (Q9)
+ * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
+ * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -260,6 +264,58 @@ router.get('/world/:showId/season/event/:eventId', requireAuth, async (req, res)
   } catch (err) {
     console.error('[ArcRoutes] event season context error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Story threads (§8(ff) A3, A6, Q9) ─────────────────────────────────────
+
+// GET /world/:showId/season/threads — the show's threads, and drafts from seeds
+router.get('/world/:showId/season/threads', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { listThreads, seedDrafts } = require('../services/storyThreadService');
+    const threads = await listThreads(models.sequelize, req.params.showId);
+    const drafts = await seedDrafts(models.sequelize, req.params.showId);
+    return res.json({ success: true, threads, drafts });
+  } catch (err) {
+    return sendSlotError(res, err, 'list threads');
+  }
+});
+
+// POST /world/:showId/season/threads — Evoni creates and names a thread
+// Body: { title, description, seed_text, episode_id } (seed_text when from a draft).
+router.post('/world/:showId/season/threads', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { createThread } = require('../services/storyThreadService');
+    const thread = await createThread(models.sequelize, req.params.showId, req.body || {});
+    return res.status(201).json({ success: true, thread });
+  } catch (err) {
+    return sendSlotError(res, err, 'create thread');
+  }
+});
+
+// PUT /world/:showId/season/threads/:threadId — rename or re-describe
+router.put('/world/:showId/season/threads/:threadId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { updateThread } = require('../services/storyThreadService');
+    await updateThread(models.sequelize, req.params.showId, req.params.threadId, req.body || {});
+    return res.json({ success: true });
+  } catch (err) {
+    return sendSlotError(res, err, 'update thread');
+  }
+});
+
+// POST /world/:showId/season/threads/:threadId/close — only Evoni closes a thread (Q9)
+router.post('/world/:showId/season/threads/:threadId/close', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { closeThread } = require('../services/storyThreadService');
+    await closeThread(models.sequelize, req.params.showId, req.params.threadId);
+    return res.json({ success: true });
+  } catch (err) {
+    return sendSlotError(res, err, 'close thread');
   }
 });
 
