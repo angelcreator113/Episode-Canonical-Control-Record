@@ -204,4 +204,47 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     fireEvent.click(within(confirmBox).getByText('Confirm: advance and carry the debt'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/arc/advance/confirm'));
   });
+
+  test('a future slot\'s intention can be edited and saved (A3, Q7, Q10); a started slot has none to edit', async () => {
+    renderAt('season');
+    await screen.findByTestId('season-roadmap');
+    expect(screen.queryByTestId('season-intention-1')).toBeNull(); // E1 is locked
+
+    fireEvent.click(screen.getByTestId('season-intention-3'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    expect(within(editor).getByText('S1 · E3 intention')).toBeTruthy();
+    fireEvent.change(within(editor).getByLabelText('Story purpose'), { target: { value: 'Lala bluffs her way in' } });
+    fireEvent.change(within(editor).getByLabelText('Career focus'), { target: { value: 'reputation' } });
+    fireEvent.change(within(editor).getByLabelText('Desired pressure'), { target: { value: 'High' } });
+    fireEvent.change(within(editor).getByLabelText('Lowest outcome'), { target: { value: 'pass' } });
+    fireEvent.change(within(editor).getByLabelText('Highest outcome'), { target: { value: 'slay' } });
+    fireEvent.click(within(editor).getByText('Save'));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-3/intention', {
+      story_purpose: 'Lala bluffs her way in', career_focus: 'reputation', desired_pressure: 'High',
+      outcome_range: { min: 'pass', max: 'slay' },
+    }));
+  });
+
+  test('Draft with AI asks before replacing an edited intention, then sends force', async () => {
+    const edited = { ...ROADMAP, phases: ROADMAP.phases.map((p, i) => (i === 0 ? {
+      ...p, slots: p.slots.map((sl) => (sl.slot_number === 4 ? { ...sl, intention: { story_purpose: 'Mine', source: 'edited' } } : sl)),
+    } : p)) };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: edited } };
+      return { data: {} };
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt('season');
+
+    fireEvent.click(await screen.findByTestId('season-intention-4'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    expect(within(editor).getByText('Edited')).toBeTruthy();
+    fireEvent.click(within(editor).getByText('Draft with AI'));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-4/intention/draft', { force: true }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('was edited'));
+    confirm.mockRestore();
+  });
 });

@@ -3754,6 +3754,12 @@ and untracked-stat goals left unchanged." So these are no longer INFERRED:
   coins drop below 100") and goals whose metric Lala's state does not carry
   (followers, engagement rate, portfolio strength, consistency streak)
   unchanged, as well as custom goals.
+
+**Build choice accepted (Evoni, 2026-10-01)**, Season Arc PR 5, verbatim:
+"PR 5: designed intent at the top of the range is accepted." So at Start
+Episode a slot's outcome range sets the brief's `designed_intent` to the
+top of the range and `allowed_outcomes` to every tier in it (for "pass to
+slay": slay, with pass and slay allowed); no longer INFERRED.
 ---
 
 ## 9. Owed before enforcement
