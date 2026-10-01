@@ -63,6 +63,8 @@ describe('WorldAdmin: attaching an event whose scene set can\'t be linked (F2)',
     const banner = await attach();
     expect(banner.textContent).toContain('Event attached · Scene set needs reconnecting');
     expect(banner.textContent).toContain('The scene set could not be linked: boom');
+    // Not shown as a success: the episode list stays, with no green panel in its place.
+    expect(screen.getByText((_, el) => el?.tagName === 'BUTTON' && /^1\. Gala Night/.test(el.textContent))).toBeTruthy();
 
     fireEvent.click(within(banner).getByText('Retry'));
     await waitFor(() => expect(posted('/events/ev-1/scene-set-link')).toHaveLength(1));

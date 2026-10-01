@@ -1403,9 +1403,12 @@ The revised event should feel like a completely different experience from the si
         const needsReconnect = res.data.scene_set?.status === 'needs_reconnecting';
         const msg = needsReconnect ? 'Event attached · Scene set needs reconnecting' : `✅ Injected into ${epLabel}`;
         setSceneSetReconnect(needsReconnect ? { eventId, reason: res.data.scene_set.reason || null } : null);
-        setSuccessMsg(msg);
-        // Show inline success in the inject panel briefly
-        setInjectSuccess({ eventId, message: msg });
+        // Show inline success in the inject panel briefly; a scene set still
+        // to reconnect is shown in its own banner instead, never as success.
+        if (!needsReconnect) {
+          setSuccessMsg(msg);
+          setInjectSuccess({ eventId, message: msg });
+        }
         // Show floating toast (visible regardless of scroll)
         setToast(msg);
         setTimeout(() => { setToast(null); }, 3000);
