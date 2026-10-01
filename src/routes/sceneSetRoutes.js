@@ -18,6 +18,27 @@ const postProcessService = require('../services/postProcessingService');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let anthropicClient = null;
+// S2: the "Your override" lines the person set on the brief they were shown:
+// { <brief line key>: text }; an empty text removes the line. { value } when
+// absent (null) or valid, { error } otherwise.
+const BRIEF_OVERRIDE_MAX_KEYS = 40;
+const BRIEF_OVERRIDE_MAX_LEN = 1000;
+function readBriefOverrides(raw) {
+  if (raw === undefined || raw === null) return { value: null };
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'overrides must be an object of { line key: text }' };
+  const entries = Object.entries(raw);
+  if (entries.length > BRIEF_OVERRIDE_MAX_KEYS) return { error: `at most ${BRIEF_OVERRIDE_MAX_KEYS} overrides` };
+  const value = {};
+  for (const [key, text] of entries) {
+    if (!/^[a-z0-9_.-]{1,64}$/i.test(key)) return { error: `override key "${key}" is not a brief line key` };
+    if (text !== null && typeof text !== 'string') return { error: `override "${key}" must be text` };
+    const t = String(text ?? '');
+    if (t.length > BRIEF_OVERRIDE_MAX_LEN) return { error: `override "${key}" must be at most ${BRIEF_OVERRIDE_MAX_LEN} characters` };
+    value[key] = t;
+  }
+  return { value };
+}
+
 function getAnthropicClient() {
   if (!anthropicClient) {
     anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -781,6 +802,9 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
       });
     }
 
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
     // The key the set's base model needs (Task #2396).
     const baseModelKey = sceneGenService.resolveBaseModel(set);
     const missingKeys = modelComparison.missingProviderKeys([baseModelKey]);
@@ -797,7 +821,8 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
     try {
       const sceneGenService = require('../services/sceneGenerationService');
       const models = require('../models');
-      await sceneGenService.generateBaseScene(set, models);
+      // S2: the overrides the person set on the brief they were shown.
+      await sceneGenService.generateBaseScene(set, models, briefOverrides.value ? { overrides: briefOverrides.value } : {});
       console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
@@ -1044,6 +1069,9 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
     if (!process.env.FAL_KEY && !process.env.RUNWAY_ML_API_KEY) {
       return res.status(503).json({ success: false, error: 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).' });
     }
@@ -1058,7 +1086,7 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
     try {
       const sceneGenService = require('../services/sceneGenerationService');
       const models = require('../models');
-      await sceneGenService.generateAngle(angle, set, models);
+      await sceneGenService.generateAngle(angle, set, models, briefOverrides.value ? { overrides: briefOverrides.value } : {});
       console.log(`[SceneGen] Angle ${angle.angle_name} generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Angle ${angle.angle_name} generation failed:`, genErr.message);
@@ -1296,8 +1324,11 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
       });
     }
 
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
     const result = await sceneGenService.regenerateAngleRefined(
-      angle, set, categories, { SceneAngle, SceneSet }
+      angle, set, categories, { SceneAngle, SceneSet }, briefOverrides.value ? { overrides: briefOverrides.value } : {}
     );
 
     res.json({ success: true, data: result });
@@ -1492,6 +1523,68 @@ router.get('/for-beat/:beatNumber', requireAuth, async (req, res) => {
   }
 });
 
+// ─── POST /:id/brief  — the Scene Brief shown before a paid generation (S2) ─
+// "The Scene Brief is shown before any paid generation, each line labelled
+// "From venue", "From event", or "Your override", with missing essentials
+// flagged." (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd).) Read-only: it
+// builds the brief the generation would send, with the overrides the person
+// is editing (body.overrides; without them, the base's saved overrides), for
+// the base (no angle_id) or one angle (angle_id). The base's estimate comes
+// from its model's rate; an angle's provider path is chosen at generation
+// time, so it has none.
+router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
+    // A description edited and not yet saved (the regenerate-with-new-
+    // description flow saves it with the generation): shown in the brief
+    // as the place's description, never written here.
+    const draft = typeof req.body?.canonical_description === 'string'
+      ? { ...set.get({ plain: true }), canonical_description: req.body.canonical_description }
+      : set;
+
+    const { prepareSceneBrief, briefToPrompt } = require('../services/sceneBriefService');
+    let options;
+    let estimate = null;
+    let angle = null;
+    if (req.body?.angle_id) {
+      angle = await SceneAngle.findOne({ where: { id: req.body.angle_id, scene_set_id: set.id } });
+      if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+      // refine: the artifact-review regenerate (regenerateAngleRefined), which
+      // also adds the fixes for the flagged problems to this brief.
+      options = req.body?.refine
+        ? sceneGenService.refinedBriefOptions(angle, draft, { overrides: briefOverrides.value })
+        : sceneGenService.angleBriefOptions(angle, draft, { overrides: briefOverrides.value }).options;
+    } else {
+      const saved = set.base_generation?.brief || null;
+      options = {
+        angleLabel: 'WIDE',
+        eventId: null,
+        overrides: briefOverrides.value || saved?.overrides || {},
+      };
+      const modelKey = sceneGenService.resolveBaseModel(set);
+      const e = sceneGenService.estimateBaseStillCost(modelKey);
+      estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: modelKey };
+    }
+    const brief = await prepareSceneBrief(SceneSet.sequelize, draft, options);
+    res.json({
+      success: true,
+      data: {
+        target: angle ? { kind: 'angle', angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name } : { kind: 'base' },
+        brief,
+        prompt: briefToPrompt(brief),
+        estimate,
+      },
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/brief error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── GET /:id/preview-prompt  — preview the AI prompt without generating ─────
 
 router.get('/:id/preview-prompt', validateUUIDParam('id'), requireAuth, async (req, res) => {
@@ -1568,6 +1661,9 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
     // Optionally update the description first
     if (req.body.canonical_description !== undefined) {
       await set.update({ canonical_description: req.body.canonical_description });
@@ -1582,7 +1678,8 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     const job = await GenerationJob.create({
       job_type: 'cascade_regenerate',
       scene_set_id: set.id,
-      payload: { force: true },
+      // S2: the base takes the overrides; its angles inherit them from the base's brief.
+      payload: briefOverrides.value ? { force: true, overrides: briefOverrides.value } : { force: true },
     });
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
@@ -2143,6 +2240,9 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
 
+    const briefOverrides = readBriefOverrides(req.body?.overrides);
+    if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+
     const MAX_BATCH = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
     const pendingAngles = await SceneAngle.findAll({
       where: { scene_set_id: set.id, generation_status: 'pending' },
@@ -2162,7 +2262,7 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const models = require('../models');
     for (const angle of pendingAngles) {
       try {
-        await sceneGenService.generateAngle(angle, set, models);
+        await sceneGenService.generateAngle(angle, set, models, briefOverrides.value ? { overrides: briefOverrides.value } : {});
       } catch (err) {
         console.error(`[BatchGen] Angle ${angle.angle_name} failed:`, err.message);
         if (isBudgetError(err)) break; // budget reached: the rest would be refused too
