@@ -36,8 +36,11 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
  * @param {string} episodeId
  * @param {string} [listKey] — changes whenever the shown list changes, so
  *   the state (approved / outdated) is reloaded.
+ * @param {boolean} [showPreview] — false where the preview is shown beside it
+ *   (Production → Overlays, P15).
+ * @param {Function} [onChange] — called after an approve or design.
  */
-export default function EpisodeTaskListOverlay({ episodeId, listKey = '' }) {
+export default function EpisodeTaskListOverlay({ episodeId, listKey = '', showPreview = true, onChange }) {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(null); // 'approve' | 'design' | null
   const [error, setError] = useState(null);
@@ -59,6 +62,7 @@ export default function EpisodeTaskListOverlay({ episodeId, listKey = '' }) {
     setError(null);
     try {
       setState(await approveTaskListApi(episodeId, state?.hash));
+      onChange?.();
     } catch (err) {
       console.error('[EpisodeTaskListOverlay] approve failed:', err);
       setError(errorText(err));
@@ -76,6 +80,7 @@ export default function EpisodeTaskListOverlay({ episodeId, listKey = '' }) {
       const data = await designTaskListOverlayApi(episodeId);
       setState(data?.state || null);
       if (!data?.state) load();
+      onChange?.();
     } catch (err) {
       console.error('[EpisodeTaskListOverlay] design failed:', err);
       // A budget refusal (429), an unapproved or changed list (409) says why.
@@ -126,7 +131,7 @@ export default function EpisodeTaskListOverlay({ episodeId, listKey = '' }) {
         )}
       </div>
 
-      {overlay?.image_url && (
+      {showPreview && overlay?.image_url && (
         <figure className="etlo-figure">
           <img
             className={`etlo-thumb${outdated ? ' etlo-thumb-outdated' : ''}`}

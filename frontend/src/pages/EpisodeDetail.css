@@ -3192,14 +3192,26 @@
 }
 
 
-/* Title approval + title card strip (Task #2386, P11; EpisodeTitleCard). */
-.ed-title-card-strip {
-  max-width: 1100px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 0 1.25rem;
-  box-sizing: border-box;
+/* P15: the banner's title status chip (EpisodeTitleChip); opens
+   Production → Overlays. Replaces the title card strip. */
+.ed-title-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0.25rem;
+  margin-right: 0.5rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--lala-parchment, #FAF7F0);
+  color: var(--lala-ink, #2C2C2C);
+  border: 1.5px solid var(--lala-gold-line, #E8D9A8);
+  cursor: pointer;
 }
-.ed-title-card-strip:empty {
-  display: none;
-}
+.ed-title-chip:hover,
+.ed-title-chip:focus-visible { border-color: var(--lala-gold, #B8962E); }
+.ed-title-chip-approved { color: #2f6b3a; border-color: #b9d8be; background: #f1f8f2; }
+.ed-title-chip-outdated { color: #8a5a00; border-color: #f0d28a; background: #fff8e6; }
+.ed-title-chip-not_made { color: #6b6b6b; }

@@ -4,7 +4,9 @@
  * "Design title card" with its cost shown. ... Changing an approved title
  * marks the card outdated and offers a redesign."
  *
- * Rendered under the episode title in EpisodeDetail's header. All state comes
+ * Rendered in Production → Overlays (P15, EpisodeOverlaysTab), which passes
+ * showCardImage={false} (it shows the previews itself) and onChange (called
+ * after approve, design or an overlay save). All state comes
  * from GET /api/v1/episodes/:id/title-card (episodeTitleCardService):
  *   - not approved           → "Approve title"
  *   - approved, no card      → "Design title card — est. $0.04"
@@ -52,7 +54,7 @@ export function formatEstimate(estimate) {
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
 
-export default function EpisodeTitleCard({ episode }) {
+export default function EpisodeTitleCard({ episode, showCardImage = true, onChange }) {
   const episodeId = episode?.id;
   const title = episode?.title || '';
   const [state, setState] = useState(null);
@@ -77,6 +79,7 @@ export default function EpisodeTitleCard({ episode }) {
     setError(null);
     try {
       setState(await approveTitleApi(episodeId, title));
+      onChange?.();
     } catch (err) {
       console.error('[EpisodeTitleCard] approve failed:', err);
       setError(errorText(err));
@@ -93,6 +96,7 @@ export default function EpisodeTitleCard({ episode }) {
       const data = await designTitleCardApi(episodeId);
       setState(data?.state || null);
       if (!data?.state) load();
+      onChange?.();
     } catch (err) {
       console.error('[EpisodeTitleCard] design failed:', err);
       // A budget refusal (429) or an unapproved title (409) says why.
@@ -148,7 +152,8 @@ export default function EpisodeTitleCard({ episode }) {
           episodeId={episodeId}
           overlay={state.overlay || null}
           flourishEstimate={state.overlay_offer.flourish_estimate}
-          onSaved={(overlay) => setState((st) => ({ ...st, overlay }))}
+          showPreview={showCardImage}
+          onSaved={(overlay) => { setState((st) => ({ ...st, overlay })); onChange?.(); }}
         />
       )}
       {!approved && state.overlay?.outdated && (
@@ -157,7 +162,7 @@ export default function EpisodeTitleCard({ episode }) {
         </span>
       )}
 
-      {card?.image_url && (
+      {showCardImage && card?.image_url && (
         <img
           className={`etc-thumb${outdated ? ' etc-thumb-outdated' : ''}`}
           src={card.image_url}
@@ -175,7 +180,7 @@ export default function EpisodeTitleCard({ episode }) {
  * The title overlay: lettering styles at no image cost, an optional
  * backing band (20–40%), and the optional AI flourish with its estimate.
  */
-export function TitleOverlayPanel({ episodeId, overlay, flourishEstimate, onSaved }) {
+export function TitleOverlayPanel({ episodeId, overlay, flourishEstimate, onSaved, showPreview = true }) {
   const [options, setOptions] = useState(null); // { variants, band }
   const [variant, setVariant] = useState(overlay?.style?.variant || null);
   const [bandOn, setBandOn] = useState(Boolean(overlay?.style?.band?.enabled));
@@ -285,7 +290,7 @@ export function TitleOverlayPanel({ episodeId, overlay, flourishEstimate, onSave
         </div>
       )}
 
-      {overlay?.image_url && (
+      {showPreview && overlay?.image_url && (
         <div className={`etc-overlay-preview${overlay.outdated ? ' etc-thumb-outdated' : ''}`}>
           <img src={overlay.image_url} alt={`Title overlay for “${overlay.designed_for || ''}”`} data-testid="etc-overlay-thumb" />
         </div>
