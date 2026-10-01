@@ -121,6 +121,30 @@ async function prepareVenueBriefs(sequelize, event, { overrides = {} } = {}) {
   return { draft, location, interior, exterior, estimate };
 }
 
+/**
+ * The scene set already attached to an event, when it still exists (a
+ * deleted set reads as none), or null.
+ */
+async function loadAttachedSet(models, event) {
+  if (!event?.scene_set_id || !models?.SceneSet) return null;
+  return models.SceneSet.findByPk(event.scene_set_id);
+}
+
+/**
+ * The brief and estimate for the missing base image of the scene set already
+ * attached to an event, made for this event (S2, S3): the same brief
+ * POST /scene-sets/:id/brief shows, and the same one generateBaseScene sends.
+ */
+async function attachedSetBaseBrief(sequelize, set, eventId, { overrides = {} } = {}) {
+  const sceneGen = require('./sceneGenerationService');
+  const { prepareSceneBrief } = require('./sceneBriefService');
+  const brief = await prepareSceneBrief(sequelize, set, { angleLabel: 'WIDE', eventId, overrides });
+  const dressing = brief.mode === 'event_dressing';
+  const baseModel = dressing ? sceneGen.SCENE_DRESSING_MODEL.key : sceneGen.resolveBaseModel(set);
+  const e = dressing ? sceneGen.estimateDressingCost() : sceneGen.estimateBaseStillCost(baseModel);
+  return { brief, estimate: { usd: e.usd, priced: e.priced, model: e.model, base_model: baseModel, images: 1 } };
+}
+
 // ─── MAIN: GENERATE VENUE IMAGES ────────────────────────────────────────────
 
 /**
@@ -263,6 +287,8 @@ async function generateVenueImages(event, models, options = {}) {
 
 module.exports = {
   generateVenueImages,
+  loadAttachedSet,
+  attachedSetBaseBrief,
   prepareVenueBriefs,
   venueDraftSet,
   venueLocationId,

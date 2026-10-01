@@ -3355,7 +3355,25 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
     );
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    const { prepareVenueBriefs } = require('../services/venueGenerationService');
+    const { prepareVenueBriefs, loadAttachedSet, attachedSetBaseBrief } = require('../services/venueGenerationService');
+    // A scene set already attached: its image is already available, or its
+    // missing base is what a generation makes, from this brief and estimate.
+    // A set that no longer exists reads as none: a new venue is made.
+    const attached = await loadAttachedSet(models, event);
+    if (attached) {
+      const target = { event_id: event.id, scene_set_id: attached.id, scene_set_name: attached.name, world_location_id: attached.world_location_id || null };
+      if (attached.base_still_url) {
+        return res.json({
+          success: true,
+          data: { target: { kind: 'already_available', ...target, venue_image_url: attached.base_still_url }, brief: null, prompt: null, exterior_brief: null, exterior_prompt: null, estimate: null },
+        });
+      }
+      const { brief, estimate: baseEstimate } = await attachedSetBaseBrief(models.sequelize, attached, event.id, { overrides: briefOverrides.value || {} });
+      return res.json({
+        success: true,
+        data: { target: { kind: 'base', ...target }, brief, prompt: briefToPrompt(brief), exterior_brief: null, exterior_prompt: null, estimate: baseEstimate },
+      });
+    }
     const { draft, interior, exterior, estimate } = await prepareVenueBriefs(models.sequelize, event, { overrides: briefOverrides.value || {} });
     return res.json({
       success: true,
@@ -3375,11 +3393,14 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
 });
 
 // POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
-// Body: { force?: boolean, overrides? } — when `force` is true the endpoint regenerates
-// even if the event already has a scene_set_id attached. Otherwise it skips
-// and returns the existing scene set so the "Mark Ready" flow doesn't clobber
-// a venue the user deliberately picked. overrides: the "Your override" lines
-// confirmed on the venue's brief (S2, S5).
+// Body: { force?: boolean, overrides? } — when `force` is true the endpoint makes
+// a new venue even if the event already has a scene set attached. Otherwise an
+// attached set is kept (a venue the user deliberately picked): its image is
+// "already available", or its missing base is generated for this event from
+// the brief venue-brief showed (S2, S3). A set that no longer exists reads as
+// none. overrides: the "Your override" lines confirmed on the brief (S2, S5).
+// The response's outcome says what happened: generated, already_available or
+// failed.
 router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
@@ -3398,30 +3419,30 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRate
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    // Skip-and-return when a scene set is already attached. Hydrate a minimal
-    // result payload so the caller gets consistent shape (scene_set_id +
-    // images) whether we generated or skipped. This is what prevents the
-    // "Mark Ready" button from regenerating venue images every time the
-    // creator revisits an event that already has one.
-    if (event.scene_set_id && !force) {
-      let existing = null;
-      if (models.SceneSet) {
-        try {
-          existing = await models.SceneSet.findByPk(event.scene_set_id, {
-            attributes: ['id', 'name', 'base_still_url', 'canonical_description'],
-          });
-        } catch { /* non-blocking */ }
-      }
+    // A scene set already attached is kept. Its image is already available,
+    // or its missing base is generated now; a set that no longer exists reads
+    // as none, and a new venue is generated and linked below.
+    const { loadAttachedSet } = require('../services/venueGenerationService');
+    const attached = !force ? await loadAttachedSet(models, event) : null;
+    if (attached?.base_still_url) {
       return res.json({
         success: true,
         skipped: true,
-        data: {
-          scene_set_id: event.scene_set_id,
-          venue_image_url: existing?.base_still_url || null,
-          venue_name: existing?.name || null,
-          reason: 'scene_set already attached — pass { force: true } to regenerate',
-        },
-        message: `Venue already attached to "${event.name}" — skipped regeneration`,
+        outcome: 'already_available',
+        data: { kind: 'base', scene_set_id: attached.id, venue_image_url: attached.base_still_url, venue_name: attached.name },
+        message: `Venue images already available for "${event.name}": nothing generated`,
+      });
+    }
+    if (attached) {
+      const sceneGenService = require('../services/sceneGenerationService');
+      await sceneGenService.generateBaseScene(attached, models, { overrides: briefOverrides.value || {}, eventId: event.id });
+      await attached.reload();
+      if (!attached.base_still_url) throw new Error(`No base image was stored for "${attached.name}"`);
+      return res.json({
+        success: true,
+        outcome: 'generated',
+        data: { kind: 'base', scene_set_id: attached.id, venue_image_url: attached.base_still_url, venue_name: attached.name },
+        message: `Venue image generated for "${attached.name}"`,
       });
     }
 
@@ -3439,12 +3460,13 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRate
 
     return res.json({
       success: true,
-      data: result,
+      outcome: 'generated',
+      data: { kind: 'venue', ...result },
       message: `Venue images generated for "${event.name}" — scene set created`,
     });
   } catch (err) {
     console.error('[VenueGen] Error:', err);
-    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, outcome: 'failed', error: err.message });
   }
 });
 
