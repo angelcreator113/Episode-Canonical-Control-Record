@@ -3473,6 +3473,20 @@ database access.
   - Two or more pieces of a set worn show as one look: "Look: <set name>".
   - Each piece stays choosable on its own, and its card shows the set it
     belongs to.
+- **Old outfit sets** (Evoni, 2026-10-01, a read-only query on
+  production): "the outfit_sets table exists with 0 rows. No copy
+  needed." So no set made before W1 is lost, and no copy was built.
+
+**Choices accepted** (Evoni, 2026-10-01): "I accept all your choices
+(unknown venue city drafts travel and accommodation; perfume single; no
+cap; one set per piece; sets need two pieces)." So these are no longer
+INFERRED:
+- the category fallback for an unknown venue city drafts both lines
+  (§8(cc));
+- Perfume stays single (W2);
+- there is no per-slot cap (W2);
+- a piece is in one matching set at most, and a set has at least two
+  pieces (W1).
 ---
 
 ## 9. Owed before enforcement
