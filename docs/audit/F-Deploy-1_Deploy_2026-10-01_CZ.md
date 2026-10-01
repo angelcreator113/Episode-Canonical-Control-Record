@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CZ, 2026-10-01, backend and frontend, by `scripts/deploy-prod.sh` end to end. A fast-forward of 3 commits and 18 files from `a077ad55` to `21d4172e`: no migration and no package or lock file, 0 pending of 243, one plain restart. Season Arc PRs 5 and 6 go live, with the CY deploy record. CFO 89/100 with 4 warnings, unchanged from CY. The app check has not been done yet. The restart count is continuous from CY (55 → 56). Production is one commit behind `origin/main` (#2445, Season Arc PR 7, merged after CZ, with a migration).* |
+| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy CZ, 2026-10-01, backend and frontend, by `scripts/deploy-prod.sh` end to end. A fast-forward of 3 commits and 18 files from `a077ad55` to `21d4172e`: no migration and no package or lock file, 0 pending of 243, one plain restart. Season Arc PRs 5 and 6 go live, with the CY deploy record. CFO 89/100 with 4 warnings, unchanged from CY. Evoni's app check, made after DA, passed for the roadmap, a pencilled slot and an auto-drafted intention. The restart count is continuous from CY (55 → 56). Production is one commit behind `origin/main` (#2445, Season Arc PR 7, merged after CZ, with a migration).* |
 | --- |
 
 **Document version**
@@ -22,6 +22,7 @@ RECORD. Standings:
 - **MEASURED**: what this repository shows, with output pasted.
 - **INFERRED**: marked where used.
 - **RULED**: Evoni's decision, quoted.
+- **CANNOT-TELL**: marked where used.
 
 Nothing is upgraded. This document closes no keystone and discharges no
 owed item. It mints no FD, XK or PE number, and it rules on nothing.
@@ -65,8 +66,25 @@ left out):
 7. **CFO.** 19:33:16–19:33:20: **89/100**, 0 critical, **4 warnings**,
    3779 ms.
 
-**App check: not checked yet** (Evoni). Nothing in this record says the
-deployed features work or fail in production.
+**App check (Evoni), ATTESTED, given for CZ and DA together, after DA**
+(`F-Deploy-1_Deploy_2026-10-01_DA.md`), verbatim:
+"the roadmap works; slot 2 has Local Boutique "Style Challenge" pencilled
+in (Event ready), and its intention was auto-drafted ("Lala lands her
+first real styling opportunity…")."
+
+- **When.** The check was made on production after DA (`20cb81db`),
+  which carries CZ's code. It speaks for CZ's changes as they run there,
+  not for the hour between CZ and DA.
+- **The roadmap** (#2437, CY) shows.
+- **Slot 2's pencilled event** (#2439, CY), with the event at "ready":
+  pencilling, which CY's check did not cover, works.
+- **Slot 2's intention, auto-drafted** (#2442, CZ): the AI draft of a
+  slot's intention works in production. INFERRED: so the Anthropic key
+  the draft needs (count 1, step 5) is usable. CANNOT-TELL whether
+  the draft ran on demand or in the background after an acceptance.
+- **Not covered by the check:** the next-event suggestions and the Event
+  Package's Season Context (#2444). They are not said to work or to
+  fail.
 
 ## §1. Identity and continuity
 
@@ -260,7 +278,9 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
   the AI key present, one restart (count 56), ready, `/health` healthy and
   connected.
 - **CFO:** 89/100, 0 critical, 4 warnings, unchanged from CY.
-- **App check:** not done yet (Evoni).
+- **App check (Evoni, ATTESTED, after DA):** the roadmap works; slot 2
+  has an event pencilled in and an auto-drafted intention (§0). The
+  suggestions and the Season Context were not checked.
 - **Source of the account:** the script output Evoni pasted, which she
   confirmed is the CZ summary.
 - Nothing is RULED here beyond Evoni's confirmation of the account's
