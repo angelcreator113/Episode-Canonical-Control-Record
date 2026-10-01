@@ -82,6 +82,75 @@
   font-size: 12px;
 }
 
+/* The title overlay (P11 as amended, 2026-09-30). */
+.etc-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.etc-variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  max-width: 680px;
+}
+
+.etc-variant {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.etc-variant.is-chosen {
+  border-color: var(--lala-gold, #B8962E);
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.25);
+}
+
+/* A transparent overlay reads on a dark, then light, backdrop. */
+.etc-variant-img,
+.etc-overlay-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #2F3B47 0%, #8A8178 55%, #D9CDB8 100%);
+  object-fit: contain;
+}
+
+.etc-overlay-preview {
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+
+.etc-overlay-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.etc-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.etc-band input[type='range'] {
+  flex: 1;
+  max-width: 220px;
+}
+
 @media (max-width: 480px) {
   .etc-btn {
     width: 100%;

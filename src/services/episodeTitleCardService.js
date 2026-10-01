@@ -140,11 +140,28 @@ function notFound() {
   return new TitleCardError('Episode not found', 404, 'EPISODE_NOT_FOUND');
 }
 
+/**
+ * P11 as amended (2026-09-30): the state also carries the title overlay
+ * (episodeTitleOverlayService) and its offer. The overlay's lettering styles
+ * cost nothing; the AI flourish behind them is offered with its estimate.
+ * The framed card above stays as the full-screen option.
+ */
+async function withOverlay(models, episodeId, state) {
+  const overlay = require('./episodeTitleOverlayService');
+  return {
+    ...state,
+    overlay: await overlay.getTitleOverlayState(models, episodeId),
+    overlay_offer: state.approved
+      ? { offered: true, variants: overlay.VARIANTS.map((v) => ({ key: v.key, label: v.label })), flourish_estimate: overlay.flourishEstimate() }
+      : { offered: false },
+  };
+}
+
 /** GET state. */
 async function getTitleCardState(models, episodeId) {
   const ep = await loadEpisode(models.sequelize, episodeId);
   if (!ep) throw notFound();
-  return titleCardState(ep, await loadCard(models.sequelize, ep.title_card_asset_id));
+  return withOverlay(models, episodeId, titleCardState(ep, await loadCard(models.sequelize, ep.title_card_asset_id)));
 }
 
 /**
@@ -170,7 +187,7 @@ async function approveTitle(models, episodeId, { expectedTitle } = {}) {
   if (!rows || rows.length === 0) {
     throw new TitleCardError('The title changed while approving. Reload and approve the current title.', 409, 'TITLE_CHANGED');
   }
-  return titleCardState(rows[0], await loadCard(sequelize, rows[0].title_card_asset_id));
+  return withOverlay(models, episodeId, titleCardState(rows[0], await loadCard(sequelize, rows[0].title_card_asset_id)));
 }
 
 async function uploadCard(imageUrl, episodeId) {

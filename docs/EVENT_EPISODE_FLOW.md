@@ -2409,6 +2409,33 @@ the event's visual direction, so the invitation and title look like one
 production, and it belongs to that episode. Changing an approved title
 marks the card outdated and offers a redesign.
 
+**P11 amendment** (Evoni, 2026-09-30). Recorded verbatim:
+
+> The episode title card is a title overlay: the title set in real typefaces (never AI-rendered letters), styled from the event's visual direction (fonts, palette, gold/foil/shadow effects), with the episode number small beneath, rendered as a transparent PNG. An optional soft translucent backing band (20–40% opacity) can be switched on for readability. Approving the title offers 2–3 lettering style variants to choose from, at no image cost; an optional AI-generated decorative flourish behind the letters is offered separately with its cost shown. The current framed card remains available as a full-screen card option.
+
+What was built (`episodeTitleOverlayService`; the episode page's title
+panel, `EpisodeTitleCard`):
+
+- **Letters.** node-canvas sets the title in the invitation's typefaces,
+  Cormorant Garamond and Libre Baskerville. When they are not installed,
+  the invitation service's serif fallback is used.
+- **Image.** A 1920×1080 transparent PNG with the episode number small
+  beneath.
+- **Look**, from the source event's visual direction:
+  - its theme sets the finish: gold foil, rose-gold foil, ink or sage;
+  - its palette sets the accent.
+- **Three lettering variants**, offered after approval with previews and
+  no image call: Classic serif, Editorial italic and Engraved capitals.
+- **Band.** The optional band runs from 20 to 40% (default 30%).
+- **Flourish.** The flourish is the one image call, with its estimate
+  shown first. It is an ornament generated in gold on black, keyed to
+  transparency, and drawn behind the letters. It can be removed.
+- **Storage.** The overlay is the episode's `title_overlay_*` columns plus
+  an assets row with role `UI.OVERLAY.EPISODE_TITLE_TEXT`. Like the card,
+  it is outdated when the title changes.
+- **Framed card.** The card is unchanged and is offered as "Full-screen
+  framed card".
+
 **P12.** Each episode has a viewer teaser, separate from the event
 description (guest copy, rule 12): mystery-driven, never revealing the
 outcome, the hook in the first 150 characters. It's auto-drafted at Start

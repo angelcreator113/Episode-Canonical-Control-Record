@@ -200,6 +200,22 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'The title the current card was designed for; outdated when it differs from title',
       },
+      // The title overlay (P11 as amended, 2026-09-30; episodeTitleOverlayService).
+      title_overlay_asset_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'The current title overlay, a transparent PNG (assets.id)',
+      },
+      title_overlay_title: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'The title the current overlay was made for; outdated when it differs from title',
+      },
+      title_overlay_style: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: '{ variant, band: { enabled, opacity }, flourish: { asset_id, url } | null }',
+      },
     },
     {
       sequelize,

@@ -62,8 +62,10 @@ const REQUIRE_AUTH_COUNTS = {
   // 78 at CP2 close; +1 for GET /:id/events (Task #1906, requireAuth);
   // +3 for GET /:id/title-card, POST /:id/title/approve, POST /:id/title-card
   // (Task #2386, requireAuth); +3 for GET /:id/task-list-overlay,
-  // POST /:id/task-list/approve, POST /:id/task-list-overlay (Task #2395, requireAuth).
-  'episodes.js': 85,
+  // POST /:id/task-list/approve, POST /:id/task-list-overlay (Task #2395, requireAuth);
+  // +3 for GET /:id/title-overlay/variants, POST /:id/title-overlay,
+  // POST /:id/title-overlay/flourish (P11 amendment, Task #2395, requireAuth).
+  'episodes.js': 88,
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth).
   'episodeBriefRoutes.js': 13,
   'episodeOrchestrationRoute.js': 2,
@@ -250,14 +252,15 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for episodeBriefRoutes.js POST /:episodeId/feed-moments/retry (Task #2220);
     // +3 for episodes.js title approval + title card routes (Task #2386);
     // +3 for episodes.js task list approval + task-list overlay routes (Task #2395);
-    // +2 for shows.js GET and PUT /:id/lala-home (D13 travel, Task #2395).
-    test('CP2 zone contains 261 total requireAuth references across 22 files', () => {
+    // +2 for shows.js GET and PUT /:id/lala-home (D13 travel, Task #2395);
+    // +3 for episodes.js title overlay routes (P11 amendment, Task #2395).
+    test('CP2 zone contains 264 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(261);
+      expect(total).toBe(264);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {
