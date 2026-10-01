@@ -55,7 +55,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const slotId = async (arcId, n) => (await rows('SELECT id FROM season_slots WHERE arc_id = :arcId AND slot_number = :n', { arcId, n }))[0].id;
   const threadsOf = async (show) => (await auth(request(app).get(`/api/v1/world/${show}/season/threads`))).body;
   const create = (show, body) => auth(request(app).post(`/api/v1/world/${show}/season/threads`)).send(body);
-  const thread = async (id) => (await rows('SELECT status, last_advanced_episode_id, closed_at FROM show_story_threads WHERE id = :id', { id }))[0];
+  const thread = async (id) => (await rows('SELECT status, last_advanced_episode_id, closed_at, reopened_at FROM show_story_threads WHERE id = :id', { id }))[0];
 
   beforeAll(async () => {
     for (const m of [slotsMigration, contextMigration, threadsMigration]) await m.up(sequelize.getQueryInterface(), Sequelize);
@@ -186,5 +186,30 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const second = await completeEpisode(ep2, show, sequelize);
     expect(second.season.story_thread_advanced).toBeNull();
     expect((await thread(closed.id)).status).toBe('closed');
+  });
+
+  test('Evoni reopens a closed thread, keeping its history (PR 7 choice 1)', async () => {
+    const { show, arcId } = await seedSeason();
+    const plain = (await create(show, { title: 'Never advanced' })).body.thread;
+    const advanced = (await create(show, { title: 'Advanced once' })).body.thread;
+    const ep = uuid();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'One', 1, 'draft', NOW(), NOW())`, { ep, show });
+    await run("UPDATE show_story_threads SET status = 'advanced', last_advanced_episode_id = :ep, last_advanced_at = NOW() WHERE id = :id", { ep, id: advanced.id });
+    const reopen = (id) => auth(request(app).post(`/api/v1/world/${show}/season/threads/${id}/reopen`));
+    for (const t of [plain, advanced]) await auth(request(app).post(`/api/v1/world/${show}/season/threads/${t.id}/close`));
+
+    expect((await reopen(plain.id)).status).toBe(200);
+    expect((await reopen(advanced.id)).status).toBe(200);
+
+    const p = await thread(plain.id);
+    expect(p.status).toBe('open');
+    expect(p.closed_at).not.toBeNull(); // history kept
+    expect(p.reopened_at).not.toBeNull();
+    expect(await thread(advanced.id)).toEqual(expect.objectContaining({ status: 'advanced', last_advanced_episode_id: ep }));
+    const saved = await auth(request(app).put(`/api/v1/world/${show}/season/slots/${await slotId(arcId, 3)}/intention`))
+      .send({ story_purpose: 'Back again', story_thread_id: plain.id });
+    expect(saved.status).toBe(200); // choosable again
+    expect((await threadsOf(show)).threads.find((t) => t.id === plain.id).reopened_at).toBeTruthy();
+    expect((await reopen(uuid())).status).toBe(404);
   });
 });

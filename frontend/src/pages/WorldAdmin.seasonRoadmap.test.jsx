@@ -282,6 +282,23 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
       confirm.mockRestore();
     });
 
+    test('a closed thread can be reopened, only after a confirm (PR 7 choice 1)', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+      renderAt('season');
+
+      const card = await screen.findByTestId('story-threads');
+      expect(within(within(card).getByTestId('story-thread-th-1')).queryByText('Reopen')).toBeNull();
+      const closed = within(card).getByTestId('story-thread-th-2');
+
+      fireEvent.click(within(closed).getByText('Reopen'));
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Reopen "Old debt"? It keeps its history'));
+      expect(api.post).not.toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-2/reopen');
+
+      fireEvent.click(within(closed).getByText('Reopen'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-2/reopen'));
+      confirm.mockRestore();
+    });
+
     test('Evoni creates and names a thread, by hand or from a seed draft', async () => {
       const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Maison Belle returns');
       renderAt('season');

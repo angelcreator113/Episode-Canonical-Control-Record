@@ -11,6 +11,8 @@
  *   Q9 (accepted). "you create and name them; drafts are offered from
  *   seeds_future_events. Acceptance can mark one "advanced", and only you
  *   close one."
+ *   PR 7 choice 1 (Evoni, 2026-10-01). "a closed thread can be reopened by
+ *   Evoni (with confirm), keeping its history".
  *
  * show_story_threads: one row per thread.
  *   show_id, title, description
@@ -20,7 +22,8 @@
  *                     offered again)
  *   opened_episode_id the episode whose seed it came from (nullable)
  *   last_advanced_episode_id, last_advanced_at   set by acceptance
- *   closed_at         set only by Evoni
+ *   closed_at         set only by Evoni; kept when the thread is reopened
+ *   reopened_at       set when Evoni reopens a closed thread
  *   timestamps, deleted_at (paranoid)
  * season_slots.story_thread_id (from 20261001230000) points here.
  *
@@ -52,6 +55,7 @@ module.exports = {
           last_advanced_episode_id: { type: Sequelize.UUID, allowNull: true },
           last_advanced_at: { type: Sequelize.DATE, allowNull: true },
           closed_at: { type: Sequelize.DATE, allowNull: true },
+          reopened_at: { type: Sequelize.DATE, allowNull: true },
           created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.fn('NOW') },
           updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.fn('NOW') },
           deleted_at: { type: Sequelize.DATE, allowNull: true },

@@ -9,6 +9,8 @@
  *   Q9 (accepted). "you create and name them; drafts are offered from
  *   seeds_future_events. Acceptance can mark one "advanced", and only you
  *   close one."
+ *   PR 7 choice 1 (Evoni, 2026-10-01). "a closed thread can be reopened by
+ *   Evoni (with confirm), keeping its history".
  *   A3. A slot's intention includes "the story thread it continues".
  *   A6. Accepting an episode "updates [...] story threads".
  */
@@ -49,7 +51,7 @@ function seedText(seed) {
 async function listThreads(sequelize, showId) {
   const [rows] = await sequelize.query(
     `SELECT t.id, t.title, t.description, t.status, t.source, t.seed_text, t.opened_episode_id,
-            t.last_advanced_episode_id, t.last_advanced_at, t.closed_at, t.created_at,
+            t.last_advanced_episode_id, t.last_advanced_at, t.closed_at, t.reopened_at, t.created_at,
             COALESCE((SELECT array_agg(s.slot_number ORDER BY s.slot_number) FROM season_slots s
                        WHERE s.story_thread_id = t.id AND s.deleted_at IS NULL), '{}') AS slot_numbers
        FROM show_story_threads t
@@ -140,6 +142,22 @@ async function closeThread(sequelize, showId, threadId) {
     { replacements: { threadId } });
 }
 
+/**
+ * Evoni reopens a closed thread (PR 7 choice 1). Its history stays: it
+ * returns to "advanced" if an accepted episode had advanced it, else to
+ * "open"; closed_at and the last advance are kept, and reopened_at is set.
+ */
+async function reopenThread(sequelize, showId, threadId) {
+  const thread = await loadThread(sequelize, showId, threadId);
+  if (thread.status !== STATUSES.CLOSED) return;
+  await sequelize.query(
+    `UPDATE show_story_threads
+        SET status = CASE WHEN last_advanced_episode_id IS NULL THEN 'open' ELSE 'advanced' END,
+            reopened_at = NOW(), updated_at = NOW()
+      WHERE id = :threadId`,
+    { replacements: { threadId } });
+}
+
 /** A slot may continue a thread of its show that is not closed (A3). */
 async function assertThreadChoosable(sequelize, showId, threadId) {
   const thread = await loadThread(sequelize, showId, threadId);
@@ -173,6 +191,7 @@ module.exports = {
   createThread,
   updateThread,
   closeThread,
+  reopenThread,
   assertThreadChoosable,
   advanceSlotThread,
 };

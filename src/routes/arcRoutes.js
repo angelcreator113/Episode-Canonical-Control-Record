@@ -20,6 +20,7 @@
  * POST   /world/:showId/season/threads           — Create and name a thread (Q9)
  * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
+ * POST   /world/:showId/season/threads/:threadId/reopen — Reopen a closed one, keeping its history
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -316,6 +317,19 @@ router.post('/world/:showId/season/threads/:threadId/close', requireAuth, async 
     return res.json({ success: true });
   } catch (err) {
     return sendSlotError(res, err, 'close thread');
+  }
+});
+
+// POST /world/:showId/season/threads/:threadId/reopen — Evoni reopens a closed
+// thread, keeping its history (PR 7 choice 1, 2026-10-01)
+router.post('/world/:showId/season/threads/:threadId/reopen', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { reopenThread } = require('../services/storyThreadService');
+    await reopenThread(models.sequelize, req.params.showId, req.params.threadId);
+    return res.json({ success: true });
+  } catch (err) {
+    return sendSlotError(res, err, 'reopen thread');
   }
 });
 

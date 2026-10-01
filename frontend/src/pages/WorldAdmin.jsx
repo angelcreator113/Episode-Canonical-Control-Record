@@ -7240,11 +7240,26 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
     setBusy(false);
   };
 
+  // PR 7 choice 1 (Evoni, 2026-10-01): she can reopen a closed thread, with
+  // a confirm; it keeps its history.
+  const reopen = async (thread) => {
+    if (!window.confirm(`Reopen "${thread.title}"? It keeps its history and can be chosen for a slot again.`)) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/season/threads/${thread.id}/reopen`);
+      if (setToast) setToast('Story thread reopened');
+      if (onChanged) await onChanged();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setBusy(false);
+  };
+
   return (
     <div style={S.card} data-testid="story-threads">
       <h3 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Story threads</h3>
       <p style={{ ...S.muted, margin: '0 0 12px', fontSize: 12 }}>
-        You create and name them; a slot's intention says which one it continues, and accepting its episode marks the thread advanced. Only you close one.
+        You create and name them; a slot's intention says which one it continues, and accepting its episode marks the thread advanced. Only you close one, and you can reopen it.
       </p>
       {threads.length === 0 && <p style={{ ...S.muted, fontSize: 12 }}>No story threads yet.</p>}
       {threads.map((t) => {
@@ -7258,10 +7273,13 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
                 <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
                 {Array.isArray(t.slot_numbers) && t.slot_numbers.length > 0 && <span style={{ color: '#94a3b8' }}> · in {t.slot_numbers.map((n) => `E${n}`).join(', ')}</span>}
                 {t.source === 'seed' && <span style={{ color: '#94a3b8' }}> · from a seed</span>}
+                {t.reopened_at && t.status !== 'closed' && <span style={{ color: '#94a3b8' }}> · reopened</span>}
               </div>
             </div>
-            {t.status !== 'closed' && (
+            {t.status !== 'closed' ? (
               <button onClick={() => close(t)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Close</button>
+            ) : (
+              <button onClick={() => reopen(t)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Reopen</button>
             )}
           </div>
         );
