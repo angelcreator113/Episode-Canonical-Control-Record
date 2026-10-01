@@ -131,6 +131,7 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
     reasonRow: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11 },
     boostIcon: { color: '#16a34a', fontWeight: 700 },
     blockIcon: { color: '#dc2626', fontWeight: 700 },
+    warnIcon: { color: '#b45309', fontWeight: 700 },
     primaryBtn: { padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
     ghostBtn: { padding: '6px 12px', borderRadius: 6, background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
     footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid #e2e8f0' },
@@ -178,6 +179,15 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
           </div>
         )}
 
+        {/* The slot these suggestions are for (Season Arc §8(ff) A4) */}
+        {data?.season?.next_slot && (
+          <div data-testid="suggestions-next-slot" style={{ margin: '0 0 12px', padding: '8px 12px', background: '#faf5ea', border: '1px solid rgba(184,150,46,0.3)', borderRadius: 8, fontSize: 12, color: '#334155' }}>
+            <strong style={{ color: '#B8962E' }}>For {data.season.next_slot.label}</strong>
+            {data.season.next_slot.story_purpose ? `: ${data.season.next_slot.story_purpose}` : ' (no intention set yet)'}
+            {data.season.next_slot.desired_pressure && <span style={{ color: '#64748b' }}> · planned pressure {data.season.next_slot.desired_pressure}</span>}
+          </div>
+        )}
+
         {/* Suggestions */}
         {loading && <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Reading state and ranking events…</div>}
         {error && <div style={{ padding: 20, color: '#dc2626' }}>Error: {error}</div>}
@@ -221,8 +231,9 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
                     <div style={{ marginBottom: 8 }}>
                       {s.reasons.map((r, i) => (
                         <div key={i} style={S.reasonRow}>
-                          <span style={r.kind === 'boost' ? S.boostIcon : S.blockIcon}>{r.kind === 'boost' ? '+' : '−'}</span>
-                          <span style={{ color: r.kind === 'boost' ? '#16a34a' : '#dc2626' }}>{r.text}</span>
+                          {/* warn: a repeat (Season Arc Q8) — it warns, never blocks */}
+                          <span style={r.kind === 'boost' ? S.boostIcon : r.kind === 'warn' ? S.warnIcon : S.blockIcon}>{r.kind === 'boost' ? '+' : r.kind === 'warn' ? '!' : '−'}</span>
+                          <span style={{ color: r.kind === 'boost' ? '#16a34a' : r.kind === 'warn' ? '#b45309' : '#dc2626' }}>{r.text}</span>
                         </div>
                       ))}
                     </div>

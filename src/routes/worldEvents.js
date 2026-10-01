@@ -4731,12 +4731,33 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
         'id', 'name', 'event_type', 'host', 'host_brand', 'prestige',
         'cost_coins', 'payment_amount', 'is_paid', 'strictness',
         'career_tier', 'career_milestone', 'parent_event_id', 'source_profile_id',
+        'venue_location_id', 'venue_name',
       ],
     });
+    // format is read on its own (Task #1640 keeps it out of the scoped
+    // attributes above), for the Q8 repeat check; a database without the
+    // column just has no format repeats.
+    const formatById = {};
+    if (candidates.length) {
+      try {
+        const [fmtRows] = await sequelize.query(
+          'SELECT id, format FROM world_events WHERE id IN (:ids)',
+          { replacements: { ids: candidates.map(c => c.id) } }
+        );
+        for (const row of fmtRows) formatById[row.id] = row.format;
+      } catch (fmtErr) {
+        console.error('[WorldEvents] next-suggestions format read failed (no format repeats):', fmtErr.message);
+      }
+    }
+
+    // ── 3b. The season (§8(ff) A4, Q8): the next slot's intention, goals,
+    // narrative debt, and the last three episodes' events for repeats.
+    const { loadSeasonInputs, scoreForSeason } = require('../services/seasonSuggestionService');
+    const seasonInputs = await loadSeasonInputs(sequelize, showId);
 
     // ── 4. Score each candidate ──
     const scored = candidates.map(ev => {
-      const e = ev.toJSON();
+      const e = { ...ev.toJSON(), format: formatById[ev.id] || null };
       let score = 0;
       const reasons = [];
 
@@ -4806,11 +4827,21 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
         reasons.push({ kind: 'block', text: `Career tier locked (need tier ${e.career_tier}, currently ${careerTier})` });
       }
 
+      // The season: fit to the next slot's intention and Lala's goals, and
+      // Q8 repeats, which warn and lower the score but never block.
+      const season = scoreForSeason(e, state, seasonInputs);
+      score += season.score;
+      reasons.push(...season.reasons);
+
       return {
+        estimated_pressure: season.estimated_pressure,
+        repeats: season.repeats,
         event: {
           id: e.id,
           name: e.name,
           event_type: e.event_type,
+          format: e.format,
+          venue_name: e.venue_name,
           host: e.host,
           host_brand: e.host_brand,
           prestige: e.prestige,
@@ -4848,6 +4879,10 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
         },
         suggestions: top,
         candidate_count: candidates.length,
+        season: {
+          next_slot: seasonInputs.slot,
+          narrative_debt: seasonInputs.debt.map(d => d.narrative_weight || d.goal_title).filter(Boolean),
+        },
       },
     });
   } catch (err) {

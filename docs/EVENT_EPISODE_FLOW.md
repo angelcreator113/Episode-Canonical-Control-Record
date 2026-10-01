@@ -3760,6 +3760,21 @@ and untracked-stat goals left unchanged." So these are no longer INFERRED:
 Episode a slot's outcome range sets the brief's `designed_intent` to the
 top of the range and `allowed_outcomes` to every tier in it (for "pass to
 slay": slay, with pass and slay allowed); no longer INFERRED.
+
+**Build choices accepted (Evoni, 2026-10-01)**, Season Arc PR 6, verbatim:
+"PR 6 choices accepted as described (estimated pressure, the weights,
+debt shown but not scored yet)." So these are no longer INFERRED:
+- **Estimated pressure** (`seasonSuggestionService.estimatePressure`), an
+  event's likely pressure before it runs: prestige above Lala's reputation
+  (+1 for 1–2, +2 for 3 or more), a dress code strictness of 7 or more
+  (+1), an unpaid cost above half her balance (+1); 0 Low, 1 Medium, 2–3
+  High, 4 or more Peak.
+- **The weights** in next-event suggestions: fits the slot's planned
+  pressure +12 (one step off +4, else a warning); serves the slot's career
+  focus +8; moves an active goal +5; each Q8 repeat (format, host or
+  brand, venue within the last three episodes) −6 with a warning, never a
+  block.
+- **Narrative debt** is shown with the suggestions but not scored yet.
 ---
 
 ## 9. Owed before enforcement

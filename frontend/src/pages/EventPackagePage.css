@@ -189,6 +189,30 @@
 }
 .epp-reopen-confirm-body p { margin: 0 0 8px; }
 
+/* Season Context (Season Arc §8(ff) A4): read-only */
+.epp-season {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: var(--lala-parchment, #FAF7F0);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-left: 3px solid var(--lala-gold, #B8962E);
+  border-radius: var(--lala-radius, 8px);
+  min-width: 0;
+}
+.epp-season-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lala-gold, #B8962E);
+}
+.epp-season-text { font-size: 13px; color: var(--lala-ink, #2C2C2C); }
+.epp-season-purpose { flex-basis: 100%; font-family: 'Lora', serif; font-size: 13px; color: #5b5346; }
+.epp-season-link { color: var(--lala-gold, #B8962E); }
+
 .epp-sections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
