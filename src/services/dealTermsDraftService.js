@@ -316,8 +316,8 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
   const costRecords = { ...(draftedValues.costs || {}) };
   const costs = await listEventCosts(sequelize, eventId, { transaction });
   const costById = new Map(costs.map((c) => [String(c.id), c]));
-  const { travels } = await lalaTravelsFor(sequelize, event, { transaction });
-  const wanted = new Map(draftedCostLines(event, { travels }).map((l) => [l.key, l]));
+  const { travels, stays } = await lalaTravelsFor(sequelize, event, { transaction });
+  const wanted = new Map(draftedCostLines(event, { travels, stays }).map((l) => [l.key, l]));
   const liveKeys = new Set();
   const declinedKeys = new Set();
   for (const [id, record] of Object.entries(costRecords)) {

@@ -3179,6 +3179,10 @@ Experiments Studio Session (Echo Park):
 
      It corrects D13's "Echo Park, Los Angeles" (§8(cc) D13 travel,
      2026-09-30), which stays recorded as it was given.
+   - **Accommodation** (Evoni, 2026-10-01), added to the DREAM-cities
+     ruling and recorded verbatim:
+
+     > Between DREAM cities, travel is drafted but accommodation is not; a stay is added only when Lala decides (Evoni adds the line). For an event in a city outside the five DREAM cities, once such cities exist, travel and accommodation are both drafted, with no amount and 'Price required'.
    - **The fix.**
      - Migration `20261001210000` sets the stored home to city Echo Park,
        neighbourhood empty, address kept. It changes each `lala_home` whose
@@ -3186,12 +3190,18 @@ Experiments Studio Session (Echo Park):
      - `lalaTravelsFor` compares the venue's city (or, with no city known,
        its district) with the home city. An Echo Park venue is home; a
        venue in Dazzle District, Radiance Row, Ascent Tower or Maverick
-       Harbor drafts travel and accommodation with no amount. Only a venue
-       with no known place falls back to the travel_destination category.
+       Harbor drafts travel only, with no amount. A venue in a city outside
+       the five (`isDreamCity`, `DREAM_CITIES`) drafts travel and
+       accommodation, both with no amount.
+     - Re-drafting drops a drafted accommodation line that is still at its
+       drafted value once the destination is a DREAM city. A stay Evoni
+       added by hand is hers, and stays.
+     - INFERRED: a venue with no known place falls back to the
+       travel_destination category, which drafts both lines, as D13 built
+       it.
+     - The Show Settings help text says the same.
      - A stored home neighbourhood still counts as home, so a show not yet
        migrated keeps Echo Park local.
-   - **Open (INFERRED).** Accommodation is drafted with every travel line,
-     as D13 built it. "Where a stay makes sense" is not yet a rule.
 
 **(dd) Scene image rulings (Evoni, 2026-09-30).** Recorded verbatim; built
 after D13, one PR each.

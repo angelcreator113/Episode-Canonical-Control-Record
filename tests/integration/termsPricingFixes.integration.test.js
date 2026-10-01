@@ -175,7 +175,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
     expect(await costs(ids)).toEqual([]);
   });
-  it('4. another DREAM city is away: travel and accommodation, no amount', async () => {
+  it('4. another DREAM city is away: travel only, no amount; a stay is Lala\'s to add (accommodation ruling)', async () => {
     const ids = await seed();
     await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
     const venue = uuid();
@@ -184,7 +184,35 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
                VALUES (:id, 'The Velvet Room', 'venue', 'Dazzle District', NOW(), NOW())`, { id: venue });
     await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue });
     expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
+    expect((await costs(ids)).map((c) => [c.kind, c.amount, c.paid_by])).toEqual([['travel', null, 'lala']]);
+  });
+
+  it('4. a city outside the five DREAM cities: travel and accommodation, no amount', async () => {
+    const ids = await seed();
+    await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
+    const venue = uuid();
+    locations.push(venue);
+    await run(`INSERT INTO world_locations (id, name, location_type, city, created_at, updated_at)
+               VALUES (:id, 'Maison Rue', 'venue', 'Paris', NOW(), NOW())`, { id: venue });
+    await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue });
+    expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
     expect((await costs(ids)).map((c) => [c.kind, c.amount, c.paid_by])).toEqual([['travel', null, 'lala'], ['accommodation', null, 'lala']]);
+  });
+
+  it('4. moving the event from Paris to Dazzle District drops the drafted stay', async () => {
+    const ids = await seed();
+    await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
+    const [paris, dazzle] = [uuid(), uuid()];
+    locations.push(paris, dazzle);
+    await run(`INSERT INTO world_locations (id, name, location_type, city, created_at, updated_at)
+               VALUES (:paris, 'Maison Rue', 'venue', 'Paris', NOW(), NOW()),
+                      (:dazzle, 'The Velvet Room', 'venue', 'Dazzle District', NOW(), NOW())`, { paris, dazzle });
+    await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue: paris });
+    expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
+    expect((await costs(ids)).map((c) => c.kind)).toEqual(['travel', 'accommodation']);
+    await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue: dazzle });
+    expect((await putEvent(ids, { deal_components: ['paid_to_appear', 'paid_for_content'] })).status).toBe(200);
+    expect((await costs(ids)).map((c) => c.kind)).toEqual(['travel']);
   });
 
   it('4. migration 20261001210000 moves the stored home to city Echo Park, and back', async () => {

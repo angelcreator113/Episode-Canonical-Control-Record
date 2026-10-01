@@ -97,6 +97,9 @@ describe('travel and accommodation (answer 7 and the travel ruling)', () => {
     expect(draftedCostLines(deal, { travels: false })).toEqual([]);
     expect(draftedCostLines(deal, { travels: true }).map((l) => [l.kind, l.amount, l.paid_by]))
       .toEqual([['travel', null, 'lala'], ['accommodation', null, 'lala']]);
+    // Between DREAM cities: travel only; the stay is Lala's to add (Evoni, 2026-10-01).
+    expect(draftedCostLines(deal, { travels: true, stays: false }).map((l) => l.kind)).toEqual(['travel']);
+    expect(draftedCostLines(deal, { travels: true, stays: true }).map((l) => l.kind)).toEqual(['travel', 'accommodation']);
     // Without a city lookup, the fallback alone: the category travel_destination.
     expect(lalaTravels({ category: 'travel_destination' })).toBe(true);
     expect(draftedCostLines({ ...deal, category: 'travel_destination' })).toHaveLength(2);

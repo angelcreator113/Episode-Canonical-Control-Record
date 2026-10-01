@@ -21,6 +21,13 @@
  * (migrations 20261001190000 and 20261001210000, which sets the city to
  * Echo Park; edited at Show Settings, GET/PUT /api/v1/shows/:id/lala-home).
  *
+ * Accommodation (Evoni, 2026-10-01): "Between DREAM cities, travel is
+ * drafted but accommodation is not; a stay is added only when Lala decides
+ * (Evoni adds the line). For an event in a city outside the five DREAM
+ * cities, once such cities exist, travel and accommodation are both
+ * drafted, with no amount and 'Price required'." lalaTravelsFor's `stays`
+ * says whether accommodation is drafted with the travel.
+ *
  * An event's location is its venue's World Location (venue_location_id, or
  * the automation's), read up the parent chain until one has a city (and,
  * failing that, a district). The World Studio seed gives each DREAM city's
@@ -31,6 +38,10 @@
  */
 
 const HOME_FIELDS = Object.freeze(['address', 'neighbourhood', 'city']);
+
+// The five DREAM cities of the LalaVerse (migration 20260725000000,
+// worldStudio's seed). Separate cities; travel between them has no stay.
+const DREAM_CITIES = Object.freeze(['Dazzle District', 'Radiance Row', 'Echo Park', 'Ascent Tower', 'Maverick Harbor']);
 const FIELD_MAX = 200;
 const PARENT_DEPTH = 6;
 
@@ -91,6 +102,12 @@ async function locationCity(sequelize, locationId, options = {}) {
   return (await locationPlace(sequelize, locationId, options)).city;
 }
 
+/** Whether a city is one of the five DREAM cities. */
+function isDreamCity(name) {
+  const n = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return Boolean(n) && DREAM_CITIES.some((c) => c.toLowerCase() === n);
+}
+
 /** Whether a place name is Lala's home city or home neighbourhood. */
 function isHomePlace(name, home) {
   const n = normCity(name);
@@ -99,12 +116,16 @@ function isHomePlace(name, home) {
 }
 
 /**
- * Whether the event takes Lala away from home: { travels, reason, city,
- * home_city }. reason is 'outside_home' or 'home_city' when both cities are
- * known, else 'category' (the fallback).
+ * Whether the event takes Lala away from home: { travels, stays, reason,
+ * city, home_city }. reason is 'outside_home' or 'home_city' when both
+ * cities are known, else 'category' (the fallback). stays: accommodation is
+ * drafted with the travel, unless the destination is another DREAM city.
+ * INFERRED: on the category fallback (no city known) both are drafted, as
+ * D13 built it.
  */
 async function lalaTravelsFor(sequelize, event, { transaction } = {}) {
-  const fallback = { travels: event?.category === 'travel_destination', reason: 'category', city: null, home_city: null };
+  const byCategory = event?.category === 'travel_destination';
+  const fallback = { travels: byCategory, stays: byCategory, reason: 'category', city: null, home_city: null };
   if (!event) return fallback;
   let home = null;
   if (event.show_id) {
@@ -117,14 +138,16 @@ async function lalaTravelsFor(sequelize, event, { transaction } = {}) {
   // A district counts only where no city is known (a Paris venue in a
   // district that happens to share the name is still Paris).
   if (home && (isHomePlace(city, home) || (!normCity(city) && isHomePlace(district, home)))) {
-    return { travels: false, reason: 'home_city', city: city || district, home_city: home.city };
+    return { travels: false, stays: false, reason: 'home_city', city: city || district, home_city: home.city };
   }
   if (!home || !city) return { ...fallback, city, home_city: home?.city || null };
-  return { travels: true, reason: 'outside_home', city, home_city: home.city };
+  return { travels: true, stays: !isDreamCity(city), reason: 'outside_home', city, home_city: home.city };
 }
 
 module.exports = {
   HOME_FIELDS,
+  DREAM_CITIES,
+  isDreamCity,
   normCity,
   readLalaHome,
   readLalaHomeBody,
