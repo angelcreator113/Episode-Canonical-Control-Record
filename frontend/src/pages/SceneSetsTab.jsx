@@ -4,6 +4,7 @@ import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, Chec
 import apiClient from '../services/api';
 import './SceneSetsTab.css';
 import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
+import SceneBriefConfirm from '../components/SceneBriefConfirm';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -267,6 +268,8 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // S2: the regenerate is a paid generation; its brief is shown first.
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const toggle = (cat) => {
     setSelected(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
@@ -285,13 +288,17 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
     }
   };
 
-  const handleRegenerate = async () => {
+  const handleRegenerate = () => {
     if (selected.length === 0) return;
+    setBriefOpen(true);
+  };
+
+  const runRegenerate = async (overrides) => {
     setSubmitting(true);
     try {
       // Submit review first, then regenerate
       await submitAngleReviewApi(setId, angle.id, { categories: selected, notes: notes.trim() || null });
-      await regenerateAngleApi(setId, angle.id, { categories: selected });
+      await regenerateAngleApi(setId, angle.id, { categories: selected, overrides });
       onSubmit('regenerate');
     } catch {
       onSubmit('error');
@@ -381,6 +388,17 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
           </button>
         </div>
       </div>
+      {briefOpen && (
+        <SceneBriefConfirm
+          setId={setId}
+          angleId={angle.id}
+          refine
+          title={`Regenerate “${angle.angle_name || angle.angle_label}”`}
+          note="The fixes for the problems you flagged are added to this brief."
+          onCancel={() => setBriefOpen(false)}
+          onConfirm={(overrides) => { setBriefOpen(false); runRegenerate(overrides); }}
+        />
+      )}
     </div>
   );
 }
@@ -2418,12 +2436,55 @@ export default function SceneSetsTab() {
     return 'timeout';
   }, []);
 
-  const handleGenerateBase = async (set) => {
+  // S2 (Evoni, 2026-09-30): "The Scene Brief is shown before any paid
+  // generation". Every paid scene-set generation below first opens
+  // SceneBriefConfirm; confirming runs it with the overrides set there.
+  const [briefAsk, setBriefAsk] = useState(null);
+  const askBrief = (ask, run) => setBriefAsk({ ...ask, run });
+
+  const handleGenerateBase = (set) => askBrief(
+    { setId: set.id, title: `Generate the base image for “${set.name}”` },
+    (overrides) => runGenerateBase(set, overrides),
+  );
+  const handleRegenerateBase = (set) => askBrief(
+    { setId: set.id, title: `Regenerate the base image for “${set.name}”` },
+    (overrides) => runRegenerateBase(set, overrides),
+  );
+  const handleGenerateAngle = (set, angle) => askBrief(
+    { setId: set.id, angleId: angle.id, title: `Generate “${angle.angle_name || angle.angle_label}”` },
+    (overrides) => runGenerateAngle(set, angle, overrides),
+  );
+  const handleGenerateAll = (set, regenerate = false) => {
+    const targets = regenerate
+      ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
+      : set.angles?.filter(a => a.generation_status === 'pending') || [];
+    if (targets.length === 0) return;
+    askBrief(
+      {
+        setId: set.id,
+        angleId: targets[0].id,
+        title: `Generate ${targets.length} angle${targets.length === 1 ? '' : 's'} for “${set.name}”`,
+        note: targets.length > 1 ? `Shown for “${targets[0].angle_name || targets[0].angle_label}”; each angle uses this brief with its own camera.` : null,
+      },
+      (overrides) => runGenerateAll(set, regenerate, overrides),
+    );
+  };
+  const handleCascadeRegenerate = (set, description) => askBrief(
+    {
+      setId: set.id,
+      title: `Regenerate “${set.name}”: the base, then every angle`,
+      note: 'The angles take the base\'s brief with their own cameras.',
+      description: description || undefined,
+    },
+    (overrides) => runCascadeRegenerate(set, description, overrides),
+  );
+
+  const runGenerateBase = async (set, overrides) => {
     startGenerating(set.id);
     try {
       let json;
       try {
-        const res = await generateBaseImageApi(set.id, {});
+        const res = await generateBaseImageApi(set.id, { overrides });
         json = res.data;
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Generation failed');
@@ -2448,12 +2509,12 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleRegenerateBase = async (set) => {
+  const runRegenerateBase = async (set, overrides) => {
     startGenerating(set.id);
     try {
       let json;
       try {
-        const res = await generateBaseImageApi(set.id, { force: true });
+        const res = await generateBaseImageApi(set.id, { force: true, overrides });
         json = res.data;
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Regeneration failed');
@@ -2531,7 +2592,7 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleGenerateAngle = async (set, angle) => {
+  const runGenerateAngle = async (set, angle, overrides) => {
     try {
       // Quick check if generation is configured
       try {
@@ -2545,7 +2606,7 @@ export default function SceneSetsTab() {
 
       let json;
       try {
-        const res = await generateAngleApi(set.id, angle.id);
+        const res = await generateAngleApi(set.id, angle.id, { overrides });
         json = res.data;
       } catch (err) {
         throw new Error(err.response?.data?.error || `Generation failed (${err.response?.status || 'unknown'})`);
@@ -2590,7 +2651,7 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleGenerateAll = async (set, regenerate = false) => {
+  const runGenerateAll = async (set, regenerate, overrides) => {
     const targets = regenerate
       ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
       : set.angles?.filter(a => a.generation_status === 'pending') || [];
@@ -2605,7 +2666,7 @@ export default function SceneSetsTab() {
 
     try {
       // Use the backend batch endpoint — it generates sequentially to avoid rate limits
-      const res = await generateAllAnglesApi(set.id);
+      const res = await generateAllAnglesApi(set.id, { overrides });
       const json = res.data;
 
       // Poll for completion
@@ -2910,14 +2971,14 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleCascadeRegenerate = async (set, description) => {
+  const runCascadeRegenerate = async (set, description, overrides) => {
     startGenerating(set.id);
     try {
       let json;
       try {
         const res = await cascadeRegenerateApi(
           set.id,
-          description ? { canonical_description: description } : {},
+          description ? { canonical_description: description, overrides } : { overrides },
         );
         json = res.data;
       } catch (err) {
@@ -3119,6 +3180,22 @@ export default function SceneSetsTab() {
             multiple camera angles that map to episode beats.
           </p>
         </div>
+      )}
+
+      {briefAsk && (
+        <SceneBriefConfirm
+          setId={briefAsk.setId}
+          angleId={briefAsk.angleId || null}
+          title={briefAsk.title}
+          note={briefAsk.note || null}
+          description={briefAsk.description}
+          onCancel={() => setBriefAsk(null)}
+          onConfirm={(overrides) => {
+            const { run } = briefAsk;
+            setBriefAsk(null);
+            run(overrides);
+          }}
+        />
       )}
 
       {/* Grid */}

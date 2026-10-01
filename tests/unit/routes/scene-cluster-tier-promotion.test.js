@@ -43,7 +43,7 @@ const REQUIRE_AUTH_COUNTS = {
   'sceneTemplates.js': 6,      // 1 import + 5 handlers
   'sceneLibrary.js': 6,        // 1 import + 5 handlers (3 ex-authenticateToken + 2 ex-bare)
   'sceneProposeRoute.js': 7,   // 1 import + 6 handlers (1 with aiRateLimiter)
-  'sceneSetRoutes.js': 75,     // 1 import + 74 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3)
+  'sceneSetRoutes.js': 76,     // 1 import + 75 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3); +1 S2 POST /:id/brief
   'sceneLinks.js': 5,          // 1 import + 4 handlers
 };
 
@@ -198,13 +198,13 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
   });
 
   describe('CP4 zone aggregate consumer counts', () => {
-    test('CP4 zone contains 136 total requireAuth references across 6 files (6 imports + 130 handlers; +4 Task #2396)', () => {
+    test('CP4 zone contains 137 total requireAuth references across 6 files (6 imports + 131 handlers; +4 Task #2396; +1 S2 POST /:id/brief)', () => {
       const total = CP4_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(136);
+      expect(total).toBe(137);
     });
 
     test('CP4 zone contains 18 total aiRateLimiter references (4 import-line matches + 14 handler invocations)', () => {

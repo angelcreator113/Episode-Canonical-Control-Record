@@ -41,6 +41,8 @@ describe('buildSceneBrief (S1)', () => {
     expect(place.every((l) => l.source === 'venue')).toBe(true);
     expect(line(brief, 'surroundings').text).toBe('Outside, through windows and doorways: Echo Park, Los Angeles.');
     expect(line(brief, 'equipment').text).toContain('a raised stage, a bar');
+    expect(line(brief, 'identity').text).toMatch(/, an event hall\.$/);
+    expect(line(buildSceneBrief({ sceneSet: SET, location: { ...LOCATION, venue_type: 'rooftop_bar' } }), 'identity').text).toMatch(/, a rooftop bar\.$/);
     expect(brief.world_location_id).toBe('loc-1');
   });
 
