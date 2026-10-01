@@ -312,16 +312,26 @@ async function loadScriptContext(episodeId, showId, models) {
     }
   } catch { /* non-blocking */ }
 
-  // 13. Arc / season phase — emotional temperature
+  // 13. Arc / season phase — the active arc, read through the shared
+  // getArcContext (show_arcs has no name or phase_title column; the phase
+  // title lives in its phases JSON).
   context.arcPhase = null;
   try {
-    const [arc] = await sequelize.query(
-      `SELECT name, current_phase, phase_title, emotional_temperature FROM show_arcs
-       WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-    );
-    context.arcPhase = arc || null;
-  } catch { /* non-blocking */ }
+    const { getArcContext } = require('./arcProgressionService');
+    const arc = await getArcContext(showId, { sequelize });
+    if (arc) {
+      context.arcPhase = {
+        name: arc.arc_title,
+        current_phase: arc.current_phase.number,
+        phase_title: arc.current_phase.title,
+        emotional_arc: arc.current_phase.emotional_arc,
+        emotional_temperature: arc.emotional_temperature,
+        narrative_debt_summary: arc.narrative_debt.length > 0 ? arc.narrative_debt_summary : null,
+      };
+    }
+  } catch (err) {
+    console.error('[ScriptWriter] season arc context failed (non-blocking):', err.message);
+  }
 
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
@@ -586,7 +596,13 @@ ${(() => {
   // Arc phase
   let arcBlock = '';
   if (context.arcPhase) {
-    arcBlock = `═══ SEASON ARC ═══\n${context.arcPhase.name || 'Current Arc'} — Phase: ${context.arcPhase.phase_title || context.arcPhase.current_phase}\nEmotional Temperature: ${context.arcPhase.emotional_temperature || 'neutral'}\nSCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n`;
+    const a = context.arcPhase;
+    const phase = a.phase_title ? `Phase ${a.current_phase}: ${a.phase_title}` : `Phase ${a.current_phase}`;
+    arcBlock = `═══ SEASON ARC ═══\n${a.name || 'Current Arc'} — ${phase}\n`;
+    if (a.emotional_arc) arcBlock += `Phase emotional arc: ${a.emotional_arc}\n`;
+    arcBlock += `Emotional Temperature: ${a.emotional_temperature || 'neutral'}\n`;
+    if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;
+    arcBlock += 'SCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n';
   }
 
   // Designed intent direction
