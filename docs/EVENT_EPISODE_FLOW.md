@@ -3423,6 +3423,24 @@ database access.
   show (`wardrobe.show_id`), is deleted, or exists only in
   `wardrobe_library`. Those can be read only on the database, which agent
   sessions never touch.
+
+**W2, what was built** (`EpisodeWardrobeGameplay`, `closetGrouping`
+`MULTI_SLOTS`):
+
+- **Several pieces.** Accessories (accessory and bag) and Jewelry hold
+  several pieces at once. Choosing another piece adds it beside the ones
+  already worn.
+  - Each piece has its own ✕, and one comes off without the others.
+  - The slot reads "· N pieces" and stays open to "+ Add another".
+- **Single slots.** Body (dress, or top and bottom) and shoes stay single:
+  a second pair of shoes replaces the first. INFERRED: Perfume stays
+  single too, since the ruling names only accessories and jewellery.
+- **Saving.** The lock sends every piece; the server already linked any
+  number. A locked outfit restores every accessory and jewellery piece.
+  A draft saved with one piece there still loads (`normalizeSlots`).
+  Lala Suggests picks one piece per slot, as before.
+- INFERRED: no cap per slot. The outfit score endpoint's 20-piece draft
+  cap (`MAX_DRAFT_PIECES`) still applies to the whole outfit.
 ---
 
 ## 9. Owed before enforcement
