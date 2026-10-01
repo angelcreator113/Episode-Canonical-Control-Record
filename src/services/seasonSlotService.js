@@ -335,6 +335,16 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
         SET arc_number = COALESCE(arc_number, :phase), position_in_arc = COALESCE(position_in_arc, :position)
       WHERE episode_id = :episodeId AND deleted_at IS NULL`,
     { replacements: { phase: slot.phase, position: context.position_in_phase, episodeId }, transaction });
+  // Q10: the slot's outcome range sets the brief's designed intent and
+  // allowed outcomes, so the slot is the one source.
+  const { outcomeRangeToBrief } = require('./seasonIntentionService');
+  const fromRange = outcomeRangeToBrief(context.outcome_range);
+  if (fromRange) {
+    await sequelize.query(
+      `UPDATE episode_briefs SET designed_intent = :intent, allowed_outcomes = CAST(:allowed AS jsonb)
+        WHERE episode_id = :episodeId AND deleted_at IS NULL`,
+      { replacements: { intent: fromRange.designed_intent, allowed: JSON.stringify(fromRange.allowed_outcomes), episodeId }, transaction });
+  }
   return context;
 }
 

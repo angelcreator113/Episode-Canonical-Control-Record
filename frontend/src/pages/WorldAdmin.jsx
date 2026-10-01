@@ -7201,10 +7201,102 @@ const SLOT_STATE_CONFIG = {
   needs_event:   { label: 'Needs an event',  color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
 };
 
+const PRESSURE_OPTIONS = ['Low', 'Medium', 'High', 'Peak'];
+const OUTCOME_OPTIONS = ['fail', 'safe', 'pass', 'slay'];
+
+// A future slot's intention (§8(ff) A3): story purpose, career focus,
+// desired pressure (Q7) and the outcome range hoped for (Q10). Labelled
+// Auto-drafted or Edited; Draft asks before replacing an edit.
+function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast }) {
+  const init = slot.intention || {};
+  const [form, setForm] = useState({
+    story_purpose: init.story_purpose || '',
+    career_focus: init.career_focus || '',
+    desired_pressure: init.desired_pressure || '',
+    min: init.outcome_range?.min || '',
+    max: init.outcome_range?.max || '',
+  });
+  const [busy, setBusy] = useState(null);
+  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 4 };
+  const label = { fontSize: 11, fontWeight: 600, color: '#64748b', marginTop: 10, display: 'block' };
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    setBusy('save');
+    try {
+      await api.put(`/api/v1/world/${showId}/season/slots/${slot.id}/intention`, {
+        story_purpose: form.story_purpose,
+        career_focus: form.career_focus,
+        desired_pressure: form.desired_pressure || null,
+        outcome_range: form.min || form.max ? { min: form.min || form.max, max: form.max || form.min } : null,
+      });
+      if (setToast) setToast(`${slot.label} intention saved`);
+      if (onSaved) await onSaved();
+      onClose();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setBusy(null);
+  };
+  const draft = async () => {
+    const edited = init.source === 'edited';
+    if (edited && !window.confirm(`${slot.label}'s intention was edited. Replace it with an AI draft?`)) return;
+    setBusy('draft');
+    try {
+      await api.post(`/api/v1/world/${showId}/season/slots/${slot.id}/intention/draft`, edited ? { force: true } : {});
+      if (setToast) setToast(`${slot.label} intention drafted`);
+      if (onSaved) await onSaved();
+      onClose();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setBusy(null);
+  };
+
+  return (
+    <div data-testid="season-intention-editor" style={{ marginTop: 4, marginBottom: 16, padding: '12px 14px', border: '1px solid rgba(184,150,46,0.35)', borderRadius: 10, background: '#fffef9' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{slot.label} intention</div>
+        {init.source && <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
+      </div>
+      <label style={label}>Story purpose
+        <textarea aria-label="Story purpose" value={form.story_purpose} onChange={set('story_purpose')} rows={2} style={field} />
+      </label>
+      <label style={label}>Career focus
+        <input aria-label="Career focus" value={form.career_focus} onChange={set('career_focus')} style={field} />
+      </label>
+      <label style={label}>Desired pressure
+        <select aria-label="Desired pressure" value={form.desired_pressure} onChange={set('desired_pressure')} style={field}>
+          <option value="">Not set</option>
+          {PRESSURE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </label>
+      <span style={label}>Outcome range hoped for</span>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <select aria-label="Lowest outcome" value={form.min} onChange={set('min')} style={{ ...field, marginTop: 0 }}>
+          <option value="">From…</option>
+          {OUTCOME_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>to</span>
+        <select aria-label="Highest outcome" value={form.max} onChange={set('max')} style={{ ...field, marginTop: 0 }}>
+          <option value="">To…</option>
+          {OUTCOME_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <button onClick={save} disabled={!!busy} style={S.primaryBtn}>{busy === 'save' ? 'Saving...' : 'Save'}</button>
+        <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>
+        <button onClick={onClose} disabled={!!busy} style={S.secBtn}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#334155', minWidth: 0 };
 
 function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance }) {
   const [busySlot, setBusySlot] = useState(null);
+  const [editingSlotId, setEditingSlotId] = useState(null);
   if (!roadmap) return null;
   const { phases = [], counts = {}, unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
   const openSlots = phases.flatMap((p) => p.slots).filter((sl) => !sl.locked);
@@ -7319,12 +7411,31 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                     </select>
                   )}
                   {slot.intention?.story_purpose && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{slot.intention.story_purpose}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
+                      {slot.intention.story_purpose}
+                      {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: '#94a3b8' }}> · Auto-drafted</span>}
+                    </div>
+                  )}
+                  {!slot.locked && (
+                    <button
+                      data-testid={`season-intention-${slot.slot_number}`}
+                      onClick={() => setEditingSlotId(editingSlotId === slot.id ? null : slot.id)}
+                      style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#B8962E', cursor: 'pointer' }}
+                    >
+                      {slot.intention?.story_purpose ? 'Intention' : 'Add intention'}
+                    </button>
                   )}
                 </div>
               );
             })}
           </div>
+          {(() => {
+            const editing = phase.slots.find((sl) => sl.id === editingSlotId);
+            return editing ? (
+              <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
+                onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} />
+            ) : null;
+          })()}
         </div>
       ))}
 

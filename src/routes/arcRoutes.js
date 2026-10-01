@@ -13,6 +13,8 @@
  * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2)
  * PUT    /world/:showId/season/slots/:slotId/event   — Pencil an event into a future slot, or clear it (Q5)
  * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
+ * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
+ * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12)
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -23,6 +25,7 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // GET /world/:showId/arc — active arc
 router.get('/world/:showId/arc', requireAuth, async (req, res) => {
@@ -216,6 +219,32 @@ router.put('/world/:showId/season/slots/:slotId/episode', requireAuth, async (re
     return res.json({ success: true, ...result });
   } catch (err) {
     return sendSlotError(res, err, 'place episode');
+  }
+});
+
+// PUT /world/:showId/season/slots/:slotId/intention — edit a future slot's intention (§8(ff) A3)
+// Body: { story_purpose, career_focus, desired_pressure, outcome_range: { min, max } }.
+router.put('/world/:showId/season/slots/:slotId/intention', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { saveIntention } = require('../services/seasonIntentionService');
+    const result = await saveIntention(models.sequelize, req.params.showId, req.params.slotId, req.body || {});
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'save intention');
+  }
+});
+
+// POST /world/:showId/season/slots/:slotId/intention/draft — auto-draft it (§8(ff) A3, Q12)
+// Body: { force } replaces an Edited intention (Evoni's confirm).
+router.post('/world/:showId/season/slots/:slotId/intention/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { draftIntention } = require('../services/seasonIntentionService');
+    const result = await draftIntention(models.sequelize, req.params.showId, req.params.slotId, { force: req.body?.force === true });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'draft intention');
   }
 });
 

@@ -689,6 +689,17 @@ ${narrativeLines.short || ''}`,
     console.error('[EpisodeCompletion] Season slot outcome failed (non-blocking):', seasonErr?.message);
   }
 
+  // ── 17c. Ready the next slot (A6; Q12: "draft only the next open slot, on
+  // acceptance and on demand") ──
+  // An AI call: not awaited, so it never slows or blocks completion; a
+  // failure is logged and the slot can be drafted on demand.
+  if (season) {
+    const { draftNextSlot } = require('./seasonIntentionService');
+    draftNextSlot(sequelize, showId).catch((draftErr) => {
+      console.error('[EpisodeCompletion] Next slot intention draft failed (non-blocking):', draftErr?.message);
+    });
+  }
+
   // ── 18. Complete the linked opportunity (Task #1817) ──
   // Runs once per completion: the already-accepted early return above skips
   // it on repeat calls. Opportunity only — no goal cascade (step 17 above is
