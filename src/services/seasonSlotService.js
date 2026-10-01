@@ -223,9 +223,9 @@ async function getRoadmap(sequelize, showId) {
 
   const [rows] = await sequelize.query(
     `SELECT s.id, s.slot_number, s.phase, s.season_number, s.locked_at,
-            s.story_purpose, s.career_focus, s.desired_pressure, s.outcome_range, s.intention_source,
+            s.story_purpose, s.story_purposes, s.career_focus, s.desired_pressure, s.outcome_range, s.intention_source,
             st.id AS thread_id, st.title AS thread_title, st.status AS thread_status,
-            s.actual_outcome, s.actual_pressure,
+            s.actual_outcome, s.actual_pressure, s.accepted_at,
             ep.id AS episode_id, ep.title AS episode_title, ep.status AS episode_status,
             ep.evaluation_status AS episode_evaluation_status,
             ev.id AS event_id, ev.name AS event_name, ev.status AS event_status
@@ -238,6 +238,7 @@ async function getRoadmap(sequelize, showId) {
     { replacements: { arcId: arc.id } });
 
   const seasonNumber = arc.season_number || 1;
+  const threadById = await threadTitles(sequelize, arc.show_id);
   const slots = rows.map((r) => {
     const episode = r.episode_id
       ? { id: r.episode_id, title: r.episode_title, status: r.episode_status, evaluation_status: r.episode_evaluation_status }
@@ -258,8 +259,14 @@ async function getRoadmap(sequelize, showId) {
         desired_pressure: r.desired_pressure,
         outcome_range: parseJson(r.outcome_range, null),
         story_thread: r.thread_id ? { id: r.thread_id, title: r.thread_title, status: r.thread_status } : null,
+        // A10: every purpose, primary first, each with its thread.
+        story_purposes: purposesWithThreads(r, threadById),
         source: r.intention_source,
       },
+      // A9: a future slot, or a started one whose episode is still a draft;
+      // locked for good once the episode is accepted.
+      intention_editable: !r.accepted_at && episode?.evaluation_status !== 'accepted'
+        && (Boolean(episode) || !r.locked_at),
       result: { actual_outcome: r.actual_outcome, actual_pressure: r.actual_pressure },
     };
   });
@@ -353,7 +360,8 @@ async function getRoadmap(sequelize, showId) {
  */
 async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
   const [[slot]] = await sequelize.query(
-    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.career_focus, s.desired_pressure,
+    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes, s.story_thread_id,
+            s.career_focus, s.desired_pressure, s.show_id,
             s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.phases, st.title AS thread_title
        FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id
        LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
@@ -381,6 +389,9 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
     desired_pressure: slot.desired_pressure || null,
     outcome_range: parseJson(slot.outcome_range, null),
     story_thread: slot.thread_title || null,
+    // A10: every purpose, primary first, with its thread's title.
+    story_purposes: purposesWithThreads(slot, await threadTitles(sequelize, slot.show_id, transaction))
+      .map((p) => ({ text: p.text, primary: p.primary, story_thread: p.story_thread?.title || null })),
     snapshotted_at: new Date().toISOString(),
   };
   await sequelize.query(
@@ -403,6 +414,32 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
       { replacements: { intent: fromRange.designed_intent, allowed: JSON.stringify(fromRange.allowed_outcomes), episodeId }, transaction });
   }
   return context;
+}
+
+/** The show's story thread titles by id (A10: a purpose names its thread). */
+async function threadTitles(sequelize, showId, transaction) {
+  try {
+    const [rows] = await sequelize.query(
+      'SELECT id, title, status FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL',
+      { replacements: { showId }, transaction });
+    return new Map(rows.map((t) => [String(t.id), t]));
+  } catch (err) {
+    console.error('[seasonSlotService] story thread titles failed:', err.message);
+    return new Map();
+  }
+}
+
+/** A10: a slot's purposes, primary first, each with its thread ({ id, title, status } or null). */
+function purposesWithThreads(slot, threadById) {
+  const { purposesOf } = require('./seasonIntentionService');
+  return purposesOf(slot).map((p) => {
+    const t = p.story_thread_id ? threadById.get(String(p.story_thread_id)) : null;
+    return {
+      text: p.text,
+      primary: Boolean(p.primary),
+      story_thread: t ? { id: t.id, title: t.title, status: t.status } : null,
+    };
+  });
 }
 
 async function lockSlot(sequelize, showId, slotId, transaction) {

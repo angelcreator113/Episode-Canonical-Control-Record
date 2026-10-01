@@ -23,10 +23,12 @@ module.exports = (sequelize) => {
     episode_id: { type: DataTypes.UUID, allowNull: true },
 
     // Intention (A3)
-    story_purpose: { type: DataTypes.TEXT, allowNull: true },
+    story_purpose: { type: DataTypes.TEXT, allowNull: true }, // the primary purpose's text (A10)
+    // A10: up to three purposes, primary first: [{ text, primary, story_thread_id }]
+    story_purposes: { type: DataTypes.JSONB, allowNull: true },
     career_focus: { type: DataTypes.TEXT, allowNull: true },
     desired_pressure: { type: DataTypes.STRING(10), allowNull: true }, // Low | Medium | High | Peak
-    story_thread_id: { type: DataTypes.UUID, allowNull: true },
+    story_thread_id: { type: DataTypes.UUID, allowNull: true }, // the primary purpose's thread (A10)
     outcome_range: { type: DataTypes.JSONB, allowNull: true },
     intention_source: { type: DataTypes.STRING(20), allowNull: true }, // auto-drafted | edited
 

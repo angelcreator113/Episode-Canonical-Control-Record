@@ -108,16 +108,22 @@ const DRAFT = { story_purpose: 'Lala is tested by her first paid invite', career
     expect(map.phases[0].slots[2].intention).toEqual(expect.objectContaining({ story_purpose: 'Lala bluffs her way in', source: 'edited' }));
   });
 
-  test('a started slot\'s intention cannot change', async () => {
+  // A9 (Evoni, 2026-10-01) replaces PR 5's lock on a started slot's
+  // intention: "A started slot's intention stays editable while its episode
+  // is a draft [...]. It locks for good when the episode is accepted."
+  test('a started slot\'s intention is editable while its episode is a draft, and locks once it is accepted (A9)', async () => {
     const { show, arcId } = await seedSeason();
     const ep = uuid();
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'Started', 1, 'draft', NOW(), NOW())`, { ep, show });
     await auth(request(app).put(`/api/v1/world/${show}/season/slots/${await slotId(arcId, 1)}/episode`)).send({ episode_id: ep });
 
-    const res = await save(show, await slotId(arcId, 1), { story_purpose: 'Too late' });
+    const res = await save(show, await slotId(arcId, 1), { story_purpose: 'Still a draft' });
+    expect(res.status).toBe(200);
 
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('SEASON_SLOT_LOCKED');
+    await run("UPDATE episodes SET evaluation_status = 'accepted' WHERE id = :ep", { ep });
+    const late = await save(show, await slotId(arcId, 1), { story_purpose: 'Too late' });
+    expect(late.status).toBe(409);
+    expect(late.body.code).toBe('SEASON_SLOT_ACCEPTED');
   });
 
   test('a draft comes from the phase and the season so far, and is labelled Auto-drafted', async () => {

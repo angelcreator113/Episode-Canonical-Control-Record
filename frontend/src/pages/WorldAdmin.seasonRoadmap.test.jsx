@@ -205,7 +205,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/arc/advance/confirm'));
   });
 
-  test('a future slot\'s intention can be edited and saved (A3, Q7, Q10); a started slot has none to edit', async () => {
+  test('a future slot\'s intention can be edited and saved (A3, Q7, Q10); a locked slot with no flag has none to edit', async () => {
     renderAt('season');
     await screen.findByTestId('season-roadmap');
     expect(screen.queryByTestId('season-intention-1')).toBeNull(); // E1 is locked
@@ -213,7 +213,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     fireEvent.click(screen.getByTestId('season-intention-3'));
     const editor = await screen.findByTestId('season-intention-editor');
     expect(within(editor).getByText('S1 · E3 intention')).toBeTruthy();
-    fireEvent.change(within(editor).getByLabelText('Story purpose'), { target: { value: 'Lala bluffs her way in' } });
+    fireEvent.change(within(editor).getByLabelText('Story purpose 1'), { target: { value: 'Lala bluffs her way in' } });
     fireEvent.change(within(editor).getByLabelText('Career focus'), { target: { value: 'reputation' } });
     fireEvent.change(within(editor).getByLabelText('Desired pressure'), { target: { value: 'High' } });
     fireEvent.change(within(editor).getByLabelText('Lowest outcome'), { target: { value: 'pass' } });
@@ -221,9 +221,73 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     fireEvent.click(within(editor).getByText('Save'));
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-3/intention', {
-      story_purpose: 'Lala bluffs her way in', career_focus: 'reputation', desired_pressure: 'High',
-      outcome_range: { min: 'pass', max: 'slay' }, story_thread_id: null,
+      story_purposes: [{ text: 'Lala bluffs her way in', primary: true, story_thread_id: null }],
+      career_focus: 'reputation', desired_pressure: 'High', outcome_range: { min: 'pass', max: 'slay' },
     }));
+  });
+
+  test('a started slot stays editable while its episode is a draft, and says so; an accepted one does not (A9)', async () => {
+    const started = { ...ROADMAP, phases: ROADMAP.phases.map((p, i) => (i === 0 ? {
+      ...p, slots: p.slots.map((sl) => {
+        if (sl.slot_number === 1) return { ...sl, intention_editable: true, intention: { story_purpose: 'Her first gala', source: 'edited' } };
+        if (sl.slot_number === 2) return { ...sl, locked: true, episode: { id: 'ep-2', title: 'Done' }, intention_editable: false };
+        return sl;
+      }),
+    } : p)) };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: started } };
+      return { data: {} };
+    });
+    renderAt('season');
+    await screen.findByTestId('season-roadmap');
+    expect(screen.queryByTestId('season-intention-2')).toBeNull(); // accepted: locked for good
+
+    fireEvent.click(screen.getByTestId('season-intention-1'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    expect(within(editor).getByTestId('season-intention-started').textContent).toMatch(/editable while its episode is a draft/);
+    expect(within(editor).queryByText('Draft with AI')).toBeNull();
+    fireEvent.change(within(editor).getByLabelText('Story purpose 1'), { target: { value: 'Her first gala, on borrowed shoes' } });
+    fireEvent.click(within(editor).getByText('Save'));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-1/intention',
+      expect.objectContaining({ story_purposes: [{ text: 'Her first gala, on borrowed shoes', primary: true, story_thread_id: null }] })));
+  });
+
+  test('a slot holds up to three purposes with one primary; the card shows the primary with "+N more" (A10)', async () => {
+    const multi = { ...ROADMAP, phases: ROADMAP.phases.map((p, i) => (i === 0 ? {
+      ...p, slots: p.slots.map((sl) => (sl.slot_number === 3 ? { ...sl, intention: {
+        story_purpose: 'Lala bluffs her way in', source: 'edited',
+        story_purposes: [
+          { text: 'Lala bluffs her way in', primary: true, story_thread: null },
+          { text: 'The rival notices', primary: false, story_thread: null },
+        ],
+      } } : sl)),
+    } : p)) };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: multi } };
+      return { data: {} };
+    });
+    renderAt('season');
+
+    expect((await screen.findByTestId('season-slot-purpose-3')).textContent).toBe('Lala bluffs her way in +1 more');
+    fireEvent.click(screen.getByTestId('season-intention-3'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    expect(within(editor).getByLabelText('Story purpose 2').value).toBe('The rival notices');
+
+    fireEvent.click(within(editor).getByTestId('season-purpose-add'));
+    expect(within(editor).queryByTestId('season-purpose-add')).toBeNull(); // three is the most
+    fireEvent.change(within(editor).getByLabelText('Story purpose 3'), { target: { value: 'Her mother calls' } });
+    fireEvent.click(within(editor).getByLabelText('Primary purpose 2'));
+    fireEvent.click(within(editor).getByText('Save'));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-3/intention',
+      expect.objectContaining({ story_purposes: [
+        { text: 'Lala bluffs her way in', primary: false, story_thread_id: null },
+        { text: 'The rival notices', primary: true, story_thread_id: null },
+        { text: 'Her mother calls', primary: false, story_thread_id: null },
+      ] })));
   });
 
   test('Draft with AI asks before replacing an edited intention, then sends force', async () => {
@@ -318,13 +382,13 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
       renderAt('season');
       fireEvent.click(await screen.findByTestId('season-intention-5'));
       const editor = await screen.findByTestId('season-intention-editor');
-      const select = within(editor).getByLabelText('Story thread');
+      const select = within(editor).getByLabelText('Story thread 1');
       expect(within(select).queryByText('Old debt')).toBeNull();
       fireEvent.change(select, { target: { value: 'th-1' } });
       fireEvent.click(within(editor).getByText('Save'));
 
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-5/intention',
-        expect.objectContaining({ story_thread_id: 'th-1' })));
+        expect.objectContaining({ story_purposes: [{ text: '', primary: true, story_thread_id: 'th-1' }] })));
     });
   });
 

@@ -7445,18 +7445,39 @@ const SLOT_STATE_CONFIG = {
 const PRESSURE_OPTIONS = ['Low', 'Medium', 'High', 'Peak'];
 const OUTCOME_OPTIONS = ['fail', 'safe', 'pass', 'slay'];
 
-// A future slot's intention (§8(ff) A3): story purpose, career focus,
-// desired pressure (Q7) and the outcome range hoped for (Q10). Labelled
+// A slot's intention (§8(ff) A3): story purposes, career focus, desired
+// pressure (Q7) and the outcome range hoped for (Q10). Labelled
 // Auto-drafted or Edited; Draft asks before replacing an edit.
+// A9: a started slot stays editable while its episode is a draft; saving
+// updates the episode's season position. A10: up to three purposes, one
+// primary, each optionally tied to a story thread.
+const MAX_PURPOSES = 3;
+
+function initialPurposes(init) {
+  const list = Array.isArray(init.story_purposes) && init.story_purposes.length
+    ? init.story_purposes.map((p) => ({ text: p.text || '', primary: Boolean(p.primary), story_thread_id: p.story_thread?.id || '' }))
+    : [{ text: init.story_purpose || '', primary: true, story_thread_id: init.story_thread?.id || '' }];
+  if (!list.some((p) => p.primary)) list[0].primary = true;
+  return list;
+}
+
 function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast, threads = [] }) {
   const init = slot.intention || {};
+  const started = Boolean(slot.episode);
   const [form, setForm] = useState({
-    story_purpose: init.story_purpose || '',
     career_focus: init.career_focus || '',
     desired_pressure: init.desired_pressure || '',
     min: init.outcome_range?.min || '',
     max: init.outcome_range?.max || '',
-    story_thread_id: init.story_thread?.id || '',
+  });
+  const [purposes, setPurposes] = useState(() => initialPurposes(init));
+  const setPurpose = (i, patch) => setPurposes((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const makePrimary = (i) => setPurposes((ps) => ps.map((p, j) => ({ ...p, primary: j === i })));
+  const addPurpose = () => setPurposes((ps) => (ps.length >= MAX_PURPOSES ? ps : [...ps, { text: '', primary: false, story_thread_id: '' }]));
+  const removePurpose = (i) => setPurposes((ps) => {
+    const next = ps.filter((_, j) => j !== i);
+    if (next.length && !next.some((p) => p.primary)) next[0] = { ...next[0], primary: true };
+    return next.length ? next : [{ text: '', primary: true, story_thread_id: '' }];
   });
   const [busy, setBusy] = useState(null);
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 4 };
@@ -7467,13 +7488,12 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
     setBusy('save');
     try {
       await api.put(`/api/v1/world/${showId}/season/slots/${slot.id}/intention`, {
-        story_purpose: form.story_purpose,
+        story_purposes: purposes.map((p) => ({ text: p.text, primary: p.primary, story_thread_id: p.story_thread_id || null })),
         career_focus: form.career_focus,
         desired_pressure: form.desired_pressure || null,
         outcome_range: form.min || form.max ? { min: form.min || form.max, max: form.max || form.min } : null,
-        story_thread_id: form.story_thread_id || null,
       });
-      if (setToast) setToast(`${slot.label} intention saved`);
+      if (setToast) setToast(started ? `${slot.label} intention saved; the episode's season position is updated` : `${slot.label} intention saved`);
       if (onSaved) await onSaved();
       onClose();
     } catch (err) {
@@ -7502,9 +7522,36 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
         <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{slot.label} intention</div>
         {init.source && <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
       </div>
-      <label style={label}>Story purpose
-        <textarea aria-label="Story purpose" value={form.story_purpose} onChange={set('story_purpose')} rows={2} style={field} />
-      </label>
+      {started && (
+        <div data-testid="season-intention-started" style={{ fontSize: 11, color: '#92400e', marginTop: 6 }}>
+          Started: editable while its episode is a draft. Saving updates the episode's season position; it locks once the episode is accepted.
+        </div>
+      )}
+      <span style={label}>Story purposes (up to {MAX_PURPOSES}, one primary)</span>
+      {purposes.map((p, i) => (
+        <div key={i} data-testid={`season-purpose-${i}`} style={{ marginTop: 6, padding: 8, border: '1px solid #f1f5f9', borderRadius: 8, background: '#fff' }}>
+          <textarea aria-label={`Story purpose ${i + 1}`} value={p.text} onChange={(e) => setPurpose(i, { text: e.target.value })} rows={2} style={{ ...field, marginTop: 0 }} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 11, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input type="radio" name={`primary-${slot.id}`} aria-label={`Primary purpose ${i + 1}`} checked={p.primary} onChange={() => makePrimary(i)} /> Primary
+            </label>
+            <select aria-label={`Story thread ${i + 1}`} value={p.story_thread_id} onChange={(e) => setPurpose(i, { story_thread_id: e.target.value })} style={{ ...field, marginTop: 0, flex: '1 1 140px', width: 'auto' }}>
+              <option value="">No story thread</option>
+              {threads.filter((t) => t.status !== 'closed' || t.id === p.story_thread_id).map((t) => (
+                <option key={t.id} value={t.id}>{t.title}{t.status === 'closed' ? ' (closed)' : ''}</option>
+              ))}
+            </select>
+            {purposes.length > 1 && (
+              <button type="button" onClick={() => removePurpose(i)} style={{ fontSize: 11, border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' }}>Remove</button>
+            )}
+          </div>
+        </div>
+      ))}
+      {purposes.length < MAX_PURPOSES && (
+        <button type="button" data-testid="season-purpose-add" onClick={addPurpose} style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#B8962E', cursor: 'pointer' }}>
+          + Add a purpose
+        </button>
+      )}
       <label style={label}>Career focus
         <input aria-label="Career focus" value={form.career_focus} onChange={set('career_focus')} style={field} />
       </label>
@@ -7512,14 +7559,6 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
         <select aria-label="Desired pressure" value={form.desired_pressure} onChange={set('desired_pressure')} style={field}>
           <option value="">Not set</option>
           {PRESSURE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </label>
-      <label style={label}>Story thread it continues
-        <select aria-label="Story thread" value={form.story_thread_id} onChange={set('story_thread_id')} style={field}>
-          <option value="">None</option>
-          {threads.filter((t) => t.status !== 'closed' || t.id === form.story_thread_id).map((t) => (
-            <option key={t.id} value={t.id}>{t.title}{t.status === 'closed' ? ' (closed)' : ''}</option>
-          ))}
         </select>
       </label>
       <span style={label}>Outcome range hoped for</span>
@@ -7536,7 +7575,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button onClick={save} disabled={!!busy} style={S.primaryBtn}>{busy === 'save' ? 'Saving...' : 'Save'}</button>
-        <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>
+        {!started && <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>}
         <button onClick={onClose} disabled={!!busy} style={S.secBtn}>Close</button>
       </div>
     </div>
@@ -7662,15 +7701,18 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                     </select>
                   )}
                   {slot.intention?.story_purpose && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }} data-testid={`season-slot-purpose-${slot.slot_number}`}>
                       {slot.intention.story_purpose}
+                      {(slot.intention.story_purposes?.length || 0) > 1 && (
+                        <span style={{ fontStyle: 'normal', color: '#B8962E', fontWeight: 600 }}> +{slot.intention.story_purposes.length - 1} more</span>
+                      )}
                       {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: '#94a3b8' }}> · Auto-drafted</span>}
                     </div>
                   )}
                   {slot.intention?.story_thread && (
                     <div style={{ fontSize: 10, color: '#4f46e5', marginTop: 4 }}>Thread: {slot.intention.story_thread.title}</div>
                   )}
-                  {!slot.locked && (
+                  {(slot.intention_editable ?? !slot.locked) && (
                     <button
                       data-testid={`season-intention-${slot.slot_number}`}
                       onClick={() => setEditingSlotId(editingSlotId === slot.id ? null : slot.id)}

@@ -170,6 +170,21 @@ async function generateGroundedScript(episodeId, showId, models) {
   return response.content[0]?.text || '';
 }
 
+// A10: every season story purpose, primary first, each with its thread.
+function seasonPurposeLines(sc) {
+  // A purpose may name only a thread; it then reads as continuing that thread.
+  const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
+    .filter((p) => p && (p.text || p.story_thread))
+    .map((p) => (p.text ? p : { ...p, text: `Continue the thread "${p.story_thread}"`, story_thread: null }));
+  const purposes = list.length
+    ? [...list.filter((p) => p.primary), ...list.filter((p) => !p.primary)]
+    : (sc?.story_purpose ? [{ text: sc.story_purpose, primary: true, story_thread: sc.story_thread || null }] : []);
+  if (!purposes.length) return 'Season story purpose: Not set';
+  if (purposes.length === 1) return `Season story purpose: ${purposes[0].text}`;
+  return ['Season story purposes (primary first):',
+    ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
+}
+
 function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }) {
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
@@ -259,7 +274,7 @@ Designed intent: ${brief?.designed_intent || 'pass'}
 Narrative purpose: ${brief?.narrative_purpose || 'Not set'}
 Forward hook: ${brief?.forward_hook || 'Not set'}
 ${seasonContext?.label ? `Season position: ${seasonContext.label}${seasonContext.phase?.title ? `, Phase ${seasonContext.phase.number}: ${seasonContext.phase.title}` : ''}
-Season story purpose: ${seasonContext.story_purpose || 'Not set'}
+${seasonPurposeLines(seasonContext)}
 ` : ''}
 ═══ EVENT ═══
 ${eventContext}

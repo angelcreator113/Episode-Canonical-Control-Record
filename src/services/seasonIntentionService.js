@@ -19,6 +19,18 @@
  *
  * The story thread (A3) is chosen from the show's threads that are not
  * closed (storyThreadService, build PR 7); a draft never changes it.
+ *
+ *   A9. "A started slot's intention stays editable while its episode is a
+ *   draft; saving updates the episode's season snapshot (and the brief's
+ *   intent/allowed outcomes per Q10). It locks for good when the episode is
+ *   accepted."
+ *   A10. "A slot can hold up to three story purposes, one marked primary,
+ *   each optionally tied to a story thread. Desired pressure and the outcome
+ *   range stay single per slot. [...]"
+ *
+ * story_purposes holds the purposes, primary first; story_purpose and
+ * story_thread_id stay as the primary's mirror, so every reader of the
+ * primary keeps working.
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -26,6 +38,7 @@ const { PRESSURE_LEVELS } = require('./seasonSlotService');
 
 // Lowest to highest.
 const OUTCOME_TIERS = ['fail', 'safe', 'pass', 'slay'];
+const MAX_PURPOSES = 3;
 const MODELS = ['claude-haiku-4-5-20251001'];
 const SOURCES = Object.freeze({ DRAFTED: 'auto-drafted', EDITED: 'edited' });
 
@@ -78,7 +91,57 @@ function normaliseIntention(body = {}) {
   };
   // Only when given: a draft (and an edit that leaves it out) keeps the thread.
   if (body.story_thread_id !== undefined) out.story_thread_id = body.story_thread_id || null;
+  // A10: the purposes, when given, replace the single purpose and thread.
+  if (Array.isArray(body.story_purposes)) {
+    const purposes = normalisePurposes(body.story_purposes);
+    out.story_purposes = purposes;
+    out.story_purpose = purposes[0]?.text || null;
+    out.story_thread_id = purposes[0]?.story_thread_id || null;
+  }
   return out;
+}
+
+/**
+ * A10: up to three purposes, one primary, each with an optional thread.
+ * Empty ones are dropped; with none marked, the first is primary. Returned
+ * primary first. Throws a 400 on more than three or more than one primary.
+ */
+function normalisePurposes(list) {
+  const purposes = list
+    .map((p) => ({
+      text: text(p?.text, 1000) || '',
+      primary: p?.primary === true,
+      story_thread_id: p?.story_thread_id || null,
+    }))
+    .filter((p) => p.text || p.story_thread_id);
+  if (purposes.length > MAX_PURPOSES) {
+    throw new SeasonIntentionError(`A slot holds up to ${MAX_PURPOSES} story purposes`, 400, 'SEASON_INTENTION_INVALID');
+  }
+  const primaries = purposes.filter((p) => p.primary).length;
+  if (primaries > 1) {
+    throw new SeasonIntentionError('Only one story purpose can be primary', 400, 'SEASON_INTENTION_INVALID');
+  }
+  if (purposes.length && primaries === 0) purposes[0].primary = true;
+  return [...purposes.filter((p) => p.primary), ...purposes.filter((p) => !p.primary)];
+}
+
+function parsePurposes(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  try { const v = JSON.parse(value); return Array.isArray(v) ? v : []; } catch (err) {
+    console.error('[seasonIntention] story_purposes parse failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * A slot's purposes as stored, primary first; a slot written before A10 has
+ * only story_purpose and story_thread_id.
+ */
+function purposesOf(slot) {
+  const stored = parsePurposes(slot?.story_purposes);
+  if (stored.length) return [...stored.filter((p) => p.primary), ...stored.filter((p) => !p.primary)];
+  return slot?.story_purpose ? [{ text: slot.story_purpose, primary: true, story_thread_id: slot.story_thread_id || null }] : [];
 }
 
 /** Q10: the brief fields an outcome range sets. Null when there is no range. */
@@ -87,6 +150,31 @@ function outcomeRangeToBrief(range) {
   const lo = OUTCOME_TIERS.indexOf(range.min);
   const hi = OUTCOME_TIERS.indexOf(range.max);
   return { designed_intent: range.max, allowed_outcomes: OUTCOME_TIERS.slice(lo, hi + 1) };
+}
+
+/**
+ * A9: the slot whose intention Evoni edits: a future slot, or a started one
+ * whose episode is still a draft. It locks for good once the episode is
+ * accepted.
+ */
+async function loadEditableSlot(sequelize, showId, slotId, transaction) {
+  const [[slot]] = await sequelize.query(
+    `SELECT s.id, s.arc_id, s.slot_number, s.phase, s.season_number, s.episode_id, s.locked_at, s.accepted_at,
+            s.intention_source, s.story_purpose, s.story_purposes, s.story_thread_id,
+            ep.id AS live_episode_id, ep.evaluation_status
+       FROM season_slots s
+       LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
+      WHERE s.id = :slotId AND s.show_id = :showId AND s.deleted_at IS NULL`,
+    { replacements: { slotId, showId }, transaction });
+  if (!slot) throw new SeasonIntentionError('Slot not found', 404, 'SEASON_SLOT_NOT_FOUND');
+  if (slot.accepted_at || slot.evaluation_status === 'accepted') {
+    throw new SeasonIntentionError(`E${slot.slot_number}'s episode is accepted: its intention is locked for good`, 409, 'SEASON_SLOT_ACCEPTED');
+  }
+  if (!slot.episode_id && slot.locked_at) {
+    throw new SeasonIntentionError(`E${slot.slot_number} has started: its intention is locked with it`, 409, 'SEASON_SLOT_LOCKED');
+  }
+  slot.started = Boolean(slot.live_episode_id);
+  return slot;
 }
 
 async function loadFutureSlot(sequelize, showId, slotId, transaction) {
@@ -101,32 +189,82 @@ async function loadFutureSlot(sequelize, showId, slotId, transaction) {
   return slot;
 }
 
+/**
+ * The purposes to store. Given purposes (A10) replace them all. A single
+ * story_purpose (a draft, or an older client) replaces the primary's text,
+ * and its thread when one is given, keeping the other purposes.
+ */
+async function purposesToWrite(sequelize, slotId, intention) {
+  if (intention.story_purposes !== undefined) return intention.story_purposes;
+  const [[slot]] = await sequelize.query(
+    'SELECT story_purpose, story_purposes, story_thread_id FROM season_slots WHERE id = :slotId',
+    { replacements: { slotId } });
+  const current = purposesOf(slot);
+  const others = current.filter((p) => !p.primary);
+  if (!intention.story_purpose) {
+    return others.map((p, i) => ({ ...p, primary: i === 0 }));
+  }
+  const primary = current.find((p) => p.primary);
+  const thread = intention.story_thread_id !== undefined ? intention.story_thread_id : (primary?.story_thread_id || null);
+  return [{ text: intention.story_purpose, primary: true, story_thread_id: thread || null }, ...others];
+}
+
 async function writeIntention(sequelize, slotId, intention, source) {
-  const setThread = intention.story_thread_id !== undefined;
+  const purposes = await purposesToWrite(sequelize, slotId, intention);
+  const primary = purposes[0] || null;
   await sequelize.query(
-    `UPDATE season_slots SET story_purpose = :story_purpose, career_focus = :career_focus,
+    `UPDATE season_slots SET story_purpose = :story_purpose, story_purposes = CAST(:story_purposes AS jsonb),
+            story_thread_id = :story_thread_id, career_focus = :career_focus,
             desired_pressure = :desired_pressure, outcome_range = CAST(:outcome_range AS jsonb),
-            ${setThread ? 'story_thread_id = :story_thread_id,' : ''}
             intention_source = :source, updated_at = NOW()
       WHERE id = :slotId`,
     { replacements: {
-      ...intention,
-      story_thread_id: setThread ? intention.story_thread_id : null,
+      story_purpose: primary?.text || null,
+      story_purposes: purposes.length ? JSON.stringify(purposes) : null,
+      story_thread_id: primary?.story_thread_id || null,
+      career_focus: intention.career_focus,
+      desired_pressure: intention.desired_pressure,
       outcome_range: intention.outcome_range ? JSON.stringify(intention.outcome_range) : null,
       source, slotId,
     } });
+  return purposes;
 }
 
-/** Evoni's edit of a future slot's intention (A3): labelled Edited. */
+/**
+ * Evoni's edit of a slot's intention (A3): labelled Edited. A future slot,
+ * or (A9) a started one whose episode is still a draft: then the episode's
+ * season snapshot, and the brief's intent and allowed outcomes (Q10), are
+ * updated from it. Locked for good once the episode is accepted.
+ */
 async function saveIntention(sequelize, showId, slotId, body) {
   const intention = normaliseIntention(body);
-  const slot = await loadFutureSlot(sequelize, showId, slotId);
-  if (intention.story_thread_id) {
+  const slot = await loadEditableSlot(sequelize, showId, slotId);
+  const threadIds = new Set([
+    ...(intention.story_purposes || []).map((p) => p.story_thread_id),
+    intention.story_thread_id,
+  ].filter(Boolean));
+  if (threadIds.size) {
     const { assertThreadChoosable } = require('./storyThreadService');
-    await assertThreadChoosable(sequelize, showId, intention.story_thread_id);
+    for (const id of threadIds) await assertThreadChoosable(sequelize, showId, id);
   }
-  await writeIntention(sequelize, slotId, intention, SOURCES.EDITED);
-  return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.EDITED } };
+  const purposes = await writeIntention(sequelize, slotId, intention, SOURCES.EDITED);
+  let seasonContext = null;
+  if (slot.started) {
+    const { snapshotEpisode } = require('./seasonSlotService');
+    seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
+  }
+  return {
+    slot_number: slot.slot_number,
+    started: slot.started,
+    season_context: seasonContext,
+    intention: {
+      ...intention,
+      story_purposes: purposes,
+      story_purpose: purposes[0]?.text || null,
+      story_thread_id: purposes[0]?.story_thread_id || null,
+      source: SOURCES.EDITED,
+    },
+  };
 }
 
 /** What the draft is made from: the phase and the season so far (A3). */
@@ -259,9 +397,12 @@ async function draftNextSlot(sequelize, showId, { anthropic = null } = {}) {
 
 module.exports = {
   OUTCOME_TIERS,
+  MAX_PURPOSES,
   SOURCES,
   SeasonIntentionError,
   normaliseIntention,
+  normalisePurposes,
+  purposesOf,
   outcomeRangeToBrief,
   saveIntention,
   draftIntention,
