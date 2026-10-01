@@ -131,6 +131,10 @@ const readSchema = async () => ({
     await require('../../src/migrations/20261001160000-add-deliverable-formats').up(sequelize.getQueryInterface(), Sequelize);
     const [{ v2 }] = await q(`SELECT COUNT(*)::int AS v2 FROM deal_rate_anchors WHERE version = 2`);
     expect(v2).toBe(65);
+    // Recreating event_costs also restored amount NOT NULL; D13
+    // (20261001190000) made it nullable, and the suites after this one
+    // draft travel lines with no amount.
+    await sequelize.query('ALTER TABLE event_costs ALTER COLUMN amount DROP NOT NULL');
   });
 
   it('M-5 refuses a second executed payout row for the same source, and nothing else', async () => {
