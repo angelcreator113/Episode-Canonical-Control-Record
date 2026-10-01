@@ -59,7 +59,7 @@ import {
   buildDeliverableBody, deliverableDraftFrom, DELIVERABLE_OWED_TO_LABELS,
   DELIVERABLE_STATUS_LABELS, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel, deliverableTimeline,
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_DUE_MAX,
-  DEAL_TYPES, DEAL_TYPE_LABELS, describeDealType, buildDealTypeUpdate,
+  DEAL_COMPONENT_KEYS, DEAL_COMPONENT_LABELS, describeDealComponents, buildDealComponentsUpdate, isDealEvent, dealLabelFor,
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
   DELIVERABLE_FORMATS, PLATFORM_LABELS, quantityWord,
   dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableDraftNote, missingPriceLabels,
@@ -244,12 +244,17 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     saveEventTerm('restrictions', buildRestrictionRemove(event, index).body, 'Restriction removed');
   };
 
-  const dealType = describeDealType(event);
-  const dealUpdate = dealDraft !== null ? buildDealTypeUpdate(event, dealDraft) : null;
+  // D14 (2026-09-30): the deal is the components Evoni ticks; its label is
+  // derived. dealDraft is null, or the ticked keys while editing.
+  const deal = describeDealComponents(event);
+  const dealUpdate = dealDraft !== null ? buildDealComponentsUpdate(event, dealDraft) : null;
   const saveDealType = async () => {
     if (!dealUpdate || dealUpdate.unchanged || dealUpdate.error) return;
-    if (await saveEventTerm('deal type', dealUpdate.body, 'Deal type saved')) setDealDraft(null);
+    if (await saveEventTerm('deal', dealUpdate.body, 'Deal saved')) setDealDraft(null);
   };
+  const toggleComponent = (key) => setDealDraft((list) => (
+    list.includes(key) ? list.filter((k) => k !== key) : [...list, key]
+  ));
 
   // ── Deal price (Task #2341) ──
   const plan = dealPlanFor(event);
@@ -689,44 +694,59 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
           {restrictionError && <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {restrictionError}</p>}
         </div>
 
-        {/* Deal type */}
+        {/* Deal: its components (D14) */}
         <div className="epp-term" data-testid="terms-deal-type">
           <div className="epp-term-head">
-            <span className="epp-term-title"><Handshake size={14} aria-hidden="true" /> Deal type</span>
+            <span className="epp-term-title"><Handshake size={14} aria-hidden="true" /> Deal</span>
             {!locked && dealDraft === null && (
-              <button type="button" className="epp-inline-link" data-testid="terms-deal-type-edit" onClick={() => setDealDraft(dealType.value || '')}>
+              <button type="button" className="epp-inline-link" data-testid="terms-deal-type-edit" onClick={() => setDealDraft(deal.components || [])}>
                 <Pencil size={11} aria-hidden="true" /> Edit
               </button>
             )}
           </div>
           {dealDraft === null && (
-            <div className="epp-term-value" data-testid="terms-deal-type-summary">
-              {dealType.label}
-              {dealType.note && <span className="epp-term-state" data-testid="terms-deal-type-state"> · {dealType.note}</span>}
-            </div>
+            <>
+              <div className="epp-term-value" data-testid="terms-deal-type-summary">
+                {deal.label}
+                {deal.note && <span className="epp-term-state" data-testid="terms-deal-type-state"> · {deal.note}</span>}
+              </div>
+              {deal.components && deal.components.length > 0 && (
+                <span className="epp-term-meta" data-testid="terms-deal-components-summary">
+                  {deal.components.map((k) => <span key={k}>{DEAL_COMPONENT_LABELS[k]}</span>)}
+                </span>
+              )}
+            </>
           )}
           {dealDraft !== null && (
-            <div className="epp-term-form">
-              <label className="epp-term-field">
-                <span>Deal type</span>
-                <select value={dealDraft} data-testid="terms-deal-type-select" onChange={(e) => setDealDraft(e.target.value)}>
-                  <option value="">Not set</option>
-                  {DEAL_TYPES.map((t) => <option key={t} value={t}>{DEAL_TYPE_LABELS[t] || t}</option>)}
-                </select>
-              </label>
+            <div className="epp-term-form" data-testid="terms-deal-components-form">
+              <fieldset className="epp-term-checks">
+                <legend>What the deal includes</legend>
+                {DEAL_COMPONENT_KEYS.map((k) => (
+                  <label key={k} className="epp-term-check">
+                    <input
+                      type="checkbox" checked={dealDraft.includes(k)} data-testid={`terms-deal-component-${k}`}
+                      onChange={() => toggleComponent(k)}
+                    />
+                    {DEAL_COMPONENT_LABELS[k]}
+                  </label>
+                ))}
+              </fieldset>
+              <p className="epp-term-note" data-testid="terms-deal-components-label">
+                Reads as: {dealUpdate?.body?.deal_components ? dealLabelFor(dealUpdate.body.deal_components) : deal.label}
+              </p>
               {dealUpdate?.error && <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {dealUpdate.error}</p>}
               <div className="epp-term-actions">
-                <button type="button" className="epp-btn epp-btn-small" onClick={() => setDealDraft(null)} disabled={termSaving === 'deal type'}>Cancel</button>
+                <button type="button" className="epp-btn epp-btn-small" onClick={() => setDealDraft(null)} disabled={termSaving === 'deal'}>Cancel</button>
                 <button
                   type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid="terms-deal-type-save"
                   onClick={saveDealType} disabled={!!termSaving || !dealUpdate || dealUpdate.unchanged || !!dealUpdate.error}
                 >
-                  {termSaving === 'deal type' ? 'Saving…' : 'Save'}
+                  {termSaving === 'deal' ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
           )}
-          <p className="epp-term-note">What kind of arrangement this is. It decides how the deal pays: its fees at Complete, each deliverable's fee on approval.</p>
+          <p className="epp-term-note">Tick what the deal includes; its name follows. It decides how the deal pays: its fees at Complete, each deliverable's fee on approval.</p>
         </div>
 
         {/* Deal price (Task #2341) */}
@@ -739,22 +759,13 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               </button>
             )}
           </div>
-          {!event?.deal_type && <div className="epp-empty" data-testid="terms-pricing-empty">Choose a deal type to price the deal.</div>}
+          {!plan.known && <div className="epp-empty" data-testid="terms-pricing-empty">Tick what the deal includes to price it.</div>}
           {plan.known && !plan.cash && (
             <p className="epp-term-note" data-testid="terms-no-cash">
-              {plan.giftedValue ? 'Gifted: no cash income. The gifted value is recorded, never paid.' : 'No cash income for this deal type.'}
+              {plan.giftedValue ? 'Gifted: no cash income. The gifted value is recorded, never paid.' : 'No cash income for this deal.'}
             </p>
           )}
-          {plan.appearanceIfRequired && (
-            <label className="epp-term-check">
-              <input
-                type="checkbox" checked={event?.appearance_required === true} disabled={locked || !!termSaving}
-                data-testid="terms-appearance-required"
-                onChange={(e) => saveEventTerm('appearance', { appearance_required: e.target.checked }, e.target.checked ? 'Appearance added to the partnership' : 'Appearance removed from the partnership')}
-              />
-              The partnership also requires Lala to attend or appear (adds the appearance fee)
-            </label>
-          )}
+          {/* D14: a partnership that requires an appearance ticks Paid to appear (Terms > Deal). */}
           {plan.components.map((c) => componentRow(c.field, c.label, describeComponentFee(event, c.field), true))}
           {plan.giftedValue && componentRow('gifted_value', 'Gifted value', describeGiftedValue(event), false)}
           {plan.cash && (
@@ -846,7 +857,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         </div>
 
         {/* Costs (deal build PR 4, Task #2365): a deal event's itemised costs */}
-        {event?.deal_type && (
+        {isDealEvent(event) && (
           <EventCostsTerm
             showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey}
             onSaved={onSaved} onToast={onToast}
@@ -857,7 +868,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         <div className="epp-term" data-testid="terms-compensation">
           <div className="epp-term-head">
             <span className="epp-term-title"><Coins size={14} aria-hidden="true" /> Compensation</span>
-            {!locked && !compDraft && !event?.deal_type && (
+            {!locked && !compDraft && !isDealEvent(event) && (
               <button type="button" className="epp-inline-link" data-testid="terms-compensation-edit" onClick={() => setCompDraft(compensationDraftFrom(event))}>
                 <Pencil size={11} aria-hidden="true" /> Edit
               </button>
@@ -896,7 +907,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             </div>
           )}
           <p className="epp-term-note" data-testid="terms-compensation-note">
-            {event?.deal_type
+            {isDealEvent(event)
               ? 'For a deal, pay comes from Deal price above; this older payment is not paid.'
               : 'Contractual pay for the appearance. Rewards are separate and not edited here.'}
           </p>

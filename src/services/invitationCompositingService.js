@@ -394,8 +394,12 @@ function describeInvitationMoney(event, { costs = null, deliverables = null } = 
   const e = event || {};
 
   // D14: the plan comes from the deal's ticked components (its deal_type
-  // for an event written before them). Build PR 3 writes one sentence per
-  // component; until then each backfilled deal type reads as it did.
+  // for an event written before them), one sentence per component, in a
+  // fixed order (docs/DEAL_COMPONENTS_DESIGN.md §3.4): as our guest (entry
+  // covered, or gifted, on a deal that pays no cash) or the gifted items on
+  // a cash deal; the fees; the deliverables; the entry Lala pays
+  // (self-funded); what is covered; the bonus. Every backfilled deal type
+  // reads as it did before D14.
   if (isDealEvent(e) || e.deal_type) {
     const plan = dealPlanOf(e);
     const done = (kind, sentences) => {
@@ -424,7 +428,13 @@ function describeInvitationMoney(event, { costs = null, deliverables = null } = 
       const { completionPayouts } = require('./dealPayoutService');
       const fees = completionPayouts(e, null).map((p) => `${FEE_NAMES[p.category] || 'a fee'} of ${coins(p.amount)}`);
       if (fees.length) sentences.push(`We will pay you ${joinList(fees)}.`);
+      // Gifted items on a cash deal (a combination no deal type had).
+      // INFERRED wording; no value is named, as with a gifted guest.
+      if (plan.giftedValue) sentences.push('We are also gifting you pieces to keep.');
+      // The deliverables line (§3.4): with their fees when the deal pays for
+      // content, else as what is asked in return.
       if (plan.deliverables) sentences.push(deliverableSentence(e, deliverables, { withFees: true }));
+      else sentences.push(deliverableSentence(e, deliverables, { withFees: false }));
       if (!fees.length && !(plan.deliverables && sentences.some(Boolean))) sentences.push('Your fee will be confirmed.');
     } else {
       if (plan.selfFunded) {

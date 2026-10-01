@@ -193,3 +193,27 @@ describe('buildInvitationContent states the deal', () => {
     expect(content.body).not.toContain('per guest');
   });
 });
+
+describe('describeInvitationMoney — D14 components (2026-09-30)', () => {
+  test('a combination no deal type had: appearance + performance fee + gifted, each named once', () => {
+    const m = describeInvitationMoney(
+      { deal_components: ['paid_to_appear', 'performance_fee', 'gifted_items'], appearance_fee: 300, performance_fee: 500 },
+      { costs: [], deliverables: [] }
+    );
+    expect(m.kind).toBe('earn');
+    expect(m.text).toBe('We will pay you a performance fee of 500 Prime Coins and an appearance fee of 300 Prime Coins. We are also gifting you pieces to keep.');
+  });
+
+  test('a retainer pays its base and asks for content without fees', () => {
+    const m = describeInvitationMoney(
+      { deal_components: ['partnership_base'], partnership_base_fee: 900 },
+      { costs: [], deliverables: [{ deliverable_type: 'instagram_reel', fee: 300 }] }
+    );
+    expect(m.text).toBe('We will pay you a partnership base fee of 900 Prime Coins. In return, we ask for 1 Instagram Reel.');
+  });
+
+  test('gifted with entry covered reads as a gifted guest, with no price talk', () => {
+    const m = describeInvitationMoney({ deal_components: ['gifted_items', 'entry_covered'] }, { costs: [], deliverables: [] });
+    expect(m).toMatchObject({ kind: 'comped', text: 'You attend as our gifted guest, with our compliments.' });
+  });
+});

@@ -1418,6 +1418,21 @@
   color: var(--lala-ink, #2C2C2C);
 }
 .epp-term-field textarea { resize: vertical; }
+/* D14: the deal's components, ticked (Terms > Deal). */
+.epp-term-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.epp-term-checks legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--lala-ink, #2C2C2C);
+}
 .epp-term-check {
   display: inline-flex;
   align-items: center;
@@ -1447,6 +1462,7 @@
   .epp-stakes-summary { grid-template-columns: 1fr; }
   .epp-terms-grid { grid-template-columns: 1fr; }
   .epp-term-row { grid-template-columns: 1fr; }
+  .epp-term-checks { grid-template-columns: 1fr; }
   /* The advance button drops under its deliverable and fills the row. */
   .epp-term-item.is-fulfilment { flex-direction: column; align-items: stretch; }
   .epp-term-item.is-fulfilment .epp-term-item-main { flex: none; }
