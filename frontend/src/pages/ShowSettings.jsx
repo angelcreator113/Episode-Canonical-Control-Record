@@ -300,6 +300,9 @@ export default function ShowSettings() {
               <ReadOnlyField label='Show ID' value={showId} mono />
             </ConfigBlock>
 
+            {/* Lala's home (D13 travel, 2026-09-30) */}
+            <LalaHomeBlock showId={showId} onToast={showToast} />
+
             {/* Season Settings */}
             <ConfigBlock title='Season Settings'>
               <Field label='Era'>
@@ -435,6 +438,76 @@ export default function ShowSettings() {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
+
+// Lala's home, a show setting (D13 travel, Evoni 2026-09-30): travel and
+// accommodation are drafted only for events outside its city.
+export const getLalaHomeApi = (showId) => api.get(`/api/v1/shows/${showId}/lala-home`);
+export const putLalaHomeApi = (showId, body) => api.put(`/api/v1/shows/${showId}/lala-home`, body);
+
+const EMPTY_HOME = { address: '', neighbourhood: '', city: '' };
+
+export function LalaHomeBlock({ showId, onToast }) {
+  const [home, setHome] = useState(EMPTY_HOME);
+  const [saved, setSaved] = useState(EMPTY_HOME);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!showId) return undefined;
+    let cancelled = false;
+    getLalaHomeApi(showId)
+      .then((res) => {
+        const h = res.data?.lala_home || {};
+        const next = { address: h.address || '', neighbourhood: h.neighbourhood || '', city: h.city || '' };
+        if (!cancelled) { setHome(next); setSaved(next); }
+      })
+      .catch((err) => console.error('[ShowSettings] Lala\'s home load failed:', err));
+    return () => { cancelled = true; };
+  }, [showId]);
+
+  const dirty = ['address', 'neighbourhood', 'city'].some((k) => home[k] !== saved[k]);
+  const save = async () => {
+    if (!home.city.trim()) { onToast('The city is required: it decides when Lala travels', 'error'); return; }
+    setBusy(true);
+    try {
+      const res = await putLalaHomeApi(showId, home);
+      const h = res.data?.lala_home || home;
+      const next = { address: h.address || '', neighbourhood: h.neighbourhood || '', city: h.city || '' };
+      setHome(next); setSaved(next);
+      onToast("Lala's home saved");
+    } catch (err) {
+      console.error('[ShowSettings] Lala\'s home save failed:', err);
+      onToast(err.response?.data?.error || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ConfigBlock title="Lala's home">
+      <Field label='Address'>
+        <input style={s.input} value={home.address} data-testid='lala-home-address'
+          onChange={(e) => setHome((h) => ({ ...h, address: e.target.value }))} placeholder='Street address' />
+      </Field>
+      <Field label='Neighbourhood'>
+        <input style={s.input} value={home.neighbourhood} data-testid='lala-home-neighbourhood'
+          onChange={(e) => setHome((h) => ({ ...h, neighbourhood: e.target.value }))} placeholder='Neighbourhood' />
+      </Field>
+      <Field label='City'>
+        <input style={s.input} value={home.city} data-testid='lala-home-city'
+          onChange={(e) => setHome((h) => ({ ...h, city: e.target.value }))} placeholder='City' />
+      </Field>
+      <div style={s.sectionDesc}>
+        Travel and accommodation are drafted only for an event whose location is outside this city, with no amount
+        until you price or comp them. Getting around the city (rides, valet) is event spending.
+      </div>
+      {dirty && (
+        <button style={s.saveBtn} type='button' onClick={save} disabled={busy} data-testid='lala-home-save'>
+          {busy ? 'Saving…' : "Save Lala's home"}
+        </button>
+      )}
+    </ConfigBlock>
+  );
+}
 
 function ConfigBlock({ title, children }) {
   return (

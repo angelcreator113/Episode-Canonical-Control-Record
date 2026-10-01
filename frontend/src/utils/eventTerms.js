@@ -677,6 +677,40 @@ export function describeBonusTerms(event) {
     : { set: false, label: 'None: the deal contains no bonus' };
 }
 
+// D13 (2026-09-30): the bonus Terms drafts on a partnership or a
+// performance booking (answer 5) is recorded in
+// automation.drafted_values.bonus_terms with auto_drafted.bonus_terms
+// 'deal'. It reads Auto-drafted while it equals that copy, then Edited.
+export function bonusDraftNote(event) {
+  const automation = event?.canon_consequences?.automation || {};
+  if (automation.auto_drafted?.bonus_terms !== 'deal' || automation.drafted_values?.bonus_terms == null) return null;
+  const current = parseBonusTerms(event?.bonus_terms);
+  const drafted = automation.drafted_values.bonus_terms;
+  const same = BONUS_TIERS.every((t) => (Number(current[t]) || 0) === (Number(drafted[t]) || 0));
+  return same ? 'Auto-drafted · suggested: slay 20%, pass 10% of the cash total' : 'Edited';
+}
+
+// D13 answer 6: at most 2 relationship goals, drafted with the deliverables
+// and stored as automation.relationship_goals. Not owed: Start Episode
+// writes them as Lala's goals, counted in T9's limit.
+export function relationshipGoalsOf(event) {
+  const goals = event?.canon_consequences?.automation?.relationship_goals;
+  return Array.isArray(goals) ? goals.filter((g) => g && String(g.label || '').trim()) : [];
+}
+
+export function relationshipGoalsDraftNote(event) {
+  const automation = event?.canon_consequences?.automation || {};
+  if (automation.auto_drafted?.relationship_goals !== 'deal') return null;
+  const same = JSON.stringify(automation.relationship_goals ?? null) === JSON.stringify(automation.drafted_values?.relationship_goals ?? null);
+  return same ? 'Auto-drafted · from deal' : 'Edited';
+}
+
+/** The event PUT body removing one relationship goal (automation keys replace whole). */
+export function buildRelationshipGoalRemove(event, index) {
+  const next = relationshipGoalsOf(event).filter((_, i) => i !== index);
+  return { body: { canon_consequences: { automation: { relationship_goals: next } } } };
+}
+
 /** A form draft: { slay, pass, safe } as strings. */
 export function bonusDraftFrom(event) {
   const terms = parseBonusTerms(event?.bonus_terms);

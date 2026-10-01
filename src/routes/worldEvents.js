@@ -726,8 +726,17 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // deal_components writes the derived copy; a body with only deal_type or
     // appearance_required (the pre-D14 form) writes the components through
     // the one-to-one map, so the two never disagree.
+    // D13: the components before this save, to draft the Terms when they change.
+    let componentsBefore;
     {
-      const { readComponents, componentsFromDealType, dealTypeFromComponents } = require('../utils/dealComponents');
+      const { readComponents, componentsFromDealType, dealTypeFromComponents, componentsOf } = require('../utils/dealComponents');
+      if (updates.deal_components !== undefined || updates.deal_type !== undefined || updates.appearance_required !== undefined) {
+        const [beforeRows] = await models.sequelize.query(
+          'SELECT deal_type, deal_components, appearance_required FROM world_events WHERE id = :eventId AND show_id = :showId',
+          { replacements: { eventId, showId } }
+        );
+        componentsBefore = beforeRows?.[0] ? componentsOf(beforeRows[0]) : undefined;
+      }
       if (updates.deal_components !== undefined) {
         const read = readComponents(updates.deal_components === '' ? null : updates.deal_components);
         if (read.error) {
@@ -1132,6 +1141,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // or one on a locked event, is left alone (dealTypeDraftService).
     if (updates.event_type !== undefined || updates.host_brand !== undefined) {
       await syncDraftedDealType(models.sequelize, eventId);
+    }
+
+    // D13 (2026-09-30): changed components draft the whole Terms section,
+    // touching only what is still Auto-drafted (dealTermsDraftService). The
+    // terms lock refused a change above, so this runs only before it.
+    if (updates.deal_components !== undefined && updates.deal_components !== null
+      && JSON.stringify(updates.deal_components) !== JSON.stringify(componentsBefore ?? null)) {
+      const { syncDraftedTerms } = require('../services/dealTermsDraftService');
+      await syncDraftedTerms(models.sequelize, eventId);
     }
 
     const [updated] = await models.sequelize.query(

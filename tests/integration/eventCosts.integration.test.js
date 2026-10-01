@@ -161,7 +161,8 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     ]);
     const [event] = await q(`SELECT canon_consequences FROM world_events WHERE id = :event`, selfFunded);
     const records = Object.values(asJson(event.canon_consequences).automation.drafted_values.costs);
-    expect(records.find((r) => r.key === 'entry')).toEqual({ key: 'entry', amount: 100, source: 'event_cost' });
+    // D13: the record keeps the payer too, so a re-draft can tell an edited payer.
+    expect(records.find((r) => r.key === 'entry')).toEqual({ key: 'entry', amount: 100, paid_by: 'lala', source: 'event_cost' });
 
     const comped = await seed({ dealType: 'invited_comped' });
     const compedRes = await draftExtras(comped);

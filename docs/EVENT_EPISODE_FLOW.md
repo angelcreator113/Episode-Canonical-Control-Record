@@ -3020,6 +3020,18 @@ changes):
 > 12. The same format costs the same on every platform, for now.
 > 13. Changing components re-drafts only what's still Auto-drafted, without asking.
 
+**D13 travel (Evoni, 2026-09-30), verbatim:**
+
+> Lala's home is 246 Olddy Paveway Ln, Echo Park, Los Angeles; store it as a show setting (address, neighbourhood Echo Park, city Los Angeles). Travel and accommodation are drafted only when an event's location is outside Los Angeles (fallback: category travel_destination); those lines are drafted with no amount and show "Price required" (never 0), so the price is set or comped before Start Episode. Getting around within Los Angeles (rides, valet) is event spending, not travel.
+
+Built with D13:
+- The home is stored as `shows.metadata.lala_home` and edited in Show
+  Settings → Config ("Lala's home").
+- An event's city is its venue's World Location city, read up the parent
+  chain. When either city is unknown, the category is the fallback.
+- `event_costs.amount` may be null ("Price required"). Start Episode
+  refuses while a line Lala pays has none; a comped line needs no price.
+
 **Where these stand:**
 - The answers are recorded here and in `docs/DEAL_DESIGN.md` §10. §11 of
   that note says what they change in the design:

@@ -18,7 +18,8 @@ module.exports = (sequelize) => {
     event_id: { type: DataTypes.UUID, allowNull: false },
     kind: { type: DataTypes.STRING(20), allowNull: false, validate: { isIn: [COST_KINDS] } },
     label: { type: DataTypes.STRING(200), allowNull: true },
-    amount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // NULL: no amount yet, "Price required" (D13 travel, 2026-09-30).
+    amount: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
     paid_by: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'lala', validate: { isIn: [COST_PAID_BY] } },
   }, {
     tableName: 'event_costs',

@@ -143,7 +143,8 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const ids = await seed();
     await putEvent(ids, { deal_components: ['paid_to_appear', 'performance_fee'], appearance_fee: 300, performance_fee: 500 });
     const rows = completionPayouts(await row(ids), 'slay');
-    expect(rows.map((r) => [r.category, r.amount])).toEqual([['performance_fee', 500], ['appearance_fee', 300]]);
+    // D13 answer 5: a performance fee drafts the suggested bonus, slay 20% of the 800 cash total.
+    expect(rows.map((r) => [r.category, r.amount])).toEqual([['performance_fee', 500], ['appearance_fee', 300], ['deal_bonus', 160]]);
     expect(rows[0].metadata.deal_components).toEqual(['paid_to_appear', 'performance_fee']);
   });
 

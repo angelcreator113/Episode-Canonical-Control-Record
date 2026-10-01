@@ -201,7 +201,7 @@ const DRAFTED_DELIVERABLES_SOURCE = 'deal';
 
 // D15 (2026-09-30): the pieces are drafted in the new formats: a Reel is an
 // Instagram Reel, a Story Set (3) is Instagram Stories ×3, a Post is an
-// Instagram post (answer 8). D13's drafting (a later PR) supersedes this.
+// Instagram post (answer 8).
 const REEL = { type: 'instagram_reel' };
 const STORIES = { type: 'instagram_stories', quantity: 3 };
 const POST = { type: 'instagram_post' };
@@ -227,7 +227,35 @@ function draftedDeliverableTypes(dealType, tier) {
 }
 
 /**
- * D12: the deliverables Propose terms drafts for a deal. Pure.
+ * D13 (2026-09-30; DEAL_COMPONENTS_DESIGN.md §4.1): D12's sizing,
+ * generalised from deal types to the ticked components. Returns the D12 row
+ * the components size like, or null for none:
+ *   paid_for_content with partnership_base     the partnership package
+ *   paid_for_content with paid_to_appear or
+ *     performance_fee                          one piece fewer
+ *   paid_for_content alone                     paid deliverables
+ *   paid_to_appear or performance_fee, no
+ *     paid content                             the optional Story Set
+ *   anything else (self-funded, entry covered,
+ *     gifted, a retainer)                      none
+ * Every deal type's backfilled components size exactly as D12 did.
+ * INFERRED (answers 1 and 4 make these combinations new): a performance
+ * booking without paid content drafts the optional Story Set, like a paid
+ * appearance; a retainer (partnership_base alone) drafts nothing.
+ */
+function sizingFor(keys) {
+  const k = Array.isArray(keys) ? keys : [];
+  const content = k.includes('paid_for_content');
+  const showsUp = k.includes('paid_to_appear') || k.includes('performance_fee');
+  if (content && k.includes('partnership_base')) return 'brand_partnership';
+  if (content && showsUp) return 'appearance_plus_deliverables';
+  if (content) return 'paid_deliverables';
+  if (showsUp) return 'paid_appearance';
+  return null;
+}
+
+/**
+ * The deliverables a deal drafts (D12's sizing by D13's components). Pure.
  *   event: { deal_type, career_tier }
  *   tier:  overrides event.career_tier
  *   card:  the rate card (loadRateCard); without one no fee is drafted.
@@ -243,12 +271,10 @@ function draftedDeliverableTypes(dealType, tier) {
 function draftDeliverablesForDeal(event, { tier, card } = {}) {
   const plan = planFor(event);
   if (!plan) return [];
-  // D12's mapping is by deal type; since D14 that is the type the
-  // components derive (dealTypeFromComponents). D13 replaces this drafting.
-  const dealType = dealTypeFromComponents(plan.keys).deal_type;
+  const sizing = sizingFor(plan.keys);
   const t = tierOf(tier ?? event?.career_tier);
   const owedTo = plan.keys.includes('partnership_base') ? 'brand' : 'host';
-  return draftedDeliverableTypes(dealType, t).map(({ type, quantity, required = true }) => {
+  return draftedDeliverableTypes(sizing, t).map(({ type, quantity, required = true }) => {
     const format = formatOf(type);
     const row = {
       deliverable_type: type,
@@ -372,7 +398,11 @@ function missingPrices(event, deliverables = []) {
   return missing;
 }
 
-/** missingPrices for a stored event, read from the database. */
+/**
+ * missingPrices for a stored event, read from the database, plus (D13
+ * travel, 2026-09-30) every cost line Lala pays that has no amount yet, on
+ * any deal: "the price is set or comped before Start Episode".
+ */
 async function findMissingPrices(sequelize, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
     `SELECT id, deal_type, deal_components, appearance_fee, partnership_base_fee, performance_fee, appearance_required
@@ -380,13 +410,18 @@ async function findMissingPrices(sequelize, eventId, { transaction } = {}) {
     { replacements: { eventId }, transaction }
   );
   const event = rows?.[0];
-  if (!event || !planFor(event)?.cash) return [];
-  const [deliverables] = await sequelize.query(
-    `SELECT id, description, deliverable_type, fee FROM event_deliverables
-      WHERE event_id = :eventId AND deleted_at IS NULL ORDER BY created_at ASC`,
-    { replacements: { eventId }, transaction }
-  );
-  return missingPrices(event, deliverables);
+  if (!event || !planFor(event)) return [];
+  let missing = [];
+  if (planFor(event).cash) {
+    const [deliverables] = await sequelize.query(
+      `SELECT id, description, deliverable_type, fee FROM event_deliverables
+        WHERE event_id = :eventId AND deleted_at IS NULL ORDER BY created_at ASC`,
+      { replacements: { eventId }, transaction }
+    );
+    missing = missingPrices(event, deliverables);
+  }
+  const { listEventCosts, missingCostPrices } = require('./eventCostsService');
+  return [...missing, ...missingCostPrices(await listEventCosts(sequelize, eventId, { transaction }))];
 }
 
 const DEAL_PRICE_REQUIRED_CODE = 'DEAL_PRICE_REQUIRED';
@@ -417,6 +452,7 @@ module.exports = {
   loadRateCard,
   proposeTerms,
   draftedDeliverableTypes,
+  sizingFor,
   draftDeliverablesForDeal,
   missingPrices,
   findMissingPrices,

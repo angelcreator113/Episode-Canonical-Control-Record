@@ -102,8 +102,9 @@ function parseJson(value, fallback) {
  */
 async function syncDraftedDealType(sequelize, eventId, { initial = false } = {}) {
   if (!sequelize || typeof sequelize.transaction !== 'function' || !eventId) return { skipped: 'no_event' };
+  let result;
   try {
-    return await sequelize.transaction(async (transaction) => {
+    result = await sequelize.transaction(async (transaction) => {
       const [rows] = await sequelize.query(
         `SELECT id, event_type, host_brand, opportunity_id, deal_type, deal_components, appearance_required, canon_consequences
            FROM world_events WHERE id = :eventId AND deleted_at IS NULL FOR UPDATE`,
@@ -177,12 +178,19 @@ async function syncDraftedDealType(sequelize, eventId, { initial = false } = {})
           transaction,
         }
       );
-      return { ...draft, deal_type: derived.deal_type, deal_components: components };
+      return { ...draft, deal_type: derived.deal_type, deal_components: components, changed: !sameList(components, current) };
     });
   } catch (err) {
     console.error(`[DealTypeDraft] draft for event ${eventId} failed:`, err.message);
     return { skipped: 'error' };
   }
+  // D13 (2026-09-30): drafted components draft the whole Terms section,
+  // after this commit and in its own transaction (it logs its own failure).
+  if (result && !result.skipped && result.changed) {
+    const { syncDraftedTerms } = require('./dealTermsDraftService');
+    await syncDraftedTerms(sequelize, eventId);
+  }
+  return result;
 }
 
 module.exports = {

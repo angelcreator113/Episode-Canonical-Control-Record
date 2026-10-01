@@ -65,6 +65,7 @@ import {
   dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableDraftNote, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
   BONUS_TIERS, BONUS_TIER_LABELS, describeBonusTerms, bonusDraftFrom, buildBonusTermsUpdate,
+  bonusDraftNote, relationshipGoalsOf, relationshipGoalsDraftNote, buildRelationshipGoalRemove,
 } from '../../utils/eventTerms';
 import EventCostsTerm from './EventCostsTerm';
 
@@ -248,9 +249,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   // derived. dealDraft is null, or the ticked keys while editing.
   const deal = describeDealComponents(event);
   const dealUpdate = dealDraft !== null ? buildDealComponentsUpdate(event, dealDraft) : null;
+  // D13: saving the components drafts the whole Terms section on the
+  // server (deliverables, prices, entry, bonus, goals), so the lists reload.
   const saveDealType = async () => {
     if (!dealUpdate || dealUpdate.unchanged || dealUpdate.error) return;
-    if (await saveEventTerm('deal', dealUpdate.body, 'Deal saved')) setDealDraft(null);
+    if (await saveEventTerm('deal', dealUpdate.body, 'Deal saved; the terms are drafted from it')) {
+      setDealDraft(null);
+      setCostsKey((k) => k + 1);
+      await loadDeliverables();
+    }
   };
   const toggleComponent = (key) => setDealDraft((list) => (
     list.includes(key) ? list.filter((k) => k !== key) : [...list, key]
@@ -264,7 +271,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [bonusError, setBonusError] = useState(null);
   const [pricing, setPricing] = useState(null); // null, or { card, selection, loading, error, gaps }
   const [proposing, setProposing] = useState(false);
-  // Bumped after a proposal, which drafts a new deal's extras as cost rows.
+  // Bumped after a proposal or a deal save, which draft the entry line (and
+  // travel when Lala travels) as cost rows (D13).
   const [costsKey, setCostsKey] = useState(0);
 
   const saveComponentFee = async (label) => {
@@ -274,8 +282,16 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     if (await saveEventTerm(label.toLowerCase(), built.body, `${label} saved`)) setFeeDraft(null);
   };
 
+  // D13 answer 6: the relationship goals drafted with the deliverables.
+  const relationshipGoals = relationshipGoalsOf(event);
+  const relationshipGoalsNote = relationshipGoalsDraftNote(event);
+  const removeRelationshipGoal = (index) => {
+    saveEventTerm('goals', buildRelationshipGoalRemove(event, index).body, 'Goal removed');
+  };
+
   // Performance bonus (deal build PR 5): only when the deal contains one.
   const bonus = describeBonusTerms(event);
+  const bonusNote = bonusDraftNote(event);
   const saveBonus = async () => {
     const built = buildBonusTermsUpdate(bonusDraft);
     if (built.error) { setBonusError(built.error); return; }
@@ -649,6 +665,34 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               </div>
             </div>
           )}
+          {relationshipGoals.length > 0 && (
+            <div className="epp-term-goals" data-testid="terms-relationship-goals">
+              <span className="epp-term-premium-title">Lala's goals (not owed)</span>
+              <ul className="epp-term-list">
+                {relationshipGoals.map((g, i) => (
+                  <li key={g.slot || i} className="epp-term-item" data-testid={`terms-relationship-goal-${i}`}>
+                    <div className="epp-term-item-main">
+                      <span className="epp-term-item-text">{g.label}</span>
+                      {g.description && <span className="epp-term-meta"><span>{g.description}</span></span>}
+                    </div>
+                    {!locked && (
+                      <span className="epp-term-item-actions">
+                        <button
+                          type="button" className="epp-icon-btn" aria-label={`Remove ${g.label}`}
+                          data-testid={`terms-relationship-goal-remove-${i}`} onClick={() => removeRelationshipGoal(i)} disabled={!!termSaving}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="epp-term-note">
+                {relationshipGoalsNote ? `${relationshipGoalsNote}. ` : ''}Start Episode adds these to Lala's goals; they count toward her goal limit.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Restrictions */}
@@ -801,7 +845,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   </div>
                 </div>
               ) : (
-                <div className="epp-term-value" data-testid="terms-bonus-summary">{bonus.label}</div>
+                <div className="epp-term-value" data-testid="terms-bonus-summary">
+                  {bonus.label}
+                  {bonusNote && <span className="epp-term-state" data-testid="terms-bonus-note"> · {bonusNote}</span>}
+                </div>
               )}
               <p className="epp-term-note">Paid at Complete only for a tier the deal names. A SLAY pays nothing on its own.</p>
             </div>
