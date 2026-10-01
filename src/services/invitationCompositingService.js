@@ -13,8 +13,8 @@
  *   - Font fallback: returns null when fonts missing (caller falls back to v1)
  *   - PDF export: compositeInvitationPDF() returns a Sharp-rendered PDF buffer
  *
- * Fonts: Cormorant Garamond (headers/signature) + Libre Baskerville (body)
- * Install: node scripts/install-invitation-fonts.js
+ * Fonts: Cormorant Garamond (headers/signature) + Libre Baskerville (body),
+ * committed under src/assets/fonts/invitation (OFL 1.1); never downloaded.
  */
 
 // canvas and sharp are optional native dependencies — lazy-loaded to avoid crashing
@@ -28,7 +28,6 @@ try {
 }
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
 const Anthropic = require('@anthropic-ai/sdk');
 const { dealPlanOf, isDealEvent } = require('../utils/dealComponents');
 
@@ -36,67 +35,29 @@ const { dealPlanOf, isDealEvent } = require('../utils/dealComponents');
 
 const FONT_DIR = path.join(__dirname, '../assets/fonts/invitation');
 
-const FONT_URLS = {
-  'CormorantGaramond-Regular.ttf': 'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Regular.ttf',
-  'CormorantGaramond-Bold.ttf':    'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Bold.ttf',
-  'CormorantGaramond-Italic.ttf':  'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Italic.ttf',
-  'LibreBaskerville-Regular.ttf':  'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Regular.ttf',
-  'LibreBaskerville-Italic.ttf':   'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Italic.ttf',
-  'LibreBaskerville-Bold.ttf':     'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Bold.ttf',
-};
+// The fonts ship in the repo (src/assets/fonts/invitation, OFL 1.1; their
+// licences sit beside them as *-OFL.txt). Nothing is downloaded at runtime:
+// Evoni, 2026-10-01, after production's folder was found holding only
+// .gitkeep, so every invitation and title card had used the fallback.
+const REQUIRED_FONT_FILES = Object.freeze([
+  'CormorantGaramond-Regular.ttf',
+  'CormorantGaramond-Bold.ttf',
+  'CormorantGaramond-Italic.ttf',
+  'LibreBaskerville-Regular.ttf',
+  'LibreBaskerville-Italic.ttf',
+  'LibreBaskerville-Bold.ttf',
+]);
 
-function downloadFont(url, dest) {
-  return new Promise((resolve, reject) => {
-    const get = (u, redirects = 0) => {
-      if (redirects > 5) { reject(new Error('Too many redirects')); return; }
-      https.get(u, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          res.resume(); // drain the response
-          return get(res.headers.location, redirects + 1);
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-          return;
-        }
-        const file = fs.createWriteStream(dest);
-        res.pipe(file);
-        file.on('finish', () => { file.close(); resolve(); });
-        file.on('error', (err) => { file.close(); reject(err); });
-      }).on('error', reject);
-    };
-    get(url);
+/** The required font files that are missing from FONT_DIR (or too small to be a font). */
+function missingFontFiles() {
+  return REQUIRED_FONT_FILES.filter((f) => {
+    const p = path.join(FONT_DIR, f);
+    return !fs.existsSync(p) || fs.statSync(p).size < 10000;
   });
 }
 
 let fontsAvailable = false;
 let fontsChecked = false;
-
-async function autoInstallFonts() {
-  if (!fs.existsSync(FONT_DIR)) {
-    fs.mkdirSync(FONT_DIR, { recursive: true });
-  }
-
-  const missing = Object.keys(FONT_URLS).filter(f => {
-    const p = path.join(FONT_DIR, f);
-    return !fs.existsSync(p) || fs.statSync(p).size < 10000;
-  });
-
-  if (missing.length === 0) return true;
-
-  console.log(`[InviteComposite] Auto-installing ${missing.length} fonts...`);
-  for (const name of missing) {
-    try {
-      await downloadFont(FONT_URLS[name], path.join(FONT_DIR, name));
-      console.log(`[InviteComposite]   Downloaded ${name}`);
-    } catch (err) {
-      console.error(`[InviteComposite]   Failed to download ${name}: ${err.message}`);
-      return false;
-    }
-  }
-  console.log('[InviteComposite] All fonts installed');
-  return true;
-}
 
 // ─── FONT FAMILIES (resolved after init) ──────────────────────────────────────
 // These get set to either the luxury fonts or system fallbacks
@@ -157,15 +118,20 @@ async function checkFonts() {
   if (fontsChecked) return fontsAvailable;
   fontsChecked = true;
 
-  // Try auto-install custom fonts
-  const installed = await autoInstallFonts();
-  if (installed && registerAllFonts()) {
+  // The committed fonts. A missing file is a deploy fault: it is logged as
+  // an error, loudly, every time the fonts are first checked.
+  const missing = missingFontFiles();
+  if (missing.length === 0 && registerAllFonts()) {
     fontsAvailable = true;
     return true;
   }
+  if (missing.length) {
+    console.error(`[InviteComposite] FONT FILES MISSING from ${FONT_DIR}: ${missing.join(', ')}. `
+      + 'Invitations and title overlays will use a fallback font. The fonts are committed under src/assets/fonts/invitation; redeploy them.');
+  }
 
   // Fall back to system fonts — always succeed
-  console.warn('[InviteComposite] Custom fonts unavailable — falling back to system fonts');
+  console.error('[InviteComposite] Custom fonts unavailable — falling back to system fonts');
   registerSystemFallback();
   fontsAvailable = true;
   return true;
@@ -846,5 +812,7 @@ module.exports = {
   detectTheme,
   checkFonts,
   fontFamilies,
+  missingFontFiles,
+  REQUIRED_FONT_FILES,
   wrapText,
 };

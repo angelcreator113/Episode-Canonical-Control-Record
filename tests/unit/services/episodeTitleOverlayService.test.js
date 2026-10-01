@@ -84,3 +84,17 @@ describe('titleOverlayState', () => {
     expect(titleOverlayState({ title: 'x' })).toBeNull();
   });
 });
+
+describe('the fonts ship in the repo (Evoni, 2026-10-01)', () => {
+  test('every required TTF and its OFL licence is committed, and the real families register', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const invitation = require('../../../src/services/invitationCompositingService');
+    expect(invitation.missingFontFiles()).toEqual([]);
+    const dir = path.join(__dirname, '../../../src/assets/fonts/invitation');
+    expect(fs.existsSync(path.join(dir, 'CormorantGaramond-OFL.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'LibreBaskerville-OFL.txt'))).toBe(true);
+    await invitation.checkFonts();
+    expect(invitation.fontFamilies()).toEqual({ header: 'CormorantGaramond', body: 'LibreBaskerville' });
+  });
+});
