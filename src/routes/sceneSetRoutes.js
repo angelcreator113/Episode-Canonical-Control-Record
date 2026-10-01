@@ -39,6 +39,22 @@ function readBriefOverrides(raw) {
   return { value };
 }
 
+// S3 (Evoni, 2026-09-30): "Generating for an event requires choosing that
+// event explicitly; never the first match." The event a base brief is made
+// for: { value: undefined } when not given (the base keeps the event its
+// last brief was made for), { value: null } for no event (null or ''),
+// { value: id } for an event of the set's show, { error, status } otherwise.
+const EVENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function readBriefEvent(raw, set) {
+  if (raw === undefined) return { value: undefined };
+  if (raw === null || raw === '') return { value: null };
+  if (typeof raw !== 'string' || !EVENT_ID_RE.test(raw)) return { error: 'event_id must be an event id, or null for no event', status: 400 };
+  const { loadBriefEvent } = require('../services/sceneBriefService');
+  const event = await loadBriefEvent(SceneSet.sequelize, raw, set.show_id);
+  if (!event) return { error: 'event_id is not an event of this scene set\'s show', status: 404 };
+  return { value: event.id };
+}
+
 function getAnthropicClient() {
   if (!anthropicClient) {
     anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -804,6 +820,8 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
 
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+    const briefEvent = await readBriefEvent(req.body?.event_id, set);
+    if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
     // The key the set's base model needs (Task #2396).
     const baseModelKey = sceneGenService.resolveBaseModel(set);
@@ -821,8 +839,12 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
     try {
       const sceneGenService = require('../services/sceneGenerationService');
       const models = require('../models');
-      // S2: the overrides the person set on the brief they were shown.
-      await sceneGenService.generateBaseScene(set, models, briefOverrides.value ? { overrides: briefOverrides.value } : {});
+      // S2: the overrides the person set on the brief they were shown; S3:
+      // the event they chose on it (not given: the base's last choice).
+      const genOptions = {};
+      if (briefOverrides.value) genOptions.overrides = briefOverrides.value;
+      if (briefEvent.value !== undefined) genOptions.eventId = briefEvent.value;
+      await sceneGenService.generateBaseScene(set, models, genOptions);
       console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
@@ -1538,6 +1560,10 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+    // S3: the base's event is chosen explicitly (event_id); an angle's is
+    // its base's, so event_id is not taken for an angle.
+    const briefEvent = req.body?.angle_id ? { value: undefined } : await readBriefEvent(req.body?.event_id, set);
+    if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
     // A description edited and not yet saved (the regenerate-with-new-
     // description flow saves it with the generation): shown in the brief
@@ -1562,7 +1588,7 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
       const saved = set.base_generation?.brief || null;
       options = {
         angleLabel: 'WIDE',
-        eventId: null,
+        eventId: briefEvent.value !== undefined ? briefEvent.value : (saved?.event_id || null),
         overrides: briefOverrides.value || saved?.overrides || {},
       };
       const modelKey = sceneGenService.resolveBaseModel(set);
@@ -1663,6 +1689,8 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
 
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
+    const briefEvent = await readBriefEvent(req.body?.event_id, set);
+    if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
     // Optionally update the description first
     if (req.body.canonical_description !== undefined) {
@@ -1675,11 +1703,15 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     }
 
     await ensureGenerationJobsTable();
+    // S2: the base takes the overrides; its angles inherit them from the
+    // base's brief. S3: likewise the event chosen on the brief.
+    const payload = { force: true };
+    if (briefOverrides.value) payload.overrides = briefOverrides.value;
+    if (briefEvent.value !== undefined) payload.event_id = briefEvent.value;
     const job = await GenerationJob.create({
       job_type: 'cascade_regenerate',
       scene_set_id: set.id,
-      // S2: the base takes the overrides; its angles inherit them from the base's brief.
-      payload: briefOverrides.value ? { force: true, overrides: briefOverrides.value } : { force: true },
+      payload,
     });
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });

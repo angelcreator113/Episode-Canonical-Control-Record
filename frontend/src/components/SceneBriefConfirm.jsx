@@ -9,6 +9,13 @@
  * "Your override"), removed when it is not essential, or reset to its
  * source. Missing essentials are listed at the top and on their lines; they
  * do not block generating. Confirm hands the overrides to the generation.
+ *
+ * The event (ruling S3, Evoni 2026-09-30: "Generating for an event requires
+ * choosing that event explicitly; never the first match."): a base brief has
+ * an Event choice listing the show's events, with "No event". It opens on
+ * the event passed in (eventId), else the event the base was last made for,
+ * else none; it never picks an event by itself. An angle's event is its
+ * base's, shown and not chosen here. Confirm hands the choice over too.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -21,6 +28,21 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 export const sceneBriefApi = (setId, body) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/brief`, body);
+export const showEventsApi = (showId) => apiClient.get(`${API_BASE}/world/${showId}/events`);
+
+const NO_EVENT = '';
+/** The event choices: by date (undated last), then name. */
+export function eventOptions(events) {
+  return [...(events || [])]
+    .filter((e) => e && e.id)
+    .sort((a, b) => {
+      const da = a.event_date || '';
+      const db = b.event_date || '';
+      if (da !== db) return !da ? 1 : !db ? -1 : da.localeCompare(db);
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    })
+    .map((e) => ({ id: e.id, label: e.event_date ? `${e.name} · ${String(e.event_date).slice(0, 10)}` : (e.name || 'Untitled event') }));
+}
 
 export const SOURCE_LABELS = Object.freeze({ venue: 'From venue', event: 'From event', override: 'Your override' });
 const LAYER_TITLES = Object.freeze({ place: 'The place', event: 'The event', shot: 'The shot', environment: 'Environment' });
@@ -42,22 +64,30 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
  * @param {string} [note]          — e.g. "Each angle uses this brief with its own camera."
  * @param {string} [description]   — an edited, unsaved description to show
  * @param {boolean} [refine]       — the artifact-review regenerate's brief
- * @param {Function} onConfirm     — (overrides) => void
+ * @param {string} [showId]        — the set's show, whose events are offered (S3)
+ * @param {string|null} [eventId]  — the event to open the base brief on (S3);
+ *                                   not given: the base's own
+ * @param {Function} onConfirm     — (overrides, { eventId }) => void; eventId
+ *                                   only for a base brief (null: no event)
  * @param {Function} onCancel
  */
-export default function SceneBriefConfirm({ setId, angleId = null, title, note = null, description, refine = false, onConfirm, onCancel }) {
+export default function SceneBriefConfirm({ setId, angleId = null, title, note = null, description, refine = false, showId = null, eventId, onConfirm, onCancel }) {
   const [data, setData] = useState(null);
   const [overrides, setOverrides] = useState(null); // null until the first brief says what is saved
   const [editing, setEditing] = useState(null); // { key, text }
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState(null);
+  const isBase = !angleId;
 
-  const load = useCallback(async (next) => {
+  // chosen: the event to ask the brief for (S3); undefined asks for the base's own.
+  const load = useCallback(async (next, chosen) => {
     setLoading(true);
     try {
       const body = {};
       if (angleId) body.angle_id = angleId;
       if (refine) body.refine = true;
+      if (!angleId && chosen !== undefined) body.event_id = chosen || null;
       if (next) body.overrides = next;
       if (typeof description === 'string') body.canonical_description = description;
       const res = await sceneBriefApi(setId, body);
@@ -73,12 +103,26 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
     }
   }, [setId, angleId, description, refine]);
 
-  useEffect(() => { load(null); }, [load]);
+  useEffect(() => { load(null, eventId); }, [load, eventId]);
 
+  useEffect(() => {
+    if (!isBase || !showId) return undefined;
+    let live = true;
+    showEventsApi(showId)
+      .then((res) => { if (live) setEvents(res.data?.events || []); })
+      .catch((err) => {
+        console.error('[SceneBriefConfirm] events load failed:', err);
+        if (live) setEvents([]);
+      });
+    return () => { live = false; };
+  }, [isBase, showId]);
+
+  const chosenEvent = data?.brief?.event_id || null;
   const change = (next) => {
     setOverrides(next);
-    load(next);
+    load(next, isBase ? chosenEvent : undefined);
   };
+  const chooseEvent = (value) => load(overrides, value === NO_EVENT ? null : value);
   const saveEdit = () => {
     if (!editing) return;
     change({ ...(overrides || {}), [editing.key]: editing.text });
@@ -131,10 +175,32 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
 
             {LAYERS.map((layer) => {
               const lines = brief.lines.filter((l) => l.layer === layer);
+              const eventChoice = layer === 'event' && (isBase ? (
+                <label className="sbc-event-choice">
+                  <span>Event</span>
+                  <select
+                    value={chosenEvent || NO_EVENT}
+                    onChange={(e) => chooseEvent(e.target.value)}
+                    disabled={loading || Boolean(editing)}
+                    aria-label="Event"
+                    data-testid="sbc-event"
+                  >
+                    <option value={NO_EVENT}>No event</option>
+                    {/* The chosen event stays listed even before the show's events load. */}
+                    {chosenEvent && !(events || []).some((e) => e.id === chosenEvent) && (
+                      <option value={chosenEvent}>{lines.find((l) => l.key === 'concept')?.text || 'The chosen event'}</option>
+                    )}
+                    {eventOptions(events).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <p className="sbc-note" data-testid="sbc-event-from-base">The angles take the event their base was made for.</p>
+              ));
               if (layer === 'event' && lines.length === 0) {
                 return (
                   <section key={layer} className="sbc-layer">
                     <h3 className="sbc-layer-title">{LAYER_TITLES[layer]}</h3>
+                    {eventChoice}
                     <p className="sbc-note" data-testid="sbc-no-event">No event chosen: the brief has no event layer.</p>
                   </section>
                 );
@@ -143,6 +209,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
               return (
                 <section key={layer} className="sbc-layer">
                   <h3 className="sbc-layer-title">{LAYER_TITLES[layer]}</h3>
+                  {eventChoice}
                   <ul className="sbc-lines">
                     {lines.map((line) => {
                       const isMissing = line.essential && !line.text;
@@ -238,7 +305,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
             type="button"
             className="sbc-btn sbc-btn-primary"
             disabled={!brief || loading || Boolean(editing)}
-            onClick={() => onConfirm(overrides || {})}
+            onClick={() => onConfirm(overrides || {}, isBase ? { eventId: chosenEvent } : {})}
             data-testid="sbc-confirm"
           >
             {cost ? `Generate — ${cost}` : 'Generate'}

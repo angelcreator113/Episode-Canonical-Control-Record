@@ -3371,6 +3371,38 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   build a Scene Brief yet, so it gets one with S5; mood and time variants
   and Scene Studio's object and background calls do not use the brief.
 
+**S7, ruled** (Evoni, 2026-10-01), recorded verbatim; built with S3 and S5:
+
+> S7. The Event Package's Place section lets Evoni choose a scene set for the event (the venue's own sets listed first) or create one for the venue. Creating opens the Scene Brief with this event chosen (S3) and the venue's World Location linked (S5), shows the cost, then generates the base. After Start Episode the chosen set is shown read-only with a link to it.
+
+**What S3 built** (Task #2395):
+
+- **The event is chosen on the base brief.** `POST /scene-sets/:id/brief`,
+  `generate-base` and `cascade-regenerate` take `event_id`, checked by
+  `readBriefEvent`:
+  - an id must be an event of the set's show (else 404), and anything
+    else but null is refused (400) before anything is generated;
+  - null is no event;
+  - not given, the base keeps the event its last brief was made for
+    (`base_generation.brief.event_id`), as it keeps its overrides (S2).
+    That event was chosen explicitly too.
+- **Never the first match.** An event that uses the set
+  (`world_events.scene_set_id`) does not put itself in the brief; only
+  `event_id` does. The S1 loader (`loadEventContext`, `LIMIT 1`) was already
+  gone; S3 keeps it so with a test.
+- **Angles follow their base.** An angle's brief takes its base's event;
+  an `event_id` sent with an angle is not taken. The cascade's job carries
+  the event chosen, and its angles inherit it from the base.
+- **The choice on the brief.** `SceneBriefConfirm` shows an Event choice on
+  a base brief: "No event" and the show's events, by date (undated last).
+  - It opens on the event passed in (S7 passes the Event Package's), else
+    the base's own, else none.
+  - Choosing re-asks the brief; confirming hands the choice to the
+    generation.
+  - An angle's brief says it takes its base's event, with no choice.
+  - On the Scene Sets page, generate, regenerate and cascade send the
+    event chosen (null for none).
+
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
 and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in

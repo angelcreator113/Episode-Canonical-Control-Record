@@ -12,7 +12,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import apiClient from '../services/api';
-import SceneBriefConfirm, { estimateText, SOURCE_LABELS } from './SceneBriefConfirm';
+import SceneBriefConfirm, { estimateText, eventOptions, SOURCE_LABELS } from './SceneBriefConfirm';
 
 const line = (key, over = {}) => ({ layer: 'place', key, label: key[0].toUpperCase() + key.slice(1), text: `${key} text.`, source: 'venue', essential: false, ...over });
 const BRIEF = (over = {}) => ({
@@ -91,7 +91,7 @@ describe('SceneBriefConfirm (S2)', () => {
     expect(screen.queryByRole('button', { name: 'Remove Place' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('sbc-confirm'));
-    expect(onConfirm).toHaveBeenCalledWith({ architecture: '' });
+    expect(onConfirm).toHaveBeenCalledWith({ architecture: '' }, {});
   });
 
   test('the refine brief and an unsaved description are asked for', async () => {
@@ -136,7 +136,82 @@ describe('SceneSetsTab opens the brief before "AI Generate" (S2)', () => {
     fireEvent.click(screen.getByTestId('sbc-confirm'));
     await waitFor(() => expect(apiClient.post.mock.calls.some(([u]) => u.endsWith('/generate-base'))).toBe(true));
     const [, body] = apiClient.post.mock.calls.find(([u]) => u.endsWith('/generate-base'));
-    expect(body).toEqual({ overrides: {} });
+    // S3: the event chosen on the brief is sent, here none.
+    expect(body).toEqual({ overrides: {}, event_id: null });
     expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
+  });
+});
+
+describe('choosing the event on the brief (S3)', () => {
+  const EVENTS = [
+    { id: 'ev-2', name: 'Velour Launch', event_date: '2026-11-02' },
+    { id: 'ev-1', name: 'Garden Gala', event_date: '2026-10-20' },
+    { id: 'ev-3', name: 'Undated Mixer', event_date: null },
+  ];
+  const eventLine = { layer: 'event', key: 'concept', label: 'Event', text: 'Dressed for Velour Launch.', source: 'event', essential: true };
+
+  beforeEach(() => {
+    vi.mocked(apiClient.post).mockReset();
+    vi.mocked(apiClient.get).mockReset();
+    vi.mocked(apiClient.get).mockImplementation((url) => (url === '/api/v1/world/show-1/events' ? ok(null).then(() => ({ data: { success: true, events: EVENTS } })) : ok([])));
+    vi.mocked(apiClient.post).mockImplementation((_url, body) => {
+      const id = body.event_id === undefined ? null : body.event_id;
+      return ok({
+        target: { kind: body.angle_id ? 'angle' : 'base' },
+        brief: BRIEF({ event_id: id, lines: [...BRIEF().lines, ...(id ? [eventLine] : [])] }),
+        estimate: null,
+      });
+    });
+  });
+
+  test('a base brief offers the show\'s events and "No event", and opens on none; it never picks one', async () => {
+    render(<SceneBriefConfirm setId="set-1" showId="show-1" title="t" onConfirm={() => {}} onCancel={() => {}} />);
+    const select = await screen.findByTestId('sbc-event');
+    await waitFor(() => expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'No event', 'Garden Gala · 2026-10-20', 'Velour Launch · 2026-11-02', 'Undated Mixer',
+    ]));
+    expect(select.value).toBe('');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/brief', {});
+    expect(screen.getByTestId('sbc-no-event')).toBeTruthy();
+  });
+
+  test('choosing an event asks the brief for it; confirming hands it over; "No event" sends null', async () => {
+    const onConfirm = vi.fn();
+    render(<SceneBriefConfirm setId="set-1" showId="show-1" title="t" onConfirm={onConfirm} onCancel={() => {}} />);
+    const select = await screen.findByTestId('sbc-event');
+    await waitFor(() => expect(within(select).getAllByRole('option')).toHaveLength(4));
+    fireEvent.change(select, { target: { value: 'ev-2' } });
+    await waitFor(() => expect(screen.getByTestId('sbc-line-concept')).toBeTruthy());
+    expect(apiClient.post).toHaveBeenLastCalledWith('/api/v1/scene-sets/set-1/brief', { event_id: 'ev-2', overrides: {} });
+    fireEvent.click(screen.getByTestId('sbc-confirm'));
+    expect(onConfirm).toHaveBeenLastCalledWith({}, { eventId: 'ev-2' });
+
+    fireEvent.change(screen.getByTestId('sbc-event'), { target: { value: '' } });
+    await waitFor(() => expect(screen.queryByTestId('sbc-line-concept')).toBeNull());
+    expect(apiClient.post).toHaveBeenLastCalledWith('/api/v1/scene-sets/set-1/brief', { event_id: null, overrides: {} });
+    fireEvent.click(screen.getByTestId('sbc-confirm'));
+    expect(onConfirm).toHaveBeenLastCalledWith({}, { eventId: null });
+  });
+
+  test('an event passed in opens the brief on that event', async () => {
+    render(<SceneBriefConfirm setId="set-1" showId="show-1" eventId="ev-1" title="t" onConfirm={() => {}} onCancel={() => {}} />);
+    await screen.findByTestId('sbc-line-concept');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/brief', { event_id: 'ev-1' });
+    await waitFor(() => expect(screen.getByTestId('sbc-event').value).toBe('ev-1'));
+  });
+
+  test('an angle\'s brief takes its base\'s event: no choice, and none handed over', async () => {
+    const onConfirm = vi.fn();
+    render(<SceneBriefConfirm setId="set-1" angleId="a-1" showId="show-1" title="t" onConfirm={onConfirm} onCancel={() => {}} />);
+    expect(await screen.findByTestId('sbc-event-from-base')).toBeTruthy();
+    expect(screen.queryByTestId('sbc-event')).toBeNull();
+    expect(apiClient.get).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('sbc-confirm'));
+    expect(onConfirm).toHaveBeenCalledWith({}, {});
+  });
+
+  test('eventOptions: by date, undated last, then name', () => {
+    expect(eventOptions(EVENTS).map((o) => o.id)).toEqual(['ev-1', 'ev-2', 'ev-3']);
+    expect(eventOptions(null)).toEqual([]);
   });
 });

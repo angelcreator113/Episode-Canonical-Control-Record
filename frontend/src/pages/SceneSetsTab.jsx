@@ -2442,13 +2442,15 @@ export default function SceneSetsTab() {
   const [briefAsk, setBriefAsk] = useState(null);
   const askBrief = (ask, run) => setBriefAsk({ ...ask, run });
 
+  // S3: a base brief offers the show's events; the one chosen there (or
+  // none) is sent with the generation.
   const handleGenerateBase = (set) => askBrief(
-    { setId: set.id, title: `Generate the base image for “${set.name}”` },
-    (overrides) => runGenerateBase(set, overrides),
+    { setId: set.id, showId: set.show_id, title: `Generate the base image for “${set.name}”` },
+    (overrides, choice) => runGenerateBase(set, overrides, choice?.eventId),
   );
   const handleRegenerateBase = (set) => askBrief(
-    { setId: set.id, title: `Regenerate the base image for “${set.name}”` },
-    (overrides) => runRegenerateBase(set, overrides),
+    { setId: set.id, showId: set.show_id, title: `Regenerate the base image for “${set.name}”` },
+    (overrides, choice) => runRegenerateBase(set, overrides, choice?.eventId),
   );
   const handleGenerateAngle = (set, angle) => askBrief(
     { setId: set.id, angleId: angle.id, title: `Generate “${angle.angle_name || angle.angle_label}”` },
@@ -2472,19 +2474,24 @@ export default function SceneSetsTab() {
   const handleCascadeRegenerate = (set, description) => askBrief(
     {
       setId: set.id,
+      showId: set.show_id,
       title: `Regenerate “${set.name}”: the base, then every angle`,
       note: 'The angles take the base\'s brief with their own cameras.',
       description: description || undefined,
     },
-    (overrides) => runCascadeRegenerate(set, description, overrides),
+    (overrides, choice) => runCascadeRegenerate(set, description, overrides, choice?.eventId),
   );
 
-  const runGenerateBase = async (set, overrides) => {
+  // eventId: the event chosen on the brief (S3); undefined sends none, and
+  // the base keeps its own.
+  const withEvent = (payload, eventId) => (eventId === undefined ? payload : { ...payload, event_id: eventId });
+
+  const runGenerateBase = async (set, overrides, eventId) => {
     startGenerating(set.id);
     try {
       let json;
       try {
-        const res = await generateBaseImageApi(set.id, { overrides });
+        const res = await generateBaseImageApi(set.id, withEvent({ overrides }, eventId));
         json = res.data;
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Generation failed');
@@ -2509,12 +2516,12 @@ export default function SceneSetsTab() {
     }
   };
 
-  const runRegenerateBase = async (set, overrides) => {
+  const runRegenerateBase = async (set, overrides, eventId) => {
     startGenerating(set.id);
     try {
       let json;
       try {
-        const res = await generateBaseImageApi(set.id, { force: true, overrides });
+        const res = await generateBaseImageApi(set.id, withEvent({ force: true, overrides }, eventId));
         json = res.data;
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Regeneration failed');
@@ -2971,14 +2978,14 @@ export default function SceneSetsTab() {
     }
   };
 
-  const runCascadeRegenerate = async (set, description, overrides) => {
+  const runCascadeRegenerate = async (set, description, overrides, eventId) => {
     startGenerating(set.id);
     try {
       let json;
       try {
         const res = await cascadeRegenerateApi(
           set.id,
-          description ? { canonical_description: description, overrides } : { overrides },
+          withEvent(description ? { canonical_description: description, overrides } : { overrides }, eventId),
         );
         json = res.data;
       } catch (err) {
@@ -3189,11 +3196,12 @@ export default function SceneSetsTab() {
           title={briefAsk.title}
           note={briefAsk.note || null}
           description={briefAsk.description}
+          showId={briefAsk.showId || null}
           onCancel={() => setBriefAsk(null)}
-          onConfirm={(overrides) => {
+          onConfirm={(overrides, choice) => {
             const { run } = briefAsk;
             setBriefAsk(null);
-            run(overrides);
+            run(overrides, choice);
           }}
         />
       )}
