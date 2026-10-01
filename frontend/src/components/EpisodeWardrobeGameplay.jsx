@@ -33,7 +33,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach } from '../utils/wardrobeReach';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, gameSlotFor, fetchAllClosetItems } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, gameSlotFor, closetGroupFor, fetchClosetWithTotal } from '../lib/closetGrouping';
 
 // ─── CONSTANTS ───
 
@@ -128,6 +128,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [browseMode, setBrowseMode] = useState('pool'); // pool | closet | search
   const [closetItems, setClosetItems] = useState([]);
   const [closetLoading, setClosetLoading] = useState(false);
+  // W3: how many pieces the closet holds (the server's total), and a load error.
+  const [closetTotal, setClosetTotal] = useState(null);
+  const [closetError, setClosetError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [todoList, setTodoList] = useState(null);
   const [outfitHistory, setOutfitHistory] = useState([]);
@@ -252,13 +255,17 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   }, [filledSlots, episodeId, slotsReady]);
 
   // ─── v3: Load closet (full wardrobe for browse) ───
+  // W3 (Evoni, 2026-10-01): reloaded each time the Full Closet or Search
+  // opens, so a piece added since the page loaded appears.
   const loadCloset = useCallback(async () => {
-    if (!showId || closetItems.length > 0) return;
+    if (!showId) return;
     setClosetLoading(true);
+    setClosetError(null);
     try {
       // Task #2377: every page, not one limit=200 request (which dropped the
       // oldest items once a closet passed 200).
-      const items = await fetchAllClosetItems(api, showId);
+      const { items, total } = await fetchClosetWithTotal(api, showId);
+      setClosetTotal(total);
       setClosetItems(Array.isArray(items) ? items.map(i => ({
         ...i,
         aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
@@ -267,10 +274,20 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       })) : []);
     } catch (err) {
       console.error('Failed to load closet:', err);
-      setClosetItems([]);
+      setClosetError(err?.response?.data?.error || err?.message || 'network error');
     }
     finally { setClosetLoading(false); }
-  }, [showId, closetItems.length]);
+  }, [showId]);
+
+  // W3: pieces per closet group, for the switcher's counts.
+  const closetGroupCounts = useMemo(() => {
+    const counts = { [ALL_GROUP.key]: closetItems.length };
+    for (const item of closetItems) {
+      const key = closetGroupFor(item.clothing_category);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [closetItems]);
 
   // Task #1937: Closet and Search apply the backend's reach rule (owned, or
   // coin-locked and affordable, or reputation-locked and qualified) to the
@@ -411,9 +428,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const filteredBrowseItems = useMemo(() => {
     // Task #2377: the Other tab holds every item no game slot accepts
     // (outerwear, unknown or missing category) so none vanish.
-    const inSlot = activeSlot === OTHER_GROUP.key
-      ? (item) => !gameSlotFor(item.clothing_category)
-      : (item) => gameSlotFor(item.clothing_category) === activeSlot;
+    const inSlot = activeSlot === ALL_GROUP.key
+      ? () => true
+      : activeSlot === OTHER_GROUP.key
+        ? (item) => !gameSlotFor(item.clothing_category)
+        : (item) => gameSlotFor(item.clothing_category) === activeSlot;
 
     if (browseMode === 'pool') {
       return pool.filter(inSlot)
@@ -699,7 +718,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 { key: 'closet', label: 'Full Closet' },
                 { key: 'search', label: 'Search' },
               ].map(m => (
-                <button key={m.key} onClick={() => { setBrowseMode(m.key); if (m.key === 'pool' && activeSlot === OTHER_GROUP.key) setActiveSlot('body'); if (m.key !== 'pool' && closetItems.length === 0) loadCloset(); }}
+                <button key={m.key} onClick={() => {
+                  setBrowseMode(m.key);
+                  if (m.key === 'pool' && (activeSlot === OTHER_GROUP.key || activeSlot === ALL_GROUP.key)) setActiveSlot('body');
+                  // W3: the Full Closet opens on All, and reloads.
+                  if (m.key === 'closet') setActiveSlot(ALL_GROUP.key);
+                  if (m.key !== 'pool' && (m.key !== browseMode || closetItems.length === 0)) loadCloset();
+                }}
                   style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? '#fff' : 'transparent', color: browseMode === m.key ? '#6366f1' : '#64748b', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                   {m.label}
                 </button>
@@ -713,6 +738,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
             )}
 
+            {closetError && browseMode !== 'pool' && (
+              <div data-testid="closet-error" role="alert" style={{ padding: '8px 10px', marginBottom: 8, borderRadius: 8, background: '#fef2f2', color: '#b91c1c', fontSize: 12 }}>
+                Couldn't load the closet ({closetError}). <button type="button" onClick={loadCloset} style={{ border: 'none', background: 'none', color: '#b91c1c', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}>Try again</button>
+              </div>
+            )}
             {closetLoading && browseMode !== 'pool' && (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Loading closet...</div>
             )}
@@ -720,9 +750,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             <div style={W.browseHeader}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
-                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
+                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : activeSlot === ALL_GROUP.key ? ALL_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : activeSlot === ALL_GROUP.key ? ALL_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · {activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}</div>
+                {browseMode === 'closet' && !closetLoading && !closetError && (
+                  <div data-testid="closet-count" style={{ fontSize: 11, color: closetTotal != null && closetTotal > closetItems.length ? '#b91c1c' : '#94a3b8' }}>
+                    {`${closetItems.length} of ${closetTotal ?? closetItems.length} pieces${closetTotal != null && closetTotal > closetItems.length ? ' — some did not load' : ''}`}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {/* Task #2377: the Full Closet and Search offer every category
@@ -730,11 +765,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     event pool keeps its open-slot switcher. */}
                 {(browseMode === 'pool'
                   ? visibleSlots.filter(s => !filledSlots[s.key])
-                  : [...SLOT_DEFS, OTHER_GROUP]
+                  : [ALL_GROUP, ...SLOT_DEFS, OTHER_GROUP]
                 ).map(s => (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)} title={s.label} aria-label={s.label}
                     style={{ ...W.slotSwitch, background: activeSlot === s.key ? '#6366f1' : '#f1f5f9', color: activeSlot === s.key ? '#fff' : '#64748b' }}>
                     {s.icon}
+                    {/* W3: each group's piece count in the closet. */}
+                    {browseMode !== 'pool' && <span style={{ fontSize: 9, marginLeft: 2 }}>{closetGroupCounts[s.key] || 0}</span>}
                   </button>
                 ))}
               </div>
@@ -771,6 +808,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
+                    {browseMode !== 'pool' && (
+                      <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>
+                        {`${item.clothing_category || 'no category'} · ${[...SLOT_DEFS, OTHER_GROUP].find(g => g.key === closetGroupFor(item.clothing_category))?.label || 'Other'}`}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
                       {(item.aesthetic_tags || []).slice(0, 3).map((t, i) => (
                         <span key={i} style={W.tagPill}>{t}</span>

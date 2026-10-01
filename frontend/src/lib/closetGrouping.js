@@ -26,6 +26,8 @@ export const GAME_SLOT_DEFS = [
   { key: 'perfume', icon: '🌸', label: 'Perfume', categories: ['perfume'], required: false, desc: 'Optional' },
 ];
 
+// W3 (Evoni, 2026-10-01): the Full Closet opens on every piece at once.
+export const ALL_GROUP = { key: 'all', icon: '🗂️', label: 'All', categories: [], required: false, desc: 'Every piece in the closet' };
 // The Full Closet's catch-all for items no game slot accepts. Browse-only:
 // these pieces cannot be equipped into a game slot.
 export const OTHER_GROUP = { key: 'other', icon: '🧥', label: 'Other', categories: [], required: false, desc: 'Outerwear and uncategorized pieces' };
@@ -93,8 +95,18 @@ export const CLOSET_MAX_PAGES = 100;
  * `limit=200` request silently dropped the oldest items, so this reads
  * until the server's pagination.total is reached or a page comes back short.
  */
-export async function fetchAllClosetItems(api, showId, { pageSize = CLOSET_PAGE_SIZE, maxPages = CLOSET_MAX_PAGES } = {}) {
+export async function fetchAllClosetItems(api, showId, options) {
+  return (await fetchClosetWithTotal(api, showId, options)).items;
+}
+
+/**
+ * { items, total }: every closet item, and how many the server says the
+ * closet holds (null when it does not say). A total above items.length means
+ * some pieces did not load (W3).
+ */
+export async function fetchClosetWithTotal(api, showId, { pageSize = CLOSET_PAGE_SIZE, maxPages = CLOSET_MAX_PAGES } = {}) {
   const all = [];
+  let serverTotal = null;
   const seen = new Set();
   for (let page = 1; page <= maxPages; page += 1) {
     const res = await api.get(`/api/v1/wardrobe?show_id=${encodeURIComponent(showId)}&limit=${pageSize}&page=${page}`);
@@ -110,11 +122,12 @@ export async function fetchAllClosetItems(api, showId, { pageSize = CLOSET_PAGE_
       added += 1;
     }
     const total = Number(body?.pagination?.total);
+    if (Number.isFinite(total)) serverTotal = total;
     if (Number.isFinite(total) && all.length >= total) break;
     if (rows.length < pageSize || added === 0) break;
     if (page === maxPages) {
       console.warn(`[closet] stopped after ${maxPages} pages (${all.length} items); the closet may be incomplete`);
     }
   }
-  return all;
+  return { items: all, total: serverTotal };
 }

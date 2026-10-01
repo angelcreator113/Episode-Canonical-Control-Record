@@ -499,7 +499,9 @@ module.exports = {
           where,
           limit: parseInt(limit),
           offset,
-          order: [[safeSortBy, safeSortOrder]],
+          // W3: id breaks ties, so pieces sharing a timestamp keep one order
+          // across pages and none falls between them (the Full Closet pages).
+          order: [[safeSortBy, safeSortOrder], ['id', 'ASC']],
         }));
       } catch (ormError) {
         // Fallback to raw SQL if ORM fails (model/DB column mismatch)
@@ -561,7 +563,7 @@ module.exports = {
         );
         count = parseInt(countResult[0].total);
         const [rawRows] = await sequelize.query(
-          `SELECT * FROM wardrobe ${whereClause} ORDER BY ${realSortBy} ${safeSortOrder} LIMIT :limit OFFSET :offset`,
+          `SELECT * FROM wardrobe ${whereClause} ORDER BY ${realSortBy} ${safeSortOrder}, id ASC LIMIT :limit OFFSET :offset`,
           { replacements: { ...replacements, limit: parseInt(limit), offset } }
         );
         rows = rawRows;

@@ -3377,6 +3377,52 @@ and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in
 `SceneSetsTab` (#2401). Held means not run and not extended; the per-set
 base model choice it shares with base generation stays.
 
+
+**(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
+PR each:
+
+> W1. Wardrobe pieces can be linked as a matching set; choosing the set equips every piece in its own slot at once, and the set shows as one look. Pieces stay individually choosable.
+>
+> W2. Accessories and jewellery allow several pieces at once; body (dress or top+bottom) and shoes stay single.
+>
+> W3. Full Closet still doesn't show all my pieces after #2382. Compare every wardrobe item for the show against what the Full Closet renders, list the missing ones with their stored category, and fix.
+
+**W3, what the code shows and what was built.** MEASURED from the code
+unless marked. No production data was read: the filing session has no
+database access.
+
+- **What the Full Closet reads.** The Full Closet and the World Admin
+  wardrobe tab both read `GET /api/v1/wardrobe?show_id=`. That covers the
+  show's own items and show-less ones, with `deleted_at` null. The Full
+  Closet reads every page; World Admin reads one page of 200. So a piece
+  World Admin lists is one the Full Closet also fetches.
+- **Why pieces looked missing** (INFERRED; each could hide a piece):
+  - The Full Closet showed one category group at a time (Body, Top,
+    Bottom, Shoes, Accessories, Jewelry, Perfume, Other). The groups were
+    switched by icon-only buttons, with no total and no "all" view.
+  - It loaded once per page view, so a piece added since then did not
+    appear until a reload.
+  - A failed load showed an empty group, with no error.
+  - The list endpoint paged by `created_at` alone. Pieces sharing a
+    timestamp had no defined order across pages. A local probe of 450 tied
+    rows did not reproduce a gap, but the order is not guaranteed.
+- **The fix.**
+  - The Full Closet opens on **All**: every piece at once. Each card shows
+    its stored category and the group it falls in ("Mini Skirt · Bottom",
+    "costume piece · Other").
+  - The group switches show their counts.
+  - The header reads "N of T pieces", where T is the server's total. It
+    turns red, with "some did not load", when fewer arrived.
+  - The closet reloads each time it opens.
+  - A failed load says so, with Try again.
+  - The list endpoint breaks ties by `id`, on the ORM path and the raw-SQL
+    fallback alike.
+- **Listing the missing pieces.** The All view now lists every piece the
+  closet holds, with its stored category. A piece still missing from it is
+  not in `GET /api/v1/wardrobe` for the show. It either belongs to another
+  show (`wardrobe.show_id`), is deleted, or exists only in
+  `wardrobe_library`. Those can be read only on the database, which agent
+  sessions never touch.
 ---
 
 ## 9. Owed before enforcement
