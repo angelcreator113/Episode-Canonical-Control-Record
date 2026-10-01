@@ -22,7 +22,8 @@ const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = 
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
 const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../utils/socialTaskSource');
 const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
-const { goalTaskScale, goalFields, composeGoalTasks } = require('../utils/goalTasks');
+const { goalTaskScale, goalFields, composeGoalTasks, capCombinedGoals } = require('../utils/goalTasks');
+const { relationshipGoalTasks } = require('./dealTermsDraftService');
 const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('../utils/episodeTeaser');
 
 // ─── LALA'S GOAL TASKS (T9) ──────────────────────────────────────────────────
@@ -57,8 +58,19 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], cont
   const event = context.event || {};
   const bounds = goalTaskScale(context.prestige !== undefined ? { prestige: context.prestige } : event);
   const fields = goalFields(event, context, hostProfile, outfitPieces);
-  const goals = composeGoalTasks(fields, bounds, { upTo: bounds.min, where: 'SocialTasks' });
-  return withDeliverableTasks(goals, context.deliverables);
+  // D13 answer 6 (2026-09-30): the event's relationship goals (at most 2)
+  // are Lala's goals and count toward T9's limit, so the composed goals
+  // fill only the room they leave (Start Episode writes the minimum).
+  const relationship = relationshipGoalTasks(event);
+  const room = {
+    ...bounds,
+    min: Math.max(0, bounds.min - relationship.length),
+    max: Math.max(0, bounds.max - relationship.length),
+  };
+  const composed = room.max > 0
+    ? composeGoalTasks(fields, room, { upTo: room.min, where: 'SocialTasks', excludeSlots: relationship.map((g) => g.slot) })
+    : [];
+  return withDeliverableTasks([...composed, ...relationship], context.deliverables);
 }
 
 // ─── EPISODE BEAT TEMPLATES ──────────────────────────────────────────────────
@@ -760,6 +772,13 @@ Return ONLY JSON.` }],
 
   // Use event's saved social tasks if available, otherwise generate fresh
   let socialTasks = automation.social_tasks;
+  if (Array.isArray(socialTasks) && socialTasks.length > 0) {
+    // D13 answer 6: the relationship goals join a saved list too, within
+    // T9's combined limit.
+    const have = new Set(socialTasks.map((t) => t?.slot).filter(Boolean));
+    const added = relationshipGoalTasks(event).filter((g) => !have.has(g.slot));
+    if (added.length) socialTasks = capCombinedGoals([...socialTasks, ...added], goalTaskScale(event), 'SocialTasks');
+  }
   if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
     let hostProfile = null;
     const creator = eventCreatorOrganizer(event);

@@ -82,7 +82,8 @@ const REQUIRE_AUTH_COUNTS = {
   'phoneMissionRoutes.js': 5,
   'sceneStudioEpisodeRoutes.js': 6,
   'onboarding.js': 6,
-  'shows.js': 19,
+  // 19; +2 for GET and PUT /:id/lala-home (D13 travel, Task #2395, requireAuth).
+  'shows.js': 21,
   // 25 at CP2 close; +1 for PUT /:showId/phone-skin (Task #1964, requireAuth).
   'uiOverlayRoutes.js': 26,
   'todoListRoutes.js': 10,
@@ -248,14 +249,15 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for uiOverlayRoutes.js PUT /:showId/phone-skin (Task #1964);
     // +1 for episodeBriefRoutes.js POST /:episodeId/feed-moments/retry (Task #2220);
     // +3 for episodes.js title approval + title card routes (Task #2386);
-    // +3 for episodes.js task list approval + task-list overlay routes (Task #2395).
-    test('CP2 zone contains 259 total requireAuth references across 22 files', () => {
+    // +3 for episodes.js task list approval + task-list overlay routes (Task #2395);
+    // +2 for shows.js GET and PUT /:id/lala-home (D13 travel, Task #2395).
+    test('CP2 zone contains 261 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(259);
+      expect(total).toBe(261);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {

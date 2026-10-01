@@ -57,15 +57,19 @@ export function costDraftFrom(cost) {
   };
 }
 
-/** The POST / PUT body from a draft: { body } or { error }. */
+/**
+ * The POST / PUT body from a draft: { body } or { error }. An empty amount
+ * is null: no amount yet, "Price required" (D13 travel, 2026-09-30); Start
+ * Episode waits on it while Lala pays the line.
+ */
 export function buildCostBody(draft) {
   const d = draft || {};
   if (!COST_KINDS.includes(d.kind)) return { error: 'Choose a kind of cost.' };
   if (!COST_PAID_BY.includes(d.paid_by)) return { error: 'Choose who pays.' };
   const raw = String(d.amount ?? '').trim();
-  const amount = Number(raw);
-  if (raw === '' || !Number.isInteger(amount) || amount < 0) {
-    return { error: 'The amount is a whole number of coins, 0 or more.' };
+  const amount = raw === '' ? null : Number(raw);
+  if (amount !== null && (!Number.isInteger(amount) || amount < 0)) {
+    return { error: 'The amount is a whole number of coins, 0 or more, or empty while the price is not known.' };
   }
   const label = String(d.label || '').trim();
   if (label.length > COST_LABEL_MAX) return { error: `The label is at most ${COST_LABEL_MAX} characters.` };
@@ -75,15 +79,26 @@ export function buildCostBody(draft) {
 /**
  * The rule 14 note for a row: a drafted row reads Auto-drafted, naming where
  * it came from (the event's cost for the entry line, Evoni's answer 2 of
- * 2026-09-30; the event extras otherwise), until its amount changes.
+ * 2026-09-30; the event's travel for travel and accommodation, D13 answer 7;
+ * the event extras for rows drafted before the cost split), until its
+ * amount or payer changes.
  */
 export function costDraftNote(cost, drafted) {
   const record = drafted?.[cost?.id];
   if (!record) return null;
-  if (Number(record.amount) !== Number(cost.amount)) return 'Edited';
+  const sameAmount = record.amount == null ? cost.amount == null : cost.amount != null && Number(record.amount) === Number(cost.amount);
+  if (!sameAmount) return 'Edited';
+  // D13: a record written with its payer compares it too.
+  if (record.paid_by !== undefined && record.paid_by !== cost.paid_by) return 'Edited';
+  if (record.source === 'travel') return 'Auto-drafted · Lala travels';
   return record.source === 'event_cost' || record.key === 'entry'
     ? 'Auto-drafted · from event cost'
     : 'Auto-drafted · event extras';
+}
+
+/** "Price required" for a line with no amount yet; else its coins. */
+export function costAmountLabel(cost) {
+  return cost?.amount == null ? 'Price required' : `${Number(cost.amount).toLocaleString()} coins`;
 }
 
 /** { lala, comped }: what Lala pays, and what the host or brand covers. */

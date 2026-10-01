@@ -97,12 +97,19 @@ async function listEventCosts(sequelize, eventId, { transaction } = {}) {
       ORDER BY created_at ASC, id ASC`,
     { replacements: { eventId }, transaction }
   );
-  return (rows || []).map((r) => ({ ...r, amount: Number(r.amount) || 0 }));
+  return (rows || []).map(normalizeCost);
+}
+
+/** A row's amount as a number, or null: no amount yet, "Price required" (D13 travel). */
+function normalizeCost(r) {
+  return { ...r, amount: r.amount == null ? null : (Number(r.amount) || 0) };
 }
 
 /**
  * Validates a cost body. `partial` (PUT) allows any subset; POST needs a
- * kind and an amount. Returns { fields } or { error }.
+ * kind and an amount. The amount may be null: no amount yet, which reads
+ * "Price required" and holds Start Episode while Lala pays the line (D13
+ * travel, 2026-09-30). Returns { fields } or { error }.
  */
 function readCostBody(body, { partial }) {
   const b = body && typeof body === 'object' ? body : {};
@@ -122,11 +129,15 @@ function readCostBody(body, { partial }) {
     }
   }
   if (b.amount !== undefined || !partial) {
-    const amount = Number(b.amount);
-    if (b.amount === null || b.amount === '' || !Number.isInteger(amount) || amount < 0) {
-      return { error: 'amount must be a whole number of Prime Coins, 0 or more' };
+    if (b.amount === null || b.amount === '') {
+      fields.amount = null;
+    } else {
+      const amount = Number(b.amount);
+      if (b.amount === undefined || !Number.isInteger(amount) || amount < 0) {
+        return { error: 'amount must be a whole number of Prime Coins, 0 or more, or null (price required)' };
+      }
+      fields.amount = amount;
     }
-    fields.amount = amount;
   }
   if (b.paid_by !== undefined) {
     if (!COST_PAID_BY.includes(b.paid_by)) return { error: `paid_by must be one of ${COST_PAID_BY.join(', ')}` };
@@ -135,9 +146,20 @@ function readCostBody(body, { partial }) {
   return { fields };
 }
 
-/** The ledger rows Finalize books for a deal event's costs: Lala's only. */
+/** The ledger rows Finalize books for a deal event's costs: Lala's only, with an amount above 0. */
 function chargeableCosts(costs) {
   return (costs || []).filter((c) => c.paid_by === 'lala' && (Number(c.amount) || 0) > 0);
+}
+
+/**
+ * D13 travel: the lines Lala pays that have no amount yet ("Price
+ * required"). Start Episode refuses while any remain; a line the host or
+ * brand comps needs no price. Returns [{ kind: 'cost', key, label }].
+ */
+function missingCostPrices(costs) {
+  return (costs || [])
+    .filter((c) => c.paid_by === 'lala' && c.amount == null)
+    .map((c) => ({ kind: 'cost', key: c.id, label: `"${c.label || c.kind}"` }));
 }
 
 /** Totals by who pays: { lala, comped }. */
@@ -151,18 +173,43 @@ function costTotals(costs) {
 }
 
 /**
- * The terms lines a deal drafts: the entry line (self-funded: Lala pays;
- * entry covered: comped by the host) at cost_coins, when above 0. The
- * extras are no longer drafted here: they are event spending, drafted at
- * Start Episode (the event cost split, 2026-09-30).
+ * Answer 7 and its follow-up (D13 travel, Evoni 2026-09-30): travel and
+ * accommodation are drafted only when the event's location is outside
+ * Lala's home city (utils/lalaHome.lalaTravelsFor, which reads the show's
+ * lala_home setting and the venue's World Location), with the category
+ * travel_destination as the fallback. This pure form is the fallback alone,
+ * for a caller that has not looked the cities up.
+ */
+function lalaTravels(event) {
+  return event?.category === 'travel_destination';
+}
+
+const TRAVEL_SOURCE = 'travel';
+
+/**
+ * The terms lines a deal drafts:
+ *   - the entry line (self-funded: Lala pays; entry covered: comped by the
+ *     host) at cost_coins, when above 0;
+ *   - travel and accommodation when Lala travels (`travels`, from
+ *     lalaTravelsFor; without it, the category fallback), with no amount:
+ *     "Price required", never 0, so the price is set or comped before
+ *     Start Episode (Evoni, 2026-09-30). Paid by Lala until Evoni comps
+ *     them. Getting around within the home city (rides, valet) is event
+ *     spending, not travel.
+ * The extras are no longer drafted here: they are event spending, drafted
+ * at Start Episode (the event cost split, 2026-09-30).
  * Returns [{ key, kind, label, amount, paid_by, source }].
  */
-function draftedCostLines(event) {
+function draftedCostLines(event, { travels } = {}) {
   const lines = [];
   const entryPayer = entryPayerFor(event);
   const entry = Number(event?.cost_coins) || 0;
   if (entryPayer && entry > 0) {
     lines.push({ key: 'entry', kind: 'entry', label: 'Entry / ticket', amount: entry, paid_by: entryPayer, source: ENTRY_SOURCE });
+  }
+  if (isDealEvent(event) && (travels === undefined ? lalaTravels(event) : travels)) {
+    lines.push({ key: 'travel', kind: 'travel', label: 'Travel', amount: null, paid_by: 'lala', source: TRAVEL_SOURCE });
+    lines.push({ key: 'accommodation', kind: 'accommodation', label: 'Accommodation', amount: null, paid_by: 'lala', source: TRAVEL_SOURCE });
   }
   return lines;
 }
@@ -175,7 +222,8 @@ function draftedCostLines(event) {
  */
 async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
   const [eventRows] = await sequelize.query(
-    `SELECT id, deal_type, deal_components, cost_coins, prestige, format, event_type, dress_code, canon_consequences
+    `SELECT id, show_id, deal_type, deal_components, cost_coins, prestige, format, event_type, dress_code, category,
+            venue_location_id, canon_consequences
        FROM world_events WHERE id = :eventId FOR UPDATE`,
     { replacements: { eventId }, transaction }
   );
@@ -193,7 +241,9 @@ async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
   );
 
   const inserted = [];
-  for (const line of draftedCostLines(event)) {
+  const { lalaTravelsFor } = require('../utils/lalaHome');
+  const { travels } = await lalaTravelsFor(sequelize, event, { transaction });
+  for (const line of draftedCostLines(event, { travels })) {
     if (liveDraftedKeys.has(line.key)) continue;
     // clock_timestamp, not NOW(): NOW() is fixed for the transaction, and
     // the rows list in the order they were drafted.
@@ -205,8 +255,8 @@ async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
     );
     const row = rows?.[0];
     if (row) {
-      draftedCosts[row.id] = { key: line.key, amount: line.amount, source: line.source };
-      inserted.push({ ...row, amount: Number(row.amount) || 0 });
+      draftedCosts[row.id] = { key: line.key, amount: line.amount, paid_by: line.paid_by, source: line.source };
+      inserted.push(normalizeCost(row));
     }
   }
 
@@ -235,7 +285,11 @@ module.exports = {
   EXTRAS_SOURCE,
   ENTRY_SOURCE,
   ENTRY_PAYER_BY_DEAL,
+  TRAVEL_SOURCE,
   entryPayerFor,
+  lalaTravels,
+  normalizeCost,
+  missingCostPrices,
   isDealEvent,
   draftedCostLines,
   listEventCosts,

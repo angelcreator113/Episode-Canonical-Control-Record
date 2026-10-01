@@ -465,6 +465,44 @@ router.put('/:id/financial-config', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/lala-home
+ * PUT /api/v1/shows/:id/lala-home   Body: { address?, neighbourhood?, city }
+ * Lala's home, a show setting (D13 travel, Evoni 2026-09-30): stored on
+ * Show.metadata.lala_home. Travel and accommodation are drafted only when an
+ * event's location is outside its city (utils/lalaHome.lalaTravelsFor).
+ * The PUT keeps every other metadata key.
+ */
+router.get('/:id/lala-home', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readLalaHome } = require('../utils/lalaHome');
+    return res.json({ success: true, lala_home: readLalaHome(show.metadata) });
+  } catch (err) {
+    console.error('GET /shows/:id/lala-home error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id/lala-home', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readLalaHomeBody } = require('../utils/lalaHome');
+    const read = readLalaHomeBody(req.body);
+    if (read.error) return res.status(400).json({ success: false, error: read.error });
+    const nextMeta = { ...(show.metadata || {}), lala_home: read.value };
+    await show.update({ metadata: nextMeta });
+    return res.json({ success: true, lala_home: read.value });
+  } catch (err) {
+    console.error('PUT /shows/:id/lala-home error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/financial-summary
  * Aggregated financial dashboard for the Finance page. Returns:
  *   - totals: lifetime income/expense/net + current balance

@@ -1379,6 +1379,13 @@
 .epp-term-item.is-fulfilment { flex-wrap: wrap; }
 .epp-term-item.is-fulfilment .epp-term-item-main { flex: 1 1 160px; }
 .epp-term-advance { flex-shrink: 0; white-space: nowrap; }
+.epp-term-goals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .epp-term-item-actions {
   display: inline-flex;
   gap: 6px;

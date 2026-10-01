@@ -29,7 +29,7 @@ import { Receipt, Pencil, Plus, Trash2, Loader2, AlertCircle, Sparkles } from 'l
 import api from '../../services/api';
 import {
   COST_KINDS, TERMS_COST_KINDS, COST_PAID_BY, COST_PAID_BY_LABELS, COST_LABEL_MAX,
-  costKindLabel, costName, costDraftFrom, buildCostBody, costDraftNote, costTotals,
+  costKindLabel, costName, costDraftFrom, buildCostBody, costDraftNote, costTotals, costAmountLabel,
 } from '../../utils/eventCosts';
 
 const costsUrl = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/costs`;
@@ -169,8 +169,11 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
                   <span className="epp-term-item-text">{costName(c)}</span>
                   <span className="epp-term-meta">
                     <span>{costKindLabel(c.kind)}</span>
-                    <span data-testid={`terms-cost-amount-${c.id}`} className={comped ? 'epp-cost-comped' : undefined}>
-                      {Number(c.amount).toLocaleString()} coins
+                    <span
+                      data-testid={`terms-cost-amount-${c.id}`}
+                      className={c.amount == null && !comped ? 'is-price-required' : comped ? 'epp-cost-comped' : undefined}
+                    >
+                      {costAmountLabel(c)}
                     </span>
                     <span data-testid={`terms-cost-payer-${c.id}`}>{COST_PAID_BY_LABELS[c.paid_by] || c.paid_by}</span>
                     {note && <span className="epp-term-state" data-testid={`terms-cost-note-${c.id}`}>{note}</span>}
@@ -211,7 +214,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
             <label className="epp-term-field">
               <span>Amount (coins)</span>
               <input
-                type="number" min={0} step={1} inputMode="numeric" value={draft.amount} data-testid="terms-cost-amount"
+                type="number" min={0} step={1} inputMode="numeric" placeholder="Price required" value={draft.amount} data-testid="terms-cost-amount"
                 onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
               />
             </label>
