@@ -3837,6 +3837,17 @@ code against these rulings, with open questions, is
 The recommendations accepted for Q1, Q2 and Q4–Q9 are in the note's §3,
 as written there. Q3 differs from its recommendation: no bonus tier is
 counted in the projection, the brief's `designed_intent` included.
+
+**Build choices accepted (Evoni, 2026-10-01)**, Phase B PR 1, verbatim:
+"PR 1 choices accepted (Evoni, 2026-10-01): "Not earned" for unreached
+bonus tiers after Complete; "Covered" as its own state for comped costs."
+So, beside MB1's Planned, Pending and Posted (`episodeMoneyLines.STATES`):
+- **Not earned:** after Complete, a bonus tier that was not reached (no
+  row was booked for it) shows "Not earned", struck through and outside
+  every total.
+- **Covered:** a terms cost the host or brand comps is listed with its own
+  state, "Covered by <host or brand> (amount)", at 0 to Lala and outside
+  every total.
 ---
 
 ## 9. Owed before enforcement
