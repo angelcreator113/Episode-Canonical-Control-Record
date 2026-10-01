@@ -3820,7 +3820,8 @@ only the started slot's own intention.
 >
 > A10. A slot can hold up to three story purposes, one marked primary, each optionally tied to a story thread. Desired pressure and the outcome range stay single per slot. The script writer receives all purposes, primary first; the roadmap card shows the primary with "+N more".
 
-Build choices in the A9/A10 PR, proposed and awaiting Evoni's acceptance:
+**Build choices accepted (Evoni, 2026-10-01)**, A9/A10, verbatim: "A9/A10's
+six as listed." The six, and the storage they rest on:
 1. Drafting with AI stays future-only; a started slot is edited by hand.
 2. An AI draft (one story purpose) replaces only the primary's text and
    keeps the other purposes and every purpose's thread.
