@@ -31,6 +31,12 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         allowNull: true,
       },
+      // Episode Money Phase B, MB6 (§8(gg)): the money lines as planned at
+      // Start Episode, for the reconciliation after Complete.
+      money_plan: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,

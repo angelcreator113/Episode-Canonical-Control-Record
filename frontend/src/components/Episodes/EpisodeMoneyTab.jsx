@@ -21,6 +21,9 @@
  * after this episode. A conditional bonus is never counted; it shows as
  * "+ up to X if SLAY" beside the net. The header chip stays the actual
  * balance. No recap (Phase C).
+ *
+ * After Complete (MB6, Q7): a Reconciliation section compares each line as
+ * planned at Start Episode (episodes.money_plan) with what posted.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -58,6 +61,65 @@ function payerText(line) {
   if (line.covered) return `Covered by ${name || 'the host'}${line.covered_amount ? ` (${coins(line.covered_amount)})` : ''}`;
   if (who === 'lala') return 'Lala pays';
   return name ? `Paid by ${name}` : 'Paid by the host';
+}
+
+// MB6 (§8(gg), Q7): after Complete, the plan saved at Start Episode beside
+// what posted, per line, with the differences highlighted.
+const RECON_LABELS = {
+  as_planned: 'As planned',
+  changed: 'Changed',
+  not_earned: 'Not earned',
+  earned: 'Earned',
+  outstanding: 'Outstanding',
+  added: 'Added',
+  removed: 'Removed',
+  covered: 'Covered',
+  unplanned: 'Posted, not planned',
+};
+const QUIET = new Set(['as_planned', 'earned', 'covered']);
+
+function Reconciliation({ recon }) {
+  const amount = (n) => (n == null ? '—' : signed(n));
+  return (
+    <section className="em-section" data-testid="em-reconciliation">
+      <h3 className="em-heading">Reconciliation</h3>
+      <p className="em-explain">
+        {recon.basis === 'start_episode'
+          ? `Each line as planned at Start Episode${recon.planned_at ? ` (${day(recon.planned_at)})` : ''}, beside what posted.`
+          : 'No plan was saved at Start Episode for this episode, so each line is compared with the plan as it stands now.'}
+        {recon.highlighted > 0 ? ` ${recon.highlighted} difference${recon.highlighted === 1 ? '' : 's'} highlighted.` : ' Everything went as planned.'}
+      </p>
+      <ul className="em-rows">
+        {recon.rows.map((r) => {
+          const loud = !QUIET.has(r.status) || r.draft_change;
+          return (
+            <li key={r.key} className={`em-recon ${loud ? 'em-recon-diff' : ''}`} data-testid={`em-recon-${r.key}`}>
+              <span className="em-line-label">{r.label}</span>
+              <span className={`em-chip em-recon-chip-${r.status}`}>
+                {r.status === 'outstanding' && r.pending ? 'Outstanding · pending' : (RECON_LABELS[r.status] || r.status)}
+              </span>
+              <span className="em-recon-figures">
+                <span>Planned {r.planned_conditional != null ? `${signed(r.planned_conditional)} if earned` : amount(r.planned)}</span>
+                <span>Posted {amount(r.posted)}</span>
+                {r.difference != null && r.difference !== 0 && (
+                  <span className={tone(r.difference)}>Difference {signed(r.difference)}</span>
+                )}
+              </span>
+              {r.draft_change && (
+                <span className="em-recon-note">
+                  Changed from its draft: {r.draft_change.from.quantity} × {coins(r.draft_change.from.unit_price)} → {r.draft_change.to.quantity} × {coins(r.draft_change.to.unit_price)}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="em-recon-totals" data-testid="em-recon-totals">
+        Planned net {signed(recon.totals.planned_net)} · posted net {signed(recon.totals.posted_net)} ·{' '}
+        <span className={tone(recon.totals.difference)}>difference {signed(recon.totals.difference)}</span>
+      </div>
+    </section>
+  );
 }
 
 export default function EpisodeMoneyTab({ episode, showId }) {
@@ -183,6 +245,8 @@ export default function EpisodeMoneyTab({ episode, showId }) {
           </ul>
         )}
       </section>
+
+      {money.reconciliation && <Reconciliation recon={money.reconciliation} />}
 
       {money.spending && (
         <EpisodeSpendingSection showId={showId} episodeId={episode.id} spending={money.spending} onChanged={reload} />
