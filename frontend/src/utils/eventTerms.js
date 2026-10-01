@@ -572,7 +572,9 @@ const coins = (n) => `${Number(n).toLocaleString('en-US')} coins`;
 function pricingNote(event, drafted, value) {
   const version = event?.canon_consequences?.automation?.pricing_version ?? event?.pricing_version;
   if (drafted === undefined || value == null) return null;
-  return Number(drafted) === Number(value) ? `Auto-drafted · pricing v${version}` : 'Edited';
+  if (Number(drafted) !== Number(value)) return 'Edited';
+  // A draft with no recorded version names none (the screen read "pricing vnull").
+  return version == null ? 'Auto-drafted · pricing' : `Auto-drafted · pricing v${version}`;
 }
 
 /** { value, label, note } for one event-level component (appearance_fee, partnership_base_fee, performance_fee). */
@@ -627,6 +629,25 @@ export function deliverableDraftNote(event, d) {
     && (record.description ?? '') === (d.description ?? '')
     && (record.required !== false) === (d.required !== false);
   return same ? 'Auto-drafted · from deal' : 'Edited';
+}
+
+/**
+ * A deliverable's two notes, said once (Evoni, 2026-10-01: "Auto-drafted"
+ * showed twice on one deliverable). { fee, draft }: fee is
+ * describeDeliverableFee's, draft is deliverableDraftNote's. A drafted row
+ * reads one note, "Auto-drafted · from deal · pricing v<N>", and its fee
+ * none; an edited fee on an edited row reads Edited once, on the row.
+ */
+export function deliverableNotes(event, d) {
+  const fee = describeDeliverableFee(event, d);
+  let draft = deliverableDraftNote(event, d);
+  const feeAuto = typeof fee.note === 'string' && fee.note.startsWith('Auto-drafted');
+  if (draft && draft.startsWith('Auto-drafted') && feeAuto) {
+    draft = `${draft} · ${fee.note.replace(/^Auto-drafted · /, '')}`;
+    return { fee: { ...fee, note: null }, draft };
+  }
+  if (draft === 'Edited' && fee.note === 'Edited') return { fee: { ...fee, note: null }, draft };
+  return { fee, draft };
 }
 
 /** Mirror of dealPricingService.missingPrices: what Start Episode waits on, as labels. */

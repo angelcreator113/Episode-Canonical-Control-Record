@@ -3143,6 +3143,43 @@ Built with D13:
 - S1–S6 (2026-09-30, §8(dd)) are built after D13, one PR each; the scene
   model comparison is held until S1–S4 ship.
 
+**Pricing ruling (Evoni, 2026-10-01).** Recorded verbatim:
+
+> Deal prices use Lala's own career tier (her rate card), not the event's tier. A smaller event either meets her rate or doesn't book her.
+
+What was built, with three fixes from the Terms screen of the Wearable
+Experiments Studio Session (Echo Park):
+
+1. **Prices at Lala's tier.** `dealPricingService.lalaPricingTier` reads
+   Lala's tier from her reputation (`careerTierFromReputation`, the bands
+   `getAccessibleCareerTier` uses). `draftTerms` prices every component and
+   deliverable at it, through `draftDeliverablesForDeal`'s `priceTier` and
+   `proposeTerms`'s `tier`.
+   - The event's own tier still sizes the job (D12's drafted deliverables).
+     INFERRED: the ruling is about prices only.
+   - INFERRED: with no `character_state` row for Lala, the event's tier
+     prices the deal, as before.
+2. **No "pricing vnull".**
+   - A deliverable drafted with its price now counts as priced, so the
+     deal records the card's `pricing_version` on its first draft.
+   - A draft with no recorded version reads "Auto-drafted · pricing".
+3. **"Auto-drafted" once.** A drafted, priced deliverable reads one note,
+   "Auto-drafted · from deal · pricing v<N>" (`deliverableNotes`). An
+   edited fee on an edited row reads Edited once.
+4. **No travel from Echo Park.**
+   - **The cause.** In the LalaVerse, Echo Park is one of the DREAM cities,
+     so the World Studio seed gives its venues `city: 'Echo Park'`. Lala's
+     home is city Los Angeles, neighbourhood Echo Park, so the city
+     comparison drafted travel.
+   - **The fix.** `lalaTravelsFor` now treats Lala's home neighbourhood as
+     home, alongside her home city. It does so for the venue's city, or
+     its district when no city is known. Only then does the
+     travel_destination fallback apply.
+   - **Open (INFERRED).** The other DREAM cities (Dazzle District,
+     Radiance Row, Ascent Tower, Maverick Harbor) are not Lala's home
+     neighbourhood, so an event there still drafts travel. Whether they
+     are inside Los Angeles is not ruled.
+
 **(dd) Scene image rulings (Evoni, 2026-09-30).** Recorded verbatim; built
 after D13, one PR each.
 

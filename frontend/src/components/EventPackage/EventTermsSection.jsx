@@ -62,7 +62,7 @@ import {
   DEAL_COMPONENT_KEYS, DEAL_COMPONENT_LABELS, describeDealComponents, buildDealComponentsUpdate, isDealEvent, dealLabelFor,
   DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS, deliverableTypeLabel, hasRateAnchor,
   DELIVERABLE_FORMATS, PLATFORM_LABELS, quantityWord,
-  dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableDraftNote, missingPriceLabels,
+  dealPlanFor, describeComponentFee, describeGiftedValue, describeDeliverableFee, deliverableNotes, missingPriceLabels,
   buildComponentFeeUpdate, premiumChoicesFrom, buildProposeBody,
   BONUS_TIERS, BONUS_TIER_LABELS, describeBonusTerms, bonusDraftFrom, buildBonusTermsUpdate,
   bonusDraftNote, relationshipGoalsOf, relationshipGoalsDraftNote, buildRelationshipGoalRemove,
@@ -493,7 +493,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                       <span data-testid={`terms-deliverable-owed-${d.id}`}>{DELIVERABLE_OWED_TO_LABELS[d.owed_to === 'brand' ? 'brand' : 'host']}</span>
                       {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d)}{d.platform && DELIVERABLE_FORMATS[d.deliverable_type]?.platforms.length > 1 ? ` · ${PLATFORM_LABELS[d.platform]}` : ''}</span>}
                       {(() => {
-                        const fee = describeDeliverableFee(event, d);
+                        const { fee } = deliverableNotes(event, d);
                         return fee.label && (
                           <span className={fee.priceRequired ? 'is-price-required' : undefined} data-testid={`terms-deliverable-fee-${d.id}`}>
                             {fee.label}{fee.note ? ` · ${fee.note}` : ''}
@@ -503,7 +503,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                       {d.due_date && <span>Due {d.due_date}</span>}
                       {d.required === false && <span>Optional</span>}
                       {(() => {
-                        const draftNote = deliverableDraftNote(event, d);
+                        const draftNote = deliverableNotes(event, d).draft;
                         return draftNote && <span data-testid={`terms-deliverable-draft-${d.id}`}>{draftNote}</span>;
                       })()}
                       <span className={`epp-term-status is-${status}`} data-testid={`terms-deliverable-status-${d.id}`}>{DELIVERABLE_STATUS_LABELS[status]}</span>

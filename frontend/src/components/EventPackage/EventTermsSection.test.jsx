@@ -281,6 +281,43 @@ describe('EventTermsSection', () => {
     await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ appearance_fee: 500 }));
   });
 
+  test('one drafted deliverable says Auto-drafted once, and never "pricing vnull" (Evoni, 2026-10-01)', async () => {
+    // As on the Wearable Experiments Studio Session: a drafted, priced Reel and no recorded pricing version.
+    const event = {
+      ...EVENT, deal_type: 'paid_deliverables',
+      canon_consequences: { automation: {
+        auto_drafted: { deliverables: 'deal', deliverable_fees: 'pricing' },
+        drafted_values: {
+          deliverables: { r1: { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 325, description: 'Instagram Reel', required: true } },
+          deliverable_fees: { r1: 325 },
+        },
+      } },
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
+      { id: 'r1', description: 'Instagram Reel', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 325 },
+    ] } });
+    renderTerms({ event });
+    const row = await screen.findByTestId('terms-deliverable-r1');
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-fee-r1').textContent).toBe('Fee 325 coins'));
+    expect(row.textContent).not.toMatch(/vnull|vundefined/);
+    expect(row.textContent.match(/Auto-drafted/g)).toHaveLength(1);
+    expect(screen.getByTestId('terms-deliverable-draft-r1').textContent).toBe('Auto-drafted · from deal · pricing');
+  });
+
+  test('with a pricing version, the one note names it; an edited fee reads Edited once', async () => {
+    const auto = { auto_drafted: { deliverables: 'deal', deliverable_fees: 'pricing' }, pricing_version: 2,
+      drafted_values: { deliverables: { r1: { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 325, description: 'Instagram Reel', required: true } }, deliverable_fees: { r1: 325 } } };
+    const event = { ...EVENT, deal_type: 'paid_deliverables', canon_consequences: { automation: auto } };
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
+      { id: 'r1', description: 'Instagram Reel', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 400 },
+    ] } });
+    renderTerms({ event });
+    const row = await screen.findByTestId('terms-deliverable-r1');
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-fee-r1').textContent).toBe('Fee 400 coins'));
+    expect(row.textContent.match(/Edited/g)).toHaveLength(1);
+    expect(screen.getByTestId('terms-deliverable-draft-r1').textContent).toBe('Edited');
+  });
+
   test('D12: a deliverable Propose terms drafted reads Auto-drafted · from deal, and Edited once changed', async () => {
     const event = {
       ...EVENT, deal_type: 'brand_partnership',

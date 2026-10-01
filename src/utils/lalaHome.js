@@ -16,9 +16,14 @@
  * /api/v1/shows/:id/lala-home).
  *
  * An event's location is its venue's World Location (venue_location_id, or
- * the automation's), read up the parent chain until one has a city. When
- * both cities are known, Lala travels when they differ. When either is
- * unknown, the fallback decides: the event's category travel_destination.
+ * the automation's), read up the parent chain until one has a city (and,
+ * failing that, a district). Lala is home when that place is her home city
+ * or her home neighbourhood: in the LalaVerse, Echo Park is one of the DREAM
+ * cities, so a venue there carries city "Echo Park" (worldStudio's seed),
+ * and an Echo Park event drafted travel (Evoni, 2026-10-01: "LA events
+ * never draft travel"). Otherwise she travels when the city is known and
+ * differs. When it is unknown, the fallback decides: the event's category
+ * travel_destination.
  */
 
 const HOME_FIELDS = Object.freeze(['address', 'neighbourhood', 'city']);
@@ -56,20 +61,37 @@ function readLalaHomeBody(body) {
   return { value };
 }
 
-/** The city of a World Location, read up its parents. null when none has one. */
-async function locationCity(sequelize, locationId, { transaction } = {}) {
+/**
+ * The place of a World Location, read up its parents: { city, district },
+ * the first city found and the first district found (null when none).
+ */
+async function locationPlace(sequelize, locationId, { transaction } = {}) {
   let id = locationId;
+  let district = null;
   for (let depth = 0; id && depth < PARENT_DEPTH; depth += 1) {
     const [rows] = await sequelize.query(
-      'SELECT city, parent_location_id FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+      'SELECT city, district, parent_location_id FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1',
       { replacements: { id }, transaction }
     );
     const row = rows?.[0];
-    if (!row) return null;
-    if (normCity(row.city)) return row.city;
+    if (!row) break;
+    if (!district && normCity(row.district)) district = row.district;
+    if (normCity(row.city)) return { city: row.city, district };
     id = row.parent_location_id;
   }
-  return null;
+  return { city: null, district };
+}
+
+/** The city of a World Location, read up its parents. null when none has one. */
+async function locationCity(sequelize, locationId, options = {}) {
+  return (await locationPlace(sequelize, locationId, options)).city;
+}
+
+/** Whether a place name is Lala's home city or home neighbourhood. */
+function isHomePlace(name, home) {
+  const n = normCity(name);
+  if (!n || !home) return false;
+  return n === normCity(home.city) || (Boolean(normCity(home.neighbourhood)) && n === normCity(home.neighbourhood));
 }
 
 /**
@@ -87,10 +109,14 @@ async function lalaTravelsFor(sequelize, event, { transaction } = {}) {
   }
   const automation = parseJson(event.canon_consequences, {})?.automation || {};
   const locationId = event.venue_location_id || automation.venue_location_id || null;
-  const city = locationId ? await locationCity(sequelize, locationId, { transaction }) : null;
+  const { city, district } = locationId ? await locationPlace(sequelize, locationId, { transaction }) : { city: null, district: null };
+  // A district counts only where no city is known (a Paris venue in a
+  // district that happens to share the name is still Paris).
+  if (home && (isHomePlace(city, home) || (!normCity(city) && isHomePlace(district, home)))) {
+    return { travels: false, reason: 'home_city', city: city || district, home_city: home.city };
+  }
   if (!home || !city) return { ...fallback, city, home_city: home?.city || null };
-  const travels = normCity(city) !== normCity(home.city);
-  return { travels, reason: travels ? 'outside_home' : 'home_city', city, home_city: home.city };
+  return { travels: true, reason: 'outside_home', city, home_city: home.city };
 }
 
 module.exports = {
@@ -98,6 +124,8 @@ module.exports = {
   normCity,
   readLalaHome,
   readLalaHomeBody,
+  locationPlace,
   locationCity,
+  isHomePlace,
   lalaTravelsFor,
 };
