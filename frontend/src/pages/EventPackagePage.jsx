@@ -185,6 +185,33 @@ export function orderSceneSetsForEvent(sets, venueLocationId, showId = null) {
 /** Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set. */
 export const sceneSetPath = (showId, setId) => `/shows/${showId}/world?tab=scene-sets&set=${setId}`;
 
+// Season Context (§8(ff) A4): read-only — "Season Arc provides intent; the
+// Event Package owns the event's facts." Season, phase, slot and purpose.
+function SeasonContextBlock({ context, showId }) {
+  if (!context) return null;
+  const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Arc</Link>;
+  if (!context.in_slot) {
+    return (
+      <div className="epp-season" data-testid="season-context" role="note">
+        <span className="epp-season-label">Season {context.season_number}</span>
+        <span className="epp-season-text">
+          Not on the roadmap yet{context.next_open ? `; the next open slot is ${context.next_open.label}` : ''}. Pencil it in on {roadmapLink}.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="epp-season" data-testid="season-context" role="note">
+      <span className="epp-season-label">{context.label}</span>
+      <span className="epp-season-text">
+        Season {context.season_number}{context.phase?.title ? ` · Phase ${context.phase.number}: ${context.phase.title}` : ''}
+        {context.via === 'pencilled' ? ' · pencilled in' : ''}
+      </span>
+      <span className="epp-season-purpose">{context.story_purpose || 'No story purpose set for this slot yet.'}</span>
+    </div>
+  );
+}
+
 export default function EventPackagePage() {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
@@ -196,6 +223,7 @@ export default function EventPackagePage() {
   // Start Anyway confirm (Task #1775): open while warnings are listed.
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [seasonContext, setSeasonContext] = useState(null);
   // Owned here, not inside InvitationButton (Task #1668): load() below sets
   // loading=true while it refetches, which unmounts this page's whole JSX
   // subtree — including InvitationButton — until it resolves. Local state
@@ -306,6 +334,15 @@ export default function EventPackagePage() {
   }, [showId, eventId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The event's place in the season (§8(ff) A4); never blocks the page.
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/api/v1/world/${showId}/season/event/${eventId}`)
+      .then((res) => { if (!cancelled) setSeasonContext(res.data?.context || null); })
+      .catch((err) => { console.error('[EventPackage] season context load failed:', err); });
+    return () => { cancelled = true; };
+  }, [showId, eventId]);
 
   // Every event save on this page goes through here. A refusal (409,
   // EVENT_CHANGED) reloads the page so the person sees what changed; the
@@ -929,6 +966,8 @@ export default function EventPackagePage() {
           )}
         </div>
       )}
+
+      <SeasonContextBlock context={seasonContext} showId={showId} />
 
       <div className="epp-sections">
         <section className="epp-section">

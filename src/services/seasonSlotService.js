@@ -139,6 +139,58 @@ async function recordSlotOutcome(sequelize, { showId, episodeId, tier, moneyNet,
   };
 }
 
+/**
+ * A4: the Event Package's read-only Season Context block — the season,
+ * phase, slot and purpose an event belongs to: the slot it is pencilled
+ * into, or the slot of the episode it started. When it is in no slot, the
+ * next open slot is named. Null when the show has no active season.
+ */
+async function eventSeasonContext(sequelize, showId, eventId) {
+  const [[arc]] = await sequelize.query(
+    `SELECT id, title, phases, season_number FROM show_arcs
+      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY arc_number ASC LIMIT 1`,
+    { replacements: { showId } });
+  if (!arc) return null;
+  const [[slot]] = await sequelize.query(
+    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.desired_pressure, s.episode_id,
+            CASE WHEN s.event_id = :eventId THEN 'pencilled' ELSE 'episode' END AS via
+       FROM season_slots s
+       LEFT JOIN world_events ev ON ev.id = :eventId
+      WHERE s.arc_id = :arcId AND s.deleted_at IS NULL
+        AND (s.event_id = :eventId OR (ev.used_in_episode_id IS NOT NULL AND s.episode_id = ev.used_in_episode_id))
+      ORDER BY s.slot_number ASC LIMIT 1`,
+    { replacements: { arcId: arc.id, eventId } });
+  const phases = arcPhases(arc);
+  const phaseOf = (n) => {
+    const p = phases.find((ph) => Number(ph.phase) === Number(n));
+    return p ? { number: Number(p.phase), title: p.title } : { number: n, title: null };
+  };
+  if (slot) {
+    return {
+      season_number: slot.season_number || 1,
+      arc_title: arc.title,
+      in_slot: true,
+      via: slot.via,
+      label: episodeLabel(slot.season_number, slot.slot_number),
+      slot_number: slot.slot_number,
+      phase: phaseOf(slot.phase),
+      story_purpose: slot.story_purpose || null,
+      desired_pressure: slot.desired_pressure || null,
+    };
+  }
+  const [[next]] = await sequelize.query(
+    `SELECT slot_number, season_number, phase FROM season_slots
+      WHERE arc_id = :arcId AND deleted_at IS NULL AND episode_id IS NULL AND locked_at IS NULL
+      ORDER BY slot_number ASC LIMIT 1`,
+    { replacements: { arcId: arc.id } });
+  return {
+    season_number: arc.season_number || 1,
+    arc_title: arc.title,
+    in_slot: false,
+    next_open: next ? { label: episodeLabel(next.season_number, next.slot_number), phase: phaseOf(next.phase) } : null,
+  };
+}
+
 /** Creates an arc's 24 empty slots when it has none. Returns how many were created. */
 async function ensureSeasonSlots(sequelize, arc, { transaction } = {}) {
   const [[{ n }]] = await sequelize.query(
@@ -487,6 +539,7 @@ module.exports = {
   SeasonSlotError,
   ensureSeasonSlots,
   getRoadmap,
+  eventSeasonContext,
   pencilEvent,
   placeEpisode,
   assignOnStart,

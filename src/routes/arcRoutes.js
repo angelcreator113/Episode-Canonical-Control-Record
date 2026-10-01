@@ -15,6 +15,7 @@
  * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
  * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12)
+ * GET    /world/:showId/season/event/:eventId — The Event Package's Season Context (A4), read-only
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -245,6 +246,20 @@ router.post('/world/:showId/season/slots/:slotId/intention/draft', requireAuth, 
     return res.json({ success: true, ...result });
   } catch (err) {
     return sendSlotError(res, err, 'draft intention');
+  }
+});
+
+// GET /world/:showId/season/event/:eventId — the Event Package's read-only
+// Season Context block (§8(ff) A4): season, phase, slot and purpose.
+router.get('/world/:showId/season/event/:eventId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { eventSeasonContext } = require('../services/seasonSlotService');
+    const context = await eventSeasonContext(models.sequelize, req.params.showId, req.params.eventId);
+    return res.json({ success: true, context });
+  } catch (err) {
+    console.error('[ArcRoutes] event season context error:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
