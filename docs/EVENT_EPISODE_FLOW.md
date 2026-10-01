@@ -3442,8 +3442,8 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
     brief with this event chosen, and generates its base. The old call
     there was skipped because the event already had a scene set.
 - **Mark Ready no longer starts a paid generation by itself.** With no
-  venue, it opens the venue's brief. INFERRED from S2 ("before any paid
-  generation"); Evoni has not ruled on Mark Ready itself.
+  venue, it opens the venue's brief. RULED (Evoni, 2026-10-01): "Mark
+  Ready opening the venue brief is accepted."
 
 **The scene model comparison (held).** `sceneModelComparisonService`, the
 `/scene-sets/model-comparison` and `/scene-sets/base-models` routes (ADMIN),
