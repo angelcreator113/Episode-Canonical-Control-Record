@@ -6,9 +6,11 @@
  *      Influential Lala's Reel at the Influential anchor.
  *   2. A first draft records its pricing version, so the screen never reads
  *      "pricing vnull".
- *   4. An event in Echo Park, Lala's home neighbourhood in Los Angeles,
- *      drafts no travel, even where the venue's city field reads "Echo Park"
- *      (the DREAM city seed) and the event is a travel_destination.
+ *   4. Lala's home city is Echo Park, a DREAM city (Evoni's correction,
+ *      2026-10-01): an Echo Park event drafts no travel, even as a
+ *      travel_destination; an event in another DREAM city drafts travel and
+ *      accommodation with no amount. Migration 20261001210000 moves the
+ *      stored home from city Los Angeles to city Echo Park.
  * (3, "Auto-drafted" twice, is the Terms screen's: EventTermsSection.test.)
  */
 jest.unmock('uuid');
@@ -148,10 +150,11 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect(asJson(event.canon_consequences).automation.pricing_version).toBe(v);
   });
 
-  it('4. Echo Park is home: no travel, even with city "Echo Park" and a travel_destination category', async () => {
+  const HOME = { address: '246 Olddy Paveway Ln', neighbourhood: null, city: 'Echo Park' };
+
+  it('4. Echo Park is home: no travel, even with a travel_destination category', async () => {
     const ids = await seed({ category: 'travel_destination' });
-    await run(`UPDATE shows SET metadata = :m WHERE id = :show`,
-      { show: ids.show, m: JSON.stringify({ lala_home: { address: '246 Olddy Paveway Ln', neighbourhood: 'Echo Park', city: 'Los Angeles' } }) });
+    await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
     const venue = uuid();
     locations.push(venue);
     await run(`INSERT INTO world_locations (id, name, location_type, city, created_at, updated_at)
@@ -163,8 +166,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
   it('4. a venue whose district is Echo Park, with no city, is home too', async () => {
     const ids = await seed({ category: 'travel_destination' });
-    await run(`UPDATE shows SET metadata = :m WHERE id = :show`,
-      { show: ids.show, m: JSON.stringify({ lala_home: { neighbourhood: 'Echo Park', city: 'Los Angeles' } }) });
+    await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
     const venue = uuid();
     locations.push(venue);
     await run(`INSERT INTO world_locations (id, name, location_type, district, created_at, updated_at)
@@ -172,5 +174,40 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue });
     expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
     expect(await costs(ids)).toEqual([]);
+  });
+  it('4. another DREAM city is away: travel and accommodation, no amount', async () => {
+    const ids = await seed();
+    await run(`UPDATE shows SET metadata = :m WHERE id = :show`, { show: ids.show, m: JSON.stringify({ lala_home: HOME }) });
+    const venue = uuid();
+    locations.push(venue);
+    await run(`INSERT INTO world_locations (id, name, location_type, city, created_at, updated_at)
+               VALUES (:id, 'The Velvet Room', 'venue', 'Dazzle District', NOW(), NOW())`, { id: venue });
+    await run('UPDATE world_events SET venue_location_id = :venue WHERE id = :event', { ...ids, venue });
+    expect((await putEvent(ids, { deal_components: ['paid_to_appear'], appearance_fee: 300 })).status).toBe(200);
+    expect((await costs(ids)).map((c) => [c.kind, c.amount, c.paid_by])).toEqual([['travel', null, 'lala'], ['accommodation', null, 'lala']]);
+  });
+
+  it('4. migration 20261001210000 moves the stored home to city Echo Park, and back', async () => {
+    const migration = require('../../src/migrations/20261001210000-lala-home-city-echo-park');
+    const old = await seed();
+    const edited = await seed();
+    const elsewhere = await seed();
+    const set = (ids, home) => run(`UPDATE shows SET metadata = :m WHERE id = :show`,
+      { show: ids.show, m: JSON.stringify({ keep: 1, lala_home: home }) });
+    const homeOf = async (ids) => asJson((await q('SELECT metadata FROM shows WHERE id = :show', ids))[0].metadata);
+    await set(old, { address: '246 Olddy Paveway Ln', neighbourhood: 'Echo Park', city: 'Los Angeles' });
+    await set(edited, { address: '1 Other St', neighbourhood: 'echo park', city: 'Los Angeles ' });
+    await set(elsewhere, { address: '9 Rue', neighbourhood: null, city: 'Paris' });
+
+    await migration.up(sequelize.getQueryInterface());
+    await migration.up(sequelize.getQueryInterface()); // a re-run changes nothing
+    expect(await homeOf(old)).toEqual({ keep: 1, lala_home: HOME });
+    expect((await homeOf(edited)).lala_home).toEqual({ address: '1 Other St', neighbourhood: null, city: 'Echo Park' });
+    expect((await homeOf(elsewhere)).lala_home.city).toBe('Paris');
+
+    await migration.down(sequelize.getQueryInterface());
+    expect((await homeOf(old)).lala_home).toEqual({ address: '246 Olddy Paveway Ln', neighbourhood: 'Echo Park', city: 'Los Angeles' });
+    expect((await homeOf(edited)).lala_home.city).toBe('Echo Park'); // not the value up writes for her address
+    await migration.up(sequelize.getQueryInterface());
   });
 });

@@ -1,29 +1,33 @@
 'use strict';
 
 /**
- * Lala's home, and whether an event takes her away from it (D13 travel,
- * Evoni 2026-09-30):
+ * Lala's home, and whether an event takes her away from it.
  *
- *   "Lala's home is 246 Olddy Paveway Ln, Echo Park, Los Angeles; store it
- *   as a show setting (address, neighbourhood Echo Park, city Los Angeles).
- *   Travel and accommodation are drafted only when an event's location is
- *   outside Los Angeles (fallback: category travel_destination); [...]
- *   Getting around within Los Angeles (rides, valet) is event spending, not
- *   travel."
+ * D13 travel (Evoni 2026-09-30) stored the home as a show setting and
+ * drafts travel and accommodation only when an event is away from it (the
+ * fallback: category travel_destination), with no amount ("Price
+ * required"). Her correction (2026-10-01; EVENT_EPISODE_FLOW.md §8(cc)):
+ *
+ *   "Lala's home city is Echo Park, one of the five DREAM cities in the
+ *   LalaVerse (not Los Angeles). Her home is 246 Olddy Paveway Ln, Echo
+ *   Park. The DREAM cities (Echo Park, Dazzle District, Radiance Row,
+ *   Ascent Tower, Maverick Harbor) are separate cities, each with its own
+ *   streets, shops, restaurants and venues. An event inside Echo Park is
+ *   local: getting there is event spending, never travel. An event in any
+ *   other DREAM city drafts travel (and accommodation where a stay makes
+ *   sense), with no amount and "Price required"."
  *
  * The setting is shows.metadata.lala_home = { address, neighbourhood, city }
- * (migration 20261001190000; edited at Show Settings, GET/PUT
- * /api/v1/shows/:id/lala-home).
+ * (migrations 20261001190000 and 20261001210000, which sets the city to
+ * Echo Park; edited at Show Settings, GET/PUT /api/v1/shows/:id/lala-home).
  *
  * An event's location is its venue's World Location (venue_location_id, or
  * the automation's), read up the parent chain until one has a city (and,
- * failing that, a district). Lala is home when that place is her home city
- * or her home neighbourhood: in the LalaVerse, Echo Park is one of the DREAM
- * cities, so a venue there carries city "Echo Park" (worldStudio's seed),
- * and an Echo Park event drafted travel (Evoni, 2026-10-01: "LA events
- * never draft travel"). Otherwise she travels when the city is known and
- * differs. When it is unknown, the fallback decides: the event's category
- * travel_destination.
+ * failing that, a district). The World Studio seed gives each DREAM city's
+ * venues that city ("Echo Park", "Dazzle District", ...). Lala is home when
+ * the place is her home city (or a stored home neighbourhood); otherwise
+ * she travels when the city is known. When it is unknown, the fallback
+ * decides: the event's category travel_destination.
  */
 
 const HOME_FIELDS = Object.freeze(['address', 'neighbourhood', 'city']);

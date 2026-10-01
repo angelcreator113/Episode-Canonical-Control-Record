@@ -3156,9 +3156,11 @@ Experiments Studio Session (Echo Park):
    deliverable at it, through `draftDeliverablesForDeal`'s `priceTier` and
    `proposeTerms`'s `tier`.
    - The event's own tier still sizes the job (D12's drafted deliverables).
-     INFERRED: the ruling is about prices only.
-   - INFERRED: with no `character_state` row for Lala, the event's tier
-     prices the deal, as before.
+   - With no `character_state` row for Lala, the event's tier prices the
+     deal, as before.
+   - Both choices were accepted by Evoni (2026-10-01: "I accept your other
+     two choices (sizing by the event's tier, prices by Lala's tier; fall
+     back to the event's tier when no reputation is on record).").
 2. **No "pricing vnull".**
    - A deliverable drafted with its price now counts as priced, so the
      deal records the card's `pricing_version` on its first draft.
@@ -3169,16 +3171,27 @@ Experiments Studio Session (Echo Park):
 4. **No travel from Echo Park.**
    - **The cause.** In the LalaVerse, Echo Park is one of the DREAM cities,
      so the World Studio seed gives its venues `city: 'Echo Park'`. Lala's
-     home is city Los Angeles, neighbourhood Echo Park, so the city
-     comparison drafted travel.
-   - **The fix.** `lalaTravelsFor` now treats Lala's home neighbourhood as
-     home, alongside her home city. It does so for the venue's city, or
-     its district when no city is known. Only then does the
-     travel_destination fallback apply.
-   - **Open (INFERRED).** The other DREAM cities (Dazzle District,
-     Radiance Row, Ascent Tower, Maverick Harbor) are not Lala's home
-     neighbourhood, so an event there still drafts travel. Whether they
-     are inside Los Angeles is not ruled.
+     home was stored as city Los Angeles, neighbourhood Echo Park, so the
+     city comparison drafted travel.
+   - **The correction** (Evoni, 2026-10-01), recorded verbatim:
+
+     > Lala's home city is Echo Park, one of the five DREAM cities in the LalaVerse (not Los Angeles). Her home is 246 Olddy Paveway Ln, Echo Park. The DREAM cities (Echo Park, Dazzle District, Radiance Row, Ascent Tower, Maverick Harbor) are separate cities, each with its own streets, shops, restaurants and venues. An event inside Echo Park is local: getting there is event spending, never travel. An event in any other DREAM city drafts travel (and accommodation where a stay makes sense), with no amount and "Price required".
+
+     It corrects D13's "Echo Park, Los Angeles" (§8(cc) D13 travel,
+     2026-09-30), which stays recorded as it was given.
+   - **The fix.**
+     - Migration `20261001210000` sets the stored home to city Echo Park,
+       neighbourhood empty, address kept. It changes each `lala_home` whose
+       city is Los Angeles and neighbourhood Echo Park; others are left.
+     - `lalaTravelsFor` compares the venue's city (or, with no city known,
+       its district) with the home city. An Echo Park venue is home; a
+       venue in Dazzle District, Radiance Row, Ascent Tower or Maverick
+       Harbor drafts travel and accommodation with no amount. Only a venue
+       with no known place falls back to the travel_destination category.
+     - A stored home neighbourhood still counts as home, so a show not yet
+       migrated keeps Echo Park local.
+   - **Open (INFERRED).** Accommodation is drafted with every travel line,
+     as D13 built it. "Where a stay makes sense" is not yet a rule.
 
 **(dd) Scene image rulings (Evoni, 2026-09-30).** Recorded verbatim; built
 after D13, one PR each.
