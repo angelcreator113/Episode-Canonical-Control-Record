@@ -3827,6 +3827,16 @@ code against these rulings, with open questions, is
 > MB5. The episode Overview gets a Money card (M1): actual net so far, projected net, and how many lines are still planned or pending.
 >
 > MB6. After Complete, a reconciliation view compares planned with posted per line and highlights differences (a bonus not earned, a spending line changed).
+
+**Answers (Evoni, 2026-10-01)** to the design note's questions, verbatim:
+
+> Q1, Q2, Q4–Q9: accept your recommendations as written.
+> Q3: each tier's bonus is its own line, but conditional bonuses are not counted in the projection; show them as "+ up to X if SLAY" (or the tier named) beside the projected net.
+> Q10: the Overview's ledger list is replaced by the Money card with a "See all in Money →" link; the Money tab is the one full view.
+
+The recommendations accepted for Q1, Q2 and Q4–Q9 are in the note's §3,
+as written there. Q3 differs from its recommendation: no bonus tier is
+counted in the projection, the brief's `designed_intent` included.
 ---
 
 ## 9. Owed before enforcement

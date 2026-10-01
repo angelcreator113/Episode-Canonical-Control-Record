@@ -174,7 +174,28 @@ Each has a recommendation; nothing is ruled until she answers.
     - The Overview's ledger list stays below it unchanged. The other
       choice is removing the list, since the Money tab has the rows.
 
-## 4. Suggested build order (one PR each)
+## 4. Answers (Evoni, 2026-10-01)
+
+Recorded verbatim; also in `docs/EVENT_EPISODE_FLOW.md` §8(gg). Where an
+answer differs from §3's recommendation, the answer stands: §3 is not
+rewritten.
+
+> Q1, Q2, Q4–Q9: accept your recommendations as written.
+> Q3: each tier's bonus is its own line, but conditional bonuses are not counted in the projection; show them as "+ up to X if SLAY" (or the tier named) beside the projected net.
+> Q10: the Overview's ledger list is replaced by the Money card with a "See all in Money →" link; the Money tab is the one full view.
+
+So, for the build:
+- **Q1, Q2, Q4–Q9:** as §3 recommends.
+- **Q3:**
+  - each tier the deal names is its own Planned line;
+  - no conditional bonus is counted in the projected net or the projected
+    balance, so the brief's `designed_intent` is not used;
+  - beside the projected net the tab shows "+ up to X if SLAY" (or the
+    tier named).
+- **Q10:** the Overview's ledger list goes. The Money card replaces it,
+  with a "See all in Money →" link; the Money tab is the one full view.
+
+## 5. Build order (one PR each)
 
 1. The line list with states and the projection: the service and the Money
    tab (MB1–MB3).
