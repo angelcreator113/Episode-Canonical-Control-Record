@@ -1831,6 +1831,9 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
     // ── SceneSpec post-generation validation ──
+    // The set's SceneSpec, including one auto-built above. Read here: the
+    // brief's copy lives in angleBriefOptions since S2 (#2421).
+    const spec = sceneSet.scene_spec;
     let specValidation = null;
     if (spec?.camera_contracts && stillUrl) {
       try {
