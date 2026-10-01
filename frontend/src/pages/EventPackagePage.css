@@ -1605,3 +1605,39 @@
   text-underline-offset: 2px;
   overflow-wrap: anywhere;
 }
+
+/* Episode Money Phase B, MB4 (§8(gg)): early money warnings, never blocking. */
+.epp-money-warnings {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #E9C46A;
+  border-radius: 8px;
+  background: #FFF6DC;
+  color: #6B4A00;
+  font-size: 13px;
+}
+
+.epp-money-warnings-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.epp-money-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.epp-money-warnings li {
+  overflow-wrap: anywhere;
+}
+
+.epp-money-warnings-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #8A6A20;
+}

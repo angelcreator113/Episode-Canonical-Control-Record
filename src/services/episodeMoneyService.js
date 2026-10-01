@@ -113,7 +113,7 @@ async function spendingView(sequelize, episodeId) {
  *   episode_id, show_id, balance, rows, net,
  *   event: null | { id, name }, expected,
  *   spending: { lines, total, editable },
- *   lines, unplanned, projection
+ *   lines, unplanned, projection, warnings
  * }>} null when the episode is missing, deleted, or of another show.
  */
 async function getEpisodeMoney(sequelize, { showId, episodeId }) {
@@ -158,7 +158,7 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
 
   // Phase B (§8(gg) MB1–MB3): the lines, their states and the projection.
   const { listSpending, hadSpendingLines } = require('./episodeSpendingService');
-  const { plannedLines, buildMoneyLines } = require('./episodeMoneyLines');
+  const { plannedLines, buildMoneyLines, moneyWarnings } = require('./episodeMoneyLines');
   const plan = plannedLines({
     event,
     costs,
@@ -182,7 +182,34 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     lines,
     unplanned,
     projection,
+    // MB4: early warnings, never blocking.
+    warnings: moneyWarnings({ lines, projection, balance }),
   };
 }
 
-module.exports = { getEpisodeMoney, findSourceEvent, expectedLines };
+/**
+ * The money an event's episode would carry, before Start Episode makes it
+ * (MB4: "Start Episode/Complete warn early"): its accepted terms as lines,
+ * nothing posted, and the warnings against Lala's ledger balance. When
+ * `episodeId` is given (Save and relock after a reopen), that episode's
+ * spending lines are planned too; otherwise a legacy event's extras stand
+ * in for the spending Start Episode will draft.
+ */
+async function eventMoneyPreview(sequelize, { showId, event, episodeId = null, transaction } = {}) {
+  const { getCurrentBalance } = require('./financialTransactionService');
+  const balance = await getCurrentBalance(sequelize, showId);
+  const { isDealEvent, listEventCosts } = require('./eventCostsService');
+  const { listEventDeliverables } = require('./eventTermsService');
+  const deal = isDealEvent(event);
+  const costs = deal ? await listEventCosts(sequelize, event.id, { transaction }) : [];
+  const deliverables = deal ? await listEventDeliverables(sequelize, event.id, { transaction }) : [];
+  const { listSpending, hadSpendingLines } = require('./episodeSpendingService');
+  const spending = episodeId ? await listSpending(sequelize, episodeId, { transaction }) : [];
+  const hadSpending = episodeId ? await hadSpendingLines(sequelize, episodeId, { transaction }) : false;
+  const { plannedLines, buildMoneyLines, moneyWarnings } = require('./episodeMoneyLines');
+  const plan = plannedLines({ event, costs, deliverables, spending, hadSpending });
+  const { lines, projection } = buildMoneyLines({ plan, rows: [], balance });
+  return { balance, lines, projection, warnings: moneyWarnings({ lines, projection, balance }) };
+}
+
+module.exports = { getEpisodeMoney, eventMoneyPreview, findSourceEvent, expectedLines };

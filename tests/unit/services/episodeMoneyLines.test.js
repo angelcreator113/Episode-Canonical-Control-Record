@@ -2,7 +2,7 @@
  * Episode Money, Phase B (§8(gg) MB1–MB3 and Evoni's answers): the pure
  * line builder, episodeMoneyLines.
  */
-const { plannedLines, buildMoneyLines, STATES } = require('../../../src/services/episodeMoneyLines');
+const { plannedLines, buildMoneyLines, moneyWarnings, STATES, WARNING_CODES } = require('../../../src/services/episodeMoneyLines');
 
 describe('episodeMoneyLines', () => {
   test('a legacy unpaid event: its entry cost is a line Lala pays at Complete', () => {
@@ -62,5 +62,46 @@ describe('episodeMoneyLines', () => {
     expect(projection.projected_net).toBe(0);
     expect(projection.projected_balance).toBe(10);
     expect(projection.conditional).toEqual([{ tier: 'slay', amount: 200, label: 'Bonus (SLAY)' }]);
+  });
+
+  describe('moneyWarnings (MB4, Q6)', () => {
+    const cost = (key, amount, category = 'event_cost', state = STATES.PLANNED) => ({
+      key, kind: 'expense', category, amount, signed: -amount, state, conditional: false, covered: false,
+    });
+    const income = (key, amount) => ({ key, kind: 'income', category: 'appearance_fee', amount, signed: amount, state: STATES.PLANNED, conditional: false, covered: false });
+
+    test('nothing warns when the balance covers the costs and the projection stays above zero', () => {
+      const lines = [cost('a', 50)];
+      expect(moneyWarnings({ lines, balance: 100, projection: { projected_balance: 50 } })).toEqual([]);
+    });
+
+    test('costs above the balance warn with the shortfall, even when income would cover them', () => {
+      const lines = [cost('a', 80), cost('s', 30, 'event_spending'), income('i', 500)];
+      const [w] = moneyWarnings({ lines, balance: 100, projection: { projected_balance: 490 } });
+      expect(w).toEqual(expect.objectContaining({
+        code: WARNING_CODES.COSTS_EXCEED_BALANCE, shortfall: 10, costs: 110, spending: 30, have: 100, spending_alone: false,
+      }));
+      expect(w.message).toBe("This episode's costs and spending (110) are more than Lala has (100): 10 short if the income does not arrive.");
+    });
+
+    test('spending alone above the balance is named', () => {
+      const lines = [cost('s', 120, 'event_spending')];
+      const [w] = moneyWarnings({ lines, balance: 100, projection: { projected_balance: -20 } }).filter((x) => x.code === WARNING_CODES.COSTS_EXCEED_BALANCE);
+      expect(w.spending_alone).toBe(true);
+      expect(w.message).toBe('Event spending (120) is more than Lala has (100): 20 short before any income arrives.');
+    });
+
+    test('a projected balance below zero warns with its shortfall', () => {
+      const ws = moneyWarnings({ lines: [], balance: 10, projection: { projected_balance: -40 } });
+      expect(ws).toEqual([expect.objectContaining({ code: WARNING_CODES.PROJECTED_BELOW_ZERO, shortfall: 40 })]);
+    });
+
+    test('posted, covered and conditional lines are not open costs', () => {
+      const lines = [
+        cost('p', 500, 'event_cost', STATES.POSTED),
+        { ...cost('c', 500), covered: true, state: STATES.COVERED },
+      ];
+      expect(moneyWarnings({ lines, balance: 10, projection: { projected_balance: 10 } })).toEqual([]);
+    });
   });
 });
