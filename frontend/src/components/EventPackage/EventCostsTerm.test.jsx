@@ -83,13 +83,22 @@ describe('EventCostsTerm (Task #2365)', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  test('Draft extras posts to the draft route and reloads', async () => {
+  test('Draft entry posts to the draft route and reloads (extras are event spending since the split)', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, drafted: [{ id: 'c4' }], costs: COSTS } });
     const { onToast } = renderCosts();
     await screen.findByTestId('terms-cost-c1');
     fireEvent.click(screen.getByTestId('terms-costs-draft-extras'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${costsUrl}/draft-extras`, {}));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Drafted 1 extra'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Drafted the entry line'));
+  });
+
+  test('a new cost cannot be of kind extras; an existing extras row keeps its kind', async () => {
+    renderCosts();
+    await screen.findByTestId('terms-cost-c1');
+    fireEvent.click(screen.getByTestId('terms-cost-add'));
+    const kinds = [...screen.getByTestId('terms-cost-kind').options].map((o) => o.value);
+    expect(kinds).not.toContain('extras');
+    expect(kinds).toContain('entry');
   });
 
   test('locked: read-only, with no add, draft, edit or remove', async () => {

@@ -524,7 +524,27 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
           metadata: { kind: cost.kind, paid_by: cost.paid_by, label: cost.label || null },
         });
       }
-    } else {
+    }
+
+    // 8b. Event spending (the event cost split ruling, 2026-09-30): the
+    // episode's Money tab lines, one expense each (category event_spending,
+    // naming its line; Law 13). A legacy event's styling_extras lump is
+    // charged only for an episode that never had lines (started before the
+    // split): lines drafted at Start Episode replace it, and deleting them
+    // all does not bring it back.
+    const {
+      listSpending, chargeableSpending, hadSpendingLines, SPENDING_CATEGORY,
+    } = require('./episodeSpendingService');
+    const spending = await listSpending(sequelize, episodeId, { transaction });
+    for (const line of chargeableSpending(spending)) {
+      await addTx({
+        type: 'expense', category: SPENDING_CATEGORY, amount: line.total,
+        description: `${line.label}${line.quantity > 1 ? ` × ${line.quantity}` : ''} at "${event.name}"`,
+        source_type: 'event_spending', source_id: line.id, source_name: event.name,
+        metadata: { label: line.label, quantity: line.quantity, unit_price: line.unit_price },
+      });
+    }
+    if (!isDeal && !(await hadSpendingLines(sequelize, episodeId, { transaction }))) {
       const { drinks, valet, photo_booth: photoBooth } = eventExtrasFor(event);
       const extras = drinks + valet + photoBooth;
       if (extras > 0) {
