@@ -13,6 +13,9 @@
  *
  *   Q5. "an event can be pencilled into a future slot and moved freely; it
  *   locks at Start Episode."
+ *   A5. "Start Episode snapshots the season context onto the episode. The
+ *   Overview shows its season position and purpose, and the script
+ *   generator receives that context."
  *   A7. "Only future slots can be reordered or re-planned; a slot whose
  *   episode has started is locked to that episode."
  *   Q4 (accepted). Existing episodes in no slot are listed "for you to place
@@ -192,6 +195,54 @@ async function getRoadmap(sequelize, showId) {
   };
 }
 
+/**
+ * The season context snapshotted onto an episode (A5): the slot's season,
+ * label, phase and intention. Also sets episodes.season_number and fills the
+ * brief's arc_number (the phase) and position_in_arc (the slot within the
+ * phase) where they are empty, so the grounded script reads them.
+ */
+async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
+  const [[slot]] = await sequelize.query(
+    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.career_focus, s.desired_pressure,
+            s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.phases
+       FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id
+      WHERE s.id = :slotId`,
+    { replacements: { slotId }, transaction });
+  if (!slot) return null;
+  const phase = arcPhases(slot).find((p) => Number(p.phase) === Number(slot.phase)) || {};
+  const start = Number(phase.episode_start) || ((slot.phase - 1) * 8 + 1);
+  const season = slot.season_number || 1;
+  const context = {
+    season_number: season,
+    label: episodeLabel(season, slot.slot_number),
+    slot_number: slot.slot_number,
+    arc_id: slot.arc_id,
+    arc_title: slot.arc_title,
+    phase: {
+      number: slot.phase,
+      title: phase.title || null,
+      tagline: phase.tagline || null,
+      emotional_arc: phase.emotional_arc || null,
+    },
+    position_in_phase: slot.slot_number - start + 1,
+    story_purpose: slot.story_purpose || null,
+    career_focus: slot.career_focus || null,
+    desired_pressure: slot.desired_pressure || null,
+    outcome_range: parseJson(slot.outcome_range, null),
+    snapshotted_at: new Date().toISOString(),
+  };
+  await sequelize.query(
+    `UPDATE episodes SET season_context = CAST(:context AS jsonb), season_number = :season, updated_at = NOW()
+      WHERE id = :episodeId`,
+    { replacements: { context: JSON.stringify(context), season, episodeId }, transaction });
+  await sequelize.query(
+    `UPDATE episode_briefs
+        SET arc_number = COALESCE(arc_number, :phase), position_in_arc = COALESCE(position_in_arc, :position)
+      WHERE episode_id = :episodeId AND deleted_at IS NULL`,
+    { replacements: { phase: slot.phase, position: context.position_in_phase, episodeId }, transaction });
+  return context;
+}
+
 async function lockSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
     `SELECT id, arc_id, slot_number, event_id, episode_id, locked_at
@@ -276,6 +327,7 @@ async function placeEpisode(sequelize, showId, slotId, episodeId) {
       `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
         WHERE id = :slotId`,
       { replacements: { episodeId, eventId, slotId }, transaction });
+    await snapshotEpisode(sequelize, { slotId, episodeId, transaction });
     return { slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId };
   });
 }
@@ -294,9 +346,12 @@ async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingE
   if (replacingEpisodeId) {
     const [rows] = await sequelize.query(
       `UPDATE season_slots SET episode_id = :episodeId, updated_at = NOW()
-        WHERE episode_id = :replacingEpisodeId AND deleted_at IS NULL RETURNING slot_number`,
+        WHERE episode_id = :replacingEpisodeId AND deleted_at IS NULL RETURNING id, slot_number`,
       { replacements: { episodeId, replacingEpisodeId }, transaction });
-    if (rows.length) return rows[0].slot_number;
+    if (rows.length) {
+      await snapshotEpisode(sequelize, { slotId: rows[0].id, episodeId, transaction });
+      return rows[0].slot_number;
+    }
   }
   const [[arc]] = await sequelize.query(
     `SELECT id FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
@@ -315,6 +370,7 @@ async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingE
     `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
       WHERE id = :id`,
     { replacements: { episodeId, eventId, id: slot.id }, transaction });
+  await snapshotEpisode(sequelize, { slotId: slot.id, episodeId, transaction });
   return slot.slot_number;
 }
 
@@ -329,4 +385,5 @@ module.exports = {
   pencilEvent,
   placeEpisode,
   assignOnStart,
+  snapshotEpisode,
 };

@@ -71,7 +71,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [linkedEvents, setLinkedEvents] = useState([]);  // GET /episodes/:id/events — the brief's source event first, then events whose used_in_episode_id is this episode
   const [sceneSets, setSceneSets] = useState([]);
   const [scriptInfo, setScriptInfo] = useState(null);
-  const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [linkBusy, setLinkBusy] = useState(false);
   // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
   const [linkError, setLinkError] = useState(null);
@@ -115,6 +114,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
 
   const showId = show?.id || episode?.show_id;
 
+  // The season context snapshotted at Start Episode (Season Arc §8(ff) A5).
+  const seasonContext = (() => {
+    const sc = episode?.season_context;
+    if (!sc) return null;
+    if (typeof sc !== 'string') return sc;
+    try { return JSON.parse(sc); } catch (err) { console.error('[Episode] season_context parse failed:', err); return null; }
+  })();
+
   useEffect(() => {
     if (!episode?.id) return;
     loadContext();
@@ -131,9 +138,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       // yet linked anywhere). It is not how this episode finds its events.
       api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
         setAllEvents(data?.events || []);
-      }).catch(() => {});
-      api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(({ data }) => {
-        setTotalEpisodes((data?.data || data || []).length);
       }).catch(() => {});
       // Episode-scoped ledger. Skipping when no showId — the endpoint
       // requires it, and a draft episode without a show wouldn't have
@@ -671,15 +675,31 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           </select>
         </div>
 
-        {/* Season Position */}
-        <div style={S.card}>
+        {/* Season Position — the season context snapshotted at Start Episode
+            (Season Arc §8(ff) A5), shown "S1 · E7" (Q3); the show-wide
+            episode count stays internal. */}
+        <div style={S.card} data-testid="season-position">
           <span style={S.label}>📺 Season Position</span>
-          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {Array.from({ length: totalEpisodes || 6 }, (_, i) => (
-              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === (episode.episode_number || 1) ? '#B8962E' : (i + 1) < (episode.episode_number || 1) ? '#d1fae5' : '#f1f5f9' }} />
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600, marginTop: 4 }}>Episode {episode.episode_number || '?'} of {totalEpisodes || '?'}</div>
+          {seasonContext?.label ? (
+            <>
+              <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                {Array.from({ length: 24 }, (_, i) => (
+                  <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === seasonContext.slot_number ? '#B8962E' : (i + 1) < seasonContext.slot_number ? '#d1fae5' : '#f1f5f9' }} />
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: '#B8962E', fontWeight: 700, marginTop: 6 }}>
+                {seasonContext.label}
+                {seasonContext.phase?.title && <span style={{ fontWeight: 500, color: '#64748b' }}> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
+              </div>
+              <div style={{ fontSize: 12, color: seasonContext.story_purpose ? '#334155' : '#94a3b8', marginTop: 4, fontStyle: seasonContext.story_purpose ? 'normal' : 'italic' }}>
+                {seasonContext.story_purpose || 'No story purpose set for this slot yet.'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+              Not in a season slot yet. Place it on Producer Mode → Episodes → Season Arc.
+            </div>
+          )}
         </div>
       </div>
       </SectionBand>

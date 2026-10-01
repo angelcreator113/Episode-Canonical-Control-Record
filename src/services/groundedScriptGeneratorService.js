@@ -143,8 +143,21 @@ async function generateGroundedScript(episodeId, showId, models) {
     lalaStats = rows?.[0] || null;
   } catch { /* non-blocking */ }
 
+  // 7. This episode's season position (§8(ff) A5), snapshotted at Start Episode
+  let seasonContext = null;
+  try {
+    const [rows] = await sequelize.query(
+      'SELECT season_context FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+      { replacements: { episodeId } }
+    );
+    const sc = rows?.[0]?.season_context;
+    seasonContext = (typeof sc === 'string' ? JSON.parse(sc) : sc) || null;
+  } catch (err) {
+    console.error('[ScriptGen] season context failed (non-blocking):', err.message);
+  }
+
   // Build prompt
-  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore });
+  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext });
 
   console.log(`[ScriptGen] Generating script for episode ${episodeId} with ${scenePlan.length} beats`);
 
@@ -157,7 +170,7 @@ async function generateGroundedScript(episodeId, showId, models) {
   return response.content[0]?.text || '';
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore }) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }) {
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
         const tpl = BEAT_TEMPLATES[b.beat_number] || {};
@@ -245,7 +258,9 @@ Archetype: ${brief?.episode_archetype || 'Rising'}
 Designed intent: ${brief?.designed_intent || 'pass'}
 Narrative purpose: ${brief?.narrative_purpose || 'Not set'}
 Forward hook: ${brief?.forward_hook || 'Not set'}
-
+${seasonContext?.label ? `Season position: ${seasonContext.label}${seasonContext.phase?.title ? `, Phase ${seasonContext.phase.number}: ${seasonContext.phase.title}` : ''}
+Season story purpose: ${seasonContext.story_purpose || 'Not set'}
+` : ''}
 ═══ EVENT ═══
 ${eventContext}
 
@@ -277,4 +292,4 @@ RULES:
 Write the complete 14-beat script now. No preamble — just the script.`;
 }
 
-module.exports = { generateGroundedScript };
+module.exports = { generateGroundedScript, buildScriptPrompt };

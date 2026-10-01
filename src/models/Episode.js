@@ -25,6 +25,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'season_number',
       },
+      // Season Arc (§8(ff) A5): the slot's season, label ("S1 · E7"), phase
+      // and intention, snapshotted at Start Episode or placement.
+      season_context: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,
