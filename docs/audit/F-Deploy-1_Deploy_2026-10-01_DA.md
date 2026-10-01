@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy DA, 2026-10-01, backend and frontend. One commit, 12 files: Season Arc PR 7 (#2445, story threads) with its one migration; no package change; one plain restart. `scripts/deploy-prod.sh` stopped on the pending migration as designed, and Evoni finished the deploy by hand per `DEVELOPMENT_WORKFLOW.md` §7.1, outside any agent session. CFO 89/100 with 4 warnings, unchanged from CZ. The app check has not been done yet. The restart count is continuous from CZ (56 → 57). Production is one commit behind `origin/main`: #2446 (Season Arc PR 8), merged after DA's fetch, with no migration.* |
+| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy DA, 2026-10-01, backend and frontend. One commit, 12 files: Season Arc PR 7 (#2445, story threads) with its one migration; no package change; one plain restart. `scripts/deploy-prod.sh` stopped on the pending migration as designed, and Evoni finished the deploy by hand per `DEVELOPMENT_WORKFLOW.md` §7.1, outside any agent session. CFO 89/100 with 4 warnings, unchanged from CZ. Evoni's app check passed for the roadmap, a pencilled slot and an auto-drafted intention; story threads were not checked. The restart count is continuous from CZ (56 → 57). Production is one commit behind `origin/main`: #2446 (Season Arc PR 8), merged after DA's fetch, with no migration.* |
 | --- |
 
 **Document version**
@@ -63,8 +63,28 @@ was still open when this record was written).
    - `episode-worker` stopped (standing).
 5. **CFO.** 20:12:36–20:12:40: **89/100**, 0 critical, **4 warnings**.
 
-**App check: not checked yet** (Evoni). Nothing in this record says the
-deployed features work or fail in production.
+**App check (Evoni), ATTESTED, given for CZ and DA together, after DA**,
+verbatim: "the roadmap works; slot 2 has Local Boutique "Style Challenge"
+pencilled in (Event ready), and its intention was auto-drafted ("Lala
+lands her first real styling opportunity…")."
+
+- **The roadmap works after DA's migration.** MEASURED: in DA's code, the
+  roadmap's query joins the new table:
+
+  ```
+  $ git show 20cb81db:src/services/seasonSlotService.js | grep -n "LEFT JOIN show_story_threads"
+  235:       LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
+  359:       LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
+  ```
+
+  INFERRED: a roadmap that loads in production agrees with
+  `show_story_threads` existing there, as §0 step 3 says. Line 235 is
+  `getRoadmap`; line 359 is the Event Package's season context.
+- **Slot 2's pencilled event and auto-drafted intention** are CY's and
+  CZ's features; the CZ record (§0) carries what they show.
+- **Not covered by the check:** DA's own feature, story threads (the
+  Story threads card, a slot naming its thread, acceptance advancing it,
+  close and reopen). It is not said to work or to fail.
 
 ## §1. Identity and continuity
 
@@ -269,7 +289,9 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
   - `/health` healthy and connected;
   - `episode-worker` stopped.
 - **CFO:** 89/100, 0 critical, 4 warnings, unchanged from CZ.
-- **App check:** not done yet (Evoni).
+- **App check (Evoni, ATTESTED):** the roadmap works (INFERRED: so the
+  new table is there); slot 2 has an event pencilled in and an
+  auto-drafted intention (§0). Story threads were not checked.
 - Nothing is RULED here. The filing session made no host, AWS, database or
   Cognito contact.
 
