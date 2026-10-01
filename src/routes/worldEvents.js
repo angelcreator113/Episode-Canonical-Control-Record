@@ -508,7 +508,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
     // If venue_location_id provided, auto-populate venue details from WorldLocation
     let resolvedVenueName = venue_name || null;
     let resolvedVenueAddress = venue_address || null;
-    let resolvedSceneSetId = scene_set_id || null;
+    const resolvedSceneSetId = scene_set_id || null;
     // Task #2158: the venue link is saved when it names an existing
     // WorldLocation (the lookup below), and left unsaved otherwise.
     let savedVenueLocationId = null;
@@ -522,14 +522,9 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
             const parts = [venue.street_address, venue.district, venue.city].filter(Boolean);
             resolvedVenueAddress = parts.length > 0 ? parts.join(', ') : null;
           }
-          // Auto-link scene set from venue if not specified
-          if (!resolvedSceneSetId && models.SceneSet) {
-            const venueSceneSet = await models.SceneSet.findOne({
-              where: { world_location_id: venue_location_id },
-              attributes: ['id'],
-            });
-            if (venueSceneSet) resolvedSceneSetId = venueSceneSet.id;
-          }
+          // No scene set is linked from the venue by itself (S3, S7): the
+          // first set found at the location was linked here, with no order.
+          // The Event Package's Place section is where the set is chosen.
         }
       } catch { /* non-blocking */ }
     }

@@ -3986,3 +3986,14 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The set a link opened the page on (?set=<id>; S7). */
+.scene-sets-card-focused {
+  outline: 3px solid var(--lala-gold, #B8962E);
+  outline-offset: 2px;
+}
+.scene-sets-focus-missing {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #a3271f;
+}
