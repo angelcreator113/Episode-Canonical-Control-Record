@@ -3683,6 +3683,27 @@ INFERRED:
   pieces (W1).
 ---
 
+**(ff) Season Arc (Evoni, 2026-10-01).** Recorded verbatim. Nothing is
+built yet. The read of today's code is `docs/SEASON_ARC_READ.md`; the
+design note, with open questions, is `docs/SEASON_ARC_DESIGN_NOTE.md`.
+
+> A1. Season Arc is Prime Studios' plan for where Lala's career and story go across a season. Events say what's next, episodes say what happened, Season Arc says where it's all going.
+>
+> A2. A season has 24 episode slots in three phases: Foundation (1–8), Ascension (9–16), Legacy (17–24). The Season Arc page centres on this roadmap, each slot showing its state: done, in production, event ready, needs an event.
+>
+> A3. Each future slot can carry an intention: story purpose, career focus, desired pressure, the story thread it continues, and the outcome range hoped for. Intentions are auto-drafted from the phase and the season so far, labelled, and editable.
+>
+> A4. The next slot's intention, with Lala's current state (balance, goals, narrative debt, recent formats, people and places), drives next-event suggestions and avoids repetition. The Event Package shows a small read-only Season Context block (season, phase, slot, purpose). Season Arc provides intent; the Event Package owns the event's facts.
+>
+> A5. Start Episode snapshots the season context onto the episode. The Overview shows its season position and purpose, and the script generator receives that context.
+>
+> A6. Accepting a completed episode updates the season: it records the actual outcome on its slot, updates career goals, story threads and narrative debt, checks whether a phase boundary is reached (checkPhaseTransition, currently never called), and readies the next slot.
+>
+> A7. Only future slots can be reordered or re-planned; a slot whose episode has started is locked to that episode.
+>
+> A8. A Planning Insights view compares planned pressure with actual results per slot. Season money (spend, income, balance trend) comes from the ledger only, never from cost_coins.
+---
+
 ## 9. Owed before enforcement
 
 Located, not investigated beyond locating them, per this issue's scope.
