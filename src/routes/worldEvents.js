@@ -3123,7 +3123,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     try {
       const [eventRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type, deal_components,
+                outfit_pieces, canon_consequences, dress_code, format, rewards, deal_type, deal_components,
                 host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
                 appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
@@ -3134,7 +3134,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
       if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
       const [fallbackRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-                outfit_pieces, canon_consequences, dress_code, rewards, deal_type, deal_components,
+                outfit_pieces, canon_consequences, dress_code, format, rewards, deal_type, deal_components,
                 host, host_brand, appearance_fee, partnership_base_fee, performance_fee,
                 appearance_required, bonus_terms
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
@@ -3155,7 +3155,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     })();
 
     const {
-      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE,
+      USD_TO_COINS, RENTAL_RATE,
     } = require('../utils/financialRates');
     const {
       getCurrentBalance, getFinancialGoals,
@@ -3184,9 +3184,15 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     }
 
     // ── Event extras (drinks / valet / photo booth) ──────────────────
-    // A deal event (deal build PR 4, Task #2365) has no hidden extras and no
-    // cost_coins entry charge: its costs are its itemised event_costs rows,
-    // as Finalize charges them. A legacy event keeps both.
+    // A deal event (deal build PR 4, Task #2365) has no cost_coins entry
+    // charge: its terms costs are its itemised event_costs rows, as Finalize
+    // charges them. A legacy event keeps the entry cost.
+    // The extras are event spending since the event cost split (2026-09-30):
+    // Start Episode drafts them as Money tab lines and Complete charges
+    // them, for every event, so they are estimated here for every event,
+    // except a deal event that still has extras cost rows (drafted before
+    // the split; Start Episode carries them into spending): those rows are
+    // the estimate.
     const { normalizePaidFreeFlags } = require('../utils/paidFreeFlags');
     const { isDeal, eventCost } = normalizePaidFreeFlags(event);
     let drinks = 0;
@@ -3202,20 +3208,13 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
         lala_total: totals.lala,
         comped_total: totals.comped,
       };
-    } else {
-      drinks = EVENT_EXTRAS.drinks(prestige);
-      valet = EVENT_EXTRAS.valet(prestige);
-      // Photo booth only fires on events where it makes narrative sense —
-      // galas, premieres, launch parties (format, per Evoni's taxonomy
-      // ruling, 2026-09-22) or brand-deal events (event_type, the mechanic),
-      // or the dress code/presentation mentioning "red carpet". red_carpet
-      // is deliberately not a format value of its own — it stays a
-      // dress-code attribute (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)).
-      const photoBoothPrompt = (event.dress_code || '').toLowerCase();
-      const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
-        || event.event_type === 'brand_deal'
-        || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
-      photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
+    }
+    if (!isDeal || !itemised.costs.some((c) => c.kind === 'extras')) {
+      // The same extras Start Episode drafts (financialRates.eventExtrasFor:
+      // the photo booth only on galas, premieres, launches, brand deals or a
+      // red-carpet or photo dress code).
+      const { eventExtrasFor } = require('../utils/financialRates');
+      ({ drinks, valet, photo_booth: photoBooth } = eventExtrasFor(event));
     }
 
     // ── Income side ─────────────────────────────────────────────────

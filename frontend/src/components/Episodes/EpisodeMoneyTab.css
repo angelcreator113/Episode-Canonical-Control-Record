@@ -139,6 +139,152 @@
   background: var(--lala-danger-soft, #F7E4DC);
 }
 
+/* Event spending (the event cost split ruling, 2026-09-30). */
+.em-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.em-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--lala-gold, #B8962E);
+  cursor: pointer;
+}
+
+.em-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.em-link-danger {
+  color: var(--lala-danger, #B84D2E);
+}
+
+.em-spend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 90px;
+  grid-template-areas:
+    'label qty total'
+    'meta meta meta';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+}
+
+.em-spend:first-child {
+  border-top: none;
+}
+
+.em-spend-label { grid-area: label; font-weight: 600; overflow-wrap: anywhere; }
+.em-spend-qty { grid-area: qty; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
+.em-spend-total { grid-area: total; text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; color: var(--lala-danger, #B84D2E); }
+
+.em-spend-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.em-spend-note {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-spend-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.em-spend-sum {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-align: right;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  background: var(--lala-parchment, #FAF7F0);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: var(--lala-radius, 8px);
+}
+
+.em-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-field input {
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 14px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+  min-width: 0;
+}
+
+.em-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.em-button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--lala-gold, #B8962E);
+  color: #FFFFFF;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.em-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.em-form-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--lala-danger, #B84D2E);
+}
+
 /* 375px: the summary cards stack and each row wraps into two lines. */
 @media (max-width: 600px) {
   .em-tab {
@@ -156,6 +302,14 @@
       'desc desc'
       'date date';
     row-gap: 2px;
+  }
+
+  .em-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .em-field-wide {
+    grid-column: 1 / -1;
   }
 
   .em-row-category { grid-area: category; }

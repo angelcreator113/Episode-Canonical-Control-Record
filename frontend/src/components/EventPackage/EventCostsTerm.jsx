@@ -4,11 +4,13 @@
  *
  * Each row is one cost and says who pays it: Lala (Finalize charges it as
  * its own expense) or the host or brand (comped, never charged). Saved
- * through /world/:showId/events/:eventId/costs. "Draft extras" adds the
- * event's drinks, valet and photo booth as rows Lala pays, each once, and
- * for a self-funded deal an "Entry / ticket" row at the event's coin cost
- * that Lala pays (comped by the host for an invited/comped deal; Evoni,
- * 2026-09-30). A drafted row reads "Auto-drafted · event extras" or
+ * through /world/:showId/events/:eventId/costs. "Draft entry" adds, for a
+ * self-funded deal, an "Entry / ticket" row at the event's coin cost that
+ * Lala pays (comped by the host when entry is covered; Evoni, 2026-09-30).
+ * The extras (drinks, valet, photo booth) are event spending since the
+ * event cost split (2026-09-30): the episode's Money tab drafts and edits
+ * them; an extras row drafted before the split still shows here and moves
+ * there at Start Episode. A drafted row reads "Auto-drafted · event extras" or
  * "Auto-drafted · from event cost" until its amount changes, then Edited
  * (doctrine rule 14).
  *
@@ -17,8 +19,8 @@
  * it is charged its entry cost and extras as before, so the section is not
  * shown for it (EventTermsSection renders this only for a deal).
  *
- * `refreshKey` reloads the rows, for Propose terms, which drafts the extras
- * on a deal's first proposal.
+ * `refreshKey` reloads the rows, for Propose terms, which drafts the entry
+ * line on a deal's first proposal.
  *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
@@ -26,7 +28,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Receipt, Pencil, Plus, Trash2, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 import {
-  COST_KINDS, COST_PAID_BY, COST_PAID_BY_LABELS, COST_LABEL_MAX,
+  COST_KINDS, TERMS_COST_KINDS, COST_PAID_BY, COST_PAID_BY_LABELS, COST_LABEL_MAX,
   costKindLabel, costName, costDraftFrom, buildCostBody, costDraftNote, costTotals,
 } from '../../utils/eventCosts';
 
@@ -125,10 +127,10 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
     try {
       const res = await draftExtrasApi(showId, eventId);
       const added = Array.isArray(res.data?.drafted) ? res.data.drafted.length : 0;
-      toast(added ? `Drafted ${added} extra${added === 1 ? '' : 's'}` : 'The extras are already drafted');
+      toast(added ? 'Drafted the entry line' : 'Nothing to draft: the entry line is drafted, or this deal has none');
       await load();
     } catch (err) {
-      onWriteError(err, 'Failed to draft the extras');
+      onWriteError(err, 'Failed to draft the entry line');
     } finally {
       setSaving(false);
     }
@@ -143,7 +145,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
         {!locked && !form && (
           <span className="epp-term-head-actions">
             <button type="button" className="epp-inline-link" data-testid="terms-costs-draft-extras" onClick={draftExtras} disabled={saving}>
-              <Sparkles size={11} aria-hidden="true" /> Draft extras
+              <Sparkles size={11} aria-hidden="true" /> Draft entry
             </button>
             <button type="button" className="epp-inline-link" data-testid="terms-cost-add" onClick={() => openForm(null)} disabled={saving}>
               <Plus size={11} aria-hidden="true" /> Add
@@ -203,7 +205,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
             <label className="epp-term-field">
               <span>Kind</span>
               <select value={draft.kind} data-testid="terms-cost-kind" onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value }))}>
-                {COST_KINDS.map((k) => <option key={k} value={k}>{costKindLabel(k)}</option>)}
+                {(draft.kind === 'extras' ? COST_KINDS : TERMS_COST_KINDS).map((k) => <option key={k} value={k}>{costKindLabel(k)}</option>)}
               </select>
             </label>
             <label className="epp-term-field">
@@ -240,7 +242,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
       <p className="epp-term-note">
         {locked
           ? 'Locked at Start Episode. Complete charges each cost Lala pays; comped costs are never charged.'
-          : 'Each cost Lala pays is charged at Complete, one line each; a cost the host or brand comps is never charged. Draft extras adds the event\'s extras and, for a self-funded or comped deal, its entry from the event cost.'}
+          : 'Each cost Lala pays is charged at Complete, one line each; a cost the host or brand comps is never charged. Draft entry adds a self-funded or entry-covered deal\'s entry from the event cost. Drinks, valet and other spending during the event are on the episode\'s Money tab.'}
       </p>
     </div>
   );
