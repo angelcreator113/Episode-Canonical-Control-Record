@@ -21,13 +21,17 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
       ['post', '/world/:showId/arc/advance/confirm'],
       ['get', '/world/:showId/arc/context'],
       ['put', '/world/:showId/arc/phase/:phase'],
-      ['post', '/world/:showId/arc/extend'],
+      ['get', '/world/:showId/season/roadmap'],
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} → requireAuth`, () => {
         const re = new RegExp(`router\\.${verb}\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*async`);
         expect(SRC).toMatch(re);
       });
     });
+  });
+
+  test('no Extend route: the season stays 24 slots (§8(ff) Q2)', () => {
+    expect(SRC).not.toMatch(/router\.post\('\/world\/:showId\/arc\/extend'/);
   });
 
   test('no optionalAuth references remain', () => {
