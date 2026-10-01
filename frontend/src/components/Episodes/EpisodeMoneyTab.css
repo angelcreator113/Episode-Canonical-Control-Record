@@ -317,3 +317,82 @@
   .em-row-desc { grid-area: desc; }
   .em-row-date { grid-area: date; }
 }
+
+/* Phase B (§8(gg) MB1–MB3): one list of money lines with their states. */
+.em-summary {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.em-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'label amount'
+    'meta meta';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+}
+
+.em-line:first-child {
+  border-top: none;
+}
+
+.em-line-label { grid-area: label; font-weight: 600; overflow-wrap: anywhere; }
+.em-line-amount { grid-area: amount; text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; }
+
+.em-line-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-line-planned,
+.em-line-covered,
+.em-line-not_earned {
+  background: var(--lala-parchment, #FAF7F0);
+}
+
+.em-line-not_earned .em-line-label,
+.em-line-not_earned .em-line-amount {
+  text-decoration: line-through;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.em-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-surface, #FFFFFF);
+}
+
+.em-chip-pending { color: #8A5A00; border-color: #E9C46A; background: #FFF6DC; }
+.em-chip-posted { color: var(--em-positive); border-color: #A9D3B8; background: #EAF5EE; }
+.em-chip-conditional { text-transform: none; color: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); }
+
+.em-conditional {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+  .em-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

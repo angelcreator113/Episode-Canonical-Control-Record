@@ -11,7 +11,11 @@
  *   terms are returned as `expected` lines, apart from the rows, and are never
  *   added to the balance or the net.
  *
- * Phase A has no planned or pending states (Phase B) and no recap (Phase C).
+ * Phase B (§8(gg) MB1–MB3; episodeMoneyLines): `lines` is every money
+ * line of the episode with its trigger, payer and state (Planned, Pending,
+ * Posted), matched to its posted row by category and source; `unplanned`
+ * the posted rows no line matches; `projection` the projected net and
+ * balance. `expected` stays as Phase A returned it. No recap (Phase C).
  *
  * Event spending (the event cost split ruling, 2026-09-30): the episode's
  * spending lines (episodeSpendingService), each quantity × unit price with
@@ -108,7 +112,8 @@ async function spendingView(sequelize, episodeId) {
  * @returns {Promise<null | {
  *   episode_id, show_id, balance, rows, net,
  *   event: null | { id, name }, expected,
- *   spending: { lines, total, editable }
+ *   spending: { lines, total, editable },
+ *   lines, unplanned, projection
  * }>} null when the episode is missing, deleted, or of another show.
  */
 async function getEpisodeMoney(sequelize, { showId, episodeId }) {
@@ -122,7 +127,7 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const balance = await getCurrentBalance(sequelize, showId);
 
   const rows = await sequelize.query(
-    `SELECT ft.id, ft.created_at, ft.category, ft.type, ft.description, ft.amount
+    `SELECT ft.id, ft.created_at, ft.category, ft.type, ft.description, ft.amount, ft.source_id, ft.metadata
        FROM financial_transactions ft
       WHERE ft.show_id = :showId AND ft.episode_id = :episodeId AND ${countedLedgerRows('ft')}
       ORDER BY ft.created_at, ft.id`,
@@ -138,6 +143,8 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
       type: r.type,
       amount,
       signed: INCOME_TYPES.has(r.type) ? amount : -amount,
+      source_id: r.source_id || null,
+      metadata: r.metadata || null,
     };
   });
   const net = posted.reduce((sum, r) => sum + r.signed, 0);
@@ -147,6 +154,22 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const costs = isDealEvent(event) ? await listEventCosts(sequelize, event.id) : [];
   const { listEventDeliverables } = require('./eventTermsService');
   const deliverables = isDealEvent(event) ? await listEventDeliverables(sequelize, event.id) : [];
+  const spending = await spendingView(sequelize, episodeId);
+
+  // Phase B (§8(gg) MB1–MB3): the lines, their states and the projection.
+  const { listSpending, hadSpendingLines } = require('./episodeSpendingService');
+  const { plannedLines, buildMoneyLines } = require('./episodeMoneyLines');
+  const plan = plannedLines({
+    event,
+    costs,
+    deliverables,
+    spending: await listSpending(sequelize, episodeId),
+    hadSpending: await hadSpendingLines(sequelize, episodeId),
+  });
+  const { lines, unplanned, projection } = buildMoneyLines({
+    plan, rows: posted, balance, completed: !spending.editable,
+  });
+
   return {
     episode_id: episode.id,
     show_id: episode.show_id,
@@ -155,7 +178,10 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     net,
     event: event ? { id: event.id, name: event.name } : null,
     expected: expectedLines(event, costs, deliverables),
-    spending: await spendingView(sequelize, episodeId),
+    spending,
+    lines,
+    unplanned,
+    projection,
   };
 }
 

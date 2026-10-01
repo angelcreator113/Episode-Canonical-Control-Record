@@ -148,13 +148,13 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     fireEvent.click(await screen.findByTestId('ed-balance-chip'));
 
-    expect(await screen.findByText('Nothing has posted for this episode yet.')).toBeTruthy();
+    expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
     expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
   });
 
   test('?tab=money lands on the Money tab', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=money');
 
-    expect(await screen.findByText('Nothing has posted for this episode yet.')).toBeTruthy();
+    expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
   });
 });
