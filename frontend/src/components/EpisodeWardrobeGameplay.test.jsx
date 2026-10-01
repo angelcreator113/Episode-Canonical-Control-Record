@@ -586,3 +586,97 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
     expect(screen.getByText('Closet Mini Skirt')).toBeTruthy();
   });
 });
+
+// ─── W2 (Evoni, 2026-10-01): "Accessories and jewellery allow several
+// pieces at once; body (dress or top+bottom) and shoes stay single." ───
+describe('EpisodeWardrobeGameplay — several accessories and jewellery (W2)', () => {
+  const own = { ...base, is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined };
+  const CLOSET = [
+    { ...own, id: 'm-dress', name: 'Silk Gown', clothing_category: 'dress' },
+    { ...own, id: 'm-heels', name: 'Gold Heels', clothing_category: 'shoes' },
+    { ...own, id: 'm-flats', name: 'Ballet Flats', clothing_category: 'shoes' },
+    { ...own, id: 'm-clutch', name: 'Pearl Clutch', clothing_category: 'bag' },
+    { ...own, id: 'm-scarf', name: 'Silk Scarf', clothing_category: 'accessory' },
+    { ...own, id: 'm-ear', name: 'Drop Earrings', clothing_category: 'earrings' },
+    { ...own, id: 'm-neck', name: 'Pearl Necklace', clothing_category: 'necklace' },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?show_id=')
+      ? Promise.resolve({ data: { success: true, data: CLOSET, pagination: { page: 1, limit: 200, total: CLOSET.length } } })
+      : poolGet(url)));
+  });
+
+  const openCloset = async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Pearl Necklace');
+  };
+  const equip = async (name) => {
+    const before = screen.getAllByText(name).length;
+    fireEvent.click(screen.getAllByText(name)[0]);
+    await waitFor(() => expect(screen.getAllByText(name).length).toBe(before + 1));
+  };
+  const slotCard = (label) => screen.getByTestId(`slot-${label}`);
+
+  test('two accessories and two jewellery pieces are worn together', async () => {
+    await openCloset();
+    for (const name of ['Pearl Clutch', 'Silk Scarf', 'Drop Earrings', 'Pearl Necklace']) await equip(name);
+    expect(within(slotCard('accessories')).getByText('Pearl Clutch')).toBeTruthy();
+    expect(within(slotCard('accessories')).getByText('Silk Scarf')).toBeTruthy();
+    expect(within(slotCard('jewelry')).getByText('Drop Earrings')).toBeTruthy();
+    expect(within(slotCard('jewelry')).getByText('Pearl Necklace')).toBeTruthy();
+  });
+
+  test('shoes stay single: a second pair replaces the first', async () => {
+    await openCloset();
+    await equip('Gold Heels');
+    fireEvent.click(screen.getByText('Ballet Flats'));
+    await waitFor(() => expect(within(slotCard('shoes')).getByText('Ballet Flats')).toBeTruthy());
+    expect(within(slotCard('shoes')).queryByText('Gold Heels')).toBeNull();
+  });
+
+  test('one piece comes off on its own; the lock sends every piece', async () => {
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });
+      if (url === '/api/v1/wardrobe/lock-outfit-atomic') return Promise.resolve({ data: { success: true, locked: [], coins_after: 500 } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: serverScore(55, 'Okay') });
+      return Promise.resolve({ data: { success: true } });
+    });
+    await openCloset();
+    for (const name of ['Silk Gown', 'Gold Heels', 'Pearl Clutch', 'Silk Scarf', 'Drop Earrings', 'Pearl Necklace']) await equip(name);
+    fireEvent.click(within(slotCard('accessories')).getByRole('button', { name: 'Remove Silk Scarf' }));
+    await waitFor(() => expect(within(slotCard('accessories')).queryByText('Silk Scarf')).toBeNull());
+    expect(within(slotCard('accessories')).getByText('Pearl Clutch')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Lock Outfit/ }));
+    await waitFor(() => expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/lock-outfit-atomic')).toHaveLength(1));
+    const [, body] = api.post.mock.calls.find(([url]) => url === '/api/v1/wardrobe/lock-outfit-atomic');
+    expect([...body.wardrobe_ids].sort()).toEqual(['m-clutch', 'm-dress', 'm-ear', 'm-heels', 'm-neck']);
+  });
+
+  test('a locked outfit restores every jewellery piece, and an older one-piece draft still loads', async () => {
+    window.localStorage.setItem('wardrobe_draft_ep-1', JSON.stringify({ jewelry: { ...CLOSET[5], can_select: true } }));
+    await renderGame();
+    expect(within(slotCard('jewelry')).getByText('Drop Earrings')).toBeTruthy();
+  });
+
+  test('a locked outfit with two jewellery pieces shows both', async () => {
+    const LINKED = [
+      { id: 'r-dress', name: 'Linked Gown', clothing_category: 'dress' },
+      { id: 'r-ear', name: 'Linked Earrings', clothing_category: 'earrings' },
+      { id: 'r-neck', name: 'Linked Necklace', clothing_category: 'necklace' },
+    ];
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe/outfit/')
+      ? Promise.resolve({ data: { items: LINKED } }) : poolGet(url)));
+    await renderGame({}, 'Outfit Locked');
+    fireEvent.click(screen.getByRole('button', { name: /Unlock/ }));
+    await waitFor(() => expect(within(slotCard('jewelry')).getByText('Linked Necklace')).toBeTruthy());
+    expect(within(slotCard('jewelry')).getByText('Linked Earrings')).toBeTruthy();
+  });
+});

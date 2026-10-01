@@ -26,6 +26,46 @@ export const GAME_SLOT_DEFS = [
   { key: 'perfume', icon: '🌸', label: 'Perfume', categories: ['perfume'], required: false, desc: 'Optional' },
 ];
 
+// W2 (Evoni, 2026-10-01): "Accessories and jewellery allow several pieces
+// at once; body (dress or top+bottom) and shoes stay single." A multi slot
+// holds an array of pieces; every other slot holds one piece.
+export const MULTI_SLOTS = new Set(['accessories', 'jewelry']);
+
+/** The pieces in one slot, as an array (a single slot gives 0 or 1). */
+export function slotPieces(filled, key) {
+  const v = filled?.[key];
+  if (Array.isArray(v)) return v.filter(Boolean);
+  return v ? [v] : [];
+}
+
+/** Every piece worn, as [{ slot, item }], multi slots expanded. */
+export function outfitPieces(filled) {
+  const out = [];
+  for (const key of Object.keys(filled || {})) {
+    for (const item of slotPieces(filled, key)) out.push({ slot: key, item });
+  }
+  return out;
+}
+
+/**
+ * Slots in the current shape: a multi slot as an array (a draft saved
+ * before W2 held one piece there), a single slot as one piece.
+ */
+export function normalizeSlots(raw) {
+  const out = {};
+  for (const [key, v] of Object.entries(raw || {})) {
+    if (MULTI_SLOTS.has(key)) {
+      const pieces = slotPieces(raw, key);
+      if (pieces.length) out[key] = pieces;
+    } else if (v && !Array.isArray(v)) {
+      out[key] = v;
+    } else if (Array.isArray(v) && v[0]) {
+      out[key] = v[0];
+    }
+  }
+  return out;
+}
+
 // W3 (Evoni, 2026-10-01): the Full Closet opens on every piece at once.
 export const ALL_GROUP = { key: 'all', icon: '🗂️', label: 'All', categories: [], required: false, desc: 'Every piece in the closet' };
 // The Full Closet's catch-all for items no game slot accepts. Browse-only:

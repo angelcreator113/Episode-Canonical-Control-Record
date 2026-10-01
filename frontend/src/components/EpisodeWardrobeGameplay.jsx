@@ -33,7 +33,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach } from '../utils/wardrobeReach';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, gameSlotFor, closetGroupFor, fetchClosetWithTotal } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots } from '../lib/closetGrouping';
 
 // ─── CONSTANTS ───
 
@@ -217,7 +217,10 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           const restored = {};
           backendItems.forEach(item => {
             const slot = gameSlotFor(item.clothing_category);
-            if (slot) restored[slot] = { ...item, can_select: true };
+            if (!slot) return;
+            // W2: several accessories and jewellery pieces come back together.
+            if (MULTI_SLOTS.has(slot)) restored[slot] = [...(restored[slot] || []), { ...item, can_select: true }];
+            else restored[slot] = { ...item, can_select: true };
           });
           setFilledSlots(restored);
           setOutfitLocked(true);
@@ -233,7 +236,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           const saved = localStorage.getItem(key);
           if (saved) {
             const draft = JSON.parse(saved);
-            if (draft && typeof draft === 'object') setFilledSlots(draft);
+            if (draft && typeof draft === 'object') setFilledSlots(normalizeSlots(draft));
           }
         } catch { /* ignore parse errors */ }
         setSlotsReady(true);
@@ -246,8 +249,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   useEffect(() => {
     if (!episodeId || !slotsReady) return; // skip until initial restore is done
     const key = `wardrobe_draft_${episodeId}`;
-    const filled = Object.entries(filledSlots).filter(([, v]) => v);
-    if (filled.length === 0) {
+    if (outfitPieces(filledSlots).length === 0) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, JSON.stringify(filledSlots));
@@ -322,8 +324,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const todoCompletion = useMemo(() => {
     if (!todoList?.tasks) return null;
     const filledCats = new Set();
-    Object.entries(filledSlots).forEach(([key, item]) => {
-      if (!item) return;
+    outfitPieces(filledSlots).forEach(({ slot: key }) => {
       if (key === 'body') filledCats.add('dress');
       else filledCats.add(key);
     });
@@ -341,7 +342,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   // The ids on screen, order-free, so re-equipping the same pieces is not a
   // change. The event is the one on screen (EpisodeDetail's selectedEvent).
   const outfitIds = useMemo(() => {
-    const ids = Object.values(filledSlots).filter(Boolean).map(i => i.id).filter(Boolean);
+    const ids = outfitPieces(filledSlots).map(({ item }) => item.id).filter(Boolean);
     return [...new Set(ids)].sort();
   }, [filledSlots]);
   const outfitKey = outfitIds.join(',');
@@ -409,7 +410,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           .filter(i => i.can_select && !used.has(i.id) && gameSlotFor(i.clothing_category) === slot.key)
           .sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
         if (candidates.length > 0) {
-          newSlots[slot.key] = candidates[0];
+          newSlots[slot.key] = MULTI_SLOTS.has(slot.key) ? [candidates[0]] : candidates[0];
           used.add(candidates[0].id);
         }
       }
@@ -461,7 +462,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     const slotKey = gameSlotFor(item.clothing_category);
     if (!slotKey) { setInspecting(item); return; } // Other: browse-only
 
-    if (slotKey === 'body') {
+    if (MULTI_SLOTS.has(slotKey)) {
+      // W2: added beside the pieces already worn there.
+      setFilledSlots(prev => {
+        const worn = slotPieces(prev, slotKey);
+        return worn.some(p => p.id === item.id) ? prev : { ...prev, [slotKey]: [...worn, item] };
+      });
+    } else if (slotKey === 'body') {
       setFilledSlots(prev => ({ ...prev, body: item, top: undefined, bottom: undefined }));
     } else if (slotKey === 'top' || slotKey === 'bottom') {
       setFilledSlots(prev => ({ ...prev, [slotKey]: item, body: undefined }));
@@ -471,8 +478,15 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     setInspecting(null);
   };
 
-  const removeFromSlot = (slotKey) => {
-    setFilledSlots(prev => ({ ...prev, [slotKey]: undefined }));
+  // W2: in a multi slot, one piece comes off (itemId); the rest stay.
+  const removeFromSlot = (slotKey, itemId) => {
+    setFilledSlots(prev => {
+      if (MULTI_SLOTS.has(slotKey) && itemId) {
+        const rest = slotPieces(prev, slotKey).filter(p => p.id !== itemId);
+        return { ...prev, [slotKey]: rest.length ? rest : undefined };
+      }
+      return { ...prev, [slotKey]: undefined };
+    });
   };
 
   const purchaseItem = async (item) => {
@@ -509,7 +523,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const lockOutfit = async () => {
     setConfirming(true);
     try {
-      const items = Object.entries(filledSlots).filter(([, v]) => v && v.can_select).map(([slot, item]) => ({ slot, item }));
+      const items = outfitPieces(filledSlots).filter(({ item }) => item.can_select);
       if (items.length === 0) { setError('No selectable items in outfit'); setConfirming(false); return; }
       // Task #1937: one request for the whole outfit. The server checks every
       // piece and the total cost first, then buys and links all of them in
@@ -650,44 +664,55 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
             {/* Slots */}
             {visibleSlots.map(slot => {
-              const item = filledSlots[slot.key];
+              // W2: Accessories and Jewelry hold several pieces; the rest one.
+              const pieces = slotPieces(filledSlots, slot.key);
+              const multi = MULTI_SLOTS.has(slot.key);
+              const item = pieces[0];
               const isActive = activeSlot === slot.key;
               return (
-                <div key={slot.key}
-                  onClick={() => !item && setActiveSlot(slot.key)}
+                <div key={slot.key} data-testid={`slot-${slot.key}`}
+                  onClick={() => (!item || multi) && setActiveSlot(slot.key)}
                   style={{
                     ...W.slotCard,
                     border: isActive ? '2px solid #6366f1' : item ? '2px solid #bbf7d0' : '1px solid #e2e8f0',
                     background: item ? '#f0fdf4' : isActive ? '#eef2ff' : '#fff',
-                    cursor: item ? 'default' : 'pointer',
+                    cursor: item && !multi ? 'default' : 'pointer',
                   }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {item ? (
-                      <GarmentImage item={item} fallback={slot.icon} size={40} />
-                    ) : (
-                      <span style={{ fontSize: 20 }}>{slot.icon}</span>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>
-                        {slot.label}
-                        {slot.required && !item && <span style={{ color: '#dc2626', fontSize: 9 }}> *</span>}
-                      </div>
-                      {item ? (
-                        <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>{item.name}</div>
+                  {(multi && pieces.length > 0 ? pieces : [item]).map((piece, pi) => (
+                    <div key={piece?.id || 'empty'} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: pi ? 6 : 0 }}>
+                      {piece ? (
+                        <GarmentImage item={piece} fallback={slot.icon} size={40} />
                       ) : (
-                        <div style={{ fontSize: 10, color: '#94a3b8' }}>{slot.desc}</div>
+                        <span style={{ fontSize: 20 }}>{slot.icon}</span>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {pi === 0 && (
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>
+                            {slot.label}
+                            {slot.required && !piece && <span style={{ color: '#dc2626', fontSize: 9 }}> *</span>}
+                            {multi && pieces.length > 1 && <span style={{ color: '#64748b', fontSize: 10, fontWeight: 400 }}> · {pieces.length} pieces</span>}
+                          </div>
+                        )}
+                        {piece ? (
+                          <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>{piece.name}</div>
+                        ) : (
+                          <div style={{ fontSize: 10, color: '#94a3b8' }}>{slot.desc}</div>
+                        )}
+                      </div>
+                      {piece && (
+                        <button onClick={(e) => { e.stopPropagation(); removeFromSlot(slot.key, piece.id); setActiveSlot(slot.key); }}
+                          aria-label={`Remove ${piece.name}`} style={W.removeBtn}>✕</button>
                       )}
                     </div>
-                    {item && (
-                      <button onClick={(e) => { e.stopPropagation(); removeFromSlot(slot.key); setActiveSlot(slot.key); }}
-                        style={W.removeBtn}>✕</button>
-                    )}
-                  </div>
-                  {item && (
+                  ))}
+                  {item && !multi && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                       <span style={W.miniTier(item.tier)}>{TIER_STYLES[item.tier]?.emoji} {item.tier}</span>
                       {item.match_score != null && <span style={{ fontSize: 9, color: '#64748b' }}>Match: {item.match_score}</span>}
                     </div>
+                  )}
+                  {multi && item && (
+                    <div style={{ fontSize: 10, color: '#6366f1', marginTop: 4 }}>+ Add another</div>
                   )}
                 </div>
               );
@@ -764,7 +789,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     (Bottom even with a dress on, filled slots, and Other); the
                     event pool keeps its open-slot switcher. */}
                 {(browseMode === 'pool'
-                  ? visibleSlots.filter(s => !filledSlots[s.key])
+                  ? visibleSlots.filter(s => MULTI_SLOTS.has(s.key) || !filledSlots[s.key])
                   : [ALL_GROUP, ...SLOT_DEFS, OTHER_GROUP]
                 ).map(s => (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)} title={s.label} aria-label={s.label}
@@ -782,7 +807,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 const ts = TIER_STYLES[item.tier] || TIER_STYLES.basic;
                 const rs = ROLE_STYLES[item.pool_role] || ROLE_STYLES.safe;
                 const isLocked = !item.is_owned;
-                const isUsed = Object.values(filledSlots).some(fi => fi?.id === item.id);
+                const isUsed = outfitPieces(filledSlots).some(({ item: fi }) => fi?.id === item.id);
                 return (
                   <div key={item.id}
                     onClick={() => {

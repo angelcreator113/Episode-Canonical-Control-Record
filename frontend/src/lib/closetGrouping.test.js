@@ -5,8 +5,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import {
   GAME_SLOT_DEFS, OTHER_GROUP, canonicalCategory, gameSlotFor, closetGroupFor,
-  groupClosetItems, fetchAllClosetItems,
-} from './closetGrouping';
+  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots } from './closetGrouping';
 
 const ITEMS = [
   { id: 'dress', clothing_category: 'dress' },
@@ -117,5 +116,26 @@ describe('fetchAllClosetItems', () => {
     const api = { get: vi.fn(async () => ({ data: { data: rows } })) };
     expect(await fetchAllClosetItems(api, 's')).toHaveLength(200);
     expect(api.get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('several accessories and jewellery (W2)', () => {
+  const a = { id: 'a' }; const b = { id: 'b' }; const d = { id: 'd' };
+  test('only Accessories and Jewelry hold several pieces', () => {
+    expect([...MULTI_SLOTS].sort()).toEqual(['accessories', 'jewelry']);
+  });
+  test('slotPieces reads one piece or several as an array', () => {
+    expect(slotPieces({ jewelry: [a, b] }, 'jewelry')).toEqual([a, b]);
+    expect(slotPieces({ shoes: a }, 'shoes')).toEqual([a]);
+    expect(slotPieces({}, 'shoes')).toEqual([]);
+  });
+  test('outfitPieces lists every piece worn with its slot', () => {
+    expect(outfitPieces({ body: d, jewelry: [a, b], top: undefined })).toEqual([
+      { slot: 'body', item: d }, { slot: 'jewelry', item: a }, { slot: 'jewelry', item: b },
+    ]);
+  });
+  test('normalizeSlots turns an older one-piece draft into the multi shape, and drops empties', () => {
+    expect(normalizeSlots({ jewelry: a, accessories: [a, b], shoes: b, top: null, bottom: [d] }))
+      .toEqual({ jewelry: [a], accessories: [a, b], shoes: b, bottom: d });
   });
 });
