@@ -116,35 +116,37 @@ function inferIntent(event) {
 
 /**
  * The affordability warning Start Episode stores on the brief
- * (event_metadata.affordability_warning): the event costs more coins than
- * Lala has, or null. Save and relock after a reopen (Task #2378) rebuilds it
- * with this same function. A failed coins read logs and counts as 0 coins,
- * as Start Episode always has; it never blocks.
+ * (event_metadata.affordability_warning); Save and relock after a reopen
+ * (Task #2378) rebuilds it with this same function.
+ *
+ * Episode Money Phase B, MB4 (Evoni, 2026-10-01; §8(gg), Q6): it reads
+ * Lala's ledger balance and the event's whole plan (episodeMoneyService.
+ * eventMoneyPreview: itemised terms costs, the entry cost, spending), not
+ * cost_coins against the cached coins. Null when nothing warns, else
+ *   { coins_needed, coins_available, shortfall, warnings }
+ * with coins_needed the open costs and shortfall the largest warning's. It
+ * never blocks; a failed read logs and stores no warning.
  */
-function affordabilityWarningFor(currentCoins, event) {
-  const coins = parseInt(currentCoins) || 0;
-  const eventCost = parseFloat(event?.cost_coins) || 0;
-  if (eventCost > 0 && coins < eventCost) {
-    return { coins_needed: eventCost, coins_available: coins, shortfall: eventCost - coins };
-  }
-  return null;
-}
-
-async function computeAffordabilityWarning(sequelize, showId, event, { transaction } = {}) {
-  // A failed read counts as 0 coins, as Start Episode always has.
-  let charState;
+async function computeAffordabilityWarning(sequelize, showId, event, { transaction, episodeId = null } = {}) {
+  let preview;
   try {
-    [charState] = await sequelize.query(
-      `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-      { replacements: { showId }, type: sequelize.QueryTypes.SELECT, transaction }
-    );
+    const { eventMoneyPreview } = require('./episodeMoneyService');
+    preview = await eventMoneyPreview(sequelize, { showId, event, episodeId, transaction });
   } catch (affordErr) {
-    console.error('[EpisodeGenerator] Coins read for the affordability check failed (read as 0):', affordErr.message);
+    console.error('[EpisodeGenerator] The money preview for the affordability check failed:', affordErr.message);
+    return null;
   }
-  const warning = affordabilityWarningFor(charState?.coins, event);
-  if (warning) {
-    console.warn(`[EpisodeGenerator] Affordability warning: event costs ${warning.coins_needed} coins but character has ${warning.coins_available}`);
-  }
+  if (!preview.warnings.length) return null;
+  const costs = preview.lines
+    .filter((l) => l.kind === 'expense' && !l.covered && !l.conditional)
+    .reduce((s, l) => s + l.amount, 0);
+  const warning = {
+    coins_needed: costs,
+    coins_available: preview.balance,
+    shortfall: Math.max(...preview.warnings.map((w) => w.shortfall)),
+    warnings: preview.warnings,
+  };
+  console.warn(`[EpisodeGenerator] Affordability warning: ${preview.warnings.map((w) => w.message).join(' ')}`);
   return warning;
 }
 
@@ -1003,7 +1005,6 @@ module.exports = {
   createScenePlanRows,
   buildSocialTasks,
   calculateFinancials,
-  affordabilityWarningFor,
   computeAffordabilityWarning,
   loadFinancialWardrobeItems,
   inferArchetype,
