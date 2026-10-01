@@ -3490,13 +3490,20 @@ what was left:
   asks for the place as it is, with no style, mood or lighting not given.
 - Venue generation's category look-up and templates (`buildVenueIdentity`,
   unused since S5).
+- **Scene Studio** (S4 extended, Evoni 2026-10-01: "Extend S4 to Scene
+  Studio's object generation before it merges").
+  - Object generation drops its style anchor (`OBJECT_STYLE_ANCHOR`:
+    "Final Fantasy softness, Pinterest-core femininity…", warm neutral and
+    pastel colours). An object is what was asked for, plus any style
+    hints given, with even, neutral lighting. INFERRED: so it takes the
+    lighting of the scene it is placed in.
+  - Its background prompt drops "Pinterest-core femininity, luxury
+    lifestyle, warm tones".
 - `tests/unit/services/sceneGenericText.test.js` keeps that text out of
-  the brief, scene-set generation, venue generation and the scene-set
-  routes.
+  the brief, scene-set generation, venue generation, the scene-set
+  routes, and Scene Studio's object service and controller.
 
 **Not changed** (INFERRED scope; each is a separate path):
-- Scene Studio's object generation keeps its style anchor
-  (`objectGenerationService.OBJECT_STYLE_ANCHOR`).
 - The restyle, mood and season variants are presets chosen explicitly.
 - `NEGATIVE_PROMPT` is never sent.
 - WorldAdmin's event template `venue_theme` is template text Evoni picks.

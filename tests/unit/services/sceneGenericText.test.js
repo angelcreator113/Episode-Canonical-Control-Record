@@ -11,13 +11,16 @@ const path = require('path');
 const root = path.resolve(__dirname, '../../..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
-// The scene image paths: the brief, scene-set and venue generation, and the
-// description writer whose text becomes the place's description.
+// The scene image paths: the brief, scene-set and venue generation, the
+// description writer whose text becomes the place's description, and Scene
+// Studio's objects and backgrounds (S4 extended, Evoni 2026-10-01).
 const SOURCES = [
   'src/services/sceneBriefService.js',
   'src/services/sceneGenerationService.js',
   'src/services/venueGenerationService.js',
   'src/routes/sceneSetRoutes.js',
+  'src/services/objectGenerationService.js',
+  'src/controllers/sceneStudioController.js',
 ];
 
 // The generic text the review found, and its kin.
@@ -33,6 +36,8 @@ const GENERIC = [
   /aspirational/i,
   /magical realism/i,
   /final fantasy softness/i,
+  /warm neutrals|pastel glow|warm tones/i,
+  /studio lighting/i,
 ];
 
 describe('S4: no generic style or lighting in scene image prompts', () => {
@@ -40,6 +45,17 @@ describe('S4: no generic style or lighting in scene image prompts', () => {
     const src = read(rel);
     const found = GENERIC.filter((re) => re.test(src)).map(String);
     expect(found).toEqual([]);
+  });
+
+  test('Scene Studio: an object is what was asked for, with neutral light; a background has no house style', () => {
+    const { buildObjectPrompt, buildScenePrompt } = require('../../../src/services/objectGenerationService');
+    const obj = buildObjectPrompt('a brass floor lamp', 'art deco');
+    expect(obj).toContain('Object: a brass floor lamp.');
+    expect(obj).toContain('Additional style: art deco.');
+    expect(obj).toContain('Even, neutral lighting with no colour cast.');
+    expect(obj).not.toMatch(/feminine|pinterest|blush|pastel|magical/i);
+    const bg = buildScenePrompt('a rooftop terrace at night');
+    expect(bg).toBe('Scene: a rooftop terrace at night. Wide establishing shot, cinematic composition, no people, no text, no UI elements. Photographic quality, 16:9 aspect ratio, high resolution.');
   });
 
   test('the style anchor, angle modifiers and venue look-up are gone', () => {
