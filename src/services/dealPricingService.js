@@ -101,6 +101,30 @@ function tierOf(careerTier) {
   return n >= 1 && n <= 5 ? n : 1;
 }
 
+/**
+ * The tier a deal is priced at. Evoni's pricing ruling (2026-10-01,
+ * EVENT_EPISODE_FLOW.md §8(cc)): "Deal prices use Lala's own career tier
+ * (her rate card), not the event's tier. A smaller event either meets her
+ * rate or doesn't book her." Lala's tier is her reputation's band
+ * (careerTierFromReputation, as careerPipelineService's
+ * getAccessibleCareerTier reads it). INFERRED: with no character_state row
+ * for her, the event's tier prices the deal, as before the ruling.
+ * Returns { tier, source: 'lala' | 'event' }.
+ */
+async function lalaPricingTier(sequelize, event, { transaction } = {}) {
+  if (event?.show_id) {
+    const [rows] = await sequelize.query(
+      `SELECT reputation FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+      { replacements: { showId: event.show_id }, transaction }
+    );
+    if (rows?.length) {
+      const { careerTierFromReputation } = require('../utils/careerTiers');
+      return { tier: careerTierFromReputation(rows[0].reputation), source: 'lala' };
+    }
+  }
+  return { tier: tierOf(event?.career_tier), source: 'event' };
+}
+
 function deliverableName(d) {
   return `"${d?.description || deliverableTypeLabel(d) || 'Deliverable'}"`;
 }
@@ -256,9 +280,11 @@ function sizingFor(keys) {
 
 /**
  * The deliverables a deal drafts (D12's sizing by D13's components). Pure.
- *   event: { deal_type, career_tier }
- *   tier:  overrides event.career_tier
- *   card:  the rate card (loadRateCard); without one no fee is drafted.
+ *   event:     { deal_type, career_tier }
+ *   tier:      overrides event.career_tier for the sizing (D12: the job's scale)
+ *   priceTier: the tier the fees are priced at (Lala's, lalaPricingTier);
+ *              the sizing tier without one
+ *   card:      the rate card (loadRateCard); without one no fee is drafted.
  * Returns [{ deliverable_type, platform, quantity, description, required,
  * owed_to, fee }]. The fee is the format's anchor price at the tier (D15)
  * on a deal that pays its deliverables (rulings 2 and 4); null otherwise:
@@ -268,11 +294,12 @@ function sizingFor(keys) {
  * draft never re-drafts an Auto-drafted deal type (dealTypeDraftService's
  * rule 2 reads brand-owed deliverables).
  */
-function draftDeliverablesForDeal(event, { tier, card } = {}) {
+function draftDeliverablesForDeal(event, { tier, priceTier, card } = {}) {
   const plan = planFor(event);
   if (!plan) return [];
   const sizing = sizingFor(plan.keys);
   const t = tierOf(tier ?? event?.career_tier);
+  const pt = priceTier == null ? t : tierOf(priceTier);
   const owedTo = plan.keys.includes('partnership_base') ? 'brand' : 'host';
   return draftedDeliverableTypes(sizing, t).map(({ type, quantity, required = true }) => {
     const format = formatOf(type);
@@ -281,7 +308,7 @@ function draftDeliverablesForDeal(event, { tier, card } = {}) {
       platform: format.platforms[0] || null,
       quantity: quantity || format.defaultQuantity,
     };
-    const price = plan.deliverables ? formatAnchorPrice(row, t, card) : null;
+    const price = plan.deliverables ? formatAnchorPrice(row, pt, card) : null;
     return {
       ...row,
       description: deliverableTypeLabel(row),
@@ -295,6 +322,8 @@ function draftDeliverablesForDeal(event, { tier, card } = {}) {
 /**
  * The proposal for one event.
  *   event:        { deal_type, career_tier, appearance_required }
+ *   tier:         the tier it is priced at (Lala's, lalaPricingTier); the
+ *                 event's career_tier without one
  *   deliverables: [{ id, description, deliverable_type }]
  *   premiums:     { appearance?, partnership_base?, performance?: [{kind,key}],
  *                   deliverables?: { <id>: [{kind,key}] } }
@@ -303,7 +332,7 @@ function draftDeliverablesForDeal(event, { tier, card } = {}) {
  * deliverables: [{ id, component, anchor, fee, premiums, note, price_required }],
  * gaps, note }. A fee of null is "Price required" (ruling 6): gaps say why.
  */
-function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
+function proposeTerms({ event, deliverables = [], premiums = {}, card, tier: priceTier }) {
   const plan = planFor(event);
   if (!plan) {
     return event?.deal_type
@@ -313,7 +342,7 @@ function proposeTerms({ event, deliverables = [], premiums = {}, card }) {
   const dealType = dealTypeFromComponents(plan.keys).deal_type;
   if (!card) return { ok: false, error: 'There is no rate card yet, so no terms can be proposed.' };
 
-  const tier = tierOf(event.career_tier);
+  const tier = tierOf(priceTier ?? event.career_tier);
   const gaps = [];
   const errors = [];
   const componentKeys = dealComponents(event);
@@ -450,6 +479,7 @@ module.exports = {
   dealComponents,
   rateCardFrom,
   loadRateCard,
+  lalaPricingTier,
   proposeTerms,
   draftedDeliverableTypes,
   sizingFor,

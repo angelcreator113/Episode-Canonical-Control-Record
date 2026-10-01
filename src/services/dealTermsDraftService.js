@@ -40,7 +40,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const {
-  loadRateCard, proposeTerms, draftDeliverablesForDeal, planFor,
+  loadRateCard, lalaPricingTier, proposeTerms, draftDeliverablesForDeal, planFor,
   PRICING_SOURCE, DRAFTED_DELIVERABLES_SOURCE,
 } = require('./dealPricingService');
 const { listEventDeliverables, insertDeliverableRow } = require('./eventTermsService');
@@ -198,6 +198,9 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
   if (keys == null) return { skipped: 'legacy' };
 
   const card = await loadRateCard(sequelize, { transaction });
+  // Prices are Lala's: her own career tier, not the event's (Evoni's pricing
+  // ruling, 2026-10-01). The event's tier still sizes the job (D12).
+  const { tier: priceTier } = await lalaPricingTier(sequelize, event, { transaction });
   const cc = parseJson(event.canon_consequences, {}) || {};
   const automation = cc.automation || {};
   const autoDrafted = { ...(automation.auto_drafted || {}) };
@@ -216,7 +219,7 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
   // D12's guard stands: deliverables Evoni entered by hand on a deal never
   // drafted are hers; nothing is drafted on top of them.
   const handEntered = live.length > 0 && !automation.auto_drafted?.deliverables;
-  const targets = handEntered ? [] : draftDeliverablesForDeal(event, { card });
+  const targets = handEntered ? [] : draftDeliverablesForDeal(event, { card, priceTier });
   for (const t of targets) {
     const candidates = live.filter((d) => unmatched.has(d.id) && d.deliverable_type === t.deliverable_type);
     const match = candidates.find(isAuto) || candidates[0];
@@ -244,6 +247,9 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
       fee: t.fee ?? null, description: t.description, required: t.required !== false,
     };
     changes.deliverables.added += 1;
+    // A row drafted with its price is priced from the card, so the deal
+    // records the card's version (the Terms screen read "pricing vnull").
+    if (t.fee != null) changes.fees += 1;
   }
   // A drafted row the new components no longer call for goes, unless Evoni edited it.
   for (const d of live) {
@@ -262,7 +268,7 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
 
   // ── 2. Prices ──
   live = await listEventDeliverables(sequelize, eventId, { transaction });
-  const proposal = proposeTerms({ event, deliverables: live, premiums, card });
+  const proposal = proposeTerms({ event, deliverables: live, premiums, card, tier: priceTier });
   const feeWrites = {};
   if (!proposal.ok) {
     if (overwritePrices) throw proposalError(proposal);
@@ -310,8 +316,8 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
   const costRecords = { ...(draftedValues.costs || {}) };
   const costs = await listEventCosts(sequelize, eventId, { transaction });
   const costById = new Map(costs.map((c) => [String(c.id), c]));
-  const { travels } = await lalaTravelsFor(sequelize, event, { transaction });
-  const wanted = new Map(draftedCostLines(event, { travels }).map((l) => [l.key, l]));
+  const { travels, stays } = await lalaTravelsFor(sequelize, event, { transaction });
+  const wanted = new Map(draftedCostLines(event, { travels, stays }).map((l) => [l.key, l]));
   const liveKeys = new Set();
   const declinedKeys = new Set();
   for (const [id, record] of Object.entries(costRecords)) {
@@ -393,7 +399,7 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
     sets.push(`${field} = :${field}`);
     replacements[field] = fee;
   }
-  if (proposal.ok && (overwritePrices || Object.keys(feeWrites).length)) {
+  if (proposal.ok && (overwritePrices || Object.keys(feeWrites).length || changes.fees)) {
     sets.push('pricing_version = :version');
     replacements.version = proposal.pricing_version;
   }

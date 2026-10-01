@@ -195,12 +195,14 @@ const TRAVEL_SOURCE = 'travel';
  *     "Price required", never 0, so the price is set or comped before
  *     Start Episode (Evoni, 2026-09-30). Paid by Lala until Evoni comps
  *     them. Getting around within the home city (rides, valet) is event
- *     spending, not travel.
+ *     spending, not travel. Accommodation only where `stays` (lalaTravelsFor:
+ *     not between DREAM cities, Evoni 2026-10-01); a stay there is Evoni's
+ *     to add.
  * The extras are no longer drafted here: they are event spending, drafted
  * at Start Episode (the event cost split, 2026-09-30).
  * Returns [{ key, kind, label, amount, paid_by, source }].
  */
-function draftedCostLines(event, { travels } = {}) {
+function draftedCostLines(event, { travels, stays } = {}) {
   const lines = [];
   const entryPayer = entryPayerFor(event);
   const entry = Number(event?.cost_coins) || 0;
@@ -209,7 +211,9 @@ function draftedCostLines(event, { travels } = {}) {
   }
   if (isDealEvent(event) && (travels === undefined ? lalaTravels(event) : travels)) {
     lines.push({ key: 'travel', kind: 'travel', label: 'Travel', amount: null, paid_by: 'lala', source: TRAVEL_SOURCE });
-    lines.push({ key: 'accommodation', kind: 'accommodation', label: 'Accommodation', amount: null, paid_by: 'lala', source: TRAVEL_SOURCE });
+    if (stays !== false) {
+      lines.push({ key: 'accommodation', kind: 'accommodation', label: 'Accommodation', amount: null, paid_by: 'lala', source: TRAVEL_SOURCE });
+    }
   }
   return lines;
 }
@@ -242,8 +246,8 @@ async function draftExtrasCosts(sequelize, eventId, { transaction } = {}) {
 
   const inserted = [];
   const { lalaTravelsFor } = require('../utils/lalaHome');
-  const { travels } = await lalaTravelsFor(sequelize, event, { transaction });
-  for (const line of draftedCostLines(event, { travels })) {
+  const { travels, stays } = await lalaTravelsFor(sequelize, event, { transaction });
+  for (const line of draftedCostLines(event, { travels, stays })) {
     if (liveDraftedKeys.has(line.key)) continue;
     // clock_timestamp, not NOW(): NOW() is fixed for the transaction, and
     // the rows list in the order they were drafted.

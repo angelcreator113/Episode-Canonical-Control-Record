@@ -256,6 +256,12 @@ describe('pricing (Task #2341)', () => {
     } },
   });
 
+  test('no recorded pricing version: the note never reads "pricing vnull"', () => {
+    const ev = drafted(450, 450);
+    delete ev.canon_consequences.automation.pricing_version;
+    expect(describeComponentFee(ev, 'appearance_fee').note).toBe('Auto-drafted · pricing');
+  });
+
   test('a component: Auto-drafted · pricing v1 while equal to the draft, Edited once changed, Price required when empty', () => {
     expect(describeComponentFee(drafted(450, 450), 'appearance_fee')).toEqual({ value: 450, label: '450 coins', note: 'Auto-drafted · pricing v1' });
     expect(describeComponentFee(drafted(500, 450), 'appearance_fee').note).toBe('Edited');

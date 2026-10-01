@@ -439,8 +439,9 @@ export default function ShowSettings() {
 
 // ── Sub-components ────────────────────────────────────────────────────────
 
-// Lala's home, a show setting (D13 travel, Evoni 2026-09-30): travel and
-// accommodation are drafted only for events outside its city.
+// Lala's home, a show setting (D13 travel, Evoni 2026-09-30; her home city
+// is Echo Park, 2026-10-01): travel is drafted only for events outside its
+// city, and accommodation with it only outside the five DREAM cities.
 export const getLalaHomeApi = (showId) => api.get(`/api/v1/shows/${showId}/lala-home`);
 export const putLalaHomeApi = (showId, body) => api.put(`/api/v1/shows/${showId}/lala-home`, body);
 
@@ -497,8 +498,9 @@ export function LalaHomeBlock({ showId, onToast }) {
           onChange={(e) => setHome((h) => ({ ...h, city: e.target.value }))} placeholder='City' />
       </Field>
       <div style={s.sectionDesc}>
-        Travel and accommodation are drafted only for an event whose location is outside this city, with no amount
-        until you price or comp them. Getting around the city (rides, valet) is event spending.
+        Travel is drafted only for an event whose location is outside this city, with no amount until you price or
+        comp it. Accommodation is drafted with it only for a city outside the five DREAM cities; between DREAM
+        cities, add a stay yourself. Getting around the city (rides, valet) is event spending.
       </div>
       {dirty && (
         <button style={s.saveBtn} type='button' onClick={save} disabled={busy} data-testid='lala-home-save'>

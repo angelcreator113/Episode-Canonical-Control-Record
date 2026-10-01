@@ -1,27 +1,47 @@
 'use strict';
 
 /**
- * Lala's home, and whether an event takes her away from it (D13 travel,
- * Evoni 2026-09-30):
+ * Lala's home, and whether an event takes her away from it.
  *
- *   "Lala's home is 246 Olddy Paveway Ln, Echo Park, Los Angeles; store it
- *   as a show setting (address, neighbourhood Echo Park, city Los Angeles).
- *   Travel and accommodation are drafted only when an event's location is
- *   outside Los Angeles (fallback: category travel_destination); [...]
- *   Getting around within Los Angeles (rides, valet) is event spending, not
- *   travel."
+ * D13 travel (Evoni 2026-09-30) stored the home as a show setting and
+ * drafts travel and accommodation only when an event is away from it (the
+ * fallback: category travel_destination), with no amount ("Price
+ * required"). Her correction (2026-10-01; EVENT_EPISODE_FLOW.md §8(cc)):
+ *
+ *   "Lala's home city is Echo Park, one of the five DREAM cities in the
+ *   LalaVerse (not Los Angeles). Her home is 246 Olddy Paveway Ln, Echo
+ *   Park. The DREAM cities (Echo Park, Dazzle District, Radiance Row,
+ *   Ascent Tower, Maverick Harbor) are separate cities, each with its own
+ *   streets, shops, restaurants and venues. An event inside Echo Park is
+ *   local: getting there is event spending, never travel. An event in any
+ *   other DREAM city drafts travel (and accommodation where a stay makes
+ *   sense), with no amount and "Price required"."
  *
  * The setting is shows.metadata.lala_home = { address, neighbourhood, city }
- * (migration 20261001190000; edited at Show Settings, GET/PUT
- * /api/v1/shows/:id/lala-home).
+ * (migrations 20261001190000 and 20261001210000, which sets the city to
+ * Echo Park; edited at Show Settings, GET/PUT /api/v1/shows/:id/lala-home).
+ *
+ * Accommodation (Evoni, 2026-10-01): "Between DREAM cities, travel is
+ * drafted but accommodation is not; a stay is added only when Lala decides
+ * (Evoni adds the line). For an event in a city outside the five DREAM
+ * cities, once such cities exist, travel and accommodation are both
+ * drafted, with no amount and 'Price required'." lalaTravelsFor's `stays`
+ * says whether accommodation is drafted with the travel.
  *
  * An event's location is its venue's World Location (venue_location_id, or
- * the automation's), read up the parent chain until one has a city. When
- * both cities are known, Lala travels when they differ. When either is
- * unknown, the fallback decides: the event's category travel_destination.
+ * the automation's), read up the parent chain until one has a city (and,
+ * failing that, a district). The World Studio seed gives each DREAM city's
+ * venues that city ("Echo Park", "Dazzle District", ...). Lala is home when
+ * the place is her home city (or a stored home neighbourhood); otherwise
+ * she travels when the city is known. When it is unknown, the fallback
+ * decides: the event's category travel_destination.
  */
 
 const HOME_FIELDS = Object.freeze(['address', 'neighbourhood', 'city']);
+
+// The five DREAM cities of the LalaVerse (migration 20260725000000,
+// worldStudio's seed). Separate cities; travel between them has no stay.
+const DREAM_CITIES = Object.freeze(['Dazzle District', 'Radiance Row', 'Echo Park', 'Ascent Tower', 'Maverick Harbor']);
 const FIELD_MAX = 200;
 const PARENT_DEPTH = 6;
 
@@ -56,29 +76,56 @@ function readLalaHomeBody(body) {
   return { value };
 }
 
-/** The city of a World Location, read up its parents. null when none has one. */
-async function locationCity(sequelize, locationId, { transaction } = {}) {
+/**
+ * The place of a World Location, read up its parents: { city, district },
+ * the first city found and the first district found (null when none).
+ */
+async function locationPlace(sequelize, locationId, { transaction } = {}) {
   let id = locationId;
+  let district = null;
   for (let depth = 0; id && depth < PARENT_DEPTH; depth += 1) {
     const [rows] = await sequelize.query(
-      'SELECT city, parent_location_id FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+      'SELECT city, district, parent_location_id FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1',
       { replacements: { id }, transaction }
     );
     const row = rows?.[0];
-    if (!row) return null;
-    if (normCity(row.city)) return row.city;
+    if (!row) break;
+    if (!district && normCity(row.district)) district = row.district;
+    if (normCity(row.city)) return { city: row.city, district };
     id = row.parent_location_id;
   }
-  return null;
+  return { city: null, district };
+}
+
+/** The city of a World Location, read up its parents. null when none has one. */
+async function locationCity(sequelize, locationId, options = {}) {
+  return (await locationPlace(sequelize, locationId, options)).city;
+}
+
+/** Whether a city is one of the five DREAM cities. */
+function isDreamCity(name) {
+  const n = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return Boolean(n) && DREAM_CITIES.some((c) => c.toLowerCase() === n);
+}
+
+/** Whether a place name is Lala's home city or home neighbourhood. */
+function isHomePlace(name, home) {
+  const n = normCity(name);
+  if (!n || !home) return false;
+  return n === normCity(home.city) || (Boolean(normCity(home.neighbourhood)) && n === normCity(home.neighbourhood));
 }
 
 /**
- * Whether the event takes Lala away from home: { travels, reason, city,
- * home_city }. reason is 'outside_home' or 'home_city' when both cities are
- * known, else 'category' (the fallback).
+ * Whether the event takes Lala away from home: { travels, stays, reason,
+ * city, home_city }. reason is 'outside_home' or 'home_city' when both
+ * cities are known, else 'category' (the fallback). stays: accommodation is
+ * drafted with the travel, unless the destination is another DREAM city.
+ * INFERRED: on the category fallback (no city known) both are drafted, as
+ * D13 built it.
  */
 async function lalaTravelsFor(sequelize, event, { transaction } = {}) {
-  const fallback = { travels: event?.category === 'travel_destination', reason: 'category', city: null, home_city: null };
+  const byCategory = event?.category === 'travel_destination';
+  const fallback = { travels: byCategory, stays: byCategory, reason: 'category', city: null, home_city: null };
   if (!event) return fallback;
   let home = null;
   if (event.show_id) {
@@ -87,17 +134,25 @@ async function lalaTravelsFor(sequelize, event, { transaction } = {}) {
   }
   const automation = parseJson(event.canon_consequences, {})?.automation || {};
   const locationId = event.venue_location_id || automation.venue_location_id || null;
-  const city = locationId ? await locationCity(sequelize, locationId, { transaction }) : null;
+  const { city, district } = locationId ? await locationPlace(sequelize, locationId, { transaction }) : { city: null, district: null };
+  // A district counts only where no city is known (a Paris venue in a
+  // district that happens to share the name is still Paris).
+  if (home && (isHomePlace(city, home) || (!normCity(city) && isHomePlace(district, home)))) {
+    return { travels: false, stays: false, reason: 'home_city', city: city || district, home_city: home.city };
+  }
   if (!home || !city) return { ...fallback, city, home_city: home?.city || null };
-  const travels = normCity(city) !== normCity(home.city);
-  return { travels, reason: travels ? 'outside_home' : 'home_city', city, home_city: home.city };
+  return { travels: true, stays: !isDreamCity(city), reason: 'outside_home', city, home_city: home.city };
 }
 
 module.exports = {
   HOME_FIELDS,
+  DREAM_CITIES,
+  isDreamCity,
   normCity,
   readLalaHome,
   readLalaHomeBody,
+  locationPlace,
   locationCity,
+  isHomePlace,
   lalaTravelsFor,
 };
