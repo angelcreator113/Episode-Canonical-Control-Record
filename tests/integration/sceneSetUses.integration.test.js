@@ -18,6 +18,11 @@ const { Sequelize } = require('sequelize');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+// scene_set_episodes is created by these two; the file runs them itself
+// rather than relying on another test file having run first (CI orders
+// files by size and history, #2438).
+const junctionMigration = require('../../src/migrations/20260324000000-add-scene-sets-cover-and-episodes');
+const sortOrderMigration = require('../../src/migrations/20260626000001-add-sort-order-to-scene-set-episodes');
 const rolesMigration = require('../../src/migrations/20261002100000-add-scene-set-episode-roles');
 const scenePlanIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
 const { resolveSetShowId } = require('../../src/services/sceneSetUsesService');
@@ -76,7 +81,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(async () => {
     const qi = sequelize.getQueryInterface();
-    for (const m of [rolesMigration, scenePlanIdMigration]) await m.up(qi, Sequelize);
+    for (const m of [junctionMigration, sortOrderMigration, rolesMigration, scenePlanIdMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({ id: 'test-user-set-uses', email: 'u@uses.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
     await run(`INSERT INTO universes (id, name, slug, created_at, updated_at) VALUES (:universe, :name, :name, NOW(), NOW())`,
       { universe, name: `uses-${universe.slice(0, 8)}` }).catch(() => {});
@@ -193,5 +198,77 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       .toEqual([[1, newA], [2, newA], [13, newB]]);
     expect(await usesOf(newA)).toMatchObject({ locations: 1, events: 1, scenes: 2 });
     expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
+  });
+
+  // Bug (Evoni, 2026-10-02, production): "Move my beats" returned 500. An
+  // episode has one live location per set (scene_set_episodes_unique_pair),
+  // and the move only dropped the old location when the episode already had
+  // the replacement in the same role.
+  const locationsOf = async (ep) => (await rows(
+    'SELECT scene_set_id, role FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY role NULLS LAST', { ep }));
+  const location = (setId, ep, role) => run(`INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, sort_order, created_at, updated_at)
+               VALUES (:id, :setId, :ep, :role, 1, NOW(), NOW())`, { id: uuid(), setId, ep, role });
+
+  it('Move my beats: the replacement is already a location of the episode in another role, or has none', async () => {
+    const gone = await sceneSet("d2-Lala's Room", { deleted: true });
+    const replacement = await sceneSet("d2-Lala's bedroom");
+    const ep = await episode();
+    await useEverywhere(gone, ep); // a 'home' location, beats 1-2, their scenes, the event
+    await location(replacement, ep, null);
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: gone, to: replacement }] });
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
+    expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
+  });
+
+  it('Move my beats: two removed sets moved to the same replacement', async () => {
+    const goneA = await sceneSet("d2-Lala's Closet", { deleted: true });
+    const goneB = await sceneSet("d2-Lala's Home", { deleted: true });
+    const replacement = await sceneSet("d2-Lala's home");
+    const ep = await episode();
+    await useEverywhere(goneA, ep);
+    await location(goneB, ep, 'closet');
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
+      .send({ moves: [{ from: goneA, to: replacement }, { from: goneB, to: replacement }] });
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
+    expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
+  });
+
+  it('D1: deleting with a replacement the episode already has merges the two links, keeping the more specific role', async () => {
+    const old = await sceneSet('d2-old set');
+    const replacement = await sceneSet('d2-new set');
+    const ep = await episode();
+    await useEverywhere(old, ep); // 'home'
+    await location(replacement, ep, 'extra');
+
+    const res = await auth(request(app).delete(`/api/v1/scene-sets/${old}?replacement_id=${replacement}`));
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
+    expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
+  });
+
+  it('merging links: a named role is kept over an extra, an extra over none, and an extra keeps its name', async () => {
+    const goneA = await sceneSet('d2-gone extra', { deleted: true });
+    const goneB = await sceneSet('d2-gone named extra', { deleted: true });
+    const keepHome = await sceneSet('d2-keep home');
+    const keepNone = await sceneSet('d2-keep none');
+    const ep = await episode();
+    await run(`INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, role_name, sort_order, created_at, updated_at)
+               VALUES (:a, :goneA, :ep, 'extra', 'Car', 1, NOW(), NOW()), (:b, :goneB, :ep, 'extra', 'Café', 2, NOW(), NOW()),
+                      (:c, :keepHome, :ep, 'home', NULL, 3, NOW(), NOW()), (:d, :keepNone, :ep, NULL, NULL, 4, NOW(), NOW())`,
+    { a: uuid(), b: uuid(), c: uuid(), d: uuid(), goneA, goneB, keepHome, keepNone, ep });
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
+      .send({ moves: [{ from: goneA, to: keepHome }, { from: goneB, to: keepNone }] });
+
+    expect(res.status).toBe(200);
+    expect(await rows(`SELECT scene_set_id, role, role_name FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY sort_order`, { ep }))
+      .toEqual([{ scene_set_id: keepHome, role: 'home', role_name: null }, { scene_set_id: keepNone, role: 'extra', role_name: 'Café' }]);
   });
 });
