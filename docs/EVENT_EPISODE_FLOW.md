@@ -4437,6 +4437,30 @@ As built, S9 (a) (accurate status):
 - **"Move my beats" is never hidden.** The banner shows under the status line, without a click, whenever the episode uses a removed set: a beat, a location, a scene or its event. It shows nothing otherwise (Evoni, 2026-10-02: "hold merge approval until the hidden-warning concern is resolved").
 - **Not changed in (a):** the locked count and the next step stay until (c).
 
+As built, S9 (b) (the compact layout):
+- **The episode header** collapses to the back link, the title and its actions once the page is scrolled down (`useScrolledPast`). The meta line, the "From event" link and the title chip return at the top.
+- **The Locations** are a strip of chips ("Home · Lala's Apartment", "Event · The Glasshouse") with Edit locations. A chip expands one location: its base image, its views ("Base image and 3 more views", or "Base image only"), Open in Scene Sets, and, for the event venue, Open Event Package (the episode's source event).
+- **The beats are in story order.** "Group by location" (a checkbox) shows the L12 groups.
+- **Each row shows:**
+  - the background;
+  - the beat number and name;
+  - one line of story (its `scene_context`);
+  - where the background comes from, with the base named as its zone: "Lala's Apartment · Inside";
+  - the repair action, when one is needed;
+  - "Change background", which opens the beat editor in place (disabled on a locked beat: "Locked: unlock it in Details to change it");
+  - "Details".
+- **Missing and reference pictures:**
+  - A beat with no picture shows "Missing".
+  - A beat whose zone is missing but shows a stand-in (the set's base or the event's look) has that picture dimmed and tagged "Reference", and reads "The Glasshouse · Front missing (reference: Inside)".
+- **Details:**
+  - the shot and the emotional intent;
+  - "Chosen by you", with what it means ("A re-plan or a location change leaves this beat as it is.");
+  - "Event look", when the background is dressed for the event;
+  - Lock or Unlock (the per-beat lock route);
+  - Open in Studio.
+- **The base's label** on the server (`beatPicture`) is "<set> · Inside" in place of "<set> · base", on the Beat Plan page too.
+- **Not changed in (b):** the locked count and the next step (they go with (c)); the Beat Plan page's own controls (d).
+
 ---
 
 ## 9. Owed before enforcement

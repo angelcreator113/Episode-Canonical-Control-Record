@@ -27,7 +27,7 @@ import { MapPin, Film, Loader, AlertTriangle, Clapperboard, Trash2 } from 'lucid
 import apiClient from '../../services/api';
 import EpisodeLocationsStep from '../EpisodeLocationsStep';
 import {
-  ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
+  ROLE_LABELS, SHOT_LABELS, fmtType, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
 } from '../BeatPlan/BeatPlanParts';
 import useBeatActions from '../BeatPlan/useBeatActions';
 import { sceneSetPath } from '../../utils/sceneSets';
@@ -47,6 +47,8 @@ export const deleteSceneApi = (sceneId) =>
   apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
 export const getEpisodePlanApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episode-brief/${episodeId}/plan`);
+export const toggleBeatLockApi = (episodeId, beatNumber) =>
+  apiClient.post(`${API_BASE}/episode-brief/${episodeId}/plan/${beatNumber}/lock`);
 export const lockAllBeatsApi = (episodeId) =>
   apiClient.post(`${API_BASE}/episode-brief/${episodeId}/plan/lock-all`);
 // The episode's locations with their roles (L6; Evoni, 2026-10-02)
@@ -105,6 +107,26 @@ export function statusText(readiness, total) {
   return `${readiness.ready} ready · ${issues} ${issues === 1 ? 'needs' : 'need'} attention`;
 }
 
+/**
+ * S9 (b): where a beat's background comes from. A beat whose zone is
+ * missing but shows a stand-in picture (the set's base, or the event's
+ * look) says so: "The Glasshouse · Front missing (reference: Inside)".
+ */
+export function whereText(beat) {
+  const set = beatSetName(beat, 'No location');
+  const missing = beat.location?.missing;
+  const label = beatImageLabel(beat);
+  if (missing) {
+    const what = `${set} · ${missing.name || missing.label || 'View'} missing`;
+    if (!beatImage(beat)) return what;
+    const view = label ? label.split(' · ').slice(1).join(' · ') : '';
+    return `${what} (reference: ${view || 'set image'})`;
+  }
+  if (label) return label;
+  const angle = beat.location?.angle;
+  return `${set}${angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}`;
+}
+
 /** The status bar's next step (L12): plan, images, locks, then the script. */
 export function nextStep(plan, readiness) {
   const total = plan.length;
@@ -117,12 +139,17 @@ export function nextStep(plan, readiness) {
   return { kind: 'script', text: 'Write the script' };
 }
 
-const EpisodeScenesTab = ({ episode, onToast }) => {
+const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
   const episodeId = episode?.id;
 
   const [plan, setPlan] = useState([]);
   const [readiness, setReadiness] = useState(null);
   const [showIssues, setShowIssues] = useState(false);
+  // S9 (b): one location expanded at a time; story order unless grouped;
+  // one beat's Details open at a time.
+  const [openLocation, setOpenLocation] = useState(null);
+  const [grouped, setGrouped] = useState(false);
+  const [openDetails, setOpenDetails] = useState(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [locations, setLocations] = useState({ locations: [], show_id: null });
   const [olderScenes, setOlderScenes] = useState([]);
@@ -270,6 +297,18 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     }
   };
 
+  // S9 (b, d): a beat is locked and unlocked from its Details here.
+  const toggleLock = async (beat) => {
+    try {
+      await toggleBeatLockApi(episodeId, beat.beat_number);
+      toast(beat.locked ? `Beat ${beat.beat_number} unlocked` : `Beat ${beat.beat_number} locked`, 'success');
+      await loadPlan();
+    } catch (err) {
+      console.error('Failed to change the beat lock:', err);
+      toast(err.response?.data?.error || 'Could not change the lock', 'error');
+    }
+  };
+
   const removeOlderScene = async (scene) => {
     try {
       await deleteSceneApi(scene.id);
@@ -287,6 +326,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   const issues = readiness?.not_ready || [];
   const step = nextStep(plan, readiness);
   const groups = groupBeats(plan, locations.locations);
+  const storyOrder = [...plan].sort((a, b) => a.beat_number - b.beat_number);
   const editingNumber = beats.editingBeat?.beat_number ?? null;
 
   return (
@@ -378,20 +418,47 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </section>
       )}
 
-      {/* ===== Locations (L12) ===== */}
-      <section className="est-section" data-testid="est-locations">
-        <div className="est-section-header">
-          <div className="est-section-title">
-            <MapPin size={18} />
-            <h3>Locations</h3>
-            <span className="est-count">{locations.locations.length}</span>
-          </div>
-          <div className="est-section-actions">
-            <button className="est-btn est-btn-outline" onClick={openLocations} data-testid="est-edit-locations">
-              <MapPin size={14} /> Edit locations
-            </button>
-          </div>
+      {/* ===== Locations: a compact strip (L12; S9 b) ===== */}
+      <section className="est-section est-section-compact" data-testid="est-locations">
+        <div className="est-location-strip" data-testid="est-location-strip">
+          <MapPin size={15} className="est-location-strip-icon" aria-hidden="true" />
+          {locations.locations.length === 0 ? (
+            <span className="est-empty-hint">No locations yet.</span>
+          ) : locations.locations.map((l) => (
+            <button
+              key={`${l.role}-${l.scene_set_id}`} type="button"
+              className={`est-location-chip${openLocation === l.scene_set_id ? ' is-open' : ''}`}
+              aria-expanded={openLocation === l.scene_set_id}
+              onClick={() => setOpenLocation((cur) => (cur === l.scene_set_id ? null : l.scene_set_id))}
+              data-testid={`est-location-chip-${l.scene_set_id}`}
+            >{`${locationLabel(l)} · ${l.scene_set?.name || 'Scene set'}`}</button>
+          ))}
+          <button className="est-btn est-btn-outline est-btn-sm" onClick={openLocations} data-testid="est-edit-locations">
+            Edit locations
+          </button>
         </div>
+        {(() => {
+          const l = locations.locations.find((x) => x.scene_set_id === openLocation);
+          if (!l) return null;
+          const views = l.angle_count ?? 0;
+          return (
+            <div className="est-location-detail" data-testid={`est-location-detail-${l.scene_set_id}`}>
+              {l.scene_set?.base_still_url
+                ? <img className="est-location-thumb" src={l.scene_set.base_still_url} alt="" />
+                : <span className="est-location-thumb is-empty" aria-hidden="true"><MapPin size={16} /></span>}
+              <span className="est-location-text">
+                <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>
+                <span className="est-location-meta">{views ? `Base image and ${views} more ${views === 1 ? 'view' : 'views'}` : 'Base image only'}</span>
+                <span className="est-location-links">
+                  {showId && <Link to={sceneSetPath(showId, l.scene_set_id)}>Open in Scene Sets</Link>}
+                  {l.role === 'event' && sourceEvent?.id && (sourceEvent.show_id || showId) && (
+                    <Link to={`/shows/${sourceEvent.show_id || showId}/events/${sourceEvent.id}`}>Open Event Package</Link>
+                  )}
+                </span>
+              </span>
+            </div>
+          );
+        })()}
         {locationsEdit && (
           <EpisodeLocationsStep
             showId={showId}
@@ -404,30 +471,9 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             onCancel={() => setLocationsEdit(null)}
           />
         )}
-        {locations.locations.length === 0 ? (
-          <p className="est-empty-hint">No locations yet. Edit locations to choose the episode's home, closet, event and extras.</p>
-        ) : (
-          <ul className="est-locations">
-            {locations.locations.map((l) => (
-              <li key={`${l.role}-${l.scene_set_id}`} className="est-location" data-testid={`est-location-${l.scene_set_id}`}>
-                {l.scene_set?.base_still_url
-                  ? <img className="est-location-thumb" src={l.scene_set.base_still_url} alt="" />
-                  : <span className="est-location-thumb is-empty" aria-hidden="true"><MapPin size={16} /></span>}
-                <span className="est-location-text">
-                  <span className="est-location-role">{locationLabel(l)}</span>
-                  <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>
-                  <span className="est-location-meta">
-                    {l.angle_count ?? 0} {l.angle_count === 1 ? 'angle' : 'angles'}
-                    {showId && <> · <Link to={sceneSetPath(showId, l.scene_set_id)}>Scene Sets</Link></>}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
-      {/* ===== The beats, grouped by location (L12) ===== */}
+      {/* ===== The beats, in story order (S9 b; grouped by location as an option, L12) ===== */}
       <section className="est-section" data-testid="est-beats">
         <div className="est-section-header">
           <div className="est-section-title">
@@ -435,58 +481,75 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             <h3>Beats</h3>
             <span className="est-count">{total}</span>
           </div>
+          {total > 0 && (
+            <label className="est-group-toggle">
+              <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
+              Group by location
+            </label>
+          )}
         </div>
         {loadingPlan ? (
           <div className="est-loading">Loading the beats…</div>
         ) : total === 0 ? (
           <p className="est-empty-hint">No beat plan yet. <Link to={`/episodes/${episodeId}/plan`}>Make the beat plan</Link> to map the 14 beats to the locations.</p>
-        ) : groups.map((g) => (
-          <div key={g.key} className="est-beat-group" data-testid={`est-group-${g.key}`}>
-            <h4 className="est-beat-group-title">{g.title}</h4>
+        ) : (grouped ? groups : [{ key: 'story', title: null, beats: storyOrder }]).map((g) => (
+          <div key={g.key} className={g.title ? 'est-beat-group' : 'est-beat-story'} data-testid={`est-group-${g.key}`}>
+            {g.title && <h4 className="est-beat-group-title">{g.title}</h4>}
             <ul className="est-beats">
               {g.beats.map((beat) => {
                 const n = beat.beat_number;
                 const img = beatImage(beat);
-                const angle = beat.location?.angle;
+                const reference = Boolean(beat.location?.missing && img);
                 const editing = editingNumber === n;
-                const open = () => { if (!beat.locked) beats.openEditor(beat); };
+                const detailsOpen = openDetails === n;
+                const change = () => { if (!beat.locked) beats.openEditor(beat); };
                 return (
                   <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}`}>
-                    <div
-                      className="est-beat-main" role="button" tabIndex={beat.locked ? -1 : 0} aria-expanded={editing}
-                      aria-disabled={beat.locked || undefined} data-testid={`est-beat-${n}`}
-                      title={beat.locked ? 'Locked: unlock it in the Beat Plan to edit it' : 'Edit this beat'}
-                      onClick={open}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
-                    >
-                      {img
-                        ? <img className="est-beat-thumb" src={img} alt="" />
-                        : <span className="est-beat-thumb is-empty" aria-hidden="true">No image</span>}
+                    <div className="est-beat-main" data-testid={`est-beat-${n}`}>
+                      <span className="est-beat-thumb-wrap">
+                        {img
+                          ? <img className={`est-beat-thumb${reference ? ' is-reference' : ''}`} src={img} alt="" />
+                          : <span className="est-beat-thumb is-empty" data-testid={`est-thumb-missing-${n}`}>Missing</span>}
+                        {reference && <span className="est-reference-tag" data-testid={`est-reference-${n}`}>Reference</span>}
+                      </span>
                       <span className="est-beat-text">
                         <span className="est-beat-name"><span className="est-beat-num">{n}</span> {beat.beat_name}</span>
-                        <span className="est-beat-where" data-testid={`est-where-${n}`}>
-                          {beatImageLabel(beat) || (
-                            <>
-                              {beatSetName(beat, 'No location')}
-                              {angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}
-                            </>
-                          )}
-                        </span>
-                        <span className="est-beat-badges">
-                          {beat.locked && <span className="est-badge is-locked" data-testid={`est-locked-${n}`}>Locked</span>}
-                          <ChosenBadge beat={beat} className="est-badge is-chosen" />
-                          {isDressed(beat) && <span className="est-badge is-dressed">Event look</span>}
-                        </span>
+                        {beat.scene_context && <span className="est-beat-story" data-testid={`est-story-${n}`}>{beat.scene_context}</span>}
+                        <span className="est-beat-where" data-testid={`est-where-${n}`}>{whereText(beat)}</span>
                       </span>
                     </div>
                     <div className="est-beat-side">
                       <MissingAngle beat={beat} {...beats.missingPropsFor(beat)} />
-                      {beat.scene_id && (
-                        <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/scene/${beat.scene_id}`} data-testid={`est-studio-${n}`}>
-                          Open in Studio
-                        </Link>
-                      )}
+                      <button type="button" className="est-btn est-btn-primary est-btn-sm" onClick={change} disabled={beat.locked}
+                        aria-label={`Change background for beat ${n}`}
+                        title={beat.locked ? 'Locked: unlock it in Details to change it' : undefined}>
+                        Change background
+                      </button>
+                      <button type="button" className="est-btn est-btn-outline est-btn-sm" aria-expanded={detailsOpen}
+                        aria-label={`Details for beat ${n}`} onClick={() => setOpenDetails((cur) => (cur === n ? null : n))}>
+                        Details
+                      </button>
                     </div>
+                    {detailsOpen && (
+                      <div className="est-beat-details" data-testid={`est-details-${n}`}>
+                        {beat.shot_type && <p>Shot: {SHOT_LABELS[beat.shot_type] || fmtType(beat.shot_type)}</p>}
+                        {beat.emotional_intent && <p>Emotional intent: {beat.emotional_intent}</p>}
+                        {beat.chosen_by_user && (
+                          <p><ChosenBadge beat={beat} className="est-badge is-chosen" /> A re-plan or a location change leaves this beat as it is.</p>
+                        )}
+                        {isDressed(beat) && <p><span className="est-badge is-dressed">Event look</span> The background is dressed for the event.</p>}
+                        <div className="est-beat-details-actions">
+                          <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={() => toggleLock(beat)}>
+                            {beat.locked ? 'Unlock' : 'Lock'}
+                          </button>
+                          {beat.scene_id && (
+                            <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/scene/${beat.scene_id}`} data-testid={`est-studio-${n}`}>
+                              Open in Studio
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {editing && (
                       <div className="est-beat-sheet" data-testid="est-beat-sheet">
                         <button type="button" className="est-sheet-backdrop" aria-label="Close the beat editor" onClick={beats.closeEditor} />

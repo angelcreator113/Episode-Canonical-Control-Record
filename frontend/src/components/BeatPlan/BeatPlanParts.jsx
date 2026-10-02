@@ -73,8 +73,8 @@ export function MissingAngle({ beat, showId = null, fromLabel = null }) {
 // The beat's picture: its angle's image (the dressed one at the look's set,
 // L10), else the event's look on its set, else the set's base image.
 // The picture a beat shows: the server's location.image (its angle, the
-// event's look, else the set's base, labelled "Lala's Closet · base";
-// display bug 1, Evoni 2026-10-02), else the same order read here.
+// event's look, else the set's base, labelled "Lala's Closet · Inside";
+// display bug 1, Evoni 2026-10-02; S9 b), else the same order read here.
 export const beatImage = (beat) => beat.location?.image?.url || beat.location?.angle?.still_image_url || beat.location?.look?.image_url || beat.sceneSet?.base_still_url || null;
 export const beatImageLabel = (beat) => beat.location?.image?.label || null;
 // Display bug 2: "only say something is missing when the set is."
