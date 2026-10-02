@@ -4048,3 +4048,13 @@
   font-size: 11px;
   color: #6b6b6b;
 }
+
+/* L9 (§8(hh)): a venue set's Looks row, approved base then one per event. */
+.scene-sets-looks { display: grid; gap: 4px; margin: 6px 0; }
+.scene-sets-looks-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: #6B6557; }
+.scene-sets-looks-row { display: flex; gap: 8px; overflow-x: auto; }
+.scene-sets-look { flex: none; margin: 0; width: 96px; display: grid; gap: 2px; font-size: 11px; }
+.scene-sets-look img, .scene-sets-look-empty { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; border: 1px solid #E8E0D0; background: #fff; }
+.scene-sets-look-empty { display: flex; align-items: center; justify-content: center; color: #94a3b8; }
+.scene-sets-look figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6B6557; }
+.scene-sets-look a { color: #B8962E; }

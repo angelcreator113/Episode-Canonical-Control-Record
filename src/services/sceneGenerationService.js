@@ -510,11 +510,11 @@ function estimateDressingCost() {
 }
 
 /** An event-dressed version: the approved base edited with the event layer only (S6). */
-async function generateDressedStill(sceneSet, prompt, approvedBaseUrl) {
+async function generateDressedStill(sceneSet, prompt, approvedBaseUrl, { suffix = 'base' } = {}) {
   const costs = createCostCollector(`dressed still ${sceneSet.id} (${SCENE_DRESSING_MODEL.key})`);
   const { generateImageFromImage } = require('./imageGenerationService');
   const result = await generateImageFromImage(approvedBaseUrl, prompt, { size: 'landscape', onLogged: costs.onLogged });
-  const stillUrl = await downloadAndStoreStill(result.url, sceneSet.id, 'base');
+  const stillUrl = await downloadAndStoreStill(result.url, sceneSet.id, suffix);
   return {
     stillUrl,
     cost: costs.value(),
@@ -2098,6 +2098,7 @@ module.exports = {
   SCENE_BASE_MODELS,
   SCENE_DRESSING_MODEL,
   estimateDressingCost,
+  generateDressedStill,
   OUTPAINT_MODEL,
   isBaseModelKey,
   defaultBaseModel,
