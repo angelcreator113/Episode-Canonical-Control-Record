@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { sceneSetPath } from '../utils/sceneSets';
 import {
-  SHOT_LABELS, ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
+  SHOT_LABELS, ROLE_LABELS, ChosenBadge, MissingAngle, beatImage, beatImageLabel, beatSetName, isDressed,
 } from '../components/BeatPlan/BeatPlanParts';
-import useBeatActions from '../components/BeatPlan/useBeatActions';
 import usePlanRefresh from '../components/BeatPlan/usePlanRefresh';
-import RemovedSetsBanner from '../components/BeatPlan/RemovedSetsBanner';
 import './ScenePlannerPage.css';
 
 const BEAT_NAMES = [
@@ -35,7 +33,16 @@ function LocationsStrip({ locations, showId }) {
 
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
-function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
+// S9 (d) (Evoni, 2026-10-02; §8(hh)): "the Beat Plan page keeps
+// re-planning only, and every per-beat change happens in Scenes." A beat's
+// missing image is a status here; it is changed in the Scenes tab.
+const scenesPath = (episodeId) => `/episodes/${episodeId}?tab=scenes`;
+const BeatStatus = ({ beat }) => <MissingAngle beat={beat} statusOnly />;
+function ChangeInScenes({ episodeId, className }) {
+  return <Link className={className} to={scenesPath(episodeId)}>Change in Scenes →</Link>;
+}
+
+function BeatCard({ beat, index, episodeId }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`} data-testid={`beat-card-${beat.beat_number}`}>
       <div className="scene-planner-card-image">
@@ -67,17 +74,10 @@ function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
           <p className="scene-planner-card-intent">{beat.emotional_intent}</p>
         )}
 
-        <MissingAngle beat={beat} {...missingProps} />
+        <BeatStatus beat={beat} />
 
         <div className="scene-planner-card-actions">
-          <button className="scene-planner-card-edit" onClick={() => onEdit(beat)} disabled={beat.locked}
-            title={beat.locked ? 'Unlock this beat to edit it' : undefined}>Edit</button>
-          <button
-            className={`scene-planner-card-lock-btn ${beat.locked ? 'is-locked' : ''}`}
-            onClick={() => onLock(beat)}
-          >
-            {beat.locked ? '🔒' : '🔓'}
-          </button>
+          <ChangeInScenes episodeId={episodeId} className="scene-planner-card-change" />
         </div>
       </div>
     </div>
@@ -86,7 +86,7 @@ function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
+function BeatRow({ beat, index, episodeId }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -113,18 +113,12 @@ function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
 
       <div className="scene-planner-row-intent">
         <p>{beat.emotional_intent || '—'}</p>
-        <MissingAngle beat={beat} {...missingProps} />
+        <BeatStatus beat={beat} />
       </div>
 
       <div className="scene-planner-row-actions">
-        <button className="scene-planner-btn primary" style={{ padding: '5px 12px', fontSize: 11 }} onClick={() => onEdit(beat)}
-          disabled={beat.locked} title={beat.locked ? 'Unlock this beat to edit it' : undefined}>Edit</button>
-        <button
-          className={`scene-planner-card-lock-btn ${beat.locked ? 'is-locked' : ''}`}
-          onClick={() => onLock(beat)}
-        >
-          {beat.locked ? '🔒' : '🔓'}
-        </button>
+        {beat.locked && <span className="scene-planner-card-tag lock">Locked</span>}
+        <ChangeInScenes episodeId={episodeId} className="scene-planner-card-change" />
       </div>
     </div>
   );
@@ -211,7 +205,6 @@ function BriefPanel({ brief, onUpdate, onGenerate, generating }) {
 
 export default function ScenePlannerPage() {
   const { episodeId } = useParams();
-  const navigate = useNavigate();
   const [view, setView] = useState('storyboard');
   const [brief, setBrief] = useState(null);
   const [plan, setPlan] = useState([]);
@@ -241,7 +234,7 @@ export default function ScenePlannerPage() {
     } finally {
       setLoading(false);
     }
-    // The episode's locations (L11), for the strip and the editor; a failed
+    // The episode's locations (L11), for the strip; a failed
     // read leaves the page without them.
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/locations`);
@@ -282,34 +275,6 @@ export default function ScenePlannerPage() {
     }
   };
 
-  const handleLock = async (beat) => {
-    try {
-      await api.post(`/api/v1/episode-brief/${episodeId}/plan/${beat.beat_number}/lock`);
-      await fetchAll();
-    } catch {
-      showToast('Lock failed', 'error');
-    }
-  };
-
-  // B2, L4, L10, L11: the beat's actions, shared with the Scenes tab (L12).
-  const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
-  const beats = useBeatActions({
-    episodeId, showToast, reload: fetchAll, showId: locations.show_id, loadShowId: fetchAll, linkedIds, fromLabel: 'Beat Plan',
-  });
-
-  const handleLockAll = async () => {
-    try {
-      await api.post(`/api/v1/episode-brief/${episodeId}/plan/lock-all`);
-      showToast('All beats locked — ready for script generation');
-      await fetchAll();
-    } catch {
-      showToast('Lock all failed', 'error');
-    }
-  };
-
-  const lockedCount = plan.filter(b => b.locked).length;
-  const allLocked = plan.length > 0 && lockedCount === plan.length;
-
   return (
     <div className="scene-planner">
       {toast && <div className={`scene-planner-toast ${toast.type}`}>{toast.msg}</div>}
@@ -318,15 +283,21 @@ export default function ScenePlannerPage() {
         <div>
           <h1 className="scene-planner-title">Beat Plan</h1>
           <p className="scene-planner-subtitle">
-            Map scenes to beats → generates a grounded script
-            {plan.length > 0 && ` · ${lockedCount}/${plan.length} beats locked`}
+            Make and re-make the plan: each beat mapped to a location
           </p>
+          {plan.length > 0 && (
+            <p className="scene-planner-scope" data-testid="beat-plan-scope">
+              A re-plan keeps locked and chosen beats. Change a beat&apos;s background, lock or unlock it in the{' '}
+              <Link to={scenesPath(episodeId)}>Scenes tab</Link>.
+            </p>
+          )}
           {/* L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking. */}
           {readiness && readiness.total > 0 && (
             <p className={`scene-planner-readiness${readiness.ready < readiness.total ? ' is-short' : ''}`} data-testid="planner-readiness">
               {readiness.ready === readiness.total
                 ? `Every beat has its image (${readiness.total}/${readiness.total}).`
-                : `${readiness.ready}/${readiness.total} beats have their image; still needed: beat${readiness.not_ready.length === 1 ? '' : 's'} ${readiness.not_ready.map((b) => b.beat_number).join(', ')}. Planning and writing can go on.`}
+                : `${readiness.ready}/${readiness.total} beats have their image; still needed: beat${readiness.not_ready.length === 1 ? '' : 's'} ${readiness.not_ready.map((b) => b.beat_number).join(', ')}. Planning and writing can go on. `}
+              {readiness.ready < readiness.total && <Link to={scenesPath(episodeId)}>Fix them in Scenes →</Link>}
             </p>
           )}
         </div>
@@ -341,24 +312,10 @@ export default function ScenePlannerPage() {
             ))}
           </div>
 
-          {plan.length > 0 && !allLocked && (
-            <button className="scene-planner-btn lock" onClick={handleLockAll}>
-              🔒 Lock All
-            </button>
-          )}
-
-          {allLocked && (
-            <button className="scene-planner-btn success"
-              onClick={() => navigate(`/episodes/${episodeId}/script-writer`)}>
-              ✦ Generate Script →
-            </button>
-          )}
         </div>
       </div>
 
       <LocationsStrip locations={locations.locations} showId={locations.show_id} />
-      {/* D2: beats at removed sets, with "Move my beats to…". */}
-      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={locations.show_id} onMoved={fetchAll} />
 
       {!loading && (
         <BriefPanel brief={brief} onUpdate={handleUpdateBrief}
@@ -379,24 +336,17 @@ export default function ScenePlannerPage() {
       )}
 
 
-      {beats.editingBeat && (
-        <BeatEditor key={beats.editingBeat.beat_number} beat={beats.editingBeat} library={beats.library} linkedIds={linkedIds}
-          onSave={beats.saveBeat} onRelease={beats.releaseBeat} onCancel={beats.closeEditor} saving={beats.savingBeat} />
-      )}
-
       {!loading && plan.length > 0 && (
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={beats.openEditor}
-                missingProps={beats.missingPropsFor(beat)} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={beats.openEditor}
-                missingProps={beats.missingPropsFor(beat)} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} />
             ))}
           </div>
         )

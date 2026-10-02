@@ -38,7 +38,9 @@ export function ChosenBadge({ beat, className }) {
 // buttons are removed." The link lands on the missing angle, else its kind
 // (the zone); at the event's look (L10) the dressed angle is made there too.
 
-export function MissingAngle({ beat, showId = null, fromLabel = null }) {
+// statusOnly: the status without the link (the Beat Plan page, which
+// re-plans only; a beat is changed in the Scenes tab: S9 d).
+export function MissingAngle({ beat, showId = null, fromLabel = null, statusOnly = false }) {
   const missing = beat.location?.missing;
   const dressed = beat.location?.angle?.dressed;
   const n = beat.beat_number;
@@ -56,7 +58,7 @@ export function MissingAngle({ beat, showId = null, fromLabel = null }) {
               : 'Made from the event\'s look.'}
         </span>
       )}
-      <span className="scene-planner-missing-actions">
+      {!statusOnly && <span className="scene-planner-missing-actions">
         <OpenInSceneSets
           showId={showId}
           setId={beat.scene_set_id}
@@ -65,7 +67,7 @@ export function MissingAngle({ beat, showId = null, fromLabel = null }) {
           className="scene-planner-missing-btn"
           testId={`beat-open-scene-sets-${n}`}
         />
-      </span>
+      </span>}
     </div>
   );
 }

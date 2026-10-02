@@ -4478,6 +4478,22 @@ As built, S9 (c) (the guidance moves to the Checklist):
   - The first build added "Make the plan" and "Write the script" buttons to the Next line, duplicating the footer's; they were removed.
   - The Scene Plan section still reads "Complete" while images are missing, because images never block (L5).
 
+As built, S9 (d) (the Beat Plan page re-plans only):
+- **It keeps:** the Episode Brief with Save Brief and Generate Scene Plan (the re-plan), the locations strip, the readiness line, and the plan itself, read-only, as a board or a list.
+  - Each beat shows its picture, set, view, shot and intent.
+  - The Locked and "Chosen by you" tags stay: they show what a re-plan leaves alone.
+  - A missing image or zone shows as its status (`MissingAngle` with `statusOnly`), including the dressed angle's state.
+- **It no longer has:**
+  - each beat's Edit and lock;
+  - Lock All and Generate Script (the Checklist's since (c));
+  - the missing images' "Open in Scene Sets →";
+  - the "Move my beats" banner.
+- **Each beat links to the Scenes tab** ("Change in Scenes →", `/episodes/:id?tab=scenes`). A line under the title says so: "A re-plan keeps locked and chosen beats. Change a beat's background, lock or unlock it in the Scenes tab." When images are missing, the readiness line ends with "Fix them in Scenes →".
+- **The beat editor** (L11) opens only from the Scenes tab's "Change background". Its tests moved there (`EpisodeScenesTab.editor.test.jsx`).
+- **The walkthrough of (d):** the page was rendered in a browser with a 14-beat sample at 1280px and 375px.
+  - Its only buttons were Board, List, Save Brief and Generate Scene Plan, with 14 "Change in Scenes →" links, and no page scrolled sideways.
+  - It found the links drawn at button size; they now have their own small style.
+
 ---
 
 ## 9. Owed before enforcement

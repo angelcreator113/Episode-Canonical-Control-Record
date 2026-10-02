@@ -4,8 +4,9 @@
  * (choose replacements per removed set)." Lists the removed sets the
  * episode still uses (GET /episodes/:id/removed-sets), a replacement choice
  * for each from the show's library, and one button that moves them all
- * (POST /episodes/:id/move-removed-sets). Shown on the Beat Plan and the
- * Scenes tab; renders nothing when no removed set is used.
+ * (POST /episodes/:id/move-removed-sets). Shown on the Scenes tab (the
+ * Beat Plan re-plans only since S9 d); renders nothing when no removed set
+ * is used.
  */
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';

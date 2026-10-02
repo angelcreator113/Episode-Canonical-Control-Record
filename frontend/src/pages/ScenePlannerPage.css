@@ -614,3 +614,9 @@
 
 /* L10 (§8(hh)): angles dressed from the event's look. */
 .scene-planner-card-tag.dressed { background: rgba(184,150,46,0.18); color: #7a5f12; }
+
+/* S9 (d): re-planning only; a beat is changed in the Scenes tab. */
+.scene-planner-scope { margin: 4px 0 0; font-size: 12px; color: #2C2C2C; }
+.scene-planner-scope a, .scene-planner-readiness a { color: #B8962E; font-weight: 600; }
+a.scene-planner-card-change { font-size: 12px; font-weight: 600; color: #B8962E; text-decoration: none; white-space: nowrap; }
+a.scene-planner-card-change:hover { text-decoration: underline; }
