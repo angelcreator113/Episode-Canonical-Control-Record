@@ -7,6 +7,7 @@ import {
 } from '../components/BeatPlan/BeatPlanParts';
 import useBeatActions from '../components/BeatPlan/useBeatActions';
 import usePlanRefresh from '../components/BeatPlan/usePlanRefresh';
+import RemovedSetsBanner from '../components/BeatPlan/RemovedSetsBanner';
 import './ScenePlannerPage.css';
 
 const BEAT_NAMES = [
@@ -356,6 +357,8 @@ export default function ScenePlannerPage() {
       </div>
 
       <LocationsStrip locations={locations.locations} showId={locations.show_id} />
+      {/* D2: beats at removed sets, with "Move my beats to…". */}
+      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={locations.show_id} onMoved={fetchAll} />
 
       {!loading && (
         <BriefPanel brief={brief} onUpdate={handleUpdateBrief}

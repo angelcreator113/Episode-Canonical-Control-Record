@@ -4254,6 +4254,25 @@ As fixed:
   - a beat names its set, says "Scene set not found" when its set id names no set, and says "No scene assigned" only when it has no set;
   - while any beat is generating, the page re-reads the plan every 6 seconds and stops when none is (`usePlanRefresh`).
 
+D1 and D2 (Evoni, 2026-10-02), after her query showed her beats pointing at two sets she had deleted that day (Lala's Closet, Lala's Room), and that the three sets she made to replace them had no show. Recorded verbatim:
+
+> D1. Deleting a scene set that episodes, beats or locations use asks for a replacement set and moves every use (episode locations, plan beats, event scene_set_id, defaults) to it; deleting without a replacement shows how many uses will be left pointing at a removed set.
+> D2. A scene set created while working in a show gets that show's show_id; find why my three new sets have none. Also give me a one-click "Move my beats to…" for an episode whose beats point at removed sets (choose replacements per removed set).
+
+Why the new sets had no show: Scene Sets' create form had been cut to name and type, so it never sent a show. The page took no show from World Admin either (`SceneSetsTab` ignored the `showId` it was given), and Scene Library has no show at all. A property room (World Locations → property → rooms) was created with a universe and no show. Which path made each of Evoni's three sets is INFERRED, not read.
+
+As fixed (`sceneSetUsesService`):
+- **D1.** A set's uses are its episode locations, plan beats, events, show defaults (home, closet) and the beats' scene rows (`GET /scene-sets/:id/uses`).
+  - Deleting a set in use is refused (409 `SET_IN_USE`) with its uses.
+  - With `?replacement_id=`, every use moves to the replacement and the set is deleted, in one transaction. An episode already linked to the replacement in the same role keeps that link.
+  - With `?confirm_orphan=true`, the set is deleted and the answer counts the uses left.
+  - Scene Sets' Delete opens a dialog for a set in use. It lists the uses, offers the other sets (its own show's first), and has "Move uses and delete" and "Delete anyway (N uses left pointing at a removed set)".
+  - The set's own angles, looks and an approved base are not moved; they are images of that set.
+- **D2, the show.** A new set takes the show it is given. Otherwise it takes the show of a linked episode, else the show of its universe when that universe has exactly one show. This covers both `POST /scene-sets` and a property room. Scene Sets in World Admin now gives new sets its show. Scene Library's create form asks for the show when there is more than one, and otherwise uses the only show.
+- **D2, "Move my beats to…".** `GET /episodes/:id/removed-sets` lists the removed sets an episode's beats, locations, scenes or event still use, with their beats. `POST /episodes/:id/move-removed-sets` (`{ moves: [{ from, to }] }`) moves that episode's uses of each one to its chosen live replacement, in one transaction. The Beat Plan and the Scenes tab show a banner with a replacement choice per removed set and one "Move my beats" button.
+- **An existing set's show** (Evoni, 2026-10-02: "add a Show choice to an existing set's edit form in Scene Sets, so I can give my three new sets (Lala's bedroom, lala's closet, Lala's home) this show"). `PUT /scene-sets/:id` takes `show_id` (an existing show, or empty for none). The set's details in Scene Sets have a Show choice.
+- **Not done:** the three existing sets' show is not set here. That is production data; Evoni sets it with the Show choice.
+
 ---
 
 ## 9. Owed before enforcement

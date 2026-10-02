@@ -337,6 +337,11 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
     }
 
+    // D2 (Evoni, 2026-10-02): a set made while working in a show belongs to
+    // it: the show given, else a linked episode's, else its universe's only show.
+    const { resolveSetShowId } = require('../services/sceneSetUsesService');
+    const resolvedShowId = await resolveSetShowId(SceneSet.sequelize, { show_id, episode_ids, universe_id });
+
     const createFields = {
       name,
       scene_type,
@@ -345,7 +350,7 @@ router.post('/', requireAuth, async (req, res) => {
       aesthetic_tags: aesthetic_tags || [],
       beat_numbers: beat_numbers || [],
       universe_id: universe_id || null,
-      show_id: show_id || null,
+      show_id: resolvedShowId,
       world_location_id: world_location_id || null,
       base_runway_model: base_runway_model || 'gen3a_turbo',
       time_of_day: time_of_day || null,
@@ -427,6 +432,7 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       'style_reference_url', 'negative_prompt', 'variation_count',
       'time_of_day', 'season',
       'base_model',
+      'show_id',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -437,6 +443,17 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       if (updates.base_model === '' || updates.base_model === null) updates.base_model = null;
       else if (!sceneGenService.isBaseModelKey(updates.base_model)) {
         return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
+      }
+    }
+
+    // D2 (Evoni, 2026-10-02): "add a Show choice to an existing set's edit
+    // form". A real, live show, or null/'' for none.
+    if (updates.show_id !== undefined) {
+      if (updates.show_id === '' || updates.show_id === null) updates.show_id = null;
+      else {
+        const [shows] = await SceneSet.sequelize.query('SELECT id FROM shows WHERE id = :id AND deleted_at IS NULL',
+          { replacements: { id: updates.show_id } }).catch((err) => { console.error('Scene Sets PUT show lookup failed:', err.message); return [[]]; });
+        if (!shows.length) return res.status(400).json({ success: false, error: 'show_id must be an existing show' });
       }
     }
 
@@ -610,12 +627,57 @@ router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (
 
 // ─── DELETE /:id  — soft-delete a scene set ──────────────────────────────────
 
+// D1 (Evoni, 2026-10-02; §8(hh)): "Deleting a scene set that episodes,
+// beats or locations use asks for a replacement set and moves every use
+// (episode locations, plan beats, event scene_set_id, defaults) to it;
+// deleting without a replacement shows how many uses will be left pointing
+// at a removed set."
+//   ?replacement_id=<set>  moves every use to that set, then deletes;
+//   ?confirm_orphan=true   deletes, leaving the uses (counted in uses_left);
+//   neither, on a set in use: 409 SET_IN_USE with the uses.
+
+// GET /:id/uses — where the set is used.
+router.get('/:id/uses', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, { attributes: ['id'] });
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const { countUses } = require('../services/sceneSetUsesService');
+    res.json({ success: true, data: await countUses(SceneSet.sequelize, set.id) });
+  } catch (err) {
+    console.error('Scene Sets GET /:id/uses error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const { countUses, moveUses, SceneSetUsesError } = require('../services/sceneSetUsesService');
+    const replacementId = req.query.replacement_id || req.body?.replacement_id || null;
+    const confirmOrphan = String(req.query.confirm_orphan || req.body?.confirm_orphan || '') === 'true';
+    if (replacementId) {
+      try {
+        const moved = await SceneSet.sequelize.transaction(async (transaction) => {
+          const counts = await moveUses(SceneSet.sequelize, set.id, replacementId, { transaction });
+          await set.destroy({ transaction });
+          return counts;
+        });
+        return res.json({ success: true, message: 'Scene set deleted; its uses moved to the replacement', moved });
+      } catch (moveErr) {
+        if (moveErr instanceof SceneSetUsesError) return res.status(moveErr.status).json({ success: false, code: moveErr.code, error: moveErr.message });
+        throw moveErr;
+      }
+    }
+    const uses = await countUses(SceneSet.sequelize, set.id);
+    if (uses.total > 0 && !confirmOrphan) {
+      return res.status(409).json({
+        success: false, code: 'SET_IN_USE', uses,
+        error: `This scene set is used ${uses.total} time(s). Choose a replacement to move them to, or delete anyway and leave them pointing at a removed set.`,
+      });
+    }
     await set.destroy();
-    res.json({ success: true, message: 'Scene set deleted' });
+    res.json({ success: true, message: 'Scene set deleted', uses_left: uses });
   } catch (err) {
     console.error('Scene Sets DELETE /:id error:', err);
     res.status(500).json({ success: false, error: err.message });

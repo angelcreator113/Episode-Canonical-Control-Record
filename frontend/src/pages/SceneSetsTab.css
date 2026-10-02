@@ -4079,3 +4079,17 @@
 .scene-sets-look-empty { display: flex; align-items: center; justify-content: center; color: #94a3b8; }
 .scene-sets-look figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6B6557; }
 .scene-sets-look a { color: #B8962E; }
+
+/* D1 (Evoni, 2026-10-02): deleting a set in use asks for a replacement. */
+.scene-sets-delete-backdrop {
+  position: fixed; inset: 0; background: rgba(44, 44, 44, 0.35);
+  display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 1000;
+}
+.scene-sets-delete-dialog {
+  background: #FAF7F0; border-radius: 10px; padding: 16px; width: 100%; max-width: 440px;
+  display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+.scene-sets-delete-dialog h3 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.scene-sets-delete-dialog p { margin: 0; font-size: 13px; }
+.scene-sets-delete-dialog select { max-width: 100%; min-width: 0; }
+.scene-sets-delete-actions { display: flex; flex-wrap: wrap; gap: 8px; }

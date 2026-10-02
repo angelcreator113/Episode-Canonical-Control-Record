@@ -1316,6 +1316,43 @@ router.put(
   })
 );
 
+// D2 (Evoni, 2026-10-02; §8(hh)): "a one-click 'Move my beats to…' for an
+// episode whose beats point at removed sets (choose replacements per
+// removed set)."
+// GET  /api/v1/episodes/:episodeId/removed-sets — the removed sets the
+//      episode's beats, locations, scenes or event use, with the beats.
+// POST /api/v1/episodes/:episodeId/move-removed-sets — Body: { moves:
+//      [{ from, to }] }: each removed set's uses in this episode move to its
+//      live replacement, in one transaction.
+router.get(
+  '/:episodeId/removed-sets',
+  validateUUIDParam('episodeId'),
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sequelize } = require('../models');
+    const { removedSetsForEpisode } = require('../services/sceneSetUsesService');
+    return res.json({ success: true, data: await removedSetsForEpisode(sequelize, req.params.episodeId) });
+  })
+);
+
+router.post(
+  '/:episodeId/move-removed-sets',
+  validateUUIDParam('episodeId'),
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sequelize } = require('../models');
+    const { moveRemovedSetsForEpisode, SceneSetUsesError } = require('../services/sceneSetUsesService');
+    try {
+      const moved = await moveRemovedSetsForEpisode(sequelize, req.params.episodeId, req.body?.moves);
+      return res.json({ success: true, data: { moved } });
+    } catch (err) {
+      if (err instanceof SceneSetUsesError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+      console.error('POST /episodes/:episodeId/move-removed-sets error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  })
+);
+
 // POST /api/v1/episodes/:episodeId/scene-sets - Link scene set(s) to episode
 router.post(
   '/:episodeId/scene-sets',

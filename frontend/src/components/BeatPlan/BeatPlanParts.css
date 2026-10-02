@@ -39,3 +39,23 @@
 .beat-editor-angle-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scene-planner-missing-look { flex-basis: 100%; color: #64748b; font-size: 11px; }
 .scene-planner-dressed-note { margin: 8px 0 0; font-size: 12px; color: #64748b; }
+
+/* D2 (Evoni, 2026-10-02): "Move my beats to…" for beats at removed sets. */
+.removed-sets-banner {
+  border: 1px solid #c97b5b;
+  background: #fbf1ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.removed-sets-title { margin: 0 0 8px; font-weight: 600; color: #2C2C2C; }
+.removed-sets-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.removed-sets-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.removed-sets-list li span { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.removed-sets-list select { flex: 1 1 160px; min-width: 0; max-width: 100%; }
+.removed-sets-error { margin: 0 0 8px; color: #a33; }
+.removed-sets-move {
+  background: #B8962E; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.removed-sets-move:disabled { opacity: 0.5; cursor: default; }
