@@ -110,6 +110,48 @@ export function SetShowSelect({ set, shows, onSaved, onError }) {
   );
 }
 
+// Evoni, 2026-10-02: "when a set's base image changes (upload or generate),
+// its stored description written by the image analysis should be refreshed
+// or flagged, since a description of an old image now drives every prompt."
+// The flag is visual_language.description_review (baseDescriptionService).
+export function DescriptionReview({ set, onResolved, onError }) {
+  const review = set?.visual_language?.description_review || null;
+  const [busy, setBusy] = useState(false);
+  if (!review) return null;
+  const answer = async (action) => {
+    setBusy(true);
+    try {
+      const r = await apiClient.post(`${API_BASE}/scene-sets/${set.id}/description-review`, { action });
+      onResolved?.(r.data?.data || null);
+    } catch (err) {
+      console.error('[SceneSets] description review failed:', err);
+      onError?.(err.response?.data?.error || 'Could not update the description');
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="scene-sets-desc-review" role="status" data-testid="description-review">
+      <AlertCircle size={12} aria-hidden="true" />
+      <div>
+        {review.machine_written ? (
+          <p>This description was written by the image analysis of the earlier base image. It is rewritten when the new image is analysed.</p>
+        ) : (
+          <p>The base image changed after this description was written. It is still sent with every prompt.</p>
+        )}
+        {review.suggested && (
+          <p className="scene-sets-desc-review-suggested">The new image, as the analysis describes it: {review.suggested}</p>
+        )}
+        <div className="scene-sets-desc-review-actions">
+          {review.suggested && (
+            <button type="button" className="scene-sets-btn-generate" disabled={busy} onClick={() => answer('use_suggested')}>Use the new image&apos;s description</button>
+          )}
+          <button type="button" className="scene-sets-btn-details" disabled={busy} onClick={() => answer('keep')}>Keep this description</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // D2 (Evoni, 2026-10-02): "A scene set created while working in a show gets
 // that show's show_id." The page's show, else the one chosen in the form,
 // else the only show; null when none can be told.
@@ -813,6 +855,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   useEffect(() => { setLocalSeason(set.season || ''); }, [set.season]);
   useEffect(() => { setLocalRoomProps(set.visual_language?.room_properties || {}); }, [set.visual_language?.room_properties]);
   useEffect(() => { setLocalDesc(set.canonical_description || ''); }, [set.canonical_description]);
+  // A saved description answers the review (PUT clears it).
+  const [descReview, setDescReview] = useState(set.visual_language?.description_review || null);
+  useEffect(() => { setDescReview(set.visual_language?.description_review || null); }, [set.visual_language?.description_review]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [genStartTime, setGenStartTime] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
@@ -1624,6 +1669,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       onSaved={() => showToast('Base model saved')}
                       onError={(msg) => showToast(msg, 'error')}
                     />
+                    {/* A description written before the base image changed */}
+                    {!editingDesc && (
+                      <DescriptionReview
+                        set={{ ...set, visual_language: { ...(set.visual_language || {}), description_review: descReview } }}
+                        onResolved={(data) => {
+                          setDescReview(null);
+                          if (data?.canonical_description != null) setLocalDesc(data.canonical_description);
+                          showToast('Description updated');
+                        }}
+                        onError={(msg) => showToast(msg, 'error')}
+                      />
+                    )}
                     {/* Description — view or safe edit mode */}
                     {localDesc && !editingDesc && (
                       <div className="scene-sets-overview-desc-wrap">
@@ -1665,6 +1722,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             try {
                               await updateSceneSetApi(set.id, { canonical_description: descDraft });
                               setLocalDesc(descDraft);
+                              setDescReview(null);
                               showToast('Description saved');
                               setEditingDesc(false);
                             } catch { showToast('Save failed', 'error'); }
