@@ -216,10 +216,14 @@ Return ONLY the JSON array, no other text.`;
 
   // Save to database
   if (save) {
-    // Delete existing plan for this episode
-    await ScenePlan.destroy({ where: { episode_id: episodeId }, force: true });
+    // B2 (Evoni, 2026-10-02): a rewrite never deletes a locked beat. The
+    // unlocked beats are replaced; a locked one stays as Evoni set it, and
+    // the plan returned shows it.
+    const lockedRows = await ScenePlan.findAll({ where: { episode_id: episodeId, locked: true } });
+    const lockedByBeat = new Map(lockedRows.map((r) => [r.beat_number, r]));
+    await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false }, force: true });
 
-    const rows = enrichedBeats.map((beat, i) => ({
+    const rows = enrichedBeats.map((beat, i) => ({ beat, i })).filter(({ beat }) => !lockedByBeat.has(beat.beat_number)).map(({ beat, i }) => ({
       episode_id: episodeId,
       episode_brief_id: null, // will link later if needed
       beat_number: beat.beat_number,
@@ -237,7 +241,24 @@ Return ONLY the JSON array, no other text.`;
     }));
 
     await ScenePlan.bulkCreate(rows);
-    console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}`);
+    console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked`);
+
+    return enrichedBeats.map((beat) => {
+      const kept = lockedByBeat.get(beat.beat_number);
+      if (!kept) return { ...beat, locked: false };
+      return {
+        beat_number: kept.beat_number,
+        beat_name: kept.beat_name,
+        scene_set_id: kept.scene_set_id,
+        angle_label: kept.angle_label,
+        shot_type: kept.shot_type,
+        emotional_intent: kept.emotional_intent,
+        transition_in: kept.transition_in,
+        scene_context: kept.scene_context,
+        ai_confidence: kept.ai_confidence,
+        locked: true,
+      };
+    });
   }
 
   return enrichedBeats;
