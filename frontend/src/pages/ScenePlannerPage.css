@@ -587,55 +587,21 @@
   }
 }
 
-/* B2: the beat editor */
-.scene-planner-editor { margin: 12px 0; padding: 12px 14px; border: 1px solid rgba(184,150,46,0.35); border-radius: 10px; background: #fffef9; display: grid; gap: 8px; max-width: 560px; }
-.scene-planner-editor-title { margin: 0; font-weight: 700; font-size: 13px; color: #2C2C2C; }
-.scene-planner-editor-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: #64748b; }
-.scene-planner-editor-field select,
-.scene-planner-editor-field input,
-.scene-planner-editor-field textarea { width: 100%; box-sizing: border-box; font-size: 13px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; }
-.scene-planner-editor-note { margin: 0; font-size: 11px; color: #92400e; }
-.scene-planner-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* B2: a locked beat's Edit (the editor is in BeatPlanParts.css) */
 .scene-planner-card-edit:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* L4 (§8(hh), Q19): "<Kind> angle missing — Upload image / Generate angle". */
-.scene-planner-missing { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: #FDF4E7; border: 1px dashed #B8962E; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.scene-planner-missing-text { color: #92400e; font-weight: 600; }
-.scene-planner-missing-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.scene-planner-missing-btn { border: 1px solid #B8962E; background: #fff; color: #2C2C2C; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
-.scene-planner-missing-btn:disabled, .scene-planner-missing-btn.is-busy { opacity: 0.5; cursor: not-allowed; }
 
 /* L5, Q21 (§8(hh)): the scene images readiness flag; never blocking. */
 .scene-planner-readiness { margin: 4px 0 0; font-size: 12px; color: #166534; }
 .scene-planner-readiness.is-short { color: #92400e; font-weight: 600; }
 
-/* L11 (§8(hh)): the Beat Plan — "Chosen by you", the locations strip and the
-   beat editor's library of the show's sets with their angles. */
+/* L11 (§8(hh)): the Beat Plan — "Chosen by you" and the locations strip
+   (the editor's library is in BeatPlanParts.css). */
 .scene-planner-card-chosen { position: absolute; top: 6px; right: 6px; background: #2C2C2C; color: #FAF7F0; border-radius: 6px; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: var(--text-2xs); font-weight: 700; }
 .scene-planner-card-tag.chosen { background: #2C2C2C; color: #FAF7F0; }
 .beat-plan-locations { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px; }
 .beat-plan-locations-label { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; color: #64748b; margin-right: 2px; }
 .beat-plan-location { padding: 3px 9px; border: 1px solid rgba(184,150,46,0.45); border-radius: 999px; background: #FAF7F0; color: #2C2C2C; font-size: 12px; text-decoration: none; }
 .beat-plan-location:hover, .beat-plan-location:focus-visible { border-color: #B8962E; color: #B8962E; }
-.scene-planner-editor-chosen { margin: 0; font-size: 12px; color: #2C2C2C; }
-.scene-planner-editor-link { border: none; background: none; padding: 0; color: #B8962E; font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; justify-self: start; }
-.scene-planner-editor-link:disabled { opacity: 0.5; cursor: not-allowed; }
-.beat-editor-sets { display: grid; gap: 4px; max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px; background: #fff; }
-.beat-editor-set { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; border-radius: 6px; background: none; padding: 4px; cursor: pointer; }
-.beat-editor-set:hover { background: #FAF7F0; }
-.beat-editor-set.is-on { border-color: #B8962E; background: rgba(184,150,46,0.08); }
-.beat-editor-set-thumb { width: 56px; height: 36px; flex: none; object-fit: cover; border-radius: 4px; }
-.beat-editor-set-thumb.is-empty { display: inline-flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; font-size: 9px; }
-.beat-editor-set-text { display: grid; min-width: 0; }
-.beat-editor-set-name { font-size: 13px; font-weight: 600; color: #2C2C2C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.beat-editor-set-meta { font-size: 11px; color: #64748b; }
-.beat-editor-angles { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.beat-editor-angle { display: grid; gap: 2px; flex: none; width: 84px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; padding: 3px; cursor: pointer; font-size: 11px; color: #2C2C2C; }
-.beat-editor-angle img, .beat-editor-angle .beat-editor-set-thumb { width: 100%; height: 48px; object-fit: cover; border-radius: 4px; }
-.beat-editor-angle.is-on { border-color: #B8962E; background: rgba(184,150,46,0.08); }
-.beat-editor-angle-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* L10 (§8(hh)): angles dressed from the event's look. */
 .scene-planner-card-tag.dressed { background: rgba(184,150,46,0.18); color: #7a5f12; }
-.scene-planner-missing-look { flex-basis: 100%; color: #64748b; font-size: 11px; }
-.scene-planner-dressed-note { margin: 8px 0 0; font-size: 12px; color: #64748b; }
