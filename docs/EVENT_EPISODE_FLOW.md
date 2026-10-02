@@ -3763,6 +3763,23 @@ As built (S8):
 - **Server.** The set list carries each set's `events` (each with its look). The dressed-angle list read is new. The pinned `requireAuth` count for `episodeBriefRoutes.js` is +1.
 - **Not changed:** Scene Studio's background regeneration (not named in S8).
 
+The description after a new base (Evoni, 2026-10-02), recorded verbatim:
+
+> when a set's base image changes (upload or generate), its stored description written by the image analysis should be refreshed or flagged, since a description of an old image now drives every prompt.
+
+What the code did: the image analysis (`analyzeBaseImage`) fills a set's description only when it is empty, so a description it wrote for an earlier base stayed after the base changed, and the Scene Brief sends it every time.
+
+As built (`baseDescriptionService`):
+- **When the base changes** (generate, upload, "promote to base", or a new `base_still_url` saved directly), the set records `visual_language.description_review`, with what made the new base and the image.
+  - A description the analysis wrote (it is still the analysis's own text) is marked for rewriting, whatever made the new base.
+  - A description the person wrote or edited is flagged when the base was uploaded, promoted or replaced. A base generated from it is not flagged: it was made from that description.
+  - No description: nothing is recorded; the analysis fills it, as before.
+- **The new base's analysis** then rewrites a description it wrote, and clears the flag. For the person's own description, it adds its description of the new image to the flag as a suggestion; the person's text is kept.
+- **The Scene Sets panel** shows the flag above the description: "The base image changed after this description was written. It is still sent with every prompt.", the suggestion, and "Use the new image's description" or "Keep this description" (`POST /scene-sets/:id/description-review`). Saving a description also clears it.
+- `visual_language.description_source` records a description the analysis wrote, so it is still recognised after the analysis is replaced.
+- "Promote to base" no longer tries to delete the cached analysis (the delete never reached the database: the object was changed in place). The cache is keyed by the image it read, so a new base is analysed anyway.
+- The flag is recorded after the new base is saved; a failure to record it is logged and does not fail the base change.
+
 **(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
 PR each:
 

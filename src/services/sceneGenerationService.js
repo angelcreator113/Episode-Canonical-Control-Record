@@ -35,6 +35,7 @@ const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation } = require('./sceneBriefService');
+const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
 const { assertBaseReplaceable } = require('./approvedBaseService');
 
@@ -901,6 +902,10 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       generation_cost: typeof cost === 'number' ? Math.round((previousCost + cost) * 1e4) / 1e4 : previousCost,
       base_generation: baseGeneration,
     }, { where: { id: sceneSet.id } });
+    // A description the analysis wrote for the old base is rewritten by the
+    // new base's analysis (baseDescriptionService); the person's own, which
+    // this base was made from, is left as it is.
+    await noteBaseChanged(briefDb(models), sceneSet.id, { origin: 'generated', baseUrl: stillUrl });
 
     // ── Feature 4: Auto-lock style DNA from the new base image ──
     // Analyze the generated base image with Claude Vision and cache the
@@ -1118,20 +1123,31 @@ Return ONLY JSON.` },
     }
     const updatedVl = { ...vl, ...vlPatch };
 
-    // Auto-fill description from image analysis if the set has no description yet
+    // The description: filled when empty; after a new base, a description
+    // the analysis wrote is rewritten and the person's own is offered this
+    // one (baseDescriptionService). Read as stored: the caller's copy can
+    // predate the new base's review.
     const updateFields = {};
-    if (analysis.description && !sceneSet.canonical_description) {
-      updateFields.canonical_description = analysis.description;
+    const db = SceneSetModel.sequelize || null;
+    const [storedRows] = db
+      ? await db.query('SELECT canonical_description, visual_language FROM scene_sets WHERE id = :id', { replacements: { id: sceneSet.id } })
+      : [[]];
+    const stored = storedRows[0] || sceneSet;
+    const outcome = descriptionAfterAnalysis(stored, analysis);
+    Object.assign(vlPatch, outcome.vlPatch);
+    if (outcome.description) {
+      updateFields.canonical_description = outcome.description;
       // Also regenerate the prompt from the new description
-      const tempSet = { ...sceneSet, canonical_description: analysis.description, visual_language: updatedVl };
+      const tempSet = { ...sceneSet, canonical_description: outcome.description, visual_language: { ...updatedVl, ...outcome.vlPatch } };
       updateFields.base_runway_prompt = buildPrompt(tempSet);
-      console.log(`[SceneGen] Auto-filled description from image analysis`);
+      console.log(`[SceneGen] Description written from image analysis`);
     }
 
     // Merged into the stored visual_language (DJ bug 2): the base's style
     // lock writes it at the same time, and a whole-object write from a stale
     // copy dropped the other's keys.
     await mergeVisualLanguage(SceneSetModel, sceneSet.id, vlPatch);
+    if (outcome.clearReview && db) await writeReview(db, sceneSet.id, null);
     if (Object.keys(updateFields).length) {
       await SceneSetModel.update(updateFields, { where: { id: sceneSet.id } });
     }
@@ -2178,6 +2194,7 @@ module.exports = {
   buildVideoPrompt,
   generateBaseScene,
   analyzeBaseImage,
+  mergeVisualLanguage,
   checkAngleConsistency,
   cropReferenceRegion,
   generateDepthMap,

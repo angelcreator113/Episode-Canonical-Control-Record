@@ -11,6 +11,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
+const { noteBaseChanged, writeReview } = require('../services/baseDescriptionService');
 const { isBudgetError } = require('../services/imageCostService');
 const modelComparison = require('../services/sceneModelComparisonService');
 const artifactService    = require('../services/artifactDetectionService');
@@ -469,6 +470,7 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       };
     }
 
+    const previousBaseUrl = set.base_still_url;
     await set.update(updates);
 
     // If description changed, regenerate the base prompt and invalidate image analysis cache
@@ -481,12 +483,53 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       if (vlUpdates.image_analysis) {
         delete vlUpdates.image_analysis;
       }
+      // A saved description answers a description review.
+      delete vlUpdates.description_review;
       await set.update({ base_runway_prompt: newPrompt, visual_language: vlUpdates });
+    } else if (updates.base_still_url && updates.base_still_url !== previousBaseUrl) {
+      await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'replaced', baseUrl: updates.base_still_url });
     }
 
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PUT /:id error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/description-review — answer a stale-description flag ────────
+// Evoni, 2026-10-02: "when a set's base image changes (upload or generate),
+// its stored description written by the image analysis should be refreshed
+// or flagged" (baseDescriptionService). Body { action }:
+//   use_suggested — the new base's analysis description replaces this one;
+//   keep          — this description stays, and the flag is cleared.
+router.post('/:id/description-review', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const action = req.body?.action;
+    if (!['use_suggested', 'keep'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'action must be use_suggested or keep' });
+    }
+    const review = set.visual_language?.description_review || null;
+    if (action === 'use_suggested') {
+      const suggested = String(review?.suggested || '').trim();
+      if (!suggested) {
+        return res.status(409).json({ success: false, code: 'NO_SUGGESTION', error: 'There is no description of the new base image yet' });
+      }
+      await set.update({
+        canonical_description: suggested,
+        base_runway_prompt: sceneGenService.buildPrompt({ ...set.get({ plain: true }), canonical_description: suggested }),
+      });
+      await sceneGenService.mergeVisualLanguage(SceneSet, set.id, {
+        description_source: { kind: 'image_analysis', source_url: review.base_url || set.base_still_url, text: suggested, at: new Date().toISOString() },
+      });
+    }
+    await writeReview(SceneSet.sequelize, set.id, null);
+    const fresh = await SceneSet.findByPk(set.id);
+    res.json({ success: true, data: { canonical_description: fresh.canonical_description, visual_language: fresh.visual_language } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/description-review error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -741,6 +784,9 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadScen
       base_runway_seed: `uploaded-${Date.now()}`,
       generation_status: 'complete',
     });
+    // A description of the old base now drives every prompt: flag it, or
+    // mark it for rewriting by the new base's analysis (baseDescriptionService).
+    await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'uploaded', baseUrl: primaryUrl });
 
     res.json({
       success: true,
@@ -860,6 +906,13 @@ Return ONLY the JSON object, no other text.` },
     if (analysis.scene_type) updates.scene_type = analysis.scene_type;
     if (analysis.mood_tags) updates.mood_tags = analysis.mood_tags;
     if (Object.keys(updates).length > 0) await set.update(updates);
+    if (updates.canonical_description) {
+      // The description is now the analysis's of the current base.
+      await writeReview(SceneSet.sequelize, set.id, null);
+      await sceneGenService.mergeVisualLanguage(SceneSet, set.id, {
+        description_source: { kind: 'image_analysis', source_url: set.base_still_url, text: String(updates.canonical_description).trim(), at: new Date().toISOString() },
+      });
+    }
 
     // Replace angles with location-specific ones if suggested
     let createdAngles = [];
@@ -2082,13 +2135,10 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async 
       base_still_url: angle.still_image_url,
       base_runway_seed: `promoted-${Date.now()}`,
     });
-
-    // Invalidate cached image analysis so it re-analyzes the new base
-    const vl = set.visual_language || {};
-    if (vl.image_analysis) {
-      delete vl.image_analysis;
-      await set.update({ visual_language: vl });
-    }
+    // The cached image analysis is kept: it is keyed by the image it read
+    // (analyzeBaseImage re-analyses a new base_still_url), and its text tells
+    // a description the analysis wrote from one the person wrote.
+    await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'promoted', baseUrl: angle.still_image_url });
 
     // Reset all OTHER angles to pending (they need to regenerate from new base)
     const { Op } = require('sequelize');
