@@ -3929,9 +3929,10 @@ Outstanding/pending fees after Complete)". So:
    Complete is "Outstanding", marked pending when its row is pending.
 
 **(hh) Venue looks and episode locations (Evoni, 2026-10-02).** Recorded
-verbatim. Nothing is built yet. The design note, reading today's code
-against these rulings, with open questions, is
-`docs/VENUE_LOOKS_EPISODE_LOCATIONS_NOTE.md`.
+verbatim. The design note, reading the code against these rulings, with
+its 22 questions and Evoni's answers, is
+`docs/VENUE_LOOKS_EPISODE_LOCATIONS_NOTE.md`. Built in the order of
+answer 22, (a)–(e), one PR each.
 
 > L1. Each event carries an Event Venue Look: overall look, décor and colours, lighting and time, event areas, signage, must include/avoid, and reference images. "Draft from event details" fills it from the host, description, activity and dress code; it is labelled Auto-drafted and editable. It feeds the Scene Brief's event layer. The venue is the place; the look is how it's dressed for this occasion. Scene images never contain characters.
 >
@@ -3944,6 +3945,46 @@ against these rulings, with open questions, is
 > L5. A written venue look is enough to keep planning and writing; missing scene images are flagged for production readiness, never blocking.
 >
 > L6. An episode can have any number of scene sets, each with a role (home, closet, event, or an extra location such as a car or café). They're chosen together in the Episode Locations step and can be added or changed while the episode is a draft.
+
+Answers to the design note's questions (Evoni, 2026-10-02), recorded
+verbatim:
+
+> Venue design answers (Evoni, 2026-10-02), record verbatim in §8(hh) and the note: Accept your recommendations for Q1–Q6, Q8–Q14 and Q16–Q22, with the build order (a)–(e) as proposed. Q7: the draft also reads the venue's own description, as context only, so the dressing fits the space; the look still describes the occasion, not the place. Q15: roles are home, closet, event (one) and extra; any number of extras, each with a free name (per L6).
+
+The answers, in full (the recommendations she accepted, with Q7 and Q15
+as she changed them):
+
+1. **Where the look lives:** a JSON column `venue_look` on the event, with reference images stored as asset IDs.
+2. **Its parts:** seven named fields, with "must include" and "must avoid" as two separate fields.
+3. **Existing fields:** the look replaces `theme`, `mood`, `color_palette`, `venue_theme` and `location_hint` in the brief; they stay only as inputs for drafting the look.
+4. **Lighting and time:** the look's lighting replaces the brief's time line, falling back to `event_time` when it is empty.
+5. **Event areas:** named spaces (bar, runway, VIP); each can become a suggested angle for the venue's set.
+6. **Reference images:** shown to Evoni, and sent to generation only when she ticks "use as reference" (at most 3).
+7. **Draft inputs (changed):** host, description, activity and dress code, plus the event's prestige, and the venue's own description *as context only*, so the dressing fits the space. The look still describes the occasion, not the place.
+8. **Redraft:** per field; parts Evoni edited are kept, as with A9's purposes. No confirm needed.
+9. **Locking:** editable while the episode is a draft; locks when it is accepted (as A9 does).
+10. **Where it is edited:** the Event Package's Place section; shown read-only in the Episode Locations step.
+11. **Picker preview (L2):** a strip of angle thumbnails under the highlighted set; search covers name, venue and type.
+12. **Show defaults (L3):** stored in `shows.metadata`, set with "Make default" on a set in Scene Sets. With no default, the step asks instead of picking.
+13. **The step's place:** before the episode is created, so nothing exists until Evoni confirms.
+14. **Creating a set from the step:** create it and return with it selected; images come later (L5). The paid brief is not forced.
+15. **Roles (changed):** home, closet, event (one) and extra; any number of extras, each with a free name (per L6).
+16. **Changing a set while the episode is a draft:** the beats move to the new set by role; locked beats stay where they are.
+17. **Beat-to-location mapping (L4):** each beat's usual location becomes its role. TRANSITION beats 7 and 9 go to home; beat 10 (Event Travel) is "arrival" and goes to the event's exterior or entrance.
+18. **Angle kinds:** a new `angle_kind` field (exterior, entrance, main interior, …) beside the free label, filled for existing angles from their labels (ESTABLISHING → exterior, DOORWAY → entrance, WIDE → main interior).
+19. **The missing-angle action:** on the beat in the planner, and summarised in the step. "Generate angle" opens that angle's brief; "Upload image" creates the angle from the file.
+20. **Locked beats in a rewrite:** kept (B2).
+21. **Readiness (L5):** every planned beat has an angle with an image. Flagged on the production checklist and the planner header; never blocks.
+22. **Order of work:** (a) roles and defaults with the Episode Locations step (L3, L6); (b) the look (L1); (c) the picker (L2); (d) the planner mapping and missing-angle actions (L4); (e) readiness (L5). One PR each.
+
+
+Further answers (Evoni, 2026-10-02), recorded verbatim:
+
+> Q21 reading accepted: a beat shot on its set's base image (no particular angle asked) counts as ready.
+> Q6: reference images stay brief-only for now (stored and shown, not sent to generation); revisit after the scene model comparison. Record both in §8(hh).
+
+- **Q21, as built:** a beat that asks for no particular angle is shot on its set's base image, and that image counts as its angle for readiness.
+- **Q6, as built:** reference images are stored and shown, with at most 3 ticked "use as reference"; they are not sent to image generation. To be revisited after the scene model comparison.
 
 ---
 
