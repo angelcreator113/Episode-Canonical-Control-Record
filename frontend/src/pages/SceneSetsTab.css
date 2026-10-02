@@ -4115,3 +4115,21 @@
 }
 .scene-sets-event-look.is-zone-focus { outline: 2px solid #B8962E; outline-offset: 2px; }
 .scene-sets-event-look-name { display: inline-block; font-weight: 600; font-size: 12px; margin-bottom: 4px; overflow-wrap: anywhere; }
+
+/* A description written before the base image changed */
+.scene-sets-desc-review {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: #fdf3e7;
+  border: 1px solid #e8c99a;
+  color: var(--lala-ink, #2C2C2C);
+  font-size: 0.83rem;
+}
+.scene-sets-desc-review > div { min-width: 0; }
+.scene-sets-desc-review p { margin: 0 0 0.35rem; overflow-wrap: anywhere; }
+.scene-sets-desc-review-suggested { font-style: italic; }
+.scene-sets-desc-review-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
