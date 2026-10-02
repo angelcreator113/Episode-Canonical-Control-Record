@@ -16,7 +16,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import EventPackagePage, { orderSceneSetsForEvent, sceneSetPath } from './EventPackagePage';
+import EventPackagePage, { orderSceneSetsForEvent, sceneSetPath, searchSceneSets, sceneSetThumb } from './EventPackagePage';
 
 const EVENT_URL = '/api/v1/world/show-1/events/ev-1';
 const EVENT = {
@@ -95,7 +95,9 @@ describe('Place: the scene set for the event (S7)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Choose scene set' }));
     const venueGroup = await screen.findByTestId('scene-set-group-venue');
     expect(within(venueGroup).getByText('At The Glasshouse')).toBeTruthy();
-    const ids = (el) => within(el).getAllByRole('button').map((b) => b.dataset.testid.replace('scene-set-option-', ''));
+    const ids = (el) => within(el).getAllByRole('button')
+      .filter((b) => b.dataset.testid?.startsWith('scene-set-option-'))
+      .map((b) => b.dataset.testid.replace('scene-set-option-', ''));
     expect(ids(venueGroup)).toEqual(['set-venue-hall', 'set-venue-room']);
     expect(ids(screen.getByTestId('scene-set-group-others'))).toEqual(['set-other-a', 'set-other-b']);
 
@@ -167,5 +169,86 @@ describe('Place: the scene set for the event (S7)', () => {
     });
     expect(orderSceneSetsForEvent(null, 'loc-1')).toEqual({ atVenue: [], others: [] });
     expect(sceneSetPath('show-1', 'set-1')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
+  });
+});
+
+// L2 (Evoni, 2026-10-02, §8(hh)) and her answer Q11: "The Place section's
+// scene-set picker shows thumbnails, search and a preview of each set's
+// angles"; "a strip of angle thumbnails under the highlighted set; search
+// covers name, venue and type."
+describe('Place: the scene-set picker shows thumbnails, search and angles (L2)', () => {
+  const LOCATIONS = [{ id: 'loc-1', name: 'The Glasshouse' }, { id: 'loc-9', name: 'Rue Bistro' }];
+  const ANGLED = SETS.map((s) => (s.id === 'set-venue-hall' ? {
+    ...s,
+    angles: [
+      { id: 'ang-2', angle_label: 'CLOSE', angle_name: 'Bar close-up', sort_order: 2, still_image_url: 'close.jpg' },
+      { id: 'ang-1', angle_label: 'WIDE', angle_name: 'Main hall', sort_order: 1, still_image_url: null },
+    ],
+    cover_angle_id: 'ang-2',
+  } : s));
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    stored = { ...EVENT, scene_set_id: 'set-venue-hall' };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === EVENT_URL) {
+        return { data: {
+          success: true, event: stored, sourceProfile: null, startedFromProfile: null,
+          sceneSet: { id: 'set-venue-hall', name: 'Glasshouse Hall' }, venueLocation: null, invitationAsset: null, usedInEpisode: null,
+        } };
+      }
+      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200') return { data: { success: true, data: ANGLED } };
+      if (url === '/api/v1/world/locations') return { data: { success: true, locations: LOCATIONS } };
+      return { data: { success: true, deliverables: [], locked: false } };
+    });
+  });
+
+  test('each set shows a thumbnail (its base, else its cover angle) and its venue', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    const bistro = await screen.findByTestId('scene-set-option-set-other-b');
+    expect(bistro.querySelector('img').getAttribute('src')).toBe('x.jpg');
+    await waitFor(() => expect(bistro.textContent).toContain('Rue Bistro'));
+    expect(screen.getByTestId('scene-set-option-set-venue-hall').querySelector('img').getAttribute('src')).toBe('close.jpg');
+    expect(screen.getByTestId('scene-set-option-set-other-a').querySelector('img')).toBeNull();
+  });
+
+  test("the event's set opens highlighted with its angles in order; another set's angles open on request", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    const strip = await screen.findByTestId('scene-set-angles-set-venue-hall');
+    expect(within(strip).getAllByRole('figure').map((f) => f.textContent)).toEqual(['No imageMain hall', 'Bar close-up']);
+
+    fireEvent.click(screen.getByTestId('scene-set-preview-set-other-b'));
+    expect(screen.getByTestId('scene-set-angles-set-other-b').textContent).toBe('No angles yet');
+    expect(screen.queryByTestId('scene-set-angles-set-venue-hall')).toBeNull();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  test('search covers name, venue and type', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    // Venue names arrive with the World Locations.
+    await waitFor(() => expect(screen.getByTestId('scene-set-option-set-other-b').textContent).toContain('Rue Bistro'));
+    const search = screen.getByTestId('scene-set-search');
+    const shown = () => screen.queryAllByTestId(/^scene-set-option-/).map((b) => b.dataset.testid.replace('scene-set-option-', '')).sort();
+
+    fireEvent.change(search, { target: { value: 'atelier' } });
+    expect(shown()).toEqual(['set-other-a']);
+    fireEvent.change(search, { target: { value: 'rue bistro' } });
+    expect(shown()).toEqual(['set-other-b']);
+    fireEvent.change(search, { target: { value: 'home base' } });
+    expect(shown()).toEqual(['set-other-a']);
+    fireEvent.change(search, { target: { value: 'nothing like this' } });
+    expect(shown()).toEqual([]);
+    expect(screen.getByTestId('scene-set-no-match')).toBeTruthy();
+  });
+
+  test('the helpers: search with no query returns the groups; a thumb falls back to any angle image', () => {
+    const groups = { atVenue: [SETS[3]], others: [SETS[0]] };
+    expect(searchSceneSets(groups, '  ')).toBe(groups);
+    expect(searchSceneSets(groups, 'event location', {})).toEqual({ atVenue: [SETS[3]], others: [] });
+    expect(sceneSetThumb({ angles: [{ id: 'a', still_image_url: null }, { id: 'b', still_image_url: 'b.jpg' }] })).toBe('b.jpg');
+    expect(sceneSetThumb({})).toBeNull();
   });
 });
