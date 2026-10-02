@@ -151,6 +151,9 @@ module.exports = (sequelize) => {
     theme: { type: DataTypes.STRING(100), allowNull: true },
     mood: { type: DataTypes.STRING(100), allowNull: true },
     color_palette: { type: DataTypes.JSONB, allowNull: true },
+    // The Event Venue Look (L1, Q1; Evoni, 2026-10-02) — migration
+    // 20261002110000. Shape: src/services/venueLookService.js.
+    venue_look: { type: DataTypes.JSONB, allowNull: true },
     floral_style: { type: DataTypes.STRING(50), allowNull: true },
     border_style: { type: DataTypes.STRING(50), allowNull: true },
     // invitation_details — migration 20260709 (may not exist)

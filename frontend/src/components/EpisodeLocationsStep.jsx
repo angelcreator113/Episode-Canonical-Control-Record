@@ -22,6 +22,8 @@
  *   initial      [{ role, scene_set_id, name, scene_set }] (the proposal, or
  *                the episode's locations)
  *   missing      roles with no default ('home', 'closet', 'event')
+ *   eventLook    the event's venue look, shown read-only under Event (L1,
+ *                Q10); edited in the Event Package's Place section
  *   onConfirm(locations) → [{ role, scene_set_id, name }]
  *   onCancel, busy
  */
@@ -108,7 +110,7 @@ function SetPicker({ showId, sets, role, onPick, onClose, setSets }) {
 }
 
 export default function EpisodeLocationsStep({
-  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], onConfirm, onCancel, busy = false,
+  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], eventLook = null, onConfirm, onCancel, busy = false,
 }) {
   const [{ byRole, extras }, setRows] = useState(() => initialRows(initial));
   const [sets, setSets] = useState([]);
@@ -161,6 +163,12 @@ export default function EpisodeLocationsStep({
         <div className="els-row-set">
           {value?.scene_set_id ? (value.scene_set?.name || 'Scene set') : <span className="els-ask">Not chosen</span>}
         </div>
+        {key === 'event' && (eventLook?.overall || eventLook?.areas?.length > 0) && (
+          <div className="els-look" data-testid="els-event-look">
+            <span className="els-look-label">Venue look</span>{' '}
+            {[eventLook.overall, eventLook.areas?.length ? `Areas: ${eventLook.areas.join(', ')}` : null].filter(Boolean).join(' · ')}
+          </div>
+        )}
         {!value?.scene_set_id && missing.includes(key) && (
           <div className="els-note">No saved default: choose one.</div>
         )}

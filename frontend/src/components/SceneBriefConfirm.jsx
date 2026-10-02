@@ -44,7 +44,7 @@ export function eventOptions(events) {
     .map((e) => ({ id: e.id, label: e.event_date ? `${e.name} · ${String(e.event_date).slice(0, 10)}` : (e.name || 'Untitled event') }));
 }
 
-export const SOURCE_LABELS = Object.freeze({ venue: 'From venue', event: 'From event', override: 'Your override' });
+export const SOURCE_LABELS = Object.freeze({ venue: 'From venue', event: 'From event', look: 'From venue look', override: 'Your override' });
 const LAYER_TITLES = Object.freeze({ place: 'The place', event: 'The event', shot: 'The shot', environment: 'Environment' });
 const LAYERS = ['place', 'event', 'shot', 'environment'];
 

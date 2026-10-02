@@ -16,9 +16,10 @@
  * A brief is plain data: { version, scene_set_id, world_location_id,
  * event_id, angle, lines, rules, missing }. Each line is
  *   { layer: 'place' | 'event' | 'shot' | 'environment', key, label, text,
- *     source: 'venue' | 'event' | 'override', essential }
+ *     source: 'venue' | 'event' | 'look' | 'override', essential }
  * so S2 can show it before a paid generation, each line labelled "From
- * venue", "From event" or "Your override", with missing essentials flagged.
+ * venue", "From event", "From venue look" (L1) or "Your override", with
+ * missing essentials flagged.
  * briefToPrompt turns it into the one prompt every scene image path sends.
  *
  * What it reads, and what it never reads:
@@ -54,6 +55,8 @@
  * image. Otherwise the mode is 'full'.
  */
 
+const { readVenueLook, hasLookContent } = require('./venueLookService');
+
 const BRIEF_VERSION = 1;
 const MODES = Object.freeze(['full', 'event_dressing']);
 
@@ -61,7 +64,7 @@ const MODES = Object.freeze(['full', 'event_dressing']);
 // stays as it is; only the event layer is added.
 const DRESSING_KEEP = 'Edit this photograph of the place. Keep the place exactly as it is: the same architecture, walls, floor, windows, furniture, layout, lighting and camera. Add only the event dressing below.';
 const DRESSING_END = 'Change nothing else.';
-const SOURCES = Object.freeze(['venue', 'event', 'override']);
+const SOURCES = Object.freeze(['venue', 'event', 'look', 'override']);
 const LAYERS = Object.freeze(['place', 'event', 'shot', 'environment']);
 
 // "No people are generated." Always first in the prompt.
@@ -224,7 +227,23 @@ function buildSceneBrief({
   if (set.style_reference_url) add('place', 'reference', 'Reference image', 'Match the reference image\'s materials and palette.', 'venue');
 
   // ── The event (temporary; only the event chosen explicitly) ──
-  if (event) {
+  // With an Event Venue Look (L1; Evoni's answers Q3 and Q4, 2026-10-02),
+  // the look replaces the theme, mood and colours in the brief: "the look
+  // replaces them in the brief; they stay only as inputs for drafting the
+  // look." Its lighting replaces the time line, falling back to event_time
+  // when it is empty.
+  const look = event ? readVenueLook(event.venue_look) : null;
+  if (event && hasLookContent(look)) {
+    const name = clean(event.name);
+    const lead = look.overall || (event.description ? clean(event.description).split(/(?<=[.!?])\s/)[0] : '');
+    add('event', 'concept', 'Event', sentence(`Dressed for ${name || 'the event'}${lead ? `: ${lead}` : ''}`), look.overall ? 'look' : 'event', true);
+    if (event.format) add('event', 'setup', 'Activity setup', sentence(`Set up for a ${String(event.format).replace(/_/g, ' ')}`), 'event');
+    if (look.decor) add('event', 'decor', 'Décor and colours', sentence(`Décor and colours, only in décor and props, never on the building: ${look.decor}`), 'look');
+    if (look.areas.length) add('event', 'areas', 'Event areas', sentence(`Event areas: ${listText(look.areas)}`), 'look');
+    if (look.signage) add('event', 'signage', 'Signage', sentence(`Signage shapes, with no readable text: ${look.signage}`), 'look');
+    if (look.must_include) add('event', 'must_include', 'Must include', sentence(`Must include: ${look.must_include}`), 'look');
+    if (look.must_avoid) add('event', 'must_avoid', 'Must avoid', sentence(`Must avoid: ${look.must_avoid}`), 'look');
+  } else if (event) {
     const concept = [clean(event.name), clean(event.theme) && `themed "${clean(event.theme)}"`].filter(Boolean).join(', ');
     add('event', 'concept', 'Event', sentence(`Dressed for ${concept || 'the event'}${event.description ? `: ${clean(event.description).split(/(?<=[.!?])\s/)[0]}` : ''}`), 'event', true);
     if (event.format) add('event', 'setup', 'Activity setup', sentence(`Set up for a ${String(event.format).replace(/_/g, ' ')}`), 'event');
@@ -243,7 +262,8 @@ function buildSceneBrief({
   // ── The environment ──
   const eventTime = event ? timeOfDayFromEventTime(event.event_time) : null;
   const timeKey = eventTime || set.time_of_day || null;
-  if (timeKey && TIME_LIGHT[timeKey]) add('environment', 'time', 'Time of day', TIME_LIGHT[timeKey], eventTime ? 'event' : 'venue', true);
+  if (look?.lighting) add('environment', 'time', 'Lighting and time', sentence(look.lighting), 'look', true);
+  else if (timeKey && TIME_LIGHT[timeKey]) add('environment', 'time', 'Time of day', TIME_LIGHT[timeKey], eventTime ? 'event' : 'venue', true);
   else add('environment', 'time', 'Time of day', '', 'venue', true);
   const eventSeason = event ? seasonFromDate(event.event_date) : null;
   const seasonKey = eventSeason || set.season || null;
@@ -370,7 +390,7 @@ async function loadBriefLocation(sequelize, worldLocationId, { transaction } = {
 async function loadBriefEvent(sequelize, eventId, showId, { transaction } = {}) {
   if (!eventId) return null;
   const [rows] = await sequelize.query(
-    `SELECT id, show_id, name, description, theme, format, mood, color_palette, event_time, event_date
+    `SELECT id, show_id, name, description, theme, format, mood, color_palette, event_time, event_date, venue_look
        FROM world_events WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
     { replacements: { id: eventId }, transaction }
   );
