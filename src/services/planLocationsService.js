@@ -215,16 +215,34 @@ async function planWithAngles(sequelize, rows) {
  * A beat that asks for no angle kind and names no label is shot on its
  * set's base image, so that image counts as its angle.
  * rows: the plan rows with `location` (planWithAngles) and `sceneSet`.
- * { ready, total, not_ready: [{ beat_number, beat_name, text }] }
+ * S9 (a) (Evoni, 2026-10-02; §8(hh)): "The count should reflect usable
+ * assignments, including missing views and removed sets": a beat at a
+ * removed set needs attention too. Each item carries its fix: the removed
+ * set's "Move my beats" (removed_set), the set and zone in Scene Sets
+ * (scene_set), or the episode's locations (locations).
+ * { ready, total, not_ready: [{ beat_number, beat_name, text, fix }] }
  */
 function planReadiness(rows) {
   const notReady = [];
   for (const r of rows || []) {
     let text = null;
-    if (!r.scene_set_id) text = 'No location';
-    else if (r.location?.missing) text = r.location.missing.text;
-    else if (!r.location?.angle && !r.sceneSet?.base_still_url) text = `${r.sceneSet?.name || 'The scene set'} has no base image`;
-    if (text) notReady.push({ beat_number: r.beat_number, beat_name: r.beat_name, text });
+    let fix = null;
+    const setFix = (zone = null) => ({ kind: 'scene_set', scene_set_id: r.scene_set_id, zone });
+    if (!r.scene_set_id) {
+      text = 'No location';
+      fix = { kind: 'locations' };
+    } else if (r.sceneSet?.removed) {
+      // S9 (a): a removed set is not a usable background, whatever image it had.
+      text = `${r.sceneSet.name || 'The scene set'} was removed`;
+      fix = { kind: 'removed_set', scene_set_id: r.scene_set_id };
+    } else if (r.location?.missing) {
+      text = r.location.missing.text;
+      fix = setFix(r.location.missing.angle_id || r.location.missing.kind || null);
+    } else if (!r.location?.angle && !r.sceneSet?.base_still_url) {
+      text = `${r.sceneSet?.name || 'The scene set'} has no base image`;
+      fix = setFix();
+    }
+    if (text) notReady.push({ beat_number: r.beat_number, beat_name: r.beat_name, text, fix });
   }
   const total = (rows || []).length;
   return { ready: total - notReady.length, total, not_ready: notReady };

@@ -693,3 +693,11 @@
   .est-sheet-body { position: relative; max-height: 85vh; overflow-y: auto; background: #fffef9; border-radius: 14px 14px 0 0; padding: 12px 16px 20px; box-shadow: 0 -6px 24px rgba(0,0,0,0.18); }
   .est-sheet-body .scene-planner-editor { border: none; padding: 0; background: transparent; }
 }
+
+/* S9 (a): what needs attention, with its fix */
+.est-issues { margin-top: 10px; padding: 10px 14px; border: 1px solid #e8c99a; border-radius: 10px; background: #fdf3e7; }
+.est-issues-title { margin: 0 0 6px; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600; color: #8a5a1a; text-transform: uppercase; letter-spacing: 0.04em; }
+.est-issues-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.est-issue { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: #2C2C2C; }
+.est-issue-text { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.est-issue-hint { font-size: 12px; color: #8a7a4a; }
