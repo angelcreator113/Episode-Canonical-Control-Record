@@ -4363,6 +4363,22 @@ As fixed (`sceneSetUsesService`):
 - **An existing set's show** (Evoni, 2026-10-02: "add a Show choice to an existing set's edit form in Scene Sets, so I can give my three new sets (Lala's bedroom, lala's closet, Lala's home) this show"). `PUT /scene-sets/:id` takes `show_id` (an existing show, or empty for none). The set's details in Scene Sets have a Show choice.
 - **Not done:** the three existing sets' show is not set here. That is production data; Evoni sets it with the Show choice.
 
+"Move my beats" 500 (Evoni, 2026-10-02, production), recorded verbatim:
+
+> duplicate key on scene_set_episodes_unique_pair (scene_set_id d6cccd2e…, episode 8b9301a6…): the episode already links the replacement set, and the move updates the removed set's link onto it. Fix, with a fail-then-pass test, in both move-removed-sets and D1's delete-with-replacement: when the episode already has a link to the replacement, merge (keep the existing link, keeping the more specific role, and remove the old link) instead of updating; same for any other unique pairs the move touches.
+
+As built: the move is shared by both (`moveUses` in `sceneSetUsesService`). Where the episode already links the replacement, the existing link is kept and the old link is soft-deleted. The kept link's role:
+- the more specific of the two: a named role (home, closet, event) over an extra, and an extra over no role;
+- between two named roles, the existing link's own;
+- an extra's free name (`role_name`) goes with its role. Between two extras, the existing name is kept, or the old link's name when the existing one has none.
+
+The other unique indexes on the tables the move writes do not hold `scene_set_id`, so a move cannot collide with them:
+- `scene_plans` (`episode_id`, `beat_number`);
+- `scenes` (`scene_plan_id`);
+- `world_events` (`used_in_episode_id`).
+
+`scene_set_episodes_unique_pair` (`scene_set_id`, `episode_id`, live rows) is the only one.
+
 ---
 
 ## 9. Owed before enforcement

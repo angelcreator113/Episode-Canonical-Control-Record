@@ -57,8 +57,8 @@ async function liveSet(sequelize, id, transaction) {
 /**
  * Move a set's uses to another live set; scoped to one episode when
  * episodeId is given (then the show defaults stay). An episode already
- * linked to the replacement keeps that link, and the old one is removed.
- * Returns the counts moved.
+ * linked to the replacement keeps that link, with the more specific of the
+ * two roles, and the old one is removed. Returns the counts moved.
  */
 async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction } = {}) {
   if (!toId || toId === fromId) throw new SceneSetUsesError('Choose a different scene set as the replacement');
@@ -69,16 +69,25 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
     const [, meta] = await sequelize.query(sql, { replacements: r, transaction });
     return typeof meta?.rowCount === 'number' ? meta.rowCount : 0;
   };
-  // An episode has one live location per set (scene_set_episodes_unique_pair).
-  // Where it already has the replacement, in any role, that location is kept
-  // (taking the old location's role when it has none) and the old one is
-  // removed; moving it would duplicate the pair (the "Move my beats" 500,
-  // Evoni, 2026-10-02).
+  // An episode has one live location per set (scene_set_episodes_unique_pair,
+  // the only unique index here that holds scene_set_id). Where it already
+  // has the replacement, the two links are merged rather than the old one
+  // moved onto it, which duplicated the pair (the "Move my beats" 500,
+  // Evoni, 2026-10-02): the existing link is kept, with the more specific
+  // role (a named role over an extra, an extra over none; between two named
+  // roles, its own), an extra's name going with its role; the old link is
+  // removed.
   const oldEp = ep.replace('episode_id', 'old.episode_id');
-  await exec(`UPDATE scene_set_episodes keep SET role = old.role, updated_at = NOW()
+  const rank = (t) => `(CASE WHEN ${t}.role IN ('home', 'closet', 'event') THEN 2 WHEN ${t}.role = 'extra' THEN 1 ELSE 0 END)`;
+  await exec(`UPDATE scene_set_episodes keep
+                 SET role = CASE WHEN ${rank('old')} > ${rank('keep')} THEN old.role ELSE keep.role END,
+                     role_name = CASE WHEN ${rank('old')} > ${rank('keep')} THEN old.role_name
+                                      WHEN keep.role IS NOT DISTINCT FROM old.role THEN COALESCE(keep.role_name, old.role_name)
+                                      ELSE keep.role_name END,
+                     updated_at = NOW()
                 FROM scene_set_episodes old
-               WHERE keep.scene_set_id = :toId AND keep.deleted_at IS NULL AND keep.role IS NULL
-                 AND old.scene_set_id = :fromId AND old.deleted_at IS NULL AND old.role IS NOT NULL
+               WHERE keep.scene_set_id = :toId AND keep.deleted_at IS NULL
+                 AND old.scene_set_id = :fromId AND old.deleted_at IS NULL
                  AND old.episode_id = keep.episode_id${oldEp}`);
   await exec(`UPDATE scene_set_episodes old SET deleted_at = NOW(), updated_at = NOW()
                WHERE old.scene_set_id = :fromId AND old.deleted_at IS NULL${oldEp}

@@ -234,17 +234,36 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
   });
 
-  it('D1: deleting with a replacement the episode already has as a location keeps one location', async () => {
+  it('D1: deleting with a replacement the episode already has merges the two links, keeping the more specific role', async () => {
     const old = await sceneSet('d2-old set');
     const replacement = await sceneSet('d2-new set');
     const ep = await episode();
-    await useEverywhere(old, ep);
+    await useEverywhere(old, ep); // 'home'
     await location(replacement, ep, 'extra');
 
     const res = await auth(request(app).delete(`/api/v1/scene-sets/${old}?replacement_id=${replacement}`));
 
     expect(res.status).toBe(200);
-    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'extra' }]);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
     expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
+  });
+
+  it('merging links: a named role is kept over an extra, an extra over none, and an extra keeps its name', async () => {
+    const goneA = await sceneSet('d2-gone extra', { deleted: true });
+    const goneB = await sceneSet('d2-gone named extra', { deleted: true });
+    const keepHome = await sceneSet('d2-keep home');
+    const keepNone = await sceneSet('d2-keep none');
+    const ep = await episode();
+    await run(`INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, role_name, sort_order, created_at, updated_at)
+               VALUES (:a, :goneA, :ep, 'extra', 'Car', 1, NOW(), NOW()), (:b, :goneB, :ep, 'extra', 'Café', 2, NOW(), NOW()),
+                      (:c, :keepHome, :ep, 'home', NULL, 3, NOW(), NOW()), (:d, :keepNone, :ep, NULL, NULL, 4, NOW(), NOW())`,
+    { a: uuid(), b: uuid(), c: uuid(), d: uuid(), goneA, goneB, keepHome, keepNone, ep });
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
+      .send({ moves: [{ from: goneA, to: keepHome }, { from: goneB, to: keepNone }] });
+
+    expect(res.status).toBe(200);
+    expect(await rows(`SELECT scene_set_id, role, role_name FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY sort_order`, { ep }))
+      .toEqual([{ scene_set_id: keepHome, role: 'home', role_name: null }, { scene_set_id: keepNone, role: 'extra', role_name: 'Café' }]);
   });
 });
