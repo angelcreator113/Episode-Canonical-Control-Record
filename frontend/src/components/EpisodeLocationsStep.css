@@ -30,3 +30,7 @@
 .els-look { font-size: 12px; color: #6B6557; margin-top: 2px; overflow-wrap: anywhere; }
 .els-look-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; color: var(--lala-gold, #B8962E); }
 .els-gap { font-size: 11px; color: #92400e; margin-top: 2px; }
+
+/* S8 (Evoni, 2026-10-02): each gap's one action, Open in Scene Sets. */
+.els-gap-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.els-gap-open { font-size: 11px; color: #8a6d1f; }

@@ -278,6 +278,11 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     expect(screen.getAllByTestId('els-gap-event').map((g) => g.textContent)).toEqual([
       'Entrance or exterior angle missing (beat 10)', 'Main interior angle missing (beats 11, 12)',
     ]);
+    // S8 (Evoni, 2026-10-02; §8(dd)): each gap's one action is Open in Scene
+    // Sets, on that set and zone.
+    expect(screen.getAllByTestId('els-gap-open-event').map((l) => new URL(l.getAttribute('href'), 'http://x').searchParams.get('zone')))
+      .toEqual(['entrance', 'main_interior']);
+    expect(screen.getAllByTestId('els-gap-open-event')[0].getAttribute('href')).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-venue&zone=entrance&from=/);
     // Another set chosen for the event: the summary was for the old one.
     fireEvent.click(screen.getByTestId('els-change-event'));
     fireEvent.click(await screen.findByTestId('els-option-set-loft'));

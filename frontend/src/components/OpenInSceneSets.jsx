@@ -11,13 +11,15 @@
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { sceneSetPath, isAppPath } from '../utils/sceneSets';
 
-export default function OpenInSceneSets({ showId, setId, zone = null, fromLabel = null, className = 'open-in-scene-sets', testId }) {
+export default function OpenInSceneSets({ showId, setId, zone = null, from: fromPath = null, fromLabel = null, className = 'open-in-scene-sets', testId }) {
   const location = useLocation();
   if (!setId) return null;
   if (!showId) {
     return <span className={className} data-testid={testId}>Find this set in Scene Sets</span>;
   }
-  const from = `${location.pathname}${location.search || ''}`;
+  // The page to come back to: the one given (a page whose URL drops its own
+  // state, e.g. World Admin's open event), else this one.
+  const from = fromPath || `${location.pathname}${location.search || ''}`;
   return (
     <Link className={className} data-testid={testId} to={sceneSetPath(showId, setId, { zone, from, fromLabel })}>
       Open in Scene Sets →

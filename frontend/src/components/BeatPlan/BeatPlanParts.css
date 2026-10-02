@@ -59,3 +59,6 @@
   background: #B8962E; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer;
 }
 .removed-sets-move:disabled { opacity: 0.5; cursor: default; }
+
+/* S8 (Evoni, 2026-10-02): the missing image's one action is a link. */
+a.scene-planner-missing-btn { text-decoration: none; display: inline-block; }
