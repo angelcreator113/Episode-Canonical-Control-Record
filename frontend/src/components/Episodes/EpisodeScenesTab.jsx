@@ -352,6 +352,11 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </div>
       </div>
 
+      {/* D2: the removed sets' repair, "Move my beats to…". Always in view
+          when the episode uses a removed set (a beat, a location, a scene or
+          its event), never behind Review issues; nothing otherwise. */}
+      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={showId} onMoved={reload} />
+
       {/* S9 (a): each beat that needs attention, with its fix. */}
       {showIssues && issues.length > 0 && (
         <section className="est-issues" aria-label="Needs attention" data-testid="est-issues">
@@ -366,14 +371,10 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                 {item.fix?.kind === 'locations' && (
                   <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={openLocations}>Edit locations</button>
                 )}
-                {item.fix?.kind === 'removed_set' && <span className="est-issue-hint">Move my beats, below</span>}
+                {item.fix?.kind === 'removed_set' && <span className="est-issue-hint">choose its replacement in Move my beats</span>}
               </li>
             ))}
           </ul>
-          {/* D2: the removed sets' repair, "Move my beats to…". */}
-          {issues.some((i) => i.fix?.kind === 'removed_set') && (
-            <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={showId} onMoved={reload} />
-          )}
         </section>
       )}
 

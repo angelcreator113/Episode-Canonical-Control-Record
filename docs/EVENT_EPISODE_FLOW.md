@@ -4433,8 +4433,9 @@ As built, S9 (a) (accurate status):
 - **The Scenes tab's status line** reads "Backgrounds: 12 ready · 2 need attention", or "All 14 backgrounds ready". "Review issues" opens the Needs attention panel, shown only when something needs attention. Each item reads "Beat 5 · <name> — <what>", with its fix:
   - Open in Scene Sets → on the set and zone;
   - Edit locations;
-  - or, for a removed set, the "Move my beats" banner, which is now inside the panel instead of above the status bar.
-- **Not changed in (a):** the locked count and the next step stay until (c); the Beat Plan page keeps its own "Move my beats" banner.
+  - or, for a removed set, "choose its replacement in Move my beats".
+- **"Move my beats" is never hidden.** The banner shows under the status line, without a click, whenever the episode uses a removed set: a beat, a location, a scene or its event. It shows nothing otherwise (Evoni, 2026-10-02: "hold merge approval until the hidden-warning concern is resolved").
+- **Not changed in (a):** the locked count and the next step stay until (c).
 
 ---
 

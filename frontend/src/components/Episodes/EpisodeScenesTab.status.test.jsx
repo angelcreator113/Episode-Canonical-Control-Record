@@ -73,8 +73,23 @@ describe('EpisodeScenesTab status (S9 a)', () => {
     expect(within(within(panel).getByTestId('est-issue-10')).getByRole('link', { name: 'Open in Scene Sets →' }).getAttribute('href'))
       .toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-venue&zone=front&/);
     expect(within(within(panel).getByTestId('est-issue-14')).getByRole('button', { name: 'Edit locations' })).toBeTruthy();
-    // The removed set's repair, "Move my beats", is in the panel.
-    expect(await within(panel).findByTestId('removed-sets-banner')).toBeTruthy();
+    expect(within(panel).getByTestId('est-issue-5').textContent).toContain('choose its replacement in Move my beats');
+  });
+
+  // Not hidden behind Review issues (Evoni, 2026-10-02: "hold merge approval
+  // until the hidden-warning concern is resolved"): the removed sets' repair
+  // shows without a click, whatever uses them.
+  test('Move my beats shows without opening the panel', async () => {
+    renderTab();
+    expect(await screen.findByTestId('removed-sets-banner')).toBeTruthy();
+    expect(screen.queryByTestId('est-issues')).toBeNull();
+  });
+
+  test('…also when only a location (no beat) uses a removed set, and every background is ready', async () => {
+    READINESS = { ready: 4, total: 4, not_ready: [] };
+    renderTab();
+    expect(await screen.findByTestId('removed-sets-banner')).toBeTruthy();
+    expect((await screen.findByTestId('est-status-images')).textContent).toBe('Backgrounds: All 4 backgrounds ready');
   });
 
   test('nothing to review when every background is ready', async () => {
