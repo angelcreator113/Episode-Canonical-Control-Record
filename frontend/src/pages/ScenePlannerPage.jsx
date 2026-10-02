@@ -17,7 +17,7 @@ const SHOT_LABELS = {
 
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
-function BeatCard({ beat, index, onLock }) {
+function BeatCard({ beat, index, onLock, onEdit }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-card-image">
@@ -45,7 +45,8 @@ function BeatCard({ beat, index, onLock }) {
         )}
 
         <div className="scene-planner-card-actions">
-          <button className="scene-planner-card-edit">Edit</button>
+          <button className="scene-planner-card-edit" onClick={() => onEdit(beat)} disabled={beat.locked}
+            title={beat.locked ? 'Unlock this beat to edit it' : undefined}>Edit</button>
           <button
             className={`scene-planner-card-lock-btn ${beat.locked ? 'is-locked' : ''}`}
             onClick={() => onLock(beat)}
@@ -60,7 +61,7 @@ function BeatCard({ beat, index, onLock }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, onLock }) {
+function BeatRow({ beat, index, onLock, onEdit }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -86,13 +87,71 @@ function BeatRow({ beat, index, onLock }) {
       </div>
 
       <div className="scene-planner-row-actions">
-        <button className="scene-planner-btn primary" style={{ padding: '5px 12px', fontSize: 11 }}>Edit</button>
+        <button className="scene-planner-btn primary" style={{ padding: '5px 12px', fontSize: 11 }} onClick={() => onEdit(beat)}
+          disabled={beat.locked} title={beat.locked ? 'Unlock this beat to edit it' : undefined}>Edit</button>
         <button
           className={`scene-planner-card-lock-btn ${beat.locked ? 'is-locked' : ''}`}
           onClick={() => onLock(beat)}
         >
           {beat.locked ? '🔒' : '🔓'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── BEAT EDITOR ──────────────────────────────────────────────────────────────
+// B2 (Evoni, 2026-10-02): the beats' Edit buttons did nothing. They open
+// this editor, which saves through PUT /episode-brief/:episodeId/plan/:beat
+// (a locked beat is refused there, and its Edit is disabled here). The scene
+// sets offered are the ones linked to this episode.
+
+function BeatEditor({ beat, sceneSets, onSave, onCancel, saving }) {
+  const [values, setValues] = useState({
+    scene_set_id: beat.scene_set_id || '',
+    angle_label: beat.angle_label || '',
+    shot_type: beat.shot_type || '',
+    emotional_intent: beat.emotional_intent || '',
+  });
+  const set = (k) => (e) => setValues((v) => ({ ...v, [k]: e.target.value }));
+  const chosen = sceneSets.find((x) => x.id === values.scene_set_id);
+  const angleLabels = [...new Set((chosen?.angles || []).map((a) => a.angle_label).filter(Boolean))];
+  const options = sceneSets.some((x) => x.id === beat.scene_set_id) || !beat.sceneSet
+    ? sceneSets : [{ id: beat.scene_set_id, name: beat.sceneSet.name, angles: [] }, ...sceneSets];
+
+  return (
+    <div className="scene-planner-editor" data-testid="beat-editor">
+      <p className="scene-planner-editor-title">Edit beat {beat.beat_number}: {beat.beat_name}</p>
+      <label className="scene-planner-editor-field">Scene set
+        <select aria-label="Scene set" value={values.scene_set_id} onChange={set('scene_set_id')}>
+          <option value="">No scene</option>
+          {options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+      </label>
+      {sceneSets.length === 0 && (
+        <p className="scene-planner-editor-note">No scene set is linked to this episode yet: link one in the episode's Scenes tab.</p>
+      )}
+      <label className="scene-planner-editor-field">Angle
+        <input aria-label="Angle" list="scene-planner-angles" value={values.angle_label} onChange={set('angle_label')} placeholder="e.g. WIDE" />
+        <datalist id="scene-planner-angles">{angleLabels.map((l) => <option key={l} value={l} />)}</datalist>
+      </label>
+      <label className="scene-planner-editor-field">Shot
+        <select aria-label="Shot" value={values.shot_type} onChange={set('shot_type')}>
+          <option value="">Not set</option>
+          {Object.entries(SHOT_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+      </label>
+      <label className="scene-planner-editor-field">Emotional intent
+        <textarea aria-label="Emotional intent" rows={2} value={values.emotional_intent} onChange={set('emotional_intent')} />
+      </label>
+      <div className="scene-planner-editor-actions">
+        <button className="scene-planner-btn primary" onClick={() => onSave({
+          scene_set_id: values.scene_set_id || null,
+          angle_label: values.angle_label.trim() || null,
+          shot_type: values.shot_type || null,
+          emotional_intent: values.emotional_intent.trim() || null,
+        })} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="scene-planner-btn" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
     </div>
   );
@@ -186,6 +245,9 @@ export default function ScenePlannerPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
+  const [editingBeat, setEditingBeat] = useState(null);
+  const [episodeSets, setEpisodeSets] = useState([]);
+  const [savingBeat, setSavingBeat] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -238,6 +300,31 @@ export default function ScenePlannerPage() {
       await fetchAll();
     } catch {
       showToast('Lock failed', 'error');
+    }
+  };
+
+  const handleEdit = async (beat) => {
+    setEditingBeat(beat);
+    try {
+      const res = await api.get(`/api/v1/episodes/${episodeId}/scene-sets`);
+      setEpisodeSets(res.data?.data || []);
+    } catch (err) {
+      console.error('[ScenePlanner] scene sets load failed:', err);
+      setEpisodeSets([]);
+    }
+  };
+
+  const handleSaveBeat = async (values) => {
+    setSavingBeat(true);
+    try {
+      await api.put(`/api/v1/episode-brief/${episodeId}/plan/${editingBeat.beat_number}`, values);
+      showToast(`Beat ${editingBeat.beat_number} saved`);
+      setEditingBeat(null);
+      await fetchAll();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Save failed', 'error');
+    } finally {
+      setSavingBeat(false);
     }
   };
 
@@ -310,17 +397,22 @@ export default function ScenePlannerPage() {
         </div>
       )}
 
+      {editingBeat && (
+        <BeatEditor key={editingBeat.beat_number} beat={editingBeat} sceneSets={episodeSets}
+          onSave={handleSaveBeat} onCancel={() => setEditingBeat(null)} saving={savingBeat} />
+      )}
+
       {!loading && plan.length > 0 && (
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} onLock={handleLock} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} onLock={handleLock} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit} />
             ))}
           </div>
         )
