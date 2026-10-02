@@ -52,28 +52,21 @@ describe('ScenePlannerPage: missing angles (L4, Q19)', () => {
     renderPage();
     const missing = await screen.findByTestId('beat-missing-10');
     expect(missing.textContent).toContain('Entrance or exterior angle missing');
-    // S8: the action is "Open in Scene Sets →" (see below).
-    expect(within(missing).getByText('Open in Scene Sets →')).toBeTruthy();
+    // S9 (d): a status here; the beat is changed in the Scenes tab.
+    expect(within(missing).queryByText('Open in Scene Sets →')).toBeNull();
     expect(screen.getByTestId('beat-missing-11').textContent).toContain('Main hall angle has no image');
     expect(screen.queryByTestId('beat-missing-1')).toBeNull();
   });
 
-  // S8 (Evoni, 2026-10-02; §8(dd)): "Other pages (Beat Plan, Scenes tab, ...)
-  // show status only, with one entry point: 'Open in Scene Sets →', landing
-  // on the exact set and zone, with a way back ... Their own upload, generate
-  // and add-angle buttons are removed."
-  test('S8: a missing angle shows its status and "Open in Scene Sets →" on that set and zone; no upload or generate', async () => {
+  // S9 (d) (§8(hh)): "the Beat Plan page keeps re-planning only"; S8's
+  // "Open in Scene Sets →" for a missing angle is on the Scenes tab now.
+  test('S9 (d): a missing angle is a status with no upload, generate or link; the beat changes in Scenes', async () => {
     renderPage();
     const m10 = await screen.findByTestId('beat-missing-10');
     expect(within(m10).queryByText('Upload image')).toBeNull();
     expect(within(m10).queryByText('Generate angle')).toBeNull();
-    const back = encodeURIComponent('/episodes/ep-1/plan');
-    expect(within(m10).getByRole('link', { name: 'Open in Scene Sets →' }).getAttribute('href'))
-      .toBe(`/shows/show-1/world?tab=scene-sets&set=set-venue&zone=entrance&from=${back}&fromLabel=Beat%20Plan`);
-    // An angle with no image: the link lands on that angle.
-    const m11 = screen.getByTestId('beat-missing-11');
-    expect(within(m11).getByRole('link', { name: 'Open in Scene Sets →' }).getAttribute('href'))
-      .toBe(`/shows/show-1/world?tab=scene-sets&set=set-venue&zone=ang-wide&from=${back}&fromLabel=Beat%20Plan`);
+    expect(within(m10).queryByRole('link')).toBeNull();
+    expect(within(screen.getByTestId('beat-card-10')).getByRole('link', { name: 'Change in Scenes →' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
     expect(api.post).not.toHaveBeenCalled();
   });
 });
@@ -92,7 +85,7 @@ describe('ScenePlannerPage: the readiness flag (L5, Q21)', () => {
     READY({ ready: 12, total: 14, not_ready: [{ beat_number: 10 }, { beat_number: 11 }] });
     renderPage();
     const flag = await screen.findByTestId('planner-readiness');
-    expect(flag.textContent).toBe('12/14 beats have their image; still needed: beats 10, 11. Planning and writing can go on.');
+    expect(flag.textContent).toBe('12/14 beats have their image; still needed: beats 10, 11. Planning and writing can go on. Fix them in Scenes →');
     expect(flag.className).toContain('is-short');
   });
 

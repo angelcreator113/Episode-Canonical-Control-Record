@@ -58,12 +58,12 @@ describe('ScenePlannerPage: angles dressed from the event\'s look (L10)', () => 
     expect(screen.getByTestId('beat-missing-look-10').textContent).toBe("Made from the event's look.");
   });
 
-  // S8 (Evoni, 2026-10-02; §8(dd)), answer 2: dressed angles are made on the
-  // look in the Scene Sets panel; the Beat Plan links there.
-  test('S8: a missing dressed angle links to Scene Sets on its angle; nothing is made here', async () => {
+  // S9 (d) (§8(hh)): the Beat Plan shows the missing dressed angle as a
+  // status; it is fixed from the Scenes tab, and nothing is made here.
+  test('S9 (d): a missing dressed angle is a status here, changed in Scenes; nothing is made here', async () => {
     renderPage();
-    const link = await screen.findByTestId('beat-open-scene-sets-10');
-    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-venue&zone=ang-door&from=${encodeURIComponent('/episodes/ep-1/plan')}&fromLabel=Beat%20Plan`);
+    await screen.findByTestId('beat-missing-10');
+    expect(screen.queryByTestId('beat-open-scene-sets-10')).toBeNull();
     expect(screen.queryByTestId('beat-generate-angle-10')).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
   });
