@@ -3,9 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { sceneSetPath } from '../utils/sceneSets';
 import {
-  SHOT_LABELS, ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, isDressed,
+  SHOT_LABELS, ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
 } from '../components/BeatPlan/BeatPlanParts';
 import useBeatActions from '../components/BeatPlan/useBeatActions';
+import usePlanRefresh from '../components/BeatPlan/usePlanRefresh';
 import './ScenePlannerPage.css';
 
 const BEAT_NAMES = [
@@ -35,10 +36,10 @@ function LocationsStrip({ locations, showId }) {
 
 function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
   return (
-    <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`}>
+    <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`} data-testid={`beat-card-${beat.beat_number}`}>
       <div className="scene-planner-card-image">
         {beatImage(beat) ? (
-          <img src={beatImage(beat)} alt={beat.sceneSet?.name || ''} />
+          <img src={beatImage(beat)} alt={beatImageLabel(beat) || beat.sceneSet?.name || ''} />
         ) : (
           <div className="scene-planner-card-placeholder">✦</div>
         )}
@@ -50,7 +51,10 @@ function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
 
       <div className="scene-planner-card-body">
         <p className="scene-planner-card-beat-name">{beat.beat_name || BEAT_NAMES[index]}</p>
-        <p className="scene-planner-card-scene-name">{beat.sceneSet?.name || 'No scene assigned'}</p>
+        <p className="scene-planner-card-scene-name">{beatSetName(beat)}</p>
+        {beatImageLabel(beat) && (
+          <p className="scene-planner-card-image-label" data-testid={`beat-image-label-${beat.beat_number}`}>{beatImageLabel(beat)}</p>
+        )}
 
         <div className="scene-planner-card-tags">
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
@@ -94,7 +98,8 @@ function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
       </div>
 
       <div className="scene-planner-row-scene">
-        <p className="scene-planner-row-scene-name">{beat.sceneSet?.name || '— No scene —'}</p>
+        <p className="scene-planner-row-scene-name">{beatSetName(beat, '— No scene —')}</p>
+        {beatImageLabel(beat) && <p className="scene-planner-card-image-label">{beatImageLabel(beat)}</p>}
         <div className="scene-planner-card-tags">
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
@@ -247,6 +252,9 @@ export default function ScenePlannerPage() {
       return null;
     }
   }, [episodeId]);
+
+  // Display bug 3: re-read while a beat's image is still generating.
+  usePlanRefresh(plan, fetchAll);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 

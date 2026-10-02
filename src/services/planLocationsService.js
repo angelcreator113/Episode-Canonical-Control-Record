@@ -96,10 +96,13 @@ function rowAngleStatus(row, anglesBySet, dressing = null) {
   // and counted when there is one, else the plain angle.
   const dressed = look && angle ? dressing.angles.get(`${look.id}:${angle.id}`) || null : null;
   if (view && dressed) {
+    base.generating = dressed.status === 'generating';
     view.dressed = { id: dressed.id, status: dressed.status, image_url: dressed.image_url || null, error: dressed.error || null };
     view.plain_image_url = view.still_image_url;
     if (dressed.status === 'complete' && dressed.image_url) return { ...base, angle: { ...view, still_image_url: dressed.image_url } };
   }
+  // Display bug 3 (Evoni, 2026-10-02): the page refreshes while this is true.
+  base.generating = angle?.generation_status === 'generating' || dressed?.status === 'generating';
   if (angle && hasImage(angle)) return { ...base, angle: view };
   const kind = angle?.angle_kind || (label ? null : spot.kinds[0] || null);
   const what = angle ? (angle.angle_name || angle.angle_label)
@@ -136,15 +139,71 @@ async function loadDressing(sequelize, episodeId) {
 }
 
 /**
+ * The beats' sets, read directly (removed ones too, flagged), by id. Display
+ * bug 2 (Evoni, 2026-10-02): "'No scene assigned' shows on beats that have
+ * a set" — the page named a beat's set only from the plan read's include,
+ * which comes back empty for a set removed from Scene Sets.
+ */
+async function loadPlanSets(sequelize, setIds) {
+  const ids = [...new Set((setIds || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const [rows] = await sequelize.query(
+    `SELECT id, name, scene_type, script_context, base_still_url, generation_status, deleted_at
+       FROM scene_sets WHERE id IN (:ids)`,
+    { replacements: { ids } });
+  return new Map(rows.map((s) => [s.id, s]));
+}
+
+/**
+ * The picture a beat shows and its label (display bug 1, Evoni 2026-10-02:
+ * "A beat with a set but no specific angle ... must show the set's base
+ * image (per Q21), labelled e.g. "Lala's Closet · base""): its angle (the
+ * dressed one at the look's set, L10), else the event's look on its set,
+ * else the set's base image. { url, source, label } or null.
+ */
+function beatPicture(location, set) {
+  if (!set) return null;
+  const removed = set.deleted_at ? ' (removed from Scene Sets)' : '';
+  const name = set.name || 'Scene set';
+  const angle = location?.angle;
+  if (angle?.still_image_url) {
+    const dressed = angle.dressed?.status === 'complete';
+    return {
+      url: angle.still_image_url,
+      source: dressed ? 'dressed' : 'angle',
+      label: `${name} · ${angle.name || angle.label}${dressed ? ' (event look)' : ''}${removed}`,
+    };
+  }
+  if (location?.look?.image_url) return { url: location.look.image_url, source: 'look', label: `${name} · event look${removed}` };
+  if (set.base_still_url) return { url: set.base_still_url, source: 'base', label: `${name} · base${removed}` };
+  return null;
+}
+
+/**
  * The plan rows with their angle status (GET /episode-brief/:id/plan).
  * A beat at a set the episode's event has a finished look on carries
- * location.look, and its angle its dressed version (L10).
+ * location.look, and its angle its dressed version (L10). Each beat also
+ * carries its set (sceneSet, read directly), the picture it shows
+ * (location.image) and whether what it waits on is still generating
+ * (location.generating), for the Beat Plan and the Scenes tab.
  */
 async function planWithAngles(sequelize, rows) {
   const anglesBySet = await loadSetAngles(sequelize, rows.map((r) => r.scene_set_id));
+  const setsById = await loadPlanSets(sequelize, rows.map((r) => r.scene_set_id));
   const episodeId = rows.find((r) => r.episode_id)?.episode_id || null;
   const dressing = episodeId ? await loadDressing(sequelize, episodeId) : null;
-  return rows.map((r) => ({ ...r, location: rowAngleStatus(r, anglesBySet, dressing) }));
+  return rows.map((r) => {
+    const set = r.scene_set_id ? setsById.get(r.scene_set_id) || null : null;
+    const location = rowAngleStatus(r, anglesBySet, dressing);
+    location.generating = Boolean(location.generating) || set?.generation_status === 'generating';
+    location.image = beatPicture(location, set);
+    const sceneSet = set ? {
+      ...(r.sceneSet || {}),
+      id: set.id, name: set.name, scene_type: set.scene_type, script_context: set.script_context,
+      base_still_url: set.base_still_url, removed: Boolean(set.deleted_at),
+    } : null;
+    return { ...r, sceneSet, location };
+  });
 }
 
 /**
