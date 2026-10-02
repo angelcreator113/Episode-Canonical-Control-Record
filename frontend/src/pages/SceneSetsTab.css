@@ -617,6 +617,17 @@
   font-weight: 700;
 }
 
+/* The show's default home or closet (L3, Q12). */
+.scene-sets-default-badge {
+  background: rgba(44, 44, 44, 0.85);
+  color: #FFF;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
 .scene-sets-card-video-ready {
   position: absolute;
   bottom: 10px;

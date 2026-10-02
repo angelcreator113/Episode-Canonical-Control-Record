@@ -216,7 +216,7 @@ function calculateFinancials(event, wardrobeItems = []) {
  * @param {object} models — Sequelize models
  * @returns {Promise<{ scenePlanRows: object[], sceneSetIds: { home: string|null, venue: string|null } }>}
  */
-async function createScenePlanRows(episode, event, models) {
+async function createScenePlanRows(episode, event, models, locations = null) {
   const { ScenePlan } = models;
   const scenePlanRows = [];
   const sceneSetIds = { home: null, venue: null };
@@ -225,19 +225,26 @@ async function createScenePlanRows(episode, event, models) {
   }
 
   try {
-    // B1 (Evoni, 2026-10-02): this show's HOME_BASE sets only, oldest first,
-    // until L3's saved home default replaces it. It took any show's, in no
-    // order.
-    const [homeSets] = await models.sequelize.query(
-      `SELECT id FROM scene_sets
-        WHERE scene_type = 'HOME_BASE' AND show_id = :showId AND deleted_at IS NULL
-        ORDER BY created_at ASC, id ASC LIMIT 1`,
-      { replacements: { showId: event.show_id || episode.show_id } }
-    );
-    sceneSetIds.home = homeSets?.[0]?.id || null;
-
-    if (event.scene_set_id) {
-      sceneSetIds.venue = event.scene_set_id;
+    // L3 (Evoni, 2026-10-02): the home and event sets chosen in the Episode
+    // Locations step. Without locations (a direct caller), B1: this show's
+    // HOME_BASE sets only, oldest first.
+    if (Array.isArray(locations)) {
+      sceneSetIds.home = locations.find((l) => l.role === 'home')?.scene_set_id || null;
+      sceneSetIds.venue = locations.find((l) => l.role === 'event')?.scene_set_id || null;
+    } else {
+      // B1 (Evoni, 2026-10-02): this show's HOME_BASE sets only, oldest first,
+      // until L3's saved home default replaces it. It took any show's, in no
+      // order.
+      const [homeSets] = await models.sequelize.query(
+        `SELECT id FROM scene_sets
+          WHERE scene_type = 'HOME_BASE' AND show_id = :showId AND deleted_at IS NULL
+          ORDER BY created_at ASC, id ASC LIMIT 1`,
+        { replacements: { showId: event.show_id || episode.show_id } }
+      );
+      sceneSetIds.home = homeSets?.[0]?.id || null;
+      if (event.scene_set_id) {
+        sceneSetIds.venue = event.scene_set_id;
+      }
     }
   } catch { /* scene_sets query failed — no scene sets linked */ }
 
@@ -506,6 +513,14 @@ Return ONLY JSON.` }],
   }
   const termsSnapshot = buildTermsSnapshot(event, eventDeliverables);
 
+  // ── 1b. The episode's locations (L3, L6; Evoni, 2026-10-02) ──
+  // Those confirmed in the Episode Locations step, validated here before
+  // anything is created (a bad choice is a 400 and leaves no episode); with
+  // none given, the show's defaults and the event's set (B1's oldest home
+  // when there is no default).
+  const { resolveStartLocations } = require('./episodeLocationsService');
+  const locations = await resolveStartLocations(models.sequelize, { showId, event, locations: options.locations });
+
   // ── 2. Create the Episode, its Brief and the event link — one transaction ──
   // Task #1906: the Episode, the Brief (which records the source event in
   // event_id) and the event's used_in_episode_id / status / times_used
@@ -698,7 +713,7 @@ Return ONLY JSON.` }],
   // ── 3. Create Scene Plan (14 beats) ──
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
-  const { scenePlanRows, sceneSetIds } = await createScenePlanRows(episode, event, models);
+  const { scenePlanRows } = await createScenePlanRows(episode, event, models, locations);
 
   // ── 3b. The approved invitation is this episode's invitation overlay ──
   // P10 (Evoni, 2026-09-30; Task #2386): approved before Start, it is
@@ -715,32 +730,18 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] Invitation overlay placement failed (non-blocking):', invErr.message);
   }
 
-  // ── Link the chosen scene set(s) to the episode via SceneSetEpisode ──
-  // Critical fix: scene_set_id was reaching scene_plans rows but never
-  // creating the episode↔scene_set junction record that the episode page's
-  // /scene-sets endpoint queries. Without this, creators saw "no scene
-  // sets" on the episode even though they explicitly picked one on the
-  // event. findOrCreate is idempotent so a re-run (regenerate flow)
-  // doesn't pile up duplicates.
-  if (models.SceneSetEpisode) {
-    const orderedSetIds = [sceneSetIds.venue, sceneSetIds.home].filter(Boolean);
-    const uniqueOrderedSetIds = orderedSetIds.filter((setId, idx) => orderedSetIds.indexOf(setId) === idx);
-    for (let i = 0; i < uniqueOrderedSetIds.length; i += 1) {
-      const setId = uniqueOrderedSetIds[i];
-      try {
-        const [link, created] = await models.SceneSetEpisode.findOrCreate({
-          where: { episode_id: episode.id, scene_set_id: setId },
-          defaults: { sort_order: i },
-        });
-        if (!created && link.sort_order !== i) {
-          await link.update({ sort_order: i });
-        }
-      } catch (linkErr) {
-        // Junction insert failure shouldn't fail the whole episode
-        // generation. Log and move on; creator can manually link later.
-        console.warn(`[EpisodeGenerator] SceneSetEpisode link failed for set ${setId}:`, linkErr.message);
-      }
+  // ── Link the episode's locations (L3, L6) ──
+  // Every location chosen in the step, with its role, in one transaction
+  // (event, home, closet, extras). It never fails the episode: a failure is
+  // logged, and the locations can be set again from the episode while it is
+  // a draft.
+  try {
+    const { applyLocations } = require('./episodeLocationsService');
+    if (locations.length) {
+      await models.sequelize.transaction((transaction) => applyLocations(models.sequelize, { episodeId: episode.id, locations, transaction }));
     }
+  } catch (linkErr) {
+    console.error(`[EpisodeGenerator] Episode locations link failed for ${episode.id}:`, linkErr.message);
   }
 
   // ── Parse automation data from event (used by feed moments + social tasks) ──

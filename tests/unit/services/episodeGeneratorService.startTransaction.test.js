@@ -5,7 +5,9 @@
  * event's used_in_episode_id / status / times_used stamp in one
  * transaction. A stamp failure fails the Start and rolls back both the
  * Episode and the Brief. The non-blocking steps (feed, history, asset
- * linking) stay outside the transaction.
+ * linking) stay outside the transaction. The episode's locations (L3, L6;
+ * Evoni, 2026-10-02) are linked in their own transaction after the Start
+ * commits, and a link failure does not fail the Start.
  *
  * The sequelize transaction is mocked: rows created with a transaction
  * are held in a pending set and only reach the store on commit; a throw
@@ -20,6 +22,7 @@ jest.mock('../../../src/services/feedActivityService', () => ({ generatePostEven
 jest.mock('../../../src/services/timelinePlacementService', () => ({ autoPlaceRequiredOverlays: jest.fn(async () => []) }));
 
 const { generateEpisodeFromEvent } = require('../../../src/services/episodeGeneratorService');
+const episodeLocations = require('../../../src/services/episodeLocationsService');
 const characterSync = require('../../../src/services/characterSyncService');
 const feedActivity = require('../../../src/services/feedActivityService');
 
@@ -188,5 +191,36 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
       .rejects.toMatchObject({ code: 'EVENT_ALREADY_HAS_EPISODE', status: 409 });
     expect(log.transactions).toHaveLength(0);
     expect(models.Episode.create).not.toHaveBeenCalled();
+  });
+
+  test('the chosen locations are linked in their own transaction after the Start commits (L3, L6)', async () => {
+    const { models, store, log } = makeWorld();
+    const LOCATIONS = [{ role: 'event', scene_set_id: 'set-venue', name: null }, { role: 'home', scene_set_id: 'set-home', name: null }];
+    jest.spyOn(episodeLocations, 'resolveStartLocations').mockResolvedValue(LOCATIONS);
+    const apply = jest.spyOn(episodeLocations, 'applyLocations').mockImplementation(async () => {
+      // The Start has committed by now.
+      expect(log.transactions[0].state).toBe('committed');
+      expect(store.episodes).toHaveLength(1);
+    });
+
+    await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS });
+
+    expect(log.transactions).toHaveLength(2);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', locations: LOCATIONS, transaction: log.transactions[1] });
+    expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: log.transactions[0] });
+  });
+
+  test('a locations link that fails is logged and does not fail the Start', async () => {
+    const { models, store } = makeWorld();
+    jest.spyOn(episodeLocations, 'resolveStartLocations').mockResolvedValue([{ role: 'home', scene_set_id: 'set-home', name: null }]);
+    jest.spyOn(episodeLocations, 'applyLocations').mockRejectedValue(new Error('link boom'));
+
+    const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1' });
+
+    expect(result.episode.id).toBe('ep-new');
+    expect(store.episodes).toHaveLength(1);
+    expect(store.events['ev-1'].used_in_episode_id).toBe('ep-new');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Episode locations link failed for ep-new'), 'link boom');
   });
 });

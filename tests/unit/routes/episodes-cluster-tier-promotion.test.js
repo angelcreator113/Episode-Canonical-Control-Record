@@ -65,8 +65,9 @@ const REQUIRE_AUTH_COUNTS = {
   // POST /:id/task-list/approve, POST /:id/task-list-overlay (Task #2395, requireAuth);
   // +3 for GET /:id/title-overlay/variants, POST /:id/title-overlay,
   // POST /:id/title-overlay/flourish (P11 amendment, Task #2395, requireAuth);
-  // +1 for GET /:id/overlays (P15, requireAuth).
-  'episodes.js': 89,
+  // +1 for GET /:id/overlays (P15, requireAuth);
+  // +2 for GET and PUT /:episodeId/locations (L6, §8(hh), requireAuth).
+  'episodes.js': 91,
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth).
   'episodeBriefRoutes.js': 13,
   'episodeOrchestrationRoute.js': 2,
@@ -85,8 +86,9 @@ const REQUIRE_AUTH_COUNTS = {
   'phoneMissionRoutes.js': 5,
   'sceneStudioEpisodeRoutes.js': 6,
   'onboarding.js': 6,
-  // 19; +2 for GET and PUT /:id/lala-home (D13 travel, Task #2395, requireAuth).
-  'shows.js': 21,
+  // 19; +2 for GET and PUT /:id/lala-home (D13 travel, Task #2395, requireAuth);
+  // +2 for GET and PUT /:id/scene-defaults (L3, §8(hh), requireAuth).
+  'shows.js': 23,
   // 25 at CP2 close; +1 for PUT /:showId/phone-skin (Task #1964, requireAuth).
   'uiOverlayRoutes.js': 26,
   'todoListRoutes.js': 10,
@@ -255,14 +257,16 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +3 for episodes.js task list approval + task-list overlay routes (Task #2395);
     // +2 for shows.js GET and PUT /:id/lala-home (D13 travel, Task #2395);
     // +3 for episodes.js title overlay routes (P11 amendment, Task #2395);
-    // +1 for episodes.js GET /:id/overlays (P15).
-    test('CP2 zone contains 265 total requireAuth references across 22 files', () => {
+    // +1 for episodes.js GET /:id/overlays (P15);
+    // +2 for episodes.js GET and PUT /:episodeId/locations (L6, §8(hh));
+    // +2 for shows.js GET and PUT /:id/scene-defaults (L3, §8(hh)).
+    test('CP2 zone contains 269 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(265);
+      expect(total).toBe(269);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {

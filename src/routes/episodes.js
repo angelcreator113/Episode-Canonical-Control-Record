@@ -1257,6 +1257,44 @@ router.get(
   })
 );
 
+// GET /api/v1/episodes/:episodeId/locations — the episode's locations, each
+// with its role (L6; Evoni, 2026-10-02).
+// PUT /api/v1/episodes/:episodeId/locations — Body: { locations: [{ role,
+// scene_set_id, name? }] }. Replaces them while the episode is a draft (409
+// once it is accepted); a changed home, closet or event takes its unlocked
+// beats with it.
+router.get(
+  '/:episodeId/locations',
+  validateUUIDParam('episodeId'),
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const db = require('../models');
+    const { listLocations } = require('../services/episodeLocationsService');
+    const episode = await db.models.Episode.findByPk(req.params.episodeId);
+    if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+    const locations = await listLocations(db.sequelize, req.params.episodeId);
+    return res.json({ success: true, data: { locations, editable: episode.evaluation_status !== 'accepted' } });
+  })
+);
+
+router.put(
+  '/:episodeId/locations',
+  validateUUIDParam('episodeId'),
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sequelize } = require('../models');
+    const { saveEpisodeLocations, EpisodeLocationsError } = require('../services/episodeLocationsService');
+    try {
+      const locations = await saveEpisodeLocations(sequelize, { episodeId: req.params.episodeId, locations: req.body?.locations });
+      return res.json({ success: true, data: { locations } });
+    } catch (err) {
+      if (err instanceof EpisodeLocationsError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+      console.error('PUT /episodes/:episodeId/locations error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  })
+);
+
 // POST /api/v1/episodes/:episodeId/scene-sets - Link scene set(s) to episode
 router.post(
   '/:episodeId/scene-sets',

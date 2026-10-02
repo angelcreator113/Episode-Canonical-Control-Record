@@ -2350,6 +2350,9 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     const result = await episodeGenerator.generateEpisodeFromEvent(event, models, {
       showId,
       wardrobeItems,
+      // L3 (Evoni, 2026-10-02): the locations confirmed in the Episode
+      // Locations step; absent, the show's defaults and the event's set.
+      locations: req.body?.locations,
     });
 
     // Optional: drop in a script skeleton right after the episode lands.
@@ -2398,8 +2401,34 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       console.warn('Generate episode refused:', error.message);
       return res.status(409).json(dealPriceRequiredBody(error));
     }
+    if (error instanceof require('../services/episodeLocationsService').EpisodeLocationsError) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(error.status).json({ success: false, code: error.code, error: error.message });
+    }
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
+  }
+});
+
+// GET /world/:showId/events/:eventId/episode-locations — the Episode
+// Locations step's starting point (L3, Q12; Evoni, 2026-10-02): home and
+// closet from the show's defaults, the event's set, and the roles still to
+// choose. Read-only.
+router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const [[event]] = await models.sequelize.query(
+      'SELECT id, show_id, scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
+      { replacements: { eventId, showId } });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    const { proposeLocations } = require('../services/episodeLocationsService');
+    const data = await proposeLocations(models.sequelize, { showId, event });
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('Episode locations proposal error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
