@@ -65,7 +65,7 @@ const ARTIFACT_CATEGORIES = {
     label: 'Hand/Body Error',
     description: 'Malformed hands, extra fingers, or anatomical impossibilities',
     severity: 'critical',
-    promptFix: 'no people visible, empty room scene',
+    promptFix: 'no people present, the place furnished as described',
   },
   TEXT_BLEED: {
     label: 'Text Bleed',

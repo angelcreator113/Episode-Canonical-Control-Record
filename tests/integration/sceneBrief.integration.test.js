@@ -143,7 +143,8 @@ function mockProviders() {
     await sceneGen.generateBaseScene(set, models, { skipAnalysis: true, eventId: ids.event });
     const row = await models.SceneSet.findByPk(set.id, { attributes: ['base_runway_prompt', 'base_generation'] });
     const prompt = row.base_runway_prompt;
-    expect(prompt.startsWith('An empty space with no people')).toBe(true);
+    expect(prompt).toContain('No people present');
+    expect(prompt).not.toMatch(/empty (space|room)/i);
     expect(prompt).toContain('Architecture: Victorian iron-and-glass conservatory.');
     expect(prompt).toContain('Materials: black wrought iron metal fixtures.');
     expect(prompt).toContain('Outside, through windows and doorways: Echo Park, Los Angeles.');

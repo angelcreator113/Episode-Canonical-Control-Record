@@ -5,8 +5,10 @@
  * each prompt, side by side with their logged costs, to choose the default.
  * Evoni, 2026-10-02: each image is built "from a real scene set's Scene
  * Brief (place layer, environment, no-people rule), not free text". So the
- * two prompts are two scene sets at a World Location; the estimate step
- * shows the prompt each set's brief sends to every model.
+ * two prompts are two scene sets; the estimate step shows the prompt each
+ * set's brief sends to every model. And: "Allow any of the show's sets with
+ * a description; the World Location's place layer is used when linked,
+ * otherwise the set's own description."
  * Styles live in pages/SceneSetsTab.css (the page that renders this).
  *
  * Also exports BaseModelSelect: the per-set base model choice
@@ -87,10 +89,10 @@ export function BaseModelSelect({ set, onSaved, onError }) {
 
 const COMPARE_PREFIX = '[Compare';
 
-/** The scene sets a comparison can draw from: at a World Location, not a comparison copy. */
+/** The scene sets a comparison can draw from: any with a description, not a comparison copy. */
 export function comparableSets(sets) {
   return (sets || [])
-    .filter(s => s.world_location_id && !String(s.name || '').startsWith(COMPARE_PREFIX))
+    .filter(s => String(s.canonical_description || '').trim() && !String(s.name || '').startsWith(COMPARE_PREFIX))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
@@ -199,7 +201,7 @@ export default function SceneModelComparison({ sets = [], onClose }) {
         </label>
       ))}
       {choices.length < 2 && (
-        <p className="scene-sets-compare-hint">Two scene sets linked to a World Location are needed.</p>
+        <p className="scene-sets-compare-hint">Two scene sets with a description are needed.</p>
       )}
 
       {!estimate && (

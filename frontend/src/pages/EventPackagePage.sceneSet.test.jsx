@@ -39,7 +39,7 @@ const BRIEF = {
     { layer: 'place', key: 'identity', label: 'Place', text: 'The Glasshouse.', source: 'venue', essential: true },
     { layer: 'event', key: 'concept', label: 'Event', text: 'Dressed for Velour Launch.', source: 'event', essential: true },
   ],
-  rules: ['An empty space with no people.'], missing: [], overrides: {},
+  rules: ['No people present.'], missing: [], overrides: {},
 };
 
 let stored;

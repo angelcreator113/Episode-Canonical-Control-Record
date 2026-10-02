@@ -764,7 +764,7 @@ router.post('/:id/analyze-image', validateUUIDParam('id'), requireAuth, aiRateLi
 Return a JSON object with these fields:
 {
   "description": "2-3 sentence description of the space — layout, key furniture/features, lighting, mood, color palette, materials.",
-  "prompt": "A detailed scene generation prompt to recreate this space. Include: architectural style, lighting, colors, key objects, materials, atmosphere. Start with 'Empty room.' Under 400 characters.",
+  "prompt": "A detailed scene generation prompt to recreate this space. Start with the space itself and everything furnishing it, then architectural style, lighting, colors, materials, atmosphere. End with 'No people present.' Under 400 characters.",
   "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
   "mood_tags": ["3-5", "mood", "words"],
   "suggested_angles": [

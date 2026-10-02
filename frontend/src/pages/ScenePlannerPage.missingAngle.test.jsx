@@ -31,7 +31,7 @@ const PLAN = [
 const BRIEF = {
   version: 1, scene_set_id: 'set-venue', angle: 'DOORWAY', mode: 'full',
   lines: [{ layer: 'place', key: 'identity', label: 'Place', text: 'The Glasshouse.', source: 'venue', essential: true }],
-  rules: ['An empty space with no people.'], missing: [], overrides: {},
+  rules: ['No people present.'], missing: [], overrides: {},
 };
 
 function renderPage() {

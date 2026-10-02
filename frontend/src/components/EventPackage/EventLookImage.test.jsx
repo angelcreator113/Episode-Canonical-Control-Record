@@ -19,7 +19,7 @@ const SET = { id: 'set-1', name: 'Glasshouse Hall', base_still_url: 'https://x/a
 const BRIEF = (mode = 'event_dressing') => ({
   version: 1, scene_set_id: 'set-1', event_id: mode === 'event_dressing' ? 'ev-1' : null, angle: 'WIDE', mode,
   lines: [{ layer: 'place', key: 'identity', label: 'Place', text: 'Glasshouse Hall.', source: 'venue', essential: true }],
-  rules: ['An empty space with no people.'], missing: [], overrides: {},
+  rules: ['No people present.'], missing: [], overrides: {},
 });
 const sceneSetPath = (showId, setId) => `/shows/${showId}/world?tab=scene-sets&set=${setId}`;
 

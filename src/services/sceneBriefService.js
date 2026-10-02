@@ -36,7 +36,8 @@
  *     colour palette (as décor and props, never the building).
  *   - the shot: a camera for the angle (no lighting in it: lighting comes
  *     from the place and the environment), the required visible features,
- *     clear space for character overlays.
+ *     an open patch of floor where a person could stand, the room dressed
+ *     around it (Evoni, 2026-10-02).
  *   - the environment: time of day (the event's time, else the set's),
  *     season (the event's date, else the set's), weather (an override only;
  *     nothing stores it yet).
@@ -67,11 +68,24 @@ const DRESSING_END = 'Change nothing else.';
 const SOURCES = Object.freeze(['venue', 'event', 'look', 'override']);
 const LAYERS = Object.freeze(['place', 'event', 'shot', 'environment']);
 
-// "No people are generated." Always first in the prompt.
+// "No people are generated." Constraints, sent at the end of every prompt
+// (Evoni, 2026-10-02: "Models read 'empty space' as an unfurnished room
+// ... the set's description and place layer first, fully furnished and
+// dressed as described; 'no people present' as a constraint near the end
+// ... Never the words 'empty space' or 'empty room'."). None of the scene
+// models takes a negative prompt (Flux dev, Flux pro 1.1 and Flux Kontext
+// on fal; gpt-image-1.5 on OpenAI's images API), so the constraint is
+// written into the prompt.
 const BRIEF_RULES = Object.freeze([
-  'An empty space with no people: no person, figure, silhouette, face, hands or reflection of a person.',
+  'No people present: no person, figure, silhouette, face, hands or reflection of a person.',
   'No text, labels, logos, signage text or watermarks.',
 ]);
+
+// Follows the place layer: the place is shown as described, furnished.
+const FURNISHED = 'Fully furnished and dressed exactly as described: every piece of furniture, fixture, fitting and object described is present and in place.';
+
+// The longest prompt a brief sends.
+const MAX_PROMPT = 3500;
 
 // The camera for each angle: framing only, no lighting (S1, S4).
 const SHOT_CAMERAS = Object.freeze({
@@ -87,14 +101,9 @@ const SHOT_CAMERAS = Object.freeze({
   OTHER: 'A composition suited to this place.',
 });
 
-// Where the clear space for character overlays sits, by angle.
-const OVERLAY_SPACE = Object.freeze({
-  WIDE: 'the centre foreground',
-  ESTABLISHING: 'the centre foreground',
-  DOORWAY: 'the centre of the room beyond the threshold',
-  CLOSE: 'one side of the frame',
-  OVERHEAD: 'the centre of the floor',
-});
+// Room for the characters, laid over the image later (Evoni, 2026-10-02:
+// in place of "clear, uncluttered floor space", which read as a sparse room).
+const OVERLAY_SPACE = 'Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.';
 
 const TIME_LIGHT = Object.freeze({
   morning: 'Morning, with soft early daylight.',
@@ -261,7 +270,7 @@ function buildSceneBrief({
   add('shot', 'camera', 'Camera', sentence(cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
   if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
-  add('shot', 'overlay_space', 'Space for characters', sentence(`Leave clear, uncluttered floor space in ${OVERLAY_SPACE[angle] || 'the centre of the frame'} for character overlays`), 'venue');
+  add('shot', 'overlay_space', 'Space for characters', OVERLAY_SPACE, 'venue');
 
   // ── The environment ──
   // Q4: the look's lighting, else the event's time; for an undressed base,
@@ -346,26 +355,29 @@ function readBriefOverrides(raw) {
 }
 
 /**
- * The prompt a brief sends: the rules, then the place, event, shot and
- * environment. An event-dressed version (S6) sends the rules and only the
- * event layer, as an edit of the approved base.
+ * The prompt a brief sends: the place (then FURNISHED), the event, the shot
+ * and the environment, then the rules as constraints at the end. An
+ * event-dressed version (S6) sends only the event layer, as an edit of the
+ * approved base, then the rules. A long brief is cut in its body, never in
+ * the rules.
  */
 function briefToPrompt(brief) {
   const byLayer = (layer) => (brief?.lines || []).filter((l) => l.layer === layer && l.text).map((l) => l.text);
-  if (brief?.mode === 'event_dressing') {
-    return [...(brief.rules || BRIEF_RULES), DRESSING_KEEP, ...byLayer('event'), DRESSING_END]
-      .join(' ').replace(/\s+/g, ' ').trim();
-  }
-  const parts = [
-    ...(brief?.rules || BRIEF_RULES),
-    ...byLayer('place'),
-    ...byLayer('event'),
-    ...byLayer('shot'),
-    ...byLayer('environment'),
-    'Photorealistic.',
-  ];
-  const full = parts.join(' ').replace(/\s+/g, ' ').trim();
-  return full.length > 3500 ? `${full.slice(0, 3497)}...` : full;
+  const join = (parts) => parts.join(' ').replace(/\s+/g, ' ').trim();
+  const rules = join(brief?.rules || BRIEF_RULES);
+  const body = brief?.mode === 'event_dressing'
+    ? join([DRESSING_KEEP, ...byLayer('event'), DRESSING_END])
+    : join([
+      ...byLayer('place'),
+      FURNISHED,
+      ...byLayer('event'),
+      ...byLayer('shot'),
+      ...byLayer('environment'),
+      'Photorealistic.',
+    ]);
+  const room = MAX_PROMPT - rules.length - 1;
+  const cut = body.length > room ? `${body.slice(0, room - 3)}...` : body;
+  return `${cut} ${rules}`;
 }
 
 /** The World Location of a scene set, with its effective style guide and parent; null without one. */
@@ -432,6 +444,7 @@ module.exports = {
   SOURCES,
   LAYERS,
   BRIEF_RULES,
+  FURNISHED,
   SHOT_CAMERAS,
   timeOfDayFromEventTime,
   seasonFromDate,

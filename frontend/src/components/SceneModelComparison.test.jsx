@@ -26,14 +26,15 @@ const ESTIMATE = {
 };
 
 const SETS = [
-  { id: 'room', name: "Lala's Room", world_location_id: 'loc-1' },
-  { id: 'studio', name: 'Studio', world_location_id: 'loc-2' },
-  { id: 'loose', name: 'Unlinked set', world_location_id: null },
-  { id: 'copy', name: '[Compare 1234abcd] P1 · Flux dev', world_location_id: null },
+  { id: 'room', name: "Lala's Room", world_location_id: 'loc-1', canonical_description: 'A cream bedroom.' },
+  { id: 'studio', name: 'Studio', world_location_id: 'loc-2', canonical_description: 'A white photo studio.' },
+  { id: 'closet', name: "Lala's Closet", world_location_id: null, canonical_description: 'A walk-in closet.' },
+  { id: 'bare', name: 'No description', world_location_id: 'loc-3', canonical_description: '  ' },
+  { id: 'copy', name: '[Compare 1234abcd] P1 · Flux dev', world_location_id: null, canonical_description: 'A cream bedroom.' },
 ];
 const SOURCES = [
-  { scene_set_id: 'room', name: "Lala's Room", prompt: 'An empty space with no people. Lala room brief.', missing: [] },
-  { scene_set_id: 'studio', name: 'Studio', prompt: 'An empty space with no people. Studio brief.', missing: [] },
+  { scene_set_id: 'room', name: "Lala's Room", prompt: 'Lala room brief. No people present.', missing: [] },
+  { scene_set_id: 'studio', name: 'Studio', prompt: 'Studio brief. No people present.', missing: [] },
 ];
 
 const col = (key, label, w, h, cost) => ({
@@ -74,9 +75,10 @@ describe('SceneModelComparison', () => {
     const review = screen.getByRole('button', { name: /Review estimate/ });
     expect(review.disabled).toBe(true);
 
-    // Only sets at a World Location are offered; comparison copies never.
+    // Evoni, 2026-10-02: any set with a description, linked to a World
+    // Location or not; never one without a description, never a comparison copy.
     const first = screen.getByLabelText('Scene set 1');
-    expect(within(first).getAllByRole('option').map(o => o.textContent)).toEqual(['Choose…', "Lala's Room", 'Studio']);
+    expect(within(first).getAllByRole('option').map(o => o.textContent)).toEqual(['Choose…', "Lala's Closet", "Lala's Room", 'Studio']);
     fireEvent.change(first, { target: { value: 'room' } });
     fireEvent.change(screen.getByLabelText('Scene set 2'), { target: { value: 'room' } });
     expect(review.disabled).toBe(true); // the same set twice
@@ -89,8 +91,8 @@ describe('SceneModelComparison', () => {
     expect(within(estimate).getByText(/Plus unpriced parts/)).toBeTruthy();
     expect(apiClient.post).toHaveBeenCalledTimes(1);
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/model-comparison', { scene_set_ids: ['room', 'studio'] });
-    expect(within(estimate).getByText('An empty space with no people. Lala room brief.')).toBeTruthy();
-    expect(within(estimate).getByText('An empty space with no people. Studio brief.')).toBeTruthy();
+    expect(within(estimate).getByText('Lala room brief. No people present.')).toBeTruthy();
+    expect(within(estimate).getByText('Studio brief. No people present.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Confirm and generate/ }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(2));
