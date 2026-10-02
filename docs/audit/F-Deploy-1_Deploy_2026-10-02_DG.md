@@ -272,7 +272,23 @@ $ git show 93362409:src/migrations/20261002100000-add-scene-set-episode-roles.js
    going forward; it changes no existing link.
 
 Whether either applies to the 6 home and 7 extra links is a production
-read, which this record does not make (§8).
+read, which the filing session did not make (§8).
+
+**Evoni's read of those links, ATTESTED** (2026-10-02, production,
+read-only, run by Evoni herself, not by any agent session). The query
+listed the live `home` and `extra` links with each episode's show, the
+set's show, and whether the episode is deleted:
+- **13 rows** (the 6 home and 7 extra links of §0).
+- **The live episode's only home link is Lala's Room**, a set of the same
+  show.
+- **Both cross-show links** ("lalas bedroom day time" and "The Honey
+  Table — Garden Society Brunch") belong to the **deleted** episode
+  "Arrival".
+- **Every other row** is a set of this show on a deleted episode.
+
+**RULED** (Evoni, 2026-10-02): "No action". The cross-show picks
+observation 2 anticipated exist only on a deleted episode; no live
+episode is affected.
 
 **Restart and CFO.** ATTESTED.
 - One plain `pm2 restart`: restart count 63, online.
@@ -302,8 +318,9 @@ L(c)–L(e) are not merged. L(d) carries one more migration,
 - It records no credential, database user or host.
 - It edits no filed document.
 - It reads no production schema, calls no production endpoint (including
-  the CFO history), and queries nothing in production. It does not list
-  the 6 home links or say which shows' sets they point to.
+  the CFO history), and queries nothing in production. Evoni's own
+  read-only query of the home and extra links (§6) is recorded as she
+  gave it.
 - It discharges nothing and mints nothing.
 - The filing session made no host, AWS, database or Cognito contact.
 
@@ -334,10 +351,14 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
     connected.
 - **CFO:** 89/100, 0 critical, 4 warnings, unchanged from DF.
 - **App check:** not done yet (Evoni).
+- **Backfilled links:** 13 home and extra links; the live episode's home
+  is this show's Lala's Room; the two cross-show links are on the deleted
+  episode "Arrival". No action (Evoni).
 - **Live:** A9 as changed; the venue-description fix; B1–B3; L(a)
   Episode Locations.
-- Nothing is RULED here. The filing session made no host, AWS, database or
-  Cognito contact.
+- The record rules on nothing; it quotes Evoni's "No action" on the
+  backfilled links (§6). The filing session made no host, AWS, database
+  or Cognito contact.
 
 *Type: deploy record. Rules: nothing. Mints: nothing. Discharges: nothing.
 Host/AWS/DB/Cognito contact by the filing session: none. Task: none filed.
