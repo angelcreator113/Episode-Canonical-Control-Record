@@ -27,10 +27,11 @@ import { MapPin, Film, Loader, AlertTriangle, Clapperboard, Trash2 } from 'lucid
 import apiClient from '../../services/api';
 import EpisodeLocationsStep from '../EpisodeLocationsStep';
 import {
-  ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, isDressed,
+  ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
 } from '../BeatPlan/BeatPlanParts';
 import useBeatActions from '../BeatPlan/useBeatActions';
 import { sceneSetPath } from '../../utils/sceneSets';
+import usePlanRefresh from '../BeatPlan/usePlanRefresh';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -169,6 +170,9 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   }, [loadPlan, loadLocations, loadOlderScenes]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Display bug 3 (Evoni, 2026-10-02): re-read while a beat's image is still generating.
+  usePlanRefresh(plan, loadPlan);
 
   // Refetch when the window regains focus (e.g. an angle was made in Scene Sets)
   useEffect(() => {
@@ -412,9 +416,13 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                         : <span className="est-beat-thumb is-empty" aria-hidden="true">No image</span>}
                       <span className="est-beat-text">
                         <span className="est-beat-name"><span className="est-beat-num">{n}</span> {beat.beat_name}</span>
-                        <span className="est-beat-where">
-                          {beat.sceneSet?.name || 'No location'}
-                          {angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}
+                        <span className="est-beat-where" data-testid={`est-where-${n}`}>
+                          {beatImageLabel(beat) || (
+                            <>
+                              {beatSetName(beat, 'No location')}
+                              {angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}
+                            </>
+                          )}
                         </span>
                         <span className="est-beat-badges">
                           {beat.locked && <span className="est-badge is-locked" data-testid={`est-locked-${n}`}>Locked</span>}

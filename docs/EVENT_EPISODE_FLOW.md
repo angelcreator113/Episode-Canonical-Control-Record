@@ -4231,6 +4231,29 @@ As built, L14 (a) (zone kinds, the re-kinding and the beat mapping; no image cal
   - venue generation's exterior and interior angles are made as Front and Inside;
   - Scene Sets' Add Angle offers the zones and, for an extra framing, its zone (Inside, the base, or one of the set's zones).
 
+Beat Plan display bugs (Evoni, 2026-10-02, from a production episode), recorded verbatim:
+
+> 1. A beat with a set but no specific angle shows a blank image: it must show the set's base image (per Q21), labelled e.g. "Lala's Closet · base".
+> 2. "No scene assigned" shows on beats that have a set (all of them in my screenshot, including beat 8 which shows an image). Find what it reads (the L12a scene row?); show the set name, and only say something is missing when the set is.
+> 3. Images don't refresh as sets/angles finish generating; the Beat Plan and Scenes tab update a beat's image without a reload.
+
+What the page read:
+- The set's name and base image came only from `sceneSet`, the plan read's include of the scene set. It did not come from the L12a scene row.
+- An angle's image came from `location.angle`. So in production the include came back empty while the angle read did not, which is why beat 8 had a picture but no name.
+- The include skips a set with `deleted_at` set (SceneSet is paranoid). That is the likely cause. INFERRED: no production data was read.
+
+As fixed:
+- **The plan read** (`planWithAngles`) now reads each beat's set directly, including removed ones (`sceneSet.removed`). It adds the picture the beat shows as `location.image` (`{ url, source, label }`), in this order:
+  - its angle (the dressed one at the look's set);
+  - else the event's look;
+  - else the set's base image.
+
+  The label reads "Lala's Closet · base", or "… (removed from Scene Sets)" for a removed set. It also adds `location.generating` while the set's base, the beat's angle or its dressed angle is generating.
+- **The Beat Plan and the Scenes tab:**
+  - each beat shows that picture and its label;
+  - a beat names its set, says "Scene set not found" when its set id names no set, and says "No scene assigned" only when it has no set;
+  - while any beat is generating, the page re-reads the plan every 6 seconds and stops when none is (`usePlanRefresh`).
+
 ---
 
 ## 9. Owed before enforcement

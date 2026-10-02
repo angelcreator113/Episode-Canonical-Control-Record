@@ -330,6 +330,15 @@
   letter-spacing: 0.05em;
 }
 
+/* Display bug 1 (Evoni, 2026-10-02): where the beat's picture comes from, e.g. "Lala's Closet · base". */
+.scene-planner-card-image-label {
+  margin: -4px 0 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #8a7a55;
+  overflow-wrap: anywhere;
+}
+
 .scene-planner-card-scene-name {
   margin: 0 0 6px;
   font-family: 'Lora', serif;
