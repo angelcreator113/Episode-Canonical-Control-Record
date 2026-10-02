@@ -32,6 +32,7 @@ import {
 import useBeatActions from '../BeatPlan/useBeatActions';
 import { sceneSetPath } from '../../utils/sceneSets';
 import usePlanRefresh from '../BeatPlan/usePlanRefresh';
+import RemovedSetsBanner from '../BeatPlan/RemovedSetsBanner';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -304,6 +305,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       )}
 
       {/* ===== Status bar (L12) ===== */}
+      {/* D2: beats at removed sets, with "Move my beats to…". */}
+      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={locations.show_id || episode?.show_id || null} onMoved={reload} />
       <div className="est-status" data-testid="est-status">
         <div className="est-status-counts">
           <span className="est-status-count" data-testid="est-status-images">

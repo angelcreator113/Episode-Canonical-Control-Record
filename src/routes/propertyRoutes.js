@@ -201,10 +201,15 @@ router.post('/:id/rooms', requireAuth, async (req, res) => {
       universe_id: property.universe_id,
     });
 
-    // Create associated SceneSet
+    // Create associated SceneSet. D2 (Evoni, 2026-10-02): it belongs to the
+    // show of the property's universe when that universe has one show.
+    const { resolveSetShowId } = require('../services/sceneSetUsesService');
+    const showId = await resolveSetShowId(SceneSet.sequelize, { universe_id: property.universe_id })
+      .catch((err) => { console.error('[Properties] show lookup for the new room failed:', err.message); return null; });
     const sceneSet = await SceneSet.create({
       id: uuidv4(),
       name,
+      show_id: showId,
       scene_type: sceneType,
       world_location_id: room.id,
       universe_id: property.universe_id,
