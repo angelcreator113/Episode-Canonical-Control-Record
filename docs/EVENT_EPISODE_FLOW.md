@@ -4396,6 +4396,47 @@ The other unique indexes on the tables the move writes do not hold `scene_set_id
 
 `scene_set_episodes_unique_pair` (`scene_set_id`, `episode_id`, live rows) is the only one.
 
+
+**S9, the Scenes tab's job (Evoni, 2026-10-02).** Her audit of the tab, recorded as given:
+
+> The Scenes tab is doing too many jobs at once: managing locations, planning shots, explaining assignment rules, tracking readiness, and directing script writing. Its main purpose should be simpler: show the background each story beat will use and let you fix or change it.
+
+> Make Scenes the place where you choose and verify backgrounds; Scene Sets the place where you create images; and Timeline the place where you arrange the episode.
+
+The audit's table, in short:
+- **Collapse:** the large sticky header (to a small title and navigation bar), and the location cards (to a compact Episode Locations strip that expands).
+- **Status:** "13/14 beats with images" becomes an accurate summary ("12 ready · 2 need attention") that counts missing views and removed sets. "0/14 locked" leaves the main summary.
+- **Labels:** "Chosen by you" goes into the assignment details and the location-change confirmation; "base" becomes a readable view name; "0 angles" shows only in a location's expanded details.
+- **Details:** Shot and Emotional intent move into an expandable "Shot details".
+- **Guidance:** the Plan → Images → Locks → Write Script guidance leaves the tab for the episode's Overview or Checklist.
+- **One editing surface:** overlapping background controls are consolidated into Scenes; distinct planning tools stay as secondary actions.
+- **Removed sets:** the technical removed-set warning becomes a specific, repairable "Needs attention" item.
+- **A beat row:** number and name, one line of story action, location and selected view, the actual production background, and Change Background (plus a repair action when needed); everything else in Details; Group by location stays as an option. A missing background shows as missing, and a reference image is labelled so it cannot be mistaken for the selected background.
+
+The recommendations put to her, against the code:
+- **The readiness count** (`planReadiness`) counted a beat at a removed set as ready when the set had a base image.
+- **Earlier rulings it changes:** L12's status bar (beats locked, and the next step) and L11's "Chosen by you" badge on every beat.
+- **The Beat Plan page** shares its editor with the Scenes tab (L12). Recommended: it keeps re-planning only, and every per-beat change happens in Scenes.
+- **Also on the tab:** the phone-moment warning (kept, under "Needs attention") and Older scenes (kept, collapsed at the bottom).
+- **Build order**, one PR each, stopping before push:
+  - (a) accurate status: a beat at a removed set, a missing zone or a missing base needs attention; "N ready · M need attention" with a Review issues panel listing each item and its fix ("Move my beats", Open in Scene Sets, Upload);
+  - (b) the compact layout (header, location strip, beat rows with Details holding shot, emotional intent, lock and "Chosen by you"; zone names for "base"; a labelled reference picture or a clear "Missing"; Group by location as an option);
+  - (c) the plan → images → lock → script guidance moves to the Overview or Checklist;
+  - (d) the Beat Plan page keeps re-planning only.
+
+> S9 answers (Evoni, 2026-10-02): "Accept (a)–(d) as recommended; record in §8(hh), build (a)"
+
+This replaces, for the Scenes tab, L12's status bar (its locked count and next step move with (c)) and L11's badge on every row (it moves into Details with (b)). L11's protection of a chosen beat is unchanged.
+
+As built, S9 (a) (accurate status):
+- **The count** (`planReadiness`, which also feeds the Beat Plan header and the production checklist): a beat at a removed set now needs attention ("Lala's Closet was removed"), checked before its zone or base, even when that set had a base image. Each item carries its fix: `removed_set` (Move my beats), `scene_set` (the set and the missing zone, or its base, in Scene Sets) or `locations` (Edit locations).
+- **The Scenes tab's status line** reads "Backgrounds: 12 ready · 2 need attention", or "All 14 backgrounds ready". "Review issues" opens the Needs attention panel, shown only when something needs attention. Each item reads "Beat 5 · <name> — <what>", with its fix:
+  - Open in Scene Sets → on the set and zone;
+  - Edit locations;
+  - or, for a removed set, "choose its replacement in Move my beats".
+- **"Move my beats" is never hidden.** The banner shows under the status line, without a click, whenever the episode uses a removed set: a beat, a location, a scene or its event. It shows nothing otherwise (Evoni, 2026-10-02: "hold merge approval until the hidden-warning concern is resolved").
+- **Not changed in (a):** the locked count and the next step stay until (c).
+
 ---
 
 ## 9. Owed before enforcement

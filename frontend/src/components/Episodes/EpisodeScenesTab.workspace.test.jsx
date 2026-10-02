@@ -72,9 +72,10 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: { success: true } });
   });
 
-  test('the status bar counts beats with images and locked beats, and names the next step', async () => {
+  // S9 (a) (§8(hh)): the background summary counts what needs attention.
+  test('the status bar counts ready backgrounds and locked beats, and names the next step', async () => {
     renderTab();
-    expect((await screen.findByTestId('est-status-images')).textContent).toBe('4/6 beats with images');
+    expect((await screen.findByTestId('est-status-images')).textContent).toBe('Backgrounds: 4 ready · 2 need attention');
     await waitFor(() => expect(screen.getByTestId('est-status-locked').textContent).toBe('1/6 locked'));
     expect(screen.getByTestId('est-status-next').textContent).toBe('Next: Add the missing images: beats 10 and 14');
     expect(screen.getByTestId('est-open-beat-plan').getAttribute('href')).toBe('/episodes/ep-1/plan');

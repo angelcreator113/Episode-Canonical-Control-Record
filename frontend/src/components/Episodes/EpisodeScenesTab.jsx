@@ -33,6 +33,7 @@ import useBeatActions from '../BeatPlan/useBeatActions';
 import { sceneSetPath } from '../../utils/sceneSets';
 import usePlanRefresh from '../BeatPlan/usePlanRefresh';
 import RemovedSetsBanner from '../BeatPlan/RemovedSetsBanner';
+import OpenInSceneSets from '../OpenInSceneSets';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -91,6 +92,19 @@ export function groupBeats(plan, locations) {
   return groups.filter((g) => g.beats.length > 0);
 }
 
+/**
+ * S9 (a) (Evoni, 2026-10-02; §8(hh)): "an accurate background summary,
+ * such as 12 ready · 2 need attention". readiness is planReadiness's, which
+ * counts a beat at a removed set, a missing zone or a missing base.
+ */
+export function statusText(readiness, total) {
+  if (!total) return 'No beats yet';
+  if (!readiness) return `${total} ${total === 1 ? 'beat' : 'beats'}`;
+  const issues = (readiness.not_ready || []).length;
+  if (!issues) return `All ${readiness.total} backgrounds ready`;
+  return `${readiness.ready} ready · ${issues} ${issues === 1 ? 'needs' : 'need'} attention`;
+}
+
 /** The status bar's next step (L12): plan, images, locks, then the script. */
 export function nextStep(plan, readiness) {
   const total = plan.length;
@@ -108,6 +122,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   const [plan, setPlan] = useState([]);
   const [readiness, setReadiness] = useState(null);
+  const [showIssues, setShowIssues] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [locations, setLocations] = useState({ locations: [], show_id: null });
   const [olderScenes, setOlderScenes] = useState([]);
@@ -269,7 +284,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   const showId = locations.show_id || episode?.show_id || null;
   const total = plan.length;
   const locked = plan.filter((b) => b.locked).length;
-  const ready = readiness ? readiness.ready : null;
+  const issues = readiness?.not_ready || [];
   const step = nextStep(plan, readiness);
   const groups = groupBeats(plan, locations.locations);
   const editingNumber = beats.editingBeat?.beat_number ?? null;
@@ -304,14 +319,18 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </div>
       )}
 
-      {/* ===== Status bar (L12) ===== */}
-      {/* D2: beats at removed sets, with "Move my beats to…". */}
-      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={locations.show_id || episode?.show_id || null} onMoved={reload} />
+      {/* ===== Status bar (L12; S9 a: what needs attention) ===== */}
       <div className="est-status" data-testid="est-status">
         <div className="est-status-counts">
           <span className="est-status-count" data-testid="est-status-images">
-            {total ? `${ready ?? '–'}/${total} beats with images` : 'No beats yet'}
+            {total ? `Backgrounds: ${statusText(readiness, total)}` : 'No beats yet'}
           </span>
+          {issues.length > 0 && (
+            <button type="button" className="est-btn est-btn-outline est-btn-sm" aria-expanded={showIssues}
+              onClick={() => setShowIssues((v) => !v)} data-testid="est-review-issues">
+              {showIssues ? 'Hide issues' : 'Review issues'}
+            </button>
+          )}
           {total > 0 && <span className="est-status-count" data-testid="est-status-locked">{locked}/{total} locked</span>}
         </div>
         <div className="est-status-next" data-testid="est-status-next">
@@ -332,6 +351,32 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
           </Link>
         </div>
       </div>
+
+      {/* D2: the removed sets' repair, "Move my beats to…". Always in view
+          when the episode uses a removed set (a beat, a location, a scene or
+          its event), never behind Review issues; nothing otherwise. */}
+      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={showId} onMoved={reload} />
+
+      {/* S9 (a): each beat that needs attention, with its fix. */}
+      {showIssues && issues.length > 0 && (
+        <section className="est-issues" aria-label="Needs attention" data-testid="est-issues">
+          <h3 className="est-issues-title">Needs attention</h3>
+          <ul className="est-issues-list">
+            {issues.map((item) => (
+              <li key={item.beat_number} className="est-issue" data-testid={`est-issue-${item.beat_number}`}>
+                <span className="est-issue-text">Beat {item.beat_number} · {item.beat_name} — {item.text}</span>
+                {item.fix?.kind === 'scene_set' && (
+                  <OpenInSceneSets showId={showId} setId={item.fix.scene_set_id} zone={item.fix.zone || null} fromLabel="Scenes tab" className="est-issue-action" />
+                )}
+                {item.fix?.kind === 'locations' && (
+                  <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={openLocations}>Edit locations</button>
+                )}
+                {item.fix?.kind === 'removed_set' && <span className="est-issue-hint">choose its replacement in Move my beats</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ===== Locations (L12) ===== */}
       <section className="est-section" data-testid="est-locations">
