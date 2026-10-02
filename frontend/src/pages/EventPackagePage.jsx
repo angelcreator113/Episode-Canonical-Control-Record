@@ -65,7 +65,7 @@ import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
   Lightbulb, CircleDashed, CalendarClock, Building2, Hourglass,
-  ChevronDown, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
+  ChevronDown, ChevronUp, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
   Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus,
 } from 'lucide-react';
 import api from '../services/api';
@@ -184,6 +184,26 @@ export function orderSceneSetsForEvent(sets, venueLocationId, showId = null) {
   return { atVenue, others };
 }
 
+/**
+ * The picker's search (L2; Evoni's answer Q11, 2026-10-02, §8(hh)): "search
+ * covers name, venue and type". venueNames: { <world_location_id>: name }.
+ */
+export function searchSceneSets(groups, query, venueNames = {}) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return groups;
+  const hit = (x) => [x.name, venueNames[x.world_location_id], fmtLabel(x.scene_type), x.scene_type]
+    .some((v) => v && String(v).toLowerCase().includes(q));
+  return { atVenue: groups.atVenue.filter(hit), others: groups.others.filter(hit) };
+}
+
+/** A set's thumbnail: its base image, else its cover or first angle with an image. */
+export function sceneSetThumb(set) {
+  if (set?.base_still_url) return set.base_still_url;
+  const angles = set?.angles || [];
+  const cover = angles.find((a) => a.id === set.cover_angle_id && a.still_image_url);
+  return (cover || angles.find((a) => a.still_image_url))?.still_image_url || null;
+}
+
 /** Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set. */
 export const sceneSetPath = (showId, setId) => `/shows/${showId}/world?tab=scene-sets&set=${setId}`;
 
@@ -297,6 +317,10 @@ export default function EventPackagePage() {
   const [sceneCreateOpen, setSceneCreateOpen] = useState(false);
   const [sceneCreateName, setSceneCreateName] = useState('');
   const [sceneCreateSaving, setSceneCreateSaving] = useState(false);
+  // L2 (§8(hh), Q11): search by name, venue and type; the highlighted set
+  // shows a strip of its angles.
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerHighlight, setPickerHighlight] = useState(null);
 
   // Featured attendees (Task #1689). guestFeedResults mirrors the Change
   // Host picker's debounced search exactly (same endpoint, same shape).
@@ -800,6 +824,8 @@ export default function EventPackagePage() {
     setSceneVenue(null);
     setSceneCreateOpen(false);
     setSceneCreateName('');
+    setPickerSearch('');
+    setPickerHighlight(null);
   };
 
   // Selecting a venue always sets venue_location_id (never a typed name in
@@ -855,6 +881,14 @@ export default function EventPackagePage() {
     setSceneCreateName(venue?.name || '');
     setScenePickerOpen(true);
     setPickerSets(null);
+    setPickerSearch('');
+    setPickerHighlight(event?.scene_set_id || null);
+    // Venue names for the search (Q11); the same cached list the venue picker uses.
+    if (venueLocations === null) {
+      api.get('/api/v1/world/locations')
+        .then((res) => setVenueLocations(res.data?.locations || []))
+        .catch((err) => { console.error('[EventPackage] locations load failed:', err); });
+    }
     try {
       const res = await api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`);
       setPickerSets(res.data?.data || []);
@@ -973,7 +1007,8 @@ export default function EventPackagePage() {
     return (l.name || '').toLowerCase().includes(q) || (l.city || '').toLowerCase().includes(q);
   });
 
-  const pickerGroups = orderSceneSetsForEvent(pickerSets, sceneVenue?.id || null, showId);
+  const venueNames = Object.fromEntries((venueLocations || []).map((l) => [l.id, l.name]));
+  const pickerGroups = searchSceneSets(orderSceneSetsForEvent(pickerSets, sceneVenue?.id || null, showId), pickerSearch, venueNames);
 
   return (
     <div className="epp-page">
@@ -2049,6 +2084,13 @@ export default function EventPackagePage() {
                 <X size={16} />
               </button>
             </div>
+            <div className="epp-modal-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                type="text" placeholder="Search by name, venue or type" value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)} aria-label="Search scene sets" data-testid="scene-set-search"
+              />
+            </div>
             <div className="epp-modal-results">
               {pickerSets === null ? (
                 <div className="epp-empty"><Loader2 size={14} className="epp-spin-icon" /> Loading scene sets…</div>
@@ -2060,26 +2102,66 @@ export default function EventPackagePage() {
                   group.sets.length > 0 && (
                     <div key={group.key} data-testid={`scene-set-group-${group.key}`}>
                       {group.title && <div className="epp-modal-group-title">{group.title}</div>}
-                      {group.sets.map((s) => (
-                        <button
-                          key={s.id} className="epp-modal-result" disabled={sceneSaving}
-                          onClick={() => chooseSceneSet(s)} data-testid={`scene-set-option-${s.id}`}
-                        >
-                          <div>
-                            <div className="epp-host-name">{s.name}</div>
-                            <div className="epp-host-handle">
-                              {fmtLabel(s.scene_type)}{s.base_still_url ? '' : ' · no image yet'}
+                      {group.sets.map((s) => {
+                        const thumb = sceneSetThumb(s);
+                        const open = pickerHighlight === s.id;
+                        const angles = (s.angles || []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+                        return (
+                          <div key={s.id} className={`epp-set-row${open ? ' is-open' : ''}`}>
+                            <div className="epp-set-row-main">
+                              <button
+                                className="epp-modal-result" disabled={sceneSaving}
+                                onClick={() => chooseSceneSet(s)} data-testid={`scene-set-option-${s.id}`}
+                              >
+                                {thumb
+                                  ? <img className="epp-set-thumb" src={thumb} alt="" />
+                                  : <span className="epp-set-thumb epp-set-thumb-empty" aria-hidden="true">No image</span>}
+                                <div className="epp-set-text">
+                                  <div className="epp-host-name">{s.name}</div>
+                                  <div className="epp-host-handle">
+                                    {fmtLabel(s.scene_type)}
+                                    {venueNames[s.world_location_id] ? ` · ${venueNames[s.world_location_id]}` : ''}
+                                    {s.base_still_url ? '' : ' · no image yet'}
+                                  </div>
+                                </div>
+                                {event.scene_set_id === s.id && <CheckCircle2 size={16} />}
+                              </button>
+                              <button
+                                type="button" className="epp-icon-btn epp-set-preview-btn"
+                                onClick={() => setPickerHighlight(open ? null : s.id)}
+                                aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} the angles of ${s.name}`}
+                                data-testid={`scene-set-preview-${s.id}`}
+                              >
+                                {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              </button>
                             </div>
+                            {open && (
+                              <div className="epp-set-angles" data-testid={`scene-set-angles-${s.id}`}>
+                                {angles.length === 0 ? (
+                                  <span className="epp-host-handle">No angles yet</span>
+                                ) : angles.map((a) => (
+                                  <figure key={a.id} className="epp-set-angle" data-testid={`scene-set-angle-${a.id}`}>
+                                    {a.still_image_url
+                                      ? <img src={a.still_image_url} alt="" />
+                                      : <span className="epp-set-thumb-empty" aria-hidden="true">No image</span>}
+                                    <figcaption>{a.angle_name || a.angle_label}</figcaption>
+                                  </figure>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          {event.scene_set_id === s.id && <CheckCircle2 size={16} />}
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   )
                 ))
               )}
               {pickerSets !== null && pickerSets.length === 0 && (
                 <div className="epp-empty">No scene sets for this show yet</div>
+              )}
+              {pickerSets !== null && pickerSets.length > 0 && pickerSearch.trim()
+                && pickerGroups.atVenue.length + pickerGroups.others.length === 0 && (
+                <div className="epp-empty" data-testid="scene-set-no-match">No scene set matches “{pickerSearch.trim()}”</div>
               )}
             </div>
             <div className="epp-modal-footer">
