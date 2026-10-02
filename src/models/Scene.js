@@ -387,6 +387,12 @@ module.exports = (sequelize) => {
         field: 'scene_angle_id',
         comment: 'FK to scene_angles — the specific camera angle used as background',
       },
+      // L12a (§8(hh)): the beat this scene stands for; null for older scenes.
+      scene_plan_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'scene_plan_id',
+      },
     },
     {
       sequelize,

@@ -1,34 +1,51 @@
+/**
+ * The episode's Scenes tab: the one scene workspace (Evoni's ruling L12
+ * and answer L12a, 2026-10-02; docs/EVENT_EPISODE_FLOW.md §8(hh)).
+ *
+ *   L12. "The episode's Scenes tab is the one scene workspace. Top: a status
+ *   bar (beats with images, beats locked, and the next step). Then the
+ *   episode's Locations with role, thumbnail and angle count, and Edit
+ *   locations. Then the 14 beats as one list grouped by location, each row
+ *   showing its angle image, beat name, set and angle, its badges (Locked,
+ *   Chosen by you) and the missing-image actions; tapping a row edits it in
+ *   place (a bottom sheet at phone width). A beat with a chosen angle is
+ *   that beat's scene for the timeline: no separate 'Use in Episode' step
+ *   and no separate Episode Scenes list. The Beat Plan page remains as a
+ *   full-screen link."
+ *   L12a. "'Open in Studio' moves onto each beat's row in the new Scenes
+ *   tab; existing untied scenes show once under 'Older scenes' until
+ *   removed."
+ *
+ * The beats come from GET /episode-brief/:id/plan (which also brings each
+ * beat's scene row up to date and gives its scene_id); the editor and the
+ * missing-image actions are the Beat Plan's (components/BeatPlan). The
+ * feed moment warning (§8(w) P5, Task #2216) and Edit locations (L6) stay.
+ */
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { MapPin, Film, Loader, AlertTriangle, Clapperboard, Trash2 } from 'lucide-react';
 import apiClient from '../../services/api';
 import EpisodeLocationsStep from '../EpisodeLocationsStep';
+import {
+  ROLE_LABELS, ChosenBadge, MissingAngle, BeatEditor, beatImage, isDressed,
+} from '../BeatPlan/BeatPlanParts';
+import useBeatActions from '../BeatPlan/useBeatActions';
+import { sceneSetPath } from '../../utils/sceneSets';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ─── Track 6 CP5 module-scope helpers (Pattern F prophylactic — Api suffix) ───
-// 9 helpers covering 9 fetch sites. 6 are file-local (episode-scoped routes
-// + scene/scenes routes); 3 are intentionally duplicated locally from CP2
-// SceneSetsTab.jsx (listSceneSetsApi, suggestAnglesApi, createAngleApi) per
-// Track 6 file-local convention — duplication is preferred to cross-file
-// imports to keep test scope file-local.
-
-// Episode-scoped routes
-export const listEpisodeSceneSetsApi = (episodeId) =>
-  apiClient.get(`${API_BASE}/episodes/${episodeId}/scene-sets`);
+// The workspace's fetch sites (L12 retired the scene-set picker, the angle
+// suggestions and "Use in Episode", with their helpers).
 export const listEpisodeScenesApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episodes/${episodeId}/scenes`);
-export const linkSceneSetsToEpisodeApi = (episodeId, payload) =>
-  apiClient.post(`${API_BASE}/episodes/${episodeId}/scene-sets`, payload);
-export const unlinkSceneSetFromEpisodeApi = (episodeId, setId) =>
-  apiClient.delete(`${API_BASE}/episodes/${episodeId}/scene-sets/${setId}`);
-export const createSceneFromAngleApi = (episodeId, payload) =>
-  apiClient.post(`${API_BASE}/episodes/${episodeId}/scenes/from-angle`, payload);
 export const deleteSceneApi = (sceneId) =>
   apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
 export const getEpisodePlanApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episode-brief/${episodeId}/plan`);
+export const lockAllBeatsApi = (episodeId) =>
+  apiClient.post(`${API_BASE}/episode-brief/${episodeId}/plan/lock-all`);
 // The episode's locations with their roles (L6; Evoni, 2026-10-02)
 export const getEpisodeLocationsApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episodes/${episodeId}/locations`);
@@ -37,50 +54,61 @@ export const saveEpisodeLocationsApi = (episodeId, locations) =>
 export const retryFeedMomentsApi = (episodeId) =>
   apiClient.post(`${API_BASE}/episode-brief/${episodeId}/feed-moments/retry`);
 
-// Scene-set routes (duplicated from CP2 SceneSetsTab.jsx per file-local convention)
-export const listSceneSetsApi = () => apiClient.get(`${API_BASE}/scene-sets`);
-export const suggestAnglesApi = (setId, payload) =>
-  apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles`, payload);
-export const createAngleApi = (setId, payload) =>
-  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles`, payload);
-
-const SCENE_TYPE_COLORS = {
-  HOME_BASE: { bg: '#dbeafe', color: '#1d4ed8' },
-  CLOSET: { bg: '#fce7f3', color: '#be185d' },
-  EVENT_LOCATION: { bg: '#d1fae5', color: '#047857' },
-  TRANSITION: { bg: '#fef3c7', color: '#92400e' },
-  OTHER: { bg: '#f1f5f9', color: '#475569' },
-};
-
 // "3", "3 and 7", "3, 7 and 12"
 const listBeats = (beats) => (beats.length < 2
   ? String(beats[0])
   : `${beats.slice(0, -1).join(', ')} and ${beats[beats.length - 1]}`);
 
+const locationLabel = (l) => (l.role === 'extra' && l.name ? l.name : ROLE_LABELS[l.role] || l.role);
+
+/**
+ * The beats grouped by location: the episode's locations in their order,
+ * then other sets a beat uses, then beats with no location. Empty groups
+ * are left out.
+ */
+export function groupBeats(plan, locations) {
+  const groups = [];
+  const byKey = new Map();
+  const group = (key, title) => {
+    if (!byKey.has(key)) {
+      const g = { key, title, beats: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    return byKey.get(key);
+  };
+  for (const l of locations || []) group(l.scene_set_id, `${locationLabel(l)}: ${l.scene_set?.name || 'Scene set'}`);
+  const rest = [];
+  for (const beat of [...(plan || [])].sort((a, b) => a.beat_number - b.beat_number)) {
+    if (beat.scene_set_id && byKey.has(beat.scene_set_id)) byKey.get(beat.scene_set_id).beats.push(beat);
+    else rest.push(beat);
+  }
+  for (const beat of rest) {
+    (beat.scene_set_id ? group(beat.scene_set_id, beat.sceneSet?.name || 'Scene set') : group('none', 'No location')).beats.push(beat);
+  }
+  return groups.filter((g) => g.beats.length > 0);
+}
+
+/** The status bar's next step (L12): plan, images, locks, then the script. */
+export function nextStep(plan, readiness) {
+  const total = plan.length;
+  if (!total) return { kind: 'plan', text: 'Make the beat plan' };
+  if (readiness && readiness.ready < readiness.total) {
+    const beats = (readiness.not_ready || []).map((b) => b.beat_number);
+    return { kind: 'images', text: `Add the missing images: ${beats.length === 1 ? 'beat' : 'beats'} ${listBeats(beats)}` };
+  }
+  if (plan.some((b) => !b.locked)) return { kind: 'lock', text: 'Lock the beats' };
+  return { kind: 'script', text: 'Write the script' };
+}
+
 const EpisodeScenesTab = ({ episode, onToast }) => {
-  const navigate = useNavigate();
   const episodeId = episode?.id;
 
-  // Scene Sets state
-  const [sceneSets, setSceneSets] = useState([]);
-  const [loadingSets, setLoadingSets] = useState(false);
-  const [expandedSetId, setExpandedSetId] = useState(null);
-
-  // Episode Scenes state
-  const [scenes, setScenes] = useState([]);
-  const [loadingScenes, setLoadingScenes] = useState(false);
-
-  // Picker state
-  const [showPicker, setShowPicker] = useState(false);
-  const [allSets, setAllSets] = useState([]);
-  const [loadingAllSets, setLoadingAllSets] = useState(false);
-  const [selectedPickerIds, setSelectedPickerIds] = useState([]);
-
-  // Creating scene from angle
-  const [creatingSceneFor, setCreatingSceneFor] = useState(null);
-
-  // Generating angles
-  const [generatingAnglesFor, setGeneratingAnglesFor] = useState(null);
+  const [plan, setPlan] = useState([]);
+  const [readiness, setReadiness] = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [locations, setLocations] = useState({ locations: [], show_id: null });
+  const [olderScenes, setOlderScenes] = useState([]);
 
   // Beats whose feed moment was not saved at generation (§8(w) P5, Task #2216)
   const [feedMomentCheck, setFeedMomentCheck] = useState({ missing: [], error: null });
@@ -91,57 +119,68 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     if (onToast) onToast(msg, type);
   }, [onToast]);
 
-  // Fetch scene sets linked to this episode
-  const fetchSceneSets = useCallback(async () => {
-    if (!episodeId) return;
-    setLoadingSets(true);
-    try {
-      const res = await listEpisodeSceneSetsApi(episodeId);
-      const data = res.data;
-      if (data.success) {
-        setSceneSets(data.data || []);
-      } else {
-        console.error('Failed to load scene sets:', data.error);
-      }
-    } catch (err) {
-      console.error('Failed to load episode scene sets:', err);
-    } finally {
-      setLoadingSets(false);
-    }
-  }, [episodeId]);
-
-  // Fetch episode scenes (compositions)
-  const fetchScenes = useCallback(async () => {
-    if (!episodeId) return;
-    setLoadingScenes(true);
-    try {
-      const res = await listEpisodeScenesApi(episodeId);
-      const data = res.data;
-      if (data.success) {
-        setScenes(data.data || []);
-      }
-    } catch (err) {
-      console.error('Failed to load episode scenes:', err);
-    } finally {
-      setLoadingScenes(false);
-    }
-  }, [episodeId]);
-
-  // Which beats lost their feed moment when the episode was generated
-  const fetchFeedMomentCheck = useCallback(async () => {
+  const loadPlan = useCallback(async () => {
     if (!episodeId) return;
     try {
       const res = await getEpisodePlanApi(episodeId);
       const data = res.data || {};
+      setPlan(Array.isArray(data.data) ? data.data : []);
+      setReadiness(data.readiness || null);
       setFeedMomentCheck({
         missing: Array.isArray(data.feed_moment_missing) ? data.feed_moment_missing : [],
         error: data.feed_moment_check_error || null,
       });
     } catch (err) {
-      console.error('Failed to check feed moments:', err);
+      console.error('Failed to load the beats:', err);
       setFeedMomentCheck({ missing: [], error: err.message || 'request failed' });
+    } finally {
+      setLoadingPlan(false);
     }
   }, [episodeId]);
+
+  const loadLocations = useCallback(async () => {
+    if (!episodeId) return null;
+    try {
+      const res = await getEpisodeLocationsApi(episodeId);
+      const data = res.data?.data && !Array.isArray(res.data.data) ? res.data.data : {};
+      const next = { locations: data.locations || [], show_id: data.show_id || episode?.show_id || null, editable: data.editable };
+      setLocations(next);
+      return next.show_id;
+    } catch (err) {
+      console.error('Failed to load the episode locations:', err);
+      return episode?.show_id || null;
+    }
+  }, [episodeId, episode?.show_id]);
+
+  // L12a: scenes made before scenes followed the beats.
+  const loadOlderScenes = useCallback(async () => {
+    if (!episodeId) return;
+    try {
+      const res = await listEpisodeScenesApi(episodeId);
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
+      setOlderScenes(list.filter((s) => s && s.id && !s.scene_plan_id));
+    } catch (err) {
+      console.error('Failed to load the older scenes:', err);
+    }
+  }, [episodeId]);
+
+  const reload = useCallback(async () => {
+    await Promise.all([loadPlan(), loadLocations(), loadOlderScenes()]);
+  }, [loadPlan, loadLocations, loadOlderScenes]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // Refetch when the window regains focus (e.g. an angle was made in Scene Sets)
+  useEffect(() => {
+    const handleFocus = () => { reload(); };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [reload]);
+
+  const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
+  const beats = useBeatActions({
+    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds,
+  });
 
   // Re-run the save for the missing beats only, then refresh the warning
   const retryFeedMoments = async () => {
@@ -162,144 +201,13 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       console.error('Failed to retry feed moments:', err);
       note = `Could not retry the feed moments: ${err.response?.data?.error || err.message || 'request failed'}`;
     }
-    await fetchFeedMomentCheck();
+    await loadPlan();
     setFeedMomentRetry({ running: false, note });
   };
 
-  useEffect(() => {
-    fetchSceneSets();
-    fetchScenes();
-    fetchFeedMomentCheck();
-  }, [fetchSceneSets, fetchScenes, fetchFeedMomentCheck]);
-
-  // Refetch when browser tab/window regains focus (e.g. user linked sets in Scene Library)
-  useEffect(() => {
-    const handleFocus = () => {
-      fetchSceneSets();
-      fetchScenes();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchSceneSets, fetchScenes]);
-
-  // ---- Scene Set Picker ----
-  const openPicker = async () => {
-    setShowPicker(true);
-    setSelectedPickerIds([]);
-    setLoadingAllSets(true);
-    try {
-      const res = await listSceneSetsApi();
-      setAllSets(res.data?.data || []);
-    } catch (err) {
-      console.error('Failed to load all scene sets:', err);
-    } finally {
-      setLoadingAllSets(false);
-    }
-  };
-
-  const togglePickerSelection = (id) => {
-    setSelectedPickerIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const confirmPicker = async () => {
-    if (selectedPickerIds.length === 0) return;
-    try {
-      const res = await linkSceneSetsToEpisodeApi(episodeId, { sceneSetIds: selectedPickerIds });
-      if (res.data?.success) {
-        toast(`Linked ${selectedPickerIds.length} location(s)`, 'success');
-        setShowPicker(false);
-        fetchSceneSets();
-      }
-    } catch (err) {
-      console.error('Failed to link scene sets:', err);
-      toast('Failed to link locations', 'error');
-    }
-  };
-
-  const unlinkSet = async (setId) => {
-    try {
-      await unlinkSceneSetFromEpisodeApi(episodeId, setId);
-      setSceneSets((prev) => prev.filter((s) => s.id !== setId));
-      toast('Location unlinked', 'info');
-    } catch (err) {
-      console.error('Failed to unlink scene set:', err);
-    }
-  };
-
-  // ---- Create Scene from Angle ----
-  const createSceneFromAngle = async (sceneSetId, angle) => {
-    setCreatingSceneFor(angle.id);
-    try {
-      const res = await createSceneFromAngleApi(episodeId, { sceneSetId, sceneAngleId: angle.id });
-      const data = res.data;
-      if (data.success) {
-        toast('Scene created from angle', 'success');
-        fetchScenes();
-      } else {
-        toast(data.error || 'Failed to create scene', 'error');
-      }
-    } catch (err) {
-      console.error('Failed to create scene from angle:', err);
-      toast('Failed to create scene', 'error');
-    } finally {
-      setCreatingSceneFor(null);
-    }
-  };
-
-  // ---- Delete Scene ----
-  const deleteScene = async (sceneId) => {
-    try {
-      await deleteSceneApi(sceneId);
-      setScenes((prev) => prev.filter((s) => s.id !== sceneId));
-      toast('Scene removed', 'info');
-    } catch (err) {
-      console.error('Failed to delete scene:', err);
-    }
-  };
-
-  // ---- Generate Angles (AI suggest + auto-save) ----
-  const generateAngles = async (setId) => {
-    setGeneratingAnglesFor(setId);
-    try {
-      // Step 1: AI suggests angles
-      const suggestRes = await suggestAnglesApi(setId, {});
-      const suggestData = suggestRes.data;
-      if (!suggestData.success || !suggestData.data?.length) {
-        toast(suggestData.error || 'No angles suggested — add a description to the location first', 'error');
-        return;
-      }
-
-      // Step 2: Save all suggested angles
-      let savedCount = 0;
-      for (const angle of suggestData.data) {
-        const saveRes = await createAngleApi(setId, {
-          angle_name: angle.angle_name,
-          angle_label: angle.angle_label,
-          camera_direction: angle.camera_direction,
-          mood: angle.mood,
-          beat_affinity: angle.beat_affinity,
-          angle_kind: angle.angle_kind || null,
-        });
-        if (saveRes.data?.success) savedCount++;
-      }
-
-      toast(`Generated ${savedCount} angles`, 'success');
-      fetchSceneSets();
-    } catch (err) {
-      console.error('Failed to generate angles:', err);
-      toast('Failed to generate angles', 'error');
-    } finally {
-      setGeneratingAnglesFor(null);
-    }
-  };
-
-  const linkedSetIds = sceneSets.map((s) => s.id);
-
   // Edit locations (L6): the same step as Start Episode, while the episode
   // is a draft. A changed home, closet or event takes its unlocked plan
-  // beats with it; locked beats stay (Q16).
+  // beats with it; locked and chosen beats stay (Q16, L11).
   const [locationsEdit, setLocationsEdit] = useState(null);
   const [savingLocations, setSavingLocations] = useState(false);
   const openLocations = async () => {
@@ -316,13 +224,13 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       toast(err.response?.data?.error || 'Could not load the episode locations', 'error');
     }
   };
-  const saveLocations = async (locations) => {
+  const saveLocations = async (next) => {
     setSavingLocations(true);
     try {
-      await saveEpisodeLocationsApi(episodeId, locations);
+      await saveEpisodeLocationsApi(episodeId, next);
       setLocationsEdit(null);
       toast('Locations saved', 'success');
-      fetchSceneSets();
+      await reload();
     } catch (err) {
       console.error('Failed to save episode locations:', err);
       toast(err.response?.data?.error || 'Could not save the locations', 'error');
@@ -331,8 +239,38 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     }
   };
 
+  const lockAll = async () => {
+    try {
+      await lockAllBeatsApi(episodeId);
+      toast('All beats locked — ready for the script', 'success');
+      await loadPlan();
+    } catch (err) {
+      console.error('Failed to lock the beats:', err);
+      toast(err.response?.data?.error || 'Could not lock the beats', 'error');
+    }
+  };
+
+  const removeOlderScene = async (scene) => {
+    try {
+      await deleteSceneApi(scene.id);
+      setOlderScenes((prev) => prev.filter((s) => s.id !== scene.id));
+      toast('Scene removed', 'info');
+    } catch (err) {
+      console.error('Failed to delete scene:', err);
+      toast(err.response?.data?.error || 'Could not remove the scene', 'error');
+    }
+  };
+
+  const showId = locations.show_id || episode?.show_id || null;
+  const total = plan.length;
+  const locked = plan.filter((b) => b.locked).length;
+  const ready = readiness ? readiness.ready : null;
+  const step = nextStep(plan, readiness);
+  const groups = groupBeats(plan, locations.locations);
+  const editingNumber = beats.editingBeat?.beat_number ?? null;
+
   return (
-    <div className="est-container">
+    <div className="est-container est-workspace">
       {feedMomentCheck.missing.length > 0 && (
         <div className="est-warning" role="alert">
           <AlertTriangle size={16} className="est-warning-icon" />
@@ -361,26 +299,50 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </div>
       )}
 
-      {/* ===== SECTION 1: Scene Sets (Locations) ===== */}
-      <div className="est-section">
+      {/* ===== Status bar (L12) ===== */}
+      <div className="est-status" data-testid="est-status">
+        <div className="est-status-counts">
+          <span className="est-status-count" data-testid="est-status-images">
+            {total ? `${ready ?? '–'}/${total} beats with images` : 'No beats yet'}
+          </span>
+          {total > 0 && <span className="est-status-count" data-testid="est-status-locked">{locked}/{total} locked</span>}
+        </div>
+        <div className="est-status-next" data-testid="est-status-next">
+          <span className="est-status-next-label">Next:</span>{' '}
+          {step.kind === 'plan' && <Link to={`/episodes/${episodeId}/plan`}>{step.text}</Link>}
+          {step.kind === 'images' && <span>{step.text}</span>}
+          {step.kind === 'lock' && (
+            <button type="button" className="est-btn est-btn-primary est-btn-sm" onClick={lockAll} data-testid="est-lock-all">{step.text}</button>
+          )}
+          {step.kind === 'script' && <Link to={`/episodes/${episodeId}/script-writer`}>{step.text}</Link>}
+        </div>
+        <div className="est-status-links">
+          <Link className="est-btn est-btn-outline est-btn-sm" to={`/episodes/${episodeId}/plan`} data-testid="est-open-beat-plan">
+            <Film size={14} /> Beat Plan (full screen)
+          </Link>
+          <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/timeline?episode_id=${episodeId}`}>
+            <Clapperboard size={14} /> Timeline
+          </Link>
+        </div>
+      </div>
+
+      {/* ===== Locations (L12) ===== */}
+      <section className="est-section" data-testid="est-locations">
         <div className="est-section-header">
           <div className="est-section-title">
             <MapPin size={18} />
             <h3>Locations</h3>
-            <span className="est-count">{sceneSets.length}</span>
+            <span className="est-count">{locations.locations.length}</span>
           </div>
           <div className="est-section-actions">
             <button className="est-btn est-btn-outline" onClick={openLocations} data-testid="est-edit-locations">
               <MapPin size={14} /> Edit locations
             </button>
-            <button className="est-btn est-btn-primary" onClick={openPicker}>
-              <Plus size={14} /> Assign Set
-            </button>
           </div>
         </div>
         {locationsEdit && (
           <EpisodeLocationsStep
-            showId={episode?.show_id}
+            showId={showId}
             title="Episode locations"
             confirmLabel="Save locations"
             initial={locationsEdit.locations}
@@ -390,290 +352,134 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             onCancel={() => setLocationsEdit(null)}
           />
         )}
-
-        {loadingSets ? (
-          <div className="est-loading">Loading locations...</div>
-        ) : sceneSets.length === 0 ? (
-          <div className="est-empty">
-            <MapPin size={32} className="est-empty-icon" />
-            <p>No locations assigned to this episode yet.</p>
-            <p className="est-empty-hint">Assign locations to start building scenes.</p>
-            <button className="est-btn est-btn-primary" onClick={openPicker}>
-              <Plus size={14} /> Assign Your First Location
-            </button>
-          </div>
+        {locations.locations.length === 0 ? (
+          <p className="est-empty-hint">No locations yet. Edit locations to choose the episode's home, closet, event and extras.</p>
         ) : (
-          <div className="est-sets-grid">
-            {sceneSets.map((set) => {
-              const isExpanded = expandedSetId === set.id;
-              const angles = set.angles || [];
-              const coverAngle = angles.find((a) => a.id === set.cover_angle_id) || angles[0];
-              const thumbUrl = coverAngle?.still_image_url || coverAngle?.thumbnail_url || set.base_still_url;
-              const typeColor = SCENE_TYPE_COLORS[set.scene_type] || SCENE_TYPE_COLORS.OTHER;
-
-              return (
-                <div key={set.id} className={`est-set-card ${isExpanded ? 'est-set-expanded' : ''}`}>
-                  <div
-                    className="est-set-header"
-                    onClick={() => setExpandedSetId(isExpanded ? null : set.id)}
-                  >
-                    <div className="est-set-thumb">
-                      {thumbUrl ? (
-                        <img src={thumbUrl} alt={set.name} />
-                      ) : (
-                        <div className="est-set-thumb-empty"><MapPin size={20} /></div>
-                      )}
-                    </div>
-                    <div className="est-set-info">
-                      <div className="est-set-name">{set.name}</div>
-                      <div className="est-set-meta">
-                        <span className="est-type-badge" style={{ background: typeColor.bg, color: typeColor.color }}>
-                          {(set.scene_type || 'OTHER').replace(/_/g, ' ')}
-                        </span>
-                        <span className="est-angle-count">
-                          <Camera size={12} /> {angles.length} angle{angles.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="est-set-actions">
-                      <button
-                        className="est-btn-icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          generateAngles(set.id);
-                        }}
-                        disabled={generatingAnglesFor === set.id}
-                        title="AI Generate Angles"
-                      >
-                        {generatingAnglesFor === set.id ? <Loader size={14} className="est-spin" /> : <Sparkles size={14} />}
-                      </button>
-                      <button
-                        className="est-btn-icon est-btn-danger"
-                        onClick={(e) => { e.stopPropagation(); unlinkSet(set.id); }}
-                        title="Unlink from episode"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="est-angles-grid">
-                      {angles.length === 0 ? (
-                        <div className="est-angles-empty-container">
-                          <p className="est-angles-empty">No angles generated yet.</p>
-                          <button
-                            className="est-btn est-btn-primary est-btn-sm"
-                            onClick={(e) => { e.stopPropagation(); generateAngles(set.id); }}
-                            disabled={generatingAnglesFor === set.id}
-                          >
-                            {generatingAnglesFor === set.id ? (
-                              <><Loader size={13} className="est-spin" /> Generating...</>
-                            ) : (
-                              <><Sparkles size={13} /> AI Generate Angles</>
-                            )}
-                          </button>
-                        </div>
-                      ) : (
-                        angles.map((angle) => {
-                          const isCreating = creatingSceneFor === angle.id;
-                          const imgUrl = angle.still_image_url || angle.thumbnail_url;
-                          const videoUrl = angle.video_clip_url;
-                          return (
-                            <div key={angle.id} className="est-angle-card">
-                              <div className="est-angle-thumb">
-                                {videoUrl ? (
-                                  <video src={videoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay loop muted playsInline />
-                                ) : imgUrl ? (
-                                  <img src={imgUrl} alt={angle.angle_name} />
-                                ) : (
-                                  <div className="est-angle-thumb-empty"><Camera size={16} /></div>
-                                )}
-                                {videoUrl && <span style={{ position: 'absolute', top: 4, right: 4, padding: '1px 6px', background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 3, fontSize: 8, fontWeight: 600 }}>🎬</span>}
-                                {angle.generation_status === 'pending' && <span style={{ position: 'absolute', bottom: 4, left: 4, padding: '1px 6px', background: '#fef3c7', color: '#92400e', borderRadius: 3, fontSize: 8, fontWeight: 600 }}>Pending</span>}
-                              </div>
-                              <div className="est-angle-info">
-                                <span className="est-angle-name">{angle.angle_name}</span>
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
-                                  {angle.angle_label && (
-                                    <span className="est-angle-label">{angle.angle_label}</span>
-                                  )}
-                                  {angle.camera_motion && (
-                                    <span style={{ fontSize: 9, padding: '1px 5px', background: '#f0f0f0', borderRadius: 3, color: '#64748b' }}>{angle.camera_motion.replace(/_/g, ' ')}</span>
-                                  )}
-                                  {angle.beat_affinity && (
-                                    <span style={{ fontSize: 9, padding: '1px 5px', background: '#eef2ff', borderRadius: 3, color: '#6366f1' }}>Beat {angle.beat_affinity}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <button
-                                className="est-btn est-btn-sm est-btn-accent"
-                                onClick={() => createSceneFromAngle(set.id, angle)}
-                                disabled={isCreating}
-                              >
-                                {isCreating ? '...' : 'Use in Episode'}
-                              </button>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <ul className="est-locations">
+            {locations.locations.map((l) => (
+              <li key={`${l.role}-${l.scene_set_id}`} className="est-location" data-testid={`est-location-${l.scene_set_id}`}>
+                {l.scene_set?.base_still_url
+                  ? <img className="est-location-thumb" src={l.scene_set.base_still_url} alt="" />
+                  : <span className="est-location-thumb is-empty" aria-hidden="true"><MapPin size={16} /></span>}
+                <span className="est-location-text">
+                  <span className="est-location-role">{locationLabel(l)}</span>
+                  <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>
+                  <span className="est-location-meta">
+                    {l.angle_count ?? 0} {l.angle_count === 1 ? 'angle' : 'angles'}
+                    {showId && <> · <Link to={sceneSetPath(showId, l.scene_set_id)}>Scene Sets</Link></>}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
-      </div>
+      </section>
 
-      {/* ===== SECTION 2: Episode Scenes ===== */}
-      <div className="est-section">
+      {/* ===== The beats, grouped by location (L12) ===== */}
+      <section className="est-section" data-testid="est-beats">
         <div className="est-section-header">
           <div className="est-section-title">
-            <Clapperboard size={18} />
-            <h3>Episode Scenes</h3>
-            <span className="est-count">{scenes.length}</span>
-          </div>
-          <div className="est-section-actions">
-            <button
-              className="est-btn est-btn-outline"
-              onClick={() => navigate(`/episodes/${episodeId}/plan`)}
-            >
-              <Film size={14} /> Beat Plan
-            </button>
-            <button
-              className="est-btn est-btn-outline"
-              onClick={() => navigate(`/studio/timeline?episode_id=${episodeId}`)}
-            >
-              <ExternalLink size={14} /> Timeline Editor
-            </button>
+            <Film size={18} />
+            <h3>Beats</h3>
+            <span className="est-count">{total}</span>
           </div>
         </div>
-
-        {loadingScenes ? (
-          <div className="est-loading">Loading scenes...</div>
-        ) : scenes.length === 0 ? (
-          <div className="est-empty">
-            <Clapperboard size={32} className="est-empty-icon" />
-            <p>No scenes composed yet.</p>
-            <p className="est-empty-hint">
-              Assign locations above, then click "Use in Episode" on an angle to create a scene.
-            </p>
-          </div>
-        ) : (
-          <div className="est-scenes-list">
-            {scenes.map((scene, idx) => {
-              const bgUrl = scene.background_url || scene.backgroundUrl;
-              return (
-                <div key={scene.id} className="est-scene-row">
-                  <div className="est-scene-num">{idx + 1}</div>
-                  <div className="est-scene-thumb">
-                    {bgUrl ? (
-                      <img src={bgUrl} alt={scene.title} />
-                    ) : (
-                      <div className="est-scene-thumb-empty"><Clapperboard size={14} /></div>
-                    )}
-                  </div>
-                  <div className="est-scene-info">
-                    <div className="est-scene-title">{scene.title || `Scene ${idx + 1}`}</div>
-                    <div className="est-scene-meta">
-                      {scene.duration_seconds != null && (
-                        <span>{Number(scene.duration_seconds).toFixed(1)}s</span>
-                      )}
-                      {scene.location && <span>{scene.location}</span>}
-                      {scene.production_status && (
-                        <span className="est-status-badge">{scene.production_status}</span>
+        {loadingPlan ? (
+          <div className="est-loading">Loading the beats…</div>
+        ) : total === 0 ? (
+          <p className="est-empty-hint">No beat plan yet. <Link to={`/episodes/${episodeId}/plan`}>Make the beat plan</Link> to map the 14 beats to the locations.</p>
+        ) : groups.map((g) => (
+          <div key={g.key} className="est-beat-group" data-testid={`est-group-${g.key}`}>
+            <h4 className="est-beat-group-title">{g.title}</h4>
+            <ul className="est-beats">
+              {g.beats.map((beat) => {
+                const n = beat.beat_number;
+                const img = beatImage(beat);
+                const angle = beat.location?.angle;
+                const editing = editingNumber === n;
+                const open = () => { if (!beat.locked) beats.openEditor(beat); };
+                return (
+                  <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}`}>
+                    <div
+                      className="est-beat-main" role="button" tabIndex={beat.locked ? -1 : 0} aria-expanded={editing}
+                      aria-disabled={beat.locked || undefined} data-testid={`est-beat-${n}`}
+                      title={beat.locked ? 'Locked: unlock it in the Beat Plan to edit it' : 'Edit this beat'}
+                      onClick={open}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+                    >
+                      {img
+                        ? <img className="est-beat-thumb" src={img} alt="" />
+                        : <span className="est-beat-thumb is-empty" aria-hidden="true">No image</span>}
+                      <span className="est-beat-text">
+                        <span className="est-beat-name"><span className="est-beat-num">{n}</span> {beat.beat_name}</span>
+                        <span className="est-beat-where">
+                          {beat.sceneSet?.name || 'No location'}
+                          {angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}
+                        </span>
+                        <span className="est-beat-badges">
+                          {beat.locked && <span className="est-badge is-locked" data-testid={`est-locked-${n}`}>Locked</span>}
+                          <ChosenBadge beat={beat} className="est-badge is-chosen" />
+                          {isDressed(beat) && <span className="est-badge is-dressed">Event look</span>}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="est-beat-side">
+                      <MissingAngle beat={beat} {...beats.missingPropsFor(beat)} />
+                      {beat.scene_id && (
+                        <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/scene/${beat.scene_id}`} data-testid={`est-studio-${n}`}>
+                          Open in Studio
+                        </Link>
                       )}
                     </div>
-                  </div>
-                  <div className="est-scene-actions">
-                    <button
-                      className="est-btn est-btn-sm est-btn-outline"
-                      onClick={() => navigate(`/studio/scene/${scene.id}`)}
-                      title="Open in Scene Studio"
-                    >
-                      Studio
-                    </button>
-                    <button
-                      className="est-btn-icon est-btn-danger"
-                      onClick={() => deleteScene(scene.id)}
-                      title="Remove scene"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ===== SCENE SET PICKER MODAL ===== */}
-      {showPicker && (
-        <div className="est-modal-overlay" onClick={() => setShowPicker(false)}>
-          <div className="est-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="est-modal-header">
-              <h3>Assign Locations to Episode</h3>
-              <button className="est-btn-icon" onClick={() => setShowPicker(false)}>&times;</button>
-            </div>
-            <div className="est-modal-body">
-              {loadingAllSets ? (
-                <div className="est-loading">Loading locations...</div>
-              ) : allSets.length === 0 ? (
-                <div className="est-empty">
-                  <p>No locations found. Create locations first in the Locations tab.</p>
-                </div>
-              ) : (
-                <div className="est-picker-grid">
-                  {allSets.map((set) => {
-                    const isLinked = linkedSetIds.includes(set.id);
-                    const isSelected = selectedPickerIds.includes(set.id);
-                    const angles = set.angles || [];
-                    const thumb = angles[0]?.still_image_url || angles[0]?.thumbnail_url || set.base_still_url;
-                    const typeColor = SCENE_TYPE_COLORS[set.scene_type] || SCENE_TYPE_COLORS.OTHER;
-
-                    return (
-                      <div
-                        key={set.id}
-                        className={`est-picker-card ${isLinked ? 'est-picker-linked' : ''} ${isSelected ? 'est-picker-selected' : ''}`}
-                        onClick={() => !isLinked && togglePickerSelection(set.id)}
-                      >
-                        <div className="est-picker-thumb">
-                          {thumb ? (
-                            <img src={thumb} alt={set.name} />
-                          ) : (
-                            <div className="est-picker-thumb-empty"><MapPin size={20} /></div>
-                          )}
-                          {isLinked && <div className="est-picker-linked-badge">Linked</div>}
-                          {isSelected && <div className="est-picker-check">&#10003;</div>}
-                        </div>
-                        <div className="est-picker-info">
-                          <div className="est-picker-name">{set.name}</div>
-                          <span className="est-type-badge" style={{ background: typeColor.bg, color: typeColor.color }}>
-                            {(set.scene_type || 'OTHER').replace(/_/g, ' ')}
-                          </span>
+                    {editing && (
+                      <div className="est-beat-sheet" data-testid="est-beat-sheet">
+                        <button type="button" className="est-sheet-backdrop" aria-label="Close the beat editor" onClick={beats.closeEditor} />
+                        <div className="est-sheet-body">
+                          <BeatEditor key={n} beat={beats.editingBeat} library={beats.library} linkedIds={linkedIds}
+                            onSave={beats.saveBeat} onRelease={beats.releaseBeat} onCancel={beats.closeEditor} saving={beats.savingBeat} />
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="est-modal-footer">
-              <button className="est-btn est-btn-outline" onClick={() => setShowPicker(false)}>Cancel</button>
-              <button
-                className="est-btn est-btn-primary"
-                onClick={confirmPicker}
-                disabled={selectedPickerIds.length === 0}
-              >
-                Assign {selectedPickerIds.length > 0 ? `(${selectedPickerIds.length})` : ''}
-              </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </section>
+
+      {/* ===== Older scenes (L12a) ===== */}
+      {olderScenes.length > 0 && (
+        <section className="est-section est-older" data-testid="est-older-scenes">
+          <div className="est-section-header">
+            <div className="est-section-title">
+              <Clapperboard size={18} />
+              <h3>Older scenes</h3>
+              <span className="est-count">{olderScenes.length}</span>
             </div>
           </div>
-        </div>
+          <p className="est-empty-hint">
+            Made before the scenes followed the beats. They stay on the Timeline until you remove them.
+          </p>
+          <ul className="est-older-list">
+            {olderScenes.map((scene) => (
+              <li key={scene.id} className="est-older-scene" data-testid={`est-older-${scene.id}`}>
+                {scene.background_url
+                  ? <img className="est-beat-thumb" src={scene.background_url} alt="" />
+                  : <span className="est-beat-thumb is-empty" aria-hidden="true">No image</span>}
+                <span className="est-older-title">{scene.title || `Scene ${scene.scene_number}`}</span>
+                <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/scene/${scene.id}`}>Open in Studio</Link>
+                <button type="button" className="est-btn-icon est-btn-danger" onClick={() => removeOlderScene(scene)}
+                  aria-label={`Remove ${scene.title || 'this scene'}`} data-testid={`est-older-remove-${scene.id}`}>
+                  <Trash2 size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
+
+      {beats.dialogs}
     </div>
   );
 };

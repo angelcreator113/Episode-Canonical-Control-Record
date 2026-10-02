@@ -132,7 +132,8 @@ function setSummary(set) {
 async function listLocations(sequelize, episodeId, transaction) {
   const [rows] = await sequelize.query(
     `SELECT l.scene_set_id, l.role, l.role_name, l.sort_order,
-            s.name, s.scene_type, s.base_still_url
+            s.name, s.scene_type, s.base_still_url,
+            (SELECT COUNT(*)::int FROM scene_angles a WHERE a.scene_set_id = s.id AND a.deleted_at IS NULL) AS angle_count
        FROM scene_set_episodes l JOIN scene_sets s ON s.id = l.scene_set_id AND s.deleted_at IS NULL
       WHERE l.episode_id = :episodeId AND l.deleted_at IS NULL
       ORDER BY l.sort_order ASC, l.created_at ASC`,
@@ -142,6 +143,8 @@ async function listLocations(sequelize, episodeId, transaction) {
     scene_set_id: r.scene_set_id,
     name: r.role_name || null,
     scene_set: setSummary({ id: r.scene_set_id, name: r.name, scene_type: r.scene_type, base_still_url: r.base_still_url }),
+    // L12 (§8(hh)): the Scenes tab's Locations show each set's angle count.
+    angle_count: r.angle_count ?? 0,
   }));
 }
 
