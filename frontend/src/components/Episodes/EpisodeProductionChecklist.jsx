@@ -85,6 +85,22 @@ const CHECKLIST_SECTIONS = [
 
 // The endpoint census records phone_missions as absent from canon:
 // docs/audit/Checklist_Endpoint_Census_2026-09-18.md.
+/**
+ * "Venue image generated" (B3, Evoni 2026-10-02): the event's scene set has
+ * an actual base image. It was true whenever the event had a scene set,
+ * image or not. A set that cannot be read counts as no image.
+ */
+export async function venueImageGenerated(event) {
+  if (!event?.scene_set_id) return false;
+  try {
+    const { data } = await api.get(`/api/v1/scene-sets/${event.scene_set_id}`);
+    return Boolean((data?.data || data)?.base_still_url);
+  } catch (err) {
+    console.error('[EpisodeProductionChecklist] venue set read failed:', err.response?.status || err.message);
+    return false;
+  }
+}
+
 export function computeSectionState(section, checks) {
   if (section.unavailableReason) {
     return { state: 'unavailable', why: section.unavailableReason };
@@ -192,7 +208,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           results.invitation_exists = !!linkedEvent?.invitation_asset_id;
           const auto = linkedEvent?.canon_consequences?.automation || {};
           results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
-          results.venue_image = !!linkedEvent?.scene_set_id;
+          results.venue_image = await venueImageGenerated(linkedEvent);
           const outfit = typeof linkedEvent?.outfit_pieces === 'string' ? JSON.parse(linkedEvent.outfit_pieces || '[]') : (linkedEvent?.outfit_pieces || []);
           results.outfit_picked = outfit.length > 0;
         } else {
