@@ -164,7 +164,8 @@ async function applyLocations(sequelize, { episodeId, locations, transaction }) 
     if (old && old.scene_set_id !== l.scene_set_id) {
       await sequelize.query(
         `UPDATE scene_plans SET scene_set_id = :next, updated_at = NOW()
-          WHERE episode_id = :episodeId AND scene_set_id = :prev AND locked = false AND deleted_at IS NULL`,
+          WHERE episode_id = :episodeId AND scene_set_id = :prev AND locked = false
+            AND chosen_by_user = false AND deleted_at IS NULL`,
         { replacements: { next: l.scene_set_id, prev: old.scene_set_id, episodeId }, transaction });
     }
   }
@@ -254,6 +255,47 @@ async function saveSceneDefaults(sequelize, { showId, body }) {
   return next;
 }
 
+/**
+ * L11 (Evoni, 2026-10-02, §8(hh)): "choosing a set not yet linked to the
+ * episode adds it to the episode's locations as an extra (or the matching
+ * role if that role is empty)." The matching role is the set's type's
+ * (Home Base: home, Closet: closet, Event location: event). The set must be
+ * the show's or have no show. An accepted episode's locations are locked
+ * (409). Returns { added, role, name }; a set already linked adds nothing.
+ */
+const ROLE_OF_TYPE = Object.freeze({ HOME_BASE: 'home', CLOSET: 'closet', EVENT_LOCATION: 'event' });
+async function linkBeatSet(sequelize, { episodeId, sceneSetId, transaction }) {
+  const [[episode]] = await sequelize.query(
+    'SELECT id, show_id, evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId }, transaction });
+  if (!episode) throw new EpisodeLocationsError('Episode not found', 404, 'EPISODE_NOT_FOUND');
+  const [links] = await sequelize.query(
+    `SELECT scene_set_id, role, sort_order FROM scene_set_episodes
+      WHERE episode_id = :episodeId AND deleted_at IS NULL`,
+    { replacements: { episodeId }, transaction });
+  const existing = links.find((l) => String(l.scene_set_id) === String(sceneSetId));
+  if (existing) return { added: false, role: existing.role || 'extra', name: null };
+
+  const set = (await liveSets(sequelize, [sceneSetId], transaction)).get(sceneSetId);
+  if (!set) throw new EpisodeLocationsError('That scene set no longer exists', 404, 'SCENE_SET_NOT_FOUND');
+  if (set.show_id && String(set.show_id) !== String(episode.show_id)) {
+    throw new EpisodeLocationsError(`"${set.name}" belongs to another show`);
+  }
+  if (episode.evaluation_status === 'accepted') {
+    throw new EpisodeLocationsError('This episode is accepted: its locations are locked', 409, 'EPISODE_ACCEPTED');
+  }
+  const typeRole = ROLE_OF_TYPE[set.scene_type];
+  const role = typeRole && !links.some((l) => l.role === typeRole) ? typeRole : 'extra';
+  const name = role === 'extra' ? String(set.name || 'Location').slice(0, NAME_MAX) : null;
+  const sortOrder = links.reduce((max, l) => Math.max(max, Number(l.sort_order) || 0), -1) + 1;
+  await sequelize.query(
+    `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, role_name, sort_order, created_at, updated_at)
+     VALUES (gen_random_uuid(), :sceneSetId, :episodeId, :role, :name, :sortOrder, NOW(), NOW())
+     ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
+    { replacements: { sceneSetId, episodeId, role, name, sortOrder }, transaction });
+  return { added: true, role, name };
+}
+
 module.exports = {
   ROLES,
   EpisodeLocationsError,
@@ -265,4 +307,5 @@ module.exports = {
   saveEpisodeLocations,
   resolveStartLocations,
   saveSceneDefaults,
+  linkBeatSet,
 };

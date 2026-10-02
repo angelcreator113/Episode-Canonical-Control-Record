@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
+import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import './ScenePlannerPage.css';
 
 const BEAT_NAMES = [
@@ -15,6 +16,34 @@ const SHOT_LABELS = {
   establishing: 'Establishing', medium: 'Medium', close: 'Close',
   tracking: 'Tracking', cutaway: 'Cutaway', transition: 'Transition',
 };
+
+const ROLE_LABELS = { home: 'Home', closet: 'Closet', event: 'Event', extra: 'Extra' };
+const fmtType = (t) => String(t || '').toLowerCase().split('_').filter(Boolean)
+  .map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+// L11 (Evoni, 2026-10-02, §8(hh)): "A beat whose set or angle Evoni chose is
+// marked 'Chosen by you' and is never replaced by a re-plan or by location
+// changes, like a locked beat."
+function ChosenBadge({ beat, className }) {
+  if (!beat.chosen_by_user) return null;
+  return <span className={className} data-testid={`beat-chosen-${beat.beat_number}`}>Chosen by you</span>;
+}
+
+// L11: "shows the episode's locations at its top, each linking to its set
+// in Scene Sets." From GET /episodes/:id/locations.
+function LocationsStrip({ locations, showId }) {
+  if (!locations?.length || !showId) return null;
+  return (
+    <nav className="beat-plan-locations" aria-label="This episode's locations" data-testid="beat-plan-locations">
+      <span className="beat-plan-locations-label">Locations</span>
+      {locations.map((l) => (
+        <Link key={`${l.role}-${l.scene_set_id}`} className="beat-plan-location" to={sceneSetPath(showId, l.scene_set_id)}>
+          {l.role === 'extra' && l.name ? l.name : ROLE_LABELS[l.role] || l.role}: {l.scene_set?.name || 'Scene set'}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 // ─── MISSING ANGLE ────────────────────────────────────────────────────────────
 // L4 (Evoni, 2026-10-02; Q19, §8(hh)): "A missing angle shows a specific
@@ -54,7 +83,8 @@ function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
         )}
         <div className="scene-planner-card-number">{index + 1}</div>
         {beat.locked && <div className="scene-planner-card-lock">Locked</div>}
-        {beat.ai_suggested && !beat.locked && <div className="scene-planner-card-ai">AI</div>}
+        {!beat.locked && beat.chosen_by_user && <ChosenBadge beat={beat} className="scene-planner-card-chosen" />}
+        {beat.ai_suggested && !beat.locked && !beat.chosen_by_user && <div className="scene-planner-card-ai">AI</div>}
       </div>
 
       <div className="scene-planner-card-body">
@@ -106,7 +136,9 @@ function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
         <div className="scene-planner-card-tags">
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
-          {beat.ai_suggested && <span className="scene-planner-card-tag angle">AI</span>}
+          {beat.chosen_by_user
+            ? <ChosenBadge beat={beat} className="scene-planner-card-tag chosen" />
+            : beat.ai_suggested && <span className="scene-planner-card-tag angle">AI</span>}
         </div>
       </div>
 
@@ -132,33 +164,100 @@ function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
 // ─── BEAT EDITOR ──────────────────────────────────────────────────────────────
 // B2 (Evoni, 2026-10-02): the beats' Edit buttons did nothing. They open
 // this editor, which saves through PUT /episode-brief/:episodeId/plan/:beat
-// (a locked beat is refused there, and its Edit is disabled here). The scene
-// sets offered are the ones linked to this episode.
+// (a locked beat is refused there, and its Edit is disabled here).
+// L11 (§8(hh)): it lists the show's whole library (searchable, with
+// thumbnails and angles, like the Place picker), the episode's own sets
+// first. A set or angle changed here is sent with `chosen: true`: the beat
+// is "Chosen by you", and a set not yet linked joins the episode's
+// locations. "Let the plan choose again" sends `chosen: false`.
 
-function BeatEditor({ beat, sceneSets, onSave, onCancel, saving }) {
+function BeatEditor({ beat, library, linkedIds, onSave, onRelease, onCancel, saving }) {
   const [values, setValues] = useState({
     scene_set_id: beat.scene_set_id || '',
     angle_label: beat.angle_label || '',
     shot_type: beat.shot_type || '',
     emotional_intent: beat.emotional_intent || '',
   });
+  const [search, setSearch] = useState('');
   const set = (k) => (e) => setValues((v) => ({ ...v, [k]: e.target.value }));
-  const chosen = sceneSets.find((x) => x.id === values.scene_set_id);
-  const angleLabels = [...new Set((chosen?.angles || []).map((a) => a.angle_label).filter(Boolean))];
-  const options = sceneSets.some((x) => x.id === beat.scene_set_id) || !beat.sceneSet
-    ? sceneSets : [{ id: beat.scene_set_id, name: beat.sceneSet.name, angles: [] }, ...sceneSets];
+  const pickSet = (id) => setValues((v) => (v.scene_set_id === id ? v : { ...v, scene_set_id: id, angle_label: '' }));
+
+  const q = search.trim().toLowerCase();
+  const sets = (library || []).filter((x) => !q || [x.name, fmtType(x.scene_type), x.scene_type]
+    .some((v) => v && String(v).toLowerCase().includes(q)));
+  const chosen = (library || []).find((x) => x.id === values.scene_set_id);
+  const angles = (chosen?.angles || []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const angleLabels = [...new Set(angles.map((a) => a.angle_label).filter(Boolean))];
+  const addsSet = Boolean(values.scene_set_id) && !linkedIds.has(values.scene_set_id);
+
+  const save = () => {
+    const body = {
+      scene_set_id: values.scene_set_id || null,
+      angle_label: values.angle_label.trim() || null,
+      shot_type: values.shot_type || null,
+      emotional_intent: values.emotional_intent.trim() || null,
+    };
+    if (body.scene_set_id !== (beat.scene_set_id || null) || body.angle_label !== (beat.angle_label || null)) body.chosen = true;
+    onSave(body);
+  };
 
   return (
     <div className="scene-planner-editor" data-testid="beat-editor">
       <p className="scene-planner-editor-title">Edit beat {beat.beat_number}: {beat.beat_name}</p>
-      <label className="scene-planner-editor-field">Scene set
-        <select aria-label="Scene set" value={values.scene_set_id} onChange={set('scene_set_id')}>
-          <option value="">No scene</option>
-          {options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-      </label>
-      {sceneSets.length === 0 && (
-        <p className="scene-planner-editor-note">No scene set is linked to this episode yet: link one in the episode's Scenes tab.</p>
+      {beat.chosen_by_user && (
+        <p className="scene-planner-editor-chosen">
+          Chosen by you: a re-plan or a location change leaves this beat as it is.{' '}
+          <button type="button" className="scene-planner-editor-link" onClick={onRelease} disabled={saving}>Let the plan choose again</button>
+        </p>
+      )}
+      <div className="scene-planner-editor-field">Scene set
+        <input aria-label="Search scene sets" placeholder="Search by name or type" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+      <div className="beat-editor-sets" role="listbox" aria-label="Scene sets">
+        {library === null && <p className="scene-planner-editor-note">Loading the show's scene sets…</p>}
+        {library !== null && library.length === 0 && (
+          <p className="scene-planner-editor-note">This show has no scene sets yet: create one in Scene Sets.</p>
+        )}
+        {sets.map((x) => {
+          const thumb = sceneSetThumb(x);
+          const on = values.scene_set_id === x.id;
+          return (
+            <button key={x.id} type="button" role="option" aria-selected={on} className={`beat-editor-set${on ? ' is-on' : ''}`}
+              onClick={() => pickSet(x.id)} disabled={saving} data-testid={`beat-set-option-${x.id}`}>
+              {thumb
+                ? <img className="beat-editor-set-thumb" src={thumb} alt="" />
+                : <span className="beat-editor-set-thumb is-empty" aria-hidden="true">No image</span>}
+              <span className="beat-editor-set-text">
+                <span className="beat-editor-set-name">{x.name}</span>
+                <span className="beat-editor-set-meta">
+                  {fmtType(x.scene_type)}{linkedIds.has(x.id) ? ' · In this episode' : ''}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {values.scene_set_id && (
+        <button type="button" className="scene-planner-editor-link" onClick={() => pickSet('')} disabled={saving}>No scene</button>
+      )}
+      {addsSet && (
+        <p className="scene-planner-editor-note" data-testid="beat-editor-adds">
+          Not in this episode yet: saving adds it to the episode's locations.
+        </p>
+      )}
+      {chosen && angles.length > 0 && (
+        <div className="beat-editor-angles" role="group" aria-label={`Angles of ${chosen.name}`}>
+          {angles.map((a) => (
+            <button key={a.id} type="button" className={`beat-editor-angle${values.angle_label === a.angle_label ? ' is-on' : ''}`}
+              onClick={() => setValues((v) => ({ ...v, angle_label: a.angle_label || '' }))} disabled={saving}
+              data-testid={`beat-angle-${a.id}`}>
+              {a.still_image_url
+                ? <img src={a.still_image_url} alt="" />
+                : <span className="beat-editor-set-thumb is-empty" aria-hidden="true">No image</span>}
+              <span className="beat-editor-angle-name">{a.angle_name || a.angle_label}</span>
+            </button>
+          ))}
+        </div>
       )}
       <label className="scene-planner-editor-field">Angle
         <input aria-label="Angle" list="scene-planner-angles" value={values.angle_label} onChange={set('angle_label')} placeholder="e.g. WIDE" />
@@ -174,12 +273,7 @@ function BeatEditor({ beat, sceneSets, onSave, onCancel, saving }) {
         <textarea aria-label="Emotional intent" rows={2} value={values.emotional_intent} onChange={set('emotional_intent')} />
       </label>
       <div className="scene-planner-editor-actions">
-        <button className="scene-planner-btn primary" onClick={() => onSave({
-          scene_set_id: values.scene_set_id || null,
-          angle_label: values.angle_label.trim() || null,
-          shot_type: values.shot_type || null,
-          emotional_intent: values.emotional_intent.trim() || null,
-        })} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="scene-planner-btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         <button className="scene-planner-btn" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
     </div>
@@ -276,7 +370,8 @@ export default function ScenePlannerPage() {
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
   const [editingBeat, setEditingBeat] = useState(null);
-  const [episodeSets, setEpisodeSets] = useState([]);
+  const [library, setLibrary] = useState(null);
+  const [locations, setLocations] = useState({ locations: [], show_id: null });
   const [savingBeat, setSavingBeat] = useState(false);
   const [angleBusy, setAngleBusy] = useState(null); // beat number
   const [angleBrief, setAngleBrief] = useState(null); // { beat, setId, angleId, name }
@@ -295,10 +390,22 @@ export default function ScenePlannerPage() {
       setBrief(briefRes.data.data);
       setPlan(planRes.data.data || []);
       setReadiness(planRes.data.readiness || null);
-    } catch {
-      showToast('Failed to load planner data', 'error');
+    } catch (err) {
+      console.error('[BeatPlan] load failed:', err);
+      showToast('Failed to load the beat plan', 'error');
     } finally {
       setLoading(false);
+    }
+    // The episode's locations (L11), for the strip and the editor; a failed
+    // read leaves the page without them.
+    try {
+      const res = await api.get(`/api/v1/episodes/${episodeId}/locations`);
+      const data = res.data?.data || {};
+      setLocations({ locations: data.locations || [], show_id: data.show_id || null });
+      return data.show_id || null;
+    } catch (err) {
+      console.error('[BeatPlan] locations load failed:', err);
+      return null;
     }
   }, [episodeId]);
 
@@ -336,25 +443,56 @@ export default function ScenePlannerPage() {
     }
   };
 
+  // L11: the show's library: its own sets and the sets with no show (GET
+  // /scene-sets returns every show's), the episode's linked sets first.
   const handleEdit = async (beat) => {
     setEditingBeat(beat);
+    if (library !== null) return;
+    const showId = locations.show_id || await fetchAll();
+    if (!showId) { setLibrary([]); return; }
     try {
-      const res = await api.get(`/api/v1/episodes/${episodeId}/scene-sets`);
-      setEpisodeSets(res.data?.data || []);
+      const res = await api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`);
+      setLibrary((res.data?.data || []).filter((x) => x && x.id && (x.show_id === showId || !x.show_id)));
     } catch (err) {
-      console.error('[ScenePlanner] scene sets load failed:', err);
-      setEpisodeSets([]);
+      console.error('[BeatPlan] scene sets load failed:', err);
+      showToast(err.response?.data?.error || 'Could not load the scene sets', 'error');
+      setLibrary([]);
     }
   };
+
+  const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
+  const orderedLibrary = library === null ? null : [...library].sort((a, b) =>
+    (linkedIds.has(a.id) ? 0 : 1) - (linkedIds.has(b.id) ? 0 : 1)
+    || String(a.name || '').localeCompare(String(b.name || '')));
 
   const handleSaveBeat = async (values) => {
     setSavingBeat(true);
     try {
-      await api.put(`/api/v1/episode-brief/${episodeId}/plan/${editingBeat.beat_number}`, values);
-      showToast(`Beat ${editingBeat.beat_number} saved`);
+      const res = await api.put(`/api/v1/episode-brief/${episodeId}/plan/${editingBeat.beat_number}`, values);
+      const added = res.data?.location?.added ? res.data.location : null;
+      const setName = added && library?.find((x) => x.id === values.scene_set_id)?.name;
+      showToast(added
+        ? `Beat ${editingBeat.beat_number} saved; “${setName || 'the set'}” joined the episode's locations as ${added.role === 'extra' ? 'an extra' : `its ${added.role}`}`
+        : `Beat ${editingBeat.beat_number} saved`);
       setEditingBeat(null);
       await fetchAll();
     } catch (err) {
+      console.error('[BeatPlan] beat save failed:', err);
+      showToast(err.response?.data?.error || 'Save failed', 'error');
+    } finally {
+      setSavingBeat(false);
+    }
+  };
+
+  const handleReleaseBeat = async () => {
+    setSavingBeat(true);
+    try {
+      await api.put(`/api/v1/episode-brief/${episodeId}/plan/${editingBeat.beat_number}`, { chosen: false });
+      showToast(`Beat ${editingBeat.beat_number} is the plan's to choose again`);
+      setEditingBeat(null);
+      await fetchAll();
+    } catch (err) {
+      console.error('[BeatPlan] beat release failed:', err);
       showToast(err.response?.data?.error || 'Save failed', 'error');
     } finally {
       setSavingBeat(false);
@@ -457,7 +595,7 @@ export default function ScenePlannerPage() {
 
       <div className="scene-planner-header">
         <div>
-          <h1 className="scene-planner-title">Scene Planner</h1>
+          <h1 className="scene-planner-title">Beat Plan</h1>
           <p className="scene-planner-subtitle">
             Map scenes to beats → generates a grounded script
             {plan.length > 0 && ` · ${lockedCount}/${plan.length} beats locked`}
@@ -497,6 +635,8 @@ export default function ScenePlannerPage() {
         </div>
       </div>
 
+      <LocationsStrip locations={locations.locations} showId={locations.show_id} />
+
       {!loading && (
         <BriefPanel brief={brief} onUpdate={handleUpdateBrief}
           onGenerate={handleGenerate} generating={generating} />
@@ -526,8 +666,8 @@ export default function ScenePlannerPage() {
       )}
 
       {editingBeat && (
-        <BeatEditor key={editingBeat.beat_number} beat={editingBeat} sceneSets={episodeSets}
-          onSave={handleSaveBeat} onCancel={() => setEditingBeat(null)} saving={savingBeat} />
+        <BeatEditor key={editingBeat.beat_number} beat={editingBeat} library={orderedLibrary} linkedIds={linkedIds}
+          onSave={handleSaveBeat} onRelease={handleReleaseBeat} onCancel={() => setEditingBeat(null)} saving={savingBeat} />
       )}
 
       {!loading && plan.length > 0 && (
