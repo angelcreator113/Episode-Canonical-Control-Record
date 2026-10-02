@@ -20,7 +20,101 @@ export const getSceneSetApi = (setId) => apiClient.get(`${API_BASE}/scene-sets/$
 export const createSceneSetApi = (payload) => apiClient.post(`${API_BASE}/scene-sets`, payload);
 export const updateSceneSetApi = (setId, payload) =>
   apiClient.put(`${API_BASE}/scene-sets/${setId}`, payload);
-export const deleteSceneSetApi = (setId) => apiClient.delete(`${API_BASE}/scene-sets/${setId}`);
+export const deleteSceneSetApi = (setId, query = '') => apiClient.delete(`${API_BASE}/scene-sets/${setId}${query}`);
+export const getSceneSetUsesApi = (setId) => apiClient.get(`${API_BASE}/scene-sets/${setId}/uses`);
+
+// D1 (Evoni, 2026-10-02; §8(hh)): "Deleting a scene set that episodes,
+// beats or locations use asks for a replacement set and moves every use ...
+// to it; deleting without a replacement shows how many uses will be left
+// pointing at a removed set."
+const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene']];
+export function usesText(uses) {
+  const parts = USE_WORDS.filter(([k]) => uses?.[k] > 0).map(([k, w]) => `${uses[k]} ${w}${uses[k] === 1 ? '' : 's'}`);
+  return parts.length ? `Used by ${parts.join(', ')}.` : 'Not used anywhere.';
+}
+
+export function DeleteSetDialog({ set, uses, sets, onDone, onCancel }) {
+  const [replacement, setReplacement] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // The set's own show first, then the rest.
+  const choices = (sets || []).filter(s => s.id !== set.id)
+    .sort((a, b) => (b.show_id === set.show_id) - (a.show_id === set.show_id) || String(a.name).localeCompare(String(b.name)));
+  const run = async (query) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteSceneSetApi(set.id, query);
+      onDone?.();
+    } catch (err) {
+      console.error('[SceneSets] delete failed:', err);
+      setError(err.response?.data?.error || 'Could not delete the scene set');
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="scene-sets-delete-backdrop">
+      <div className="scene-sets-delete-dialog" role="dialog" aria-label={`Delete ${set.name}`}>
+        <h3>Delete “{set.name}”?</h3>
+        <p data-testid="delete-set-uses">{usesText(uses)}</p>
+        <label className="scene-sets-create-field">
+          <span>Move them to</span>
+          <select aria-label="Replacement set" value={replacement} onChange={e => setReplacement(e.target.value)}>
+            <option value="">Choose a replacement…</option>
+            {choices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        {error && <p className="scene-sets-compare-error" role="alert">{error}</p>}
+        <div className="scene-sets-delete-actions">
+          <button type="button" className="scene-sets-btn-generate" disabled={!replacement || busy} onClick={() => run(`?replacement_id=${replacement}`)}>
+            Move uses and delete
+          </button>
+          <button type="button" className="scene-sets-btn-details" disabled={busy} onClick={() => run('?confirm_orphan=true')}>
+            Delete anyway ({uses.total} use{uses.total === 1 ? '' : 's'} left pointing at a removed set)
+          </button>
+          <button type="button" className="scene-sets-btn-details" disabled={busy} onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// D2 (Evoni, 2026-10-02): "add a Show choice to an existing set's edit form
+// in Scene Sets, so I can give my three new sets ... this show."
+export function SetShowSelect({ set, shows, onSaved, onError }) {
+  const [value, setValue] = useState(set.show_id || '');
+  const [saving, setSaving] = useState(false);
+  const onChange = async (e) => {
+    const next = e.target.value;
+    const prev = value;
+    setValue(next);
+    setSaving(true);
+    try {
+      await updateSceneSetApi(set.id, { show_id: next || null });
+      onSaved?.(next || null);
+    } catch (err) {
+      console.error('[SceneSets] show save failed:', err);
+      setValue(prev);
+      onError?.(err.response?.data?.error || 'Could not change the show');
+    }
+    setSaving(false);
+  };
+  return (
+    <select value={value} onChange={onChange} disabled={saving} aria-label="Show" className="scene-sets-select-sm" data-testid={`set-show-${set.id}`}>
+      <option value="">No show</option>
+      {(shows || []).map(sh => <option key={sh.id} value={sh.id}>{sh.name || sh.title || sh.id}</option>)}
+    </select>
+  );
+}
+
+// D2 (Evoni, 2026-10-02): "A scene set created while working in a show gets
+// that show's show_id." The page's show, else the one chosen in the form,
+// else the only show; null when none can be told.
+export function createShowIdFor({ pageShowId, chosen, shows }) {
+  if (pageShowId) return pageShowId;
+  if (chosen) return chosen;
+  return (shows || []).length === 1 ? shows[0].id : null;
+}
 export const getSceneSetJobApi = (jobId) => apiClient.get(`${API_BASE}/scene-sets/jobs/${jobId}`);
 export const getGenerationCheckApi = () => apiClient.get(`${API_BASE}/scene-sets/generation-check`);
 
@@ -1561,6 +1655,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                       )}
                     </div>
 
+                    {/* D2: the set's show */}
+                    <div className="scene-sets-modal-field">
+                      <label>Show</label>
+                      <SetShowSelect set={set} shows={allShows} onSaved={() => { showToast('Show updated'); onRefresh?.(); }} onError={(msg) => showToast(msg, 'error')} />
+                    </div>
+
                     {/* Time of Day & Season */}
                     <div className="scene-sets-modal-field">
                       <label><Clock size={11} /> Environment</label>
@@ -2464,7 +2564,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function SceneSetsTab() {
+export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
   // ?set=<id> opens the page on that set (S7: the Event Package links to
@@ -2509,6 +2609,7 @@ export default function SceneSetsTab() {
   const [filmstrip, setFilmstrip] = useState(null);
   const [angleHistory, setAngleHistory] = useState(null);
   const [createShowId, setCreateShowId] = useState('');
+  const [deleting, setDeleting] = useState(null); // D1: { set, uses }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -2986,7 +3087,9 @@ export default function SceneSetsTab() {
         scene_type: newSet.scene_type,
         canonical_description: newSet.canonical_description.trim() || null,
       };
-      if (newSet.show_id) createPayload.show_id = newSet.show_id;
+      // D2: the page's show, else the one chosen, else the only show.
+      const showForSet = createShowIdFor({ pageShowId, chosen: createShowId || newSet.show_id, shows: allShows });
+      if (showForSet) createPayload.show_id = showForSet;
       if (newSet.episode_ids?.length > 0) createPayload.episode_ids = newSet.episode_ids;
       if (newSet.time_of_day) createPayload.time_of_day = newSet.time_of_day;
       if (newSet.season) createPayload.season = newSet.season;
@@ -3022,14 +3125,24 @@ export default function SceneSetsTab() {
     }
   };
 
+  // D1: a set in use asks for a replacement (DeleteSetDialog); an unused one
+  // is confirmed and deleted as before.
   const handleDeleteSet = async (set) => {
+    let uses = null;
+    try {
+      uses = (await getSceneSetUsesApi(set.id)).data?.data || null;
+    } catch (err) {
+      console.error('[SceneSets] uses read failed:', err);
+    }
+    if (uses && uses.total > 0) { setDeleting({ set, uses }); return; }
     if (!window.confirm(`Delete location "${set.name}"? This will soft-delete the location and all its angles.`)) return;
     try {
-      await deleteSceneSetApi(set.id);
+      await deleteSceneSetApi(set.id, uses ? '' : '?confirm_orphan=true');
       showToast(`Deleted "${set.name}"`);
       fetchSets();
-    } catch {
-      showToast('Failed to delete location', 'error');
+    } catch (err) {
+      console.error('[SceneSets] delete failed:', err);
+      showToast(err.response?.data?.error || 'Failed to delete location', 'error');
     }
   };
 
@@ -3302,7 +3415,17 @@ export default function SceneSetsTab() {
         <SceneModelComparison sets={sets} onClose={() => setShowModelCompare(false)} />
       )}
 
-      {/* Create Form — minimal: just name + type */}
+      {deleting && (
+        <DeleteSetDialog
+          set={deleting.set}
+          uses={deleting.uses}
+          sets={sets}
+          onCancel={() => setDeleting(null)}
+          onDone={() => { showToast(`Deleted "${deleting.set.name}"`); setDeleting(null); fetchSets(); }}
+        />
+      )}
+
+      {/* Create Form — minimal: name, type, and the show when the page has none (D2) */}
       {showCreateForm && (
         <div className="scene-sets-create-form">
           <div className="scene-sets-create-row">
@@ -3317,6 +3440,15 @@ export default function SceneSetsTab() {
                 onKeyDown={e => { if (e.key === 'Enter' && newSet.name.trim()) handleCreate(); }}
               />
             </div>
+            {!pageShowId && allShows.length > 1 && (
+              <div className="scene-sets-create-field">
+                <label>Show</label>
+                <select value={createShowId} onChange={e => setCreateShowId(e.target.value)} aria-label="Show for the new set">
+                  <option value="">No show</option>
+                  {allShows.map(sh => <option key={sh.id} value={sh.id}>{sh.name || sh.title || sh.id}</option>)}
+                </select>
+              </div>
+            )}
             <div className="scene-sets-create-field">
               <label>Type</label>
               <select
