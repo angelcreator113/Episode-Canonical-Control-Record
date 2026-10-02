@@ -175,7 +175,8 @@ function beatPicture(location, set) {
     };
   }
   if (location?.look?.image_url) return { url: location.look.image_url, source: 'look', label: `${name} · event look${removed}` };
-  if (set.base_still_url) return { url: set.base_still_url, source: 'base', label: `${name} · base${removed}` };
+  // S9 (b): the base is named as its zone, Inside (L14 a), not "base".
+  if (set.base_still_url) return { url: set.base_still_url, source: 'base', label: `${name} · Inside${removed}` };
   return null;
 }
 

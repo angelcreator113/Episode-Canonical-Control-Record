@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Compass } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -232,6 +233,7 @@ const EpisodeDetail = () => {
   // (Task #2356): the brief's event (episode_briefs.event_id, §8(w) P2),
   // which GET /episodes/:id/events returns first, flagged link.anchor.
   const [sourceEvent, setSourceEvent] = useState(null);
+  const headerCompact = useScrolledPast(120);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [characterState, setCharacterState] = useState({});
 
@@ -586,7 +588,8 @@ const EpisodeDetail = () => {
   return (
     <div className="ed-page">
       {/* Simplified Header: Identity + Action */}
-      <div className="ed-header-new">
+      {/* S9 (b): collapses to the title and navigation while scrolling. */}
+      <div className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
         <div className="ed-header-left">
           <button onClick={() => navigate(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
             ← Back to Show
@@ -815,6 +818,7 @@ const EpisodeDetail = () => {
         {tabKey === 'production.scenes' && (
           <EpisodeScenesTab
             episode={episode}
+            sourceEvent={sourceEvent}
             onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
           />
         )}

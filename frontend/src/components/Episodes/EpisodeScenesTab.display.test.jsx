@@ -19,7 +19,7 @@ import { PLAN_REFRESH_MS } from '../BeatPlan/usePlanRefresh';
 const CLOSET = { id: 'set-closet', name: "Lala's Closet", scene_type: 'CLOSET', base_still_url: 'https://x/closet.jpg' };
 const beat = (n, extra) => ({ id: `p${n}`, beat_number: n, beat_name: `Beat ${n}`, scene_set_id: CLOSET.id, locked: false, sceneSet: CLOSET, scene_id: null, ...extra });
 const READY = [beat(4, { location: { role: 'home', kinds: [], angle: null, missing: null, generating: false,
-  image: { url: 'https://x/closet.jpg', source: 'base', label: "Lala's Closet · base" } } })];
+  image: { url: 'https://x/closet.jpg', source: 'base', label: "Lala's Closet · Inside" } } })];
 let PLAN;
 
 const planCalls = () => vi.mocked(apiClient.get).mock.calls.filter(([u]) => u === '/api/v1/episode-brief/ep-1/plan').length;
@@ -39,9 +39,9 @@ describe('EpisodeScenesTab: beat display (Evoni, 2026-10-02)', () => {
 
   const renderTab = () => render(<MemoryRouter><EpisodeScenesTab episode={{ id: 'ep-1', show_id: 'show-1' }} onToast={vi.fn()} /></MemoryRouter>);
 
-  test('a beat on its set\'s base reads "<set> · base" with the base image', async () => {
+  test('a beat on its set\'s base reads "<set> · Inside" with the base image (S9 b)', async () => {
     renderTab();
-    expect((await screen.findByTestId('est-where-4')).textContent).toBe("Lala's Closet · base");
+    expect((await screen.findByTestId('est-where-4')).textContent).toBe("Lala's Closet · Inside");
     expect(screen.getByTestId('est-beat-4').querySelector('img').getAttribute('src')).toBe('https://x/closet.jpg');
   });
 

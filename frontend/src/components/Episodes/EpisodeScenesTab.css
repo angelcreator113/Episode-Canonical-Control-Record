@@ -701,3 +701,35 @@
 .est-issue { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: #2C2C2C; }
 .est-issue-text { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 .est-issue-hint { font-size: 12px; color: #8a7a4a; }
+
+/* S9 (b): the compact layout */
+.est-section-compact { padding-top: 10px; padding-bottom: 10px; }
+.est-location-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.est-location-strip-icon { color: #B8962E; flex: none; }
+.est-location-chip { font-family: 'DM Mono', monospace; font-size: 12px; color: #2C2C2C; padding: 4px 10px; border-radius: 999px; border: 1px solid #e8e1cf; background: #fff; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.est-location-chip.is-open { border-color: #B8962E; background: #FAF7F0; }
+.est-location-detail { display: flex; gap: 10px; align-items: center; margin-top: 8px; padding: 8px; border: 1px solid #e8e1cf; border-radius: 10px; background: #fff; }
+.est-location-links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.est-location-links a { color: #B8962E; font-weight: 600; }
+.est-group-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #2C2C2C; cursor: pointer; }
+.est-beat-main { cursor: default; }
+.est-beat-story { font-size: 12px; color: #2C2C2C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.est-beat-thumb-wrap { position: relative; flex: none; display: inline-flex; }
+.est-beat-thumb.is-reference { opacity: 0.55; filter: grayscale(0.4); }
+.est-reference-tag { position: absolute; left: 4px; bottom: 4px; font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #fff; background: rgba(44,44,44,0.78); padding: 1px 5px; border-radius: 4px; }
+.est-beat-details { flex: 1 1 100%; display: grid; gap: 4px; padding: 8px 10px; border-top: 1px dashed #e8e1cf; font-size: 12px; color: #2C2C2C; }
+.est-beat-details p { margin: 0; overflow-wrap: anywhere; }
+.est-beat-details-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.est-beat-details-actions a { text-decoration: none; }
+@media (max-width: 480px) {
+  .est-beat-side { justify-content: flex-start; flex: 1 1 100%; }
+  .est-location-detail { align-items: flex-start; }
+}
+
+/* The walkthrough (2026-10-02): a beat that needs attention says so on its row. */
+.est-beat.is-attention { border-color: #e8c99a; box-shadow: inset 3px 0 0 #d9a24a; }
+.est-beat-attention { font-size: 12px; font-weight: 600; color: #8a5a1a; overflow-wrap: anywhere; }
+.est-beat-details { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.est-beat-details p { white-space: normal; }
+/* The text column never grows past the row: long lines wrap or end in an ellipsis. */
+.est-beat-text { grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; }

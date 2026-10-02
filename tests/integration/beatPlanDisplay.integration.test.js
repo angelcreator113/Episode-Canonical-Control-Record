@@ -84,10 +84,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await q('DELETE FROM shows WHERE id = :show');
   });
 
-  it('1: a beat at a set with no angle shows the set\'s base image, labelled "<set> · base"', async () => {
+  // S9 (b) (§8(hh)): the base is named as its zone, Inside (L14 a), not "base".
+  it('1: a beat at a set with no angle shows the set\'s base image, labelled "<set> · Inside"', async () => {
     const at = await plan();
-    expect(at(4).location.image).toEqual({ url: 'https://x/closet-base.jpg', source: 'base', label: "Lala's Closet · base" });
-    expect(at(1).location.image).toEqual({ url: 'https://x/room-base.jpg', source: 'base', label: "Lala's Room · base" });
+    expect(at(4).location.image).toEqual({ url: 'https://x/closet-base.jpg', source: 'base', label: "Lala's Closet · Inside" });
+    expect(at(1).location.image).toEqual({ url: 'https://x/room-base.jpg', source: 'base', label: "Lala's Room · Inside" });
     // A chosen angle with an image: the angle, labelled by its name.
     expect(at(8).location.image).toEqual({ url: 'https://x/house-wide.jpg', source: 'angle', label: 'Lalas house · Living room' });
     // No set: no image, nothing labelled.
@@ -101,7 +102,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :id', { id: sets.room });
     at = await plan();
     expect(at(1).sceneSet).toMatchObject({ id: sets.room, name: "Lala's Room", removed: true });
-    expect(at(1).location.image).toEqual({ url: 'https://x/room-base.jpg', source: 'base', label: "Lala's Room · base (removed from Scene Sets)" });
+    expect(at(1).location.image).toEqual({ url: 'https://x/room-base.jpg', source: 'base', label: "Lala's Room · Inside (removed from Scene Sets)" });
     await run('UPDATE scene_sets SET deleted_at = NULL WHERE id = :id', { id: sets.room });
   });
 

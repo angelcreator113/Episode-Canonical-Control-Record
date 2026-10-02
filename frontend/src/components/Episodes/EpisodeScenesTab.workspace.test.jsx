@@ -95,21 +95,25 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan/lock-all'));
   });
 
-  test('the Locations show role, thumbnail, angle count and a link to Scene Sets', async () => {
+  // S9 (b) (§8(hh)): the Locations are a compact strip; a location expands.
+  test('the Locations show each role and set; one expands to its thumbnail, views and Scene Sets link', async () => {
     renderTab();
-    const home = await screen.findByTestId('est-location-set-home');
-    expect(home.textContent).toContain('Home');
+    fireEvent.click(await screen.findByTestId('est-location-chip-set-home'));
+    const home = screen.getByTestId('est-location-detail-set-home');
     expect(home.textContent).toContain("Lala's Apartment");
-    expect(home.textContent).toContain('3 angles');
+    expect(home.textContent).toContain('Base image and 3 more views');
     expect(home.querySelector('img').getAttribute('src')).toBe('https://x/home.jpg');
-    expect(within(home).getByRole('link', { name: 'Scene Sets' }).getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-home');
-    expect(screen.getByTestId('est-location-set-venue').textContent).toContain('1 angle');
+    expect(within(home).getByRole('link', { name: 'Open in Scene Sets' }).getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-home');
+    fireEvent.click(screen.getByTestId('est-location-chip-set-venue'));
+    expect(screen.getByTestId('est-location-detail-set-venue').textContent).toContain('Base image and 1 more view');
     expect(screen.getByTestId('est-edit-locations')).toBeTruthy();
   });
 
-  test('the beats are grouped by location, in the locations\' order, then other sets, then no location', async () => {
+  // S9 (b): grouping is an option; story order is the default.
+  test('grouped by location, the beats follow the locations\' order, then other sets, then no location', async () => {
     renderTab();
     await screen.findByTestId('est-beat-1');
+    fireEvent.click(screen.getByLabelText('Group by location'));
     const groups = [...document.querySelectorAll('.est-beat-group')].map((g) => [
       g.querySelector('.est-beat-group-title').textContent,
       [...g.querySelectorAll('[data-testid^="est-beat-"]')].map((b) => b.dataset.testid.replace('est-beat-', '')),
@@ -123,27 +127,35 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     expect(groupBeats([], LOCATIONS.locations)).toEqual([]);
   });
 
-  test('each row shows its angle image, name, set and angle, badges, the missing-image actions and Open in Studio', async () => {
+  // S9 (b): the badges and Open in Studio are in the beat's Details.
+  test('each row shows its angle image, name, set and angle and the missing-image actions; Details hold the badges and Open in Studio', async () => {
     renderTab();
     const two = await screen.findByTestId('est-beat-2');
     expect(two.querySelector('img').getAttribute('src')).toBe('https://x/vanity.jpg');
     expect(two.textContent).toContain('Beat 2');
     expect(two.textContent).toContain("Lala's Apartment · Vanity");
-    expect(screen.getByTestId('beat-chosen-1').textContent).toBe('Chosen by you');
-    expect(screen.getByTestId('est-locked-11').textContent).toBe('Locked');
     expect(screen.getByTestId('beat-missing-10').textContent).toContain('Entrance angle missing');
+    expect(screen.getByTestId('est-where-10').textContent).toBe('The Glasshouse · Entrance missing');
+    fireEvent.click(screen.getByRole('button', { name: 'Details for beat 1' }));
+    expect(screen.getByTestId('beat-chosen-1').textContent).toBe('Chosen by you');
+    expect(screen.getByRole('button', { name: 'Change background for beat 11' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Details for beat 2' }));
     expect(screen.getByTestId('est-studio-2').getAttribute('href')).toBe('/studio/scene/scene-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Details for beat 14' }));
     expect(screen.queryByTestId('est-studio-14')).toBeNull();
     expect(screen.queryByText(/Use in Episode/)).toBeNull();
     expect(screen.queryByText('Episode Scenes')).toBeNull();
   });
 
-  test('tapping a row edits it in place; saving a set from the library marks it chosen; a locked row does not open', async () => {
+  // S9 (b): "Change background" opens the editor in place.
+  test('Change background edits the beat in place; saving a set from the library marks it chosen; a locked beat\'s is disabled', async () => {
     renderTab();
-    fireEvent.click(await screen.findByTestId('est-beat-11'));
+    const locked = await screen.findByRole('button', { name: 'Change background for beat 11' });
+    expect(locked.disabled).toBe(true);
+    fireEvent.click(locked);
     expect(screen.queryByTestId('beat-editor')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('est-beat-2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Change background for beat 2' }));
     const sheet = await screen.findByTestId('est-beat-sheet');
     expect(screen.getByTestId('est-beat-2').closest('li').contains(sheet)).toBe(true);
     const editor = within(sheet).getByTestId('beat-editor');

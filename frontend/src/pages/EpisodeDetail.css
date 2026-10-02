@@ -3215,3 +3215,10 @@
 .ed-title-chip-approved { color: #2f6b3a; border-color: #b9d8be; background: #f1f8f2; }
 .ed-title-chip-outdated { color: #8a5a00; border-color: #f0d28a; background: #fff8e6; }
 .ed-title-chip-not_made { color: #6b6b6b; }
+
+/* S9 (b): while scrolling, the header is the title and navigation only. */
+.ed-header-new.is-compact { padding-top: 0.4rem; padding-bottom: 0.4rem; align-items: center; }
+.ed-header-new.is-compact .ed-header-title { font-size: 1rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-header-new.is-compact .ed-header-meta,
+.ed-header-new.is-compact .ed-source-event-link,
+.ed-header-new.is-compact .ed-title-chip { display: none; }
