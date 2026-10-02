@@ -412,6 +412,10 @@ function WorldAdmin() {
   const [injecting, setInjecting] = useState(false);
   const [injectError, setInjectError] = useState(null);
   const [injectSuccess, setInjectSuccess] = useState(null);
+  // F2: an event attached whose scene set could not be linked to the
+  // episode: { eventId, reason }, shown with a Retry until it links.
+  const [sceneSetReconnect, setSceneSetReconnect] = useState(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const [toast, setToast] = useState(null);
 
   // Auto-dismiss toast after 5 seconds
@@ -1402,6 +1406,25 @@ The revised event should feel like a completely different experience from the si
     } finally { setGenerating(false); }
   };
 
+  // F2: Retry linking an attached event's scene set to its episode.
+  const retrySceneSetLink = async (eventId) => {
+    setReconnecting(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/scene-set-link`, {});
+      const sceneSet = res.data?.scene_set;
+      if (sceneSet?.status === 'linked') {
+        setSceneSetReconnect(null);
+        setToast(`Scene set linked${sceneSet.scene_set_name ? `: “${sceneSet.scene_set_name}”` : ''}.`);
+        loadData();
+      } else {
+        setSceneSetReconnect({ eventId, reason: sceneSet?.reason || 'The scene set is still not linked.' });
+      }
+    } catch (err) {
+      console.error('[WorldAdmin] scene set retry failed:', err);
+      setSceneSetReconnect({ eventId, reason: err.response?.data?.error || err.message });
+    } finally { setReconnecting(false); }
+  };
+
   const injectEvent = async (eventId, episodeId) => {
     setInjecting(true); setInjectError(null); setError(null);
     try {
@@ -1409,10 +1432,15 @@ The revised event should feel like a completely different experience from the si
       if (res.data.success) {
         const ep = episodes.find(e => e.id === episodeId);
         const epLabel = ep ? `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}` : 'episode';
-        const msg = `✅ Injected into ${epLabel}`;
-        setSuccessMsg(msg);
-        // Show inline success in the inject panel briefly
-        setInjectSuccess({ eventId, message: msg });
+        const needsReconnect = res.data.scene_set?.status === 'needs_reconnecting';
+        const msg = needsReconnect ? 'Event attached · Scene set needs reconnecting' : `✅ Injected into ${epLabel}`;
+        setSceneSetReconnect(needsReconnect ? { eventId, reason: res.data.scene_set.reason || null } : null);
+        // Show inline success in the inject panel briefly; a scene set still
+        // to reconnect is shown in its own banner instead, never as success.
+        if (!needsReconnect) {
+          setSuccessMsg(msg);
+          setInjectSuccess({ eventId, message: msg });
+        }
         // Show floating toast (visible regardless of scroll)
         setToast(msg);
         setTimeout(() => { setToast(null); }, 3000);
@@ -4114,6 +4142,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   {/* Episode linking */}
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Link to Episode</div>
+                    {sceneSetReconnect?.eventId === md.id && (
+                      <div data-testid="scene-set-reconnect" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', marginBottom: 6, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
+                        <div style={{ flex: '1 1 180px', fontSize: 11, color: '#9a3412' }}>
+                          <div style={{ fontWeight: 700 }}>Event attached · Scene set needs reconnecting</div>
+                          {sceneSetReconnect.reason && <div style={{ marginTop: 2 }}>{sceneSetReconnect.reason}</div>}
+                        </div>
+                        <button onClick={() => retrySceneSetLink(md.id)} disabled={reconnecting} style={{ ...S.smBtn, fontSize: 11, padding: '4px 10px' }}>
+                          {reconnecting ? 'Retrying…' : 'Retry'}
+                        </button>
+                      </div>
+                    )}
                     {injectSuccess?.eventId === md.id ? (
                       <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 13, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
                     ) : (
