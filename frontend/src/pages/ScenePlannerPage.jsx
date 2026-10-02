@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import './ScenePlannerPage.css';
 
 const BEAT_NAMES = [
@@ -15,9 +16,34 @@ const SHOT_LABELS = {
   tracking: 'Tracking', cutaway: 'Cutaway', transition: 'Transition',
 };
 
+// ─── MISSING ANGLE ────────────────────────────────────────────────────────────
+// L4 (Evoni, 2026-10-02; Q19, §8(hh)): "A missing angle shows a specific
+// action: 'Entrance angle missing — Upload image / Generate angle'."
+// beat.location.missing comes from GET /episode-brief/:id/plan.
+
+function MissingAngle({ beat, busy, onUpload, onGenerate }) {
+  const missing = beat.location?.missing;
+  if (!missing) return null;
+  const n = beat.beat_number;
+  return (
+    <div className="scene-planner-missing" data-testid={`beat-missing-${n}`}>
+      <span className="scene-planner-missing-text">{missing.text}</span>
+      <span className="scene-planner-missing-actions">
+        <label className={`scene-planner-missing-btn${busy ? ' is-busy' : ''}`}>
+          Upload image
+          <input type="file" accept="image/*" hidden disabled={busy} aria-label={`Upload image for beat ${n}`}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onUpload(beat, f); }} />
+        </label>
+        <button type="button" className="scene-planner-missing-btn" disabled={busy}
+          onClick={() => onGenerate(beat)} data-testid={`beat-generate-angle-${n}`}>Generate angle</button>
+      </span>
+    </div>
+  );
+}
+
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
-function BeatCard({ beat, index, onLock, onEdit }) {
+function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-card-image">
@@ -44,6 +70,8 @@ function BeatCard({ beat, index, onLock, onEdit }) {
           <p className="scene-planner-card-intent">{beat.emotional_intent}</p>
         )}
 
+        <MissingAngle beat={beat} {...missingProps} />
+
         <div className="scene-planner-card-actions">
           <button className="scene-planner-card-edit" onClick={() => onEdit(beat)} disabled={beat.locked}
             title={beat.locked ? 'Unlock this beat to edit it' : undefined}>Edit</button>
@@ -61,7 +89,7 @@ function BeatCard({ beat, index, onLock, onEdit }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, onLock, onEdit }) {
+function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -69,7 +97,7 @@ function BeatRow({ beat, index, onLock, onEdit }) {
       <div className="scene-planner-row-beat">
         <p className="scene-planner-row-beat-name">{beat.beat_name || BEAT_NAMES[index]}</p>
         <p className="scene-planner-row-transition">
-          {beat.transition_in !== 'none' ? `→ ${beat.transition_in}` : ''}
+          {beat.transition_in && beat.transition_in !== 'none' ? `→ ${beat.transition_in}` : ''}
         </p>
       </div>
 
@@ -84,6 +112,7 @@ function BeatRow({ beat, index, onLock, onEdit }) {
 
       <div className="scene-planner-row-intent">
         <p>{beat.emotional_intent || '—'}</p>
+        <MissingAngle beat={beat} {...missingProps} />
       </div>
 
       <div className="scene-planner-row-actions">
@@ -248,6 +277,8 @@ export default function ScenePlannerPage() {
   const [editingBeat, setEditingBeat] = useState(null);
   const [episodeSets, setEpisodeSets] = useState([]);
   const [savingBeat, setSavingBeat] = useState(false);
+  const [angleBusy, setAngleBusy] = useState(null); // beat number
+  const [angleBrief, setAngleBrief] = useState(null); // { beat, setId, angleId, name }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -328,6 +359,83 @@ export default function ScenePlannerPage() {
     }
   };
 
+  // The missing angle (Q19): the angle the beat asks for, created when it
+  // does not exist yet; an unlocked beat is pointed at it.
+  const ensureAngle = async (beat) => {
+    const missing = beat.location.missing;
+    const setId = beat.scene_set_id;
+    let angleId = missing.angle_id;
+    let label = missing.label;
+    const name = missing.name || 'New angle';
+    if (!angleId) {
+      const res = await api.post(`/api/v1/scene-sets/${setId}/angles`, {
+        angle_label: label || 'OTHER',
+        angle_name: name || 'New angle',
+        angle_kind: missing.kinds?.[0] || missing.kind || null,
+        beat_affinity: [beat.beat_number],
+      });
+      angleId = res.data?.data?.id;
+      label = res.data?.data?.angle_label || label;
+      if (!angleId) throw new Error('The angle was not created');
+    }
+    if (!beat.locked && label && beat.angle_label !== label) {
+      await api.put(`/api/v1/episode-brief/${episodeId}/plan/${beat.beat_number}`, { angle_label: label });
+    }
+    return { setId, angleId, name };
+  };
+
+  const handleUploadAngle = async (beat, file) => {
+    setAngleBusy(beat.beat_number);
+    try {
+      const { setId, angleId } = await ensureAngle(beat);
+      const form = new FormData();
+      form.append('images', file);
+      await api.post(`/api/v1/scene-sets/${setId}/angles/${angleId}/upload`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      showToast(`Beat ${beat.beat_number}: image uploaded`);
+    } catch (err) {
+      console.error('[ScenePlanner] angle upload failed:', err);
+      showToast(err.response?.data?.error || err.message || 'Upload failed', 'error');
+    } finally {
+      setAngleBusy(null);
+      await fetchAll();
+    }
+  };
+
+  const handleGenerateAngle = async (beat) => {
+    setAngleBusy(beat.beat_number);
+    try {
+      const target = await ensureAngle(beat);
+      setAngleBrief({ beat, ...target });
+    } catch (err) {
+      console.error('[ScenePlanner] angle create failed:', err);
+      showToast(err.response?.data?.error || err.message || 'Could not create the angle', 'error');
+      setAngleBusy(null);
+    }
+  };
+
+  const confirmGenerateAngle = async (overrides) => {
+    const { beat, setId, angleId } = angleBrief;
+    setAngleBrief(null);
+    try {
+      await api.post(`/api/v1/scene-sets/${setId}/angles/${angleId}/generate`, { overrides });
+      showToast(`Beat ${beat.beat_number}: generating the angle`);
+    } catch (err) {
+      console.error('[ScenePlanner] angle generate failed:', err);
+      showToast(err.response?.data?.error || 'Generation failed', 'error');
+    } finally {
+      setAngleBusy(null);
+      await fetchAll();
+    }
+  };
+
+  const cancelGenerateAngle = async () => {
+    setAngleBrief(null);
+    setAngleBusy(null);
+    await fetchAll();
+  };
+
+  const missingProps = { onUpload: handleUploadAngle, onGenerate: handleGenerateAngle };
+
   const handleLockAll = async () => {
     try {
       await api.post(`/api/v1/episode-brief/${episodeId}/plan/lock-all`);
@@ -397,6 +505,16 @@ export default function ScenePlannerPage() {
         </div>
       )}
 
+      {angleBrief && (
+        <SceneBriefConfirm
+          setId={angleBrief.setId}
+          angleId={angleBrief.angleId}
+          title={`Generate the ${angleBrief.name.toLowerCase()} angle for beat ${angleBrief.beat.beat_number}`}
+          onConfirm={(overrides) => confirmGenerateAngle(overrides)}
+          onCancel={cancelGenerateAngle}
+        />
+      )}
+
       {editingBeat && (
         <BeatEditor key={editingBeat.beat_number} beat={editingBeat} sceneSets={episodeSets}
           onSave={handleSaveBeat} onCancel={() => setEditingBeat(null)} saving={savingBeat} />
@@ -406,13 +524,15 @@ export default function ScenePlannerPage() {
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit}
+                missingProps={{ ...missingProps, busy: angleBusy === beat.beat_number }} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} onLock={handleLock} onEdit={handleEdit}
+                missingProps={{ ...missingProps, busy: angleBusy === beat.beat_number }} />
             ))}
           </div>
         )

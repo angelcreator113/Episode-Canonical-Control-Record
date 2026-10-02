@@ -280,6 +280,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
           camera_direction: angle.camera_direction,
           mood: angle.mood,
           beat_affinity: angle.beat_affinity,
+          angle_kind: angle.angle_kind || null,
         });
         if (saveRes.data?.success) savedCount++;
       }
@@ -309,7 +310,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         toast('This episode is accepted; its locations are fixed.', 'error');
         return;
       }
-      setLocationsEdit(data.locations || []);
+      setLocationsEdit({ locations: data.locations || [], angleGaps: data.angle_gaps || [] });
     } catch (err) {
       console.error('Failed to load episode locations:', err);
       toast(err.response?.data?.error || 'Could not load the episode locations', 'error');
@@ -382,7 +383,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             showId={episode?.show_id}
             title="Episode locations"
             confirmLabel="Save locations"
-            initial={locationsEdit}
+            initial={locationsEdit.locations}
+            angleGaps={locationsEdit.angleGaps}
             busy={savingLocations}
             onConfirm={saveLocations}
             onCancel={() => setLocationsEdit(null)}

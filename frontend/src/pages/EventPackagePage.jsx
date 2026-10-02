@@ -1656,6 +1656,7 @@ export default function EventPackagePage() {
           initial={locationsStep.locations}
           missing={locationsStep.missing}
           eventLook={locationsStep.event_look}
+          angleGaps={locationsStep.angle_gaps}
           busy={starting}
           onConfirm={confirmStartEpisode}
           onCancel={() => setLocationsStep(null)}

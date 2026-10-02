@@ -927,10 +927,42 @@ function buildFallbackAngleSuggestions(set, existingLabels = []) {
   ];
 
   const existingSet = new Set(existingLabels || []);
+  const { KIND_FROM_LABEL } = require('../constants/beatLocations');
   return candidates
     .filter((c) => !existingSet.has(c.angle_label))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((c) => ({ ...c, angle_kind: KIND_FROM_LABEL[c.angle_label] || null }));
 }
+
+/**
+ * Q5 (Evoni, 2026-10-02, §8(hh)): "named spaces (bar, runway, VIP); each can
+ * become a suggested angle for the venue's set." The areas of the venue
+ * looks of the events that use this set, less those an angle already names.
+ */
+async function eventAreasForSet(setId, existingNames = []) {
+  const { readVenueLook } = require('../services/venueLookService');
+  const [rows] = await SceneSet.sequelize.query(
+    'SELECT venue_look FROM world_events WHERE scene_set_id = :setId AND venue_look IS NOT NULL AND deleted_at IS NULL',
+    { replacements: { setId } });
+  const taken = new Set(existingNames.map((n) => String(n || '').trim().toLowerCase()));
+  const areas = [];
+  for (const r of rows) {
+    for (const area of readVenueLook(r.venue_look)?.areas || []) {
+      const key = area.toLowerCase();
+      if (!taken.has(key)) { taken.add(key); areas.push(area); }
+    }
+  }
+  return areas;
+}
+
+const areaSuggestion = (area) => ({
+  angle_label: 'OTHER',
+  angle_name: area.slice(0, 100),
+  camera_direction: `Framed on the ${area} as dressed for the event.`.slice(0, 300),
+  description: `The event's ${area}.`.slice(0, 200),
+  beat_affinity: [11, 12],
+  angle_kind: 'area',
+});
 
 router.post('/:id/suggest-angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
@@ -953,6 +985,15 @@ router.post('/:id/suggest-angles', validateUUIDParam('id'), requireAuth, async (
       return res.status(400).json({ success: false, error: 'Add a scene set name or description first' });
     }
 
+    let eventAreas = [];
+    try {
+      eventAreas = await eventAreasForSet(set.id, (set.angles || []).map((a) => a.angle_name));
+    } catch (areaErr) {
+      console.error('Scene Sets suggest-angles: event areas load failed:', areaErr.message);
+    }
+    const { ANGLE_KINDS, KIND_FROM_LABEL } = require('../constants/beatLocations');
+    const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+
     const prompt = `You are a cinematic director planning camera angles and room coverage for a scene location.
 
 Scene name: ${set.name}
@@ -961,17 +1002,23 @@ Description: ${descriptionContext}
 ${set.mood_tags?.length ? `Mood: ${set.mood_tags.join(', ')}` : ''}
 ${set.aesthetic_tags?.length ? `Aesthetic: ${set.aesthetic_tags.join(', ')}` : ''}
 ${existingLabels.length ? `Already created angles: ${existingLabels.join(', ')} — do NOT suggest duplicates of these.` : ''}
+${eventAreas.length ? `Event areas to cover, one angle each (angle_kind "area", angle_name the area's name): ${eventAreas.join(', ')}` : ''}
 
 Suggest 4-6 distinct camera angles or room areas for this location. For event spaces, include BOTH different camera angles of the main space AND separate areas/rooms (entrance, outdoor area, interior rooms, etc.).
 
 Valid angle_label values: ${VALID_ANGLE_LABELS.join(', ')}. Use OTHER for non-standard angles.
+Valid angle_kind values: ${ANGLE_KINDS.join(', ')}.
+
+The episode's 14 beats:
+${CANONICAL_BEATS.map((b) => `${b.number}. ${b.name} (${b.typical_location})`).join('\n')}
 
 Return ONLY a JSON array with objects containing:
 - angle_label: one of the valid labels above
+- angle_kind: one of the valid kinds above (exterior, entrance, main_interior for the main space, area for a named area)
 - angle_name: a short descriptive name (2-4 words, e.g. "Glass Door Entrance")
 - camera_direction: detailed camera placement and framing description (1-2 sentences)
 - description: what this angle captures and why it matters for storytelling (1 sentence)
-- beat_affinity: array of beat numbers 1-5 this angle works best for (e.g. [1,2])
+- beat_affinity: array of beat numbers 1-14 this angle works best for (e.g. [10, 11])
 
 Return raw JSON only, no markdown or explanation.`;
 
@@ -996,7 +1043,7 @@ Return raw JSON only, no markdown or explanation.`;
       }
     } catch (aiErr) {
       console.warn('Scene Sets suggest-angles AI unavailable, using fallback suggestions:', aiErr?.message || aiErr);
-      suggestions = buildFallbackAngleSuggestions(set, existingLabels);
+      suggestions = [...buildFallbackAngleSuggestions(set, existingLabels), ...eventAreas.map(areaSuggestion)];
       return res.json({
         success: true,
         data: suggestions,
@@ -1015,8 +1062,13 @@ Return raw JSON only, no markdown or explanation.`;
         angle_name: String(s.angle_name).slice(0, 100),
         camera_direction: String(s.camera_direction || '').slice(0, 300),
         description: String(s.description || '').slice(0, 200),
-        beat_affinity: Array.isArray(s.beat_affinity) ? s.beat_affinity.filter(b => Number.isInteger(b) && b >= 1 && b <= 10) : [],
+        // The 14 beats (the prompt said 1-5 and this kept 1-10).
+        beat_affinity: Array.isArray(s.beat_affinity) ? s.beat_affinity.filter(b => Number.isInteger(b) && b >= 1 && b <= 14) : [],
+        angle_kind: ANGLE_KINDS.includes(s.angle_kind) ? s.angle_kind : (KIND_FROM_LABEL[s.angle_label] || null),
       }));
+    // Every event area is offered, whether or not the AI named it (Q5).
+    const named = new Set(suggestions.map((x) => x.angle_name.trim().toLowerCase()));
+    suggestions.push(...eventAreas.filter((a) => !named.has(a.toLowerCase())).map(areaSuggestion));
 
     res.json({ success: true, data: suggestions });
   } catch (err) {
@@ -1077,10 +1129,16 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
       video_duration,
       style_reference_url,
       variation_count,
+      angle_kind,
     } = req.body;
 
     if (!angle_label || !angle_name) {
       return res.status(400).json({ success: false, error: 'angle_name and angle_label are required' });
+    }
+    // Q18 (§8(hh)): the angle's kind, beside its free label.
+    const { ANGLE_KINDS } = require('../constants/beatLocations');
+    if (angle_kind != null && angle_kind !== '' && !ANGLE_KINDS.includes(angle_kind)) {
+      return res.status(400).json({ success: false, error: `angle_kind must be one of ${ANGLE_KINDS.join(', ')}` });
     }
 
     const angle = await SceneAngle.create({
@@ -1094,6 +1152,7 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
       video_duration: video_duration || null,
       style_reference_url: style_reference_url || null,
       variation_count: variation_count || 1,
+      angle_kind: angle_kind || null,
       generation_status: 'pending',
     });
 
@@ -1251,10 +1310,17 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, async
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity', 'generation_status'];
+    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity', 'generation_status', 'angle_kind'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    if (updates.angle_kind !== undefined) {
+      const { ANGLE_KINDS } = require('../constants/beatLocations');
+      if (updates.angle_kind === '') updates.angle_kind = null;
+      if (updates.angle_kind !== null && !ANGLE_KINDS.includes(updates.angle_kind)) {
+        return res.status(400).json({ success: false, error: `angle_kind must be one of ${ANGLE_KINDS.join(', ')}` });
+      }
     }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, error: 'No updatable fields provided' });
