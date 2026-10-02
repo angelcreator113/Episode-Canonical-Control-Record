@@ -103,6 +103,12 @@ export const listSceneSetEpisodesApi = (setId) =>
 export const unlinkEpisodeFromSceneSetApi = (setId, episodeId) =>
   apiClient.delete(`${API_BASE}/scene-sets/${setId}/episodes/${episodeId}`);
 
+// A show's default home and closet sets, for the Episode Locations step
+// (L3, Q12; Evoni, 2026-10-02).
+export const getSceneDefaultsApi = (showId) => apiClient.get(`${API_BASE}/shows/${showId}/scene-defaults`);
+export const putSceneDefaultsApi = (showId, payload) => apiClient.put(`${API_BASE}/shows/${showId}/scene-defaults`, payload);
+const DEFAULT_KEY = { HOME_BASE: 'home_set_id', CLOSET: 'closet_set_id' };
+
 // External (shows / episodes for picker)
 export const listShowsApi = () => apiClient.get(`${API_BASE}/shows`);
 export const listEpisodesByShowApi = (showId) =>
@@ -537,7 +543,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -819,6 +825,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
 
         <div className="scene-sets-card-overlay-top-left">
           <TypeBadge type={set.scene_type} />
+          {defaultRole && (
+            <span className="scene-sets-default-badge" data-testid={`scene-set-default-${set.id}`}>DEFAULT {defaultRole.toUpperCase()}</span>
+          )}
           {set.is_franchise_asset && (
             <span className="scene-sets-franchise-badge">FRANCHISE</span>
           )}
@@ -891,6 +900,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                   <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); }}>
                     <Eye size={12} /> Details
                   </button>
+                  {onMakeDefault && DEFAULT_KEY[set.scene_type] && set.show_id && !defaultRole && (
+                    <button onClick={() => { setShowMenu(false); onMakeDefault(set); }} data-testid={`make-default-${set.id}`}>
+                      <CheckCircle2 size={12} /> Make default {set.scene_type === 'CLOSET' ? 'closet' : 'home'}
+                    </button>
+                  )}
                   <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
                     <Trash2 size={12} /> Delete Set
                   </button>
@@ -2338,6 +2352,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
   if (prev.isGeneratingProp !== next.isGeneratingProp) return false;
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
+  if (prev.defaultRole !== next.defaultRole) return false;
   const ps = prev.set, ns = next.set;
   if (ps.id !== ns.id) return false;
   if (ps.name !== ns.name) return false;
@@ -2436,6 +2451,44 @@ export default function SceneSetsTab() {
   }, []);
 
   useEffect(() => { fetchSets(); }, [fetchSets]);
+
+  // Each show's saved default home and closet (L3, Q12): loaded for the
+  // shows that own a Home Base or Closet set. A set with no show has no
+  // show to be the default of, so it offers no "Make default".
+  const [sceneDefaults, setSceneDefaults] = useState({});
+  const defaultShowIds = useMemo(() => [...new Set(sets
+    .filter((s) => DEFAULT_KEY[s.scene_type] && s.show_id)
+    .map((s) => String(s.show_id)))].sort().join(','), [sets]);
+  useEffect(() => {
+    const ids = defaultShowIds ? defaultShowIds.split(',') : [];
+    let cancelled = false;
+    Promise.all(ids.map((id) => getSceneDefaultsApi(id)
+      .then((res) => [id, res.data?.scene_defaults || {}])
+      .catch((err) => { console.error('[SceneSetsTab] scene defaults load failed:', err); return [id, {}]; })))
+      .then((pairs) => { if (!cancelled) setSceneDefaults(Object.fromEntries(pairs)); });
+    return () => { cancelled = true; };
+  }, [defaultShowIds]);
+
+  const defaultRoleOf = (set) => {
+    const d = sceneDefaults[String(set.show_id)];
+    if (!d) return null;
+    if (d.home_set_id === set.id) return 'home';
+    if (d.closet_set_id === set.id) return 'closet';
+    return null;
+  };
+
+  const handleMakeDefault = useCallback(async (set) => {
+    const key = DEFAULT_KEY[set.scene_type];
+    if (!key || !set.show_id) return;
+    try {
+      const res = await putSceneDefaultsApi(set.show_id, { [key]: set.id });
+      setSceneDefaults((prev) => ({ ...prev, [String(set.show_id)]: res.data?.scene_defaults || {} }));
+      showToast(`${set.name} is now the default ${key === 'closet_set_id' ? 'closet' : 'home'}`);
+    } catch (err) {
+      console.error('[SceneSetsTab] make default failed:', err);
+      showToast(err.response?.data?.error || 'Could not save the default', 'error');
+    }
+  }, []);
 
   useEffect(() => {
     if (!focusSetId || loading || !/^[\w-]+$/.test(focusSetId)) return;
@@ -3314,6 +3367,8 @@ export default function SceneSetsTab() {
               onLoadEpisodes={loadEpisodesForShow}
               onToast={showToast}
               onRefresh={fetchSets}
+              defaultRole={defaultRoleOf(set)}
+              onMakeDefault={handleMakeDefault}
             />
           ))}
         </div>

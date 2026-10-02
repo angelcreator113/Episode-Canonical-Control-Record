@@ -20,6 +20,10 @@ module.exports = (sequelize) => {
     scene_set_id: { type: DataTypes.UUID, allowNull: false },
     episode_id: { type: DataTypes.UUID, allowNull: false },
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // L3/L6 (Evoni, 2026-10-02; §8(hh)): the set's role in the episode: home,
+    // closet, event (one each) or extra (any number, each with role_name).
+    role: { type: DataTypes.STRING(20), allowNull: true },
+    role_name: { type: DataTypes.STRING(80), allowNull: true },
   }, {
     sequelize,
     modelName: 'SceneSetEpisode',

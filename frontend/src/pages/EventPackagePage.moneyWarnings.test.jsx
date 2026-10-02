@@ -109,7 +109,9 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything());
 
     fireEvent.click(screen.getByTestId('start-anyway'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false }));
+    // Then the Episode Locations step (L3, §8(hh)); Confirm starts it.
+    fireEvent.click(await screen.findByTestId('els-confirm'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
   });
 
   test('no money warning: no block, and a complete event starts directly', async () => {
@@ -119,7 +121,8 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledWith(PREVIEW_URL));
     expect(screen.queryByTestId('money-warnings')).toBeNull();
     fireEvent.click(start);
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false }));
+    fireEvent.click(await screen.findByTestId('els-confirm'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
   });
 });

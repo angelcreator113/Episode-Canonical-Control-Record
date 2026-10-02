@@ -1,0 +1,29 @@
+/* The Episode Locations step (L3, L6). Parchment, gold and ink tokens. */
+.els-overlay { position: fixed; inset: 0; background: rgba(44, 44, 44, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; z-index: 1000; }
+.els-panel { width: 100%; max-width: 560px; box-sizing: border-box; background: var(--lala-parchment, #FAF7F0); color: var(--lala-ink, #2C2C2C); border-radius: 12px; padding: 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2); }
+.els-title { margin: 0; font-family: 'Lora', serif; font-size: 20px; }
+.els-sub { margin: 4px 0 12px; font-size: 13px; color: #6B6557; }
+.els-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #E8E0D0; }
+.els-row-body { min-width: 0; }
+.els-row-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lala-gold, #B8962E); }
+.els-row-set { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.els-ask { color: #92400e; font-weight: 600; }
+.els-thumb { width: 64px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #E8E0D0; background: #fff; }
+.els-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #94a3b8; font-family: 'DM Mono', monospace; }
+.els-btn { white-space: nowrap; padding: 6px 12px; border-radius: 8px; border: 1px solid #E8E0D0; background: #fff; color: var(--lala-ink, #2C2C2C); font-size: 12px; font-weight: 600; cursor: pointer; }
+.els-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.els-primary { background: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); color: #fff; }
+.els-add { margin-top: 8px; }
+.els-link { border: none; background: none; color: var(--lala-gold, #B8962E); font-size: 12px; cursor: pointer; padding: 4px 0; }
+.els-note { font-size: 11px; color: #92400e; margin: 2px 0 0; }
+.els-error { font-size: 12px; color: #B42318; margin: 8px 0 0; }
+.els-input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #E8E0D0; border-radius: 6px; font-size: 13px; background: #fff; }
+.els-row-extra { grid-column: 1 / -1; }
+.els-extra-name { display: flex; gap: 8px; align-items: center; }
+.els-picker { grid-column: 1 / -1; background: #fff; border: 1px solid #E8E0D0; border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.els-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
+.els-option { display: grid; gap: 4px; padding: 6px; border: 1px solid #E8E0D0; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+.els-option .els-thumb { width: 100%; height: 60px; }
+.els-option-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.els-create { display: flex; gap: 6px; }
+.els-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }

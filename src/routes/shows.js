@@ -503,6 +503,43 @@ router.put('/:id/lala-home', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/scene-defaults
+ * PUT /api/v1/shows/:id/scene-defaults   Body: { home_set_id?, closet_set_id? }
+ * Lala's home set and closet set, saved defaults for the Episode Locations
+ * step (L3, Q12; Evoni, 2026-10-02): stored on Show.metadata.scene_defaults.
+ * null clears one. The PUT keeps every other metadata key.
+ */
+router.get('/:id/scene-defaults', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readSceneDefaults } = require('../services/episodeLocationsService');
+    return res.json({ success: true, scene_defaults: readSceneDefaults(show.metadata) });
+  } catch (err) {
+    console.error('GET /shows/:id/scene-defaults error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id/scene-defaults', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const { saveSceneDefaults, EpisodeLocationsError } = require('../services/episodeLocationsService');
+    try {
+      const sceneDefaults = await saveSceneDefaults(Show.sequelize, { showId: req.params.id, body: req.body || {} });
+      return res.json({ success: true, scene_defaults: sceneDefaults });
+    } catch (err) {
+      if (err instanceof EpisodeLocationsError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('PUT /shows/:id/scene-defaults error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/financial-summary
  * Aggregated financial dashboard for the Finance page. Returns:
  *   - totals: lifetime income/expense/net + current balance

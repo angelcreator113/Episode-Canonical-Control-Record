@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader, AlertTriangle } from 'lucide-react';
 import apiClient from '../../services/api';
+import EpisodeLocationsStep from '../EpisodeLocationsStep';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -28,6 +29,11 @@ export const deleteSceneApi = (sceneId) =>
   apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
 export const getEpisodePlanApi = (episodeId) =>
   apiClient.get(`${API_BASE}/episode-brief/${episodeId}/plan`);
+// The episode's locations with their roles (L6; Evoni, 2026-10-02)
+export const getEpisodeLocationsApi = (episodeId) =>
+  apiClient.get(`${API_BASE}/episodes/${episodeId}/locations`);
+export const saveEpisodeLocationsApi = (episodeId, locations) =>
+  apiClient.put(`${API_BASE}/episodes/${episodeId}/locations`, { locations });
 export const retryFeedMomentsApi = (episodeId) =>
   apiClient.post(`${API_BASE}/episode-brief/${episodeId}/feed-moments/retry`);
 
@@ -290,6 +296,40 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   const linkedSetIds = sceneSets.map((s) => s.id);
 
+  // Edit locations (L6): the same step as Start Episode, while the episode
+  // is a draft. A changed home, closet or event takes its unlocked plan
+  // beats with it; locked beats stay (Q16).
+  const [locationsEdit, setLocationsEdit] = useState(null);
+  const [savingLocations, setSavingLocations] = useState(false);
+  const openLocations = async () => {
+    try {
+      const res = await getEpisodeLocationsApi(episodeId);
+      const data = res.data?.data || {};
+      if (data.editable === false) {
+        toast('This episode is accepted; its locations are fixed.', 'error');
+        return;
+      }
+      setLocationsEdit(data.locations || []);
+    } catch (err) {
+      console.error('Failed to load episode locations:', err);
+      toast(err.response?.data?.error || 'Could not load the episode locations', 'error');
+    }
+  };
+  const saveLocations = async (locations) => {
+    setSavingLocations(true);
+    try {
+      await saveEpisodeLocationsApi(episodeId, locations);
+      setLocationsEdit(null);
+      toast('Locations saved', 'success');
+      fetchSceneSets();
+    } catch (err) {
+      console.error('Failed to save episode locations:', err);
+      toast(err.response?.data?.error || 'Could not save the locations', 'error');
+    } finally {
+      setSavingLocations(false);
+    }
+  };
+
   return (
     <div className="est-container">
       {feedMomentCheck.missing.length > 0 && (
@@ -328,10 +368,26 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             <h3>Locations</h3>
             <span className="est-count">{sceneSets.length}</span>
           </div>
-          <button className="est-btn est-btn-primary" onClick={openPicker}>
-            <Plus size={14} /> Assign Set
-          </button>
+          <div className="est-section-actions">
+            <button className="est-btn est-btn-outline" onClick={openLocations} data-testid="est-edit-locations">
+              <MapPin size={14} /> Edit locations
+            </button>
+            <button className="est-btn est-btn-primary" onClick={openPicker}>
+              <Plus size={14} /> Assign Set
+            </button>
+          </div>
         </div>
+        {locationsEdit && (
+          <EpisodeLocationsStep
+            showId={episode?.show_id}
+            title="Episode locations"
+            confirmLabel="Save locations"
+            initial={locationsEdit}
+            busy={savingLocations}
+            onConfirm={saveLocations}
+            onCancel={() => setLocationsEdit(null)}
+          />
+        )}
 
         {loadingSets ? (
           <div className="est-loading">Loading locations...</div>

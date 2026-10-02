@@ -90,6 +90,7 @@ import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
+import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -222,6 +223,9 @@ export default function EventPackagePage() {
   const [starting, setStarting] = useState(false);
   // Start Anyway confirm (Task #1775): open while warnings are listed.
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
+  // Episode Locations step (L3, §8(hh)): the proposal shown before Start
+  // Episode creates anything; null while closed.
+  const [locationsStep, setLocationsStep] = useState(null);
   const [toast, setToast] = useState(null);
   const [seasonContext, setSeasonContext] = useState(null);
   // Episode Money Phase B, MB4 (§8(gg)): the money warnings Start Episode
@@ -919,14 +923,32 @@ export default function EventPackagePage() {
     else handleStartEpisode();
   };
 
+  // After the warnings (if any), the Episode Locations step (L3; Evoni,
+  // 2026-10-02): home, closet, the event's set and any extras, each
+  // changeable. Nothing is created until Confirm (Q13).
   const handleStartEpisode = async () => {
     if (!gatesMet || used || starting) return;
     setStartConfirmOpen(false);
     setStarting(true);
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false });
+      const res = await api.get(`/api/v1/world/${showId}/events/${eventId}/episode-locations`);
+      setLocationsStep(res.data?.data || { locations: [], missing: ['event', 'home', 'closet'] });
+    } catch (err) {
+      console.error('[EventPackage] episode locations load failed:', err);
+      setToast(err.response?.data?.error || err.message || 'Could not load the episode locations');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const confirmStartEpisode = async (locations) => {
+    if (!gatesMet || used || starting) return;
+    setStarting(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false, locations });
       if (res.data.success) {
         const ep = res.data.data.episode;
+        setLocationsStep(null);
         // Start Episode lands on Production -> Assets, where the building
         // happens (Evoni's ruling, 2026-09-25, Task #1905). A scoped
         // reversal of #1531's Checklist landing for this caller only;
@@ -937,6 +959,7 @@ export default function EventPackagePage() {
         setToast(res.data.error || 'Failed to start episode');
       }
     } catch (err) {
+      console.error('[EventPackage] start episode failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to start episode');
     } finally {
       setStarting(false);
@@ -1584,6 +1607,19 @@ export default function EventPackagePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {locationsStep && gatesMet && !used && (
+        <EpisodeLocationsStep
+          showId={showId}
+          title="Episode locations"
+          confirmLabel="Start Episode"
+          initial={locationsStep.locations}
+          missing={locationsStep.missing}
+          busy={starting}
+          onConfirm={confirmStartEpisode}
+          onCancel={() => setLocationsStep(null)}
+        />
       )}
 
       {basicsEditing && !used && (() => {
