@@ -18,6 +18,11 @@ const { Sequelize } = require('sequelize');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+// scene_set_episodes is created by these two; the file runs them itself
+// rather than relying on another test file having run first (CI orders
+// files by size and history, #2438).
+const junctionMigration = require('../../src/migrations/20260324000000-add-scene-sets-cover-and-episodes');
+const sortOrderMigration = require('../../src/migrations/20260626000001-add-sort-order-to-scene-set-episodes');
 const rolesMigration = require('../../src/migrations/20261002100000-add-scene-set-episode-roles');
 const scenePlanIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
 const { resolveSetShowId } = require('../../src/services/sceneSetUsesService');
@@ -76,7 +81,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(async () => {
     const qi = sequelize.getQueryInterface();
-    for (const m of [rolesMigration, scenePlanIdMigration]) await m.up(qi, Sequelize);
+    for (const m of [junctionMigration, sortOrderMigration, rolesMigration, scenePlanIdMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({ id: 'test-user-set-uses', email: 'u@uses.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
     await run(`INSERT INTO universes (id, name, slug, created_at, updated_at) VALUES (:universe, :name, :name, NOW(), NOW())`,
       { universe, name: `uses-${universe.slice(0, 8)}` }).catch(() => {});
