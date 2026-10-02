@@ -75,9 +75,10 @@ function venueLocationId(event) {
 
 /**
  * The scene set a venue generation makes, before it is saved: the venue's
- * name and World Location. Its description is the location's own (read by
- * the brief); only a venue with no location description takes the event
- * template's venue theme as the set's description.
+ * name and World Location, and its description. The description is the
+ * location's own, else the event's venue theme or location hint. (S5 left it
+ * empty when the location had one, so the set showed no description: fixed
+ * 2026-10-02. The brief reads the same text either way.)
  */
 function venueDraftSet(event, location) {
   const auto = automationOf(event);
@@ -88,7 +89,7 @@ function venueDraftSet(event, location) {
     scene_type: 'EVENT_LOCATION',
     show_id: event.show_id || null,
     world_location_id: location?.id || null,
-    canonical_description: location?.description ? null : (cleanText(auto.venue_theme || event.location_hint) || null),
+    canonical_description: cleanText(location?.description || auto.venue_theme || event.location_hint) || null,
   };
 }
 
