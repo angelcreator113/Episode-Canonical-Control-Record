@@ -194,4 +194,57 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(await usesOf(newA)).toMatchObject({ locations: 1, events: 1, scenes: 2 });
     expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
   });
+
+  // Bug (Evoni, 2026-10-02, production): "Move my beats" returned 500. An
+  // episode has one live location per set (scene_set_episodes_unique_pair),
+  // and the move only dropped the old location when the episode already had
+  // the replacement in the same role.
+  const locationsOf = async (ep) => (await rows(
+    'SELECT scene_set_id, role FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY role NULLS LAST', { ep }));
+  const location = (setId, ep, role) => run(`INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, sort_order, created_at, updated_at)
+               VALUES (:id, :setId, :ep, :role, 1, NOW(), NOW())`, { id: uuid(), setId, ep, role });
+
+  it('Move my beats: the replacement is already a location of the episode in another role, or has none', async () => {
+    const gone = await sceneSet("d2-Lala's Room", { deleted: true });
+    const replacement = await sceneSet("d2-Lala's bedroom");
+    const ep = await episode();
+    await useEverywhere(gone, ep); // a 'home' location, beats 1-2, their scenes, the event
+    await location(replacement, ep, null);
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: gone, to: replacement }] });
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
+    expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
+  });
+
+  it('Move my beats: two removed sets moved to the same replacement', async () => {
+    const goneA = await sceneSet("d2-Lala's Closet", { deleted: true });
+    const goneB = await sceneSet("d2-Lala's Home", { deleted: true });
+    const replacement = await sceneSet("d2-Lala's home");
+    const ep = await episode();
+    await useEverywhere(goneA, ep);
+    await location(goneB, ep, 'closet');
+
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
+      .send({ moves: [{ from: goneA, to: replacement }, { from: goneB, to: replacement }] });
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
+    expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
+  });
+
+  it('D1: deleting with a replacement the episode already has as a location keeps one location', async () => {
+    const old = await sceneSet('d2-old set');
+    const replacement = await sceneSet('d2-new set');
+    const ep = await episode();
+    await useEverywhere(old, ep);
+    await location(replacement, ep, 'extra');
+
+    const res = await auth(request(app).delete(`/api/v1/scene-sets/${old}?replacement_id=${replacement}`));
+
+    expect(res.status).toBe(200);
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'extra' }]);
+    expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
+  });
 });

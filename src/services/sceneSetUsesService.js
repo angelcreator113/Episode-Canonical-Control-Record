@@ -57,8 +57,8 @@ async function liveSet(sequelize, id, transaction) {
 /**
  * Move a set's uses to another live set; scoped to one episode when
  * episodeId is given (then the show defaults stay). An episode already
- * linked to the replacement in the same role keeps that link, and the old
- * one is removed. Returns the counts moved.
+ * linked to the replacement keeps that link, and the old one is removed.
+ * Returns the counts moved.
  */
 async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction } = {}) {
   if (!toId || toId === fromId) throw new SceneSetUsesError('Choose a different scene set as the replacement');
@@ -69,12 +69,21 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
     const [, meta] = await sequelize.query(sql, { replacements: r, transaction });
     return typeof meta?.rowCount === 'number' ? meta.rowCount : 0;
   };
-  // A location the episode already has with the replacement in that role.
+  // An episode has one live location per set (scene_set_episodes_unique_pair).
+  // Where it already has the replacement, in any role, that location is kept
+  // (taking the old location's role when it has none) and the old one is
+  // removed; moving it would duplicate the pair (the "Move my beats" 500,
+  // Evoni, 2026-10-02).
+  const oldEp = ep.replace('episode_id', 'old.episode_id');
+  await exec(`UPDATE scene_set_episodes keep SET role = old.role, updated_at = NOW()
+                FROM scene_set_episodes old
+               WHERE keep.scene_set_id = :toId AND keep.deleted_at IS NULL AND keep.role IS NULL
+                 AND old.scene_set_id = :fromId AND old.deleted_at IS NULL AND old.role IS NOT NULL
+                 AND old.episode_id = keep.episode_id${oldEp}`);
   await exec(`UPDATE scene_set_episodes old SET deleted_at = NOW(), updated_at = NOW()
-               WHERE old.scene_set_id = :fromId AND old.deleted_at IS NULL${ep.replace('episode_id', 'old.episode_id')}
+               WHERE old.scene_set_id = :fromId AND old.deleted_at IS NULL${oldEp}
                  AND EXISTS (SELECT 1 FROM scene_set_episodes keep
-                              WHERE keep.scene_set_id = :toId AND keep.episode_id = old.episode_id AND keep.deleted_at IS NULL
-                                AND COALESCE(keep.role, '') = COALESCE(old.role, ''))`);
+                              WHERE keep.scene_set_id = :toId AND keep.episode_id = old.episode_id AND keep.deleted_at IS NULL)`);
   const locations = await exec(`UPDATE scene_set_episodes SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
   const beats = await exec(`UPDATE scene_plans SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
   const events = await exec(`UPDATE world_events SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${episodeId ? ' AND used_in_episode_id = :episodeId' : ''}`);
