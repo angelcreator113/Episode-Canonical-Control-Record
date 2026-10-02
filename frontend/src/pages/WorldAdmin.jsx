@@ -7598,13 +7598,21 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
     }
     setBusy(null);
   };
+  // A started slot (A9, as changed 2026-10-01) is drafted from its episode's
+  // event and script, and the purposes Evoni edited are kept: no confirm.
   const draft = async () => {
     const edited = init.source === 'edited';
-    if (edited && !window.confirm(`${slot.label}'s intention was edited. Replace it with an AI draft?`)) return;
+    if (!started && edited && !window.confirm(`${slot.label}'s intention was edited. Replace it with an AI draft?`)) return;
     setBusy('draft');
     try {
-      await api.post(`/api/v1/world/${showId}/season/slots/${slot.id}/intention/draft`, edited ? { force: true } : {});
-      if (setToast) setToast(`${slot.label} intention drafted`);
+      const res = await api.post(`/api/v1/world/${showId}/season/slots/${slot.id}/intention/draft`, !started && edited ? { force: true } : {});
+      const d = res?.data?.data || res?.data || {};
+      const kept = d.kept_edited || 0;
+      if (setToast) {
+        setToast(started
+          ? `${slot.label} intention drafted from its episode${kept ? `; ${kept} edited purpose${kept === 1 ? '' : 's'} kept` : ''}${d.placed === null && kept ? ' (no room for the drafted purpose)' : ''}`
+          : `${slot.label} intention drafted`);
+      }
       if (onSaved) await onSaved();
       onClose();
     } catch (err) {
@@ -7621,7 +7629,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
       </div>
       {started && (
         <div data-testid="season-intention-started" style={{ fontSize: 11, color: '#92400e', marginTop: 6 }}>
-          Started: editable while its episode is a draft. Saving updates the episode's season position; it locks once the episode is accepted.
+          Started: editable while its episode is a draft. Saving updates the episode's season position; it locks once the episode is accepted. Draft with AI reads its event and script and keeps the purposes you edited.
         </div>
       )}
       <span style={label}>Story purposes (up to {MAX_PURPOSES}, one primary)</span>
@@ -7672,7 +7680,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button onClick={save} disabled={!!busy} style={S.primaryBtn}>{busy === 'save' ? 'Saving...' : 'Save'}</button>
-        {!started && <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>}
+        <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>
         <button onClick={onClose} disabled={!!busy} style={S.secBtn}>Close</button>
       </div>
     </div>

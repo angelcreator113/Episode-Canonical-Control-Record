@@ -115,9 +115,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       story_purpose: 'Lala bluffs her way in',
       story_thread_id: null,
       story_purposes: [
-        { text: 'Lala bluffs her way in', primary: true, story_thread_id: null },
-        { text: 'The rival notices', primary: false, story_thread_id: rival.id },
-        { text: '', primary: false, story_thread_id: debt.id },
+        { text: 'Lala bluffs her way in', primary: true, story_thread_id: null, source: 'edited' },
+        { text: 'The rival notices', primary: false, story_thread_id: rival.id, source: 'edited' },
+        { text: '', primary: false, story_thread_id: debt.id, source: 'edited' },
       ],
       desired_pressure: 'High',
     });
@@ -175,9 +175,6 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(sc.outcome_range).toEqual({ min: 'pass', max: 'slay' });
     const [brief] = await rows('SELECT designed_intent, allowed_outcomes FROM episode_briefs WHERE episode_id = :ep AND deleted_at IS NULL', { ep });
     expect(brief).toEqual({ designed_intent: 'slay', allowed_outcomes: ['pass', 'slay'] });
-    // Drafting stays future-only.
-    await expect(intentions.draftIntention(sequelize, show, id, { anthropic: { messages: { create: jest.fn() } }, force: true }))
-      .rejects.toMatchObject({ status: 409 });
 
     const result = await completeEpisode(ep, show, sequelize);
 
@@ -190,6 +187,61 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const late = await save(show, id, { story_purpose: 'Too late' });
     expect(late.status).toBe(409);
     expect(late.body.code).toBe('SEASON_SLOT_ACCEPTED');
+  });
+
+  // A9, as changed (Evoni, 2026-10-01): "Draft with AI is also allowed on a
+  // started slot while its episode is a draft, drafting from the episode's
+  // event and script; it never overwrites purposes I've edited."
+  test('a started slot is drafted from its episode\'s event and script, never over an edited purpose (A9 as changed)', async () => {
+    const { show, arcId } = await seedSeason();
+    const event = uuid();
+    await run(`INSERT INTO world_events (id, show_id, name, event_type, status, host, venue_name, created_at, updated_at)
+               VALUES (:event, :show, 'Velour Gala', 'invite', 'ready', 'Nia Vale', 'The Glasshouse', NOW(), NOW())`, { event, show });
+    const id = await slotId(arcId, 1);
+    await save(show, id, { story_purposes: [{ text: 'Face her', primary: true }] });
+    await auth(request(app).put(`/api/v1/world/${show}/season/slots/${id}/event`)).send({ event_id: event });
+    const started = await auth(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false });
+    const ep = started.body.data?.episode?.id || started.body.episode?.id;
+    await run("UPDATE episodes SET script_content = 'Lala arrives late; the rival is already at the bar.' WHERE id = :ep", { ep });
+    const DRAFT = { story_purpose: 'Lala turns a late entrance into a moment', career_focus: 'reputation', desired_pressure: 'High', outcome_range: { min: 'pass', max: 'slay' } };
+    const create = jest.fn(async () => ({ content: [{ text: JSON.stringify(DRAFT) }] }));
+    const draft = () => intentions.draftIntention(sequelize, show, id, { anthropic: { messages: { create } } });
+    const stored = async () => (await rows('SELECT story_purposes, career_focus, desired_pressure, intention_source FROM season_slots WHERE id = :id', { id }))[0];
+
+    const first = await draft();
+
+    const { content } = create.mock.calls[0][0].messages[0];
+    expect(content).toContain('This episode has already started');
+    expect(content).toContain('Velour Gala (invite), hosted by Nia Vale at The Glasshouse');
+    expect(content).toContain('Lala arrives late; the rival is already at the bar.');
+    expect(first).toMatchObject({ started: true, placed: 'added', kept_edited: 1 });
+    let s1 = await stored();
+    // Her purpose is kept as she wrote it; the draft is added beside it.
+    expect(s1.story_purposes.map((p) => [p.text, p.primary, p.source])).toEqual([
+      ['Face her', true, 'edited'],
+      ['Lala turns a late entrance into a moment', false, 'auto-drafted'],
+    ]);
+    expect(s1).toMatchObject({ career_focus: 'reputation', desired_pressure: 'High', intention_source: 'edited' });
+    const [{ season_context: sc }] = await rows('SELECT season_context FROM episodes WHERE id = :ep', { ep });
+    expect(sc.story_purposes.map((p) => p.text)).toEqual(['Face her', 'Lala turns a late entrance into a moment']);
+
+    // A second draft replaces its own purpose, not hers.
+    DRAFT.story_purpose = 'Lala owns the room';
+    expect(await draft()).toMatchObject({ placed: 'replaced' });
+    s1 = await stored();
+    expect(s1.story_purposes.map((p) => p.text)).toEqual(['Face her', 'Lala owns the room']);
+
+    // Saved unchanged, a drafted purpose stays drafted; one she rewrites is hers.
+    await save(show, id, { story_purposes: [{ text: 'Face her', primary: true }, { text: 'Lala owns the room' }, { text: 'Her mother calls' }] });
+    expect((await stored()).story_purposes.map((p) => p.source)).toEqual(['edited', 'auto-drafted', 'edited']);
+    await save(show, id, { story_purposes: [{ text: 'Face her', primary: true }, { text: 'Lala owns it, barely' }, { text: 'Her mother calls' }] });
+    DRAFT.story_purpose = 'Something else entirely';
+    expect(await draft()).toMatchObject({ placed: null, kept_edited: 3 });
+    expect((await stored()).story_purposes.map((p) => p.text)).toEqual(['Face her', 'Lala owns it, barely', 'Her mother calls']);
+
+    // Locked for good once the episode is accepted.
+    await run("UPDATE episodes SET evaluation_status = 'accepted' WHERE id = :ep", { ep });
+    await expect(draft()).rejects.toMatchObject({ status: 409, code: 'SEASON_SLOT_ACCEPTED' });
   });
 
   test('the threads list names every slot whose purposes continue a thread', async () => {

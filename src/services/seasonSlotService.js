@@ -437,6 +437,7 @@ function purposesWithThreads(slot, threadById) {
     return {
       text: p.text,
       primary: Boolean(p.primary),
+      source: p.source,
       story_thread: t ? { id: t.id, title: t.title, status: t.status } : null,
     };
   });

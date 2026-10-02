@@ -14,7 +14,7 @@
  * PUT    /world/:showId/season/slots/:slotId/event   — Pencil an event into a future slot, or clear it (Q5)
  * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
- * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12)
+ * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12; a started draft slot from its episode, A9 as changed)
  * GET    /world/:showId/season/event/:eventId — The Event Package's Season Context (A4), read-only
  * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9)
  * POST   /world/:showId/season/threads           — Create and name a thread (Q9)
@@ -257,7 +257,9 @@ router.put('/world/:showId/season/slots/:slotId/intention', requireAuth, async (
   }
 });
 
-// POST /world/:showId/season/slots/:slotId/intention/draft — auto-draft it (§8(ff) A3, Q12)
+// POST /world/:showId/season/slots/:slotId/intention/draft — auto-draft it (§8(ff) A3, Q12).
+// A started slot whose episode is a draft is drafted from that episode, never
+// over a purpose Evoni edited (A9, as changed 2026-10-01).
 // Body: { force } replaces an Edited intention (Evoni's confirm).
 router.post('/world/:showId/season/slots/:slotId/intention/draft', requireAuth, aiRateLimiter, async (req, res) => {
   try {
