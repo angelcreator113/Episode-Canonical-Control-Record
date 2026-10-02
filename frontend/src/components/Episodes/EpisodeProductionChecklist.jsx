@@ -376,12 +376,10 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       setLocking(false);
     }
   };
-  const sceneStepAction = {
-    plan: { label: 'Make the plan', onClick: () => { window.location.href = `/episodes/${episode.id}/plan`; } },
-    // images: the "Scene images for every beat" row has the Open Scenes button.
-    lock: { label: 'Lock all beats', onClick: lockAllBeats },
-    script: { label: 'Write the script', onClick: () => { window.location.href = `/episodes/${episode.id}/script-writer`; } },
-  }[sceneStep?.kind] || null;
+  // Each action is offered once on the list: the plan and the script by the
+  // footer's Scene Plan and Write Script, the images by their row's Open
+  // Scenes; only locking every beat has no other button.
+  const sceneStepAction = sceneStep?.kind === 'lock' ? { label: 'Lock all beats', onClick: lockAllBeats } : null;
 
   const allRequired = CHECKLIST_SECTIONS
     .flatMap(s => s.items)

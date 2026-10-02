@@ -70,10 +70,14 @@ describe('EpisodeProductionChecklist: the scenes\' next step (S9 c)', () => {
     readiness = { ready: 0, total: 0, not_ready: [] };
     const { unmount } = renderChecklist();
     expect((await screen.findByTestId('checklist-scene-next')).textContent).toContain('Next: Make the beat plan');
+    // The walkthrough: the footer's Scene Plan and Write Script buttons are
+    // these actions, so the Next line adds none.
+    expect(screen.queryByTestId('checklist-scene-next-action')).toBeNull();
     unmount();
     plan = [{ beat_number: 1, locked: true }];
     readiness = { ready: 1, total: 1, not_ready: [] };
     renderChecklist();
     expect((await screen.findByTestId('checklist-scene-next')).textContent).toContain('Next: Write the script');
+    expect(screen.queryByTestId('checklist-scene-next-action')).toBeNull();
   });
 });
