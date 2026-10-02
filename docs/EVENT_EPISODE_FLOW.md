@@ -4164,6 +4164,49 @@ As built (the Timeline save fix): `POST /episodes/:id/save` updates a scene sent
 
 As built (L12 and L12a): migration `20261002160000` adds `scenes.scene_plan_id` (nullable; one live scene per beat). Every beat with a set gets its scene row: a beat that asks for no angle is shot on its set's base image (Q21), so it counts as "a set and angle" here, else the Timeline would hold only beats 10–12. Its background is the beat's angle image (the dressed one at the look's set, L10); a beat that asks for no angle uses the event's look on its set, else the set's base image; an angle with no image yet leaves the background empty until it has one. The sync (`beatScenesService`) runs when the plan is read, when the Timeline or the Scenes tab loads the scenes, when a beat is saved, and before export, so a finished image reaches its scene the next time any of them is opened. It writes only the background, set, angle and scene number (the beat number); the Timeline's duration, characters, overlays and dialogue stay. After a re-plan, a beat's scene moves to the beat's new plan row, keeping its Timeline edits; a beat with no set, or no longer in the plan, loses its scene (soft-deleted). The Timeline's save never removes a beat's scene. The Scenes tab: the status bar (beats with images, beats locked, the next step: make the beat plan, add the missing images, lock the beats, write the script), the Locations (role, thumbnail, angle count, a link to Scene Sets, Edit locations), the beats grouped by location (the episode's locations in their order, then other sets, then no location) with their badges (Locked, Chosen by you, Event look), the missing-image actions and "Open in Studio"; tapping an unlocked row opens the Beat Plan's editor under it, a bottom sheet at 640px and below; a locked row does not open (it is unlocked in the Beat Plan). Older scenes (no `scene_plan_id`) are listed with "Open in Studio" and Remove. The scene-set picker, "Generate Angles" and "Use in Episode" are gone from the tab; `POST /episodes/:id/scenes/from-angle` stays mounted, unused by the app. The Beat Plan's editor, missing-image actions and badges are shared by both (`components/BeatPlan`).
 
+Ruling L14 (Evoni, 2026-10-02), recorded verbatim; a design note with questions comes before any build:
+
+> L14. "A scene set's angles are organised as zones of the place, not camera framings: Front (exterior, entrance, arrival), Inside (the main room), Back (backstage, private or quiet area), plus the Venue Look's event areas; home sets use their own zones (e.g. bed area, vanity, closet doors). Each zone is generated as a full establishing view of that part of the place, fully dressed, with an open area where a person could stand. Close-up or other framings are optional extras on a zone, made only when a beat needs one. Beats map to zones (arrival → Front, the event → Inside, private or reflective moments → Back)."
+
+**L14 design note (2026-10-02; read from the code at `fa701417`; nothing built).**
+
+What there is today:
+- **Angles are camera framings.** A scene set's angles are `scene_angles` rows with a free camera label (`angle_label`: WIDE, DOORWAY, ESTABLISHING, CLOSE, VANITY, WINDOW, OVERHEAD, BED, OTHER …) and, since Q18, an `angle_kind` (`exterior`, `entrance`, `main_interior`, `area`, `detail`, `other`; `constants/beatLocations.js`). The kind was backfilled from the label (ESTABLISHING → exterior, DOORWAY → entrance, WIDE → main interior).
+- **Angles are made from the base, as re-framings of it.** `generateAngle` first tries crop-and-outpaint of the set's base image (`CAMERA_CROP_MAP`: VANITY, WINDOW, BED, CLOSE …). Otherwise it does a full generation with the base as a reference image and a consistency check against it. The brief adds the continuity line "the same room as the reference image … only the camera moved". So every angle is the base room seen from another camera. A part of the place the base does not show (backstage, a closet wall) can't be cropped, and the continuity line works against it.
+- **Where angles come from.**
+  - "Suggest angles" (Claude) proposes 4–6 camera angles and areas, including one `area` angle per Venue Look event area (Q5).
+  - Its fallback, and the image-analysis fallback, create fixed home framings: WIDE, BED, VANITY, WINDOW, DETAIL.
+  - Venue generation creates an ESTABLISHING exterior and an "interior_wide".
+- **Dressed angles (L10).** At a set with the event's look, they are one Kontext edit of the look image per angle (`scene_set_look_angles`).
+- **Beat mapping (L4, Q17, Q18).** Each beat goes to its role's set (home, closet, event). Only beats 10–12 ask for angle kinds: 10 arrival → entrance or exterior; 11 and 12 the event → main interior. Every other beat uses the set's base image (Q21), unless an angle was chosen in the beat editor (L11). A missing kind shows "<Kind> angle missing — Upload image / Generate angle" (Q19).
+
+The proposed shape (recommendations; the questions below decide them):
+- **A zone is a `scene_angles` row whose `angle_kind` is a zone.** The zones are `front`, `inside`, `back`, the event areas (`area`), and named home zones (`zone`, named by `angle_name`). A framing extra is a row with `parent_angle_id` (its zone) and a camera label. That needs one migration (the parent link) and a remap of the kinds: exterior and entrance → front, main interior → inside, detail → an extra.
+- **A zone is generated as its own full view, not a crop of the base.** Its brief keeps the place layer and the furnished line. The shot becomes "Establishing view of <zone> of <place> …" with the zone's open-area line. The continuity line becomes "the same place as the reference image (materials, palette, architecture), a different part of it" rather than "only the camera moved". The base stays the style reference. It is a paid image call per zone, with the cost shown first (S2).
+- **An extra is made from its zone's image.** It is a crop or outpaint where possible, else Kontext. It is made only from a beat's "Add a framing" action.
+- **Beats map to zones.** 10 → Front; 11 and 12 → Inside; the "private or reflective" beats → Back (see Q4). Home and closet beats use home zones by a per-beat default (see Q5). The Q19 missing message names the zone ("Back zone missing — Upload image / Generate zone").
+
+Questions:
+1. **Inside and the base.** Is a set's Inside zone its base image (the approved base, S6), so Inside needs no extra generation? Or is Inside a separate generated zone beside the base? Recommended: Inside is the base.
+2. **Front.** Front covers "exterior, entrance, arrival". Is it one image, or may a set have both an exterior and an entrance as two Front views? Recommended: one Front zone; a second view is a framing extra.
+3. **Event areas.** A Venue Look's areas (bar, runway, VIP) exist only for that event. Are they zones of the plain set (a plain bar that every event then dresses), or dressed zones made from the event's look only (L10's per-look table)? Recommended: dressed zones per look; the plain set keeps Front, Inside, Back.
+4. **Which beats are "private or reflective"?** At the event only beats 10–12 exist today, and all three are mapped. Should a beat at the event's set be able to choose Back in the beat editor (L11) with no fixed mapping? Or should a fixed beat (e.g. 12, Deliverable Creation) go to Back? Recommended: no fixed beat; Back is offered in the editor and suggested by the planner from the beat's text.
+5. **Home zones.** Which zones does a home set get by default (bed area, vanity, closet doors, a window seat?), and which home beats go to which? Recommended: the set's zones come from "Suggest zones" (Claude, from the description). Home beats keep the base (Inside) unless a beat chooses a zone; no fixed home mapping.
+6. **Existing angles.** Angles already made are camera framings of the base. Should they be kept and re-kinded (WIDE → Inside, ESTABLISHING/DOORWAY → Front, the rest → extras on Inside)? Or kept as they are, outside the zone model? Recommended: re-kind by the same backfill rule; no image is regenerated or deleted.
+7. **Back.** Is Back always offered for an event location, even when the description names no backstage or private area? Or only when the description has one? Recommended: offered always, generated only on request (cost first).
+8. **The closet role.** Is the closet a separate set (as today) or a home zone ("closet doors" in the ruling)? Recommended: keep the closet role; "closet doors" is a home zone seen from the bedroom.
+9. **Build order.** Recommended:
+   - (a) the zone kinds, the remap and the beat mapping (no image calls);
+   - (b) zone generation (its brief and S2 cost);
+   - (c) framing extras;
+   - (d) dressed event-area zones.
+
+   One PR each, stopping before push.
+
+> L14 answers (Evoni, 2026-10-02): "accept recommendations 1–9 as written. Record them verbatim in §8(hh). For (b): each zone is generated with the set's approved base (or its base, if none is approved) as the style and architecture reference, so Front, Inside and Back read as one place; show the cost first. Yes: push the L14 note now (docs), merge when green. Build (a), stopping before push. Delete-or-keep for claude/scene-overlay-per-angle: drop it; fold its floor wording into (b)."
+
+The per-angle floor wording (the unpushed `claude/scene-overlay-per-angle`, dropped) goes into (b)'s zone shot lines.
+
 ---
 
 ## 9. Owed before enforcement
