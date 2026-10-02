@@ -12,6 +12,9 @@
  *   Locations step summarises them;
  * - suggest-angles offers the event's areas as angles, with kinds, on the
  *   14 beats (Q5).
+ * L14 (2026-10-02, answers 1-9) made the kinds zones: arrival → Front, the
+ * event → Inside (the base unless an Inside angle has an image, so never
+ * missing); tests/integration/l14Zones.integration.test.js covers it.
  * The AI client is mocked.
  */
 jest.unmock('uuid');
@@ -88,9 +91,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await sceneSet('closet', 'CLOSET');
     await sceneSet('glasshouse', 'EVENT_LOCATION');
     await sceneSet('bare', 'EVENT_LOCATION');
-    await angle(sets.apartment, 'WIDE', { name: 'Living room', kind: 'main_interior' });
-    await angle(sets.glasshouse, 'DOORWAY', { name: 'Glass doors', kind: 'entrance' });
-    await angle(sets.glasshouse, 'WIDE', { name: 'Main hall', kind: 'main_interior' });
+    await angle(sets.apartment, 'WIDE', { name: 'Living room', kind: 'inside' });
+    await angle(sets.glasshouse, 'DOORWAY', { name: 'Glass doors', kind: 'front' });
+    await angle(sets.glasshouse, 'WIDE', { name: 'Main hall', kind: 'inside' });
     await angle(sets.glasshouse, 'CLOSE', { name: 'Bar detail' });
   });
   beforeEach(() => {
@@ -155,13 +158,13 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(beats.find((b) => b.beat_number === 8).scene_set_id).toBe(sets.apartment);
   });
 
-  it('the plan names each missing angle by kind, and the step summarises them (Q19)', async () => {
+  it('the plan names each missing zone, and the step summarises them (Q19, L14)', async () => {
     const event = await readyEvent(sets.bare);
     const proposal = await auth(request(app).get(`/api/v1/world/${show}/events/${event}/episode-locations`));
-    expect(proposal.body.data.angle_gaps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: 'event', scene_set_id: sets.bare, text: 'Entrance or exterior angle missing', beats: [10] }),
-      expect.objectContaining({ role: 'event', scene_set_id: sets.bare, text: 'Main interior angle missing', beats: [11, 12] }),
-    ]));
+    // Inside is the base (L14, answer 1): only the Front is missing.
+    expect(proposal.body.data.angle_gaps.filter((g) => g.scene_set_id === sets.bare)).toEqual([
+      expect.objectContaining({ role: 'event', scene_set_id: sets.bare, text: 'Front zone missing', beats: [10] }),
+    ]);
 
     const res = await start(event, [
       { role: 'event', scene_set_id: sets.bare },
@@ -172,25 +175,25 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(got.status).toBe(200);
     const beat = (n) => got.body.data.find((b) => b.beat_number === n);
     expect(beat(10).location).toMatchObject({
-      role: 'event', kinds: ['entrance', 'exterior'],
-      missing: { reason: 'no_angle', label: 'DOORWAY', name: 'Entrance', text: 'Entrance or exterior angle missing', angle_id: null },
+      role: 'event', kinds: ['front'],
+      missing: { reason: 'no_angle', label: 'ESTABLISHING', name: 'Front', text: 'Front zone missing', angle_id: null },
     });
-    expect(beat(11).location.missing).toMatchObject({ reason: 'no_angle', label: 'WIDE', name: 'Main interior' });
+    expect(beat(11).location.missing).toBeNull();
     expect(beat(1).location.missing).toBeNull();
 
     // An angle of the kind without an image: "has no image", with its id.
-    const pending = await angle(sets.bare, 'DOORWAY', { name: 'Side door', kind: 'entrance', image: false });
+    const pending = await angle(sets.bare, 'DOORWAY', { name: 'Side door', kind: 'front', image: false });
     const again = await auth(request(app).get(`/api/v1/episode-brief/${ep}/plan`));
     expect(again.body.data.find((b) => b.beat_number === 10).location.missing).toMatchObject({
-      reason: 'no_image', angle_id: pending, text: 'Side door angle has no image',
+      reason: 'no_image', angle_id: pending, text: 'Side door zone has no image',
     });
     // L5, Q21: the plan's readiness, flagged; beats on the apartment's base
     // have no base image here, the event beats lack their angles.
     expect(again.body.readiness.total).toBe(14);
-    expect(again.body.readiness.not_ready.find((b) => b.beat_number === 10).text).toBe('Side door angle has no image');
+    expect(again.body.readiness.not_ready.find((b) => b.beat_number === 10).text).toBe('Side door zone has no image');
     expect(again.body.readiness.not_ready.find((b) => b.beat_number === 1).text).toBe('apartment has no base image');
     const locs = await auth(request(app).get(`/api/v1/episodes/${ep}/locations`));
-    expect(locs.body.data.angle_gaps.map((g) => g.text)).toEqual(expect.arrayContaining(['Side door angle has no image', 'Main interior angle missing']));
+    expect(locs.body.data.angle_gaps.map((g) => g.text)).toEqual(['Side door zone has no image']);
   });
 
   it('the AI planner keeps the mapping whatever the AI answers (Q17)', async () => {
@@ -214,18 +217,18 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(at(11)).toMatchObject({ scene_set_id: sets.glasshouse, angle_label: 'WIDE' });
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
     expect(prompt).toContain("## The Episode's Locations (fixed)");
-    expect(prompt).toContain(`10. event: glasshouse (ID ${sets.glasshouse}), entrance or exterior angle`);
+    expect(prompt).toContain(`10. event: glasshouse (ID ${sets.glasshouse}), front zone`);
     expect((await plan(ep)).find((b) => b.beat_number === 10).angle_label).toBe('DOORWAY');
   });
 
-  it('an angle is created and updated with its kind; an unknown kind is refused (Q18)', async () => {
+  it('an angle is created and updated with its kind; an unknown kind is refused (Q18, L14)', async () => {
     const bad = await auth(request(app).post(`/api/v1/scene-sets/${sets.bare}/angles`)).send({ angle_label: 'OTHER', angle_name: 'Roof', angle_kind: 'roof' });
     expect(bad.status).toBe(400);
-    const made = await auth(request(app).post(`/api/v1/scene-sets/${sets.bare}/angles`)).send({ angle_label: 'ESTABLISHING', angle_name: 'Front', angle_kind: 'exterior' });
+    const made = await auth(request(app).post(`/api/v1/scene-sets/${sets.bare}/angles`)).send({ angle_label: 'ESTABLISHING', angle_name: 'Front', angle_kind: 'front' });
     expect(made.status).toBe(201);
-    expect(made.body.data.angle_kind).toBe('exterior');
-    const patched = await auth(request(app).patch(`/api/v1/scene-sets/${sets.bare}/angles/${made.body.data.id}`)).send({ angle_kind: 'entrance' });
-    expect(patched.body.data.angle_kind).toBe('entrance');
+    expect(made.body.data.angle_kind).toBe('front');
+    const patched = await auth(request(app).patch(`/api/v1/scene-sets/${sets.bare}/angles/${made.body.data.id}`)).send({ angle_kind: 'back' });
+    expect(patched.body.data.angle_kind).toBe('back');
   });
 
   it('suggest-angles offers the event areas as angles, with kinds, on the 14 beats (Q5)', async () => {
@@ -244,7 +247,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(prompt).toContain('14. Cliffhanger (HOME_BASE)');
     const byName = Object.fromEntries(res.body.data.map((s) => [s.angle_name, s]));
     expect(byName.Runway).toMatchObject({ angle_kind: 'area', beat_affinity: [11, 12] });
-    expect(byName['Front steps']).toMatchObject({ angle_kind: 'exterior', beat_affinity: [10] });
+    expect(byName['Front steps']).toMatchObject({ angle_kind: 'front', beat_affinity: [10] });
     expect(byName.Bar).toMatchObject({ angle_kind: 'area', angle_label: 'OTHER' });
     expect(byName['VIP lounge']).toMatchObject({ angle_kind: 'area' });
   });

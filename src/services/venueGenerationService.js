@@ -235,6 +235,7 @@ async function generateVenueImages(event, models, options = {}) {
             scene_set_id: sceneSet.id,
             angle_name: `${draft.name} — Exterior`,
             angle_label: 'ESTABLISHING',
+            angle_kind: 'front', // L14
             still_image_url: exteriorS3Url,
             runway_prompt: exteriorPrompt,
             generation_status: 'complete',
@@ -249,6 +250,7 @@ async function generateVenueImages(event, models, options = {}) {
           scene_set_id: sceneSet.id,
           angle_name: `${draft.name} — Event Space`,
           angle_label: 'interior_wide',
+          angle_kind: 'inside', // L14
           still_image_url: s3Url,
           runway_prompt: interiorPrompt,
           generation_status: 'complete',

@@ -23,9 +23,12 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(50),
       allowNull: false,
     },
-    // exterior | entrance | main_interior | area | detail | other (Q18,
-    // §8(hh); src/constants/beatLocations.js) — migration 20261002120000.
+    // L14 zones: front | inside | back | area | zone, or extra (a framing on
+    // a zone); src/constants/beatLocations.js — migrations 20261002120000
+    // (Q18) and 20261002170000 (L14).
     angle_kind: { type: DataTypes.STRING(30), allowNull: true },
+    // L14: the zone an extra framing belongs to; none = Inside (the base).
+    zone_angle_id: { type: DataTypes.UUID, allowNull: true },
     angle_description: { type: DataTypes.TEXT, allowNull: true },
     camera_direction: { type: DataTypes.TEXT, allowNull: true },
     beat_affinity: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },

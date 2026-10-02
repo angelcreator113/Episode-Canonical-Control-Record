@@ -86,7 +86,7 @@ async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   const sequelizeDb = require('../models').sequelize;
   const { listLocations } = require('./episodeLocationsService');
   const { setsByRole, placeBeat, loadSetAngles } = require('./planLocationsService');
-  const { kindsText } = require('../constants/beatLocations');
+  const { kindsText, kindNoun } = require('../constants/beatLocations');
   let roleSets = {};
   let anglesBySet = new Map();
   let roleContexts = new Map();
@@ -176,7 +176,7 @@ Each beat is set at this location; choose its shot, intent and transition to fit
 ${BEAT_STRUCTURE.map((b) => {
     const placed = placeBeat(b.number, roleSets, anglesBySet);
     const set = roleContexts.get(placed.scene_set_id);
-    return `${b.number}. ${placed.role}: ${set ? `${set.name} (ID ${set.id})` : 'no set chosen'}${placed.kinds.length ? `, ${kindsText(placed.kinds).toLowerCase()} angle` : ''}`;
+    return `${b.number}. ${placed.role}: ${set ? `${set.name} (ID ${set.id})` : 'no set chosen'}${placed.kinds.length ? `, ${kindsText(placed.kinds).toLowerCase()} ${kindNoun(placed.kinds)}` : ''}`;
   }).join('\n')}
 ` : ''}
 ## Task

@@ -1024,7 +1024,7 @@ ${CANONICAL_BEATS.map((b) => `${b.number}. ${b.name} (${b.typical_location})`).j
 
 Return ONLY a JSON array with objects containing:
 - angle_label: one of the valid labels above
-- angle_kind: one of the valid kinds above (exterior, entrance, main_interior for the main space, area for a named area)
+- angle_kind: one of the valid kinds above, a zone of the place (front: exterior, entrance, arrival; inside: the main room; back: backstage, private or quiet area; area: a named event area; zone: a named area of a home, e.g. bed area, vanity) or extra (a close-up or other framing)
 - angle_name: a short descriptive name (2-4 words, e.g. "Glass Door Entrance")
 - camera_direction: detailed camera placement and framing description (1-2 sentences)
 - description: what this angle captures and why it matters for storytelling (1 sentence)
@@ -1124,6 +1124,20 @@ Write a concise camera placement and framing direction (1-2 sentences). Describe
 
 // ─── POST /:id/angles  — add an angle to a scene set ────────────────────────
 
+/**
+ * L14 (§8(hh)): an extra framing may name its zone (zone_angle_id): a live
+ * zone angle of the same set. Returns an error message, or null.
+ */
+async function zoneAngleError(setId, kind, zoneAngleId) {
+  if (zoneAngleId == null || zoneAngleId === '') return null;
+  if (kind !== 'extra') return 'zone_angle_id is only for an extra framing (angle_kind "extra")';
+  const { ZONE_KINDS } = require('../constants/beatLocations');
+  const zone = await SceneAngle.findOne({ where: { id: zoneAngleId, scene_set_id: setId }, attributes: ['id', 'angle_kind'] })
+    .catch((err) => { console.error('Scene Sets zone angle lookup failed:', err.message); return null; });
+  if (!zone || !ZONE_KINDS.includes(zone.angle_kind)) return 'zone_angle_id must be a zone of this scene set';
+  return null;
+}
+
 router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
@@ -1140,16 +1154,19 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
       style_reference_url,
       variation_count,
       angle_kind,
+      zone_angle_id,
     } = req.body;
 
     if (!angle_label || !angle_name) {
       return res.status(400).json({ success: false, error: 'angle_name and angle_label are required' });
     }
-    // Q18 (§8(hh)): the angle's kind, beside its free label.
+    // Q18 (§8(hh)): the angle's kind, beside its free label; L14's zones.
     const { ANGLE_KINDS } = require('../constants/beatLocations');
     if (angle_kind != null && angle_kind !== '' && !ANGLE_KINDS.includes(angle_kind)) {
       return res.status(400).json({ success: false, error: `angle_kind must be one of ${ANGLE_KINDS.join(', ')}` });
     }
+    const zoneError = await zoneAngleError(set.id, angle_kind, zone_angle_id);
+    if (zoneError) return res.status(400).json({ success: false, error: zoneError });
 
     const angle = await SceneAngle.create({
       scene_set_id: set.id,
@@ -1163,6 +1180,7 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
       style_reference_url: style_reference_url || null,
       variation_count: variation_count || 1,
       angle_kind: angle_kind || null,
+      zone_angle_id: zone_angle_id || null,
       generation_status: 'pending',
     });
 
@@ -1320,7 +1338,7 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, async
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity', 'generation_status', 'angle_kind'];
+    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity', 'generation_status', 'angle_kind', 'zone_angle_id'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1331,6 +1349,17 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, async
       if (updates.angle_kind !== null && !ANGLE_KINDS.includes(updates.angle_kind)) {
         return res.status(400).json({ success: false, error: `angle_kind must be one of ${ANGLE_KINDS.join(', ')}` });
       }
+    }
+    // L14: an extra's zone; an angle that is no longer an extra has none.
+    if (updates.zone_angle_id === '') updates.zone_angle_id = null;
+    const kindAfter = updates.angle_kind !== undefined ? updates.angle_kind : angle.angle_kind;
+    if (kindAfter !== 'extra') {
+      if (updates.zone_angle_id) return res.status(400).json({ success: false, error: 'zone_angle_id is only for an extra framing (angle_kind "extra")' });
+      if (angle.zone_angle_id) updates.zone_angle_id = null;
+    } else if (updates.zone_angle_id !== undefined) {
+      if (updates.zone_angle_id === angle.id) return res.status(400).json({ success: false, error: 'An angle cannot be its own zone' });
+      const zoneError = await zoneAngleError(req.params.id, 'extra', updates.zone_angle_id);
+      if (zoneError) return res.status(400).json({ success: false, error: zoneError });
     }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, error: 'No updatable fields provided' });

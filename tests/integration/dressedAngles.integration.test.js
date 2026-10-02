@@ -58,7 +58,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const dressedUrl = (ep, angleId, tail) => `/api/v1/episode-brief/${ep}/dressed-angles/${angleId}/${tail}`;
 
   /**
-   * A venue with an approved base, its set with a plain DOORWAY (entrance)
+   * A venue with an approved base, its set with a plain DOORWAY (Front, L14)
    * angle, an event linked to an episode, and that episode's plan: beat 10
    * at the venue's set, beat 1 at home. look: 'complete' | 'generating' | null.
    */
@@ -71,7 +71,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                       (:home, 'Lala apartment', 'HOME_BASE', :show, NULL, 'https://x/home.jpg', 'complete', NOW(), NOW())`,
     { set, home, show, loc });
     await run(`INSERT INTO scene_angles (id, scene_set_id, angle_label, angle_name, angle_kind, still_image_url, generation_status, created_at, updated_at)
-               VALUES (:angle, :set, 'DOORWAY', 'Entrance', 'entrance', :plainImage, :status, NOW(), NOW())`,
+               VALUES (:angle, :set, 'DOORWAY', 'Entrance', 'front', :plainImage, :status, NOW(), NOW())`,
     { angle, set, plainImage, status: plainImage ? 'complete' : 'pending' });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
                VALUES (:ep, :show, 'Gala ep', :n, 'draft', NOW(), NOW())`, { ep, show, n: Math.floor(Math.random() * 100000) + 300 });
