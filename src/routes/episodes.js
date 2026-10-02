@@ -232,36 +232,45 @@ router.post(
         await episodeRecord.update(episodeUpdate, { transaction: t });
       }
 
-      // 2. Upsert scenes
-      let _savedSceneCount = 0;
+      // 2. Upsert scenes, in place (Evoni's answer L12a, 2026-10-02,
+      // docs/EVENT_EPISODE_FLOW.md §8(hh): "the Timeline's save updates rows
+      // in place instead of deleting and recreating them"). A scene sent
+      // with the id of one of this episode's live scenes updates it, keeping
+      // its id, its dialogue clips when none are sent, and the Scene Studio
+      // work that hangs off it (scene_assets, object variants). Any other
+      // scene is created. A live scene not sent is soft-deleted. The editor
+      // learns the new ids from sceneIds (client_id -> id).
+      const sceneIds = [];
       if (scenes && Array.isArray(scenes)) {
-        // Delete existing scenes for this episode, then bulk create
-        const deletedCount = await Scene.destroy({ where: { episode_id: id }, transaction: t, force: true });
-        console.log(`[Save] Deleted ${deletedCount} existing scenes`);
-
-        if (scenes.length > 0) {
-          const created = await Scene.bulkCreate(
-            scenes.map((scene, idx) => ({
-              episode_id: id,
-              scene_number: scene.scene_number || idx + 1,
-              title: scene.title || `Scene ${idx + 1}`,
-              duration_seconds: scene.duration_seconds || 5.0,
-              background_url: scene.background_url || null,
-              characters: scene.characters || [],
-              ui_elements: scene.ui_elements || [],
-              dialogue_clips: scene.dialogue_clips || [],
-              scene_set_id: scene.scene_set_id || null,
-              scene_angle_id: scene.scene_angle_id || null,
-            })),
-            { transaction: t }
-          );
-          _savedSceneCount = created.length;
-          console.log(`[Save] Created ${created.length} scenes`);
-          if (scenes.length > 0) {
-            console.log(`[Save] Scene 1 background_url: ${scenes[0].background_url || 'null'}`);
-            console.log(`[Save] Scene 1 characters: ${JSON.stringify(scenes[0].characters || []).substring(0, 100)}`);
+        const existing = await Scene.findAll({ where: { episode_id: id }, transaction: t });
+        const byId = new Map(existing.map((row) => [String(row.id), row]));
+        const kept = new Set();
+        for (const [idx, scene] of scenes.entries()) {
+          const fields = {
+            scene_number: scene.scene_number || idx + 1,
+            title: scene.title || `Scene ${idx + 1}`,
+            duration_seconds: scene.duration_seconds || 5.0,
+            background_url: scene.background_url || null,
+            characters: scene.characters || [],
+            ui_elements: scene.ui_elements || [],
+            scene_set_id: scene.scene_set_id || null,
+            scene_angle_id: scene.scene_angle_id || null,
+          };
+          if (scene.dialogue_clips !== undefined) fields.dialogue_clips = scene.dialogue_clips || [];
+          const row = scene.id != null ? byId.get(String(scene.id)) : null;
+          if (row && !kept.has(row.id)) {
+            await row.update(fields, { transaction: t });
+            kept.add(row.id);
+            sceneIds.push({ client_id: scene.id, id: row.id });
+          } else {
+            const created = await Scene.create({ episode_id: id, dialogue_clips: [], ...fields }, { transaction: t });
+            kept.add(created.id);
+            sceneIds.push({ client_id: scene.id ?? null, id: created.id });
           }
         }
+        const removed = existing.filter((row) => !kept.has(row.id));
+        for (const row of removed) await row.destroy({ transaction: t });
+        console.log(`[Save] Scenes: ${scenes.length} saved (${sceneIds.filter((m) => String(m.client_id) !== String(m.id)).length} new), ${removed.length} removed`);
       }
 
       // 3. Upsert timeline data
@@ -285,13 +294,14 @@ router.post(
         }
       }
 
-      return { success: true };
+      return { success: true, sceneIds };
     });
 
     res.json({
       success: true,
       message: 'Saved successfully',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      scenes: _result.sceneIds,
     });
   })
 );

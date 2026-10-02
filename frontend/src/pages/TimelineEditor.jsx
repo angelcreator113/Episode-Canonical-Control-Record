@@ -7,6 +7,7 @@ import KeyframePropertyEditor from '../components/Timeline/KeyframePropertyEdito
 import SaveIndicator from '../components/SaveIndicator/SaveIndicator';
 import ExportDropdown from '../components/ExportDropdown/ExportDropdown';
 import useSaveManager from '../hooks/useSaveManager';
+import { adoptSceneIds } from '../utils/sceneIds';
 import LandscapeRequired from '../components/LandscapeRequired';
 import { episodeAPI, platformAPI, sceneAPI, timelineDataAPI } from '../services/api';
 import { API_URL } from '../config/api';
@@ -86,11 +87,22 @@ function TimelineEditor() {
     timeline: { beats, markers, audioClips, characterClips, keyframes },
   }), [episode, platform, scenes, beats, markers, audioClips, characterClips, keyframes, currentPlatform]);
 
+  // L12a (§8(hh)): scenes the save created take their row's id.
+  const adoptSavedSceneIds = useCallback((body) => {
+    if (!Array.isArray(body?.scenes)) return;
+    setScenes((prev) => adoptSceneIds(prev, body.scenes));
+    // A selected scene that took a new id stays selected.
+    const renamed = new Map(body.scenes.filter((m) => m?.client_id != null && m.id && !String(m.client_id).match(/^[0-9a-f-]{36}$/i))
+      .map((m) => [String(m.client_id), m.id]));
+    if (renamed.size) setSelectedScene((cur) => (cur != null && renamed.has(String(cur)) ? renamed.get(String(cur)) : cur));
+  }, []);
+
   const { saveStatus, lastSaved, errorMessage, save, markDirty } = useSaveManager({
     episodeId,
     getSavePayload,
     autoSaveDelay: 3000,
-    enabled: true
+    enabled: true,
+    onSaved: adoptSavedSceneIds,
   });
 
   // ── Undo / Redo history ──

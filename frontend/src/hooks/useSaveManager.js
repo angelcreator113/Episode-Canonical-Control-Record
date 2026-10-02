@@ -17,12 +17,15 @@ import { saveEpisodeData } from '../services/api';
  * @param {Function} options.getSavePayload - Returns { episode, scenes, ...extras } to save
  * @param {number} [options.autoSaveDelay=3000] - Ms to debounce auto-save
  * @param {boolean} [options.enabled=true] - Enable/disable auto-save
+ * @param {Function} [options.onSaved] - Called with the save response's body
+ *   (the Timeline adopts the ids of scenes the save created, L12a)
  */
 export default function useSaveManager({
   episodeId,
   getSavePayload,
   autoSaveDelay = 3000,
-  enabled = true
+  enabled = true,
+  onSaved = null,
 }) {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved' | 'error'
   const [lastSaved, setLastSaved] = useState(null);
@@ -38,10 +41,12 @@ export default function useSaveManager({
   // save the state from BEFORE the change that triggered markDirty().
   const getSavePayloadRef = useRef(getSavePayload);
   const episodeIdRef = useRef(episodeId);
+  const onSavedRef = useRef(onSaved);
 
   // Keep refs in sync with latest values every render
   useEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
   useEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
+  useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -80,6 +85,7 @@ export default function useSaveManager({
       const response = await saveEpisodeData(currentEpisodeId, payload);
 
       if (isMountedRef.current) {
+        onSavedRef.current?.(response?.data || null);
         setSaveStatus('saved');
         setLastSaved(new Date());
         console.log(`[SaveManager] ✅ Save successful — ${sceneCount} scenes saved at ${new Date().toLocaleTimeString()}`);

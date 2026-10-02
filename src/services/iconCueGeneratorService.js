@@ -100,7 +100,7 @@ class IconCueGeneratorService {
     // Get scenes with metadata
     const scenesResult = await pool.query(
       `SELECT * FROM scenes 
-       WHERE episode_id = $1 
+       WHERE episode_id = $1 AND deleted_at IS NULL
        ORDER BY scene_number ASC`,
       [episodeId]
     );

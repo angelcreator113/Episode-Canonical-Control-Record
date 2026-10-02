@@ -120,7 +120,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
       `SELECT b.id, b.beat_type, b.label, b.payload::text AS payload_text, b.start_time
        FROM beats b
        JOIN scenes s ON s.id = b.scene_id
-       WHERE s.episode_id = :episodeId AND b.deleted_at IS NULL
+       WHERE s.episode_id = :episodeId AND s.deleted_at IS NULL AND b.deleted_at IS NULL
        ORDER BY b.start_time DESC NULLS LAST
        LIMIT 8`,
       { replacements: { episodeId } }
