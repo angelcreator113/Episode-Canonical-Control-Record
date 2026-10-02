@@ -725,3 +725,11 @@
   .est-beat-side { justify-content: flex-start; flex: 1 1 100%; }
   .est-location-detail { align-items: flex-start; }
 }
+
+/* The walkthrough (2026-10-02): a beat that needs attention says so on its row. */
+.est-beat.is-attention { border-color: #e8c99a; box-shadow: inset 3px 0 0 #d9a24a; }
+.est-beat-attention { font-size: 12px; font-weight: 600; color: #8a5a1a; overflow-wrap: anywhere; }
+.est-beat-details { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.est-beat-details p { white-space: normal; }
+/* The text column never grows past the row: long lines wrap or end in an ellipsis. */
+.est-beat-text { grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; }

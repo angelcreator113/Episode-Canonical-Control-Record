@@ -150,4 +150,28 @@ describe('EpisodeScenesTab, the compact layout (S9 b)', () => {
     // Its repair action stays on the row.
     expect(screen.getByTestId('beat-missing-10').textContent).toContain('Front zone missing');
   });
+
+  // The walkthrough (2026-10-02): a beat at a removed set looked ready on its
+  // row. Each beat that needs attention says so on its own row.
+  test('a beat that needs attention is marked on its row; a removed set points to Move my beats', async () => {
+    PLAN.push(beat(5, { id: 'set-gone', name: "Lala's Room", base_still_url: 'https://x/old.jpg', removed: true }, {
+      location: { role: 'home', kinds: [], angle: null, missing: null, image: { url: 'https://x/old.jpg', source: 'base', label: "Lala's Room · Inside (removed from Scene Sets)" } },
+    }));
+    const notReady = [
+      { beat_number: 5, beat_name: 'Beat 5', text: "Lala's Room was removed", fix: { kind: 'removed_set', scene_set_id: 'set-gone' } },
+      { beat_number: 10, beat_name: 'Beat 10', text: 'Front zone missing', fix: { kind: 'scene_set', scene_set_id: 'set-venue', zone: 'front' } },
+    ];
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: PLAN, readiness: { ready: 3, total: 5, not_ready: notReady } } };
+      if (url === '/api/v1/episodes/ep-1/locations') return { data: { success: true, data: LOCATIONS } };
+      return { data: { data: [] } };
+    });
+    renderTab();
+    expect((await screen.findByTestId('est-attention-5')).textContent).toBe('Needs attention: Lala\'s Room was removed. Choose its replacement in Move my beats, above.');
+    // A missing zone already has its repair box on the row: marked, not repeated.
+    expect(screen.queryByTestId('est-attention-10')).toBeNull();
+    expect(screen.getByTestId('est-beat-10').closest('li').className).toContain('is-attention');
+    expect(screen.queryByTestId('est-attention-1')).toBeNull();
+    expect(screen.getByTestId('est-beat-5').closest('li').className).toContain('is-attention');
+  });
 });

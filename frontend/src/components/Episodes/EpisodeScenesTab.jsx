@@ -324,6 +324,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
   const total = plan.length;
   const locked = plan.filter((b) => b.locked).length;
   const issues = readiness?.not_ready || [];
+  const issueByBeat = new Map(issues.map((i) => [i.beat_number, i]));
   const step = nextStep(plan, readiness);
   const groups = groupBeats(plan, locations.locations);
   const storyOrder = [...plan].sort((a, b) => a.beat_number - b.beat_number);
@@ -493,7 +494,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
         ) : total === 0 ? (
           <p className="est-empty-hint">No beat plan yet. <Link to={`/episodes/${episodeId}/plan`}>Make the beat plan</Link> to map the 14 beats to the locations.</p>
         ) : (grouped ? groups : [{ key: 'story', title: null, beats: storyOrder }]).map((g) => (
-          <div key={g.key} className={g.title ? 'est-beat-group' : 'est-beat-story'} data-testid={`est-group-${g.key}`}>
+          <div key={g.key} className={g.title ? 'est-beat-group' : 'est-beat-list'} data-testid={`est-group-${g.key}`}>
             {g.title && <h4 className="est-beat-group-title">{g.title}</h4>}
             <ul className="est-beats">
               {g.beats.map((beat) => {
@@ -502,9 +503,10 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                 const reference = Boolean(beat.location?.missing && img);
                 const editing = editingNumber === n;
                 const detailsOpen = openDetails === n;
+                const issue = issueByBeat.get(n);
                 const change = () => { if (!beat.locked) beats.openEditor(beat); };
                 return (
-                  <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}`}>
+                  <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}${issue ? ' is-attention' : ''}`}>
                     <div className="est-beat-main" data-testid={`est-beat-${n}`}>
                       <span className="est-beat-thumb-wrap">
                         {img
@@ -516,11 +518,17 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                         <span className="est-beat-name"><span className="est-beat-num">{n}</span> {beat.beat_name}</span>
                         {beat.scene_context && <span className="est-beat-story" data-testid={`est-story-${n}`}>{beat.scene_context}</span>}
                         <span className="est-beat-where" data-testid={`est-where-${n}`}>{whereText(beat)}</span>
+                        {/* Said once: a missing zone's repair box (MissingAngle) already names it. */}
+                        {issue && !beat.location?.missing && (
+                          <span className="est-beat-attention" data-testid={`est-attention-${n}`}>
+                            Needs attention: {issue.text}{issue.fix?.kind === 'removed_set' ? '. Choose its replacement in Move my beats, above.' : ''}
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="est-beat-side">
                       <MissingAngle beat={beat} {...beats.missingPropsFor(beat)} />
-                      <button type="button" className="est-btn est-btn-primary est-btn-sm" onClick={change} disabled={beat.locked}
+                      <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={change} disabled={beat.locked}
                         aria-label={`Change background for beat ${n}`}
                         title={beat.locked ? 'Locked: unlock it in Details to change it' : undefined}>
                         Change background

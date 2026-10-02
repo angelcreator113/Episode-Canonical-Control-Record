@@ -4461,6 +4461,13 @@ As built, S9 (b) (the compact layout):
 - **The base's label** on the server (`beatPicture`) is "<set> · Inside" in place of "<set> · base", on the Beat Plan page too.
 - **Not changed in (b):** the locked count and the next step (they go with (c)); the Beat Plan page's own controls (d).
 
+The walkthrough of (b) (2026-10-02, the Scenes tab rendered in a browser with a 14-beat sample episode at 1280px and 375px; Evoni: "hold merge approval until … you can see the running layout") found, and (b) now fixes:
+- **A beat at a removed set looked ready on its row.** Each beat that needs attention is marked on its row (a gold edge). When no repair box already says what is wrong (a removed set, no base, no location), the row says so too: "Needs attention: Lala's Room was removed. Choose its replacement in Move my beats, above."
+- **Change background was a filled button on every row,** fourteen strong buttons; it is now an outline button.
+- **At 375px, long lines in a row were cut off instead of wrapping.** The story-order list's wrapper shared a class name with the one-line story text (`nowrap`); it is now `est-beat-list`, and the text column is held to the row's width.
+
+No page scrolls sideways at either width. The episode header is not in this walkthrough; it shows in the app only.
+
 ---
 
 ## 9. Owed before enforcement
