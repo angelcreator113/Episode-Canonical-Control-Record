@@ -254,4 +254,33 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     expect(look.textContent).toContain('A candlelit greenhouse gala. · Areas: Bar, Runway');
     expect(look.querySelector('textarea, input')).toBeNull();
   });
+
+  test('the step summarises the angles the planner will ask for that the event set lacks (L4, Q19)', async () => {
+    const base = vi.mocked(api.get).getMockImplementation();
+    const VENUE = { id: 'set-venue', name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', show_id: 'show-1', base_still_url: null };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === LOCATIONS_URL) {
+        return { data: { success: true, data: {
+          locations: [{ role: 'event', scene_set_id: VENUE.id, name: null, scene_set: VENUE }],
+          missing: ['home', 'closet'], defaults: {},
+          angle_gaps: [
+            { role: 'event', scene_set_id: VENUE.id, kinds: ['entrance', 'exterior'], text: 'Entrance or exterior angle missing', beats: [10] },
+            { role: 'event', scene_set_id: VENUE.id, kinds: ['main_interior'], text: 'Main interior angle missing', beats: [11, 12] },
+          ],
+        } } };
+      }
+      if (url === SETS_URL) return { data: { success: true, data: [HOME, LOFT, VENUE] } };
+      return base(url);
+    });
+    renderPage();
+    fireEvent.click(await screen.findByTestId('start-episode'));
+    await screen.findByTestId('episode-locations-step');
+    expect(screen.getAllByTestId('els-gap-event').map((g) => g.textContent)).toEqual([
+      'Entrance or exterior angle missing (beat 10)', 'Main interior angle missing (beats 11, 12)',
+    ]);
+    // Another set chosen for the event: the summary was for the old one.
+    fireEvent.click(screen.getByTestId('els-change-event'));
+    fireEvent.click(await screen.findByTestId('els-option-set-loft'));
+    expect(screen.queryByTestId('els-gap-event')).toBeNull();
+  });
 });

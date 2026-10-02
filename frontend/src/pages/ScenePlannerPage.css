@@ -597,3 +597,10 @@
 .scene-planner-editor-note { margin: 0; font-size: 11px; color: #92400e; }
 .scene-planner-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .scene-planner-card-edit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* L4 (§8(hh), Q19): "<Kind> angle missing — Upload image / Generate angle". */
+.scene-planner-missing { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: #FDF4E7; border: 1px dashed #B8962E; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scene-planner-missing-text { color: #92400e; font-weight: 600; }
+.scene-planner-missing-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.scene-planner-missing-btn { border: 1px solid #B8962E; background: #fff; color: #2C2C2C; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.scene-planner-missing-btn:disabled, .scene-planner-missing-btn.is-busy { opacity: 0.5; cursor: not-allowed; }

@@ -264,23 +264,38 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     return { scenePlanRows, sceneSetIds };
   }
 
+  // L4 (Evoni, 2026-10-02; Q17, Q18, §8(hh)): each beat goes to the
+  // location of its role, and to that set's angle of the kind the beat asks
+  // for (arrival → entrance or exterior, the event → main interior). The
+  // closet beat uses the closet, else home.
+  const { setsByRole, placeBeat, loadSetAngles } = require('./planLocationsService');
+  const roleSets = Array.isArray(locations)
+    ? setsByRole(locations)
+    : { home: sceneSetIds.home, event: sceneSetIds.venue };
+  let anglesBySet = new Map();
+  try {
+    anglesBySet = await loadSetAngles(models.sequelize, Object.values(roleSets));
+  } catch (angleErr) {
+    console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
+  }
+
   for (const beat of BEAT_TEMPLATES) {
-    const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
-      ? sceneSetIds.home
-      : sceneSetIds.venue;
+    const placed = placeBeat(beat.beat, roleSets, anglesBySet);
+    const sceneSetId = placed.scene_set_id;
+    const angleLabel = placed.angle?.angle_label || null;
 
     try {
       const beatId = uuidv4();
       await models.sequelize.query(
-        `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
-         VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :scene_context, :sort_order, false, true, NOW(), NOW())`,
+        `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, angle_label, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
+         VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :angle_label, :scene_context, :sort_order, false, true, NOW(), NOW())`,
         { replacements: {
           id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
-          emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null,
+          emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
           scene_context: beat.description, sort_order: beat.beat,
         } }
       );
-      scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId });
+      scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
     } catch (beatErr) {
       console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
     }

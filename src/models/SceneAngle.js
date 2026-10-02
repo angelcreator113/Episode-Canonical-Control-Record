@@ -23,6 +23,9 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(50),
       allowNull: false,
     },
+    // exterior | entrance | main_interior | area | detail | other (Q18,
+    // §8(hh); src/constants/beatLocations.js) — migration 20261002120000.
+    angle_kind: { type: DataTypes.STRING(30), allowNull: true },
     angle_description: { type: DataTypes.TEXT, allowNull: true },
     camera_direction: { type: DataTypes.TEXT, allowNull: true },
     beat_affinity: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },

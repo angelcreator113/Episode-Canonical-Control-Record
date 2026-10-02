@@ -24,6 +24,9 @@
  *   missing      roles with no default ('home', 'closet', 'event')
  *   eventLook    the event's venue look, shown read-only under Event (L1,
  *                Q10); edited in the Event Package's Place section
+ *   angleGaps    the angles the planner will ask for that a set lacks (L4,
+ *                Q19): [{ role, scene_set_id, text, beats }], shown under
+ *                the row while it still holds that set
  *   onConfirm(locations) → [{ role, scene_set_id, name }]
  *   onCancel, busy
  */
@@ -110,7 +113,8 @@ function SetPicker({ showId, sets, role, onPick, onClose, setSets }) {
 }
 
 export default function EpisodeLocationsStep({
-  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], eventLook = null, onConfirm, onCancel, busy = false,
+  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], eventLook = null, angleGaps = [],
+  onConfirm, onCancel, busy = false,
 }) {
   const [{ byRole, extras }, setRows] = useState(() => initialRows(initial));
   const [sets, setSets] = useState([]);
@@ -169,6 +173,11 @@ export default function EpisodeLocationsStep({
             {[eventLook.overall, eventLook.areas?.length ? `Areas: ${eventLook.areas.join(', ')}` : null].filter(Boolean).join(' · ')}
           </div>
         )}
+        {(angleGaps || []).filter((g) => g.role === key && value?.scene_set_id && g.scene_set_id === value.scene_set_id).map((g) => (
+          <div key={g.text} className="els-gap" data-testid={`els-gap-${key}`}>
+            {g.text}{g.beats?.length ? ` (beat${g.beats.length === 1 ? '' : 's'} ${g.beats.join(', ')})` : ''}
+          </div>
+        ))}
         {!value?.scene_set_id && missing.includes(key) && (
           <div className="els-note">No saved default: choose one.</div>
         )}

@@ -108,6 +108,8 @@ export const unlinkEpisodeFromSceneSetApi = (setId, episodeId) =>
 export const getSceneDefaultsApi = (showId) => apiClient.get(`${API_BASE}/shows/${showId}/scene-defaults`);
 export const putSceneDefaultsApi = (showId, payload) => apiClient.put(`${API_BASE}/shows/${showId}/scene-defaults`, payload);
 const DEFAULT_KEY = { HOME_BASE: 'home_set_id', CLOSET: 'closet_set_id' };
+// Angle kinds (Q18, §8(hh); src/constants/beatLocations.js ANGLE_KIND_LABELS).
+export const ANGLE_KIND_OPTIONS = { exterior: 'Exterior', entrance: 'Entrance', main_interior: 'Main interior', area: 'Event area', detail: 'Detail', other: 'Other' };
 
 // External (shows / episodes for picker)
 export const listShowsApi = () => apiClient.get(`${API_BASE}/shows`);
@@ -594,7 +596,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
   const [savingName, setSavingName] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
-  const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+  const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '', angle_kind: '' });
   const angleUploadRef = useRef(null);
   const [angleUploadFile, setAngleUploadFile] = useState(null);
   const [angleUploadPreview, setAngleUploadPreview] = useState(null);
@@ -686,9 +688,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
       angle_description: newAngle.angle_description.trim() || null,
       camera_direction: newAngle.camera_direction.trim() || null,
       beat_affinity: beatArr,
+      angle_kind: newAngle.angle_kind || null,
       _imageFile: angleUploadFile || null,
     });
-    setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+    setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '', angle_kind: '' });
     setAngleUploadFile(null);
     setAngleUploadPreview(null);
     setShowAddAngle(false);
@@ -765,6 +768,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
         angle_name: s.angle_name,
         camera_direction: s.camera_direction || null,
         beat_affinity: s.beat_affinity || [],
+        angle_kind: s.angle_kind || null,
       });
     }
     setSuggestions(null);
@@ -2134,6 +2138,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                       <div className="scene-sets-create-field"><label>Label</label><input type="text" list="angle-label-suggestions" placeholder="e.g. WIDE or custom" value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus /><datalist id="angle-label-suggestions"><option value="WIDE" /><option value="CLOSE" /><option value="ESTABLISHING" /><option value="WINDOW" /><option value="DOORWAY" /><option value="OVERHEAD" /><option value="ACTION" /><option value="VANITY" /><option value="CLOSET" /><option value="OTHER" /></datalist></div>
                       <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
                       <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
+                      {/* Q18 (§8(hh)): the kind the planner asks for, beside the free label. */}
+                      <div className="scene-sets-create-field"><label>Kind <span className="scene-sets-optional">(optional)</span></label>
+                        <select value={newAngle.angle_kind} onChange={e => setNewAngle(a => ({ ...a, angle_kind: e.target.value }))} aria-label="Angle kind" data-testid="new-angle-kind">
+                          <option value="">None</option>
+                          {Object.entries(ANGLE_KIND_OPTIONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div className="scene-sets-camera-direction-row">
                       <div className="scene-sets-create-field"><label>Camera Direction <span className="scene-sets-optional">(optional)</span></label><input type="text" placeholder="Camera placement and movement..." value={newAngle.camera_direction} onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))} /></div>

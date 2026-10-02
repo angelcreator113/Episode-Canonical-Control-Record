@@ -80,7 +80,31 @@ async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   // Load available scene sets
   const sceneSets = await loadAvailableSceneSets(showId);
 
-  if (sceneSets.length === 0) {
+  // L4 (Evoni, 2026-10-02; Q17, Q18, §8(hh)): an episode with locations
+  // plans each beat at the location of its role, on the angle of the kind
+  // the beat asks for. Without locations, the AI chooses from every set.
+  const sequelizeDb = require('../models').sequelize;
+  const { listLocations } = require('./episodeLocationsService');
+  const { setsByRole, placeBeat, loadSetAngles } = require('./planLocationsService');
+  const { kindsText } = require('../constants/beatLocations');
+  let roleSets = {};
+  let anglesBySet = new Map();
+  let roleContexts = new Map();
+  try {
+    roleSets = setsByRole(await listLocations(sequelizeDb, episodeId));
+    const ids = [...new Set(Object.values(roleSets))];
+    anglesBySet = await loadSetAngles(sequelizeDb, ids);
+    if (ids.length) {
+      const [ctx] = await sequelizeDb.query('SELECT id, name, script_context FROM scene_sets WHERE id IN (:ids)', { replacements: { ids } });
+      roleContexts = new Map(ctx.map((c) => [c.id, c]));
+    }
+  } catch (locErr) {
+    console.error('[ScenePlanner] Episode locations load failed; planning from every set:', locErr.message);
+    roleSets = {};
+  }
+  const mapped = Object.keys(roleSets).length > 0;
+
+  if (sceneSets.length === 0 && !mapped) {
     throw new Error('No scene sets available. Create scene sets before generating a plan.');
   }
 
@@ -146,7 +170,15 @@ ${sceneSetList}
 
 ## 14-Beat Structure
 ${BEAT_STRUCTURE.map(b => `${b.number}. ${b.name} (typical: ${b.typical_location}) — ${b.description}`).join('\n')}
-
+${mapped ? `
+## The Episode's Locations (fixed)
+Each beat is set at this location; choose its shot, intent and transition to fit it.
+${BEAT_STRUCTURE.map((b) => {
+    const placed = placeBeat(b.number, roleSets, anglesBySet);
+    const set = roleContexts.get(placed.scene_set_id);
+    return `${b.number}. ${placed.role}: ${set ? `${set.name} (ID ${set.id})` : 'no set chosen'}${placed.kinds.length ? `, ${kindsText(placed.kinds).toLowerCase()} angle` : ''}`;
+  }).join('\n')}
+` : ''}
 ## Task
 Assign each of the 14 beats to a scene set from the list above. Return a JSON array of 14 objects:
 
@@ -200,9 +232,30 @@ Return ONLY the JSON array, no other text.`;
   // Validate and enrich each beat with scene_context
   const sceneSetMap = new Map(sceneSets.map(s => [s.id, s]));
   const enrichedBeats = beats.map((beat, i) => {
+    const beatNumber = beat.beat_number || i + 1;
+    // L4: with locations, the beat's set and angle come from its role and
+    // kind; the AI's label stays only when that set has such an angle.
+    if (mapped) {
+      const placed = placeBeat(beatNumber, roleSets, anglesBySet);
+      const angles = anglesBySet.get(placed.scene_set_id) || [];
+      const aiLabel = beat.angle_label && angles.some((a) => String(a.angle_label).toUpperCase() === String(beat.angle_label).toUpperCase())
+        ? beat.angle_label : null;
+      const ctx = roleContexts.get(placed.scene_set_id);
+      return {
+        beat_number: beatNumber,
+        beat_name: beat.beat_name || BEAT_STRUCTURE[i]?.name || `Beat ${i + 1}`,
+        scene_set_id: placed.scene_set_id,
+        angle_label: placed.kinds.length ? (placed.angle?.angle_label || null) : aiLabel,
+        shot_type: beat.shot_type || null,
+        emotional_intent: beat.emotional_intent || null,
+        transition_in: beat.transition_in || 'cut',
+        scene_context: ctx?.script_context?.slice(0, 400) || null,
+        ai_confidence: beat.confidence || 0.7,
+      };
+    }
     const sceneSet = sceneSetMap.get(beat.scene_set_id);
     return {
-      beat_number: beat.beat_number || i + 1,
+      beat_number: beatNumber,
       beat_name: beat.beat_name || BEAT_STRUCTURE[i]?.name || `Beat ${i + 1}`,
       scene_set_id: sceneSet ? beat.scene_set_id : null,
       angle_label: beat.angle_label || null,
