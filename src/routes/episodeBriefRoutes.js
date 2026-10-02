@@ -165,6 +165,11 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       const { planWithAngles, planReadiness } = require('../services/planLocationsService');
       data = await planWithAngles(models.sequelize, plans.map((p) => p.toJSON()));
       readiness = planReadiness(data);
+      // L12a: each beat's scene row, brought up to date ("Open in Studio").
+      const { syncBeatScenesQuietly, beatSceneIds } = require('../services/beatScenesService');
+      await syncBeatScenesQuietly(models.sequelize, req.params.episodeId, 'GET plan');
+      const sceneIds = await beatSceneIds(models.sequelize, req.params.episodeId);
+      data = data.map((b) => ({ ...b, scene_id: sceneIds.get(b.id) || null }));
     } catch (angleErr) {
       console.error('[ScenePlanner] beat angle status failed:', angleErr.message);
     }
@@ -241,6 +246,9 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
     }
 
     await plan.update(updates);
+    // L12a: the beat's scene row follows the beat.
+    const { syncBeatScenesQuietly } = require('../services/beatScenesService');
+    await syncBeatScenesQuietly(models.sequelize, episodeId, 'beat save');
     return res.json({ data: plan, ...(location ? { location } : {}) });
   } catch (err) {
     console.error('[ScenePlanner] beat update failed:', err.message);

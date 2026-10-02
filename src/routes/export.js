@@ -68,6 +68,10 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
 
     const episode = episodeRows[0];
 
+    // L12a (§8(hh)): the beats' scenes are brought up to date first.
+    const { syncBeatScenesQuietly } = require('../services/beatScenesService');
+    await syncBeatScenesQuietly(sequelize, episodeId, 'export');
+
     // Fetch scenes for this episode
     const [scenes] = await sequelize.query(
       `SELECT id, title, scene_number, duration_seconds, background_url,

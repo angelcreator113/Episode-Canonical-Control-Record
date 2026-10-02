@@ -268,7 +268,8 @@ router.post(
             sceneIds.push({ client_id: scene.id ?? null, id: created.id });
           }
         }
-        const removed = existing.filter((row) => !kept.has(row.id));
+        // A beat's scene (L12) belongs to its beat: the Timeline never removes it.
+        const removed = existing.filter((row) => !kept.has(row.id) && !row.scene_plan_id);
         for (const row of removed) await row.destroy({ transaction: t });
         console.log(`[Save] Scenes: ${scenes.length} saved (${sceneIds.filter((m) => String(m.client_id) !== String(m.id)).length} new), ${removed.length} removed`);
       }
@@ -574,10 +575,17 @@ router.post(
  */
 
 // GET /api/v1/episodes/:episodeId/scenes - Get all scenes for episode
+// L12a (§8(hh)): each beat's scene row is brought up to date first, so the
+// Timeline and the Scenes tab load the beats' current images.
 router.get(
   '/:episodeId/scenes',
   validateUUIDParam('episodeId'),
   requireAuth,
+  asyncHandler(async (req, _res, next) => {
+    const { syncBeatScenesQuietly } = require('../services/beatScenesService');
+    await syncBeatScenesQuietly(require('../models').sequelize, req.params.episodeId, 'GET /episodes/:id/scenes');
+    next();
+  }),
   asyncHandler(sceneController.getEpisodeScenes)
 );
 
