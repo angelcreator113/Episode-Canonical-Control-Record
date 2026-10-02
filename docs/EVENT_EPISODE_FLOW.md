@@ -3842,7 +3842,12 @@ replaces choice 1 above:
 
 > Draft with AI is also allowed on a started slot while its episode is a draft, drafting from the episode's event and script; it never overwrites purposes I've edited.
 
-Build choices in its PR, proposed and awaiting Evoni's acceptance:
+**Build choices accepted (Evoni, 2026-10-02)**, verbatim: "A9 draft-change
+build choices 1–4 accepted". The four put to her were which purposes are
+hers, where the draft goes, the other fields, and no confirm on a started
+slot: items 1–3 below and the no-confirm part of item 5. Item 4 details the
+ruling's own "from the episode's event and script"; the rest of item 5
+follows A9 choice 5.
 1. **Which purposes are hers.** Each purpose in `story_purposes` carries
    its source, Edited or Auto-drafted. A purpose Evoni saves unchanged from
    its draft (same text and thread) stays Auto-drafted; any other she saves
