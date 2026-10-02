@@ -280,9 +280,18 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       }
     }
 
+    // L13 (§8(hh)): the Place stays editable until the episode is accepted.
+    let placeLocked = false;
+    try {
+      placeLocked = await require('../utils/placeLock').isPlaceLocked(models.sequelize, event.id);
+    } catch (placeErr) {
+      console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
+    }
+
     return res.json({
       success: true,
       event,
+      placeLocked,
       sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
       startedFromProfile: startedFromProfile ? startedFromProfile.toJSON() : null,
       sceneSet: sceneSet ? sceneSet.toJSON() : null,
@@ -786,6 +795,20 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           const changed = changedLockedFields(storedRows[0], updates, lockEpisode)
             .filter((f) => !reopened || STAYS_LOCKED_WHILE_REOPENED.has(f));
           if (changed.length > 0) return res.status(409).json(termsLockedBody(lockEpisode, changed));
+        }
+      }
+    }
+
+    // L13 (§8(hh)): the scene set is part of the Place, editable after Start
+    // Episode while the episode is a draft, locked once it is accepted. The
+    // stored value re-sent is not a change.
+    if (updates.scene_set_id !== undefined) {
+      const [[stored]] = await models.sequelize.query(
+        'SELECT scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } });
+      if (stored && String(stored.scene_set_id || '') !== String(updates.scene_set_id || '')) {
+        const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+        if (await isPlaceLocked(models.sequelize, eventId)) {
+          return res.status(409).json({ error: PLACE_LOCKED_MESSAGE, code: PLACE_LOCKED_CODE });
         }
       }
     }

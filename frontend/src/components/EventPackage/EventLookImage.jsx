@@ -76,6 +76,13 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
 
   useEffect(() => { load(); }, [load]);
 
+  // DJ bug 6: an approval made in Scene Sets shows when Evoni comes back.
+  useEffect(() => {
+    const onFocus = () => { load(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [load]);
+
   const serverGenerating = lookGenerating(state) || baseGenerating(state);
   const generating = Boolean(waiting) || serverGenerating;
 
@@ -147,16 +154,22 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
   const set = state?.scene_set || null;
   const look = state?.look || null;
   const lookReady = look?.status === 'complete' && look.image_url;
-  const baseWaiting = set && set.base_still_url && !state?.approved_base;
+  const approved = state?.approved_base || null;
+  const baseWaiting = set && set.base_still_url && !approved;
   const baseFailed = !lookReady && set?.generation_status === 'failed';
+  // L13: the Place locks when the episode is accepted.
+  const locked = state?.editable === false;
+  const openSetId = set?.id || approved?.scene_set_id || null;
 
   return (
     <div className="ell" data-testid="event-look-image">
       <div className="ell-head">
         <span className="epp-fields-label">Look image</span>
-        <button type="button" className="epp-btn epp-btn-small" onClick={() => ask()} disabled={asking || generating} data-testid="generate-this-look">
-          <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
-        </button>
+        {!locked && (
+          <button type="button" className="epp-btn epp-btn-small" onClick={() => ask()} disabled={asking || generating} data-testid="generate-this-look">
+            <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
+          </button>
+        )}
       </div>
 
       {generating && (
@@ -178,11 +191,24 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
           The venue's base is waiting for your approval. Approve it in Scene Sets, then generate this look.
         </p>
       )}
-      {!generating && !lookReady && !baseWaiting && !look && !baseFailed && (
+      {/* DJ bug 6: before the event's look exists, the venue's approved base,
+          which "Generate this look" dresses for this event. */}
+      {!generating && !lookReady && approved?.image_url && (
+        <figure className="ell-figure" data-testid="event-look-approved-base">
+          <img src={approved.image_url} alt="The venue's approved base" />
+          <figcaption className="ell-note">
+            The venue's approved base.{locked ? '' : ' Generate this look to dress it for this event.'}
+          </figcaption>
+        </figure>
+      )}
+      {!generating && !lookReady && !baseWaiting && !look && !baseFailed && !approved && (
         <p className="ell-note">No look image yet.</p>
       )}
-      {set && (
-        <Link className="epp-inline-link ell-open" to={sceneSetPath(showId, set.id)} data-testid="event-look-open">Open in Scene Sets</Link>
+      {locked && (
+        <p className="ell-note" data-testid="event-look-locked">The episode is accepted: the Place is locked.</p>
+      )}
+      {openSetId && (
+        <Link className="epp-inline-link ell-open" to={sceneSetPath(showId, openSetId)} data-testid="event-look-open">Open in Scene Sets</Link>
       )}
 
       {choose && (

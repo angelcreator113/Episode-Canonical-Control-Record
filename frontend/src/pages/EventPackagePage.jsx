@@ -488,7 +488,7 @@ export default function EventPackagePage() {
     );
   }
 
-  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, termsReopen } = data;
+  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, termsReopen, placeLocked } = data;
   // Read-only once Start Episode has locked the terms (Task #2356): the
   // server's own lock (termsLockedBy: the brief that names this event, §8(w)
   // P2, else the used_in_episode_id stamp), so the page never offers an edit
@@ -1307,9 +1307,12 @@ export default function EventPackagePage() {
                     {sceneSet.name}
                   </Link>
                 ) : 'Not set'}
-                {!used && (
+                {/* L13 (§8(hh)): the scene set stays editable after Start
+                    Episode while the episode is a draft; it locks once the
+                    episode is accepted (only the terms lock at Start). */}
+                {!placeLocked && (
                   <button
-                    type="button" className="epp-inline-link"
+                    type="button" className="epp-inline-link" data-testid="place-choose-scene-set"
                     onClick={() => openScenePicker(venueDate.venueLocationId ? { id: venueDate.venueLocationId, name: venueDate.venueName } : null)}
                   >
                     {sceneSet ? 'Change scene set' : 'Choose scene set'}

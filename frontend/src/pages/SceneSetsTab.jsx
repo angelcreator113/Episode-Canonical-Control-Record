@@ -1356,9 +1356,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
               <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
                 <Eye size={12} /> Details
               </button>
-              <button onClick={() => fileInputRef.current?.click()} className="scene-sets-btn-details">
-                <Upload size={12} /> Replace
-              </button>
+              {/* S6: an approved base is not replaced until it is un-approved. */}
+              {!set.base_approved && (
+                <button onClick={() => fileInputRef.current?.click()} className="scene-sets-btn-details" data-testid={`scene-set-replace-base-${set.id}`}>
+                  <Upload size={12} /> Replace
+                </button>
+              )}
             </div>
           )}
 
@@ -2731,12 +2734,13 @@ export default function SceneSetsTab() {
     }
   };
 
+  // DJ bug 5 (Evoni, 2026-10-02): an upload only replaces the base image
+  // (S6: never an approved one); no generation call, no Scene Spec, no
+  // angles made from it. The server's upload-base keeps its own analysis.
   const handleUploadBase = async (set, files) => {
-    startGenerating(set.id);
     const setStage = (stage) => setSpecStageMap(prev => ({ ...prev, [set.id]: stage }));
+    setStage('uploading');
     try {
-      // ── Stage 1: Upload ──
-      setStage('uploading');
       const formData = new FormData();
       const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
       if (fileList.length === 0) throw new Error('No image file selected');
@@ -2747,30 +2751,11 @@ export default function SceneSetsTab() {
         throw new Error(err.response?.data?.error || 'Upload failed');
       }
       await fetchSets();
-
-      // ── Stage 2: Build Scene Spec ──
-      setStage('building_spec');
-      try {
-        const specRes = await generateSceneSpecApi(set.id, { force: true });
-        const specJson = specRes.data;
-        if (specJson.success && specJson.data?.camera_contracts?.length) {
-          // ── Stage 3: Create Angles ──
-          setStage('creating_angles');
-          try {
-            await createAnglesFromSpecApi(set.id, {});
-          } catch { /* non-blocking */ }
-        }
-      } catch { /* non-blocking */ }
-
-      setStage('done');
-      await fetchSets();
-      showToast('Setup complete — review your spec, then generate angles!');
+      showToast('Base image replaced');
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
-      stopGenerating(set.id);
-      // Clear stage after a brief delay so user sees "done"
-      setTimeout(() => setStage(null), 2000);
+      setStage(null);
     }
   };
 

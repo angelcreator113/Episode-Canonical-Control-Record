@@ -182,6 +182,9 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
   const overrides = readBriefOverrides(rawOverrides);
   if (overrides.error) throw new VenueLookImageError(overrides.error);
   const event = await loadEvent(sequelize, { showId, eventId });
+  // L13 (§8(hh)): the Place locks when the episode is accepted.
+  const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+  if (await isPlaceLocked(sequelize, event.id)) throw new VenueLookImageError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
   const target = await resolveLookSet(sequelize, event, chosenSetId);
   if (target.kind === 'choose') {
     throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
@@ -259,14 +262,20 @@ const isStuck = (updatedAt) => Boolean(updatedAt) && Date.now() - new Date(updat
  */
 async function eventLook(sequelize, { showId, eventId }) {
   const event = await loadEvent(sequelize, { showId, eventId });
+  const { isPlaceLocked } = require('../utils/placeLock');
+  const editable = !(await isPlaceLocked(sequelize, event.id)); // L13
+  const approvedOf = (location) => (location?.approved_base_image_url
+    ? { scene_set_id: location.approved_base_scene_set_id, image_url: location.approved_base_image_url }
+    : null);
   let set = await liveSet(sequelize, event.scene_set_id);
-  if (!set) return { scene_set: null, look: null, approved_base: null };
+  // DJ bug 6: no set chosen yet, the venue's approved base still shows.
+  if (!set) return { scene_set: null, look: null, approved_base: approvedOf(await loadLocation(sequelize, venueLocationId(event))), editable };
   if (set.generation_status === 'generating' && isStuck(set.updated_at)) {
     console.warn(`[VenueLookImage] base for "${set.name}" stuck since ${new Date(set.updated_at).toISOString()}; marked failed`);
     await markBaseFailed(sequelize, set.id, STUCK_REASON);
     set = await liveSet(sequelize, set.id);
   }
-  const location = await loadLocation(sequelize, set.world_location_id);
+  const location = await loadLocation(sequelize, set.world_location_id || venueLocationId(event));
   const readLook = async () => (await sequelize.query(
     `SELECT id, status, image_url, error, generated_at, updated_at FROM scene_set_looks
       WHERE scene_set_id = :setId AND event_id = :eventId AND deleted_at IS NULL`,
@@ -285,10 +294,9 @@ async function eventLook(sequelize, { showId, eventId }) {
       id: set.id, name: set.name, base_still_url: set.base_still_url || null, generation_status: set.generation_status || null,
       error: set.generation_status === 'failed' ? (baseGeneration.last_error || null) : null,
     },
-    approved_base: location?.approved_base_image_url
-      ? { scene_set_id: location.approved_base_scene_set_id, image_url: location.approved_base_image_url }
-      : null,
+    approved_base: approvedOf(location),
     look: look || null,
+    editable,
   };
 }
 

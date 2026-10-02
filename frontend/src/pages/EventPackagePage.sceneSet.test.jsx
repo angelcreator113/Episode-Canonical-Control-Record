@@ -44,6 +44,7 @@ const BRIEF = {
 
 let stored;
 let sceneSet;
+let placeLocked;
 function Probe() {
   const loc = useLocation();
   return <div data-testid="landed">{loc.pathname}{loc.search}</div>;
@@ -65,11 +66,12 @@ describe('Place: the scene set for the event (S7)', () => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     stored = { ...EVENT };
     sceneSet = null;
+    placeLocked = false;
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === EVENT_URL) {
         return { data: {
           success: true, event: stored, sourceProfile: null, startedFromProfile: null,
-          sceneSet, venueLocation: null, invitationAsset: null, usedInEpisode: null,
+          sceneSet, venueLocation: null, invitationAsset: null, usedInEpisode: null, placeLocked,
           termsLockedBy: stored.used_in_episode_id ? { id: stored.used_in_episode_id } : null,
         } };
       }
@@ -149,15 +151,28 @@ describe('Place: the scene set for the event (S7)', () => {
     expect(screen.getByTestId('place-scene-set-link').textContent).toBe('The Glasshouse');
   });
 
-  test('after Start Episode: the chosen set, read-only, with a link to it', async () => {
+  // L13 (Evoni, 2026-10-02, §8(hh)) supersedes S7's read-only-after-Start:
+  // the scene set stays changeable while the episode is a draft and locks
+  // once it is accepted.
+  test('after Start Episode, the episode a draft: the chosen set, still changeable, with a link to it', async () => {
     stored = { ...EVENT, scene_set_id: 'set-venue-hall', used_in_episode_id: 'ep-7', status: 'used' };
     sceneSet = SETS[3];
+    placeLocked = false;
     renderPage();
     const link = await screen.findByTestId('place-scene-set-link');
     expect(link.textContent).toBe('Glasshouse Hall');
-    expect(within(screen.getByTestId('place-scene-set')).queryByRole('button')).toBeNull();
+    expect(within(screen.getByTestId('place-scene-set')).getByRole('button').textContent).toBe('Change scene set');
     fireEvent.click(link);
     expect(screen.getByTestId('landed').textContent).toBe('/shows/show-1/world?tab=scene-sets&set=set-venue-hall');
+  });
+
+  test('the episode accepted: the chosen set, read-only', async () => {
+    stored = { ...EVENT, scene_set_id: 'set-venue-hall', used_in_episode_id: 'ep-7', status: 'used' };
+    sceneSet = SETS[3];
+    placeLocked = true;
+    renderPage();
+    expect((await screen.findByTestId('place-scene-set-link')).textContent).toBe('Glasshouse Hall');
+    expect(within(screen.getByTestId('place-scene-set')).queryByRole('button')).toBeNull();
   });
 
   test('orderSceneSetsForEvent and sceneSetPath', () => {

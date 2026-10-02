@@ -156,6 +156,36 @@ describe('EventLookImage (L7-L9)', () => {
     expect(onToast).toHaveBeenCalledWith('The base could not be generated: Timed out: no image after 10 minutes');
   });
 
+  // DJ 6 (Evoni, 2026-10-02): after the venue's base is approved, the Place
+  // section shows it, with "Generate this look" for the dressed version.
+  test("the venue's approved base shows before the event's look exists, with Generate this look", async () => {
+    lookState = { scene_set: null, approved_base: { scene_set_id: 'set-1', image_url: 'https://x/approved.jpg' }, look: null, editable: true };
+    renderIt();
+    const figure = await screen.findByTestId('event-look-approved-base');
+    expect(figure.querySelector('img').getAttribute('src')).toBe('https://x/approved.jpg');
+    expect(figure.textContent).toContain('Generate this look to dress it for this event.');
+    expect(screen.getByTestId('generate-this-look')).toBeTruthy();
+    expect(screen.getByTestId('event-look-open').getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
+    expect(screen.queryByText('No look image yet.')).toBeNull();
+  });
+
+  test('an approval made elsewhere shows when the window regains focus', async () => {
+    lookState = { scene_set: null, approved_base: null, look: null, editable: true };
+    renderIt();
+    expect(await screen.findByText('No look image yet.')).toBeTruthy();
+    lookState = { scene_set: null, approved_base: { scene_set_id: 'set-1', image_url: 'https://x/approved.jpg' }, look: null, editable: true };
+    fireEvent(window, new Event('focus'));
+    expect(await screen.findByTestId('event-look-approved-base')).toBeTruthy();
+  });
+
+  // L13: the Place locks when the episode is accepted.
+  test('an accepted episode locks the Place: no Generate this look', async () => {
+    lookState = { ...lookState, editable: false };
+    renderIt();
+    expect(await screen.findByTestId('event-look-locked')).toBeTruthy();
+    expect(screen.queryByTestId('generate-this-look')).toBeNull();
+  });
+
   test('a failed look says so', async () => {
     lookState = { ...lookState, look: { id: 'look-1', status: 'failed', error: 'provider down' } };
     renderIt();
