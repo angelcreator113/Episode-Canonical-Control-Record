@@ -1665,3 +1665,18 @@
 .evl-hint { margin: 0; font-size: 12px; font-weight: 400; color: #6B6557; }
 .evl-upload { justify-self: start; cursor: pointer; }
 .evl-error { margin: 0; font-size: 12px; color: #B42318; }
+
+/* The scene-set picker's rows (L2, Q11, §8(hh)): thumbnail, venue and type,
+   and a strip of the highlighted set's angles. */
+.epp-set-row { border-radius: 6px; }
+.epp-set-row.is-open { background: var(--lala-parchment-2, #F4EFE4); }
+.epp-set-row-main { display: flex; align-items: center; gap: 4px; }
+.epp-set-row-main .epp-modal-result { flex: 1; min-width: 0; justify-content: flex-start; }
+.epp-set-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.epp-set-thumb { flex: none; width: 56px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--lala-parchment-3, #E8E0D0); background: #fff; }
+.epp-set-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #94a3b8; font-family: 'DM Mono', monospace; }
+.epp-set-preview-btn { flex: none; }
+.epp-set-angles { display: flex; gap: 8px; overflow-x: auto; padding: 4px 10px 10px; }
+.epp-set-angle { flex: none; margin: 0; width: 88px; display: grid; gap: 2px; font-size: 11px; }
+.epp-set-angle img, .epp-set-angle .epp-set-thumb-empty { width: 88px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid var(--lala-parchment-3, #E8E0D0); background: #fff; }
+.epp-set-angle figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6B6557; }
