@@ -4207,6 +4207,30 @@ Questions:
 
 The per-angle floor wording (the unpushed `claude/scene-overlay-per-angle`, dropped) goes into (b)'s zone shot lines.
 
+As built, L14 (a) (zone kinds, the re-kinding and the beat mapping; no image calls):
+- **Kinds.** `front`, `inside`, `back`, `area` and `zone` (a named home zone), plus `extra` for a framing on a zone (`constants/beatLocations.js`).
+  - An extra names its zone in `scene_angles.zone_angle_id`. No zone means Inside, the set's base.
+  - The angle routes refuse the Q18 kinds.
+  - An extra's zone must be a zone angle of the same set.
+- **Re-kinding** (migration `20261002170000`, answer 6), per set:
+  - exterior and entrance → one Front (an imaged one first, exterior before entrance, then sort order);
+  - main interior → one Inside, chosen the same way;
+  - a second of either → an extra on that zone (answer 2);
+  - area stays;
+  - detail, other and no kind → an extra on Inside.
+
+  No image is regenerated or deleted. A re-run changes nothing. `down` restores the Q18 kinds, except "other" and the extras' zones.
+- **Beats** (answer 1):
+  - arrival (10) → Front;
+  - the event (11, 12) → Inside, which is an Inside angle with an image, else the set's base, so Inside is never missing;
+  - the Back zone is fixed to no beat (answer 4).
+
+  A missing zone reads "Front zone missing" ("Gate zone has no image" for one with no image). The Episode Locations step lists only Front gaps.
+- **Elsewhere:**
+  - "Suggest angles" describes the zones to Claude;
+  - venue generation's exterior and interior angles are made as Front and Inside;
+  - Scene Sets' Add Angle offers the zones and, for an extra framing, its zone (Inside, the base, or one of the set's zones).
+
 ---
 
 ## 9. Owed before enforcement

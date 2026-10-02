@@ -27,7 +27,8 @@ export function ChosenBadge({ beat, className }) {
 
 // ─── MISSING ANGLE ────────────────────────────────────────────────────────────
 // L4 (Evoni, 2026-10-02; Q19, §8(hh)): "A missing angle shows a specific
-// action: 'Entrance angle missing — Upload image / Generate angle'."
+// action: 'Entrance angle missing — Upload image / Generate angle'." Since
+// L14 the server names zones ("Front zone missing").
 // beat.location.missing comes from GET /episode-brief/:id/plan.
 
 // L10 (§8(hh)): at a set the episode's event has a finished look on

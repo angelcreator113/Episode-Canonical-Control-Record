@@ -18,14 +18,14 @@ describe('planReadiness (L5, Q21)', () => {
     const out = planReadiness([
       row(1),
       row(2, { sceneSet: { name: 'Apartment', base_still_url: null } }),
-      row(10, { location: { angle: null, missing: { text: 'Entrance or exterior angle missing' } } }),
+      row(10, { location: { angle: null, missing: { text: 'Front zone missing' } } }),
       row(11, { scene_set_id: null, sceneSet: null }),
     ]);
     expect(out.ready).toBe(1);
     expect(out.total).toBe(4);
     expect(out.not_ready).toEqual([
       { beat_number: 2, beat_name: 'Beat 2', text: 'Apartment has no base image' },
-      { beat_number: 10, beat_name: 'Beat 10', text: 'Entrance or exterior angle missing' },
+      { beat_number: 10, beat_name: 'Beat 10', text: 'Front zone missing' },
       { beat_number: 11, beat_name: 'Beat 11', text: 'No location' },
     ]);
   });

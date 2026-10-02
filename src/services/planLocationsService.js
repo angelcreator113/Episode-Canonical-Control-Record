@@ -4,15 +4,18 @@
  * docs/EVENT_EPISODE_FLOW.md §8(hh)).
  *
  * Each beat goes to the episode's location of its role (BEAT_LOCATIONS:
- * Q17), and to that set's angle of the kind it asks for (Q18): arrival
- * (beat 10) an entrance or exterior, the event (11-12) its main interior.
- * A beat whose angle is missing, or has no image, says so with the kind
- * (Q19: "<Kind> angle missing — Upload image / Generate angle").
+ * Q17), and to that set's zone it asks for (L14): arrival (beat 10) its
+ * Front, the event (11-12) its Inside, which is the set's base unless an
+ * Inside angle has an image (answer 1), so Inside is never missing. A beat
+ * whose zone is missing, or has no image, says so (Q19, in L14's words:
+ * "Front zone missing — Upload image / Generate angle").
  *
  * Read by createScenePlanRows (Start Episode), generateScenePlan (the AI
  * planner), GET /episode-brief/:id/plan and the Episode Locations step.
  */
-const { BEAT_LOCATIONS, ANGLE_KIND_LABELS, LABEL_FOR_KIND, kindsText } = require('../constants/beatLocations');
+const {
+  BEAT_LOCATIONS, ANGLE_KIND_LABELS, LABEL_FOR_KIND, BASE_KINDS, kindsText, kindNoun,
+} = require('../constants/beatLocations');
 
 const hasImage = (a) => Boolean(a?.still_image_url) && (!a.generation_status || a.generation_status === 'complete');
 
@@ -40,6 +43,9 @@ function angleForKinds(angles, kinds) {
   return null;
 }
 
+/** Kinds the set's base image serves when no angle of them has an image (L14, answer 1). */
+const baseServes = (kinds) => (kinds || []).length > 0 && kinds.every((k) => BASE_KINDS.includes(k));
+
 /** The location's set for each role: { home, closet, event }; extras are not mapped. */
 function setsByRole(locations) {
   const out = {};
@@ -56,7 +62,8 @@ function setsByRole(locations) {
 function placeBeat(beatNumber, roleSets, anglesBySet) {
   const spot = BEAT_LOCATIONS[beatNumber] || { role: 'home', kinds: [] };
   const sceneSetId = roleSets[spot.role] || (spot.role === 'closet' ? roleSets.home : null) || null;
-  const angle = sceneSetId && spot.kinds.length ? angleForKinds(anglesBySet.get(sceneSetId), spot.kinds) : null;
+  let angle = sceneSetId && spot.kinds.length ? angleForKinds(anglesBySet.get(sceneSetId), spot.kinds) : null;
+  if (angle && !hasImage(angle) && baseServes(spot.kinds)) angle = null; // the base is Inside
   return { role: spot.role, kinds: spot.kinds, scene_set_id: sceneSetId, angle };
 }
 
@@ -80,6 +87,7 @@ function rowAngleStatus(row, anglesBySet, dressing = null) {
     angle = ofLabel.find(hasImage) || ofLabel[0] || null;
   } else if (spot.kinds.length) {
     angle = angleForKinds(angles, spot.kinds);
+    if (angle && !hasImage(angle) && baseServes(spot.kinds)) angle = null; // the base is Inside
   }
   const view = angle && {
     id: angle.id, label: angle.angle_label, name: angle.angle_name, kind: angle.angle_kind || null, still_image_url: angle.still_image_url || null,
@@ -97,7 +105,8 @@ function rowAngleStatus(row, anglesBySet, dressing = null) {
   const what = angle ? (angle.angle_name || angle.angle_label)
     : label ? label.charAt(0) + label.slice(1).toLowerCase()
       : kindsText(spot.kinds);
-  if (!angle && !label && !spot.kinds.length) return base; // the set's base image serves
+  if (!angle && !label && (!spot.kinds.length || baseServes(spot.kinds))) return base; // the set's base image serves
+  const noun = angle?.angle_kind ? kindNoun([angle.angle_kind]) : (label ? 'angle' : kindNoun(spot.kinds));
   return {
     ...base,
     angle: view || null,
@@ -110,7 +119,7 @@ function rowAngleStatus(row, anglesBySet, dressing = null) {
       // The name a new angle is created with ("Entrance"), or the angle's own.
       name: angle ? (angle.angle_name || angle.angle_label)
         : label ? what : (ANGLE_KIND_LABELS[spot.kinds[0]] || what),
-      text: angle ? `${what} angle has no image` : `${what} angle missing`,
+      text: angle ? `${what} ${noun} has no image` : `${what} ${noun} missing`,
     },
   };
 }
@@ -173,13 +182,14 @@ async function locationAngleGaps(sequelize, locations, transaction) {
   const anglesBySet = await loadSetAngles(sequelize, Object.values(roleSets), transaction);
   const gaps = new Map();
   for (const [beat, spot] of Object.entries(BEAT_LOCATIONS)) {
-    if (!spot.kinds.length) continue;
+    if (!spot.kinds.length || baseServes(spot.kinds)) continue;
     const setId = roleSets[spot.role];
     if (!setId) continue;
     const angle = angleForKinds(anglesBySet.get(setId) || [], spot.kinds);
     if (angle && hasImage(angle)) continue;
     const key = `${spot.role}:${spot.kinds.join('|')}`;
-    const text = angle ? `${angle.angle_name || kindsText(spot.kinds)} angle has no image` : `${kindsText(spot.kinds)} angle missing`;
+    const noun = kindNoun(spot.kinds);
+    const text = angle ? `${angle.angle_name || kindsText(spot.kinds)} ${noun} has no image` : `${kindsText(spot.kinds)} ${noun} missing`;
     const gap = gaps.get(key) || { role: spot.role, scene_set_id: setId, kinds: [...spot.kinds], angle_id: angle?.id || null, text, beats: [] };
     gap.beats.push(Number(beat));
     gaps.set(key, gap);

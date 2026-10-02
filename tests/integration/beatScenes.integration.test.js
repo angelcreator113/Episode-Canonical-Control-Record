@@ -86,8 +86,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     sets.vanity = uuid(); sets.doorway = uuid(); sets.wide = uuid();
     await run(`INSERT INTO scene_angles (id, scene_set_id, angle_label, angle_name, angle_kind, still_image_url, generation_status, created_at, updated_at)
                VALUES (:vanity, :apartment, 'VANITY', 'Vanity', NULL, 'https://x/vanity.jpg', 'complete', NOW(), NOW()),
-                      (:doorway, :glasshouse, 'DOORWAY', 'Entrance', 'entrance', NULL, 'pending', NOW(), NOW()),
-                      (:wide, :glasshouse, 'WIDE', 'Main hall', 'main_interior', 'https://x/wide.jpg', 'complete', NOW(), NOW())`,
+                      (:doorway, :glasshouse, 'DOORWAY', 'Entrance', 'front', NULL, 'pending', NOW(), NOW()),
+                      (:wide, :glasshouse, 'WIDE', 'Main hall', 'inside', 'https://x/wide.jpg', 'complete', NOW(), NOW())`,
     { vanity: sets.vanity, doorway: sets.doorway, wide: sets.wide, apartment: sets.apartment, glasshouse: sets.glasshouse });
   });
   beforeEach(() => {
