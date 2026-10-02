@@ -101,6 +101,26 @@ describe('SceneBriefConfirm (S2)', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/brief', { angle_id: 'a-1', refine: true, canonical_description: 'A moonlit terrace.' });
   });
 
+  // L14 (b) (Evoni, 2026-10-02): "each zone is generated with the set's
+  // approved base (or its base, if none is approved) as the style and
+  // architecture reference ... show the cost first."
+  test('a zone shows the image it is made from and its Kontext cost; with no base it cannot be generated', async () => {
+    const zone = { kind: 'zone', zone_kind: 'back', angle_id: 'a-1', reference_image_url: 'https://x/base.jpg', reference_source: 'base' };
+    vi.mocked(apiClient.post).mockReturnValue(ok({ target: zone, brief: BRIEF(), prompt: 'p', estimate: { usd: 0.04, priced: true, base_model: 'flux-kontext' } }));
+    const { unmount } = render(<SceneBriefConfirm setId="set-1" angleId="a-1" title="t" onConfirm={() => {}} onCancel={() => {}} />);
+    const panel = await screen.findByTestId('sbc-zone');
+    expect(panel.querySelector('img').getAttribute('src')).toBe('https://x/base.jpg');
+    expect(panel.textContent).toContain("Made from this set's base image with Flux Kontext");
+    expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.04');
+    expect(screen.getByTestId('sbc-confirm').disabled).toBe(false);
+    unmount();
+
+    vi.mocked(apiClient.post).mockReturnValue(ok({ target: { ...zone, reference_image_url: null, reference_source: null }, brief: BRIEF(), prompt: 'p', estimate: { usd: 0.04, priced: true } }));
+    render(<SceneBriefConfirm setId="set-1" angleId="a-1" title="t" onConfirm={() => {}} onCancel={() => {}} />);
+    expect((await screen.findByTestId('sbc-zone')).textContent).toContain("Generate or upload this set's base first");
+    expect(screen.getByTestId('sbc-confirm').disabled).toBe(true);
+  });
+
   test('estimateText', () => {
     expect(estimateText(null)).toBeNull();
     expect(estimateText({ usd: null, priced: false })).toBe('price not set');

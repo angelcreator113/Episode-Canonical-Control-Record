@@ -34,7 +34,8 @@ const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_B
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
-const { buildSceneBrief, briefToPrompt, prepareSceneBrief } = require('./sceneBriefService');
+const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation } = require('./sceneBriefService');
+const { ZONE_KINDS } = require('../constants/beatLocations');
 const { assertBaseReplaceable } = require('./approvedBaseService');
 
 // Ruling S4 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd), quoted
@@ -1685,12 +1686,16 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
   // base (if any), this shot, and the environment. Lighting comes from the
   // brief; no state ambient or generic text is added.
   const baseBrief = sceneSet.base_generation?.brief || null;
+  // L14 (b): a zone is its own establishing view of that part of the place.
+  const zone = zoneOf(sceneAngle);
   return {
     options: {
       angleLabel,
       cameraDirection: sceneAngle.camera_direction || null,
-      requiredFeatures: specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null),
-      continuity: Boolean(sceneSet.base_still_url),
+      // A zone is another part of the place: the base view's anchors are not its.
+      requiredFeatures: zone ? null : (specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null)),
+      continuity: zone ? false : Boolean(sceneSet.base_still_url),
+      ...(zone ? { zone } : {}),
       eventId: baseBrief?.event_id || null,
       overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
     },
@@ -1699,8 +1704,90 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
   };
 }
 
+/** L14 (b): { kind, name } for an angle that is a zone of its set; null otherwise. */
+function zoneOf(sceneAngle) {
+  const kind = String(sceneAngle?.angle_kind || '').toLowerCase();
+  return ZONE_KINDS.includes(kind) ? { kind, name: sceneAngle.angle_name || null } : null;
+}
+
+/**
+ * L14 (b) (Evoni, 2026-10-02): "each zone is generated with the set's
+ * approved base (or its base, if none is approved) as the style and
+ * architecture reference, so Front, Inside and Back read as one place."
+ * The approved base is the World Location's, when this set is the one
+ * approved; else the set's own base; null when the set has neither.
+ */
+async function zoneReferenceImage(sceneSet, sequelize) {
+  let location = null;
+  if (sequelize && sceneSet?.world_location_id) {
+    location = await loadBriefLocation(sequelize, sceneSet.world_location_id).catch((err) => {
+      console.error(`[SceneGen] zone reference: location read failed for set ${sceneSet.id}:`, err.message);
+      return null;
+    });
+  }
+  if (location?.approved_base_image_url && String(location.approved_base_scene_set_id) === String(sceneSet.id)) {
+    return { url: location.approved_base_image_url, source: 'approved_base' };
+  }
+  return sceneSet?.base_still_url ? { url: sceneSet.base_still_url, source: 'base' } : null;
+}
+
+function noBaseError() {
+  const err = new Error('Generate or upload this set\'s base first: each zone is made from it, so the zones read as one place.');
+  err.status = 409;
+  err.code = 'NO_BASE';
+  return err;
+}
+
+/**
+ * L14 (b): a zone's still, one Flux Kontext call (SCENE_DRESSING_MODEL)
+ * with the reference image and the zone's brief. No crop or outpaint (a
+ * zone is a different part of the place, not a framing of the base) and no
+ * consistency check against the base (which is not the same view).
+ */
+async function generateZone(sceneAngle, sceneSet, models, options = {}) {
+  const { SceneAngle, SceneSet } = models;
+  const sequelize = briefDb(models);
+  const reference = await zoneReferenceImage(sceneSet, sequelize);
+  if (!reference) throw noBaseError();
+
+  const { options: briefOptions } = angleBriefOptions(sceneAngle, sceneSet, { overrides: options.overrides });
+  const brief = await prepareSceneBrief(sequelize, sceneSet, briefOptions);
+  const prompt = briefToPrompt(brief);
+
+  await SceneAngle.update(
+    { generation_status: 'generating', runway_prompt: prompt },
+    { where: { id: sceneAngle.id } }
+  );
+  try {
+    const costs = createCostCollector(`zone ${sceneAngle.id} (${sceneAngle.angle_kind}, ${SCENE_DRESSING_MODEL.key})`);
+    const { generateImageFromImage } = require('./imageGenerationService');
+    const result = await generateImageFromImage(reference.url, prompt, { size: 'landscape', onLogged: costs.onLogged });
+    const stillUrl = await downloadAndStoreStill(result.url, sceneSet.id, sceneAngle.id);
+    const totalCost = costs.value();
+    const qualityReview = { ...(sceneAngle.quality_review || {}) };
+    qualityReview.zone_reference = { url: reference.url, source: reference.source, model: SCENE_DRESSING_MODEL.key };
+    await SceneAngle.update({
+      still_image_url: stillUrl,
+      video_clip_url: null,
+      runway_seed: null,
+      generation_status: 'complete',
+      generation_cost: totalCost,
+      generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
+      quality_review: qualityReview,
+    }, { where: { id: sceneAngle.id } });
+    if (typeof totalCost === 'number' && totalCost > 0) {
+      await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+    }
+    return { success: true, stillUrl, seed: null, specValidation: null };
+  } catch (err) {
+    await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+    throw err;
+  }
+}
+
 async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const { SceneAngle, SceneSet } = models;
+  if (zoneOf(sceneAngle)) return generateZone(sceneAngle, sceneSet, models, options);
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
 
@@ -2099,6 +2186,8 @@ module.exports = {
   MOOD_PRESETS,
   generateAngle,
   angleBriefOptions,
+  zoneOf,
+  zoneReferenceImage,
   refinedBriefOptions,
   generateAngleVideo,
   regenerateAngleRefined,

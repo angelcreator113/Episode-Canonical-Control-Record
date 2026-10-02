@@ -182,3 +182,7 @@
   border-radius: 4px;
 }
 .sbc-dressing p { margin: 0; min-width: 0; }
+.sbc-dressing.sbc-zone-blocked {
+  background: #fdf3e7;
+  border-color: #e8c99a;
+}

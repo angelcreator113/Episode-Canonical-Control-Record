@@ -4311,6 +4311,16 @@ As built, L14 (a) (zone kinds, the re-kinding and the beat mapping; no image cal
   - venue generation's exterior and interior angles are made as Front and Inside;
   - Scene Sets' Add Angle offers the zones and, for an extra framing, its zone (Inside, the base, or one of the set's zones).
 
+As built, L14 (b) (zone generation):
+- **The reference.** A zone (an angle whose kind is `front`, `inside`, `back`, `area` or `zone`) is made from the World Location's approved base when this set is the approved one, else from the set's base (`zoneReferenceImage` in `sceneGenerationService`). A set with neither refuses: "Generate or upload this set's base first" (409 `NO_BASE`, before anything is started), and its brief's Generate is disabled.
+- **The call.** One Flux Kontext edit of the reference with the zone's brief (`generateZone`, reached through `generateAngle`), priced by `estimateDressingCost()` and shown first in the brief (target kind `zone`, with the image it is made from). No crop or outpaint and no consistency check against the base, since a zone is a different part of the place. The angle records its reference and model in `quality_review.zone_reference`; its logged cost goes to the angle and the set as before.
+- **The brief** (`buildSceneBrief`'s `zone` option):
+  - camera: "Establishing view of the front of <place>: the exterior, the entrance and the approach, seen from outside." / "… of the main room of <place>, corner to corner." / "… of the back of <place> (<name>): its backstage, private or quiet area." / "… of the <name> area of <place>." / "… of the <name> of <place>.";
+  - continuity: "The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view." in place of "only the camera moved";
+  - space for characters: the WIDE line, "Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it." (the folded per-angle wording);
+  - the furnished line stays; the base view's anchor objects and camera contracts are not required of a zone; a zone is never an event dressing.
+- Not in (b): framing extras (c), dressed event-area zones (d), and the artifact-review "regenerate refined", which still re-frames from the base for any angle.
+
 Beat Plan display bugs (Evoni, 2026-10-02, from a production episode), recorded verbatim:
 
 > 1. A beat with a set but no specific angle shows a blank image: it must show the set's base image (per Q21), labelled e.g. "Lala's Closet · base".

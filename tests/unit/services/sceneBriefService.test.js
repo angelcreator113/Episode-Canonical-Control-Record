@@ -179,3 +179,27 @@ describe('environment helpers', () => {
     expect(seasonFromDate(null)).toBeNull();
   });
 });
+
+// L14 (b) (Evoni, 2026-10-02; §8(hh)): "Each zone is generated as a full
+// establishing view of that part of the place, fully dressed, with an open
+// area where a person could stand", made from the set's approved base (or
+// its base) as the style and architecture reference.
+describe('a zone\'s brief (L14 b)', () => {
+  const zoneBrief = (kind, name = null) => buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel: 'OTHER', zone: { kind, name } });
+  test('the camera is a full establishing view of that part of the place', () => {
+    expect(line(zoneBrief('front'), 'camera').text).toBe('Establishing view of the front of The Glasshouse: the exterior, the entrance and the approach, seen from outside.');
+    expect(line(zoneBrief('inside'), 'camera').text).toBe('Establishing view of the main room of The Glasshouse, corner to corner.');
+    expect(line(zoneBrief('back', 'Green room'), 'camera').text).toBe('Establishing view of the back of The Glasshouse (Green room): its backstage, private or quiet area.');
+    expect(line(zoneBrief('area', 'Bar'), 'camera').text).toBe('Establishing view of the Bar area of The Glasshouse.');
+    expect(line(zoneBrief('zone', 'Vanity'), 'camera').text).toBe('Establishing view of the Vanity of The Glasshouse.');
+  });
+  test('the same place as the reference, a different part of it; never "only the camera moved"', () => {
+    const brief = zoneBrief('back');
+    expect(line(brief, 'continuity').text).toBe('The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view.');
+    expect(briefToPrompt(brief)).not.toMatch(/only the camera moved/);
+  });
+  test('fully dressed, with an open patch of floor in the foreground', () => {
+    expect(line(zoneBrief('area', 'Bar'), 'overlay_space').text).toBe('Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.');
+    expect(briefToPrompt(zoneBrief('area', 'Bar'))).toContain(FURNISHED);
+  });
+});

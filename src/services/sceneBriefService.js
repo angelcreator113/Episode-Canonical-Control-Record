@@ -116,6 +116,23 @@ const OVERLAY_SPACE = Object.freeze({
 const OVERLAY_SPACE_DEFAULT = 'an open area in the centre of the frame where a person could stand';
 const overlaySpace = (angle) => `Leave ${OVERLAY_SPACE[angle] || OVERLAY_SPACE_DEFAULT}, with the room fully dressed around it.`;
 
+// L14 (b) (Evoni, 2026-10-02; §8(hh)): each zone is a full establishing view
+// of that part of the place, made from the set's approved base (or its base)
+// as the style and architecture reference, so Front, Inside and Back read as
+// one place.
+const ZONE_CAMERAS = Object.freeze({
+  front: (place) => `Establishing view of the front of ${place}: the exterior, the entrance and the approach, seen from outside.`,
+  inside: (place) => `Establishing view of the main room of ${place}, corner to corner.`,
+  back: (place, name) => `Establishing view of the back of ${place}${name ? ` (${name})` : ''}: its backstage, private or quiet area.`,
+  area: (place, name) => (name ? `Establishing view of the ${name} area of ${place}.` : `Establishing view of an area of ${place}.`),
+  zone: (place, name) => (name ? `Establishing view of the ${name} of ${place}.` : `Establishing view of a part of ${place}.`),
+});
+const ZONE_CONTINUITY = 'The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view.';
+const zoneCamera = (zone, place) => {
+  const make = ZONE_CAMERAS[String(zone?.kind || '').toLowerCase()];
+  return make ? make(place, clean(zone?.name || '')) : null;
+};
+
 const TIME_LIGHT = Object.freeze({
   morning: 'Morning, with soft early daylight.',
   afternoon: 'Afternoon, with bright, even daylight.',
@@ -208,10 +225,12 @@ function seasonFromDate(date) {
  *                    set the environment without dressing the place: the
  *                    empty-room base of "Generate this look" (L8; Q4, DJ
  *                    bug 3, §8(hh)). `event` takes precedence when given.
+ *   zone:            { kind, name } for a zone of the set (L14 b): its own
+ *                    establishing camera and the same-place continuity line
  */
 function buildSceneBrief({
   sceneSet, location = null, event = null, angleLabel = 'WIDE', cameraDirection = null,
-  requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false, environmentEvent = null,
+  requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false, environmentEvent = null, zone = null,
 } = {}) {
   const set = sceneSet || {};
   const angle = String(angleLabel || 'WIDE').toUpperCase();
@@ -278,10 +297,12 @@ function buildSceneBrief({
   }
 
   // ── The shot ──
-  add('shot', 'camera', 'Camera', sentence(cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
+  const zoneShot = zone ? zoneCamera(zone, clean(set.name || location?.name || 'the place')) : null;
+  add('shot', 'camera', 'Camera', sentence(zoneShot || cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
-  if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
-  add('shot', 'overlay_space', 'Space for characters', overlaySpace(angle), 'venue');
+  if (zoneShot) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
+  else if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
+  add('shot', 'overlay_space', 'Space for characters', overlaySpace(zoneShot ? 'WIDE' : angle), 'venue');
 
   // ── The environment ──
   // Q4: the look's lighting, else the event's time; for an undressed base,
@@ -322,7 +343,7 @@ function buildSceneBrief({
   const dressing = lookDressing
     ? Boolean(location?.approved_base_image_url && event)
     : Boolean(
-      location?.approved_base_image_url && event && angle === 'WIDE' && !continuity
+      location?.approved_base_image_url && event && angle === 'WIDE' && !continuity && !zone
       && (!set.id || set.id !== location.approved_base_scene_set_id)
     );
 
@@ -438,7 +459,7 @@ async function loadBriefEvent(sequelize, eventId, showId, { transaction } = {}) 
 /**
  * The brief for one generation, with its sources loaded:
  *   options: { angleLabel, cameraDirection, requiredFeatures, continuity,
- *              eventId, environmentEventId, overrides }
+ *              eventId, environmentEventId, overrides, zone }
  */
 async function prepareSceneBrief(sequelize, sceneSet, options = {}) {
   const location = await loadBriefLocation(sequelize, sceneSet?.world_location_id);
@@ -457,6 +478,7 @@ module.exports = {
   BRIEF_RULES,
   FURNISHED,
   SHOT_CAMERAS,
+  ZONE_CAMERAS,
   timeOfDayFromEventTime,
   seasonFromDate,
   buildSceneBrief,
