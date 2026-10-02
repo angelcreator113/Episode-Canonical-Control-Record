@@ -301,7 +301,7 @@ export default function EpisodeScriptWriterPage() {
 
       {/* Quick links */}
       <div className="script-writer-links">
-        <Link to={`/episodes/${episodeId}/plan`}>Scene Planner</Link>
+        <Link to={`/episodes/${episodeId}/plan`}>Beat Plan</Link>
         <Link to={`/episodes/${episodeId}`}>Episode Detail</Link>
         <Link to={`/episodes/${episodeId}/todo`}>Todo List</Link>
       </div>

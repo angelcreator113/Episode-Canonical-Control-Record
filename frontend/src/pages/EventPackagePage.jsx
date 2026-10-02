@@ -86,6 +86,7 @@ import {
   EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel,
 } from '../utils/eventTaxonomy';
 import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersion';
+import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventOutfitPicker from '../components/EventOutfitPicker';
@@ -197,16 +198,9 @@ export function searchSceneSets(groups, query, venueNames = {}) {
   return { atVenue: groups.atVenue.filter(hit), others: groups.others.filter(hit) };
 }
 
-/** A set's thumbnail: its base image, else its cover or first angle with an image. */
-export function sceneSetThumb(set) {
-  if (set?.base_still_url) return set.base_still_url;
-  const angles = set?.angles || [];
-  const cover = angles.find((a) => a.id === set.cover_angle_id && a.still_image_url);
-  return (cover || angles.find((a) => a.still_image_url))?.still_image_url || null;
-}
-
-/** Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set. */
-export const sceneSetPath = (showId, setId) => `/shows/${showId}/world?tab=scene-sets&set=${setId}`;
+// sceneSetThumb and sceneSetPath moved to utils/sceneSets (shared with the
+// Beat Plan, L11); re-exported here for the page's callers.
+export { sceneSetThumb, sceneSetPath };
 
 // Season Context (§8(ff) A4): read-only — "Season Arc provides intent; the
 // Event Package owns the event's facts." Season, phase, slot and purpose.

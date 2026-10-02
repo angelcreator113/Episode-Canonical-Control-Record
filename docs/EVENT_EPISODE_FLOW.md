@@ -4009,6 +4009,12 @@ The answers in full:
 5. **Where the look is used:** this build stores and shows the look only (Place, Scene Sets, links both ways). L10, its own PR right after, makes the episode's angles at that venue from the look.
 6. **Progress in the Place section:** after the cost is confirmed, the Place section shows "Generating…" and refreshes until the image is done or failed, then shows the thumbnail with "Open in Scene Sets".
 
+Ruling L11 (Evoni, 2026-10-02), recorded verbatim; built after L7–L9 and before L10:
+
+> L11. "In the Scene Planner, any beat can use any scene set in the show's library. The beat editor lists all the show's sets (searchable, with thumbnails and their angles, like the Place picker); choosing a set not yet linked to the episode adds it to the episode's locations as an extra (or the matching role if that role is empty). A beat whose set or angle Evoni chose is marked 'Chosen by you' and is never replaced by a re-plan or by location changes, like a locked beat. The planner is renamed 'Beat Plan' and shows the episode's locations at its top, each linking to its set in Scene Sets."
+
+As built: "the show's library" is the show's sets and sets with no show (the sets the Episode Locations step offers). "The matching role" is the role of the set's type (Home Base → home, Closet → closet, Event location → event); an occupied role, or any other type, makes it an extra named after the set. A set or angle chosen in the beat editor marks the beat; the planner's own missing-angle actions (L4) do not.
+
 ---
 
 ## 9. Owed before enforcement
