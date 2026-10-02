@@ -29,6 +29,13 @@ const LOOK = {
 };
 
 let body;
+// The look's buttons stay disabled until its first load; clicking one
+// before then does nothing, so wait for it to be enabled (CI raced it).
+const enabled = async (testId) => {
+  const button = await screen.findByTestId(testId);
+  await waitFor(() => expect(button.disabled).toBe(false));
+  return button;
+};
 const renderLook = () => {
   const onToast = vi.fn();
   const onSaved = vi.fn();
@@ -65,7 +72,7 @@ describe('EventVenueLook (L1)', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, data: { venue_look: LOOK, kept_edited: ['decor'] } } });
     const confirm = vi.spyOn(window, 'confirm');
     const { onToast, onSaved } = renderLook();
-    fireEvent.click(await screen.findByTestId('venue-look-draft'));
+    fireEvent.click(await enabled('venue-look-draft'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${URL}/draft`, {}));
     expect(confirm).not.toHaveBeenCalled();
     await screen.findByTestId('venue-look-part-overall');
@@ -76,7 +83,7 @@ describe('EventVenueLook (L1)', () => {
   test('Edit saves every part, areas one per line, and the references with their ticks', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: { success: true, data: { venue_look: LOOK } } });
     const { onToast } = renderLook();
-    fireEvent.click(await screen.findByTestId('venue-look-edit'));
+    fireEvent.click(await enabled('venue-look-edit'));
     await screen.findByTestId('venue-look-editor');
     fireEvent.change(screen.getByTestId('venue-look-input-lighting'), { target: { value: 'Warm candlelight at dusk.' } });
     fireEvent.change(screen.getByTestId('venue-look-input-areas'), { target: { value: 'Bar\nRunway\n\nVIP lounge' } });
@@ -95,7 +102,7 @@ describe('EventVenueLook (L1)', () => {
   test('at most 3 references can be ticked', async () => {
     body = { venue_look: { ...LOOK, references: [A1, A2, A3, A4].map((id, i) => ({ asset_id: id, use_as_reference: i < 3, url: null })) }, editable: true };
     renderLook();
-    fireEvent.click(await screen.findByTestId('venue-look-edit'));
+    fireEvent.click(await enabled('venue-look-edit'));
     expect(screen.getByTestId(`venue-look-ref-tick-${A4}`).disabled).toBe(true);
     fireEvent.click(screen.getByTestId(`venue-look-ref-tick-${A1}`));
     expect(screen.getByTestId(`venue-look-ref-tick-${A4}`).disabled).toBe(false);
@@ -104,7 +111,7 @@ describe('EventVenueLook (L1)', () => {
   test('an uploaded image is added as a reference, not ticked', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'SUCCESS', data: { id: A2, s3_url_processed: 'https://x/a2.png' } } });
     renderLook();
-    fireEvent.click(await screen.findByTestId('venue-look-edit'));
+    fireEvent.click(await enabled('venue-look-edit'));
     const file = new File(['png'], 'mood.png', { type: 'image/png' });
     fireEvent.change(screen.getByLabelText('Add reference image'), { target: { files: [file] } });
     await screen.findByTestId(`venue-look-ref-${A2}`);
@@ -121,7 +128,7 @@ describe('EventVenueLook (L1)', () => {
     vi.mocked(api.put).mockRejectedValue(err);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     renderLook();
-    fireEvent.click(await screen.findByTestId('venue-look-edit'));
+    fireEvent.click(await enabled('venue-look-edit'));
     fireEvent.click(screen.getByTestId('venue-look-save'));
     expect((await screen.findByRole('alert')).textContent).toContain('venue look is locked');
     expect(screen.getByTestId('venue-look-editor')).toBeTruthy();
