@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -16,7 +16,10 @@ import apiClient from '../services/api';
 import SceneSetsTab from './SceneSetsTab';
 
 const SETS = [
-  { id: 'set-1', name: 'Atelier', scene_type: 'HOME_BASE', angles: [], generation_status: 'pending' },
+  { id: 'set-1', name: 'Atelier', scene_type: 'HOME_BASE', generation_status: 'pending', angles: [
+    { id: 'a-front', angle_label: 'ESTABLISHING', angle_name: 'Front steps', angle_kind: 'front', generation_status: 'complete', still_image_url: 'https://x/f.jpg', sort_order: 0 },
+    { id: 'a-back', angle_label: 'OTHER', angle_name: 'Green room', angle_kind: 'back', generation_status: 'pending', still_image_url: null, sort_order: 1 },
+  ] },
   { id: 'set-2', name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', angles: [], generation_status: 'pending' },
 ];
 
@@ -42,5 +45,63 @@ describe('SceneSetsTab ?set=<id> (S7)', () => {
   test('an unknown set says so', async () => {
     renderAt('?tab=scene-sets&set=set-gone');
     expect(await screen.findByTestId('scene-sets-focus-missing')).toBeTruthy();
+  });
+});
+
+// S8 (Evoni, 2026-10-02): "landing on the exact set and zone, with a way back
+// to the page it came from."
+describe('SceneSetsTab ?set=&zone=&from= (S8)', () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.get).mockReset();
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (
+      url.includes('/scene-sets') ? { data: { success: true, data: SETS } } : { data: { success: true, data: [] } }
+    ));
+  });
+
+  test('opens the set\'s panel on its angles with the zone marked, by angle id or by zone kind', async () => {
+    renderAt('?tab=scene-sets&set=set-1&zone=a-back');
+    const row = await waitFor(() => {
+      const el = document.querySelector('[data-angle-id="a-back"]');
+      if (!el) throw new Error('no zone row yet');
+      return el;
+    });
+    expect(row.classList.contains('is-zone-focus')).toBe(true);
+    expect(document.querySelector('[data-angle-id="a-front"]').classList.contains('is-zone-focus')).toBe(false);
+  });
+
+  test('a zone kind marks that zone', async () => {
+    renderAt('?tab=scene-sets&set=set-1&zone=front');
+    const row = await waitFor(() => {
+      const el = document.querySelector('[data-angle-id="a-front"]');
+      if (!el) throw new Error('no zone row yet');
+      return el;
+    });
+    expect(row.classList.contains('is-zone-focus')).toBe(true);
+  });
+
+  test('shows the way back to the page it came from', async () => {
+    renderAt('?tab=scene-sets&set=set-1&from=%2Fepisodes%2Fep-1%2Fplan&fromLabel=Beat%20Plan');
+    expect((await screen.findByTestId('scene-sets-back')).getAttribute('href')).toBe('/episodes/ep-1/plan');
+  });
+});
+
+// S8 (Evoni, 2026-10-02; §8(dd)), answer 4: the exterior video moves to the
+// panel, onto the Front zone.
+describe('SceneSetsTab: the exterior video on the Front zone (S8)', () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.get).mockReset();
+    vi.mocked(apiClient.post).mockReset();
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (
+      url.includes('/scene-sets') ? { data: { success: true, data: SETS } } : { data: { success: true, data: [] } }
+    ));
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true } });
+  });
+
+  test('a Front zone with an image offers Video; other zones do not', async () => {
+    renderAt('?tab=scene-sets&set=set-1&zone=front');
+    const video = await screen.findByTestId('angle-video-a-front');
+    expect(screen.queryByTestId('angle-video-a-back')).toBeNull();
+    fireEvent.click(video);
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/angles/a-front/generate-video'));
   });
 });

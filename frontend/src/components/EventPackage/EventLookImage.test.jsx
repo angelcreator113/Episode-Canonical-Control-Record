@@ -25,12 +25,14 @@ const sceneSetPath = (showId, setId) => `/shows/${showId}/world?tab=scene-sets&s
 
 let lookState;
 let briefData;
+// S8 (Evoni, 2026-10-02; §8(dd), answer 1): the look is made in the Scene
+// Sets panel (canGenerate); the Place shows status and "Open in Scene Sets →".
 const renderIt = (props = {}) => {
   const onToast = vi.fn();
   const onSaved = vi.fn();
   render(
-    <MemoryRouter>
-      <EventLookImage showId="show-1" eventId="ev-1" sceneSetPath={sceneSetPath} onToast={onToast} onSaved={onSaved} pollMs={5} {...props} />
+    <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
+      <EventLookImage showId="show-1" eventId="ev-1" sceneSetPath={sceneSetPath} onToast={onToast} onSaved={onSaved} pollMs={5} canGenerate {...props} />
     </MemoryRouter>,
   );
   return { onToast, onSaved };
@@ -55,8 +57,7 @@ describe('EventLookImage (L7-L9)', () => {
 
   test('with an approved base: the cost first, then Confirm generates the look; it refreshes until ready and shows the thumbnail', async () => {
     const { onToast, onSaved } = renderIt();
-    expect((await screen.findByTestId('event-look-open')).getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
-    fireEvent.click(screen.getByTestId('generate-this-look'));
+    fireEvent.click(await screen.findByTestId('generate-this-look'));
 
     await screen.findByTestId('scene-brief-confirm');
     expect(screen.getByText('Generate this look on “Glasshouse Hall”')).toBeTruthy();
@@ -165,7 +166,6 @@ describe('EventLookImage (L7-L9)', () => {
     expect(figure.querySelector('img').getAttribute('src')).toBe('https://x/approved.jpg');
     expect(figure.textContent).toContain('Generate this look to dress it for this event.');
     expect(screen.getByTestId('generate-this-look')).toBeTruthy();
-    expect(screen.getByTestId('event-look-open').getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
     expect(screen.queryByText('No look image yet.')).toBeNull();
   });
 
@@ -190,5 +190,33 @@ describe('EventLookImage (L7-L9)', () => {
     lookState = { ...lookState, look: { id: 'look-1', status: 'failed', error: 'provider down' } };
     renderIt();
     expect((await screen.findByTestId('event-look-failed')).textContent).toBe('The last try failed: provider down.');
+  });
+});
+
+// S8 (Evoni, 2026-10-02; §8(dd)): "Other pages (... Place ...) show status
+// only, with one entry point: 'Open in Scene Sets →', landing on the exact
+// set and zone, with a way back."
+describe('EventLookImage in the Place (S8): status only', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    lookState = { scene_set: SET, approved_base: { scene_set_id: 'set-1', image_url: 'https://x/approved.jpg' }, look: null, editable: true };
+    vi.mocked(api.get).mockImplementation(async (url) => (url === BASE ? { data: { success: true, data: lookState } } : { data: {} }));
+  });
+
+  test('no Generate this look; "Open in Scene Sets →" lands on the event\'s look, with the way back', async () => {
+    renderIt({ canGenerate: false });
+    const link = await screen.findByTestId('event-look-open');
+    expect(link.textContent).toBe('Open in Scene Sets →');
+    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-1&zone=look%3Aev-1&from=${encodeURIComponent('/shows/show-1/events/ev-1')}&fromLabel=Event`);
+    expect(screen.queryByTestId('generate-this-look')).toBeNull();
+    expect(screen.getByTestId('event-look-approved-base').textContent).toContain("Make this event's look in Scene Sets.");
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('with no set and no approved base it says where to start', async () => {
+    lookState = { scene_set: null, approved_base: null, look: null, editable: true };
+    renderIt({ canGenerate: false });
+    expect(await screen.findByText("Choose the event's scene set, then make its look in Scene Sets.")).toBeTruthy();
+    expect(screen.queryByTestId('event-look-open')).toBeNull();
   });
 });

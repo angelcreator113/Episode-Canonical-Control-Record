@@ -281,6 +281,41 @@ function dressedError(res, err, label) {
   return res.status(500).json({ success: false, error: err.message });
 }
 
+// S8 (Evoni, 2026-10-02; §8(dd), answer 2): "Dressed angles move onto the
+// look in the panel." GET .../dressed-angles?scene_set_id= — the episode's
+// look on that set and each of the set's angles with its dressed version:
+// { look: { id, image_url } | null, angles: [{ id, label, name, kind,
+// still_image_url, dressed: { status, image_url, error } | null }] }.
+router.get('/:episodeId/dressed-angles', requireAuth, async (req, res) => {
+  try {
+    const setId = req.query.scene_set_id;
+    if (!setId || !/^[0-9a-f-]{36}$/i.test(String(setId))) return res.status(400).json({ success: false, error: 'scene_set_id is required' });
+    const { episodeLooks, lookAngles } = require('../services/dressedAngleService');
+    const look = (await episodeLooks(models.sequelize, req.params.episodeId)).get(setId) || null;
+    if (!look) return res.json({ success: true, data: { look: null, angles: [] } });
+    const dressed = await lookAngles(models.sequelize, [look.id]);
+    const [angles] = await models.sequelize.query(
+      `SELECT id, angle_label, angle_name, angle_kind, still_image_url FROM scene_angles
+        WHERE scene_set_id = :setId AND deleted_at IS NULL ORDER BY sort_order ASC NULLS LAST, created_at ASC`,
+      { replacements: { setId } });
+    return res.json({
+      success: true,
+      data: {
+        look: { id: look.id, image_url: look.image_url },
+        angles: angles.map((a) => {
+          const d = dressed.get(`${look.id}:${a.id}`);
+          return {
+            id: a.id, label: a.angle_label, name: a.angle_name, kind: a.angle_kind || null, still_image_url: a.still_image_url || null,
+            dressed: d ? { status: d.status, image_url: d.image_url || null, error: d.error || null } : null,
+          };
+        }),
+      },
+    });
+  } catch (err) {
+    return dressedError(res, err, 'list');
+  }
+});
+
 router.post('/:episodeId/dressed-angles/:angleId/brief', requireAuth, async (req, res) => {
   try {
     const { dressedAngleBrief } = require('../services/dressedAngleService');

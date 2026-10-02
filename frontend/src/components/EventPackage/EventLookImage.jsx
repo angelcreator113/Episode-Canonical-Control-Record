@@ -15,9 +15,13 @@
  * says "Generating…" and refreshes until the image is done or failed
  * (answer 6). Several sets at the venue: Evoni chooses one (answer 3).
  *
- * Props: showId, eventId, sceneSetPath(showId, setId), onToast(msg),
+ * Props: showId, eventId, onToast(msg), canGenerate (the Scene Sets panel), fromLabel,
  * onSaved() (reloads the event: a set may have been created and linked),
  * pollMs (the refresh interval; tests shorten it).
+ *
+ * S8 (Evoni, 2026-10-02; §8(dd), answer 1): the look is made in the Scene
+ * Sets panel's Looks row (canGenerate); the Place shows status only, with
+ * "Open in Scene Sets →" on the event's look (zone look:<eventId>).
  *
  * DJ bug 1 (Evoni, 2026-10-02): the section refreshes whenever the server
  * says the look or the base is generating, not only after its own Confirm
@@ -26,10 +30,11 @@
  * the server (GET .../look), so the refresh always ends.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import OpenInSceneSets from '../OpenInSceneSets';
 import { Sparkles, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
+import './EventLookImage.css';
 
 export const POLL_MS = 4000;
 // Longer than the server's 10-minute stuck timeout, so a stuck run is seen failing.
@@ -38,7 +43,7 @@ const POLL_MAX = 180;
 const lookGenerating = (d) => d?.look?.status === 'generating';
 const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
 
-export default function EventLookImage({ showId, eventId, sceneSetPath, onToast, onSaved, pollMs = POLL_MS }) {
+export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, canGenerate = false, fromLabel = 'Event' }) {
   const base = `/api/v1/world/${showId}/events/${eventId}/look`;
   const [state, setState] = useState(null);
   const [asking, setAsking] = useState(false);
@@ -165,7 +170,7 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
     <div className="ell" data-testid="event-look-image">
       <div className="ell-head">
         <span className="epp-fields-label">Look image</span>
-        {!locked && (
+        {canGenerate && !locked && (
           <button type="button" className="epp-btn epp-btn-small" onClick={() => ask()} disabled={asking || generating} data-testid="generate-this-look">
             <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
           </button>
@@ -188,7 +193,7 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
       )}
       {!generating && !lookReady && baseWaiting && (
         <p className="ell-note" data-testid="event-look-awaiting">
-          The venue's base is waiting for your approval. Approve it in Scene Sets, then generate this look.
+          The venue's base is waiting for your approval. Approve it in Scene Sets, then {canGenerate ? 'generate this look' : 'make this look there'}.
         </p>
       )}
       {/* DJ bug 6: before the event's look exists, the venue's approved base,
@@ -197,18 +202,19 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
         <figure className="ell-figure" data-testid="event-look-approved-base">
           <img src={approved.image_url} alt="The venue's approved base" />
           <figcaption className="ell-note">
-            The venue's approved base.{locked ? '' : ' Generate this look to dress it for this event.'}
+            The venue's approved base.{locked ? '' : (canGenerate ? ' Generate this look to dress it for this event.' : " Make this event's look in Scene Sets.")}
           </figcaption>
         </figure>
       )}
       {!generating && !lookReady && !baseWaiting && !look && !baseFailed && !approved && (
-        <p className="ell-note">No look image yet.</p>
+        <p className="ell-note">{canGenerate || openSetId ? 'No look image yet.' : "Choose the event's scene set, then make its look in Scene Sets."}</p>
       )}
       {locked && (
         <p className="ell-note" data-testid="event-look-locked">The episode is accepted: the Place is locked.</p>
       )}
-      {openSetId && (
-        <Link className="epp-inline-link ell-open" to={sceneSetPath(showId, openSetId)} data-testid="event-look-open">Open in Scene Sets</Link>
+      {!canGenerate && openSetId && (
+        <OpenInSceneSets showId={showId} setId={openSetId} zone={`look:${eventId}`} fromLabel={fromLabel}
+          className="epp-inline-link ell-open" testId="event-look-open" />
       )}
 
       {choose && (

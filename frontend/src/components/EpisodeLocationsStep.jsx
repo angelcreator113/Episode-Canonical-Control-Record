@@ -32,6 +32,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import OpenInSceneSets from './OpenInSceneSets';
 import './EpisodeLocationsStep.css';
 
 const ROLE_LABELS = { event: 'Event', home: 'Home', closet: 'Closet', extra: 'Extra location' };
@@ -174,8 +175,13 @@ export default function EpisodeLocationsStep({
           </div>
         )}
         {(angleGaps || []).filter((g) => g.role === key && value?.scene_set_id && g.scene_set_id === value.scene_set_id).map((g) => (
-          <div key={g.text} className="els-gap" data-testid={`els-gap-${key}`}>
-            {g.text}{g.beats?.length ? ` (beat${g.beats.length === 1 ? '' : 's'} ${g.beats.join(', ')})` : ''}
+          <div key={g.text} className="els-gap-row">
+            <div className="els-gap" data-testid={`els-gap-${key}`}>
+              {g.text}{g.beats?.length ? ` (beat${g.beats.length === 1 ? '' : 's'} ${g.beats.join(', ')})` : ''}
+            </div>
+            {/* S8 (§8(dd)): the gap's one action, on its set and zone. */}
+            <OpenInSceneSets showId={showId} setId={g.scene_set_id} zone={g.angle_id || g.kinds?.[0] || null}
+              fromLabel="the event" className="els-gap-open" testId={`els-gap-open-${key}`} />
           </div>
         ))}
         {!value?.scene_set_id && missing.includes(key) && (

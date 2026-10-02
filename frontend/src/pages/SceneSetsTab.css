@@ -4093,3 +4093,25 @@
 .scene-sets-delete-dialog p { margin: 0; font-size: 13px; }
 .scene-sets-delete-dialog select { max-width: 100%; min-width: 0; }
 .scene-sets-delete-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* S8 (Evoni, 2026-10-02): the zone Scene Sets was opened on, and the way back. */
+.scene-sets-angle-row.is-zone-focus {
+  outline: 2px solid #B8962E;
+  outline-offset: 2px;
+  background: #fbf6e6;
+}
+.scene-sets-back-link {
+  display: inline-block;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #8a6d1f;
+  text-decoration: none;
+}
+.scene-sets-back-link:hover { text-decoration: underline; }
+
+/* S8: each event's look work in the Looks row. */
+.scene-sets-event-look {
+  margin-top: 8px; padding: 8px; border: 1px solid #eadfc4; border-radius: 8px; background: #fffdf7; min-width: 0;
+}
+.scene-sets-event-look.is-zone-focus { outline: 2px solid #B8962E; outline-offset: 2px; }
+.scene-sets-event-look-name { display: inline-block; font-weight: 600; font-size: 12px; margin-bottom: 4px; overflow-wrap: anywhere; }

@@ -1,13 +1,14 @@
 /**
- * Venue generation from an event shows its Scene Brief first (rulings S2
- * and S5, Evoni 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd)). In the event
+ * S8 (Evoni, 2026-10-02; EVENT_EPISODE_FLOW.md §8(dd)): "All scene image
+ * work ... happens in one place: the scene set's panel in Scene Sets. Other
+ * pages (... World Admin's event editor) show status only, with one entry
+ * point: 'Open in Scene Sets →' ..." and answer 3: "Generate Venue Images"
+ * with no set becomes "Create the scene set" (no images). In the event
  * editor (?tab=events&event=<id>):
- *   - "Generate Venue Images" asks for the venue's brief and generates only
- *     on confirm, with the overrides set there;
- *   - for a linked scene set with no image, it opens the set's base brief
- *     with this event chosen (S3) and generates its base, not a new venue;
- *   - Mark Ready no longer starts a paid venue generation by itself: it
- *     opens the venue's brief.
+ *   - with no set: "Create the scene set" makes the venue's set and links it;
+ *     nothing is generated;
+ *   - with a linked set: "Open in Scene Sets →"; no generate or video here;
+ *   - Mark Ready opens no brief and generates nothing.
  */
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -26,11 +27,6 @@ const BASE_EVENT = {
   canon_consequences: { automation: {} }, updated_at: '2026-10-01T00:00:00Z',
 };
 const SET_NO_IMAGE = { id: 'set-9', name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', base_still_url: null, show_id: 'show-1' };
-const BRIEF = {
-  version: 1, scene_set_id: null, world_location_id: 'loc-1', event_id: 'ev-1', angle: 'WIDE',
-  lines: [{ layer: 'place', key: 'identity', label: 'Place', text: 'The Glasshouse.', source: 'venue', essential: true }],
-  rules: ['No people present.'], missing: [], overrides: {},
-};
 
 let events;
 function renderEditor() {
@@ -44,10 +40,10 @@ function renderEditor() {
 }
 const posted = (suffix) => vi.mocked(api.post).mock.calls.filter(([u]) => u.endsWith(suffix));
 
-describe('WorldAdmin: venue generation shows its brief first (S2, S5)', () => {
+describe('WorldAdmin event editor: no scene image work here (S8)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
-    events = [{ ...BASE_EVENT }];
+    events = [{ ...BASE_EVENT, venue_location_id: 'loc-1' }];
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/world/show-1/events') return { data: { events } };
       if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
@@ -55,9 +51,7 @@ describe('WorldAdmin: venue generation shows its brief first (S2, S5)', () => {
       return { data: {} };
     });
     vi.mocked(api.post).mockImplementation(async (url) => {
-      if (url.endsWith('/venue-brief')) return { data: { success: true, data: { target: { kind: 'venue' }, brief: BRIEF, estimate: { usd: 0.1, priced: true, images: 2 } } } };
-      if (url.endsWith('/scene-sets/set-9/brief')) return { data: { success: true, data: { target: { kind: 'base' }, brief: { ...BRIEF, scene_set_id: 'set-9' }, estimate: { usd: 0.03, priced: true } } } };
-      if (url.endsWith('/generate-venue')) return { data: { success: true, data: { scene_set_id: 'set-new' } } };
+      if (url === '/api/v1/scene-sets') return { data: { success: true, data: { id: 'set-new', name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', base_still_url: null, show_id: 'show-1' } } };
       if (url.endsWith('/generate-social-checklist')) return { data: { success: true, data: { tasks: [], assetUrl: null } } };
       return { data: { success: true, data: {} } };
     });
@@ -65,113 +59,36 @@ describe('WorldAdmin: venue generation shows its brief first (S2, S5)', () => {
   });
   afterEach(() => { vi.restoreAllMocks(); });
 
-  test('"Generate Venue Images" shows the venue\'s brief; nothing is generated until confirmed', async () => {
+  test('with no set: "Create the scene set" makes the venue\'s set and links it; nothing is generated', async () => {
     renderEditor();
-    fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
-    expect(await screen.findByTestId('scene-brief-confirm')).toBeTruthy();
-    await waitFor(() => expect(posted('/events/ev-1/venue-brief')).toHaveLength(1));
-    expect(screen.getByTestId('sbc-event-fixed')).toBeTruthy();
-    expect(screen.queryByTestId('sbc-event')).toBeNull();
-    expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.10');
+    expect(screen.queryByRole('button', { name: 'Generate Venue Images' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Create the scene set' }));
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.some(([u]) => u === '/api/v1/scene-sets')).toBe(true));
+    const [, created] = vi.mocked(api.post).mock.calls.find(([u]) => u === '/api/v1/scene-sets');
+    expect(created).toEqual({ name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', world_location_id: 'loc-1', show_id: 'show-1' });
+    await waitFor(() => expect(vi.mocked(api.put).mock.calls.some(([, b]) => b?.scene_set_id === 'set-new')).toBe(true));
     expect(posted('/generate-venue')).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('sbc-confirm'));
-    await waitFor(() => expect(posted('/generate-venue')).toHaveLength(1));
-    expect(posted('/generate-venue')[0][1]).toEqual({ overrides: {} });
+    expect(posted('/venue-brief')).toHaveLength(0);
     expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
   });
 
-  test('a linked scene set with no image: its base brief, for this event; the base is generated, not a new venue', async () => {
+  test('with a linked set: "Open in Scene Sets →" on it; no Generate Venue Images and no Video here', async () => {
     events = [{ ...BASE_EVENT, scene_set_id: 'set-9' }];
     renderEditor();
-    fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
-    await screen.findByTestId('scene-brief-confirm');
-    await waitFor(() => expect(posted('/scene-sets/set-9/brief')).toHaveLength(1));
-    expect(posted('/scene-sets/set-9/brief')[0][1]).toEqual({ event_id: 'ev-1' });
-
-    fireEvent.click(screen.getByTestId('sbc-confirm'));
-    await waitFor(() => expect(posted('/scene-sets/set-9/generate-base')).toHaveLength(1));
-    expect(posted('/scene-sets/set-9/generate-base')[0][1]).toEqual({ overrides: {}, event_id: 'ev-1' });
-    expect(posted('/generate-venue')).toHaveLength(0);
+    const link = await screen.findByTestId('event-editor-open-scene-sets');
+    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-9&from=${encodeURIComponent('/shows/show-1/world?tab=events&event=ev-1')}&fromLabel=the%20event`);
+    expect(screen.queryByRole('button', { name: 'Generate Venue Images' })).toBeNull();
+    expect(screen.queryByText('🎬 Video')).toBeNull();
   });
 
-  // F1 (Evoni, 2026-10-01): an event whose scene set is attached but not in
-  // the page's list. The old call was skipped by the backend and the toast
-  // said the venue was kept, with no image made.
-  describe('an attached scene set not in the list (F1)', () => {
-    const toast = (text) => screen.findByText(text, { exact: false });
-    beforeEach(() => { events = [{ ...BASE_EVENT, scene_set_id: 'set-x' }]; });
-
-    test('with no image: its base brief is shown with its note; the generated image is reported', async () => {
-      vi.mocked(api.get).mockImplementation(async (url) => {
-        if (url === '/api/v1/world/show-1/events') return { data: { events } };
-        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
-        if (url === '/api/v1/scene-sets/set-x') return { data: { success: true, data: { id: 'set-x', name: 'Old Glasshouse', base_still_url: null } } };
-        return { data: {} };
-      });
-      vi.mocked(api.post).mockImplementation(async (url) => {
-        if (url.endsWith('/venue-brief')) return { data: { success: true, data: { target: { kind: 'base', scene_set_id: 'set-x', scene_set_name: 'Old Glasshouse' }, brief: BRIEF, estimate: { usd: 0.04, priced: true, images: 1 } } } };
-        if (url.endsWith('/generate-venue')) return { data: { success: true, outcome: 'generated', data: { kind: 'base', scene_set_id: 'set-x', venue_name: 'Old Glasshouse' } } };
-        return { data: { success: true, data: {} } };
-      });
-      renderEditor();
-      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
-
-      expect((await screen.findByTestId('sbc-note')).textContent).toMatch(/“Old Glasshouse” has no image yet/);
-      expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.04');
-      fireEvent.click(screen.getByTestId('sbc-confirm'));
-
-      expect(await toast('Venue image generated for “Old Glasshouse”.')).toBeTruthy();
-    });
-
-    test('with its image: already available; no brief, nothing generated', async () => {
-      vi.mocked(api.get).mockImplementation(async (url) => {
-        if (url === '/api/v1/world/show-1/events') return { data: { events } };
-        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
-        if (url === '/api/v1/scene-sets/set-x') return { data: { success: true, data: { id: 'set-x', name: 'Old Glasshouse', base_still_url: 'https://cdn/x.jpg' } } };
-        return { data: {} };
-      });
-      renderEditor();
-      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
-
-      expect(await toast('Venue images already available: “Old Glasshouse” has its image. Nothing generated.')).toBeTruthy();
-      expect(screen.getByTestId('wa-toast').textContent).not.toMatch(/injected/);
-      expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
-      expect(posted('/venue-brief')).toHaveLength(0);
-      expect(posted('/generate-venue')).toHaveLength(0);
-    });
-
-    test('a generation that made nothing, or failed, is never reported as generated', async () => {
-      vi.mocked(api.get).mockImplementation(async (url) => {
-        if (url === '/api/v1/world/show-1/events') return { data: { events } };
-        if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [SET_NO_IMAGE] } };
-        if (url === '/api/v1/scene-sets/set-x') throw Object.assign(new Error('gone'), { response: { status: 404 } });
-        return { data: {} };
-      });
-      vi.mocked(api.post).mockImplementation(async (url) => {
-        if (url.endsWith('/venue-brief')) return { data: { success: true, data: { target: { kind: 'venue' }, brief: BRIEF, estimate: { usd: 0.1, priced: true, images: 2 } } } };
-        if (url.endsWith('/generate-venue')) throw Object.assign(new Error('500'), { response: { status: 500, data: { success: false, outcome: 'failed', error: 'provider down' } } });
-        return { data: { success: true, data: {} } };
-      });
-      renderEditor();
-      fireEvent.click(await screen.findByRole('button', { name: 'Generate Venue Images' }));
-      fireEvent.click(await screen.findByTestId('sbc-confirm'));
-
-      expect(await toast('Venue generation failed: provider down')).toBeTruthy();
-      // Reported as a failure: in red, never as an injected success.
-      const box = screen.getByTestId('wa-toast');
-      expect(box.dataset.tone).toBe('failed');
-      expect(box.textContent).not.toMatch(/injected|✅/);
-    });
-  });
-
-  test('Mark Ready with no venue opens the venue\'s brief instead of generating', async () => {
+  test('Mark Ready with no venue opens no brief and generates nothing', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    events = [{ ...BASE_EVENT }];
     renderEditor();
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Ready' }));
-    expect(await screen.findByTestId('scene-brief-confirm')).toBeTruthy();
-    await waitFor(() => expect(posted('/events/ev-1/venue-brief')).toHaveLength(1));
-    expect(posted('/generate-social-checklist')).toHaveLength(1);
+    await waitFor(() => expect(posted('/generate-social-checklist')).toHaveLength(1));
+    expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
+    expect(posted('/venue-brief')).toHaveLength(0);
     expect(posted('/generate-venue')).toHaveLength(0);
   });
 });

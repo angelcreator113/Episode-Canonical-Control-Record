@@ -319,7 +319,35 @@ async function looksForSets(sequelize, setIds) {
   return bySet;
 }
 
+/**
+ * S8 (Evoni, 2026-10-02; §8(dd), answer 1): the events using each set, for
+ * the Scene Sets panel's "Generate this look": Map<setId, [{ id, name,
+ * show_id, used_in_episode_id, look: { id, status, image_url } | null }]>.
+ */
+async function eventsForSets(sequelize, setIds) {
+  const ids = [...new Set((setIds || []).filter(Boolean))];
+  const bySet = new Map();
+  if (!ids.length) return bySet;
+  const [rows] = await sequelize.query(
+    `SELECT e.id, e.name, e.show_id, e.used_in_episode_id, e.scene_set_id,
+            l.id AS look_id, l.status AS look_status, l.image_url AS look_image_url
+       FROM world_events e
+       LEFT JOIN scene_set_looks l ON l.event_id = e.id AND l.scene_set_id = e.scene_set_id AND l.deleted_at IS NULL
+      WHERE e.scene_set_id IN (:ids) AND e.deleted_at IS NULL
+      ORDER BY e.updated_at DESC`,
+    { replacements: { ids } });
+  for (const r of rows) {
+    if (!bySet.has(r.scene_set_id)) bySet.set(r.scene_set_id, []);
+    bySet.get(r.scene_set_id).push({
+      id: r.id, name: r.name, show_id: r.show_id, used_in_episode_id: r.used_in_episode_id,
+      look: r.look_id ? { id: r.look_id, status: r.look_status, image_url: r.look_image_url } : null,
+    });
+  }
+  return bySet;
+}
+
 module.exports = {
+  eventsForSets,
   STEPS,
   STUCK_AFTER_MS,
   STUCK_REASON,
