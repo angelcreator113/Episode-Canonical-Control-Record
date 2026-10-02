@@ -225,8 +225,14 @@ async function createScenePlanRows(episode, event, models) {
   }
 
   try {
+    // B1 (Evoni, 2026-10-02): this show's HOME_BASE sets only, oldest first,
+    // until L3's saved home default replaces it. It took any show's, in no
+    // order.
     const [homeSets] = await models.sequelize.query(
-      `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
+      `SELECT id FROM scene_sets
+        WHERE scene_type = 'HOME_BASE' AND show_id = :showId AND deleted_at IS NULL
+        ORDER BY created_at ASC, id ASC LIMIT 1`,
+      { replacements: { showId: event.show_id || episode.show_id } }
     );
     sceneSetIds.home = homeSets?.[0]?.id || null;
 
