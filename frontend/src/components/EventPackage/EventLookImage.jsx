@@ -18,6 +18,12 @@
  * Props: showId, eventId, sceneSetPath(showId, setId), onToast(msg),
  * onSaved() (reloads the event: a set may have been created and linked),
  * pollMs (the refresh interval; tests shorten it).
+ *
+ * DJ bug 1 (Evoni, 2026-10-02): the section refreshes whenever the server
+ * says the look or the base is generating, not only after its own Confirm
+ * (reloading the event can remount it mid-run), and says when it finishes
+ * or fails, with the reason. A run stuck for 10 minutes is marked failed by
+ * the server (GET .../look), so the refresh always ends.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -26,7 +32,11 @@ import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
 
 export const POLL_MS = 4000;
-const POLL_MAX = 45;
+// Longer than the server's 10-minute stuck timeout, so a stuck run is seen failing.
+const POLL_MAX = 180;
+
+const lookGenerating = (d) => d?.look?.status === 'generating';
+const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
 
 export default function EventLookImage({ showId, eventId, sceneSetPath, onToast, onSaved, pollMs = POLL_MS }) {
   const base = `/api/v1/world/${showId}/events/${eventId}/look`;
@@ -35,39 +45,63 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
   const [choose, setChoose] = useState(null); // options
   const [chosenSet, setChosenSet] = useState(null);
   const [brief, setBrief] = useState(null); // { step, title, note }
-  const [waiting, setWaiting] = useState(null); // 'look' | 'base'
+  const [waiting, setWaiting] = useState(null); // 'look' | 'base', from Confirm until the server shows it
   const polls = useRef(0);
+  const last = useRef(null);
+  const toastRef = useRef(onToast);
+  toastRef.current = onToast;
+
+  // Says when a look or base this section saw generating finishes or fails.
+  const announce = (prev, data) => {
+    const toast = toastRef.current;
+    if (lookGenerating(prev) && data?.look?.status === 'complete') toast?.('The look is ready');
+    if (lookGenerating(prev) && data?.look?.status === 'failed') toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`);
+    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete') toast?.('The base is ready: approve it in Scene Sets');
+    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`);
+  };
 
   const load = useCallback(async () => {
     try {
       const res = await api.get(base);
       const data = res.data?.data || null;
+      if (last.current) announce(last.current, data);
+      last.current = data;
       setState(data);
       return data;
     } catch (err) {
       console.error('[EventLookImage] load failed:', err);
       return null;
     }
-  }, [base]);
+  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
-  // Refresh until the look (or the base) is done or failed (answer 6).
+  // DJ bug 6: an approval made in Scene Sets shows when Evoni comes back.
   useEffect(() => {
-    if (!waiting) return undefined;
+    const onFocus = () => { load(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [load]);
+
+  const serverGenerating = lookGenerating(state) || baseGenerating(state);
+  const generating = Boolean(waiting) || serverGenerating;
+
+  // Refresh while anything is generating (answer 6; DJ bug 1).
+  useEffect(() => {
+    if (!generating) return undefined;
     polls.current = 0;
     const timer = setInterval(async () => {
       polls.current += 1;
       const data = await load();
-      const status = waiting === 'look' ? data?.look?.status : data?.scene_set?.generation_status;
-      if (status === 'complete' || status === 'failed' || polls.current >= POLL_MAX) {
+      const still = lookGenerating(data) || baseGenerating(data);
+      if (data && !still) setWaiting(null);
+      if (polls.current >= POLL_MAX) {
+        clearInterval(timer);
         setWaiting(null);
-        if (status === 'failed') onToast?.(waiting === 'look' ? 'The look could not be generated' : 'The base could not be generated');
-        if (status === 'complete') onToast?.(waiting === 'look' ? 'The look is ready' : 'The base is ready: approve it in Scene Sets');
       }
     }, pollMs);
     return () => clearInterval(timer);
-  }, [waiting, load, onToast, pollMs]);
+  }, [generating, load, pollMs]);
 
   const ask = async (setId = chosenSet) => {
     setAsking(true);
@@ -120,16 +154,22 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
   const set = state?.scene_set || null;
   const look = state?.look || null;
   const lookReady = look?.status === 'complete' && look.image_url;
-  const baseWaiting = set && set.base_still_url && !state?.approved_base;
-  const generating = Boolean(waiting) || look?.status === 'generating' || set?.generation_status === 'generating';
+  const approved = state?.approved_base || null;
+  const baseWaiting = set && set.base_still_url && !approved;
+  const baseFailed = !lookReady && set?.generation_status === 'failed';
+  // L13: the Place locks when the episode is accepted.
+  const locked = state?.editable === false;
+  const openSetId = set?.id || approved?.scene_set_id || null;
 
   return (
     <div className="ell" data-testid="event-look-image">
       <div className="ell-head">
         <span className="epp-fields-label">Look image</span>
-        <button type="button" className="epp-btn epp-btn-small" onClick={() => ask()} disabled={asking || generating} data-testid="generate-this-look">
-          <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
-        </button>
+        {!locked && (
+          <button type="button" className="epp-btn epp-btn-small" onClick={() => ask()} disabled={asking || generating} data-testid="generate-this-look">
+            <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
+          </button>
+        )}
       </div>
 
       {generating && (
@@ -143,16 +183,32 @@ export default function EventLookImage({ showId, eventId, sceneSetPath, onToast,
       {!generating && look?.status === 'failed' && (
         <p className="ell-error" data-testid="event-look-failed">The last try failed{look.error ? `: ${look.error}` : ''}.</p>
       )}
+      {!generating && baseFailed && (
+        <p className="ell-error" data-testid="event-look-base-failed">The base could not be generated{set.error ? `: ${set.error}` : ''}.</p>
+      )}
       {!generating && !lookReady && baseWaiting && (
         <p className="ell-note" data-testid="event-look-awaiting">
           The venue's base is waiting for your approval. Approve it in Scene Sets, then generate this look.
         </p>
       )}
-      {!generating && !lookReady && !baseWaiting && !look && (
+      {/* DJ bug 6: before the event's look exists, the venue's approved base,
+          which "Generate this look" dresses for this event. */}
+      {!generating && !lookReady && approved?.image_url && (
+        <figure className="ell-figure" data-testid="event-look-approved-base">
+          <img src={approved.image_url} alt="The venue's approved base" />
+          <figcaption className="ell-note">
+            The venue's approved base.{locked ? '' : ' Generate this look to dress it for this event.'}
+          </figcaption>
+        </figure>
+      )}
+      {!generating && !lookReady && !baseWaiting && !look && !baseFailed && !approved && (
         <p className="ell-note">No look image yet.</p>
       )}
-      {set && (
-        <Link className="epp-inline-link ell-open" to={sceneSetPath(showId, set.id)} data-testid="event-look-open">Open in Scene Sets</Link>
+      {locked && (
+        <p className="ell-note" data-testid="event-look-locked">The episode is accepted: the Place is locked.</p>
+      )}
+      {openSetId && (
+        <Link className="epp-inline-link ell-open" to={sceneSetPath(showId, openSetId)} data-testid="event-look-open">Open in Scene Sets</Link>
       )}
 
       {choose && (

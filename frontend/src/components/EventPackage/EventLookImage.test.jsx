@@ -125,6 +125,67 @@ describe('EventLookImage (L7-L9)', () => {
     expect(posts(`${BASE}/generate`)[0][1]).toEqual({ overrides: {}, scene_set_id: 'set-a' });
   });
 
+  // DJ bug 1 (Evoni, 2026-10-02): the section stayed on "Generating…" after a
+  // base-only run. Reloading the event after Confirm can remount it mid-run:
+  // it refreshes whenever the server says something is generating.
+  test('a base generating when the section opens is refreshed until it is done', async () => {
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'generating' }, approved_base: null, look: null };
+    const { onToast } = renderIt();
+    expect(await screen.findByTestId('event-look-generating')).toBeTruthy();
+    lookState = { scene_set: { ...SET, generation_status: 'complete' }, approved_base: null, look: null };
+    expect(await screen.findByTestId('event-look-awaiting')).toBeTruthy();
+    expect(screen.queryByTestId('event-look-generating')).toBeNull();
+    expect(onToast).toHaveBeenCalledWith('The base is ready: approve it in Scene Sets');
+  });
+
+  test('a look generating when the section opens is refreshed until it is done', async () => {
+    lookState = { ...lookState, look: { id: 'look-1', status: 'generating' } };
+    const { onToast } = renderIt();
+    expect(await screen.findByTestId('event-look-generating')).toBeTruthy();
+    lookState = { ...lookState, look: { id: 'look-1', status: 'complete', image_url: 'https://x/look.jpg' } };
+    expect((await screen.findByTestId('event-look-thumb')).getAttribute('src')).toBe('https://x/look.jpg');
+    expect(onToast).toHaveBeenCalledWith('The look is ready');
+  });
+
+  test('a failed base says so with its reason', async () => {
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'generating' }, approved_base: null, look: null };
+    const { onToast } = renderIt();
+    await screen.findByTestId('event-look-generating');
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'failed', error: 'Timed out: no image after 10 minutes' }, approved_base: null, look: null };
+    expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe('The base could not be generated: Timed out: no image after 10 minutes.');
+    expect(onToast).toHaveBeenCalledWith('The base could not be generated: Timed out: no image after 10 minutes');
+  });
+
+  // DJ 6 (Evoni, 2026-10-02): after the venue's base is approved, the Place
+  // section shows it, with "Generate this look" for the dressed version.
+  test("the venue's approved base shows before the event's look exists, with Generate this look", async () => {
+    lookState = { scene_set: null, approved_base: { scene_set_id: 'set-1', image_url: 'https://x/approved.jpg' }, look: null, editable: true };
+    renderIt();
+    const figure = await screen.findByTestId('event-look-approved-base');
+    expect(figure.querySelector('img').getAttribute('src')).toBe('https://x/approved.jpg');
+    expect(figure.textContent).toContain('Generate this look to dress it for this event.');
+    expect(screen.getByTestId('generate-this-look')).toBeTruthy();
+    expect(screen.getByTestId('event-look-open').getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-1');
+    expect(screen.queryByText('No look image yet.')).toBeNull();
+  });
+
+  test('an approval made elsewhere shows when the window regains focus', async () => {
+    lookState = { scene_set: null, approved_base: null, look: null, editable: true };
+    renderIt();
+    expect(await screen.findByText('No look image yet.')).toBeTruthy();
+    lookState = { scene_set: null, approved_base: { scene_set_id: 'set-1', image_url: 'https://x/approved.jpg' }, look: null, editable: true };
+    fireEvent(window, new Event('focus'));
+    expect(await screen.findByTestId('event-look-approved-base')).toBeTruthy();
+  });
+
+  // L13: the Place locks when the episode is accepted.
+  test('an accepted episode locks the Place: no Generate this look', async () => {
+    lookState = { ...lookState, editable: false };
+    renderIt();
+    expect(await screen.findByTestId('event-look-locked')).toBeTruthy();
+    expect(screen.queryByTestId('generate-this-look')).toBeNull();
+  });
+
   test('a failed look says so', async () => {
     lookState = { ...lookState, look: { id: 'look-1', status: 'failed', error: 'provider down' } };
     renderIt();

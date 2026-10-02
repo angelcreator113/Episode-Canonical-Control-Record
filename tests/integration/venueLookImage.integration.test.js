@@ -123,7 +123,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(created).toMatchObject({ id: res.body.data.scene_set_id, show_id: show });
     expect((await rows('SELECT scene_set_id FROM world_events WHERE id = :ev', { ev }))[0].scene_set_id).toBe(created.id);
     expect(base).toHaveBeenCalledTimes(1);
-    expect(base.mock.calls[0][2]).toEqual({ eventId: null, overrides: {} });
+    // L8: no event dressing; the event only sets the environment (DJ bug 3).
+    expect(base.mock.calls[0][2]).toEqual({ eventId: null, environmentEventId: ev, overrides: {} });
     expect(await rows('SELECT id FROM scene_set_looks WHERE event_id = :ev', { ev })).toHaveLength(0);
   });
 
