@@ -5,6 +5,7 @@
  */
 const {
   buildSceneBrief, briefToPrompt, timeOfDayFromEventTime, seasonFromDate, SHOT_CAMERAS,
+  BRIEF_RULES, DRESSING_KEEP, FURNISHED,
 } = require('../../../src/services/sceneBriefService');
 
 const SET = {
@@ -67,20 +68,71 @@ describe('buildSceneBrief (S1)', () => {
     expect(brief.event_id).toBe('ev-1');
   });
 
-  test('the shot: camera, required features, continuity, clear space for character overlays', () => {
+  test('the shot: camera, required features, continuity, an open patch of floor for the characters', () => {
     const brief = buildSceneBrief({
       sceneSet: SET, location: LOCATION, angleLabel: 'VANITY', requiredFeatures: 'The gilt mirror must show', continuity: true,
     });
     expect(line(brief, 'camera').text).toBe(SHOT_CAMERAS.VANITY);
     expect(line(brief, 'required_features').text).toBe('The gilt mirror must show.');
     expect(line(brief, 'continuity')).toBeTruthy();
-    expect(line(brief, 'overlay_space').text).toMatch(/clear, uncluttered floor space .* for character overlays/);
+    // Evoni, 2026-10-02: the softened shot line.
+    expect(line(brief, 'overlay_space').text).toBe('Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.');
+    expect(briefToPrompt(brief)).not.toMatch(/uncluttered/);
   });
 
-  test('no people, ever: the rules open the prompt', () => {
+  // Evoni, 2026-10-02: "Every scene prompt opens 'An empty space with no
+  // people…'. Models read 'empty space' as an unfurnished room ... the set's
+  // description and place layer first, fully furnished and dressed as
+  // described; 'no people present' as a constraint near the end ... Never
+  // the words 'empty space' or 'empty room'."
+  const CLOSET = {
+    id: 'set-closet', name: "Lala's Closet", scene_type: 'CLOSET',
+    canonical_description: 'A walk-in closet with floor-to-ceiling rails of gowns, a central island of drawers, shoe walls and a velvet bench.',
+    time_of_day: 'evening',
+  };
+
+  test('the place first, fully furnished; no people as a constraint near the end', () => {
     const prompt = briefToPrompt(buildSceneBrief({ sceneSet: SET, location: LOCATION, event: EVENT }));
-    expect(prompt.startsWith('An empty space with no people')).toBe(true);
+    expect(prompt.startsWith('The Glasshouse, an event hall. A greenhouse ballroom')).toBe(true);
+    expect(prompt).toContain(FURNISHED);
+    expect(prompt.indexOf(FURNISHED)).toBeGreaterThan(prompt.indexOf('Lighting fixtures'));
+    expect(prompt.indexOf(FURNISHED)).toBeLessThan(prompt.indexOf('Dressed for Velour Launch'));
+    const noPeople = prompt.indexOf('No people present');
+    expect(noPeople).toBeGreaterThan(prompt.indexOf('Photorealistic.'));
+    expect(prompt.endsWith('No text, labels, logos, signage text or watermarks.')).toBe(true);
     expect(prompt).not.toMatch(/feminine aesthetic|Soft natural lighting|Pinterest/);
+  });
+
+  test('never the words "empty space" or "empty room", in any mode', () => {
+    const full = briefToPrompt(buildSceneBrief({ sceneSet: CLOSET }));
+    const dressed = briefToPrompt(buildSceneBrief({
+      sceneSet: SET, location: { ...LOCATION, approved_base_image_url: 'https://x/base.jpg', approved_base_scene_set_id: 'other' }, event: EVENT,
+    }));
+    for (const p of [full, dressed]) expect(p).not.toMatch(/empty (space|room)/i);
+    expect(BRIEF_RULES.join(' ')).not.toMatch(/empty/i);
+  });
+
+  test('the closet base opens with the closet, furnished as described', () => {
+    const prompt = briefToPrompt(buildSceneBrief({ sceneSet: CLOSET }));
+    expect(prompt.startsWith(`Lala's Closet. ${CLOSET.canonical_description}`)).toBe(true);
+    expect(prompt).toContain(FURNISHED);
+    expect(prompt.indexOf('No people present')).toBeGreaterThan(prompt.indexOf('Photorealistic.'));
+  });
+
+  test('an event dressing keeps the edit instruction first and the constraints last', () => {
+    const prompt = briefToPrompt(buildSceneBrief({
+      sceneSet: SET, location: { ...LOCATION, approved_base_image_url: 'https://x/base.jpg', approved_base_scene_set_id: 'other' }, event: EVENT,
+    }));
+    expect(prompt.startsWith(DRESSING_KEEP)).toBe(true);
+    expect(prompt.indexOf('No people present')).toBeGreaterThan(prompt.indexOf('Change nothing else.'));
+  });
+
+  test('a long brief is cut in the body, never in the constraints', () => {
+    const long = { ...CLOSET, canonical_description: 'Rails of gowns. '.repeat(400) };
+    const prompt = briefToPrompt(buildSceneBrief({ sceneSet: long }));
+    expect(prompt.length).toBeLessThanOrEqual(3500);
+    expect(prompt).toContain('No people present');
+    expect(prompt.endsWith('No text, labels, logos, signage text or watermarks.')).toBe(true);
   });
 
   test('overrides replace a line, add weather, or remove a line; each is labelled Your override', () => {

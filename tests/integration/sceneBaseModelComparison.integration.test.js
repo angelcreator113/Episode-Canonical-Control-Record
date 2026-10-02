@@ -235,13 +235,27 @@ async function waitFor(fn, timeoutMs = 20000) {
     expect(axios.post).not.toHaveBeenCalled();
   });
 
-  it('POST /model-comparison refuses a set with no World Location (no place layer)', async () => {
+  // Evoni, 2026-10-02: "Allow any of the show's sets with a description;
+  // the World Location's place layer is used when linked, otherwise the
+  // set's own description."
+  it('POST /model-comparison takes a set with no World Location (its own description) and refuses one with no description', async () => {
     const a = await sourceSet('itest-2396 linked');
     const b = await sourceSet('itest-2396 unlinked', { linked: false });
-    const res = await request(app).post('/api/v1/scene-sets/model-comparison')
+    const ok = await request(app).post('/api/v1/scene-sets/model-comparison')
       .set('Authorization', `Bearer ${adminToken}`).send({ scene_set_ids: [a.id, b.id] });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/World Location/);
+    expect(ok.status).toBe(400);
+    expect(ok.body.code).toBe('CONFIRM_REQUIRED');
+    const unlinked = ok.body.sources[1];
+    expect(unlinked.prompt.startsWith(`itest-2396 unlinked. itest-2396 unlinked: cream walls and gold hardware.`)).toBe(true);
+    expect(unlinked.prompt).not.toContain('Architecture:');
+
+    const bare = await models.SceneSet.create({ name: 'itest-2396 bare', scene_type: 'OTHER' });
+    createdSetIds.push(bare.id);
+    const refused = await request(app).post('/api/v1/scene-sets/model-comparison')
+      .set('Authorization', `Bearer ${adminToken}`).send({ scene_set_ids: [a.id, bare.id] });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toMatch(/has no Description/);
+    expect(axios.post).not.toHaveBeenCalled();
   });
 
   it('POST /model-comparison: 403 for a non-ADMIN, 400 with the estimate and the two briefs without confirm, nothing generated', async () => {
@@ -263,7 +277,7 @@ async function waitFor(fn, timeoutMs = 20000) {
       ['flux-dev', 0.05], ['flux-pro-1.1', 0.08], ['gpt-image-1.5', 0.4],
     ]);
     expect(noConfirm.body.sources.map((s) => s.scene_set_id)).toEqual([a.id, b.id]);
-    expect(noConfirm.body.sources[0].prompt).toMatch(/^An empty space with no people/);
+    expect(noConfirm.body.sources[0].prompt).toMatch(/^itest-2396 Room, a photo studio\./);
 
     expect(axios.post).not.toHaveBeenCalled();
     expect(await models.SceneSet.count()).toBe(before);
@@ -294,8 +308,8 @@ async function waitFor(fn, timeoutMs = 20000) {
     expect(urls.filter((u) => u === 'https://api.openai.com/v1/images/generations')).toHaveLength(2);
     expect(urls).toHaveLength(6);
 
-    // The prompt sent is the source set's own Scene Brief: the no-people
-    // rule first, the place layer (its World Location's architecture and
+    // The prompt sent is the source set's own Scene Brief: the place layer
+    // first, the no-people rule last; the place layer (its World Location's architecture and
     // neighbourhood, the set's name, not the copy's), the environment.
     const sent = axios.post.mock.calls.map((c) => c[1].prompt);
     const expected = [];
@@ -303,7 +317,8 @@ async function waitFor(fn, timeoutMs = 20000) {
       const brief = await prepareSceneBrief(sequelize, await models.SceneSet.findByPk(src.id), { angleLabel: 'WIDE', eventId: null });
       expected.push(briefToPrompt(brief));
     }
-    expect(expected[0]).toMatch(/^An empty space with no people/);
+    expect(expected[0]).toMatch(/^itest-2396 Room, a photo studio\./);
+    expect(expected[0]).toMatch(/No people present/);
     expect(expected[0]).toContain('itest-2396 Room, a photo studio.');
     expect(expected[0]).toContain('Architecture: cast-iron columns.');
     expect(expected[0]).toContain('Outside, through windows and doorways: Gallery Row, Dream City.');

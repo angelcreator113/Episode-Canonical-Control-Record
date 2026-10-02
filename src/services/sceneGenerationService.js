@@ -96,9 +96,8 @@ const VIDEO_MOVEMENT_MODIFIERS = {
   OTHER:        'Camera moves gently through the space with natural flowing motion. Smooth cinematic drift.',
 };
 
-// ─── ENVIRONMENT-ONLY CONSTRAINT (Scene Rule #1 — frozen Session 21) ────────
-
-const _ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human. No figure. No silhouette. No body. No face. No hands. No reflection of a person. Environment only.';
+// No-people rule (Scene Rule #1): sceneBriefService.BRIEF_RULES, sent as
+// constraints at the end of every scene prompt.
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 

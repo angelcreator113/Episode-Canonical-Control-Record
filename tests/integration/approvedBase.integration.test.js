@@ -273,7 +273,8 @@ function mockProviders() {
     const shown = (await brief(set.id, { event_id: ids.event })).body.data;
     expect(shown.brief.mode).toBe('event_dressing');
     expect(shown.brief.approved_base).toEqual({ scene_set_id: approved.id, image_url: BASE_URL });
-    expect(shown.prompt.startsWith('An empty space with no people')).toBe(true);
+    expect(shown.prompt.startsWith(DRESSING_KEEP)).toBe(true);
+    expect(shown.prompt).toContain('No people present');
     expect(shown.prompt).toContain(DRESSING_KEEP);
     expect(shown.prompt).toContain('Dressed for Velour Launch');
     expect(shown.prompt).not.toContain('iron-and-glass');

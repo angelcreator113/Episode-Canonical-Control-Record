@@ -24,7 +24,7 @@ const BRIEF = (over = {}) => ({
     line('camera', { layer: 'shot', label: 'Camera', essential: true }),
     line('time', { layer: 'environment', label: 'Time of day', essential: true }),
   ],
-  rules: ['An empty space with no people.'],
+  rules: ['No people present.'],
   missing: [],
   overrides: {},
   ...over,
@@ -42,7 +42,7 @@ describe('SceneBriefConfirm (S2)', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/brief', {});
     expect(screen.getByTestId('sbc-source-architecture').textContent).toBe('From venue');
     expect(screen.getByTestId('sbc-no-event')).toBeTruthy();
-    expect(screen.getByText('An empty space with no people.')).toBeTruthy();
+    expect(screen.getByText('No people present.')).toBeTruthy();
     expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.03');
     expect(screen.queryByTestId('sbc-missing')).toBeNull();
   });

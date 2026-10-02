@@ -29,7 +29,7 @@ const SET_NO_IMAGE = { id: 'set-9', name: 'The Glasshouse', scene_type: 'EVENT_L
 const BRIEF = {
   version: 1, scene_set_id: null, world_location_id: 'loc-1', event_id: 'ev-1', angle: 'WIDE',
   lines: [{ layer: 'place', key: 'identity', label: 'Place', text: 'The Glasshouse.', source: 'venue', essential: true }],
-  rules: ['An empty space with no people.'], missing: [], overrides: {},
+  rules: ['No people present.'], missing: [], overrides: {},
 };
 
 let events;

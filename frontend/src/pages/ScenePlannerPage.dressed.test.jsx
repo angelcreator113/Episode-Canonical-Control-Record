@@ -31,7 +31,7 @@ const PLAN = [
 const BRIEF = {
   version: 1, scene_set_id: 'set-venue', angle: 'DOORWAY', mode: 'full', source: { kind: 'look', look_id: 'look-1', image_url: 'https://x/look.jpg' },
   lines: [{ layer: 'event', key: 'concept', label: 'Event', text: 'Dressed for Velour Gala.', source: 'look', essential: true }],
-  rules: ['An empty space with no people.'], missing: [], overrides: {},
+  rules: ['No people present.'], missing: [], overrides: {},
 };
 const DRESSED = '/api/v1/episode-brief/ep-1/dressed-angles/ang-door';
 

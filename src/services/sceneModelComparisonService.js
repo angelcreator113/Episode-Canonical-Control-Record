@@ -13,8 +13,11 @@
  * prompts. Each source set's Scene Brief is built once (S1: its World
  * Location's place layer, the environment, the rules; WIDE, no event, its
  * own last overrides, as its own base would be drawn) and every model draws
- * from that same prompt. A set with no World Location, or no description,
- * is refused: its brief would have no place layer.
+ * from that same prompt.
+ *
+ * Evoni, 2026-10-02: "Allow any of the show's sets with a description; the
+ * World Location's place layer is used when linked, otherwise the set's own
+ * description." So only a set with no description is refused.
  *
  * A comparison is one group of scene sets: for each model and each of the
  * two source sets, one copy whose base_model is that model. The group is
@@ -108,9 +111,10 @@ async function planComparison(body, db) {
       eventId: null,
       overrides: (src.base_generation && src.base_generation.brief && src.base_generation.brief.overrides) || {},
     });
-    const missingPlace = brief.missing.filter((m) => m.layer === 'place').map((m) => m.label);
-    if (missingPlace.length) {
-      throw badRequest(`Scene set "${src.name}" has no ${missingPlace.join(' or ')}: its Scene Brief would have no place layer`);
+    // A World Location is used when linked; without one the set's own
+    // description is the place. Without a description there is no place.
+    if (brief.missing.some((m) => m.key === 'description')) {
+      throw badRequest(`Scene set "${src.name}" has no Description: its Scene Brief would not describe the place`);
     }
     sources.push({
       prompt: briefToPrompt(brief),

@@ -108,9 +108,10 @@ describe('SceneGenerationService', () => {
   // ─── buildPrompt ────────────────────────────────────────────────────────
 
   describe('buildPrompt', () => {
-    it('is built from the Scene Brief: the no-people rule first, no generic style or lighting text (S1, S4)', () => {
+    it('is built from the Scene Brief: the place first, no people as a constraint at the end, no generic style or lighting text (S1, S4)', () => {
       const result = buildPrompt(makeSceneSet());
-      expect(result.startsWith('An empty space with no people')).toBe(true);
+      expect(result).not.toMatch(/empty (space|room)/i);
+      expect(result.indexOf('No people present')).toBeGreaterThan(result.indexOf('cream-toned bedroom'));
       expect(result).not.toContain('feminine aesthetic');
       expect(result).not.toContain('Soft natural lighting');
     });
@@ -202,7 +203,7 @@ describe('SceneGenerationService', () => {
       const sceneSet = makeSceneSet({ canonical_description: '' });
       const result = buildPrompt(sceneSet);
       expect(typeof result).toBe('string');
-      expect(result).toContain('no people');
+      expect(result).toContain('No people present');
     });
 
     it('should produce valid prompts for every angle label', () => {

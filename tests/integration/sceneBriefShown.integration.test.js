@@ -182,7 +182,8 @@ function mockProviders() {
     expect(line(b, 'architecture')).toMatchObject({ layer: 'place', source: 'venue' });
     expect(b.lines.some((l) => l.layer === 'event')).toBe(false);
     expect(b.missing).toEqual([]);
-    expect(prompt.startsWith('An empty space with no people')).toBe(true);
+    expect(prompt).toContain('No people present');
+    expect(prompt).not.toMatch(/empty (space|room)/i);
     expect(estimate).toMatchObject({ base_model: 'flux-dev', priced: true });
     expect(typeof estimate.usd).toBe('number');
     expect(axios.post).not.toHaveBeenCalled();

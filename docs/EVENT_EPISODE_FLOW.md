@@ -3617,6 +3617,71 @@ Evidence: `tests/integration/sceneBaseModelComparison.integration.test.js`
 failed 4 of 10 before the change and passes 10 of 10 after.
 `SceneModelComparison.test.jsx` passes. No paid generation was run.
 
+**Scene image problems (Evoni, 2026-10-02).** Recorded verbatim:
+
+> 1. The comparison choosers only list sets linked to a World Location, so I can pick just one. Allow any of the show's sets with a description; the World Location's place layer is used when linked, otherwise the set's own description.
+> 2. Every scene prompt opens "An empty space with no people…". Models read "empty space" as an unfurnished room: my closet base came out as bare walls with one rail. Fix the wording and order: the set's description and place layer first, fully furnished and dressed as described; "no people present" as a constraint near the end (and as the negative prompt where the model supports one). Never the words "empty space" or "empty room". Show me the exact prompt the closet base now gets.
+
+What was built. This replaces the two points above it ("No place layer,
+no comparison" and the choosers listing only sets at a World Location).
+- **1. Any set with a description.**
+  - The choosers list every set with a description, except comparison
+    copies (`comparableSets`).
+  - `planComparison` refuses only a set with no description.
+  - A set linked to a World Location gets that location's place layer;
+    any other set's place is its own name and description.
+- **2. The prompt's order** (`briefToPrompt`), for every scene image:
+  1. the place layer (the set's name and description, then its World
+     Location's lines);
+  2. "Fully furnished and dressed exactly as described: every piece of
+     furniture, fixture, fitting and object described is present and in
+     place." (`FURNISHED`);
+  3. the event, the shot and the environment, then "Photorealistic.";
+  4. the rules, now constraints at the end: "No people present: no
+     person, figure, silhouette, face, hands or reflection of a person."
+     and the no-text rule (`BRIEF_RULES`).
+
+  An event dressing (S6) keeps the edit instruction first and its event
+  layer, then the same constraints at the end. A long brief is cut in
+  its body, never in the constraints (3,500 characters in all).
+- **Negative prompt.** None of the scene models takes one: Flux dev,
+  Flux pro 1.1 and Flux Kontext on fal, and gpt-image-1.5 on OpenAI's
+  images API. The request bodies this code sends have no such field. So
+  the constraint stays in the prompt text. For Flux, this is from a web
+  search, not fal's own schema page: "FLUX dev and schnell do not have
+  any negative prompt support".
+- **"Empty space" and "empty room" are gone from scene prompts:**
+  - the brief rules;
+  - the refinement fix appended for a hand or body flaw
+    (`artifactDetectionService` HAND_BODY), now "no people present, the
+    place furnished as described";
+  - the image-analysis instruction that wrote a set's stored prompt;
+  - an unused constant.
+
+  `propertyService`'s room templates still ask for an "Empty room, no
+  furniture" architectural shell. That is a property-room template
+  whose text is returned, not sent to a scene model, and it is
+  unchanged.
+
+**The shot line, softened (Evoni, 2026-10-02).** Recorded verbatim:
+
+> Soften the shot line (Evoni, 2026-10-02): "an open patch of floor in the foreground where a person could stand, with the room fully dressed around it" in place of "clear, uncluttered floor space…". Record it with the fix in §8(dd).
+
+Built: the shot layer's "Space for characters" line is now, for every
+angle, "Leave an open patch of floor in the foreground where a person
+could stand, with the room fully dressed around it." (`OVERLAY_SPACE`).
+The per-angle positions it replaces (centre foreground, one side of the
+frame, centre of the floor) are gone.
+
+Evidence:
+- Before the change, 7 unit tests failed: the shot line, the prompt
+  order, the closet, the dressing, the cut and the wording in
+  `sceneBriefService.test.js`, and `buildPrompt` in
+  `sceneGenerationService.test.js`. 1 integration test failed: the
+  comparison taking an unlinked set. 1 frontend test failed: the
+  chooser.
+- After the change, all pass.
+
 
 **(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
 PR each:
