@@ -1311,7 +1311,7 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       scene_set: sceneSet,
       scene_set_linked: sceneSetLinked,
       episode_id,
-      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}`,
+      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}${sceneSet.status === STATUS.CHOOSE ? ' Choose its scene set.' : ''}`,
     });
   } catch (error) {
     console.error('Inject event error:', error);
@@ -1320,8 +1320,9 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
 });
 
 // POST /api/v1/world/:showId/events/:eventId/scene-set-link — Retry linking
-// an attached event's scene set to its episode (F2). 409 when the event is
-// not attached to an episode. The response's scene_set says what happened.
+// an attached event's scene set to its episode (F2), or link the one Evoni
+// chose (F3): body { scene_set_id? }. 409 when the event is not attached to
+// an episode. The response's scene_set says what happened.
 router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
@@ -1336,8 +1337,12 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
       return res.status(409).json({ success: false, code: 'EVENT_NOT_ATTACHED', error: 'This event is not attached to an episode.' });
     }
     const { linkEventSceneSet } = require('../services/eventSceneSetLinkService');
+    const chosenSceneSetId = req.body?.scene_set_id || null;
+    if (chosenSceneSetId && typeof chosenSceneSetId !== 'string') {
+      return res.status(400).json({ success: false, error: 'scene_set_id must be a string' });
+    }
     const sceneSet = await models.sequelize.transaction((t) => linkEventSceneSet(models.sequelize, {
-      event, episodeId: event.used_in_episode_id, transaction: t,
+      event, episodeId: event.used_in_episode_id, transaction: t, chosenSceneSetId,
     }));
     return res.json({ success: true, episode_id: event.used_in_episode_id, scene_set: sceneSet });
   } catch (error) {

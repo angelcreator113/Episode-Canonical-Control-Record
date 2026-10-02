@@ -412,8 +412,9 @@ function WorldAdmin() {
   const [injecting, setInjecting] = useState(false);
   const [injectError, setInjectError] = useState(null);
   const [injectSuccess, setInjectSuccess] = useState(null);
-  // F2: an event attached whose scene set could not be linked to the
-  // episode: { eventId, reason }, shown with a Retry until it links.
+  // F2, F3: an event attached whose scene set is not linked to the episode:
+  // { eventId, status, reason, options }. needs_reconnecting is shown with a
+  // Retry; choose lists the venue's sets for Evoni to pick one.
   const [sceneSetReconnect, setSceneSetReconnect] = useState(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1406,22 +1407,23 @@ The revised event should feel like a completely different experience from the si
     } finally { setGenerating(false); }
   };
 
-  // F2: Retry linking an attached event's scene set to its episode.
-  const retrySceneSetLink = async (eventId) => {
+  // F2: Retry linking an attached event's scene set to its episode; F3: or
+  // link the venue's set Evoni chose.
+  const retrySceneSetLink = async (eventId, sceneSetId = null) => {
     setReconnecting(true);
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/scene-set-link`, {});
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/scene-set-link`, sceneSetId ? { scene_set_id: sceneSetId } : {});
       const sceneSet = res.data?.scene_set;
       if (sceneSet?.status === 'linked') {
         setSceneSetReconnect(null);
         setToast(`Scene set linked${sceneSet.scene_set_name ? `: “${sceneSet.scene_set_name}”` : ''}.`);
         loadData();
       } else {
-        setSceneSetReconnect({ eventId, reason: sceneSet?.reason || 'The scene set is still not linked.' });
+        setSceneSetReconnect({ eventId, status: sceneSet?.status || 'needs_reconnecting', reason: sceneSet?.reason || 'The scene set is still not linked.', options: sceneSet?.options || [] });
       }
     } catch (err) {
       console.error('[WorldAdmin] scene set retry failed:', err);
-      setSceneSetReconnect({ eventId, reason: err.response?.data?.error || err.message });
+      setSceneSetReconnect((cur) => ({ ...(cur || {}), eventId, reason: err.response?.data?.error || err.message }));
     } finally { setReconnecting(false); }
   };
 
@@ -1432,12 +1434,14 @@ The revised event should feel like a completely different experience from the si
       if (res.data.success) {
         const ep = episodes.find(e => e.id === episodeId);
         const epLabel = ep ? `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}` : 'episode';
-        const needsReconnect = res.data.scene_set?.status === 'needs_reconnecting';
-        const msg = needsReconnect ? 'Event attached · Scene set needs reconnecting' : `✅ Injected into ${epLabel}`;
-        setSceneSetReconnect(needsReconnect ? { eventId, reason: res.data.scene_set.reason || null } : null);
+        const sceneSet = res.data.scene_set;
+        const pending = sceneSet?.status === 'needs_reconnecting' || sceneSet?.status === 'choose';
+        const msg = !pending ? `✅ Injected into ${epLabel}`
+          : sceneSet.status === 'choose' ? 'Event attached · Choose its scene set' : 'Event attached · Scene set needs reconnecting';
+        setSceneSetReconnect(pending ? { eventId, status: sceneSet.status, reason: sceneSet.reason || null, options: sceneSet.options || [] } : null);
         // Show inline success in the inject panel briefly; a scene set still
-        // to reconnect is shown in its own banner instead, never as success.
-        if (!needsReconnect) {
+        // to reconnect or choose is shown in its own banner, never as success.
+        if (!pending) {
           setSuccessMsg(msg);
           setInjectSuccess({ eventId, message: msg });
         }
@@ -4145,12 +4149,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {sceneSetReconnect?.eventId === md.id && (
                       <div data-testid="scene-set-reconnect" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', marginBottom: 6, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
                         <div style={{ flex: '1 1 180px', fontSize: 11, color: '#9a3412' }}>
-                          <div style={{ fontWeight: 700 }}>Event attached · Scene set needs reconnecting</div>
+                          <div style={{ fontWeight: 700 }}>
+                            {sceneSetReconnect.status === 'choose' ? 'Event attached · Choose its scene set' : 'Event attached · Scene set needs reconnecting'}
+                          </div>
                           {sceneSetReconnect.reason && <div style={{ marginTop: 2 }}>{sceneSetReconnect.reason}</div>}
                         </div>
-                        <button onClick={() => retrySceneSetLink(md.id)} disabled={reconnecting} style={{ ...S.smBtn, fontSize: 11, padding: '4px 10px' }}>
-                          {reconnecting ? 'Retrying…' : 'Retry'}
-                        </button>
+                        {sceneSetReconnect.status === 'choose' ? (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+                            {(sceneSetReconnect.options || []).map((o) => (
+                              <button key={o.id} data-testid={`scene-set-choice-${o.id}`} onClick={() => retrySceneSetLink(md.id, o.id)} disabled={reconnecting} style={{ ...S.smBtn, fontSize: 11, padding: '4px 10px' }}>
+                                {o.name}{o.base_still_url ? '' : ' (no image yet)'}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <button onClick={() => retrySceneSetLink(md.id)} disabled={reconnecting} style={{ ...S.smBtn, fontSize: 11, padding: '4px 10px' }}>
+                            {reconnecting ? 'Retrying…' : 'Retry'}
+                          </button>
+                        )}
                       </div>
                     )}
                     {injectSuccess?.eventId === md.id ? (

@@ -2,6 +2,7 @@
  * F2 (Evoni, 2026-10-01): attaching an event to an episode. "If the
  * scene-set link can't be made, the UI shows "Event attached · Scene set
  * needs reconnecting" with a Retry." In the event editor's Link to Episode.
+ * F3: with no set chosen and several at the venue, Evoni chooses one.
  */
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -77,5 +78,28 @@ describe('WorldAdmin: attaching an event whose scene set can\'t be linked (F2)',
     const banner = await attach();
     fireEvent.click(within(banner).getByText('Retry'));
     await waitFor(() => expect(screen.getByTestId('scene-set-reconnect').textContent).toContain('no longer exists'));
+  });
+
+  test('several sets at the venue: Evoni chooses one, and it is linked (F3)', async () => {
+    vi.mocked(api.post).mockImplementation(async (url, body) => {
+      if (url.endsWith('/events/ev-1/inject')) {
+        return { data: { success: true, attached: true, scene_set_linked: false, scene_set: {
+          status: 'choose', scene_set_id: null, reason: 'The venue has several scene sets: choose one.',
+          options: [{ id: 'set-day', name: 'Maison Belle: Day', base_still_url: 'https://cdn/d.jpg' }, { id: 'set-night', name: 'Maison Belle: Night', base_still_url: null }],
+        } } };
+      }
+      if (url.endsWith('/events/ev-1/scene-set-link')) {
+        return { data: { success: true, scene_set: { status: 'linked', scene_set_id: body.scene_set_id, scene_set_name: 'Maison Belle: Night' } } };
+      }
+      return { data: { success: true, data: {} } };
+    });
+    const banner = await attach();
+    expect(banner.textContent).toContain('Event attached · Choose its scene set');
+    expect(within(banner).queryByText('Retry')).toBeNull();
+    expect(within(banner).getByTestId('scene-set-choice-set-night').textContent).toBe('Maison Belle: Night (no image yet)');
+
+    fireEvent.click(within(banner).getByTestId('scene-set-choice-set-night'));
+    await waitFor(() => expect(posted('/events/ev-1/scene-set-link')[0][1]).toEqual({ scene_set_id: 'set-night' }));
+    await waitFor(() => expect(screen.queryByTestId('scene-set-reconnect')).toBeNull());
   });
 });
