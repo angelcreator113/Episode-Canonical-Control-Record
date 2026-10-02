@@ -4015,6 +4015,17 @@ Ruling L11 (Evoni, 2026-10-02), recorded verbatim; built after L7–L9 and befor
 
 As built: "the show's library" is the show's sets and sets with no show (the sets the Episode Locations step offers). "The matching role" is the role of the set's type (Home Base → home, Closet → closet, Event location → event); an occupied role, or any other type, makes it an extra named after the set. A set or angle chosen in the beat editor marks the beat; the planner's own missing-angle actions (L4) do not.
 
+L10's four decisions, as put to Evoni (2026-10-02), each with its recommendation:
+
+1. Dressed angles stored per look in a new table, so the set's angles stay plain. Needs a migration.
+2. Only episode-made angles are dressed: the planner's Generate angle and Upload image, and the Episode Scenes tab, when the event has a complete look. Scene Sets' own generation stays plain.
+3. Event-location beats show and count the dressed angle when there is one, else the plain angle; with no look, everything works as today.
+4. Each dressed angle is a new image call, with its cost shown first (S2).
+
+> L10 answers (Evoni, 2026-10-02): "accept all four recommendations."
+
+As built: a dressed angle is one Flux Kontext edit of the event's look image, with the angle's brief (place, event, shot, and the continuity line "the same room as the reference image ... only the camera moved"); its Kontext estimate is shown first. Dressed angles live in `scene_set_look_angles` (one per look per angle; migration `20261002150000`), and `scene_angles` is never written. "The event" is the live event whose `used_in_episode_id` is the episode; "a complete look" is its `scene_set_looks` row on the beat's set with status complete. The Beat Plan's Generate angle and Upload image use `POST /episode-brief/:episodeId/dressed-angles/:angleId/{brief,generate,upload}` at such a set; elsewhere they use the plain angle routes as before. The Scenes tab makes no angle images today (its "Generate Angles" adds angle definitions only), so its part of decision 2 arrives with L12's beat rows, which carry the same actions. On the Beat Plan, a beat at the look's set whose angle has no image yet shows the look image as its picture; readiness still counts only angle images (and the base image for a beat that asks for no angle).
+
 ---
 
 ## 9. Owed before enforcement
