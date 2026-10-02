@@ -68,8 +68,9 @@ const REQUIRE_AUTH_COUNTS = {
   // +1 for GET /:id/overlays (P15, requireAuth);
   // +2 for GET and PUT /:episodeId/locations (L6, §8(hh), requireAuth).
   'episodes.js': 91,
-  // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth).
-  'episodeBriefRoutes.js': 13,
+  // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
+  // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
+  'episodeBriefRoutes.js': 16,
   'episodeOrchestrationRoute.js': 2,
   'episodeScriptWriterRoutes.js': 8,
   'gameShows.js': 7,
@@ -259,14 +260,15 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +3 for episodes.js title overlay routes (P11 amendment, Task #2395);
     // +1 for episodes.js GET /:id/overlays (P15);
     // +2 for episodes.js GET and PUT /:episodeId/locations (L6, §8(hh));
-    // +2 for shows.js GET and PUT /:id/scene-defaults (L3, §8(hh)).
-    test('CP2 zone contains 269 total requireAuth references across 22 files', () => {
+    // +2 for shows.js GET and PUT /:id/scene-defaults (L3, §8(hh));
+    // +3 for episodeBriefRoutes.js dressed-angle brief, generate, upload (L10, §8(hh)).
+    test('CP2 zone contains 272 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(269);
+      expect(total).toBe(272);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {

@@ -67,10 +67,11 @@ function placeBeat(beatNumber, roleSets, anglesBySet) {
  * A row with a label uses the set's angle of that label; a row without
  * one, on a beat that asks for kinds, the set's angle of those kinds.
  */
-function rowAngleStatus(row, anglesBySet) {
+function rowAngleStatus(row, anglesBySet, dressing = null) {
   const spot = BEAT_LOCATIONS[row.beat_number] || { role: 'home', kinds: [] };
-  const base = { role: spot.role, kinds: spot.kinds, angle: null, missing: null };
-  if (!row.scene_set_id) return base;
+  const look = (row.scene_set_id && dressing?.looks?.get(row.scene_set_id)) || null;
+  const base = { role: spot.role, kinds: spot.kinds, angle: null, missing: null, ...(look ? { look: { id: look.id, image_url: look.image_url } } : {}) };
+  if (!row.scene_set_id) return { role: spot.role, kinds: spot.kinds, angle: null, missing: null };
   const angles = anglesBySet.get(row.scene_set_id) || [];
   const label = row.angle_label ? String(row.angle_label).toUpperCase() : null;
   let angle = null;
@@ -83,6 +84,14 @@ function rowAngleStatus(row, anglesBySet) {
   const view = angle && {
     id: angle.id, label: angle.angle_label, name: angle.angle_name, kind: angle.angle_kind || null, still_image_url: angle.still_image_url || null,
   };
+  // L10, answer 3 (§8(hh)): at the look's set, the dressed angle is shown
+  // and counted when there is one, else the plain angle.
+  const dressed = look && angle ? dressing.angles.get(`${look.id}:${angle.id}`) || null : null;
+  if (view && dressed) {
+    view.dressed = { id: dressed.id, status: dressed.status, image_url: dressed.image_url || null, error: dressed.error || null };
+    view.plain_image_url = view.still_image_url;
+    if (dressed.status === 'complete' && dressed.image_url) return { ...base, angle: { ...view, still_image_url: dressed.image_url } };
+  }
   if (angle && hasImage(angle)) return { ...base, angle: view };
   const kind = angle?.angle_kind || (label ? null : spot.kinds[0] || null);
   const what = angle ? (angle.angle_name || angle.angle_label)
@@ -106,10 +115,27 @@ function rowAngleStatus(row, anglesBySet) {
   };
 }
 
-/** The plan rows with their angle status (GET /episode-brief/:id/plan). */
+/**
+ * The episode's looks and their dressed angles (L10), for rowAngleStatus:
+ * { looks: Map<setId, look>, angles: Map<'lookId:angleId', row> }.
+ */
+async function loadDressing(sequelize, episodeId) {
+  const { episodeLooks, lookAngles } = require('./dressedAngleService');
+  const looks = await episodeLooks(sequelize, episodeId);
+  const angles = await lookAngles(sequelize, [...looks.values()].map((l) => l.id));
+  return { looks, angles };
+}
+
+/**
+ * The plan rows with their angle status (GET /episode-brief/:id/plan).
+ * A beat at a set the episode's event has a finished look on carries
+ * location.look, and its angle its dressed version (L10).
+ */
 async function planWithAngles(sequelize, rows) {
   const anglesBySet = await loadSetAngles(sequelize, rows.map((r) => r.scene_set_id));
-  return rows.map((r) => ({ ...r, location: rowAngleStatus(r, anglesBySet) }));
+  const episodeId = rows.find((r) => r.episode_id)?.episode_id || null;
+  const dressing = episodeId ? await loadDressing(sequelize, episodeId) : null;
+  return rows.map((r) => ({ ...r, location: rowAngleStatus(r, anglesBySet, dressing) }));
 }
 
 /**
@@ -168,6 +194,7 @@ module.exports = {
   setsByRole,
   placeBeat,
   rowAngleStatus,
+  loadDressing,
   planWithAngles,
   planReadiness,
   locationAngleGaps,

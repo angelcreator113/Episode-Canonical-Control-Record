@@ -50,13 +50,27 @@ function LocationsStrip({ locations, showId }) {
 // action: 'Entrance angle missing — Upload image / Generate angle'."
 // beat.location.missing comes from GET /episode-brief/:id/plan.
 
+// L10 (§8(hh)): at a set the episode's event has a finished look on
+// (beat.location.look), these make the dressed angle, from the look.
+
 function MissingAngle({ beat, busy, onUpload, onGenerate }) {
   const missing = beat.location?.missing;
-  if (!missing) return null;
+  const dressed = beat.location?.angle?.dressed;
   const n = beat.beat_number;
+  if (!missing) {
+    if (dressed?.status === 'generating') return <p className="scene-planner-dressed-note" data-testid={`beat-dressed-${n}`}>Dressing this angle from the event's look…</p>;
+    return null;
+  }
   return (
     <div className="scene-planner-missing" data-testid={`beat-missing-${n}`}>
       <span className="scene-planner-missing-text">{missing.text}</span>
+      {beat.location?.look && (
+        <span className="scene-planner-missing-look" data-testid={`beat-missing-look-${n}`}>
+          {dressed?.status === 'generating' ? 'Dressing it from the event\'s look…'
+            : dressed?.status === 'failed' ? `The dressed version failed${dressed.error ? `: ${dressed.error}` : ''}. Try again:`
+              : 'Made from the event\'s look:'}
+        </span>
+      )}
       <span className="scene-planner-missing-actions">
         <label className={`scene-planner-missing-btn${busy ? ' is-busy' : ''}`}>
           Upload image
@@ -70,14 +84,19 @@ function MissingAngle({ beat, busy, onUpload, onGenerate }) {
   );
 }
 
+// The beat's picture: its angle's image (the dressed one at the look's set,
+// L10), else the event's look on its set, else the set's base image.
+const beatImage = (beat) => beat.location?.angle?.still_image_url || beat.location?.look?.image_url || beat.sceneSet?.base_still_url || null;
+const isDressed = (beat) => beat.location?.angle?.dressed?.status === 'complete';
+
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
 function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-card-image">
-        {beat.sceneSet?.base_still_url ? (
-          <img src={beat.sceneSet.base_still_url} alt={beat.sceneSet.name} />
+        {beatImage(beat) ? (
+          <img src={beatImage(beat)} alt={beat.sceneSet?.name || ''} />
         ) : (
           <div className="scene-planner-card-placeholder">✦</div>
         )}
@@ -94,6 +113,7 @@ function BeatCard({ beat, index, onLock, onEdit, missingProps }) {
         <div className="scene-planner-card-tags">
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
+          {isDressed(beat) && <span className="scene-planner-card-tag dressed" data-testid={`beat-dressed-tag-${beat.beat_number}`}>Event look</span>}
         </div>
 
         {beat.emotional_intent && (
@@ -136,6 +156,7 @@ function BeatRow({ beat, index, onLock, onEdit, missingProps }) {
         <div className="scene-planner-card-tags">
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
+          {isDressed(beat) && <span className="scene-planner-card-tag dressed">Event look</span>}
           {beat.chosen_by_user
             ? <ChosenBadge beat={beat} className="scene-planner-card-tag chosen" />
             : beat.ai_suggested && <span className="scene-planner-card-tag angle">AI</span>}
@@ -524,13 +545,17 @@ export default function ScenePlannerPage() {
     return { setId, angleId, name };
   };
 
+  // L10: at the look's set the image is the dressed angle, stored per look.
+  const dressedPath = (angleId) => `/api/v1/episode-brief/${episodeId}/dressed-angles/${angleId}`;
+
   const handleUploadAngle = async (beat, file) => {
     setAngleBusy(beat.beat_number);
     try {
       const { setId, angleId } = await ensureAngle(beat);
       const form = new FormData();
       form.append('images', file);
-      await api.post(`/api/v1/scene-sets/${setId}/angles/${angleId}/upload`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const url = beat.location?.look ? `${dressedPath(angleId)}/upload` : `/api/v1/scene-sets/${setId}/angles/${angleId}/upload`;
+      await api.post(url, form, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast(`Beat ${beat.beat_number}: image uploaded`);
     } catch (err) {
       console.error('[ScenePlanner] angle upload failed:', err);
@@ -545,7 +570,7 @@ export default function ScenePlannerPage() {
     setAngleBusy(beat.beat_number);
     try {
       const target = await ensureAngle(beat);
-      setAngleBrief({ beat, ...target });
+      setAngleBrief({ beat, ...target, dressed: Boolean(beat.location?.look) });
     } catch (err) {
       console.error('[ScenePlanner] angle create failed:', err);
       showToast(err.response?.data?.error || err.message || 'Could not create the angle', 'error');
@@ -554,11 +579,11 @@ export default function ScenePlannerPage() {
   };
 
   const confirmGenerateAngle = async (overrides) => {
-    const { beat, setId, angleId } = angleBrief;
+    const { beat, setId, angleId, dressed } = angleBrief;
     setAngleBrief(null);
     try {
-      await api.post(`/api/v1/scene-sets/${setId}/angles/${angleId}/generate`, { overrides });
-      showToast(`Beat ${beat.beat_number}: generating the angle`);
+      await api.post(dressed ? `${dressedPath(angleId)}/generate` : `/api/v1/scene-sets/${setId}/angles/${angleId}/generate`, { overrides });
+      showToast(`Beat ${beat.beat_number}: ${dressed ? 'dressing the angle from the event\'s look' : 'generating the angle'}`);
     } catch (err) {
       console.error('[ScenePlanner] angle generate failed:', err);
       showToast(err.response?.data?.error || 'Generation failed', 'error');
@@ -660,6 +685,8 @@ export default function ScenePlannerPage() {
           setId={angleBrief.setId}
           angleId={angleBrief.angleId}
           title={`Generate the ${angleBrief.name.toLowerCase()} angle for beat ${angleBrief.beat.beat_number}`}
+          note={angleBrief.dressed ? "Made from the event's look: the same dressed room, from this angle." : null}
+          requestBrief={angleBrief.dressed ? (body) => api.post(`${dressedPath(angleBrief.angleId)}/brief`, { overrides: body.overrides }) : null}
           onConfirm={(overrides) => confirmGenerateAngle(overrides)}
           onCancel={cancelGenerateAngle}
         />

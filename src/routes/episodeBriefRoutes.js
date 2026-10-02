@@ -248,6 +248,90 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
   }
 });
 
+// ── DRESSED ANGLES (L10, §8(hh)) ─────────────────────────────────────────────
+// "When an event has a dressed look, its episode's angles at that venue are
+// made from the dressed look instead of the plain approved base." A beat at
+// a set the episode's event has a finished look on makes its angle here:
+//   POST .../dressed-angles/:angleId/brief     the brief and its cost (read only, S2)
+//   POST .../dressed-angles/:angleId/generate  one Kontext edit of the look (202)
+//   POST .../dressed-angles/:angleId/upload    an uploaded image is the dressed angle
+// Without a look they answer 409 NO_LOOK, and the plain angle routes apply.
+
+const dressedUpload = require('multer')({
+  storage: require('multer').memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+  },
+}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]);
+
+function dressedError(res, err, label) {
+  const { DressedAngleError } = require('../services/dressedAngleService');
+  if (err instanceof DressedAngleError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  console.error(`[DressedAngle] ${label} failed:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+}
+
+router.post('/:episodeId/dressed-angles/:angleId/brief', requireAuth, async (req, res) => {
+  try {
+    const { dressedAngleBrief } = require('../services/dressedAngleService');
+    const data = await dressedAngleBrief(models.sequelize, {
+      episodeId: req.params.episodeId, angleId: req.params.angleId, overrides: req.body?.overrides,
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return dressedError(res, err, 'brief');
+  }
+});
+
+router.post('/:episodeId/dressed-angles/:angleId/generate', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { startDressedAngle } = require('../services/dressedAngleService');
+    const { result, run } = await startDressedAngle(models.sequelize, {
+      episodeId: req.params.episodeId, angleId: req.params.angleId, overrides: req.body?.overrides,
+    });
+    res.status(202).json({ success: true, data: result });
+    await run();
+  } catch (err) {
+    if (res.headersSent) {
+      console.error('[DressedAngle] generate failed after answering:', err);
+      return undefined;
+    }
+    return dressedError(res, err, 'generate');
+  }
+});
+
+router.post('/:episodeId/dressed-angles/:angleId/upload', requireAuth, dressedUpload, async (req, res) => {
+  try {
+    const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
+    if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    const { saveUploadedDressedAngle, episodeLooks } = require('../services/dressedAngleService');
+    const [[angle]] = await models.sequelize.query(
+      'SELECT id, scene_set_id FROM scene_angles WHERE id = :id AND deleted_at IS NULL',
+      { replacements: { id: req.params.angleId } });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found', code: 'ANGLE_NOT_FOUND' });
+    const look = (await episodeLooks(models.sequelize, req.params.episodeId)).get(angle.scene_set_id);
+    if (!look) {
+      return res.status(409).json({ success: false, error: "This episode's event has no finished look on this set; the plain angle is used", code: 'NO_LOOK' });
+    }
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const bucket = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
+    const region = process.env.AWS_REGION || 'us-east-1';
+    const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+    const key = `scene-sets/${angle.scene_set_id}/looks/${look.id}/angles/${angle.id}/still-${Date.now()}.${ext}`;
+    await new S3Client({ region }).send(new PutObjectCommand({
+      Bucket: bucket, Key: key, Body: file.buffer, ContentType: file.mimetype, CacheControl: 'max-age=31536000',
+    }));
+    const data = await saveUploadedDressedAngle(models.sequelize, {
+      episodeId: req.params.episodeId, angleId: angle.id, imageUrl: `https://${bucket}.s3.${region}.amazonaws.com/${key}`,
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return dressedError(res, err, 'upload');
+  }
+});
+
 // ── LOCK BEAT (toggle) ────────────────────────────────────────────────────────
 
 router.post('/:episodeId/plan/:beatNumber/lock', requireAuth, async (req, res) => {
