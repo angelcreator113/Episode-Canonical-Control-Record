@@ -3719,6 +3719,29 @@ So:
 4. The exterior video moves to the panel, onto the Front zone.
 5. S8 is built first, then L14 (b).
 
+As built (S8):
+- **The entry point.** "Open in Scene Sets →" (`OpenInSceneSets`) opens World Admin's Scene Sets on the set (`sceneSetPath`). The link carries:
+  - `&zone=`: an angle id, a zone kind, or `look:<eventId>`;
+  - `&from=` and `&fromLabel=`: the page to come back to.
+- **In Scene Sets:**
+  - a "← Back to …" link appears, to a page of this app only (`SceneSetsBackLink`);
+  - the focused set opens its panel on the Angles tab with the zone marked (`is-zone-focus`), or scrolls to the event's look.
+- **Beat Plan and Scenes tab.** A missing angle shows its status and "Open in Scene Sets →" on that angle, else its zone kind. The page can no longer create an angle, upload or generate (`useBeatActions` keeps only the beat editor).
+- **The Place.**
+  - `EventLookImage` shows the look's status with "Open in Scene Sets →" on `look:<eventId>`. With no set and no approved base, it says to choose the event's scene set first.
+  - Creating a set from the Place ("Create scene set") chooses it and opens no base brief.
+- **World Admin's event editor:**
+  - with no set, "Create the scene set" makes the venue's set (its venue, World Location and show) and links it, with no images;
+  - with a linked set, "Open in Scene Sets →" replaces its "Generate Venue Images" and "🎬 Video";
+  - Mark Ready opens no brief.
+- **Episode Locations.** Each angle gap has "Open in Scene Sets →" on its set and zone.
+- **The Scene Sets panel** gains the work the other pages lose:
+  - each event using the set gets its "Generate this look" (the same brief, with the cost shown first) in the Looks row;
+  - once that event has an episode, its dressed angles appear there too: each angle's dressed status, "Generate dressed" with the cost shown first, and Upload (`DressedAngles`, `GET /episode-brief/:id/dressed-angles?scene_set_id=`);
+  - a Front zone with an image offers "🎬 Video".
+- **Server.** The set list carries each set's `events` (each with its look). The dressed-angle list read is new. The pinned `requireAuth` count for `episodeBriefRoutes.js` is +1.
+- **Not changed:** Scene Studio's background regeneration (not named in S8).
+
 **(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
 PR each:
 
