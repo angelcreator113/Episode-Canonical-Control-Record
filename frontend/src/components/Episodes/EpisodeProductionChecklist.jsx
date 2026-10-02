@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
+import { nextStep } from '../../utils/sceneSteps';
 
 /**
  * EpisodeProductionChecklist
@@ -180,6 +181,10 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
+  // S9 (c): the scenes' next step (plan, images, locks, script), moved here
+  // from the Scenes tab.
+  const [sceneStep, setSceneStep] = useState(null);
+  const [locking, setLocking] = useState(false);
 
   useEffect(() => {
     if (!episode?.id) return;
@@ -244,11 +249,16 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         const readiness = data?.readiness;
         results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
         if (readiness && readiness.total > 0 && readiness.ready < readiness.total) {
+          // S9 (a, c): the Scenes tab's summary.
+          const n = readiness.not_ready.length;
           const beats = readiness.not_ready.map((b) => b.beat_number).join(', ');
-          checkNotes.scene_images = `${readiness.ready} of ${readiness.total} beats have an image; missing: beat${readiness.not_ready.length === 1 ? '' : 's'} ${beats}`;
+          checkNotes.scene_images = `${readiness.ready} ready · ${n} ${n === 1 ? 'needs' : 'need'} attention: beat${n === 1 ? '' : 's'} ${beats}`;
         }
-      } catch {
+        setSceneStep(nextStep(plan, readiness));
+      } catch (err) {
+        console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
         results.scene_plan = results.scene_plan_locked = results.scene_images = false;
+        setSceneStep(null);
       }
 
       // ── Check Wardrobe ──
@@ -345,12 +355,31 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     venue_set: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Add venue' },
     scene_sets: { action: () => window.location.href = `/scene-library`, label: 'Scene Library' },
     scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
-    scene_images: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Open planner' },
+    scene_images: { action: () => window.location.href = `/episodes/${episode.id}?tab=scenes`, label: 'Open Scenes' },
     wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
     outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
     overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
     character_state: { action: () => window.location.href = `/shows/${showId}/world?tab=overview`, label: 'Set up' },
   };
+
+  // S9 (c): lock every beat, then re-check.
+  const lockAllBeats = async () => {
+    setLocking(true);
+    try {
+      await api.post(`/api/v1/episode-brief/${episode.id}/plan/lock-all`);
+      await checkReadiness();
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] lock all failed:', err);
+      setToast({ msg: err.response?.data?.error || 'Could not lock the beats', type: 'error' });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setLocking(false);
+    }
+  };
+  // Each action is offered once on the list: the plan and the script by the
+  // footer's Scene Plan and Write Script, the images by their row's Open
+  // Scenes; only locking every beat has no other button.
+  const sceneStepAction = sceneStep?.kind === 'lock' ? { label: 'Lock all beats', onClick: lockAllBeats } : null;
 
   const allRequired = CHECKLIST_SECTIONS
     .flatMap(s => s.items)
@@ -419,6 +448,21 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             </span>
           </h4>
           <div style={{ marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>{sectionStatus.why}</div>
+          {section.id === 'scene' && sceneStep && (
+            <div data-testid="checklist-scene-next" style={{
+              display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8,
+              padding: '6px 10px', borderRadius: 8, background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.35)',
+              fontSize: 12, color: '#2C2C2C',
+            }}>
+              <span style={{ flex: '1 1 180px', minWidth: 0 }}><strong>Next:</strong> {sceneStep.text}</span>
+              {sceneStepAction && (
+                <button type="button" data-testid="checklist-scene-next-action" onClick={sceneStepAction.onClick} disabled={locking} style={{
+                  padding: '3px 10px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff',
+                  fontSize: 11, fontWeight: 600, cursor: locking ? 'wait' : 'pointer',
+                }}>{sceneStepAction.label}</button>
+              )}
+            </div>
+          )}
           {section.items.map(item => (
             <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}

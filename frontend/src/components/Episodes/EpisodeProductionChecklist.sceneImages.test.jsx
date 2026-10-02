@@ -32,11 +32,12 @@ describe('EpisodeProductionChecklist: "Scene images for every beat" (L5, Q21)', 
     readiness = { ready: 12, total: 14, not_ready: [{ beat_number: 10 }, { beat_number: 11 }] };
     renderChecklist();
     const note = await screen.findByTestId('check-note-scene_images');
-    expect(note.textContent).toBe('12 of 14 beats have an image; missing: beats 10, 11');
+    // S9 (a, c) (§8(hh)): the same summary as the Scenes tab.
+    expect(note.textContent).toBe('12 ready · 2 need attention: beats 10, 11');
     const label = await item();
     expect(label.style.textDecoration).toBe('none');
     expect(label.textContent).not.toMatch(/required/i);
-    expect(screen.getByRole('button', { name: 'Open planner' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Scenes' })).toBeTruthy();
   });
 
   test('ticked when every beat has its image', async () => {

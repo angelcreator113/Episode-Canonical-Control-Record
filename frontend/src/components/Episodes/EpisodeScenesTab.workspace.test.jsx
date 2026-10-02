@@ -15,7 +15,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import apiClient from '../../services/api';
-import EpisodeScenesTab, { groupBeats, nextStep } from './EpisodeScenesTab';
+import EpisodeScenesTab, { groupBeats } from './EpisodeScenesTab';
 
 const HOME = { id: 'set-home', name: "Lala's Apartment", scene_type: 'HOME_BASE', base_still_url: 'https://x/home.jpg' };
 const VENUE = { id: 'set-venue', name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', base_still_url: null };
@@ -72,27 +72,14 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: { success: true } });
   });
 
-  // S9 (a) (§8(hh)): the background summary counts what needs attention.
-  test('the status bar counts ready backgrounds and locked beats, and names the next step', async () => {
+  // S9 (c) (§8(hh)): the locked count and the next step moved to the Checklist.
+  test('the status bar is the background summary, with no locked count or next step', async () => {
     renderTab();
     expect((await screen.findByTestId('est-status-images')).textContent).toBe('Backgrounds: 4 ready · 2 need attention');
-    await waitFor(() => expect(screen.getByTestId('est-status-locked').textContent).toBe('1/6 locked'));
-    expect(screen.getByTestId('est-status-next').textContent).toBe('Next: Add the missing images: beats 10 and 14');
+    expect(screen.queryByTestId('est-status-locked')).toBeNull();
+    expect(screen.queryByTestId('est-status-next')).toBeNull();
+    expect(screen.queryByTestId('est-lock-all')).toBeNull();
     expect(screen.getByTestId('est-open-beat-plan').getAttribute('href')).toBe('/episodes/ep-1/plan');
-  });
-
-  test('the next step after the images is locking the beats, then writing the script', () => {
-    const ready = { ready: 2, total: 2, not_ready: [] };
-    expect(nextStep([], null)).toEqual({ kind: 'plan', text: 'Make the beat plan' });
-    expect(nextStep([{ locked: true }, { locked: false }], ready)).toEqual({ kind: 'lock', text: 'Lock the beats' });
-    expect(nextStep([{ locked: true }, { locked: true }], ready)).toEqual({ kind: 'script', text: 'Write the script' });
-  });
-
-  test('Lock the beats locks them all', async () => {
-    READINESS = { ready: 6, total: 6, not_ready: [] };
-    renderTab();
-    fireEvent.click(await screen.findByTestId('est-lock-all'));
-    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan/lock-all'));
   });
 
   // S9 (b) (§8(hh)): the Locations are a compact strip; a location expands.

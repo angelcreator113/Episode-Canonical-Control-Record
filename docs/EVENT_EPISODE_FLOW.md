@@ -4468,6 +4468,16 @@ The walkthrough of (b) (2026-10-02, the Scenes tab rendered in a browser with a 
 
 No page scrolls sideways at either width. The episode header is not in this walkthrough; it shows in the app only.
 
+As built, S9 (c) (the guidance moves to the Checklist):
+- **The Scenes tab's status bar** is the background summary and its links (Beat Plan, Timeline). The locked count, the "Next:" step and "Lock the beats" are gone from it.
+- **The Production Checklist** (the episode's default tab) carries them in its Scene Plan section: "Next: …", from the same rule as before (`nextStep`, now in `utils/sceneSteps.js`): make the beat plan, add the missing images (naming the beats), lock the beats, then write the script. Its one action is "Lock all beats" (locks every beat, then re-checks the list), which has no other button. Each other step's action is already on the list, so the line adds none: the images row's "Open Scenes", and the footer's "Scene Plan" and "Write Script".
+- **The "Scene images for every beat" row** reads like the Scenes tab: "12 ready · 2 need attention: beats 10, 11". Its button is "Open Scenes" (the Scenes tab), in place of "Open planner".
+- **A failed plan read** on the Checklist is logged, and the scene items show unticked.
+- **The walkthrough of (c):** the Checklist and the Scenes tab's status bar were rendered in a browser with sample data at 1280px and 375px, in the images, lock and script states.
+  - Every state read correctly, and "Lock all beats" sent the lock-all request. No page scrolled sideways.
+  - The first build added "Make the plan" and "Write the script" buttons to the Next line, duplicating the footer's; they were removed.
+  - The Scene Plan section still reads "Complete" while images are missing, because images never block (L5).
+
 ---
 
 ## 9. Owed before enforcement
