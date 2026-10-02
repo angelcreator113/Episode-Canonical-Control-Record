@@ -586,3 +586,14 @@
     flex-basis: 100%;
   }
 }
+
+/* B2: the beat editor */
+.scene-planner-editor { margin: 12px 0; padding: 12px 14px; border: 1px solid rgba(184,150,46,0.35); border-radius: 10px; background: #fffef9; display: grid; gap: 8px; max-width: 560px; }
+.scene-planner-editor-title { margin: 0; font-weight: 700; font-size: 13px; color: #2C2C2C; }
+.scene-planner-editor-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: #64748b; }
+.scene-planner-editor-field select,
+.scene-planner-editor-field input,
+.scene-planner-editor-field textarea { width: 100%; box-sizing: border-box; font-size: 13px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; }
+.scene-planner-editor-note { margin: 0; font-size: 11px; color: #92400e; }
+.scene-planner-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.scene-planner-card-edit:disabled { opacity: 0.4; cursor: not-allowed; }
