@@ -3682,6 +3682,42 @@ Evidence:
   chooser.
 - After the change, all pass.
 
+**Ruling S8 (Evoni, 2026-10-02).** Recorded verbatim:
+
+> S8. "All scene image work (uploading or generating a base, zones, angles, looks) happens in one place: the scene set's panel in Scene Sets. Other pages (Beat Plan, Scenes tab, Place, Episode Locations, World Admin's event editor) show status only, with one entry point: 'Open in Scene Sets →', landing on the exact set and zone, with a way back to the page it came from. Their own upload, generate and add-angle buttons are removed."
+
+**Where scene image work happens today** (read from the code at `993e28bd`; the frontend calls, by page and button):
+
+| Page | Button | Call |
+|---|---|---|
+| Beat Plan (`ScenePlannerPage`, `MissingAngle` via `useBeatActions`) | "Upload image", "Generate angle" on a beat with a missing angle | `POST /scene-sets/:id/angles` (creates the angle), `…/angles/:angleId/upload`, `…/angles/:angleId/generate`; at the look's set, `POST /episode-brief/:episodeId/dressed-angles/:angleId/{brief,generate,upload}` (L10) |
+| Scenes tab (`EpisodeScenesTab`, same `MissingAngle` and `useBeatActions`) | "Upload image", "Generate angle" | the same as the Beat Plan |
+| Place (`EventPackagePage`, `EventLookImage`) | "Generate this look" (the look, or first the venue's base, L7–L9) | `POST /world/:showId/events/:eventId/look/{brief,generate}` |
+| Place (`EventPackagePage`) | creating a scene set from the Place, then its base brief | `POST /scene-sets`, then `POST /scene-sets/:id/generate-base` (`generateChosenBase`) |
+| World Admin's event editor (`WorldAdmin`) | "Generate Venue Images" (no set yet) | `POST /world/:showId/events/:eventId/generate-venue` (creates the set, its base and an exterior) |
+| World Admin's event editor | "Generate Venue Images" (a linked set) | `POST /scene-sets/:id/generate-base` (`setVenueBriefAsk`) |
+| World Admin's event editor | "🎬 Video" | `POST /scene-sets/:id/angles/:angleId/generate-video` (the exterior's video) |
+| Episode Locations (`EpisodeLocationsStep`) | none; it lists the angle gaps only | — |
+| Scene Sets (`SceneSetsTab`, the set's panel) | AI Generate, Upload base, Replace, Add Angle, Generate angle, Upload angle image, Regenerate, Generate all angles, Suggest angles, Scene Spec → angles, mood variants, cascade | its own routes; this is where S8 puts all of it |
+| Scene Studio (`SceneStudio`) | regenerate the scene's background, mood | `POST /scene-sets/:id/regenerate-background` — a scene's canvas, not named in S8 |
+
+The deep link exists: `sceneSetPath(showId, setId)` opens World Admin's Scene Sets tab on the set (`?set=`, S7). Its way back and a zone (`&zone=`) do not.
+
+**What S8 needs before it is built (questions):**
+1. **Looks.** "Generate this look" makes an event's dressed look of a venue (L7–L9). Its only home is the Place. The Scene Sets panel shows the looks (L9) but cannot make one. Should the panel's Looks row get "Generate this look" per event (the same brief and cost first), and the Place keep only status and "Open in Scene Sets →"? Recommended: yes.
+2. **Dressed angles.** An episode's dressed angles (L10) are made per episode from the Beat Plan. In the panel they would sit on the look: each zone of the set, dressed for that event's look, made from the look image. Should they move there, with the Beat Plan only linking to the set, zone and look? Recommended: yes.
+3. **"Generate Venue Images" with no set yet.** It creates the venue's scene set as well as its images. Should the event editor keep only a "Create the scene set" step (no images), with the images made in Scene Sets? Or should the button go, leaving set creation to Scene Sets and the Place's set choice? Recommended: keep "Create the scene set" (no images) and land in Scene Sets.
+4. **The exterior video ("🎬 Video").** It is a video, not an image. Does it move to the panel too? Recommended: yes, onto the Front zone.
+5. **Order with L14 (b).** Zone generation (b) adds the panel's zone views. Should S8 come first, so that (b) adds its buttons only in the panel? Recommended: S8 first, then (b).
+
+> S8 answers (Evoni, 2026-10-02): "accept recommendations 1–5 as written; record them in §8(dd)."
+
+So:
+1. The panel's Looks row gets "Generate this look" per event (the same brief, with the cost shown first). The Place keeps status and "Open in Scene Sets →".
+2. Dressed angles move onto the look in the panel. The Beat Plan links to the set, zone and look.
+3. "Generate Venue Images" with no set becomes "Create the scene set" (no images) and lands in Scene Sets.
+4. The exterior video moves to the panel, onto the Front zone.
+5. S8 is built first, then L14 (b).
 
 **(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
 PR each:
