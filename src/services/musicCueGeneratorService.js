@@ -103,7 +103,7 @@ class MusicCueGeneratorService {
   async getScenes(episodeId) {
     const result = await pool.query(
       `SELECT * FROM scenes 
-       WHERE episode_id = $1 
+       WHERE episode_id = $1 AND deleted_at IS NULL
        ORDER BY scene_number ASC, start_time_seconds ASC`,
       [episodeId]
     );

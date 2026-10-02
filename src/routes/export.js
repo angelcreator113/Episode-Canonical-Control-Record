@@ -73,7 +73,7 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
       `SELECT id, title, scene_number, duration_seconds, background_url,
               characters, ui_elements
        FROM scenes
-       WHERE episode_id = $1
+       WHERE episode_id = $1 AND deleted_at IS NULL
        ORDER BY scene_number ASC`,
       { bind: [episodeId] }
     );
