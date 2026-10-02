@@ -67,7 +67,19 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     { id, show, name, locationId, sceneSetId, look: JSON.stringify({ overall: 'Candlelit gala in ivory and gold.', decor: 'White orchids.' }) });
     return id;
   }
-  const flush = () => new Promise((r) => setImmediate(r));
+  // The route answers 202 and then runs the paid step: wait for its outcome,
+  // not for a tick (one setImmediate raced the run's writes on CI).
+  async function until(check, ms = 5000) {
+    const end = Date.now() + ms;
+    while (!(await check())) {
+      if (Date.now() > end) throw new Error('timed out waiting for the background run');
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+  const lookSettled = (ev) => until(async () => {
+    const found = await rows(`SELECT status FROM scene_set_looks WHERE event_id = :ev AND deleted_at IS NULL`, { ev });
+    return found.length > 0 && found.every((l) => l.status !== 'generating');
+  });
 
   beforeAll(async () => {
     const qi = sequelize.getQueryInterface();
@@ -106,7 +118,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const res = await auth(request(app).post(url(ev, '/generate'))).send({});
     expect(res.status).toBe(202);
     expect(res.body.data.step).toBe('base');
-    await flush();
+    await until(() => base.mock.calls.length > 0);
     const [created] = await rows('SELECT id, show_id FROM scene_sets WHERE world_location_id = :loc AND deleted_at IS NULL', { loc });
     expect(created).toMatchObject({ id: res.body.data.scene_set_id, show_id: show });
     expect((await rows('SELECT scene_set_id FROM world_events WHERE id = :ev', { ev }))[0].scene_set_id).toBe(created.id);
@@ -146,7 +158,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const res = await auth(request(app).post(url(ev, '/generate'))).send({});
     expect(res.status).toBe(202);
     expect(res.body.data).toMatchObject({ step: 'look', scene_set_id: setId });
-    await flush();
+    await lookSettled(ev);
     expect(dressed).toHaveBeenCalledTimes(1);
     const [, prompt, source, opts] = dressed.mock.calls[0];
     expect(source).toBe('https://x/approved.jpg');
@@ -169,10 +181,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const ev2 = await event(loc, setId, 'Garden Brunch');
     dressed.mockResolvedValueOnce({ stillUrl: 'https://x/look-2.jpg', cost: 0.04 });
     await auth(request(app).post(url(ev2, '/generate'))).send({});
-    await flush();
+    await lookSettled(ev2);
     dressed.mockResolvedValueOnce({ stillUrl: 'https://x/look-1b.jpg', cost: 0.04 });
     await auth(request(app).post(url(ev, '/generate'))).send({});
-    await flush();
+    await lookSettled(ev);
     const looks = await rows('SELECT event_id, image_url FROM scene_set_looks WHERE scene_set_id = :setId AND deleted_at IS NULL ORDER BY image_url', { setId });
     expect(looks).toEqual([{ event_id: ev, image_url: 'https://x/look-1b.jpg' }, { event_id: ev2, image_url: 'https://x/look-2.jpg' }]);
 
@@ -193,7 +205,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('provider down'));
     await auth(request(app).post(url(ev, '/generate'))).send({});
-    await flush();
+    await lookSettled(ev);
     const [look] = await rows('SELECT status, error, image_url FROM scene_set_looks WHERE event_id = :ev', { ev });
     expect(look).toEqual({ status: 'failed', error: 'provider down', image_url: null });
   });
