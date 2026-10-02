@@ -1274,6 +1274,12 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
       return res.status(503).json({ success: false, error: 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).' });
     }
 
+    // L14 (b): a zone is made from the set's approved base or its base;
+    // without either, say so before anything is started.
+    if (sceneGenService.zoneOf(angle) && !(await sceneGenService.zoneReferenceImage(set, SceneSet.sequelize))) {
+      return res.status(409).json({ success: false, code: 'NO_BASE', error: 'Generate or upload this set\'s base first: each zone is made from it, so the zones read as one place.' });
+    }
+
     // Mark as generating
     await angle.update({ generation_status: 'generating' });
 
@@ -1787,6 +1793,15 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
       };
     }
     const brief = await prepareSceneBrief(SceneSet.sequelize, draft, options);
+    // L14 (b): a zone is one Flux Kontext edit of the set's approved base (or
+    // its base), priced like a dressing; reference null = no base yet.
+    const zone = angle ? sceneGenService.zoneOf(angle) : null;
+    let reference = null;
+    if (zone) {
+      reference = await sceneGenService.zoneReferenceImage(set, SceneSet.sequelize);
+      const e = sceneGenService.estimateDressingCost();
+      estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: sceneGenService.SCENE_DRESSING_MODEL.key };
+    }
     if (!angle) {
       // S6: an event-dressed version is priced as its Flux Kontext edit.
       if (brief.mode === 'event_dressing') {
@@ -1801,7 +1816,9 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
     res.json({
       success: true,
       data: {
-        target: angle ? { kind: 'angle', angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name } : { kind: 'base' },
+        target: zone
+          ? { kind: 'zone', zone_kind: zone.kind, angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name, reference_image_url: reference?.url || null, reference_source: reference?.source || null }
+          : (angle ? { kind: 'angle', angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name } : { kind: 'base' }),
         brief,
         prompt: briefToPrompt(brief),
         estimate,

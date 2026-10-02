@@ -3673,6 +3673,27 @@ could stand, with the room fully dressed around it." (`OVERLAY_SPACE`).
 The per-angle positions it replaces (centre foreground, one side of the
 frame, centre of the floor) are gone.
 
+**Per-angle placement, softened (Evoni, 2026-10-02).** Recorded verbatim:
+
+> Bring back per-angle placement with the softened wording (e.g. close-ups: "an open area at one side of the frame where a person could stand"; overhead: "an open patch of floor mid-room"), room fully dressed around it. Stop before push.
+
+Built (`OVERLAY_SPACE`, by angle). This replaces the single line
+above. Each angle's line reads "Leave …, with the room fully dressed
+around it.", where … is:
+
+| Angle | … |
+|---|---|
+| WIDE, ESTABLISHING | an open patch of floor in the foreground where a person could stand |
+| DOORWAY | an open patch of floor in the room beyond the threshold where a person could stand |
+| CLOSE | an open area at one side of the frame where a person could stand |
+| OVERHEAD | an open patch of floor mid-room |
+| every other angle | an open area in the centre of the frame where a person could stand |
+
+These are the positions the original line had, in the softened words.
+
+Evidence: 2 unit tests in `sceneBriefService.test.js` failed before the
+change; they pass after it, with the scene integration suites.
+
 Evidence:
 - Before the change, 7 unit tests failed: the shot line, the prompt
   order, the closet, the dressing, the cut and the wording in
@@ -4289,6 +4310,16 @@ As built, L14 (a) (zone kinds, the re-kinding and the beat mapping; no image cal
   - "Suggest angles" describes the zones to Claude;
   - venue generation's exterior and interior angles are made as Front and Inside;
   - Scene Sets' Add Angle offers the zones and, for an extra framing, its zone (Inside, the base, or one of the set's zones).
+
+As built, L14 (b) (zone generation):
+- **The reference.** A zone (an angle whose kind is `front`, `inside`, `back`, `area` or `zone`) is made from the World Location's approved base when this set is the approved one, else from the set's base (`zoneReferenceImage` in `sceneGenerationService`). A set with neither refuses: "Generate or upload this set's base first" (409 `NO_BASE`, before anything is started), and its brief's Generate is disabled.
+- **The call.** One Flux Kontext edit of the reference with the zone's brief (`generateZone`, reached through `generateAngle`), priced by `estimateDressingCost()` and shown first in the brief (target kind `zone`, with the image it is made from). No crop or outpaint and no consistency check against the base, since a zone is a different part of the place. The angle records its reference and model in `quality_review.zone_reference`; its logged cost goes to the angle and the set as before.
+- **The brief** (`buildSceneBrief`'s `zone` option):
+  - camera: "Establishing view of the front of <place>: the exterior, the entrance and the approach, seen from outside." / "… of the main room of <place>, corner to corner." / "… of the back of <place> (<name>): its backstage, private or quiet area." / "… of the <name> area of <place>." / "… of the <name> of <place>.";
+  - continuity: "The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view." in place of "only the camera moved";
+  - space for characters: the WIDE line, "Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it." (the folded per-angle wording);
+  - the furnished line stays; the base view's anchor objects and camera contracts are not required of a zone; a zone is never an event dressing.
+- Not in (b): framing extras (c), dressed event-area zones (d), and the artifact-review "regenerate refined", which still re-frames from the base for any angle.
 
 Beat Plan display bugs (Evoni, 2026-10-02, from a production episode), recorded verbatim:
 

@@ -147,6 +147,9 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
   const brief = data?.brief;
   const missing = brief?.missing || [];
   const cost = estimateText(data?.estimate);
+  // L14 (b): a zone is made from the set's approved base or its base.
+  const zone = data?.target?.kind === 'zone' ? data.target : null;
+  const zoneBlocked = Boolean(zone && !zone.reference_image_url);
   const noteText = typeof note === 'function' ? (data ? note(data) : null) : note;
   // Removed lines are gone from the brief; they are listed so they can be restored.
   const removed = Object.entries(overrides || {})
@@ -189,6 +192,17 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                 <p>
                   Made from this location's approved base image with Flux Kontext. Only the event layer is sent;
                   the place, the shot and the environment come from the image.
+                </p>
+              </div>
+            )}
+
+            {zone && (
+              <div className={`sbc-dressing${zoneBlocked ? ' sbc-zone-blocked' : ''}`} data-testid="sbc-zone" role={zoneBlocked ? 'alert' : undefined}>
+                {zone.reference_image_url && <img src={zone.reference_image_url} alt="The image this zone is made from" />}
+                <p>
+                  {zoneBlocked
+                    ? "Generate or upload this set's base first: each zone is made from it, so the zones read as one place."
+                    : `Made from this set's ${zone.reference_source === 'approved_base' ? 'approved base' : 'base'} image with Flux Kontext, as the style and architecture reference, so this zone reads as the same place.`}
                 </p>
               </div>
             )}
@@ -326,7 +340,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
           <button
             type="button"
             className="sbc-btn sbc-btn-primary"
-            disabled={!brief || loading || Boolean(editing)}
+            disabled={!brief || loading || Boolean(editing) || zoneBlocked}
             onClick={() => onConfirm(overrides || {}, isBase ? { eventId: chosenEvent } : {})}
             data-testid="sbc-confirm"
           >
