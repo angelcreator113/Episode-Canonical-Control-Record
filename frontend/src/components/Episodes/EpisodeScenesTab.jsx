@@ -2,6 +2,11 @@
  * The episode's Scenes tab: the one scene workspace (Evoni's ruling L12
  * and answer L12a, 2026-10-02; docs/EVENT_EPISODE_FLOW.md §8(hh)).
  *
+ * S9 (Evoni, 2026-10-02; §8(hh)) since: "Make Scenes the place where you
+ * choose and verify backgrounds". The status bar is the background summary
+ * (a); the layout is compact (b); the locked count and the next step moved
+ * to the Production Checklist (c).
+ *
  *   L12. "The episode's Scenes tab is the one scene workspace. Top: a status
  *   bar (beats with images, beats locked, and the next step). Then the
  *   episode's Locations with role, thumbnail and angle count, and Edit
@@ -31,6 +36,7 @@ import {
 } from '../BeatPlan/BeatPlanParts';
 import useBeatActions from '../BeatPlan/useBeatActions';
 import { sceneSetPath } from '../../utils/sceneSets';
+import { listBeats } from '../../utils/sceneSteps';
 import usePlanRefresh from '../BeatPlan/usePlanRefresh';
 import RemovedSetsBanner from '../BeatPlan/RemovedSetsBanner';
 import OpenInSceneSets from '../OpenInSceneSets';
@@ -60,9 +66,6 @@ export const retryFeedMomentsApi = (episodeId) =>
   apiClient.post(`${API_BASE}/episode-brief/${episodeId}/feed-moments/retry`);
 
 // "3", "3 and 7", "3, 7 and 12"
-const listBeats = (beats) => (beats.length < 2
-  ? String(beats[0])
-  : `${beats.slice(0, -1).join(', ')} and ${beats[beats.length - 1]}`);
 
 const locationLabel = (l) => (l.role === 'extra' && l.name ? l.name : ROLE_LABELS[l.role] || l.role);
 
@@ -125,18 +128,6 @@ export function whereText(beat) {
   if (label) return label;
   const angle = beat.location?.angle;
   return `${set}${angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}`;
-}
-
-/** The status bar's next step (L12): plan, images, locks, then the script. */
-export function nextStep(plan, readiness) {
-  const total = plan.length;
-  if (!total) return { kind: 'plan', text: 'Make the beat plan' };
-  if (readiness && readiness.ready < readiness.total) {
-    const beats = (readiness.not_ready || []).map((b) => b.beat_number);
-    return { kind: 'images', text: `Add the missing images: ${beats.length === 1 ? 'beat' : 'beats'} ${listBeats(beats)}` };
-  }
-  if (plan.some((b) => !b.locked)) return { kind: 'lock', text: 'Lock the beats' };
-  return { kind: 'script', text: 'Write the script' };
 }
 
 const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
@@ -286,17 +277,6 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
     }
   };
 
-  const lockAll = async () => {
-    try {
-      await lockAllBeatsApi(episodeId);
-      toast('All beats locked — ready for the script', 'success');
-      await loadPlan();
-    } catch (err) {
-      console.error('Failed to lock the beats:', err);
-      toast(err.response?.data?.error || 'Could not lock the beats', 'error');
-    }
-  };
-
   // S9 (b, d): a beat is locked and unlocked from its Details here.
   const toggleLock = async (beat) => {
     try {
@@ -322,10 +302,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
 
   const showId = locations.show_id || episode?.show_id || null;
   const total = plan.length;
-  const locked = plan.filter((b) => b.locked).length;
   const issues = readiness?.not_ready || [];
   const issueByBeat = new Map(issues.map((i) => [i.beat_number, i]));
-  const step = nextStep(plan, readiness);
   const groups = groupBeats(plan, locations.locations);
   const storyOrder = [...plan].sort((a, b) => a.beat_number - b.beat_number);
   const editingNumber = beats.editingBeat?.beat_number ?? null;
@@ -372,17 +350,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
               {showIssues ? 'Hide issues' : 'Review issues'}
             </button>
           )}
-          {total > 0 && <span className="est-status-count" data-testid="est-status-locked">{locked}/{total} locked</span>}
         </div>
-        <div className="est-status-next" data-testid="est-status-next">
-          <span className="est-status-next-label">Next:</span>{' '}
-          {step.kind === 'plan' && <Link to={`/episodes/${episodeId}/plan`}>{step.text}</Link>}
-          {step.kind === 'images' && <span>{step.text}</span>}
-          {step.kind === 'lock' && (
-            <button type="button" className="est-btn est-btn-primary est-btn-sm" onClick={lockAll} data-testid="est-lock-all">{step.text}</button>
-          )}
-          {step.kind === 'script' && <Link to={`/episodes/${episodeId}/script-writer`}>{step.text}</Link>}
-        </div>
+        {/* S9 (c): the locked count and the next step are on the Production Checklist. */}
         <div className="est-status-links">
           <Link className="est-btn est-btn-outline est-btn-sm" to={`/episodes/${episodeId}/plan`} data-testid="est-open-beat-plan">
             <Film size={14} /> Beat Plan (full screen)
