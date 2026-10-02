@@ -215,17 +215,35 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
+    // L11 (§8(hh)): a set or angle Evoni chose in the beat editor marks the
+    // beat "Chosen by you"; chosen: false hands it back to the plan.
+    if (req.body.chosen === true && (req.body.scene_set_id !== undefined || req.body.angle_label !== undefined)) {
+      updates.chosen_by_user = true;
+    } else if (req.body.chosen === false) {
+      updates.chosen_by_user = false;
+    }
 
+    let location = null;
     if (updates.scene_set_id) {
       const sceneSet = await SceneSet.findByPk(updates.scene_set_id);
-      if (sceneSet) {
-        updates.scene_context = sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400);
+      if (!sceneSet) return res.status(404).json({ error: 'Scene set not found' });
+      updates.scene_context = sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400);
+      // L11: a set not yet linked to the episode joins its locations.
+      const { linkBeatSet, EpisodeLocationsError } = require('../services/episodeLocationsService');
+      try {
+        location = await linkBeatSet(models.sequelize, { episodeId, sceneSetId: updates.scene_set_id });
+      } catch (linkErr) {
+        if (linkErr instanceof EpisodeLocationsError) {
+          return res.status(linkErr.status).json({ error: linkErr.message, code: linkErr.code });
+        }
+        throw linkErr;
       }
     }
 
     await plan.update(updates);
-    return res.json({ data: plan });
+    return res.json({ data: plan, ...(location ? { location } : {}) });
   } catch (err) {
+    console.error('[ScenePlanner] beat update failed:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

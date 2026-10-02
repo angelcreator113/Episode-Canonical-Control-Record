@@ -28,6 +28,9 @@ module.exports = (sequelize) => {
     scene_context: { type: DataTypes.TEXT, allowNull: true },
     director_note: { type: DataTypes.TEXT, allowNull: true },
     locked: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // L11 (§8(hh)): Evoni chose this beat's set or angle; a re-plan and the
+    // location moves leave it, like a locked beat. Migration 20261002140000.
+    chosen_by_user: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     ai_suggested: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     ai_confidence: { type: DataTypes.FLOAT, allowNull: true },

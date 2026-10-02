@@ -1276,7 +1276,7 @@ router.get(
     const locations = await listLocations(db.sequelize, req.params.episodeId);
     // The angles the planner asks for that the sets lack (L4, Q19).
     const angleGaps = await locationAngleGaps(db.sequelize, locations);
-    return res.json({ success: true, data: { locations, editable: episode.evaluation_status !== 'accepted', angle_gaps: angleGaps } });
+    return res.json({ success: true, data: { locations, editable: episode.evaluation_status !== 'accepted', angle_gaps: angleGaps, show_id: episode.show_id } });
   })
 );
 

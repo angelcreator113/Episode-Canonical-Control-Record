@@ -271,10 +271,14 @@ Return ONLY the JSON array, no other text.`;
   if (save) {
     // B2 (Evoni, 2026-10-02): a rewrite never deletes a locked beat. The
     // unlocked beats are replaced; a locked one stays as Evoni set it, and
-    // the plan returned shows it.
-    const lockedRows = await ScenePlan.findAll({ where: { episode_id: episodeId, locked: true } });
+    // the plan returned shows it. L11: a beat whose set or angle she chose
+    // ("Chosen by you") is kept the same way.
+    const { Op } = require('sequelize');
+    const lockedRows = await ScenePlan.findAll({
+      where: { episode_id: episodeId, [Op.or]: [{ locked: true }, { chosen_by_user: true }] },
+    });
     const lockedByBeat = new Map(lockedRows.map((r) => [r.beat_number, r]));
-    await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false }, force: true });
+    await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true });
 
     const rows = enrichedBeats.map((beat, i) => ({ beat, i })).filter(({ beat }) => !lockedByBeat.has(beat.beat_number)).map(({ beat, i }) => ({
       episode_id: episodeId,
@@ -294,7 +298,7 @@ Return ONLY the JSON array, no other text.`;
     }));
 
     await ScenePlan.bulkCreate(rows);
-    console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked`);
+    console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked or chosen`);
 
     return enrichedBeats.map((beat) => {
       const kept = lockedByBeat.get(beat.beat_number);
@@ -309,7 +313,8 @@ Return ONLY the JSON array, no other text.`;
         transition_in: kept.transition_in,
         scene_context: kept.scene_context,
         ai_confidence: kept.ai_confidence,
-        locked: true,
+        locked: Boolean(kept.locked),
+        chosen_by_user: Boolean(kept.chosen_by_user),
       };
     });
   }

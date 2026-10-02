@@ -540,7 +540,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
               className="est-btn est-btn-outline"
               onClick={() => navigate(`/episodes/${episodeId}/plan`)}
             >
-              <Film size={14} /> Scene Planner
+              <Film size={14} /> Beat Plan
             </button>
             <button
               className="est-btn est-btn-outline"
