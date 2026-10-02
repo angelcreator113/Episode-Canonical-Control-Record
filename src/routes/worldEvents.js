@@ -2426,9 +2426,12 @@ router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, asyn
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     const { proposeLocations } = require('../services/episodeLocationsService');
     const { readVenueLook } = require('../services/venueLookService');
+    const { locationAngleGaps } = require('../services/planLocationsService');
     const data = await proposeLocations(models.sequelize, { showId, event });
-    // The event's look, shown read-only in the step (Q10).
-    return res.json({ success: true, data: { ...data, event_look: readVenueLook(event.venue_look) } });
+    // The event's look, shown read-only in the step (Q10), and the angles
+    // the planner will ask for that the sets lack (L4, Q19).
+    const angleGaps = await locationAngleGaps(models.sequelize, data.locations);
+    return res.json({ success: true, data: { ...data, event_look: readVenueLook(event.venue_look), angle_gaps: angleGaps } });
   } catch (error) {
     console.error('Episode locations proposal error:', error);
     return res.status(500).json({ success: false, error: error.message });

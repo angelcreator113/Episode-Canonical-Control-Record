@@ -1272,8 +1272,11 @@ router.get(
     const { listLocations } = require('../services/episodeLocationsService');
     const episode = await db.models.Episode.findByPk(req.params.episodeId);
     if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+    const { locationAngleGaps } = require('../services/planLocationsService');
     const locations = await listLocations(db.sequelize, req.params.episodeId);
-    return res.json({ success: true, data: { locations, editable: episode.evaluation_status !== 'accepted' } });
+    // The angles the planner asks for that the sets lack (L4, Q19).
+    const angleGaps = await locationAngleGaps(db.sequelize, locations);
+    return res.json({ success: true, data: { locations, editable: episode.evaluation_status !== 'accepted', angle_gaps: angleGaps } });
   })
 );
 
