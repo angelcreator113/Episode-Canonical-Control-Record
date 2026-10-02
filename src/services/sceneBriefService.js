@@ -187,7 +187,7 @@ function seasonFromDate(date) {
  */
 function buildSceneBrief({
   sceneSet, location = null, event = null, angleLabel = 'WIDE', cameraDirection = null,
-  requiredFeatures = null, continuity = false, overrides = {},
+  requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false,
 } = {}) {
   const set = sceneSet || {};
   const angle = String(angleLabel || 'WIDE').toUpperCase();
@@ -287,11 +287,16 @@ function buildSceneBrief({
   const missing = kept.filter((l) => l.essential && !l.text).map((l) => ({ layer: l.layer, key: l.key, label: l.label }));
   if (!location) missing.unshift({ layer: 'place', key: 'world_location', label: 'World Location' });
 
-  // S6: an event-dressed version of the location's approved base.
-  const dressing = Boolean(
-    location?.approved_base_image_url && event && angle === 'WIDE' && !continuity
-    && (!set.id || set.id !== location.approved_base_scene_set_id)
-  );
+  // S6: an event-dressed version of the location's approved base. An
+  // event's look (L7-L9; answer 2, §8(hh)) is always a dressing of the
+  // approved base, on any set at the venue, the approved set included: it
+  // is written to the event's look, never to the set's base.
+  const dressing = lookDressing
+    ? Boolean(location?.approved_base_image_url && event)
+    : Boolean(
+      location?.approved_base_image_url && event && angle === 'WIDE' && !continuity
+      && (!set.id || set.id !== location.approved_base_scene_set_id)
+    );
 
   return {
     version: BRIEF_VERSION,

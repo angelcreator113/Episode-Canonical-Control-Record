@@ -54,16 +54,25 @@ async function refuseApprovedBase(res, set) {
 // location's approved base, { scene_set_id, image_url }, or null).
 async function withApprovals(sets) {
   const list = (sets || []).map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
+  let out = list;
   try {
     const approvals = await approvedBase.approvalsForSets(SceneSet.sequelize, list);
-    return list.map((x) => {
+    out = list.map((x) => {
       const a = x.world_location_id ? approvals.get(x.world_location_id) || null : null;
       return { ...x, base_approved: Boolean(a && a.scene_set_id === x.id), location_approved_base: a };
     });
   } catch (err) {
     console.warn('[SceneSets] approved bases not read:', err.message);
-    return list;
   }
+  // L9 (§8(hh)): each set's looks, one per event, naming its event.
+  try {
+    const { looksForSets } = require('../services/venueLookImageService');
+    const looks = await looksForSets(SceneSet.sequelize, out.map((x) => x.id));
+    out = out.map((x) => ({ ...x, looks: looks.get(x.id) || [] }));
+  } catch (err) {
+    console.warn('[SceneSets] looks not read:', err.message);
+  }
+  return out;
 }
 
 function getAnthropicClient() {

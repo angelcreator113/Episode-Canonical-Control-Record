@@ -92,6 +92,7 @@ import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
 import EventVenueLook from '../components/EventPackage/EventVenueLook';
+import EventLookImage from '../components/EventPackage/EventLookImage';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -1326,6 +1327,8 @@ export default function EventPackagePage() {
           {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
               lock (Q9): editable until the episode is accepted. */}
           <EventVenueLook showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
+          <EventLookImage showId={showId} eventId={eventId} sceneSetPath={sceneSetPath} onToast={setToast} onSaved={load} />
         </section>
 
         <section className="epp-section">

@@ -2491,6 +2491,67 @@ router.post('/world/:showId/events/:eventId/venue-look/draft', requireAuth, aiRa
   }
 });
 
+// "Generate this look" (L7-L9; Evoni, 2026-10-02, answers 1-4 and 6,
+// docs/EVENT_EPISODE_FLOW.md §8(hh)): the event's Venue Look made into an
+// image on its venue's scene set.
+//   GET  .../look            the event's set, the venue's approval, its look
+//   POST .../look/brief      the step (look, base or awaiting_approval) with
+//                            its brief and cost, shown first (S2); read only
+//   POST .../look/generate   body { overrides?, scene_set_id? }: runs the
+//                            step after the cost is confirmed (202)
+const sendLookImageError = (res, err, label) => {
+  const { VenueLookImageError } = require('../services/venueLookImageService');
+  if (err instanceof VenueLookImageError) {
+    return res.status(err.status).json({ success: false, code: err.code, error: err.message, ...(err.options ? { options: err.options } : {}) });
+  }
+  console.error(`${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.get('/world/:showId/events/:eventId/look', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { eventLook } = require('../services/venueLookImageService');
+    const data = await eventLook(models.sequelize, { showId: req.params.showId, eventId: req.params.eventId });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendLookImageError(res, err, 'Event look read');
+  }
+});
+
+router.post('/world/:showId/events/:eventId/look/brief', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { lookBrief } = require('../services/venueLookImageService');
+    const data = await lookBrief(models.sequelize, {
+      showId: req.params.showId, eventId: req.params.eventId,
+      chosenSetId: req.body?.scene_set_id || null, overrides: req.body?.overrides,
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendLookImageError(res, err, 'Event look brief');
+  }
+});
+
+router.post('/world/:showId/events/:eventId/look/generate', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { startLook } = require('../services/venueLookImageService');
+    const { result, run } = await startLook(models, {
+      showId: req.params.showId, eventId: req.params.eventId,
+      chosenSetId: req.body?.scene_set_id || null, overrides: req.body?.overrides,
+    });
+    res.status(run ? 202 : 200).json({ success: true, data: result });
+    if (run) await run();
+  } catch (err) {
+    if (!res.headersSent) return sendLookImageError(res, err, 'Event look generate');
+    console.error('Event look generate error after reply:', err);
+  }
+});
+
 // POST /world/:showId/events/generate-episode-from-many
 //
 // Generate a single episode from multiple events. The first event in the

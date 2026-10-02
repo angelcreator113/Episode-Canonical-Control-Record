@@ -3986,6 +3986,29 @@ Further answers (Evoni, 2026-10-02), recorded verbatim:
 - **Q21, as built:** a beat that asks for no particular angle is shot on its set's base image, and that image counts as its angle for readiness.
 - **Q6, as built:** reference images are stored and shown, with at most 3 ticked "use as reference"; they are not sent to image generation. To be revisited after the scene model comparison.
 
+Venue look → image rulings (Evoni, 2026-10-02), recorded verbatim:
+
+> L7. The Place section has one-click "Generate this look", with its cost shown first (S2). It uses the event's venue scene set, creating one for the venue if there is none, and its image is made on the Scene Sets page's set, not a separate copy.
+>
+> L8. If the venue has no approved base, "Generate this look" makes the base only (the empty room, no event dressing) and stops; the base waits for Evoni's approval in Scene Sets. Once a base is approved, "Generate this look" makes the event-dressed version from the Event Venue Look (S6, Kontext).
+>
+> L9. On the Scene Sets page, a venue's set shows a Looks row: its approved base, then one card per event's dressed version, each naming its event. The Place section shows the event's look thumbnail with "Open in Scene Sets", and Scene Sets links each look back to its event.
+>
+> L10. When an event has a dressed look, its episode's angles at that venue are made from the dressed look instead of the plain approved base (the look is the episode's room); without a look, the approved base is used as today.
+
+Her answers to the build questions (Evoni, 2026-10-02), recorded verbatim:
+
+> L7–L9 answers (Evoni, 2026-10-02): accept your recommendations 1–4 and 6. 5: this build stores and shows the look only, as you propose; also record now, to build as its own PR right after: L10.
+
+The answers in full:
+
+1. **Where looks live (L9):** a new table of looks, one current look per event per set, holding its image, brief, cost and status. The set's base image is never touched; regenerating an event's look replaces only that event's look.
+2. **Dressing on the approved set itself (L7, L8):** allowed. A look reads from the approved base and is written to that event's look, never to the base, so the approved base cannot be overwritten.
+3. **Which set "Generate this look" uses (L7):** the event's chosen set; else the venue's sets by F3's rule (one is used, several ask Evoni to choose); none, it creates one for the venue and links it to the event.
+4. **No approved base yet (L8):** a set with no base image gets the empty-room base (no event dressing) and stops; a set whose base is waiting for approval generates nothing and points to "Approve it in Scene Sets".
+5. **Where the look is used:** this build stores and shows the look only (Place, Scene Sets, links both ways). L10, its own PR right after, makes the episode's angles at that venue from the look.
+6. **Progress in the Place section:** after the cost is confirmed, the Place section shows "Generating…" and refreshes until the image is done or failed, then shows the thumbnail with "Open in Scene Sets".
+
 ---
 
 ## 9. Owed before enforcement

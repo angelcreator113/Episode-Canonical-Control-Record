@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import apiClient from '../services/api';
 import './SceneSetsTab.css';
@@ -495,6 +495,37 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
+// L9 (Evoni, 2026-10-02, §8(hh)): "a venue's set shows a Looks row: its
+// approved base, then one card per event's dressed version, each naming its
+// event"; "Scene Sets links each look back to its event."
+export function LooksRow({ set }) {
+  const looks = set.looks || [];
+  if (!set.base_approved && looks.length === 0) return null;
+  return (
+    <div className="scene-sets-looks" data-testid={`scene-set-looks-${set.id}`} onClick={(e) => e.stopPropagation()}>
+      <span className="scene-sets-looks-label">Looks</span>
+      <div className="scene-sets-looks-row">
+        {set.base_approved && set.base_still_url && (
+          <figure className="scene-sets-look" data-testid={`scene-set-look-base-${set.id}`}>
+            <img src={set.base_still_url} alt="" />
+            <figcaption>Approved base</figcaption>
+          </figure>
+        )}
+        {looks.map((l) => (
+          <figure key={l.id} className="scene-sets-look" data-testid={`scene-set-look-${l.id}`}>
+            {l.status === 'complete' && l.image_url
+              ? <img src={l.image_url} alt="" />
+              : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
+            <figcaption>
+              <Link to={`/shows/${l.event_show_id}/events/${l.event_id}`}>{l.event_name}</Link>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The approved base row on a scene set card (S6, Evoni 2026-10-01: "Nothing
  * is approved automatically; Evoni approves each base from Scene Sets.").
@@ -975,6 +1006,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
               location are made from it, and it is not replaced until it is
               un-approved. */}
           <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
+          <LooksRow set={set} />
 
           {/* Compact metadata */}
           <div className="scene-sets-card-meta-line">
@@ -2372,6 +2404,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
   if (ps.scene_type !== ns.scene_type) return false;
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
+  if (ps.base_approved !== ns.base_approved) return false;
+  const pl = ps.looks || [], nl = ns.looks || [];
+  if (pl.length !== nl.length) return false;
+  for (let i = 0; i < pl.length; i++) {
+    if (pl[i].id !== nl[i].id || pl[i].status !== nl[i].status || pl[i].image_url !== nl[i].image_url) return false;
+  }
   if (ps.show_id !== ns.show_id) return false;
   if (ps.scene_spec !== ns.scene_spec) return false;
   if (ps.visual_language?.scene_spec !== ns.visual_language?.scene_spec) return false;
