@@ -3,6 +3,10 @@
  *
  * Evoni, 2026-09-30: two scene prompts, a base still from each model for
  * each prompt, side by side with their logged costs, to choose the default.
+ * Evoni, 2026-10-02: each image is built "from a real scene set's Scene
+ * Brief (place layer, environment, no-people rule), not free text". So the
+ * two prompts are two scene sets at a World Location; the estimate step
+ * shows the prompt each set's brief sends to every model.
  * Styles live in pages/SceneSetsTab.css (the page that renders this).
  *
  * Also exports BaseModelSelect: the per-set base model choice
@@ -81,8 +85,18 @@ export function BaseModelSelect({ set, onSaved, onError }) {
   );
 }
 
-export default function SceneModelComparison({ onClose }) {
-  const [prompts, setPrompts] = useState(['', '']);
+const COMPARE_PREFIX = '[Compare';
+
+/** The scene sets a comparison can draw from: at a World Location, not a comparison copy. */
+export function comparableSets(sets) {
+  return (sets || [])
+    .filter(s => s.world_location_id && !String(s.name || '').startsWith(COMPARE_PREFIX))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+export default function SceneModelComparison({ sets = [], onClose }) {
+  const [setIds, setSetIds] = useState(['', '']);
+  const [sources, setSources] = useState(null);
   const [estimate, setEstimate] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -122,17 +136,18 @@ export default function SceneModelComparison({ onClose }) {
     return () => { alive = false; if (timer) clearTimeout(timer); };
   }, [group, load]);
 
-  const ready = prompts.every(p => p.trim().length > 0);
+  const choices = comparableSets(sets);
+  const ready = setIds.every(Boolean) && setIds[0] !== setIds[1];
 
   const review = async () => {
     setBusy(true);
     setError(null);
     try {
-      await startModelComparisonApi({ prompts });
+      await startModelComparisonApi({ scene_set_ids: setIds });
       setError('Unexpected: the server generated without confirmation');
     } catch (err) {
       const body = err.response?.data;
-      if (body?.code === 'CONFIRM_REQUIRED') setEstimate(body.estimate);
+      if (body?.code === 'CONFIRM_REQUIRED') { setEstimate(body.estimate); setSources(body.sources || null); }
       else {
         console.error('[ModelComparison] estimate failed', err);
         setError(body?.error || 'Could not get the estimate');
@@ -145,8 +160,9 @@ export default function SceneModelComparison({ onClose }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await startModelComparisonApi({ prompts, confirm: true });
+      const r = await startModelComparisonApi({ scene_set_ids: setIds, confirm: true });
       setEstimate(null);
+      setSources(null);
       setData(null);
       setGroup(r.data.data.group);
     } catch (err) {
@@ -167,20 +183,24 @@ export default function SceneModelComparison({ onClose }) {
         )}
       </div>
       <p className="scene-sets-compare-hint">
-        Base stills only: two stills per model from the same two prompts. Each still is a new scene set named “[Compare …]”.
+        Base stills only: each model draws each set's Scene Brief (its place, environment and the no-people rule). Each still is a new scene set named “[Compare …]”; the two sets are not changed.
       </p>
 
       {[0, 1].map(i => (
         <label key={i} className="scene-sets-compare-field">
-          <span>Scene prompt {i + 1}</span>
-          <textarea
-            rows={3}
-            value={prompts[i]}
-            onChange={e => { const next = [...prompts]; next[i] = e.target.value; setPrompts(next); setEstimate(null); }}
-            placeholder="Describe the room…"
-          />
+          <span>Scene set {i + 1}</span>
+          <select
+            value={setIds[i]}
+            onChange={e => { const next = [...setIds]; next[i] = e.target.value; setSetIds(next); setEstimate(null); setSources(null); }}
+          >
+            <option value="">Choose…</option>
+            {choices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
         </label>
       ))}
+      {choices.length < 2 && (
+        <p className="scene-sets-compare-hint">Two scene sets linked to a World Location are needed.</p>
+      )}
 
       {!estimate && (
         <button type="button" className="scene-sets-btn-generate" disabled={!ready || busy} onClick={review}>
@@ -190,6 +210,15 @@ export default function SceneModelComparison({ onClose }) {
 
       {estimate && (
         <div className="scene-sets-compare-estimate" data-testid="compare-estimate">
+          {sources?.map((src, i) => (
+            <details key={src.scene_set_id} className="scene-sets-compare-brief" open>
+              <summary>Set {i + 1}: {src.name}, the prompt every model is sent</summary>
+              <p>{src.prompt}</p>
+              {src.missing?.length > 0 && (
+                <p className="scene-sets-compare-unpriced">Missing from the brief: {src.missing.map(m => m.label).join(', ')}</p>
+              )}
+            </details>
+          ))}
           <ul>
             {estimate.per_model.map(m => (
               <li key={m.model_key}>
@@ -247,7 +276,7 @@ export default function SceneModelComparison({ onClose }) {
                         {s.generation_status === 'failed' ? 'Failed' : <><Loader size={14} className="spin" /> Generating</>}
                       </div>}
                   <figcaption>
-                    Prompt {s.prompt_index + 1} · logged {formatUsd(s.logged_cost_usd)}
+                    {s.source_name || `Prompt ${s.prompt_index + 1}`} · logged {formatUsd(s.logged_cost_usd)}
                     {s.input_tokens_unpriced ? ' + unpriced input tokens' : ''}
                   </figcaption>
                 </figure>

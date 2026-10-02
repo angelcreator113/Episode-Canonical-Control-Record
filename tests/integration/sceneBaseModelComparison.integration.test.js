@@ -42,6 +42,7 @@ jest.mock('sharp', () => {
   return jest.fn(() => chain());
 });
 
+const crypto = require('crypto');
 const { Sequelize } = require('sequelize');
 const request = require('supertest');
 const axios = require('axios');
@@ -49,6 +50,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
+const { prepareSceneBrief, briefToPrompt } = require('../../src/services/sceneBriefService');
 const migration = require('../../src/migrations/20261001140000-add-scene-sets-base-model');
 
 const { sequelize } = models;
@@ -85,6 +87,7 @@ async function waitFor(fn, timeoutMs = 20000) {
   let adminToken;
   let userToken;
   const createdSetIds = [];
+  const createdLocationIds = [];
   const saved = {};
 
   beforeAll(async () => {
@@ -133,6 +136,9 @@ async function waitFor(fn, timeoutMs = 20000) {
       const logIds = rows.flatMap((r) => (r.base_generation && r.base_generation.usage_log_ids) || []);
       if (logIds.length) await sequelize.query('DELETE FROM ai_usage_logs WHERE id IN (:ids)', { replacements: { ids: logIds } });
       await sequelize.query('DELETE FROM scene_sets WHERE id IN (:ids)', { replacements: { ids: createdSetIds } });
+    }
+    if (createdLocationIds.length) {
+      await sequelize.query('DELETE FROM world_locations WHERE id IN (:ids)', { replacements: { ids: createdLocationIds } });
     }
     await sequelize.close();
   });
@@ -198,8 +204,50 @@ async function waitFor(fn, timeoutMs = 20000) {
     ]);
   });
 
-  it('POST /model-comparison: 403 for a non-ADMIN, 400 with the estimate without confirm, nothing generated', async () => {
-    const body = { prompts: ['A cream bedroom with gold hardware.', 'A glass closet with warm light.'] };
+  /**
+   * A real scene set at a World Location (Evoni, 2026-10-02: "make sure
+   * 'Compare base models' builds each image from a real scene set's Scene
+   * Brief (place layer, environment, no-people rule), not free text").
+   */
+  async function sourceSet(name, { linked = true } = {}) {
+    const loc = crypto.randomUUID();
+    if (linked) {
+      await sequelize.query(
+        `INSERT INTO world_locations (id, name, description, venue_type, district, city, style_guide, created_at, updated_at)
+         VALUES (:loc, :name, 'A place.', 'photo_studio', 'Gallery Row', 'Dream City', :guide, NOW(), NOW())`,
+        { replacements: { loc, name: `${name} venue`, guide: JSON.stringify({ architecture: ['cast-iron columns'], materials: ['white oak'] }) } },
+      );
+      createdLocationIds.push(loc);
+    }
+    const set = await models.SceneSet.create({
+      name, scene_type: 'HOME_BASE', canonical_description: `${name}: cream walls and gold hardware.`,
+      time_of_day: 'golden_hour', season: 'winter', world_location_id: linked ? loc : null,
+    });
+    createdSetIds.push(set.id);
+    return set;
+  }
+
+  it('POST /model-comparison refuses free prompts: it takes two scene sets', async () => {
+    const res = await request(app).post('/api/v1/scene-sets/model-comparison')
+      .set('Authorization', `Bearer ${adminToken}`).send({ prompts: ['A cream bedroom.', 'A glass closet.'] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/scene_set_ids/);
+    expect(axios.post).not.toHaveBeenCalled();
+  });
+
+  it('POST /model-comparison refuses a set with no World Location (no place layer)', async () => {
+    const a = await sourceSet('itest-2396 linked');
+    const b = await sourceSet('itest-2396 unlinked', { linked: false });
+    const res = await request(app).post('/api/v1/scene-sets/model-comparison')
+      .set('Authorization', `Bearer ${adminToken}`).send({ scene_set_ids: [a.id, b.id] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/World Location/);
+  });
+
+  it('POST /model-comparison: 403 for a non-ADMIN, 400 with the estimate and the two briefs without confirm, nothing generated', async () => {
+    const a = await sourceSet('itest-2396 Room');
+    const b = await sourceSet('itest-2396 Studio');
+    const body = { scene_set_ids: [a.id, b.id] };
     const before = await models.SceneSet.count();
 
     const forbidden = await request(app).post('/api/v1/scene-sets/model-comparison')
@@ -214,15 +262,18 @@ async function waitFor(fn, timeoutMs = 20000) {
     expect(noConfirm.body.estimate.per_model.map((m) => [m.model_key, m.usd])).toEqual([
       ['flux-dev', 0.05], ['flux-pro-1.1', 0.08], ['gpt-image-1.5', 0.4],
     ]);
+    expect(noConfirm.body.sources.map((s) => s.scene_set_id)).toEqual([a.id, b.id]);
+    expect(noConfirm.body.sources[0].prompt).toMatch(/^An empty space with no people/);
 
     expect(axios.post).not.toHaveBeenCalled();
     expect(await models.SceneSet.count()).toBe(before);
   });
 
-  it('POST /model-comparison with confirm creates 6 sets, generates base stills only, and the view shows logged costs', async () => {
-    const prompts = ['A cream bedroom with gold hardware.', 'A glass closet with warm light.'];
+  it("POST /model-comparison with confirm draws each set's Scene Brief with every model: 6 stills, the same prompt per set", async () => {
+    const a = await sourceSet('itest-2396 Room');
+    const b = await sourceSet('itest-2396 Studio');
     const res = await request(app).post('/api/v1/scene-sets/model-comparison')
-      .set('Authorization', `Bearer ${adminToken}`).send({ prompts, confirm: true });
+      .set('Authorization', `Bearer ${adminToken}`).send({ scene_set_ids: [a.id, b.id], confirm: true });
     expect(res.status).toBe(202);
     const { group, sets } = res.body.data;
     expect(sets).toHaveLength(6);
@@ -243,6 +294,32 @@ async function waitFor(fn, timeoutMs = 20000) {
     expect(urls.filter((u) => u === 'https://api.openai.com/v1/images/generations')).toHaveLength(2);
     expect(urls).toHaveLength(6);
 
+    // The prompt sent is the source set's own Scene Brief: the no-people
+    // rule first, the place layer (its World Location's architecture and
+    // neighbourhood, the set's name, not the copy's), the environment.
+    const sent = axios.post.mock.calls.map((c) => c[1].prompt);
+    const expected = [];
+    for (const src of [a, b]) {
+      const brief = await prepareSceneBrief(sequelize, await models.SceneSet.findByPk(src.id), { angleLabel: 'WIDE', eventId: null });
+      expected.push(briefToPrompt(brief));
+    }
+    expect(expected[0]).toMatch(/^An empty space with no people/);
+    expect(expected[0]).toContain('itest-2396 Room, a photo studio.');
+    expect(expected[0]).toContain('Architecture: cast-iron columns.');
+    expect(expected[0]).toContain('Outside, through windows and doorways: Gallery Row, Dream City.');
+    expect(expected[0]).toContain('Golden hour');
+    expect(expected[0]).toContain('Winter.');
+    expect(expected[0]).not.toContain('[Compare');
+    expect(sent.filter((p) => p === expected[0])).toHaveLength(3);
+    expect(sent.filter((p) => p === expected[1])).toHaveLength(3);
+
+    // The copies are not attached to the venue; the sources are untouched.
+    const copies = await models.SceneSet.findAll({ where: { id: sets.map((s) => s.id) }, attributes: ['world_location_id', 'base_generation'] });
+    expect(copies.every((c) => c.world_location_id === null)).toBe(true);
+    expect(copies.every((c) => [a.id, b.id].includes(c.base_generation.source_scene_set_id))).toBe(true);
+    const srcRows = await models.SceneSet.findAll({ where: { id: [a.id, b.id] }, attributes: ['base_still_url', 'generation_status'] });
+    expect(srcRows.every((r) => r.base_still_url === null)).toBe(true);
+
     const view = await request(app).get(`/api/v1/scene-sets/model-comparison/${group}`)
       .set('Authorization', `Bearer ${userToken}`);
     expect(view.status).toBe(200);
@@ -253,9 +330,11 @@ async function waitFor(fn, timeoutMs = 20000) {
       ['gpt-image-1.5', 1536, 1024, 0.4, true],
     ]);
     for (const col of cols) {
-      expect(col.sets.map((s) => s.prompt)).toEqual(prompts);
+      expect(col.sets.map((s) => s.prompt)).toEqual(expected);
+      expect(col.sets.map((s) => s.source_name)).toEqual(['itest-2396 Room', 'itest-2396 Studio']);
       expect(col.sets.every((s) => s.base_still_url && s.generation_status === 'complete')).toBe(true);
     }
+    expect(view.body.data.sources.map((s) => s.name)).toEqual(['itest-2396 Room', 'itest-2396 Studio']);
     expect(view.body.data.columns[2].sets.map((s) => s.logged_cost_usd)).toEqual([0.2, 0.2]);
 
     const list = await request(app).get('/api/v1/scene-sets/model-comparison').set('Authorization', `Bearer ${userToken}`);

@@ -232,9 +232,9 @@ router.get('/base-models', requireAuth, (req, res) => {
   }
 });
 
-// POST /model-comparison — ADMIN. Two prompts (or two scene set ids to copy
-// the description from) × the chosen models (default all three) → one scene
-// set per model per prompt, base stills only. Without confirm: true it
+// POST /model-comparison — ADMIN. Two scene set ids (never free prompts;
+// Evoni, 2026-10-02) × the chosen models (default all three) → one copy per
+// model per set, each drawn from that set's Scene Brief, base stills only. Without confirm: true it
 // generates nothing and answers 400 CONFIRM_REQUIRED with the estimate.
 router.post('/model-comparison', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
@@ -247,6 +247,7 @@ router.post('/model-comparison', requireAuth, authorize(['ADMIN']), aiRateLimite
         error: 'Review the estimate, then send the same request with confirm: true to generate.',
         estimate: plan.estimate,
         models: plan.modelKeys,
+        sources: modelComparison.describeSources(plan),
       });
     }
     const missing = modelComparison.missingProviderKeys(plan.modelKeys);

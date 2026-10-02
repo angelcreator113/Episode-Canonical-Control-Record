@@ -1,7 +1,8 @@
 /**
- * SceneModelComparison — base-model comparison UI (Task #2396): two prompts,
- * the server's estimate before anything is generated, confirm, and the
- * side-by-side result with logged costs. Also BaseModelSelect.
+ * SceneModelComparison — base-model comparison UI (Task #2396): two scene
+ * sets (never free prompts; Evoni, 2026-10-02), the server's estimate and
+ * each set's Scene Brief prompt before anything is generated, confirm, and
+ * the side-by-side result with logged costs. Also BaseModelSelect.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -24,16 +25,27 @@ const ESTIMATE = {
   unpriced: ['gpt-image-1.5 prompt (text) input tokens are not in the rate table.'],
 };
 
+const SETS = [
+  { id: 'room', name: "Lala's Room", world_location_id: 'loc-1' },
+  { id: 'studio', name: 'Studio', world_location_id: 'loc-2' },
+  { id: 'loose', name: 'Unlinked set', world_location_id: null },
+  { id: 'copy', name: '[Compare 1234abcd] P1 · Flux dev', world_location_id: null },
+];
+const SOURCES = [
+  { scene_set_id: 'room', name: "Lala's Room", prompt: 'An empty space with no people. Lala room brief.', missing: [] },
+  { scene_set_id: 'studio', name: 'Studio', prompt: 'An empty space with no people. Studio brief.', missing: [] },
+];
+
 const col = (key, label, w, h, cost) => ({
   model_key: key, label, model: key, width: w, height: h, quality: key === 'gpt-image-1.5' ? 'high' : null,
   logged_total_usd: cost * 2, logged_complete: true,
   sets: [0, 1].map(i => ({
-    id: `${key}-${i}`, prompt_index: i, prompt: `P${i}`, base_still_url: `https://s3/${key}-${i}.png`,
+    id: `${key}-${i}`, prompt_index: i, prompt: `P${i}`, source_name: SOURCES[i].name, base_still_url: `https://s3/${key}-${i}.png`,
     generation_status: 'complete', logged_cost_usd: cost, input_tokens_unpriced: false,
   })),
 });
 const RESULT = {
-  group: 'g-1', prompts: ['P0', 'P1'], default_model: 'flux-dev',
+  group: 'g-1', prompts: ['P0', 'P1'], sources: SOURCES.map(s => ({ scene_set_id: s.scene_set_id, name: s.name })), default_model: 'flux-dev',
   columns: [col('flux-dev', 'Flux dev', 1024, 576, 0.025), col('flux-pro-1.1', 'Flux pro 1.1', 1024, 576, 0.04), col('gpt-image-1.5', 'GPT Image 1.5 (high)', 1536, 1024, 0.2)],
 };
 
@@ -42,7 +54,7 @@ describe('SceneModelComparison', () => {
     Object.values(apiClient).forEach(fn => fn?.mockReset?.());
   });
 
-  test('estimate first, then confirm, then the stills side by side with logged costs', async () => {
+  test('two scene sets, the estimate and their briefs first, then confirm, then the stills side by side with logged costs', async () => {
     vi.mocked(apiClient.get).mockImplementation(async (url) => {
       if (url.endsWith('/scene-sets/model-comparison')) return { data: { groups: [] } };
       if (url.endsWith('/scene-sets/model-comparison/g-1')) return { data: { data: RESULT } };
@@ -51,18 +63,24 @@ describe('SceneModelComparison', () => {
     vi.mocked(apiClient.post).mockImplementation(async (url, body) => {
       if (!body.confirm) {
         const err = new Error('400');
-        err.response = { data: { code: 'CONFIRM_REQUIRED', estimate: ESTIMATE } };
+        err.response = { data: { code: 'CONFIRM_REQUIRED', estimate: ESTIMATE, sources: SOURCES } };
         throw err;
       }
       return { data: { data: { group: 'g-1', sets: [] } } };
     });
 
-    render(<SceneModelComparison />);
+    render(<SceneModelComparison sets={SETS} />);
+    expect(screen.queryByRole('textbox')).toBeNull();
     const review = screen.getByRole('button', { name: /Review estimate/ });
     expect(review.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText('Scene prompt 1'), { target: { value: 'A cream bedroom' } });
-    fireEvent.change(screen.getByLabelText('Scene prompt 2'), { target: { value: 'A glass closet' } });
+    // Only sets at a World Location are offered; comparison copies never.
+    const first = screen.getByLabelText('Scene set 1');
+    expect(within(first).getAllByRole('option').map(o => o.textContent)).toEqual(['Choose…', "Lala's Room", 'Studio']);
+    fireEvent.change(first, { target: { value: 'room' } });
+    fireEvent.change(screen.getByLabelText('Scene set 2'), { target: { value: 'room' } });
+    expect(review.disabled).toBe(true); // the same set twice
+    fireEvent.change(screen.getByLabelText('Scene set 2'), { target: { value: 'studio' } });
     fireEvent.click(review);
 
     const estimate = await screen.findByTestId('compare-estimate');
@@ -70,16 +88,19 @@ describe('SceneModelComparison', () => {
     expect(within(estimate).getByText(/GPT Image 1.5 \(high\): 2 × \$0.200 = \$0.400/)).toBeTruthy();
     expect(within(estimate).getByText(/Plus unpriced parts/)).toBeTruthy();
     expect(apiClient.post).toHaveBeenCalledTimes(1);
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/model-comparison', { prompts: ['A cream bedroom', 'A glass closet'] });
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/model-comparison', { scene_set_ids: ['room', 'studio'] });
+    expect(within(estimate).getByText('An empty space with no people. Lala room brief.')).toBeTruthy();
+    expect(within(estimate).getByText('An empty space with no people. Studio brief.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Confirm and generate/ }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(2));
-    expect(apiClient.post.mock.calls[1][1]).toEqual({ prompts: ['A cream bedroom', 'A glass closet'], confirm: true });
+    expect(apiClient.post.mock.calls[1][1]).toEqual({ scene_set_ids: ['room', 'studio'], confirm: true });
 
     const grid = await screen.findByTestId('compare-grid');
     expect(within(grid).getAllByRole('img')).toHaveLength(6);
     expect(within(grid).getByText(/gpt-image-1.5 · 1536×1024 · high/)).toBeTruthy();
     expect(within(grid).getAllByText(/logged \$0.200/)).toHaveLength(2);
+    expect(within(grid).getAllByText(/Lala's Room · logged/)).toHaveLength(3);
     expect(within(grid).getByText('Logged total: $0.400')).toBeTruthy();
     expect(within(grid).getByText(/current default/)).toBeTruthy();
   });

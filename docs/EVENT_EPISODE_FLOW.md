@@ -3578,6 +3578,45 @@ and the frontend's `SceneModelComparison` (with `BaseModelSelect`) in
 `SceneSetsTab` (#2401). Held means not run and not extended; the per-set
 base model choice it shares with base generation stays.
 
+**The scene model comparison draws scene sets' briefs (Evoni,
+2026-10-02).** Recorded verbatim:
+
+> Scene model comparison (Evoni, 2026-10-02): before I run it, make sure 'Compare base models' builds each image from a real scene set's Scene Brief (place layer, environment, no-people rule), not free text: I'll choose two sets (Lala's Room and STUDIO BY SABLE's Studio). If it still takes free prompts, change it to take scene sets, stopping before push; no paid generation by you.
+
+What the code did before. MEASURED. The panel took two free-text
+prompts. The API also took `scene_set_ids`, but it copied only the set's
+description onto copies with no World Location. Their brief then had no
+place layer, and its first line was the copy's "[Compare …]" name.
+
+What was built.
+- **Scene sets only.** "Compare base models" takes two scene sets, never
+  free prompts. `planComparison` refuses `prompts` with a 400. It also
+  refuses the same set twice and a comparison copy.
+- **One brief per set.** Each set's Scene Brief is built once, with
+  `prepareSceneBrief` and `briefToPrompt`, the way its own base would be:
+  - WIDE, with no event;
+  - the set's own last overrides;
+  - the rules first (no people, no text);
+  - the place layer from its World Location;
+  - the shot;
+  - the environment (the set's time of day and season).
+- **No place layer, no comparison.** A set with no World Location or no
+  description is refused, naming what is missing.
+- **The same prompt for every model.** `generateBaseScene` takes the
+  prepared brief (`options.brief`, full mode only). So all models draw the
+  identical prompt for a set. The copies carry the set's reference image.
+- **The source sets are untouched.** The copies have no World Location, so
+  they never join the venue's sets or touch its approved base. The two
+  chosen sets are never written.
+- **What the panel shows.** Two "Scene set" choosers list only sets at a
+  World Location. Before anything is generated, the estimate step shows
+  each set's full prompt. The result labels each still with its set's
+  name.
+
+Evidence: `tests/integration/sceneBaseModelComparison.integration.test.js`
+failed 4 of 10 before the change and passes 10 of 10 after.
+`SceneModelComparison.test.jsx` passes. No paid generation was run.
+
 
 **(ee) Wardrobe rulings (Evoni, 2026-10-01).** Recorded verbatim; built one
 PR each:

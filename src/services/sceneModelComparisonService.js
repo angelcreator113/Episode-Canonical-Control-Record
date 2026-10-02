@@ -7,11 +7,23 @@
  * same two scene prompts, and put them side by side in the comparison view
  * with their logged costs. I'll choose the default from that."
  *
+ * Evoni, 2026-10-02: "make sure 'Compare base models' builds each image
+ * from a real scene set's Scene Brief (place layer, environment, no-people
+ * rule), not free text". So a comparison takes two scene set ids, never free
+ * prompts. Each source set's Scene Brief is built once (S1: its World
+ * Location's place layer, the environment, the rules; WIDE, no event, its
+ * own last overrides, as its own base would be drawn) and every model draws
+ * from that same prompt. A set with no World Location, or no description,
+ * is refused: its brief would have no place layer.
+ *
  * A comparison is one group of scene sets: for each model and each of the
- * two prompts, one set whose base_model is that model. The group is keyed by
- * scene_sets.base_generation.comparison_group (a UUID); each set also carries
- * comparison_prompt_index and the prompt. Only base stills are generated (no
- * angles, no Claude Vision analysis or style lock). Every image call goes
+ * two source sets, one copy whose base_model is that model. The group is
+ * keyed by scene_sets.base_generation.comparison_group (a UUID); each copy
+ * also carries comparison_prompt_index, the prompt, the source set and its
+ * brief. The copies carry no World Location, so they never join the venue's
+ * sets or touch its approved base; the sources are never written. Only base
+ * stills are generated (no angles, no Claude Vision analysis or style
+ * lock). Every image call goes
  * through imageCostService.runImageCall (budget-gated, logged to
  * ai_usage_logs); generateBaseScene stores the logged row ids and cost on the
  * set, and the comparison view reads the cost back from ai_usage_logs.
@@ -20,9 +32,9 @@
 const crypto = require('crypto');
 const imageCost = require('./imageCostService');
 const sceneGen = require('./sceneGenerationService');
+const { prepareSceneBrief, briefToPrompt } = require('./sceneBriefService');
 
 const PROMPTS_PER_COMPARISON = 2;
-const MAX_PROMPT_LENGTH = 4000;
 const NAME_PREFIX = '[Compare';
 
 // Parts of a comparison run the rate table does not price; shown with the
@@ -71,50 +83,59 @@ function estimateComparison(modelKeys, promptCount = PROMPTS_PER_COMPARISON) {
 }
 
 /**
- * Validate a request and resolve its two sources.
- * body: { prompts: [p1, p2] } or { scene_set_ids: [id1, id2] }, models?.
- * Returns { sources: [{ prompt, fields }], modelKeys, estimate }.
+ * Validate a request and build its two sources' Scene Briefs.
+ * body: { scene_set_ids: [id1, id2], models? }.
+ * Returns { sources: [{ prompt, brief, source_scene_set_id, source_name, fields }], modelKeys, estimate }.
  */
 async function planComparison(body, db) {
   const { prompts, scene_set_ids: sceneSetIds } = body || {};
+  if (prompts !== undefined) {
+    throw badRequest(`Free prompts are not taken: send scene_set_ids, ${PROMPTS_PER_COMPARISON} scene sets whose Scene Briefs are drawn`);
+  }
   const modelKeys = normalizeModels(body ? body.models : undefined);
-  let sources;
-  if (Array.isArray(prompts)) {
-    if (sceneSetIds) throw badRequest('Send prompts or scene_set_ids, not both');
-    if (prompts.length !== PROMPTS_PER_COMPARISON) throw badRequest(`prompts must have exactly ${PROMPTS_PER_COMPARISON} entries`);
-    sources = prompts.map((p, i) => {
-      const text = typeof p === 'string' ? p.trim() : '';
-      if (!text) throw badRequest(`prompts[${i}] must be a non-empty string`);
-      if (text.length > MAX_PROMPT_LENGTH) throw badRequest(`prompts[${i}] is longer than ${MAX_PROMPT_LENGTH} characters`);
-      return { prompt: text, source_scene_set_id: null, fields: { scene_type: 'OTHER' } };
+  if (!Array.isArray(sceneSetIds) || sceneSetIds.length !== PROMPTS_PER_COMPARISON) {
+    throw badRequest(`scene_set_ids must have exactly ${PROMPTS_PER_COMPARISON} entries`);
+  }
+  if (new Set(sceneSetIds).size !== sceneSetIds.length) throw badRequest('Choose two different scene sets');
+  const sources = [];
+  for (const id of sceneSetIds) {
+    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) throw badRequest(`Scene set id ${id} is not a UUID`);
+    const src = await db.SceneSet.findByPk(id);
+    if (!src) throw badRequest(`Scene set ${id} not found`, { status: 404 });
+    if (String(src.name || '').startsWith(NAME_PREFIX)) throw badRequest(`Scene set "${src.name}" is a comparison still, not a scene set`);
+    const brief = await prepareSceneBrief(db.sequelize, src, {
+      angleLabel: 'WIDE',
+      eventId: null,
+      overrides: (src.base_generation && src.base_generation.brief && src.base_generation.brief.overrides) || {},
     });
-  } else if (Array.isArray(sceneSetIds)) {
-    if (sceneSetIds.length !== PROMPTS_PER_COMPARISON) throw badRequest(`scene_set_ids must have exactly ${PROMPTS_PER_COMPARISON} entries`);
-    sources = [];
-    for (const id of sceneSetIds) {
-      const src = await db.SceneSet.findByPk(id, {
-        attributes: ['id', 'name', 'scene_type', 'canonical_description', 'visual_language', 'time_of_day', 'season'],
-      });
-      if (!src) throw badRequest(`Scene set ${id} not found`, { status: 404 });
-      const text = (src.canonical_description || '').trim();
-      if (!text) throw badRequest(`Scene set ${id} has no description to use as the prompt`);
-      const roomProperties = src.visual_language && src.visual_language.room_properties;
-      sources.push({
-        prompt: text,
-        source_scene_set_id: src.id,
-        source_name: src.name,
-        fields: {
-          scene_type: src.scene_type || 'OTHER',
-          time_of_day: src.time_of_day || null,
-          season: src.season || null,
-          ...(roomProperties ? { visual_language: { room_properties: roomProperties } } : {}),
-        },
-      });
+    const missingPlace = brief.missing.filter((m) => m.layer === 'place').map((m) => m.label);
+    if (missingPlace.length) {
+      throw badRequest(`Scene set "${src.name}" has no ${missingPlace.join(' or ')}: its Scene Brief would have no place layer`);
     }
-  } else {
-    throw badRequest(`Send prompts: [${PROMPTS_PER_COMPARISON} scene prompts] or scene_set_ids: [${PROMPTS_PER_COMPARISON} ids]`);
+    sources.push({
+      prompt: briefToPrompt(brief),
+      brief,
+      source_scene_set_id: src.id,
+      source_name: src.name,
+      fields: {
+        scene_type: src.scene_type || 'OTHER',
+        time_of_day: src.time_of_day || null,
+        season: src.season || null,
+        style_reference_url: src.style_reference_url || null,
+      },
+    });
   }
   return { sources, modelKeys, estimate: estimateComparison(modelKeys, sources.length) };
+}
+
+/** What the estimate step shows of each source: its name and the prompt every model is sent. */
+function describeSources(plan) {
+  return plan.sources.map((s) => ({
+    scene_set_id: s.source_scene_set_id,
+    name: s.source_name,
+    prompt: s.prompt,
+    missing: s.brief.missing,
+  }));
 }
 
 /** Provider keys the chosen models need that are not configured. */
@@ -143,7 +164,7 @@ async function createComparisonSets(plan, db, { requestedBy = null } = {}) {
       const src = plan.sources[i];
       const set = await db.SceneSet.create({
         name: `${NAME_PREFIX} ${group.slice(0, 8)}] P${i + 1} · ${cfg.label}`,
-        canonical_description: src.prompt,
+        canonical_description: src.brief.lines.find((l) => l.key === 'description')?.text || null,
         ...src.fields,
         base_model: modelKey,
         generation_status: 'pending',
@@ -152,6 +173,8 @@ async function createComparisonSets(plan, db, { requestedBy = null } = {}) {
           comparison_prompt_index: i,
           comparison_prompt: src.prompt,
           source_scene_set_id: src.source_scene_set_id,
+          source_name: src.source_name,
+          comparison_brief: src.brief,
           requested_by: requestedBy,
         },
       });
@@ -176,7 +199,12 @@ async function runComparison(sets, db) {
       continue;
     }
     try {
-      const out = await sceneGen.generateBaseScene(set, db, { skipAnalysis: true });
+      // The source set's brief, built once at planning: every model draws
+      // the same prompt.
+      const out = await sceneGen.generateBaseScene(set, db, {
+        skipAnalysis: true,
+        brief: (set.base_generation || {}).comparison_brief || null,
+      });
       results.push({ id: set.id, ok: true, cost: out.cost });
     } catch (err) {
       console.error(`[ModelComparison] base still for ${set.id} (${set.base_model}) failed: ${err.message}`);
@@ -239,6 +267,8 @@ async function getComparison(group, db) {
       name: s.name,
       prompt_index: bg.comparison_prompt_index,
       prompt: bg.comparison_prompt,
+      source_scene_set_id: bg.source_scene_set_id || null,
+      source_name: bg.source_name || null,
       base_still_url: s.base_still_url,
       generation_status: s.generation_status,
       generated_width: bg.width || null,
@@ -251,11 +281,18 @@ async function getComparison(group, db) {
   const out = [...columns.values()];
   for (const col of out) col.sets.sort((a, b) => (a.prompt_index || 0) - (b.prompt_index || 0));
   const prompts = [];
-  for (const col of out) for (const s of col.sets) if (prompts[s.prompt_index] === undefined) prompts[s.prompt_index] = s.prompt;
+  const sources = [];
+  for (const col of out) {
+    for (const s of col.sets) {
+      if (prompts[s.prompt_index] === undefined) prompts[s.prompt_index] = s.prompt;
+      if (sources[s.prompt_index] === undefined) sources[s.prompt_index] = { scene_set_id: s.source_scene_set_id, name: s.source_name };
+    }
+  }
   return {
     group,
     created_at: sets[0].created_at,
     prompts,
+    sources,
     columns: out,
     default_model: sceneGen.defaultBaseModel(),
   };
@@ -283,6 +320,7 @@ module.exports = {
   normalizeModels,
   estimateComparison,
   planComparison,
+  describeSources,
   missingProviderKeys,
   assertComparisonBudget,
   createComparisonSets,

@@ -295,13 +295,15 @@ describe('outpaint angles use gpt-image-1.5 and report their cost', () => {
 });
 
 describe('comparison request validation', () => {
-  it('needs exactly two prompts and known models', async () => {
-    await expect(comparison.planComparison({ prompts: ['one'] }, {})).rejects.toMatchObject({ status: 400 });
-    await expect(comparison.planComparison({ prompts: ['a', ' '] }, {})).rejects.toMatchObject({ status: 400 });
-    await expect(comparison.planComparison({ prompts: ['a', 'b'], models: ['flux-dev', 'midjourney'] }, {}))
+  // Evoni, 2026-10-02: a comparison draws two scene sets' Scene Briefs, never free text.
+  it('refuses free prompts; needs exactly two different scene sets and known models', async () => {
+    await expect(comparison.planComparison({ prompts: ['a', 'b'] }, {})).rejects.toMatchObject({ status: 400 });
+    const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+    await expect(comparison.planComparison({ scene_set_ids: [ids[0]] }, {})).rejects.toMatchObject({ status: 400 });
+    await expect(comparison.planComparison({ scene_set_ids: [ids[0], ids[0]] }, {})).rejects.toMatchObject({ status: 400 });
+    await expect(comparison.planComparison({ scene_set_ids: ids, models: ['flux-dev', 'midjourney'] }, {}))
       .rejects.toMatchObject({ status: 400 });
-    const plan = await comparison.planComparison({ prompts: ['a', 'b'], models: ['flux-dev', 'flux-dev'] }, {});
-    expect(plan.modelKeys).toEqual(['flux-dev']);
-    expect(plan.estimate.total_usd).toBe(0.05);
+    expect(comparison.normalizeModels(['flux-dev', 'flux-dev'])).toEqual(['flux-dev']);
+    expect(comparison.estimateComparison(['flux-dev'], 2).total_usd).toBe(0.05);
   });
 });
