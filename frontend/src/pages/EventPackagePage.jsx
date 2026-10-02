@@ -73,7 +73,6 @@ import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import EventConceptSection from '../components/EventConceptSection';
-import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
@@ -307,7 +306,6 @@ export default function EventPackagePage() {
   const [scenePickerOpen, setScenePickerOpen] = useState(false);
   const [sceneVenue, setSceneVenue] = useState(null); // { id, name } | null
   const [pickerSets, setPickerSets] = useState(null);
-  const [sceneBriefFor, setSceneBriefFor] = useState(null); // a set just created, its base brief open
   const [sceneSaving, setSceneSaving] = useState(false);
   const [sceneCreateOpen, setSceneCreateOpen] = useState(false);
   const [sceneCreateName, setSceneCreateName] = useState('');
@@ -910,9 +908,9 @@ export default function EventPackagePage() {
     }
   };
 
-  // Create a set for the venue (S7, S5: its World Location), choose it for
-  // this event, then open its base brief with this event chosen (S3); the
-  // base is generated only when the brief is confirmed.
+  // Create a set for the venue (S7, S5: its World Location) and choose it
+  // for this event. S8 (Evoni, 2026-10-02; §8(dd)): its base is made in
+  // Scene Sets ("Open in Scene Sets →" under the look), not here.
   const createSceneSet = async () => {
     const name = sceneCreateName.trim();
     if (!name || !sceneVenue || sceneCreateSaving) return;
@@ -925,7 +923,7 @@ export default function EventPackagePage() {
         show_id: showId,
       });
       const set = res.data?.data;
-      if (set && await chooseSceneSet(set, { quiet: true })) setSceneBriefFor(set);
+      if (set && await chooseSceneSet(set, { quiet: true })) setToast(`${set.name} is chosen: make its base in Scene Sets`);
     } catch (err) {
       setToast(err.response?.data?.error || err.message || 'Failed to create scene set');
     } finally {
@@ -933,17 +931,7 @@ export default function EventPackagePage() {
     }
   };
 
-  const generateChosenBase = async (set, overrides, choice) => {
-    setSceneBriefFor(null);
-    const chosen = choice && 'eventId' in choice ? choice.eventId : eventId;
-    try {
-      await api.post(`/api/v1/scene-sets/${set.id}/generate-base`, { overrides, event_id: chosen });
-      setToast(`Generating the base image for ${set.name}…`);
-    } catch (err) {
-      console.error('[EventPackage] base generation failed:', err);
-      setToast(err.response?.data?.error || err.message || 'Base generation failed');
-    }
-  };
+
 
   // Start Episode: blocked while any gate item is missing; with warnings
   // open it asks first (Start Anyway); with none it starts directly.
@@ -1325,7 +1313,7 @@ export default function EventPackagePage() {
               lock (Q9): editable until the episode is accepted. */}
           <EventVenueLook showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
-          <EventLookImage showId={showId} eventId={eventId} sceneSetPath={sceneSetPath} onToast={setToast} onSaved={load} />
+          <EventLookImage showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
         </section>
 
         <section className="epp-section">
@@ -2184,7 +2172,7 @@ export default function EventPackagePage() {
                       disabled={sceneCreateSaving || !sceneCreateName.trim()}
                       onClick={createSceneSet}
                     >
-                      {sceneCreateSaving ? 'Creating…' : 'Create & open its brief'}
+                      {sceneCreateSaving ? 'Creating…' : 'Create scene set'}
                     </button>
                     <button type="button" className="epp-icon-btn" onClick={() => setSceneCreateOpen(false)} disabled={sceneCreateSaving} aria-label="Cancel">
                       <X size={14} />
@@ -2198,19 +2186,6 @@ export default function EventPackagePage() {
         </div>
       )}
 
-      {sceneBriefFor && (
-        <SceneBriefConfirm
-          setId={sceneBriefFor.id}
-          showId={showId}
-          eventId={eventId}
-          title={`Generate the base image for “${sceneBriefFor.name}”`}
-          onCancel={() => {
-            setToast(`${sceneBriefFor.name} is chosen; its base image was not generated.`);
-            setSceneBriefFor(null);
-          }}
-          onConfirm={(overrides, choice) => generateChosenBase(sceneBriefFor, overrides, choice)}
-        />
-      )}
     </div>
   );
 }

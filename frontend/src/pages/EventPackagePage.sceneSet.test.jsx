@@ -118,37 +118,20 @@ describe('Place: the scene set for the event (S7)', () => {
     expect(screen.queryByTestId('scene-set-create-open')).toBeNull();
   });
 
-  test('creating one for the venue: its World Location, chosen for the event, then its brief for this event with the cost; generated on confirm', async () => {
+  // S8 (Evoni, 2026-10-02; §8(dd)): the Place makes no images; its base is
+  // made in Scene Sets.
+  test('creating one for the venue: its World Location, chosen for the event; no brief and no image here', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Choose scene set' }));
     fireEvent.click(await screen.findByTestId('scene-set-create-open'));
     expect(screen.getByRole('textbox', { name: 'Scene set name' }).value).toBe('The Glasshouse');
-    fireEvent.click(screen.getByRole('button', { name: 'Create & open its brief' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create scene set' }));
 
-    await screen.findByTestId('scene-brief-confirm');
+    await waitFor(() => expect(vi.mocked(api.put).mock.calls.some(([, b]) => b?.scene_set_id === 'set-new')).toBe(true));
     expect(posts('/api/v1/scene-sets')[0][1]).toEqual({ name: 'The Glasshouse', scene_type: 'EVENT_LOCATION', world_location_id: 'loc-1', show_id: 'show-1' });
-    expect(vi.mocked(api.put).mock.calls[0][1]).toMatchObject({ scene_set_id: 'set-new' });
-    await waitFor(() => expect(posts('/scene-sets/set-new/brief')).toHaveLength(1));
-    expect(posts('/scene-sets/set-new/brief')[0][1]).toEqual({ event_id: 'ev-1' });
-    expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.03');
-    expect(posts('/generate-base')).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('sbc-confirm'));
-    await waitFor(() => expect(posts('/scene-sets/set-new/generate-base')).toHaveLength(1));
-    expect(posts('/scene-sets/set-new/generate-base')[0][1]).toEqual({ overrides: {}, event_id: 'ev-1' });
-    expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
-  });
-
-  test('cancelling the brief keeps the set chosen and generates nothing', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Choose scene set' }));
-    fireEvent.click(await screen.findByTestId('scene-set-create-open'));
-    fireEvent.click(screen.getByRole('button', { name: 'Create & open its brief' }));
-    await screen.findByTestId('scene-brief-confirm');
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByTestId('scene-brief-confirm')).toBeNull();
     expect(posts('/generate-base')).toHaveLength(0);
-    expect(screen.getByTestId('place-scene-set-link').textContent).toBe('The Glasshouse');
+    expect(posts('/scene-sets/set-new/brief')).toHaveLength(0);
   });
 
   // L13 (Evoni, 2026-10-02, §8(hh)) supersedes S7's read-only-after-Start:
