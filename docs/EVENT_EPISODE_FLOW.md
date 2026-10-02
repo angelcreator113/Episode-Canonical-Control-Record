@@ -3428,6 +3428,13 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   The set's description is the location's own. Only a venue whose location
   has no description takes the event template's venue theme as the set's
   description.
+  - **Fixed 2026-10-02 (regression):** as built, a set whose location had
+    a description was saved with none, so it showed no description and its
+    angles lost the AI camera-direction button. The set is now saved with
+    the location's description (else the venue theme, else the location
+    hint). The brief reads the same text either way. The old
+    "<venue> — <aesthetic>. <neighbourhood>." text came from
+    `buildVenueIdentity`, which S4 removed; it does not come back.
 - **It never writes the location's style guide.** The old replacement of
   `world_locations.style_guide` with `{ venue_url, generated_for_event }`
   is gone.
@@ -3920,6 +3927,24 @@ Outstanding/pending fees after Complete)". So:
    line is shown as "Posted, not planned" and counted in the posted net.
 4. **Outstanding after Complete:** a fee still pending or planned after
    Complete is "Outstanding", marked pending when its row is pending.
+
+**(hh) Venue looks and episode locations (Evoni, 2026-10-02).** Recorded
+verbatim. Nothing is built yet. The design note, reading today's code
+against these rulings, with open questions, is
+`docs/VENUE_LOOKS_EPISODE_LOCATIONS_NOTE.md`.
+
+> L1. Each event carries an Event Venue Look: overall look, décor and colours, lighting and time, event areas, signage, must include/avoid, and reference images. "Draft from event details" fills it from the host, description, activity and dress code; it is labelled Auto-drafted and editable. It feeds the Scene Brief's event layer. The venue is the place; the look is how it's dressed for this occasion. Scene images never contain characters.
+>
+> L2. The Place section's scene-set picker shows thumbnails, search and a preview of each set's angles; "+ Create" stays inside the event and returns with the new set selected.
+>
+> L3. The show keeps Lala's home set and closet set as saved defaults. At Start Episode, an Episode Locations step shows Home, Closet and Event (the event's set with its look) plus any additional locations, each changeable; creating a new set there returns to the step with it selected.
+>
+> L4. The episode's scene planner suggests each location's angles for the beats (e.g. arrival → entrance/exterior, the event → main interior). A missing angle shows a specific action: "Entrance angle missing — Upload image / Generate angle".
+>
+> L5. A written venue look is enough to keep planning and writing; missing scene images are flagged for production readiness, never blocking.
+>
+> L6. An episode can have any number of scene sets, each with a role (home, closet, event, or an extra location such as a car or café). They're chosen together in the Episode Locations step and can be added or changed while the episode is a draft.
+
 ---
 
 ## 9. Owed before enforcement
