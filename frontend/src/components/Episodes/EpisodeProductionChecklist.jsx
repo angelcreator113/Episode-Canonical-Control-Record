@@ -43,6 +43,8 @@ const CHECKLIST_SECTIONS = [
       { id: 'scene_sets',        label: 'Scene sets assigned',        required: true  },
       { id: 'scene_plan',        label: 'Scene plan generated (14 beats)', required: true  },
       { id: 'scene_plan_locked', label: 'Scene plan locked',          required: false },
+      // L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking.
+      { id: 'scene_images',      label: 'Scene images for every beat', required: false },
     ],
   },
   {
@@ -129,7 +131,7 @@ const STATE_STYLES = {
   unavailable: { label: 'System unavailable', color: '#94a3b8', background: '#f8fafc' },
 };
 
-function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable }) {
+function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable, note }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -156,6 +158,9 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable 
             required
           </span>
         )}
+        {note && (
+          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: '#92400e', textDecoration: 'none' }}>{note}</span>
+        )}
       </span>
       {!checked && onAction && (
         <button onClick={onAction} disabled={unavailable} style={{
@@ -171,6 +176,7 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable 
 
 export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate }) {
   const [checks, setChecks] = useState({});
+  const [notes, setNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
@@ -183,6 +189,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   const checkReadiness = async () => {
     setLoading(true);
     const results = {};
+    const checkNotes = {};
 
     try {
       // ── Check Episode Brief ──
@@ -233,8 +240,15 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         const plan = data?.data || [];
         results.scene_plan        = plan.length > 0;
         results.scene_plan_locked = plan.length > 0 && plan.every(b => b.locked);
+        // L5, Q21: every planned beat has an angle with an image.
+        const readiness = data?.readiness;
+        results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
+        if (readiness && readiness.total > 0 && readiness.ready < readiness.total) {
+          const beats = readiness.not_ready.map((b) => b.beat_number).join(', ');
+          checkNotes.scene_images = `${readiness.ready} of ${readiness.total} beats have an image; missing: beat${readiness.not_ready.length === 1 ? '' : 's'} ${beats}`;
+        }
       } catch {
-        results.scene_plan = results.scene_plan_locked = false;
+        results.scene_plan = results.scene_plan_locked = results.scene_images = false;
       }
 
       // ── Check Wardrobe ──
@@ -289,6 +303,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       console.error('[Checklist] Error:', err);
     } finally {
       setChecks(results);
+      setNotes(checkNotes);
       setLoading(false);
     }
   };
@@ -330,6 +345,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     venue_set: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Add venue' },
     scene_sets: { action: () => window.location.href = `/scene-library`, label: 'Scene Library' },
     scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
+    scene_images: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Open planner' },
     wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
     outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
     overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
@@ -404,7 +420,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           </h4>
           <div style={{ marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>{sectionStatus.why}</div>
           {section.items.map(item => (
-            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading}
+            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
               unavailable={sectionStatus.state === 'unavailable'} />
           ))}

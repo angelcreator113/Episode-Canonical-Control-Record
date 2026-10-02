@@ -184,6 +184,11 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(again.body.data.find((b) => b.beat_number === 10).location.missing).toMatchObject({
       reason: 'no_image', angle_id: pending, text: 'Side door angle has no image',
     });
+    // L5, Q21: the plan's readiness, flagged; beats on the apartment's base
+    // have no base image here, the event beats lack their angles.
+    expect(again.body.readiness.total).toBe(14);
+    expect(again.body.readiness.not_ready.find((b) => b.beat_number === 10).text).toBe('Side door angle has no image');
+    expect(again.body.readiness.not_ready.find((b) => b.beat_number === 1).text).toBe('apartment has no base image');
     const locs = await auth(request(app).get(`/api/v1/episodes/${ep}/locations`));
     expect(locs.body.data.angle_gaps.map((g) => g.text)).toEqual(expect.arrayContaining(['Side door angle has no image', 'Main interior angle missing']));
   });

@@ -113,6 +113,30 @@ async function planWithAngles(sequelize, rows) {
 }
 
 /**
+ * Production readiness (Evoni's ruling L5 and her answer Q21, 2026-10-02):
+ * "every planned beat has an angle with an image. Flag it on the production
+ * checklist and the planner header; never block." L5: "A written venue look
+ * is enough to keep planning and writing; missing scene images are flagged
+ * for production readiness, never blocking."
+ * A beat that asks for no angle kind and names no label is shot on its
+ * set's base image, so that image counts as its angle.
+ * rows: the plan rows with `location` (planWithAngles) and `sceneSet`.
+ * { ready, total, not_ready: [{ beat_number, beat_name, text }] }
+ */
+function planReadiness(rows) {
+  const notReady = [];
+  for (const r of rows || []) {
+    let text = null;
+    if (!r.scene_set_id) text = 'No location';
+    else if (r.location?.missing) text = r.location.missing.text;
+    else if (!r.location?.angle && !r.sceneSet?.base_still_url) text = `${r.sceneSet?.name || 'The scene set'} has no base image`;
+    if (text) notReady.push({ beat_number: r.beat_number, beat_name: r.beat_name, text });
+  }
+  const total = (rows || []).length;
+  return { ready: total - notReady.length, total, not_ready: notReady };
+}
+
+/**
  * The angles the locations still need for the planner (Q19's summary in
  * the Episode Locations step): per role whose beats ask for kinds, each
  * beat's kinds the set has no imaged angle of.
@@ -145,5 +169,6 @@ module.exports = {
   placeBeat,
   rowAngleStatus,
   planWithAngles,
+  planReadiness,
   locationAngleGaps,
 };

@@ -604,3 +604,7 @@
 .scene-planner-missing-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .scene-planner-missing-btn { border: 1px solid #B8962E; background: #fff; color: #2C2C2C; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .scene-planner-missing-btn:disabled, .scene-planner-missing-btn.is-busy { opacity: 0.5; cursor: not-allowed; }
+
+/* L5, Q21 (§8(hh)): the scene images readiness flag; never blocking. */
+.scene-planner-readiness { margin: 4px 0 0; font-size: 12px; color: #166534; }
+.scene-planner-readiness.is-short { color: #92400e; font-weight: 600; }
