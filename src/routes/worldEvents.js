@@ -246,7 +246,8 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     let usedInEpisode = null;
     if (event.used_in_episode_id && models.Episode) {
       usedInEpisode = await models.Episode.findByPk(event.used_in_episode_id, {
-        attributes: ['id', 'episode_number', 'title'],
+        // evaluation_status: the venue look locks when it is accepted (Q9).
+        attributes: ['id', 'episode_number', 'title', 'evaluation_status'],
       }).catch(() => null);
     }
 
@@ -2420,15 +2421,70 @@ router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, asyn
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const [[event]] = await models.sequelize.query(
-      'SELECT id, show_id, scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
+      'SELECT id, show_id, scene_set_id, venue_look FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
       { replacements: { eventId, showId } });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     const { proposeLocations } = require('../services/episodeLocationsService');
+    const { readVenueLook } = require('../services/venueLookService');
     const data = await proposeLocations(models.sequelize, { showId, event });
-    return res.json({ success: true, data });
+    // The event's look, shown read-only in the step (Q10).
+    return res.json({ success: true, data: { ...data, event_look: readVenueLook(event.venue_look) } });
   } catch (error) {
     console.error('Episode locations proposal error:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// The Event Venue Look (L1; Evoni, 2026-10-02, answers Q1-Q10,
+// docs/EVENT_EPISODE_FLOW.md §8(hh)): how the venue is dressed for this
+// occasion. Editable while the event's episode is a draft; locked once it
+// is accepted (409 VENUE_LOOK_LOCKED).
+//   GET  .../venue-look         { venue_look, editable }
+//   PUT  .../venue-look         body { venue_look } — Evoni's edit
+//   POST .../venue-look/draft   "Draft from event details" (Haiku); keeps
+//                               every part she edited (Q8)
+const sendVenueLookError = (res, err, label) => {
+  const { VenueLookError } = require('../services/venueLookService');
+  if (err instanceof VenueLookError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  console.error(`${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.get('/world/:showId/events/:eventId/venue-look', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { getVenueLook } = require('../services/venueLookService');
+    const data = await getVenueLook(models.sequelize, { showId: req.params.showId, eventId: req.params.eventId });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendVenueLookError(res, err, 'Venue look read');
+  }
+});
+
+router.put('/world/:showId/events/:eventId/venue-look', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { saveVenueLook } = require('../services/venueLookService');
+    const data = await saveVenueLook(models.sequelize, {
+      showId: req.params.showId, eventId: req.params.eventId, input: req.body?.venue_look,
+    });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendVenueLookError(res, err, 'Venue look save');
+  }
+});
+
+router.post('/world/:showId/events/:eventId/venue-look/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { draftVenueLook } = require('../services/venueLookService');
+    const data = await draftVenueLook(models.sequelize, { showId: req.params.showId, eventId: req.params.eventId });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendVenueLookError(res, err, 'Venue look draft');
   }
 });
 

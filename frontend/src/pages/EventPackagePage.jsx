@@ -91,6 +91,7 @@ import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
+import EventVenueLook from '../components/EventPackage/EventVenueLook';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -1287,6 +1288,9 @@ export default function EventPackagePage() {
               </dd>
             </div>
           </dl>
+          {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
+              lock (Q9): editable until the episode is accepted. */}
+          <EventVenueLook showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
         </section>
 
         <section className="epp-section">
@@ -1616,6 +1620,7 @@ export default function EventPackagePage() {
           confirmLabel="Start Episode"
           initial={locationsStep.locations}
           missing={locationsStep.missing}
+          eventLook={locationsStep.event_look}
           busy={starting}
           onConfirm={confirmStartEpisode}
           onCancel={() => setLocationsStep(null)}

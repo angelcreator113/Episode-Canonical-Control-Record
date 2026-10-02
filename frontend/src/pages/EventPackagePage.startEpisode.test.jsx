@@ -236,4 +236,22 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     await screen.findByText('This scene set belongs to another show');
     expect(screen.getByTestId('episode-locations-step')).toBeTruthy();
   });
+
+  test("the event's venue look is shown read-only under Event (L1, Q10)", async () => {
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === LOCATIONS_URL) {
+        return { data: { success: true, data: {
+          locations: [], missing: ['event', 'home', 'closet'], defaults: {},
+          event_look: { overall: 'A candlelit greenhouse gala.', areas: ['Bar', 'Runway'] },
+        } } };
+      }
+      return base(url);
+    });
+    renderPage();
+    fireEvent.click(await screen.findByTestId('start-episode'));
+    const look = await screen.findByTestId('els-event-look');
+    expect(look.textContent).toContain('A candlelit greenhouse gala. · Areas: Bar, Runway');
+    expect(look.querySelector('textarea, input')).toBeNull();
+  });
 });
