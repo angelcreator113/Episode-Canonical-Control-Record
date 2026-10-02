@@ -3428,6 +3428,13 @@ numbers at that SHA. Each is MEASURED unless marked otherwise.
   The set's description is the location's own. Only a venue whose location
   has no description takes the event template's venue theme as the set's
   description.
+  - **Fixed 2026-10-02 (regression):** as built, a set whose location had
+    a description was saved with none, so it showed no description and its
+    angles lost the AI camera-direction button. The set is now saved with
+    the location's description (else the venue theme, else the location
+    hint). The brief reads the same text either way. The old
+    "<venue> — <aesthetic>. <neighbourhood>." text came from
+    `buildVenueIdentity`, which S4 removed; it does not come back.
 - **It never writes the location's style guide.** The old replacement of
   `world_locations.style_guide` with `{ venue_url, generated_for_event }`
   is gone.

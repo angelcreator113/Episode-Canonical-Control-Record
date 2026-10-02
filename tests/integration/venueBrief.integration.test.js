@@ -165,6 +165,9 @@ const GUIDE = { architecture: 'Victorian iron-and-glass conservatory', materials
 
     const set = await models.SceneSet.findByPk(setId);
     expect(set.world_location_id).toBe(ids.location);
+    // The new set is described when it is made (a regression from S5, fixed
+    // 2026-10-02): from its World Location's own description.
+    expect(set.canonical_description).toBe('A greenhouse ballroom under a glass roof.');
     expect(set.base_generation.brief).toMatchObject({ scene_set_id: setId, world_location_id: ids.location, event_id: ids.event });
     expect(line(set.base_generation.brief, 'materials')).toMatchObject({ source: 'override', text: 'Brass and frosted glass.' });
     expect(set.base_generation.exterior_brief).toMatchObject({ scene_set_id: setId, angle: 'ESTABLISHING' });
