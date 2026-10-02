@@ -75,9 +75,21 @@ describe('buildSceneBrief (S1)', () => {
     expect(line(brief, 'camera').text).toBe(SHOT_CAMERAS.VANITY);
     expect(line(brief, 'required_features').text).toBe('The gilt mirror must show.');
     expect(line(brief, 'continuity')).toBeTruthy();
-    // Evoni, 2026-10-02: the softened shot line.
-    expect(line(brief, 'overlay_space').text).toBe('Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.');
+    // Evoni, 2026-10-02: the softened shot line, placed per angle.
+    expect(line(brief, 'overlay_space').text).toBe('Leave an open area in the centre of the frame where a person could stand, with the room fully dressed around it.');
     expect(briefToPrompt(brief)).not.toMatch(/uncluttered/);
+  });
+
+  test('the space for characters is placed per angle, softly, with the room fully dressed around it', () => {
+    const at = (angleLabel) => line(buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel }), 'overlay_space').text;
+    const dressed = ', with the room fully dressed around it.';
+    expect(at('WIDE')).toBe(`Leave an open patch of floor in the foreground where a person could stand${dressed}`);
+    expect(at('ESTABLISHING')).toBe(`Leave an open patch of floor in the foreground where a person could stand${dressed}`);
+    expect(at('DOORWAY')).toBe(`Leave an open patch of floor in the room beyond the threshold where a person could stand${dressed}`);
+    expect(at('CLOSE')).toBe(`Leave an open area at one side of the frame where a person could stand${dressed}`);
+    expect(at('OVERHEAD')).toBe(`Leave an open patch of floor mid-room${dressed}`);
+    expect(at('CLOSET')).toBe(`Leave an open area in the centre of the frame where a person could stand${dressed}`);
+    for (const a of Object.keys(SHOT_CAMERAS)) expect(at(a)).not.toMatch(/uncluttered|empty/);
   });
 
   // Evoni, 2026-10-02: "Every scene prompt opens 'An empty space with no

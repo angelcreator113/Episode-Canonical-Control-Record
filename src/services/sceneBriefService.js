@@ -101,9 +101,20 @@ const SHOT_CAMERAS = Object.freeze({
   OTHER: 'A composition suited to this place.',
 });
 
-// Room for the characters, laid over the image later (Evoni, 2026-10-02:
-// in place of "clear, uncluttered floor space", which read as a sparse room).
-const OVERLAY_SPACE = 'Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.';
+// Room for the characters, laid over the image later, placed by angle
+// (Evoni, 2026-10-02: "an open patch of floor in the foreground where a
+// person could stand, with the room fully dressed around it" in place of
+// "clear, uncluttered floor space", which read as a sparse room; then
+// "Bring back per-angle placement with the softened wording").
+const OVERLAY_SPACE = Object.freeze({
+  WIDE: 'an open patch of floor in the foreground where a person could stand',
+  ESTABLISHING: 'an open patch of floor in the foreground where a person could stand',
+  DOORWAY: 'an open patch of floor in the room beyond the threshold where a person could stand',
+  CLOSE: 'an open area at one side of the frame where a person could stand',
+  OVERHEAD: 'an open patch of floor mid-room',
+});
+const OVERLAY_SPACE_DEFAULT = 'an open area in the centre of the frame where a person could stand';
+const overlaySpace = (angle) => `Leave ${OVERLAY_SPACE[angle] || OVERLAY_SPACE_DEFAULT}, with the room fully dressed around it.`;
 
 const TIME_LIGHT = Object.freeze({
   morning: 'Morning, with soft early daylight.',
@@ -270,7 +281,7 @@ function buildSceneBrief({
   add('shot', 'camera', 'Camera', sentence(cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
   if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
-  add('shot', 'overlay_space', 'Space for characters', OVERLAY_SPACE, 'venue');
+  add('shot', 'overlay_space', 'Space for characters', overlaySpace(angle), 'venue');
 
   // ── The environment ──
   // Q4: the look's lighting, else the event's time; for an undressed base,
