@@ -822,6 +822,9 @@ function briefDb(models) {
  *   explicitly then), never an event found by matching.
  * options.overrides: { <brief line key>: text } (S2's "Your override");
  *   without it, the overrides of the base's last brief.
+ * options.brief: a Scene Brief already built (the base-model comparison
+ *   draws a source set's brief onto its copies, §8(dd)); used as given, in
+ *   'full' mode only.
  *
  * The prompt is the set's Scene Brief (S1); the brief is kept on
  * base_generation.brief.
@@ -832,7 +835,8 @@ async function generateBaseScene(sceneSet, models, options = {}) {
   // S6: an approved base is never replaced until Evoni un-approves it.
   await assertBaseReplaceable(briefDb(models), sceneSet.id);
 
-  const brief = await prepareSceneBrief(briefDb(models), sceneSet, {
+  if (options.brief && options.brief.mode !== 'full') throw new Error('A given brief must be a full brief');
+  const brief = options.brief || await prepareSceneBrief(briefDb(models), sceneSet, {
     // Without overrides given, the base keeps the ones it was last generated
     // with (S2: the brief shown before generating shows them).
     angleLabel: 'WIDE',

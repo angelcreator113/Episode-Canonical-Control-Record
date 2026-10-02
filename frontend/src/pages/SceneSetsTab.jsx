@@ -3269,7 +3269,7 @@ export default function SceneSetsTab() {
       </div>
 
       {showModelCompare && (
-        <SceneModelComparison onClose={() => setShowModelCompare(false)} />
+        <SceneModelComparison sets={sets} onClose={() => setShowModelCompare(false)} />
       )}
 
       {/* Create Form — minimal: just name + type */}

@@ -3917,6 +3917,27 @@
   font-size: 13px;
 }
 
+.scene-sets-compare-field select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.scene-sets-compare-brief {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.scene-sets-compare-brief summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.scene-sets-compare-brief p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--ss-ink);
+}
+
 .scene-sets-compare-estimate ul {
   margin: 0 0 6px;
   padding-left: 18px;
