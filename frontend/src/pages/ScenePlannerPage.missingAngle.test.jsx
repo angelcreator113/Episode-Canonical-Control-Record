@@ -109,3 +109,28 @@ describe('ScenePlannerPage: missing angles (L4, Q19)', () => {
     expect(await screen.findByText('Beat 10: image uploaded')).toBeTruthy();
   });
 });
+
+describe('ScenePlannerPage: the readiness flag (L5, Q21)', () => {
+  const READY = (r) => {
+    Object.values(api).forEach((fn) => fn.mockReset());
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1') return { data: { data: { status: 'draft' } } };
+      if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: PLAN, readiness: r } };
+      return { data: {} };
+    });
+  };
+
+  test('names the beats still needing an image, and says planning and writing go on', async () => {
+    READY({ ready: 12, total: 14, not_ready: [{ beat_number: 10 }, { beat_number: 11 }] });
+    renderPage();
+    const flag = await screen.findByTestId('planner-readiness');
+    expect(flag.textContent).toBe('12/14 beats have their image; still needed: beats 10, 11. Planning and writing can go on.');
+    expect(flag.className).toContain('is-short');
+  });
+
+  test('says so when every beat has its image', async () => {
+    READY({ ready: 14, total: 14, not_ready: [] });
+    renderPage();
+    expect((await screen.findByTestId('planner-readiness')).textContent).toBe('Every beat has its image (14/14).');
+  });
+});

@@ -158,10 +158,13 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
     // L4 (§8(hh), Q19): each beat's angle and what is missing ("<Kind>
     // angle missing — Upload image / Generate angle"). A failed read leaves
     // the plan without it.
+    // L5, Q21: how many beats have their image; flagged, never blocking.
     let data = plans;
+    let readiness = null;
     try {
-      const { planWithAngles } = require('../services/planLocationsService');
+      const { planWithAngles, planReadiness } = require('../services/planLocationsService');
       data = await planWithAngles(models.sequelize, plans.map((p) => p.toJSON()));
+      readiness = planReadiness(data);
     } catch (angleErr) {
       console.error('[ScenePlanner] beat angle status failed:', angleErr.message);
     }
@@ -169,6 +172,7 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
     return res.json({
       data,
       count: plans.length,
+      readiness,
       feed_moment_missing: feedMomentMissing,
       ...(feedMomentCheckError ? { feed_moment_check_error: feedMomentCheckError } : {}),
     });
