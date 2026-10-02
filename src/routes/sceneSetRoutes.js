@@ -66,9 +66,11 @@ async function withApprovals(sets) {
   }
   // L9 (§8(hh)): each set's looks, one per event, naming its event.
   try {
-    const { looksForSets } = require('../services/venueLookImageService');
+    const { looksForSets, eventsForSets } = require('../services/venueLookImageService');
     const looks = await looksForSets(SceneSet.sequelize, out.map((x) => x.id));
-    out = out.map((x) => ({ ...x, looks: looks.get(x.id) || [] }));
+    // S8: the events using each set, for the panel's "Generate this look".
+    const events = await eventsForSets(SceneSet.sequelize, out.map((x) => x.id));
+    out = out.map((x) => ({ ...x, looks: looks.get(x.id) || [], events: events.get(x.id) || [] }));
   } catch (err) {
     console.warn('[SceneSets] looks not read:', err.message);
   }

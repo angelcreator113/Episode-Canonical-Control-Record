@@ -1,0 +1,14 @@
+/* S8 (Evoni, 2026-10-02): dressed angles on a look, in the Scene Sets panel. */
+.dressed-angles { margin-top: 8px; font-size: 12px; }
+.dressed-angles-label { display: block; font-weight: 600; margin-bottom: 4px; color: #2C2C2C; }
+.dressed-angles ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dressed-angles li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.dressed-angles img, .dressed-angles-empty { width: 48px; height: 32px; object-fit: cover; border-radius: 4px; background: #eee6d4; flex: none; }
+.dressed-angles-name { flex: 1 1 100px; min-width: 0; overflow-wrap: anywhere; }
+.dressed-angles-status { color: #8a7a55; }
+.dressed-angles-actions { display: flex; gap: 6px; }
+.dressed-angles-actions button, .dressed-angles-upload {
+  font-size: 11px; padding: 3px 8px; border: 1px solid #B8962E; border-radius: 5px; background: #fff; color: #8a6d1f; cursor: pointer;
+}
+.dressed-angles-actions button:disabled { opacity: 0.5; cursor: default; }
+.dressed-angles-note { margin: 6px 0 0; font-size: 12px; color: #8a7a55; }

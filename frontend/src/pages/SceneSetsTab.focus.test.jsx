@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -82,5 +82,26 @@ describe('SceneSetsTab ?set=&zone=&from= (S8)', () => {
   test('shows the way back to the page it came from', async () => {
     renderAt('?tab=scene-sets&set=set-1&from=%2Fepisodes%2Fep-1%2Fplan&fromLabel=Beat%20Plan');
     expect((await screen.findByTestId('scene-sets-back')).getAttribute('href')).toBe('/episodes/ep-1/plan');
+  });
+});
+
+// S8 (Evoni, 2026-10-02; §8(dd)), answer 4: the exterior video moves to the
+// panel, onto the Front zone.
+describe('SceneSetsTab: the exterior video on the Front zone (S8)', () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.get).mockReset();
+    vi.mocked(apiClient.post).mockReset();
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (
+      url.includes('/scene-sets') ? { data: { success: true, data: SETS } } : { data: { success: true, data: [] } }
+    ));
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true } });
+  });
+
+  test('a Front zone with an image offers Video; other zones do not', async () => {
+    renderAt('?tab=scene-sets&set=set-1&zone=front');
+    const video = await screen.findByTestId('angle-video-a-front');
+    expect(screen.queryByTestId('angle-video-a-back')).toBeNull();
+    fireEvent.click(video);
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/angles/a-front/generate-video'));
   });
 });

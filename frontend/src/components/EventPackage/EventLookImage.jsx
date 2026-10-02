@@ -34,6 +34,7 @@ import OpenInSceneSets from '../OpenInSceneSets';
 import { Sparkles, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
+import './EventLookImage.css';
 
 export const POLL_MS = 4000;
 // Longer than the server's 10-minute stuck timeout, so a stuck run is seen failing.

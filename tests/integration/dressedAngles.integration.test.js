@@ -213,4 +213,32 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(body.readiness).toMatchObject({ ready: 2, total: 2 });
     expect(beat(body, 1).location.look).toBeUndefined();
   });
+
+  // S8 (Evoni, 2026-10-02; §8(dd)), answers 1-2: looks and dressed angles are
+  // made in the Scene Sets panel, which needs each set's events and an
+  // episode's dressed angles on a set.
+  it('S8: the set list names the events using each set, with their look', async () => {
+    const w = await world();
+    const res = await auth(request(app).get(`/api/v1/scene-sets?show_id=${show}&limit=200`));
+    expect(res.status).toBe(200);
+    const set = res.body.data.find((x) => x.id === w.set);
+    expect(set.events).toEqual([expect.objectContaining({
+      id: w.ev, name: 'Velour Gala', show_id: show, used_in_episode_id: w.ep,
+      look: expect.objectContaining({ id: w.lookId, status: 'complete', image_url: 'https://x/look.jpg' }),
+    })]);
+  });
+
+  it('S8: an episode\'s dressed angles on a set: the look, and each angle with its dressed version', async () => {
+    const w = await world();
+    let res = await auth(request(app).get(`/api/v1/episode-brief/${w.ep}/dressed-angles?scene_set_id=${w.set}`));
+    expect(res.status).toBe(200);
+    expect(res.body.data.look).toMatchObject({ id: w.lookId, image_url: 'https://x/look.jpg' });
+    expect(res.body.data.angles).toEqual([expect.objectContaining({ id: w.angle, name: 'Entrance', kind: 'front', dressed: null })]);
+    await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, created_at, updated_at)
+               VALUES (gen_random_uuid(), :look, :angle, 'complete', 'https://x/dressed.jpg', 'upload', NOW(), NOW())`, { look: w.lookId, angle: w.angle });
+    res = await auth(request(app).get(`/api/v1/episode-brief/${w.ep}/dressed-angles?scene_set_id=${w.set}`));
+    expect(res.body.data.angles[0].dressed).toMatchObject({ status: 'complete', image_url: 'https://x/dressed.jpg' });
+    const none = await auth(request(app).get(`/api/v1/episode-brief/${w.ep}/dressed-angles?scene_set_id=${w.home}`));
+    expect(none.body.data).toEqual({ look: null, angles: [] });
+  });
 });

@@ -6,14 +6,15 @@
  */
 import React from 'react';
 import { vi, describe, test, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() } }));
 
+import api from '../services/api';
 import { LooksRow } from './SceneSetsTab';
 
-const renderRow = (set) => render(<MemoryRouter><LooksRow set={set} /></MemoryRouter>);
+const renderRow = (set, props = {}) => render(<MemoryRouter><LooksRow set={set} {...props} /></MemoryRouter>);
 
 describe('SceneSetsTab Looks row (L9)', () => {
   test('the approved base first, then one card per event, each linking to its event', () => {
@@ -40,5 +41,25 @@ describe('SceneSetsTab Looks row (L9)', () => {
   test('a set with no approved base and no looks shows no row', () => {
     const { container } = renderRow({ id: 'set-3', base_approved: false, looks: [] });
     expect(container.innerHTML).toBe('');
+  });
+
+  // S8 (Evoni, 2026-10-02; §8(dd)), answers 1-2: the look and its dressed
+  // angles are made here, per event using the set.
+  test('S8: each event using the set has its look work here: Generate this look, and its dressed angles once it has an episode', async () => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/events/ev-1/look') return { data: { success: true, data: { scene_set: { id: 'set-4', name: 'Hall' }, approved_base: null, look: null, editable: true } } };
+      if (url === '/api/v1/episode-brief/ep-1/dressed-angles?scene_set_id=set-4') return { data: { data: { look: null, angles: [] } } };
+      return { data: {} };
+    });
+    renderRow({
+      id: 'set-4', base_approved: false, looks: [],
+      events: [{ id: 'ev-1', name: 'Velour Gala', show_id: 'show-1', used_in_episode_id: 'ep-1', look: null }],
+    }, { focusZone: 'look:ev-1' });
+    const block = await screen.findByTestId('scene-set-event-ev-1');
+    expect(block.classList.contains('is-zone-focus')).toBe(true);
+    expect(within(block).getByText('Velour Gala')).toBeTruthy();
+    expect(await within(block).findByTestId('generate-this-look')).toBeTruthy();
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toContain('/api/v1/episode-brief/ep-1/dressed-angles?scene_set_id=set-4'));
   });
 });

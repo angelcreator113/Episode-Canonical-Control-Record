@@ -4108,3 +4108,10 @@
   text-decoration: none;
 }
 .scene-sets-back-link:hover { text-decoration: underline; }
+
+/* S8: each event's look work in the Looks row. */
+.scene-sets-event-look {
+  margin-top: 8px; padding: 8px; border: 1px solid #eadfc4; border-radius: 8px; background: #fffdf7; min-width: 0;
+}
+.scene-sets-event-look.is-zone-focus { outline: 2px solid #B8962E; outline-offset: 2px; }
+.scene-sets-event-look-name { display: inline-block; font-weight: 600; font-size: 12px; margin-bottom: 4px; overflow-wrap: anywhere; }

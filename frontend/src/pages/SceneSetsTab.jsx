@@ -4,6 +4,8 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import apiClient from '../services/api';
 import { SceneSetsBackLink } from '../components/OpenInSceneSets';
+import EventLookImage from '../components/EventPackage/EventLookImage';
+import DressedAngles from '../components/SceneSets/DressedAngles';
 import './SceneSetsTab.css';
 import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
@@ -627,9 +629,10 @@ function formatTime(secs) {
 // L9 (Evoni, 2026-10-02, §8(hh)): "a venue's set shows a Looks row: its
 // approved base, then one card per event's dressed version, each naming its
 // event"; "Scene Sets links each look back to its event."
-export function LooksRow({ set }) {
+export function LooksRow({ set, focusZone = null, onToast }) {
   const looks = set.looks || [];
-  if (!set.base_approved && looks.length === 0) return null;
+  const events = set.events || [];
+  if (!set.base_approved && looks.length === 0 && events.length === 0) return null;
   return (
     <div className="scene-sets-looks" data-testid={`scene-set-looks-${set.id}`} onClick={(e) => e.stopPropagation()}>
       <span className="scene-sets-looks-label">Looks</span>
@@ -651,6 +654,16 @@ export function LooksRow({ set }) {
           </figure>
         ))}
       </div>
+      {/* S8 (Evoni, 2026-10-02; §8(dd)), answers 1-2: each event's look, and
+          its dressed angles once the event has an episode, are made here. */}
+      {events.map((ev) => (
+        <div key={ev.id} data-testid={`scene-set-event-${ev.id}`}
+          className={`scene-sets-event-look${focusZone === `look:${ev.id}` ? ' is-zone-focus' : ''}`}>
+          <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
+          <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} />
+          {ev.used_in_episode_id && <DressedAngles episodeId={ev.used_in_episode_id} setId={set.id} onToast={onToast} />}
+        </div>
+      ))}
     </div>
   );
 }
@@ -751,7 +764,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   // marked and scrolled to. A look zone (look:<eventId>) marks the Looks row.
   const zoneMatches = useCallback((a) => Boolean(focusZone) && (a.id === focusZone || a.angle_kind === focusZone), [focusZone]);
   useEffect(() => {
-    if (!focused || !focusZone || String(focusZone).startsWith('look:')) return undefined;
+    if (!focused || !focusZone) return undefined;
+    if (String(focusZone).startsWith('look:')) {
+      // A look zone: the event's block in the Looks row.
+      const t = setTimeout(() => {
+        const el = document.querySelector(`[data-testid="scene-set-event-${String(focusZone).slice(5).replace(/[^\w-]/g, '')}"]`);
+        if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 150);
+      return () => clearTimeout(t);
+    }
     setShowDetails(true);
     setActiveModalTab('angles');
     const t = setTimeout(() => {
@@ -1150,7 +1171,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               location are made from it, and it is not replaced until it is
               un-approved. */}
           <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-          <LooksRow set={set} />
+          <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
 
           {/* Compact metadata */}
           <div className="scene-sets-card-meta-line">
@@ -1893,6 +1914,26 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 }
                                 return null;
                               })()}
+                              {/* S8, answer 4: the exterior video, on the Front zone. */}
+                              {isComplete && a.angle_kind === 'front' && (
+                                <button
+                                  className="scene-sets-angle-row-btn"
+                                  data-testid={`angle-video-${a.id}`}
+                                  title="Make the exterior video from this Front zone (about a minute)"
+                                  onClick={async () => {
+                                    try {
+                                      const r = await apiClient.post(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/generate-video`);
+                                      if (r.data?.success) showToast('Exterior video generation started (~1 min)');
+                                      else showToast(r.data?.error || 'Video failed', 'error');
+                                    } catch (err) {
+                                      console.error('[SceneSets] video failed:', err);
+                                      showToast(err.response?.data?.error || 'Video failed', 'error');
+                                    }
+                                  }}
+                                >
+                                  🎬 Video
+                                </button>
+                              )}
                               {isComplete && (
                                 <button
                                   className="scene-sets-angle-row-btn scene-sets-promote-btn"
@@ -2554,6 +2595,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.base_approved !== ns.base_approved) return false;
+  const pe = ps.events || [], ne = ns.events || [];
+  if (pe.length !== ne.length) return false;
+  for (let i = 0; i < pe.length; i++) {
+    if (pe[i].id !== ne[i].id || pe[i].look?.status !== ne[i].look?.status || pe[i].used_in_episode_id !== ne[i].used_in_episode_id) return false;
+  }
   const pl = ps.looks || [], nl = ns.looks || [];
   if (pl.length !== nl.length) return false;
   for (let i = 0; i < pl.length; i++) {
