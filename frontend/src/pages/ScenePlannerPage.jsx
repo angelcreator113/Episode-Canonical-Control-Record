@@ -294,7 +294,7 @@ export default function ScenePlannerPage() {
   // B2, L4, L10, L11: the beat's actions, shared with the Scenes tab (L12).
   const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
   const beats = useBeatActions({
-    episodeId, showToast, reload: fetchAll, showId: locations.show_id, loadShowId: fetchAll, linkedIds,
+    episodeId, showToast, reload: fetchAll, showId: locations.show_id, loadShowId: fetchAll, linkedIds, fromLabel: 'Beat Plan',
   });
 
   const handleLockAll = async () => {
@@ -378,7 +378,6 @@ export default function ScenePlannerPage() {
         </div>
       )}
 
-      {beats.dialogs}
 
       {beats.editingBeat && (
         <BeatEditor key={beats.editingBeat.beat_number} beat={beats.editingBeat} library={beats.library} linkedIds={linkedIds}

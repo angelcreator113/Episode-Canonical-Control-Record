@@ -6,6 +6,7 @@
  */
 import { useState } from 'react';
 import { sceneSetThumb } from '../../utils/sceneSets';
+import OpenInSceneSets from '../OpenInSceneSets';
 import './BeatPlanParts.css';
 
 export const SHOT_LABELS = {
@@ -31,10 +32,13 @@ export function ChosenBadge({ beat, className }) {
 // L14 the server names zones ("Front zone missing").
 // beat.location.missing comes from GET /episode-brief/:id/plan.
 
-// L10 (§8(hh)): at a set the episode's event has a finished look on
-// (beat.location.look), these make the dressed angle, from the look.
+// S8 (Evoni, 2026-10-02; §8(dd)): "Other pages (Beat Plan, Scenes tab, ...)
+// show status only, with one entry point: 'Open in Scene Sets →', landing on
+// the exact set and zone ... Their own upload, generate and add-angle
+// buttons are removed." The link lands on the missing angle, else its kind
+// (the zone); at the event's look (L10) the dressed angle is made there too.
 
-export function MissingAngle({ beat, busy, onUpload, onGenerate }) {
+export function MissingAngle({ beat, showId = null, fromLabel = null }) {
   const missing = beat.location?.missing;
   const dressed = beat.location?.angle?.dressed;
   const n = beat.beat_number;
@@ -48,18 +52,19 @@ export function MissingAngle({ beat, busy, onUpload, onGenerate }) {
       {beat.location?.look && (
         <span className="scene-planner-missing-look" data-testid={`beat-missing-look-${n}`}>
           {dressed?.status === 'generating' ? 'Dressing it from the event\'s look…'
-            : dressed?.status === 'failed' ? `The dressed version failed${dressed.error ? `: ${dressed.error}` : ''}. Try again:`
-              : 'Made from the event\'s look:'}
+            : dressed?.status === 'failed' ? `The dressed version failed${dressed.error ? `: ${dressed.error}` : ''}.`
+              : 'Made from the event\'s look.'}
         </span>
       )}
       <span className="scene-planner-missing-actions">
-        <label className={`scene-planner-missing-btn${busy ? ' is-busy' : ''}`}>
-          Upload image
-          <input type="file" accept="image/*" hidden disabled={busy} aria-label={`Upload image for beat ${n}`}
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onUpload(beat, f); }} />
-        </label>
-        <button type="button" className="scene-planner-missing-btn" disabled={busy}
-          onClick={() => onGenerate(beat)} data-testid={`beat-generate-angle-${n}`}>Generate angle</button>
+        <OpenInSceneSets
+          showId={showId}
+          setId={beat.scene_set_id}
+          zone={missing.angle_id || missing.kind || missing.kinds?.[0] || null}
+          fromLabel={fromLabel}
+          className="scene-planner-missing-btn"
+          testId={`beat-open-scene-sets-${n}`}
+        />
       </span>
     </div>
   );

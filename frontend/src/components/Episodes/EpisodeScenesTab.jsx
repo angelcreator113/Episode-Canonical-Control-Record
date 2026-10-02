@@ -184,7 +184,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
   const beats = useBeatActions({
-    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds,
+    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds, fromLabel: 'Scenes tab',
   });
 
   // Re-run the save for the missing beats only, then refresh the warning
@@ -490,7 +490,6 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </section>
       )}
 
-      {beats.dialogs}
     </div>
   );
 };

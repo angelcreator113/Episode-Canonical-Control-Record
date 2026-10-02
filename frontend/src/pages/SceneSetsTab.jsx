@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import apiClient from '../services/api';
+import { SceneSetsBackLink } from '../components/OpenInSceneSets';
 import './SceneSetsTab.css';
 import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
@@ -704,7 +705,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -745,6 +746,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
+  // set opens its panel on the angles, the zone (an angle id or a zone kind)
+  // marked and scrolled to. A look zone (look:<eventId>) marks the Looks row.
+  const zoneMatches = useCallback((a) => Boolean(focusZone) && (a.id === focusZone || a.angle_kind === focusZone), [focusZone]);
+  useEffect(() => {
+    if (!focused || !focusZone || String(focusZone).startsWith('look:')) return undefined;
+    setShowDetails(true);
+    setActiveModalTab('angles');
+    const t = setTimeout(() => {
+      const el = document.querySelector('.scene-sets-angle-row.is-zone-focus');
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [focused, focusZone]);
   const [editingAngleId, setEditingAngleId] = useState(null);
   const [editingAngleLabel, setEditingAngleLabel] = useState('');
   const angleQuickUploadRef = useRef(null);
@@ -1849,7 +1864,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
                         const isFailed = a.generation_status === 'failed';
                         const isGen = a.generation_status === 'generating';
                         return (
-                          <div key={a.id} className={`scene-sets-angle-row${isComplete ? ' complete' : ''}${isFailed ? ' failed' : ''}`}>
+                          <div key={a.id} data-angle-id={a.id} className={`scene-sets-angle-row${isComplete ? ' complete' : ''}${isFailed ? ' failed' : ''}${zoneMatches(a) ? ' is-zone-focus' : ''}`}>
                             <div className="scene-sets-angle-row-thumb">
                               {isComplete ? (
                                 <img src={bustUrl(a.still_image_url)} alt={a.angle_label} onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }} />
@@ -2525,6 +2540,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, onGenera
   );
 }, (prev, next) => {
   // Only re-render when meaningful rendering data changes, not on every poll
+  if (prev.focused !== next.focused || prev.focusZone !== next.focusZone) return false;
   if (prev.isGeneratingProp !== next.isGeneratingProp) return false;
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
@@ -2571,6 +2587,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   // the event's chosen set): scrolled into view and outlined.
   const [searchParams] = useSearchParams();
   const focusSetId = searchParams.get('set');
+  const focusZone = searchParams.get('zone');
   const [error, setError] = useState(null);
   const [generatingIds, setGeneratingIds] = useState(new Set());
   const [generationProgressMap, setGenerationProgressMap] = useState({});
@@ -3355,6 +3372,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   return (
     <div className="scene-sets-container">
+      {/* S8: the way back to the page that opened Scene Sets. */}
+      <SceneSetsBackLink />
       {/* Toast */}
       {toast && (
         <div className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
@@ -3539,6 +3558,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               key={set.id}
               set={set}
               focused={set.id === focusSetId}
+              focusZone={set.id === focusSetId ? focusZone : null}
               onGenerateBase={handleGenerateBase}
               onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}

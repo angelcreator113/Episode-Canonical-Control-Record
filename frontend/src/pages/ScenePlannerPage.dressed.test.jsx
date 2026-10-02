@@ -7,7 +7,7 @@
  * first. A beat shows its dressed angle when there is one.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -28,12 +28,6 @@ const PLAN = [
   { id: 'p1', beat_number: 1, beat_name: 'Opening Ritual', scene_set_id: 'set-home', locked: false, sceneSet: { id: 'set-home', name: 'Apartment', base_still_url: 'https://x/home.jpg' },
     location: { role: 'home', kinds: [], angle: null, missing: null } },
 ];
-const BRIEF = {
-  version: 1, scene_set_id: 'set-venue', angle: 'DOORWAY', mode: 'full', source: { kind: 'look', look_id: 'look-1', image_url: 'https://x/look.jpg' },
-  lines: [{ layer: 'event', key: 'concept', label: 'Event', text: 'Dressed for Velour Gala.', source: 'look', essential: true }],
-  rules: ['No people present.'], missing: [], overrides: {},
-};
-const DRESSED = '/api/v1/episode-brief/ep-1/dressed-angles/ang-door';
 
 function renderPage() {
   return render(
@@ -42,7 +36,6 @@ function renderPage() {
     </MemoryRouter>
   );
 }
-const posts = (u) => vi.mocked(api.post).mock.calls.filter(([url]) => url === u);
 
 describe('ScenePlannerPage: angles dressed from the event\'s look (L10)', () => {
   beforeEach(() => {
@@ -50,12 +43,8 @@ describe('ScenePlannerPage: angles dressed from the event\'s look (L10)', () => 
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episode-brief/ep-1') return { data: { data: { status: 'draft' } } };
       if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: PLAN } };
+      if (url === '/api/v1/episodes/ep-1/locations') return { data: { data: { locations: [], show_id: 'show-1' } } };
       return { data: {} };
-    });
-    vi.mocked(api.put).mockResolvedValue({ data: { data: {} } });
-    vi.mocked(api.post).mockImplementation(async (url) => {
-      if (url === `${DRESSED}/brief`) return { data: { success: true, data: { target: { kind: 'dressed_angle', angle_id: 'ang-door' }, brief: BRIEF, estimate: { usd: 0.04, priced: true } } } };
-      return { data: { success: true, data: {} } };
     });
   });
 
@@ -66,32 +55,16 @@ describe('ScenePlannerPage: angles dressed from the event\'s look (L10)', () => 
     expect(images).toEqual(['https://x/look.jpg', 'https://x/wide-dressed.jpg', 'https://x/home.jpg']);
     expect(screen.getByTestId('beat-dressed-tag-11')).toBeTruthy();
     expect(screen.queryByTestId('beat-dressed-tag-10')).toBeNull();
-    expect(screen.getByTestId('beat-missing-look-10').textContent).toBe("Made from the event's look:");
+    expect(screen.getByTestId('beat-missing-look-10').textContent).toBe("Made from the event's look.");
   });
 
-  test('Generate angle at the look\'s set shows the dressed brief and its cost, then dresses it; the plain angle is not generated', async () => {
+  // S8 (Evoni, 2026-10-02; §8(dd)), answer 2: dressed angles are made on the
+  // look in the Scene Sets panel; the Beat Plan links there.
+  test('S8: a missing dressed angle links to Scene Sets on its angle; nothing is made here', async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('beat-generate-angle-10'));
-    await screen.findByTestId('scene-brief-confirm');
-    expect(posts(`${DRESSED}/brief`)).toHaveLength(1);
-    expect(screen.getByText("Made from the event's look: the same dressed room, from this angle.")).toBeTruthy();
-    expect(screen.getByTestId('sbc-confirm').textContent).toBe('Generate — est. $0.04');
-    expect(posts(`${DRESSED}/generate`)).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('sbc-confirm'));
-    await waitFor(() => expect(posts(`${DRESSED}/generate`)).toHaveLength(1));
-    expect(posts(`${DRESSED}/generate`)[0][1]).toEqual({ overrides: {} });
-    expect(vi.mocked(api.post).mock.calls.some(([u]) => u.startsWith('/api/v1/scene-sets/'))).toBe(false);
-    expect(await screen.findByText("Beat 10: dressing the angle from the event's look")).toBeTruthy();
-  });
-
-  test('Upload image at the look\'s set stores the dressed angle', async () => {
-    renderPage();
-    await screen.findByTestId('beat-missing-10');
-    const file = new File(['png'], 'door.png', { type: 'image/png' });
-    fireEvent.change(screen.getByLabelText('Upload image for beat 10'), { target: { files: [file] } });
-    await waitFor(() => expect(posts(`${DRESSED}/upload`)).toHaveLength(1));
-    expect(posts(`${DRESSED}/upload`)[0][1].get('images')).toBe(file);
-    expect(vi.mocked(api.post).mock.calls.some(([u]) => u.startsWith('/api/v1/scene-sets/'))).toBe(false);
+    const link = await screen.findByTestId('beat-open-scene-sets-10');
+    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-venue&zone=ang-door&from=${encodeURIComponent('/episodes/ep-1/plan')}&fromLabel=Beat%20Plan`);
+    expect(screen.queryByTestId('beat-generate-angle-10')).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
   });
 });
