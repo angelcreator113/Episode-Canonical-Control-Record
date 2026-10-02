@@ -125,6 +125,37 @@ describe('EventLookImage (L7-L9)', () => {
     expect(posts(`${BASE}/generate`)[0][1]).toEqual({ overrides: {}, scene_set_id: 'set-a' });
   });
 
+  // DJ bug 1 (Evoni, 2026-10-02): the section stayed on "Generating…" after a
+  // base-only run. Reloading the event after Confirm can remount it mid-run:
+  // it refreshes whenever the server says something is generating.
+  test('a base generating when the section opens is refreshed until it is done', async () => {
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'generating' }, approved_base: null, look: null };
+    const { onToast } = renderIt();
+    expect(await screen.findByTestId('event-look-generating')).toBeTruthy();
+    lookState = { scene_set: { ...SET, generation_status: 'complete' }, approved_base: null, look: null };
+    expect(await screen.findByTestId('event-look-awaiting')).toBeTruthy();
+    expect(screen.queryByTestId('event-look-generating')).toBeNull();
+    expect(onToast).toHaveBeenCalledWith('The base is ready: approve it in Scene Sets');
+  });
+
+  test('a look generating when the section opens is refreshed until it is done', async () => {
+    lookState = { ...lookState, look: { id: 'look-1', status: 'generating' } };
+    const { onToast } = renderIt();
+    expect(await screen.findByTestId('event-look-generating')).toBeTruthy();
+    lookState = { ...lookState, look: { id: 'look-1', status: 'complete', image_url: 'https://x/look.jpg' } };
+    expect((await screen.findByTestId('event-look-thumb')).getAttribute('src')).toBe('https://x/look.jpg');
+    expect(onToast).toHaveBeenCalledWith('The look is ready');
+  });
+
+  test('a failed base says so with its reason', async () => {
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'generating' }, approved_base: null, look: null };
+    const { onToast } = renderIt();
+    await screen.findByTestId('event-look-generating');
+    lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'failed', error: 'Timed out: no image after 10 minutes' }, approved_base: null, look: null };
+    expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe('The base could not be generated: Timed out: no image after 10 minutes.');
+    expect(onToast).toHaveBeenCalledWith('The base could not be generated: Timed out: no image after 10 minutes');
+  });
+
   test('a failed look says so', async () => {
     lookState = { ...lookState, look: { id: 'look-1', status: 'failed', error: 'provider down' } };
     renderIt();

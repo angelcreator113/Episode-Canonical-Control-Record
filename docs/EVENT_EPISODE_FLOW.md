@@ -4009,6 +4009,14 @@ The answers in full:
 5. **Where the look is used:** this build stores and shows the look only (Place, Scene Sets, links both ways). L10, its own PR right after, makes the episode's angles at that venue from the look.
 6. **Progress in the Place section:** after the cost is confirmed, the Place section shows "Generating…" and refreshes until the image is done or failed, then shows the thumbnail with "Open in Scene Sets".
 
+Deploy DJ bugs in the base path (Evoni, 2026-10-02, from production logs), fixed:
+
+> 1. "Generate this look" base path: the base still succeeded, but the Place section stayed on "Generating…": the look/base status never flips to done after a base-only run. Fix the status update; also mark failed with its reason on any error, with a timeout for stuck runs.
+> 2. The L8 base path calls the post-still analysis without the scene set's id ("Analyzing base image with Claude Vision for undefined", then "WHERE parameter "id" has invalid "undefined" value"). Pass it.
+> 3. The base brief flagged "Missing essentials: Time of day" though the event has its time; the base brief should take time of day from the event (and the look's lighting when set), per Q4.
+
+As fixed: (1) the server did set the base complete; the Place section refreshed only after its own Confirm, and reloading the event after Confirm could remount it mid-run, so it now refreshes whenever the server says the look or base is generating and says when it finishes or fails. A failed base keeps its reason (`base_generation.last_error`, shown in the Place section), and a look or base still generating 10 minutes after its last update is marked failed ("Timed out: no image after 10 minutes") when the look is next read. (2) The analysis was handed a spread copy of the scene set's model instance, which has no `id` or `name`; it gets the plain row now. Its result and the base's style lock, written at the same time, now merge into `visual_language` instead of each replacing it, so neither is lost. (3) The empty-room base brief takes its time of day and season from the event, and the look's lighting when set, without the event dressing; the generated base uses the same.
+
 Ruling L11 (Evoni, 2026-10-02), recorded verbatim; built after L7–L9 and before L10:
 
 > L11. "In the Scene Planner, any beat can use any scene set in the show's library. The beat editor lists all the show's sets (searchable, with thumbnails and their angles, like the Place picker); choosing a set not yet linked to the episode adds it to the episode's locations as an extra (or the matching role if that role is empty). A beat whose set or angle Evoni chose is marked 'Chosen by you' and is never replaced by a re-plan or by location changes, like a locked beat. The planner is renamed 'Beat Plan' and shows the episode's locations at its top, each linking to its set in Scene Sets."

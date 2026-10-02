@@ -837,6 +837,8 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     // with (S2: the brief shown before generating shows them).
     angleLabel: 'WIDE',
     eventId: options.eventId !== undefined ? options.eventId : (sceneSet.base_generation?.brief?.event_id || null),
+    // DJ bug 3: an undressed base still takes its time of day from the event.
+    environmentEventId: options.environmentEventId || null,
     overrides: options.overrides || sceneSet.base_generation?.brief?.overrides || {},
   });
   const prompt = briefToPrompt(brief);
@@ -901,7 +903,10 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     // visual inventory + style lock so all future angles have concrete
     // details to preserve. Runs in background (non-blocking).
     if (process.env.ANTHROPIC_API_KEY && !options.skipAnalysis) {
-      const updatedSet = { ...sceneSet, base_still_url: stillUrl };
+      // DJ bug 2: a model instance keeps its fields in dataValues, which a
+      // spread drops (id and name came out undefined); copy them plainly.
+      const plainSet = typeof sceneSet.get === 'function' ? sceneSet.get({ plain: true }) : sceneSet;
+      const updatedSet = { ...plainSet, base_still_url: stillUrl };
       analyzeBaseImage(updatedSet, SceneSet).catch(err =>
         console.warn(`[SceneGen] Auto image analysis failed (non-blocking): ${err.message}`)
       );
@@ -933,10 +938,7 @@ Return ONLY JSON.` },
           const match = text.match(/\{[\s\S]*\}/);
           if (match) {
             const styleData = JSON.parse(match[0]);
-            await SceneSet.update(
-              { visual_language: { ...vl, ...styleData, locked: true } },
-              { where: { id: sceneSet.id } }
-            );
+            await mergeVisualLanguage(SceneSet, sceneSet.id, { ...styleData, locked: true });
             console.log(`[SceneGen] Auto-locked style DNA: ${styleData.design_style}`);
           }
         } catch (styleErr) {
@@ -1007,6 +1009,14 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
  * furniture, decor, textures — so angle prompts can reference specifics.
  * Results are cached in visual_language.image_analysis.
  */
+/** Merges keys into a set's stored visual_language (jsonb), leaving its other keys. */
+async function mergeVisualLanguage(SceneSetModel, setId, patch) {
+  await SceneSetModel.sequelize.query(
+    `UPDATE scene_sets SET visual_language = COALESCE(visual_language, '{}'::jsonb) || CAST(:patch AS jsonb), updated_at = NOW()
+      WHERE id = :id`,
+    { replacements: { id: setId, patch: JSON.stringify(patch) } });
+}
+
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
@@ -1095,16 +1105,17 @@ Return ONLY JSON.` },
     analysis.analyzed_at = new Date().toISOString();
 
     // Cache blueprint in visual_language + auto-fill description if empty
-    const updatedVl = { ...vl, image_analysis: analysis };
-    if (analysis.layout_map) updatedVl.layout_map = analysis.layout_map;
-    if (analysis.anchor_objects) updatedVl.anchor_objects = analysis.anchor_objects;
-    if (analysis.camera_regions) updatedVl.camera_regions = analysis.camera_regions;
+    const vlPatch = { image_analysis: analysis };
+    if (analysis.layout_map) vlPatch.layout_map = analysis.layout_map;
+    if (analysis.anchor_objects) vlPatch.anchor_objects = analysis.anchor_objects;
+    if (analysis.camera_regions) vlPatch.camera_regions = analysis.camera_regions;
     if (analysis.room_properties && !vl.room_properties_manual) {
-      updatedVl.room_properties = analysis.room_properties;
+      vlPatch.room_properties = analysis.room_properties;
     }
+    const updatedVl = { ...vl, ...vlPatch };
 
     // Auto-fill description from image analysis if the set has no description yet
-    const updateFields = { visual_language: updatedVl };
+    const updateFields = {};
     if (analysis.description && !sceneSet.canonical_description) {
       updateFields.canonical_description = analysis.description;
       // Also regenerate the prompt from the new description
@@ -1113,10 +1124,13 @@ Return ONLY JSON.` },
       console.log(`[SceneGen] Auto-filled description from image analysis`);
     }
 
-    await SceneSetModel.update(
-      updateFields,
-      { where: { id: sceneSet.id } }
-    );
+    // Merged into the stored visual_language (DJ bug 2): the base's style
+    // lock writes it at the same time, and a whole-object write from a stale
+    // copy dropped the other's keys.
+    await mergeVisualLanguage(SceneSetModel, sceneSet.id, vlPatch);
+    if (Object.keys(updateFields).length) {
+      await SceneSetModel.update(updateFields, { where: { id: sceneSet.id } });
+    }
 
     console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.room_properties?.room_size || 'unknown'} room`);
     return analysis;

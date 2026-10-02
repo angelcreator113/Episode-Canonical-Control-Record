@@ -184,10 +184,14 @@ function seasonFromDate(date) {
  *                    or anchor objects)
  *   continuity:      true for an angle made from the set's base image
  *   overrides:       { <key>: text }
+ *   environmentEvent: an event whose time of day, season and look lighting
+ *                    set the environment without dressing the place: the
+ *                    empty-room base of "Generate this look" (L8; Q4, DJ
+ *                    bug 3, §8(hh)). `event` takes precedence when given.
  */
 function buildSceneBrief({
   sceneSet, location = null, event = null, angleLabel = 'WIDE', cameraDirection = null,
-  requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false,
+  requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false, environmentEvent = null,
 } = {}) {
   const set = sceneSet || {};
   const angle = String(angleLabel || 'WIDE').toUpperCase();
@@ -260,12 +264,16 @@ function buildSceneBrief({
   add('shot', 'overlay_space', 'Space for characters', sentence(`Leave clear, uncluttered floor space in ${OVERLAY_SPACE[angle] || 'the centre of the frame'} for character overlays`), 'venue');
 
   // ── The environment ──
-  const eventTime = event ? timeOfDayFromEventTime(event.event_time) : null;
+  // Q4: the look's lighting, else the event's time; for an undressed base,
+  // the environment event's (DJ bug 3).
+  const envEvent = event || environmentEvent;
+  const envLook = event ? look : (envEvent ? readVenueLook(envEvent.venue_look) : null);
+  const eventTime = envEvent ? timeOfDayFromEventTime(envEvent.event_time) : null;
   const timeKey = eventTime || set.time_of_day || null;
-  if (look?.lighting) add('environment', 'time', 'Lighting and time', sentence(look.lighting), 'look', true);
+  if (envLook?.lighting) add('environment', 'time', 'Lighting and time', sentence(envLook.lighting), 'look', true);
   else if (timeKey && TIME_LIGHT[timeKey]) add('environment', 'time', 'Time of day', TIME_LIGHT[timeKey], eventTime ? 'event' : 'venue', true);
   else add('environment', 'time', 'Time of day', '', 'venue', true);
-  const eventSeason = event ? seasonFromDate(event.event_date) : null;
+  const eventSeason = envEvent ? seasonFromDate(envEvent.event_date) : null;
   const seasonKey = eventSeason || set.season || null;
   if (seasonKey && SEASON_TEXT[seasonKey]) add('environment', 'season', 'Season', SEASON_TEXT[seasonKey], eventSeason ? 'event' : 'venue');
 
@@ -407,12 +415,14 @@ async function loadBriefEvent(sequelize, eventId, showId, { transaction } = {}) 
 /**
  * The brief for one generation, with its sources loaded:
  *   options: { angleLabel, cameraDirection, requiredFeatures, continuity,
- *              eventId, overrides }
+ *              eventId, environmentEventId, overrides }
  */
 async function prepareSceneBrief(sequelize, sceneSet, options = {}) {
   const location = await loadBriefLocation(sequelize, sceneSet?.world_location_id);
   const event = await loadBriefEvent(sequelize, options.eventId, sceneSet?.show_id);
-  return buildSceneBrief({ sceneSet, location, event, ...options });
+  const environmentEvent = options.environmentEventId
+    ? await loadBriefEvent(sequelize, options.environmentEventId, sceneSet?.show_id) : null;
+  return buildSceneBrief({ sceneSet, location, event, ...options, environmentEvent });
 }
 
 module.exports = {

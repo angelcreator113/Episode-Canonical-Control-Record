@@ -34,6 +34,12 @@ const { venueLocationId, venueDraftSet } = require('./venueGenerationService');
 
 const STEPS = Object.freeze({ LOOK: 'look', BASE: 'base', AWAITING_APPROVAL: 'awaiting_approval' });
 
+// DJ bug 1 (Evoni, 2026-10-02, §8(hh)): a look or base still generating
+// after this long is marked failed with its reason when it is next read
+// (a restart or a hung provider call leaves nothing else to finish it).
+const STUCK_AFTER_MS = 10 * 60 * 1000;
+const STUCK_REASON = 'Timed out: no image after 10 minutes';
+
 class VenueLookImageError extends Error {
   constructor(message, status = 400, code = 'LOOK_IMAGE_INVALID', extra = {}) {
     super(message);
@@ -56,7 +62,7 @@ async function liveSet(sequelize, id) {
   if (!id) return null;
   const [[set]] = await sequelize.query(
     `SELECT id, name, show_id, scene_type, world_location_id, base_still_url, base_model, generation_status,
-            canonical_description, visual_language, time_of_day, season, style_reference_url
+            canonical_description, visual_language, time_of_day, season, style_reference_url, base_generation, updated_at
        FROM scene_sets WHERE id = :id AND deleted_at IS NULL`,
     { replacements: { id } });
   return set || null;
@@ -121,7 +127,10 @@ async function planLook(sequelize, { event, set, overrides = {} }) {
     };
   }
   if (set.id && set.base_still_url) return { step: STEPS.AWAITING_APPROVAL, brief: null, estimate: null };
-  const brief = buildSceneBrief({ sceneSet: set, location, event: null, angleLabel: 'WIDE', overrides });
+  // L8: the empty room, no event dressing; its time of day and lighting are
+  // still the event's (Q4; DJ bug 3).
+  const environmentEvent = await loadBriefEvent(sequelize, event.id, null);
+  const brief = buildSceneBrief({ sceneSet: set, location, event: null, environmentEvent, angleLabel: 'WIDE', overrides });
   const modelKey = sceneGen.resolveBaseModel(set);
   return { step: STEPS.BASE, brief, estimate: { ...sceneGen.estimateBaseStillCost(modelKey), base_model: modelKey } };
 }
@@ -193,13 +202,13 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     if (missing.length) throw new VenueLookImageError(`Base model ${plan.estimate.base_model} needs ${missing.join(', ')}, which is not configured.`, 503, 'PROVIDER_NOT_CONFIGURED');
     await models.SceneSet.update({ generation_status: 'generating' }, { where: { id: set.id } });
     const run = async () => {
-      const instance = await models.SceneSet.findByPk(set.id);
       try {
-        // L8: the empty room, no event dressing.
-        await sceneGen.generateBaseScene(instance, models, { eventId: null, overrides: overrides.value || {} });
+        const instance = await models.SceneSet.findByPk(set.id);
+        // L8: the empty room, no event dressing, in the event's light (DJ bug 3).
+        await sceneGen.generateBaseScene(instance, models, { eventId: null, environmentEventId: event.id, overrides: overrides.value || {} });
       } catch (err) {
         console.error(`[VenueLookImage] base for "${set.name}" failed:`, err.message);
-        await models.SceneSet.update({ generation_status: 'failed' }, { where: { id: set.id } });
+        await markBaseFailed(models.sequelize, set.id, err.message || String(err));
       }
     };
     return { result: { step: plan.step, scene_set_id: set.id }, run };
@@ -230,22 +239,51 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
   return { result: { step: plan.step, scene_set_id: set.id, look_id: look.id }, run };
 }
 
+/** A base that failed: generation_status failed, its reason kept in base_generation.last_error. */
+async function markBaseFailed(sequelize, setId, reason) {
+  await sequelize.query(
+    `UPDATE scene_sets SET generation_status = 'failed',
+            base_generation = COALESCE(base_generation, '{}'::jsonb)
+              || jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW()),
+            updated_at = NOW()
+      WHERE id = :setId`,
+    { replacements: { setId, reason: String(reason || 'failed').slice(0, 500) } });
+}
+
+const isStuck = (updatedAt) => Boolean(updatedAt) && Date.now() - new Date(updatedAt).getTime() > STUCK_AFTER_MS;
+
 /**
  * The event's look as the Place section shows it (L9): the set, the
- * venue's approval, and the event's look; read only.
+ * venue's approval, and the event's look. A look or base generating for
+ * longer than STUCK_AFTER_MS is marked failed here (DJ bug 1).
  */
 async function eventLook(sequelize, { showId, eventId }) {
   const event = await loadEvent(sequelize, { showId, eventId });
-  const set = await liveSet(sequelize, event.scene_set_id);
+  let set = await liveSet(sequelize, event.scene_set_id);
   if (!set) return { scene_set: null, look: null, approved_base: null };
+  if (set.generation_status === 'generating' && isStuck(set.updated_at)) {
+    console.warn(`[VenueLookImage] base for "${set.name}" stuck since ${new Date(set.updated_at).toISOString()}; marked failed`);
+    await markBaseFailed(sequelize, set.id, STUCK_REASON);
+    set = await liveSet(sequelize, set.id);
+  }
   const location = await loadLocation(sequelize, set.world_location_id);
-  const [[look]] = await sequelize.query(
+  const readLook = async () => (await sequelize.query(
     `SELECT id, status, image_url, error, generated_at, updated_at FROM scene_set_looks
       WHERE scene_set_id = :setId AND event_id = :eventId AND deleted_at IS NULL`,
-    { replacements: { setId: set.id, eventId: event.id } });
+    { replacements: { setId: set.id, eventId: event.id } }))[0][0];
+  let look = await readLook();
+  if (look?.status === 'generating' && isStuck(look.updated_at)) {
+    console.warn(`[VenueLookImage] look ${look.id} stuck since ${new Date(look.updated_at).toISOString()}; marked failed`);
+    await sequelize.query(
+      `UPDATE scene_set_looks SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id AND status = 'generating'`,
+      { replacements: { id: look.id, error: STUCK_REASON } });
+    look = await readLook();
+  }
+  const baseGeneration = typeof set.base_generation === 'string' ? JSON.parse(set.base_generation) : (set.base_generation || {});
   return {
     scene_set: {
       id: set.id, name: set.name, base_still_url: set.base_still_url || null, generation_status: set.generation_status || null,
+      error: set.generation_status === 'failed' ? (baseGeneration.last_error || null) : null,
     },
     approved_base: location?.approved_base_image_url
       ? { scene_set_id: location.approved_base_scene_set_id, image_url: location.approved_base_image_url }
@@ -275,6 +313,8 @@ async function looksForSets(sequelize, setIds) {
 
 module.exports = {
   STEPS,
+  STUCK_AFTER_MS,
+  STUCK_REASON,
   VenueLookImageError,
   resolveLookSet,
   planLook,
