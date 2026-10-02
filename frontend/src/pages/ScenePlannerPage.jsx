@@ -271,6 +271,7 @@ export default function ScenePlannerPage() {
   const [view, setView] = useState('storyboard');
   const [brief, setBrief] = useState(null);
   const [plan, setPlan] = useState([]);
+  const [readiness, setReadiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
@@ -293,6 +294,7 @@ export default function ScenePlannerPage() {
       ]);
       setBrief(briefRes.data.data);
       setPlan(planRes.data.data || []);
+      setReadiness(planRes.data.readiness || null);
     } catch {
       showToast('Failed to load planner data', 'error');
     } finally {
@@ -460,6 +462,14 @@ export default function ScenePlannerPage() {
             Map scenes to beats → generates a grounded script
             {plan.length > 0 && ` · ${lockedCount}/${plan.length} beats locked`}
           </p>
+          {/* L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking. */}
+          {readiness && readiness.total > 0 && (
+            <p className={`scene-planner-readiness${readiness.ready < readiness.total ? ' is-short' : ''}`} data-testid="planner-readiness">
+              {readiness.ready === readiness.total
+                ? `Every beat has its image (${readiness.total}/${readiness.total}).`
+                : `${readiness.ready}/${readiness.total} beats have their image; still needed: beat${readiness.not_ready.length === 1 ? '' : 's'} ${readiness.not_ready.map((b) => b.beat_number).join(', ')}. Planning and writing can go on.`}
+            </p>
+          )}
         </div>
 
         <div className="scene-planner-actions">
