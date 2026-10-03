@@ -1,16 +1,13 @@
 /**
- * WorldAdmin v2 — Producer Mode Dashboard
+ * WorldAdmin — Producer Mode, the one show workspace
  * 
  * Route: /shows/:id/world
  * 
- * 7 Tabs:
- *   1. Overview — Stats, tier distribution, canon timeline
- *   2. Episode Ledger — All episodes with tier/score/deltas
- *   3. Events Library — Reusable event catalog (create, edit, inject)
- *   4. Career Goals — Track progression goals
- *   5. Wardrobe — Tier cards, filters, item grid with Lala reactions
- *   6. Characters — View/edit Lala stats, character rules, stat ledger
- *   7. Decision Log — Training data from creative decisions
+ * Tabs (TABS below; audit IA-01/IA-02, 2026-10-03):
+ *   Overview · Episodes (Production, Season Plan with Career Goals, Results)
+ *   · Events · Assets (Scene Sets, Wardrobe, Lala's Phone, Audience
+ *   Overlays) · Cast & Continuity (Lala's State & Continuity, Lala's
+ *   Finances, Activity & Decisions) · Release (Distribution, Insights)
  * 
  * Location: frontend/src/pages/WorldAdmin.jsx
  */

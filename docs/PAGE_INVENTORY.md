@@ -57,7 +57,7 @@ not via any page's UI.
 | `/universe` | `pages/UniversePage.jsx` (App.jsx:327) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:22`) |
 | `/universe/social-import` | `pages/UniverseSocialImportPage.jsx` (App.jsx:328) | live | URL only — no in-app caller found; also the redirect target of `/social-import` (App.jsx:517) |
 | `/universe/series` | `pages/SeriesPage.jsx` (App.jsx:329) | live | URL only |
-| `/universe/production` | `pages/UniverseProductionPage.jsx` (App.jsx:330) | live | URL only |
+| `/universe/production` | `pages/UniverseProductionPage.jsx` | redirect (audit IA-01, 2026-10-03): opens the active show's Producer Mode, Episodes → Production; `ProductionTab` is gone | URL only |
 | `/universe/assets` | redirect → `/assets` (App.jsx:331) | redirect | — |
 | `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` (App.jsx:332) | live | URL only |
 | `/universe/tensions` | `pages/UniverseTensionsPage.jsx` (App.jsx:333) | live | URL only |
@@ -589,7 +589,7 @@ on by this document.
 |---|---|---|
 | `/universe/social-import` | `pages/UniverseSocialImportPage.jsx` | Standalone page wrapper that renders the Social Import view for a universe. |
 | `/universe/series` | `pages/SeriesPage.jsx` | Standalone page for managing a universe's series, books, and linked shows (list/create/update/delete). |
-| `/universe/production` | `pages/UniverseProductionPage.jsx` | Standalone page wrapper around `ProductionTab`, listing/managing a universe's shows for production. |
+| `/universe/production` | `pages/UniverseProductionPage.jsx` | Redirect into the active show's Producer Mode (Episodes → Production); its former `ProductionTab` dashboard duplicated Producer Mode's Overview and Episodes tabs and was removed (audit IA-01, 2026-10-03). |
 | `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` | Standalone page rendering the "world-state" sub-tab of the `WorldStateTensions` component. |
 | `/universe/tensions` | `pages/UniverseTensionsPage.jsx` | Standalone page rendering the "tensions" sub-tab of the `WorldStateTensions` component. |
 | `/universe/story-dashboard` | `pages/StoryDashboardPage.jsx` | Standalone page wrapper that renders the Story Dashboard component. |

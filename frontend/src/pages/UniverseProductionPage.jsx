@@ -1,78 +1,30 @@
 /**
- * UniverseProductionPage.jsx
- * Standalone page wrapper for ProductionTab
- * Route: /universe/production
+ * /universe/production (audit IA-01, 2026-10-03). It used to render its
+ * own Game Director dashboard (ProductionTab: world state, character
+ * meters, an episode browser, a tool strip) for a picked show: a third
+ * production landing surface beside Producer Mode, which has the same
+ * sections as its Overview and Episodes tabs, and nothing linked here any
+ * more. The route now opens the active show's Producer Mode on Episodes →
+ * Production; with several shows and none active it asks which, as every
+ * show page does (useActiveShow); with none it goes to the shows list.
  */
+import { Navigate } from 'react-router-dom';
+import useActiveShow from '../hooks/useActiveShow';
+import ShowChooser from '../components/ShowChooser';
 
-import { useState, useEffect, useCallback } from 'react';
-import apiClient from '../services/api';
-import ProductionTab from './ProductionTab';
-import './UniversePage.css';
-
-const SHOWS_API = '/api/v1/shows';
-const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e';
-
-// File-local cross-CP duplicate per v2.12 §9.11 — listShowsApi reaches
-// 5-fold cross-CP existence after CP15 (6-fold including WorldSetupGuide).
-// Path A (continue file-local convention) per CP15 Decision 2.
-export const listShowsApi = () =>
-  apiClient.get(SHOWS_API).then((r) => r.data);
-
-function useWindowWidth() {
-  const [w, setW] = useState(window.innerWidth);
-  useEffect(() => {
-    const h = () => setW(window.innerWidth);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
-  }, []);
-  return w;
-}
+export const showProductionPath = (showId) => `/shows/${encodeURIComponent(showId)}/world?tab=episodes-production`;
 
 export default function UniverseProductionPage() {
-  const width = useWindowWidth();
-  const isMobile = width < 640;
-  const isTablet = width >= 640 && width < 1024;
-  const [shows, setShows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
-
-  function showToast(msg, type = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
-  }
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const shData = await listShowsApi();
-      const showsList = shData.data || shData.shows || shData;
-      setShows(Array.isArray(showsList) ? showsList : []);
-    } catch (_) {
-      setShows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  if (loading) return <div className="up-loading">Loading production…</div>;
-
-  return (
-    <div className="up-shell">
-      <div className="up-tab-content" style={isMobile ? { padding: '0 16px' } : isTablet ? { padding: '0 28px' } : undefined}>
-        <ProductionTab
-          shows={shows}
-          universeId={LALAVERSE_ID}
-          onChanged={() => { load(); showToast('Show updated'); }}
-          showToast={showToast}
-          isMobile={isMobile}
-          isTablet={isTablet}
-        />
+  const { shows, showId, loaded, failed, needsChoice, choose } = useActiveShow();
+  if (!loaded) return <div className="up-loading">Opening production…</div>;
+  if (showId) return <Navigate to={showProductionPath(showId)} replace />;
+  if (needsChoice) return <ShowChooser shows={shows} onChoose={choose} purpose="to open its production board" />;
+  if (failed) {
+    return (
+      <div role="alert" style={{ maxWidth: 520, margin: '24px auto', padding: '12px 16px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', fontSize: 13 }}>
+        The shows could not be loaded, so there is no production board to open. <a href="/shows">Shows</a>
       </div>
-      {toast && (
-        <div className={`up-toast ${toast.type === 'error' ? 'up-toast--error' : 'up-toast--success'}`}>{toast.msg}</div>
-      )}
-    </div>
-  );
+    );
+  }
+  return <Navigate to="/shows" replace />;
 }
