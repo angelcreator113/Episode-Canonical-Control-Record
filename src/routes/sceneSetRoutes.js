@@ -460,6 +460,17 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       }
     }
 
+    // A set's World Location: an existing one, or null/'' to unlink. An
+    // approved base keeps its location until it is un-approved (S6).
+    if (updates.world_location_id !== undefined) {
+      if (updates.world_location_id === '') updates.world_location_id = null;
+      if (updates.world_location_id && !/^[0-9a-f-]{36}$/i.test(String(updates.world_location_id))) {
+        return res.status(400).json({ success: false, error: 'world_location_id must be an existing World Location' });
+      }
+      const refusal = await approvedBase.locationChangeRefusal(SceneSet.sequelize, set, updates.world_location_id);
+      if (refusal) return res.status(refusal.status).json({ success: false, error: refusal.error });
+    }
+
     // Handle room_properties — stored in visual_language JSONB
     if (req.body.room_properties) {
       const vl = set.visual_language || {};

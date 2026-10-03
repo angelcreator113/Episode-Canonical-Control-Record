@@ -45,6 +45,29 @@ async function baseReplaceRefusal(sequelize, sceneSetId) {
   };
 }
 
+/**
+ * null when the set may be linked to nextLocationId (an id, or null to
+ * unlink); otherwise { status, error }. The location must exist; a set whose
+ * base is its location's approved base keeps that location until the base is
+ * un-approved, so the location never points at a set that is elsewhere.
+ */
+async function locationChangeRefusal(sequelize, sceneSet, nextLocationId) {
+  const next = nextLocationId || null;
+  if ((sceneSet.world_location_id || null) === next) return null;
+  if (next) {
+    const [rows] = await sequelize.query(
+      'SELECT id FROM world_locations WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+      { replacements: { id: next } }
+    );
+    if (!rows?.length) return { status: 400, error: 'world_location_id must be an existing World Location' };
+  }
+  const approving = await locationApprovingSet(sequelize, sceneSet.id);
+  if (approving) {
+    return { status: 409, error: `This set's base is the approved base of ${approving.name}. Un-approve it before changing its World Location.` };
+  }
+  return null;
+}
+
 /** Thrown by generation when it would replace an approved base. */
 class ApprovedBaseError extends Error {
   constructor(refusal) {
@@ -123,6 +146,7 @@ async function approvalsForSets(sequelize, sets) {
 module.exports = {
   locationApprovingSet,
   baseReplaceRefusal,
+  locationChangeRefusal,
   assertBaseReplaceable,
   ApprovedBaseError,
   approveBase,

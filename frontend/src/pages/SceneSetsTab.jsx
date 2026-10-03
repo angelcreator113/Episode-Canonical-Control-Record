@@ -110,6 +110,100 @@ export function SetShowSelect({ set, shows, onSaved, onError }) {
   );
 }
 
+export const listWorldLocationsApi = () => apiClient.get(`${API_BASE}/world/locations`);
+export const createWorldLocationApi = (payload) => apiClient.post(`${API_BASE}/world/locations`, payload);
+
+/**
+ * The set's World Location: choose an existing one, or make a new one named
+ * after the set. Approving a base needs one (S6). An approved base keeps its
+ * location until it is un-approved, so the choice is locked then.
+ */
+export function SetWorldLocationSelect({ set, onSaved, onError }) {
+  const [locations, setLocations] = useState(null);
+  const [value, setValue] = useState(set.world_location_id || '');
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  useEffect(() => { setValue(set.world_location_id || ''); }, [set.world_location_id]);
+  useEffect(() => {
+    let cancelled = false;
+    listWorldLocationsApi()
+      .then((r) => { if (!cancelled) setLocations(r.data?.locations || []); })
+      .catch((err) => {
+        console.error('[SceneSets] world locations load failed:', err);
+        if (!cancelled) setLocations([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+  const save = async (next) => {
+    const prev = value;
+    setValue(next);
+    setSaving(true);
+    try {
+      await updateSceneSetApi(set.id, { world_location_id: next || null });
+      onSaved?.(next || null);
+    } catch (err) {
+      console.error('[SceneSets] world location save failed:', err);
+      setValue(prev);
+      onError?.(err.response?.data?.error || 'Could not change the World Location');
+    }
+    setSaving(false);
+  };
+  const create = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      const r = await createWorldLocationApi({ name, location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior' });
+      const loc = r.data?.location;
+      if (!loc?.id) throw new Error('No location was returned');
+      setLocations((ls) => [...(ls || []), loc]);
+      setCreating(false);
+      setSaving(false);
+      await save(loc.id);
+    } catch (err) {
+      console.error('[SceneSets] world location create failed:', err);
+      onError?.(err.response?.data?.error || err.message || 'Could not make the World Location');
+      setSaving(false);
+    }
+  };
+  if (set.base_approved) {
+    const name = (locations || []).find((l) => l.id === set.world_location_id)?.name;
+    return (
+      <div className="scene-sets-location-locked" data-testid={`set-location-${set.id}`}>
+        <span>{name || 'Linked'}</span>
+        <span className="scene-sets-location-hint">Its base is this location's approved base. Un-approve it to change the location.</span>
+      </div>
+    );
+  }
+  if (creating) {
+    return (
+      <div className="scene-sets-location-create">
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="New World Location name"
+          onKeyDown={(e) => { if (e.key === 'Enter') create(); if (e.key === 'Escape') setCreating(false); }} autoFocus disabled={saving} />
+        <button type="button" className="scene-sets-btn-generate" onClick={create} disabled={saving || !newName.trim()}>
+          {saving ? <Loader size={11} className="spin" /> : <Plus size={11} />} Create
+        </button>
+        <button type="button" className="scene-sets-btn-details" onClick={() => setCreating(false)} disabled={saving}>Cancel</button>
+      </div>
+    );
+  }
+  const list = [...(locations || [])].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  return (
+    <div className="scene-sets-location-row">
+      <select value={value} onChange={(e) => save(e.target.value)} disabled={saving || locations === null}
+        aria-label="World Location" className="scene-sets-select-sm" data-testid={`set-location-${set.id}`}>
+        <option value="">{locations === null ? 'Loading…' : 'No World Location'}</option>
+        {value && !list.some((l) => l.id === value) && <option value={value}>Linked location</option>}
+        {list.map((l) => <option key={l.id} value={l.id}>{l.city ? `${l.name} · ${l.city}` : l.name}</option>)}
+      </select>
+      <button type="button" className="scene-sets-btn-details" onClick={() => { setNewName(set.name || ''); setCreating(true); }} disabled={saving}>
+        <Plus size={11} /> New location
+      </button>
+    </div>
+  );
+}
+
 // Evoni, 2026-10-02: "when a set's base image changes (upload or generate),
 // its stored description written by the image analysis should be refreshed
 // or flagged, since a description of an old image now drives every prompt."
@@ -1337,6 +1431,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <SetShowSelect set={set} shows={allShows} onSaved={() => { showToast('Show updated'); onRefresh?.(); }} onError={(msg) => showToast(msg, 'error')} />
                     </div>
 
+                    {/* The set's World Location: approving its base needs one (S6). */}
+                    <div className="scene-sets-modal-field" id={`set-location-field-${set.id}`}>
+                      <label><MapPin size={11} /> World Location</label>
+                      <SetWorldLocationSelect set={set} onSaved={(id) => { showToast(id ? 'World Location linked' : 'World Location removed'); onRefresh?.(); }} onError={(msg) => showToast(msg, 'error')} />
+                    </div>
+
                     {/* Time of Day & Season */}
                     <div className="scene-sets-modal-field">
                       <label><Clock size={11} /> Environment</label>
@@ -1509,7 +1609,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           <p className="scene-sets-ws-main-note">Event versions at this location are made from this image. Un-approve it to replace it.</p>
                         )}
                         {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
-                          <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>To approve this image as the base, the set needs a World Location.</p>
+                          <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
+                            To approve this image as the base, the set needs a World Location.{' '}
+                            <button type="button" className="scene-sets-link-btn" onClick={() => openWorkspace('details')} data-testid={`link-location-${set.id}`}>Link a World Location</button>
+                          </p>
                         )}
                         <div className="scene-sets-ws-main-actions">
                           {/* S6: an approved base is not replaced until it is un-approved. */}
@@ -2548,6 +2651,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.base_approved !== ns.base_approved) return false;
+  if (ps.world_location_id !== ns.world_location_id) return false;
+  if (ps.location_approved_base?.scene_set_id !== ns.location_approved_base?.scene_set_id) return false;
   const pe = ps.events || [], ne = ns.events || [];
   if (pe.length !== ne.length) return false;
   for (let i = 0; i < pe.length; i++) {

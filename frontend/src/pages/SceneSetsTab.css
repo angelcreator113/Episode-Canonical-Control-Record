@@ -4167,3 +4167,12 @@
 /* Five workspace tabs scroll sideways on a phone rather than clip. */
 .scene-sets-modal-tabs { overflow-x: auto; scrollbar-width: none; }
 .scene-sets-modal-tabs .scene-sets-modal-tab { flex-shrink: 0; white-space: nowrap; }
+
+/* The set's World Location (Details & Usage). */
+.scene-sets-location-row,
+.scene-sets-location-create { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.scene-sets-location-row .scene-sets-select-sm { flex: 1 1 180px; min-width: 0; }
+.scene-sets-location-create input { flex: 1 1 180px; min-width: 0; padding: 4px 8px; border: 1px solid #e2d8c3; border-radius: 6px; font-size: 12px; }
+.scene-sets-location-locked { display: grid; gap: 2px; font-size: 12px; }
+.scene-sets-location-hint { font-size: 10px; color: #94a3b8; }
+.scene-sets-link-btn { background: none; border: none; padding: 0; color: #8a6d1f; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
