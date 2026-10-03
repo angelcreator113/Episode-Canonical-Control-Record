@@ -2412,7 +2412,43 @@ router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, as
   }
 });
 
+/**
+ * The angles a spec's camera contracts ask for (audit SCENE-01/02,
+ * 2026-10-03): one row per contract whose label the set does not have yet,
+ * with its zone kind. The kind is the contract's own (front, inside, back,
+ * area, zone, extra) when it names one, else the one its label implies
+ * (ESTABLISHING/DOORWAY: front, WIDE: inside), else null, so the beat
+ * planner can resolve "Front" from a spec-made angle. `only` retries a
+ * chosen subset of labels. The label is the idempotent key: the same
+ * request twice creates nothing the second time.
+ */
+function contractAngleRows(contracts, existingLabels, { only = null } = {}) {
+  const { ANGLE_KINDS, KIND_FROM_LABEL } = require('../constants/beatLocations');
+  const have = new Set([...existingLabels].map((l) => String(l || '').toUpperCase()));
+  const wanted = only ? new Set(only.map((l) => String(l || '').toUpperCase())) : null;
+  const rows = [];
+  const existing = [];
+  contracts.forEach((c, i) => {
+    const rawLabel = (c.angle || `ANGLE_${i + 1}`).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    const label = rawLabel.slice(0, 50); // angle_label is STRING(50)
+    if (wanted && !wanted.has(label)) return;
+    if (have.has(label)) { existing.push(label); return; }
+    have.add(label);
+    const kind = String(c.kind || c.zone_kind || '').toLowerCase();
+    rows.push({
+      angle_label: label,
+      angle_name: (c.description || label).slice(0, 255),
+      angle_description: c.validation || c.description || '',
+      camera_direction: c.description || '',
+      angle_kind: ANGLE_KINDS.includes(kind) ? kind : (KIND_FROM_LABEL[label] || null),
+      generation_status: 'pending',
+    });
+  });
+  return { rows, existing };
+}
+
 // POST /api/v1/scene-sets/:id/spec/create-angles - Create angles from spec camera contracts
+// Body: { labels?: string[] } to create (retry) only those contracts.
 router.post('/:id/spec/create-angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
@@ -2421,40 +2457,36 @@ router.post('/:id/spec/create-angles', validateUUIDParam('id'), requireAuth, asy
     if (!spec?.camera_contracts?.length) {
       return res.status(400).json({ success: false, error: 'No camera contracts in scene spec' });
     }
+    const only = Array.isArray(req.body?.labels) ? req.body.labels : null;
 
-    // Get existing angle labels to avoid duplicates
-    const existing = await SceneAngle.findAll({ where: { scene_set_id: set.id }, attributes: ['angle_label'] });
-    const existingLabels = new Set(existing.map(a => a.angle_label?.toUpperCase()));
+    const existingAngles = await SceneAngle.findAll({ where: { scene_set_id: set.id }, attributes: ['angle_label'] });
+    const { rows, existing } = contractAngleRows(spec.camera_contracts, existingAngles.map((a) => a.angle_label), { only });
 
-    const contracts = spec.camera_contracts;
+    // Every view is tried; the ones that fail are named with their reason,
+    // and the ones that succeed stay (audit SCENE-02). A retry with
+    // `labels` creates only the named views.
     const created = [];
-
-    for (let i = 0; i < contracts.length; i++) {
-      const c = contracts[i];
-      const rawLabel = (c.angle || `ANGLE_${i + 1}`).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-      const label = rawLabel.slice(0, 50); // angle_label is STRING(50)
-      if (existingLabels.has(label)) continue;
-
+    const failed = [];
+    for (const [i, row] of rows.entries()) {
       try {
-        const angle = await SceneAngle.create({
-          scene_set_id: set.id,
-          angle_label: label,
-          angle_name: (c.description || label).slice(0, 255),
-          angle_description: c.validation || c.description || '',
-          camera_direction: c.description || '',
-          sort_order: existing.length + i,
-          generation_status: 'pending',
-        });
-        created.push(angle);
-        existingLabels.add(label);
+        const angle = await SceneAngle.create({ ...row, scene_set_id: set.id, sort_order: existingAngles.length + i });
+        created.push({ id: angle.id, angle_label: angle.angle_label, angle_kind: angle.angle_kind });
       } catch (angleErr) {
-        console.warn(`[CreateAngles] Failed to create angle "${label}":`, angleErr.message);
+        console.error(`[CreateAngles] Failed to create angle "${row.angle_label}":`, angleErr.message);
+        failed.push({ angle_label: row.angle_label, reason: angleErr.message });
       }
     }
 
     res.json({
-      success: true,
-      data: { angles_created: created.length, total: existing.length + created.length },
+      success: failed.length === 0,
+      ...(failed.length ? { error: `${failed.length} of ${rows.length} view${rows.length !== 1 ? 's' : ''} could not be created`, code: 'ANGLES_PARTIAL' } : {}),
+      data: {
+        created,
+        existing,
+        failed,
+        angles_created: created.length,
+        total: existingAngles.length + created.length,
+      },
     });
   } catch (err) {
     console.error('POST /:id/spec/create-angles error:', err);
@@ -3093,3 +3125,4 @@ router.get('/:id/comparison', validateUUIDParam('id'), requireAuth, async (req, 
 
 module.exports = router;
 module.exports.sceneSetListScope = sceneSetListScope;
+module.exports.contractAngleRows = contractAngleRows;
