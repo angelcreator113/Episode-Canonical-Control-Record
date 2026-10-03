@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
 import apiClient from '../services/api';
-import { SceneSetsBackLink } from '../components/OpenInSceneSets';
+import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import './SceneSetsTab.css';
@@ -67,6 +67,56 @@ export function filterSceneSets(sets, { scope = 'all', showId = null, type = 'AL
   const q = query.trim().toLowerCase();
   if (q) result = result.filter((s) => s.name?.toLowerCase().includes(q) || s.show?.name?.toLowerCase().includes(q));
   return [...result].sort((SORTS[sort] || SORTS.newest).cmp);
+}
+
+/**
+ * Whether the image a link came here for exists yet: zone is an angle id, a
+ * zone kind or look:<eventId>. { ready, what } or null when there is no zone
+ * or no set to judge it on.
+ */
+export function handoffReady(set, zone) {
+  if (!set || !zone) return null;
+  const z = String(zone);
+  if (z.startsWith('look:')) {
+    const look = (set.looks || []).find((l) => String(l.event_id) === z.slice(5));
+    return { ready: Boolean(look && look.status === 'complete' && look.image_url), what: look?.event_name ? `${look.event_name}'s look` : "The event's look" };
+  }
+  const matches = (set.angles || []).filter((a) => a.id === z || a.angle_kind === z);
+  const done = matches.find((a) => a.generation_status === 'complete' && a.still_image_url);
+  const named = done || matches[0];
+  return { ready: Boolean(done), what: named ? (named.angle_name || named.angle_label) : (ANGLE_KIND_OPTIONS[z] || 'The view') };
+}
+
+/**
+ * Arriving from an episode or event (S8: "with a way back to the page it came
+ * from"): one line naming the page, the set and what it needs; once the image
+ * exists, it says so and the way back becomes the main action. The image is
+ * made here; choosing it for a beat stays on the page it came from.
+ */
+export function SceneSetsHandoff({ set = null, zone = null }) {
+  const [params] = useSearchParams();
+  const from = params.get('from');
+  if (!isAppPath(from)) return null;
+  const label = params.get('fromLabel') || 'the page you came from';
+  const need = params.get('need');
+  const state = handoffReady(set, zone);
+  return (
+    <div className={`scene-sets-handoff${state?.ready ? ' is-ready' : ''}`} data-testid="scene-sets-handoff">
+      <p className="scene-sets-handoff-line">
+        <strong>Working on {label}</strong>
+        {set?.name && <> · {set.name}</>}
+        {need && <> · <span data-testid="scene-sets-handoff-need">{need}</span></>}
+      </p>
+      {state?.ready && (
+        <p className="scene-sets-handoff-ready" data-testid="scene-sets-handoff-ready">
+          <CheckCircle2 size={13} /> {state.what} has its image now.
+        </p>
+      )}
+      <Link className={state?.ready ? 'scene-sets-btn-generate scene-sets-handoff-back' : 'scene-sets-back-link'} to={from} data-testid="scene-sets-back">
+        {state?.ready ? `Back to ${label}` : `← Back to ${label}`}
+      </Link>
+    </div>
+  );
 }
 
 export function usesText(uses) {
@@ -1342,6 +1392,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   <X size={16} />
                 </button>
               </div>
+
+              {/* The set a link opened: the same handoff line, above the scrolling body so the way back stays in view. */}
+              {focused && <div className="scene-sets-modal-handoff"><SceneSetsHandoff set={set} zone={focusZone} /></div>}
 
               {/* The set's workspace: backgrounds, event looks, details, and the advanced scene spec. */}
               <div className="scene-sets-modal-tabs">
@@ -3520,7 +3573,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   return (
     <div className="scene-sets-container">
       {/* S8: the way back to the page that opened Scene Sets; else, in a show, back to the show. */}
-      {searchParams.get('from') ? <SceneSetsBackLink /> : pageShowId && (
+      {isAppPath(searchParams.get('from')) ? <SceneSetsHandoff set={sets.find((x) => x.id === focusSetId) || null} zone={focusZone} /> : pageShowId && (
         <Link className="scene-sets-back-link" to={`/shows/${pageShowId}`} data-testid="scene-sets-back-to-show">
           ← Back to {allShows.find((sh) => sh.id === pageShowId)?.name || 'show'}
         </Link>
@@ -3679,7 +3732,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       )}
 
       {/* Empty state */}
-      {!loading && !error && filtered.length === 0 && (sets.length > 0 && !isFiltering && activeScope === 'show' ? (
+      {!loading && !error && visibleSets.length === 0 && (sets.length > 0 && !isFiltering && activeScope === 'show' ? (
         <div className="scene-sets-empty" data-testid="scene-sets-show-empty">
           <Camera size={32} strokeWidth={1} />
           <p className="scene-sets-empty-title">No scene sets in this show yet</p>
@@ -3723,7 +3776,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       {!loading && focusSetId && !sets.some((s) => s.id === focusSetId) && (
         <p className="scene-sets-focus-missing" data-testid="scene-sets-focus-missing">That scene set was not found.</p>
       )}
-      {!loading && filtered.length > 0 && (
+      {!loading && visibleSets.length > 0 && (
         <div className="scene-sets-grid">
           {visibleSets.map(set => (
             <SceneSetCard

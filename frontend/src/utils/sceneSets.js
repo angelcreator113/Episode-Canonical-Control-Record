@@ -15,13 +15,16 @@ export function sceneSetThumb(set) {
  * Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set.
  * S8 (Evoni, 2026-10-02): "landing on the exact set and zone, with a way
  * back to the page it came from": zone (an angle id, a zone kind or
- * look:<eventId>), from (a path in this app) and fromLabel.
+ * look:<eventId>), from (a path in this app), fromLabel and need.
  */
-export const sceneSetPath = (showId, setId, { zone = null, from = null, fromLabel = null } = {}) => {
+export const sceneSetPath = (showId, setId, { zone = null, from = null, fromLabel = null, need = null } = {}) => {
   const extra = [
     zone ? `&zone=${encodeURIComponent(zone)}` : '',
     from ? `&from=${encodeURIComponent(from)}` : '',
     fromLabel ? `&fromLabel=${encodeURIComponent(fromLabel)}` : '',
+    // What the page that sent Evoni here needs from the set, in its words
+    // ("Entrance angle missing"); Scene Sets shows it in its handoff line.
+    need ? `&need=${encodeURIComponent(String(need).slice(0, 140))}` : '',
   ].join('');
   return `/shows/${showId}/world?tab=scene-sets&set=${setId}${extra}`;
 };

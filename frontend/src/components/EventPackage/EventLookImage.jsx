@@ -224,7 +224,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
         <p className="ell-note" data-testid="event-look-locked">The episode is accepted: the Place is locked.</p>
       )}
       {!canGenerate && openSetId && (
-        <OpenInSceneSets showId={showId} setId={openSetId} zone={`look:${eventId}`} fromLabel={fromLabel}
+        <OpenInSceneSets showId={showId} setId={openSetId} zone={`look:${eventId}`} fromLabel={fromLabel} need="This event's look"
           className="epp-inline-link ell-open" testId="event-look-open" />
       )}
 

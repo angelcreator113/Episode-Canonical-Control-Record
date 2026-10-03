@@ -181,7 +181,7 @@ export default function EpisodeLocationsStep({
             </div>
             {/* S8 (§8(dd)): the gap's one action, on its set and zone. */}
             <OpenInSceneSets showId={showId} setId={g.scene_set_id} zone={g.angle_id || g.kinds?.[0] || null}
-              fromLabel="the event" className="els-gap-open" testId={`els-gap-open-${key}`} />
+              fromLabel="the event" need={g.text} className="els-gap-open" testId={`els-gap-open-${key}`} />
           </div>
         ))}
         {!value?.scene_set_id && missing.includes(key) && (

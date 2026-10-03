@@ -112,4 +112,11 @@ describe('SceneSetsTab: finding sets', () => {
     expect(cards()).toHaveLength(SCENE_SETS_PAGE_SIZE + 1);
     expect(screen.queryByTestId('scene-sets-focus-missing')).toBeNull();
   });
+
+  test('a set a link focuses on is shown even when the filter matches nothing else', async () => {
+    serve([S.ready]); // no show, so not in This show
+    render(<MemoryRouter initialEntries={['/shows/show-1/world?tab=scene-sets&set=s-ready']}><SceneSetsTab showId="show-1" /></MemoryRouter>);
+    await waitFor(() => expect(cards()).toEqual(['s-ready']));
+    expect(screen.queryByTestId('scene-sets-show-empty')).toBeNull();
+  });
 });

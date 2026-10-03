@@ -11,7 +11,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { sceneSetPath, isAppPath } from '../utils/sceneSets';
 
-export default function OpenInSceneSets({ showId, setId, zone = null, from: fromPath = null, fromLabel = null, className = 'open-in-scene-sets', testId }) {
+export default function OpenInSceneSets({ showId, setId, zone = null, from: fromPath = null, fromLabel = null, need = null, className = 'open-in-scene-sets', testId }) {
   const location = useLocation();
   if (!setId) return null;
   if (!showId) {
@@ -21,7 +21,7 @@ export default function OpenInSceneSets({ showId, setId, zone = null, from: from
   // state, e.g. World Admin's open event), else this one.
   const from = fromPath || `${location.pathname}${location.search || ''}`;
   return (
-    <Link className={className} data-testid={testId} to={sceneSetPath(showId, setId, { zone, from, fromLabel })}>
+    <Link className={className} data-testid={testId} to={sceneSetPath(showId, setId, { zone, from, fromLabel, need })}>
       Open in Scene Sets →
     </Link>
   );

@@ -218,7 +218,7 @@ describe('EventLookImage in the Place (S8): status only', () => {
     renderIt({ canGenerate: false });
     const link = await screen.findByTestId('event-look-open');
     expect(link.textContent).toBe('Open in Scene Sets →');
-    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-1&zone=look%3Aev-1&from=${encodeURIComponent('/shows/show-1/events/ev-1')}&fromLabel=Event`);
+    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-1&zone=look%3Aev-1&from=${encodeURIComponent('/shows/show-1/events/ev-1')}&fromLabel=Event&need=${encodeURIComponent("This event's look")}`);
     expect(screen.queryByTestId('generate-this-look')).toBeNull();
     expect(screen.getByTestId('event-look-approved-base').textContent).toContain("Make this event's look in Scene Sets.");
     expect(api.post).not.toHaveBeenCalled();

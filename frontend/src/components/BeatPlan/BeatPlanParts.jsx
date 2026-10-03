@@ -64,6 +64,7 @@ export function MissingAngle({ beat, showId = null, fromLabel = null, statusOnly
           setId={beat.scene_set_id}
           zone={missing.angle_id || missing.kind || missing.kinds?.[0] || null}
           fromLabel={fromLabel}
+          need={missing.text}
           className="scene-planner-missing-btn"
           testId={`beat-open-scene-sets-${n}`}
         />
