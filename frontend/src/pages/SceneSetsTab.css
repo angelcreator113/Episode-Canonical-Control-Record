@@ -4176,3 +4176,17 @@
 .scene-sets-location-locked { display: grid; gap: 2px; font-size: 12px; }
 .scene-sets-location-hint { font-size: 10px; color: #94a3b8; }
 .scene-sets-link-btn { background: none; border: none; padding: 0; color: #8a6d1f; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Library filters: which shows, status, sort; and the pager. */
+.scene-sets-filters-row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.scene-sets-scope { display: inline-flex; border: 1px solid #e2d8c3; border-radius: 999px; overflow: hidden; }
+.scene-sets-scope-btn {
+  background: transparent; border: none; padding: 4px 12px; font-family: 'DM Mono', monospace; font-size: 11px;
+  color: #6b5b3e; cursor: pointer; display: inline-flex; gap: 4px; align-items: center;
+}
+.scene-sets-scope-btn.active { background: #2D1B69; color: #fff; }
+.scene-sets-scope-count { opacity: 0.7; font-size: 10px; }
+.scene-sets-pager {
+  display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
+  margin: 16px 0 8px; font-family: 'DM Mono', monospace; font-size: 11px; color: #8a7d63;
+}
