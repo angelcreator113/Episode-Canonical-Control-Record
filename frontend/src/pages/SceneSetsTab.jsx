@@ -9,6 +9,7 @@ import DressedAngles from '../components/SceneSets/DressedAngles';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
+import useSpecBuild from '../hooks/useSpecBuild';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -1107,8 +1108,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [descRefining, setDescRefining] = useState(false);
-  const [buildingSpec, setBuildingSpec] = useState(false);
-  const [specProgress, setSpecProgress] = useState(null); // null | 'sending' | 'analyzing' | 'parsing' | 'done' | 'error'
+  // Building the spec (audit SCENE-04): one request, the real elapsed time,
+  // an error that stays until the next attempt; no pretended stages.
+  // showToast is declared below; the wrappers read it when called, not now.
+  const specBuild = useSpecBuild({ request: (payload) => generateSceneSpecApi(set.id, payload), onToast: (msg, tone) => showToast(msg, tone), onRefresh });
+  const buildingSpec = specBuild.building;
   const sceneSpec = set.scene_spec || set.visual_language?.scene_spec || null;
   const hasSpec = !!(sceneSpec?.objects?.length);
   const cameraContractCount = sceneSpec?.camera_contracts?.length || 0;
@@ -1838,33 +1842,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
                               Analyze your image to catalog every object, define zones, and create camera contracts for consistent angle generation.
                             </div>
-                            <button onClick={async () => {
-                              setBuildingSpec(true);
-                              setSpecProgress('sending');
-                              try {
-                                const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                                const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                                const r = await generateSceneSpecApi(set.id, {});
-                                clearTimeout(progressTimer);
-                                clearTimeout(parseTimer);
-                                const d = r.data;
-                                if (d.success) {
-                                  setSpecProgress('done');
-                                  showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                                  if (onRefresh) await onRefresh();
-                                } else {
-                                  setSpecProgress('error');
-                                  showToast(d.error || 'Failed', 'error');
-                                }
-                              } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
-                              setBuildingSpec(false);
-                              setTimeout(() => setSpecProgress(null), 2000);
-                            }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                              {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image to Claude...' : specProgress === 'analyzing' ? 'Claude is cataloging every object...' : specProgress === 'parsing' ? 'Building zones + camera contracts...' : 'Analyzing room...'}</> : <><FileText size={12} /> Build Scene Spec</>}
+                            <button onClick={() => specBuild.build({})} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }} data-testid={`build-spec-${set.id}`}>
+                              {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing the image… {specBuild.elapsed}s</> : <><FileText size={12} /> Build Scene Spec</>}
                             </button>
                             {buildingSpec && (
                               <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f1', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
-                                Claude Vision is analyzing your image to identify every object, define spatial zones, set up continuity rules, and create camera contracts. This takes 15-30 seconds.
+                                One request to Claude Vision: it reads the image, catalogs the objects, defines the zones and writes the camera contracts, and answers once. Usually 15–30 seconds, sometimes longer.
+                              </div>
+                            )}
+                            {specBuild.status === 'error' && (
+                              <div role="alert" data-testid={`build-spec-error-${set.id}`} style={{ marginTop: 8, padding: '8px 10px', background: '#FBEFF3', border: '1px solid #C06E87', borderRadius: 6, fontSize: 10, color: '#2C2C2C', lineHeight: 1.5 }}>
+                                The spec was not built: {specBuild.error}. The saved spec, if any, is unchanged.
                               </div>
                             )}
                           </>
@@ -1895,27 +1883,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             </div>
                             <button onClick={async () => {
                               if (cameraContractCount === 0) {
-                                setBuildingSpec(true);
-                                setSpecProgress('sending');
-                                showToast('Rebuilding spec to generate camera contracts...');
-                                try {
-                                  const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                                  const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                                  const r = await generateSceneSpecApi(set.id, { force: true });
-                                  clearTimeout(progressTimer);
-                                  clearTimeout(parseTimer);
-                                  const d = r.data;
-                                  if (d.success) {
-                                    showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                                    if (onRefresh) await onRefresh();
-                                  } else {
-                                    showToast(d.error || 'Failed', 'error');
-                                  }
-                                } catch (e) {
-                                  showToast(e.response?.data?.error || e.message, 'error');
-                                }
-                                setBuildingSpec(false);
-                                setSpecProgress(null);
+                                await specBuild.build({ force: true });
                                 return;
                               }
 
@@ -1984,29 +1952,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
                             </div>
                             <button
-                              onClick={async () => {
-                                setBuildingSpec(true);
-                                setSpecProgress('sending');
-                                showToast('Building Scene Spec for this location...');
-                                try {
-                                  const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                                  const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                                  const r = await generateSceneSpecApi(set.id, { force: true });
-                                  clearTimeout(progressTimer);
-                                  clearTimeout(parseTimer);
-                                  const d = r.data;
-                                  if (d.success) {
-                                    showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
-                                    if (onRefresh) await onRefresh();
-                                  } else {
-                                    showToast(d.error || 'Failed', 'error');
-                                  }
-                                } catch (e) {
-                                  showToast(e.response?.data?.error || e.message, 'error');
-                                }
-                                setBuildingSpec(false);
-                                setSpecProgress(null);
-                              }}
+                              onClick={() => specBuild.build({ force: true })}
                               disabled={buildingSpec}
                               className="scene-sets-btn-details"
                               style={{ fontSize: 10, padding: '4px 8px' }}
@@ -2218,46 +2164,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <button
                           className="scene-sets-btn-generate"
                           disabled={buildingSpec}
-                          onClick={async () => {
-                            setBuildingSpec(true);
-                            setSpecProgress('sending');
-                            try {
-                              const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                              const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                              const r = await generateSceneSpecApi(set.id, {});
-                              clearTimeout(progressTimer);
-                              clearTimeout(parseTimer);
-                              const d = r.data;
-                              if (d.success) {
-                                setSpecProgress('done');
-                                showToast(`Spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                                if (onRefresh) await onRefresh();
-                              } else {
-                                setSpecProgress('error');
-                                showToast(d.error || 'Failed', 'error');
-                              }
-                            } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
-                            setBuildingSpec(false);
-                            setTimeout(() => setSpecProgress(null), 2000);
-                          }}
+                          onClick={() => specBuild.build({})}
+                          data-testid={`build-spec-tab-${set.id}`}
                         >
-                          {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image...' : specProgress === 'analyzing' ? 'Cataloging objects...' : specProgress === 'parsing' ? 'Building contracts...' : 'Building...'}</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
+                          {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing the image… {specBuild.elapsed}s</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
                         </button>
                         {buildingSpec && (
                           <div style={{ marginTop: 12, padding: 12, background: '#f8f6f1', borderRadius: 8, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
-                            <div style={{ fontWeight: 600, color: '#2C2C2C', marginBottom: 6 }}>What's happening:</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: specProgress === 'sending' ? 1 : 0.4 }}>
-                              {specProgress === 'sending' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : <CheckCircle2 size={10} style={{ color: '#16a34a' }} />}
-                              Sending image to Claude Vision
+                            <div style={{ fontWeight: 600, color: '#2C2C2C', marginBottom: 6 }}>What's happening</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <Loader size={10} className="spin" style={{ color: '#B8962E' }} />
+                              One request to Claude Vision, {specBuild.elapsed}s so far: it reads the image, catalogs the objects, defines the zones and writes the camera contracts, and answers once. Usually 15–30 seconds, sometimes longer.
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: specProgress === 'analyzing' ? 1 : specProgress === 'parsing' || specProgress === 'done' ? 0.4 : 0.2 }}>
-                              {specProgress === 'analyzing' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : specProgress === 'parsing' || specProgress === 'done' ? <CheckCircle2 size={10} style={{ color: '#16a34a' }} /> : <FileText size={10} style={{ color: '#ccc' }} />}
-                              Identifying objects, materials, textures, colors
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: specProgress === 'parsing' ? 1 : specProgress === 'done' ? 0.4 : 0.2 }}>
-                              {specProgress === 'parsing' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : specProgress === 'done' ? <CheckCircle2 size={10} style={{ color: '#16a34a' }} /> : <Camera size={10} style={{ color: '#ccc' }} />}
-                              Building zones, walls, camera contracts, room states
-                            </div>
+                          </div>
+                        )}
+                        {specBuild.status === 'error' && (
+                          <div role="alert" data-testid={`build-spec-tab-error-${set.id}`} style={{ marginTop: 12, padding: 12, background: '#FBEFF3', border: '1px solid #C06E87', borderRadius: 8, fontSize: 11, color: '#2C2C2C', lineHeight: 1.5 }}>
+                            The spec was not built: {specBuild.error}. The saved spec, if any, is unchanged.
                           </div>
                         )}
                       </div>
@@ -2424,30 +2347,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
                           {/* Actions */}
                           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                            <button className="scene-sets-btn-details" disabled={buildingSpec} onClick={async () => {
-                              setBuildingSpec(true);
-                              setSpecProgress('sending');
-                              try {
-                                const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                                const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                                const r = await generateSceneSpecApi(set.id, { force: true });
-                                clearTimeout(progressTimer);
-                                clearTimeout(parseTimer);
-                                const d = r.data;
-                                if (d.success) {
-                                  setSpecProgress('done');
-                                  showToast(`Spec rebuilt: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
-                                  if (onRefresh) await onRefresh();
-                                } else {
-                                  setSpecProgress('error');
-                                  showToast(d.error || 'Failed', 'error');
-                                }
-                              } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
-                              setBuildingSpec(false);
-                              setTimeout(() => setSpecProgress(null), 2000);
-                            }}>
-                              {buildingSpec ? <Loader size={11} className="spin" /> : <RefreshCw size={11} />} Rebuild Spec
+                            <button className="scene-sets-btn-details" disabled={buildingSpec} onClick={() => specBuild.build({ force: true })} data-testid={`rebuild-spec-${set.id}`}>
+                              {buildingSpec ? <><Loader size={11} className="spin" /> Rebuilding… {specBuild.elapsed}s</> : <><RefreshCw size={11} /> Rebuild Spec</>}
                             </button>
+                            {specBuild.status === 'error' && (
+                              <span role="alert" style={{ fontSize: 10, color: '#C06E87' }}>Not rebuilt: {specBuild.error}. The saved spec is unchanged.</span>
+                            )}
                           </div>
                         </>
                       );
