@@ -18,10 +18,12 @@
  *   environment — the beat's plan row has a set and an imaged angle
  *                 (planLocationsService.planReadiness)
  *   interface   — an overlay placed on the beat (timeline_placements whose
- *                 properties.anchor is 'beat', at properties.beat_number)
- *   host, character — not tracked yet: performance clips have no live home
- *                 (character_clips is outside the canon schema and nothing
- *                 creates one). Their met is null, never guessed.
+ *                 properties.anchor is 'beat', at properties.beat_number;
+ *                 null, "not tracked", when they could not be read)
+ *   host, character — a clip attached to the beat for that performer
+ *                 (episode_performance_clips, the clip home agreed with this
+ *                 step). When the clips could not be read, met is null
+ *                 ("not tracked"), never guessed.
  *
  * Pure; no I/O.
  */
@@ -32,7 +34,9 @@ const INDICATORS = ['environment', 'host', 'character', 'interface'];
 const LABELS = { environment: 'Environment', host: 'JustAWoman clip', character: 'Lala clip', interface: 'Interface' };
 const PER_EPISODE_ENVIRONMENT = new Set([1, 2]);
 const INTERFACE_SURFACES = new Set(["Lala's Phone", 'Full Screen']);
-const UNTRACKED = 'No clip home yet';
+const UNTRACKED = 'Clips could not be read';
+const OVERLAYS_UNTRACKED = 'Overlays could not be read';
+const PERFORMER = { host: 'justawoman', character: 'lala' };
 
 const surfacesOf = (s) => (s && typeof s === 'object' ? [s.start, s.end] : [s]);
 
@@ -51,14 +55,17 @@ function beatRequirements(beat) {
 /**
  * planRows: the episode's scene_plans rows ({ beat_number, ... });
  * readiness: planReadiness(planRows) ({ not_ready: [{ beat_number, text }] });
- * overlays: beat-anchored placements ({ beat_number, label }).
+ * overlays: beat-anchored placements ({ beat_number, label }), or null
+ * when they could not be read;
+ * clips: the episode's performance clips ({ canonical_beat_number,
+ * performer, label, status }), or null when they could not be read.
  * Returns { beats, required, met, untracked, covered, total, next } where
  * required counts the 'required' indicators, met those met, untracked the
  * required ones nothing can check yet, and next is the first required,
  * trackable, unmet indicator in beat order ({ beat_number, beat_name,
  * indicator, label, text }) or null.
  */
-function computeCoverage({ planRows = [], readiness = null, overlays = [] } = {}) {
+function computeCoverage({ planRows = [], readiness = null, overlays = [], clips = null } = {}) {
   const planned = new Set((planRows || []).map((r) => Number(r.beat_number)));
   const notReady = new Map(((readiness && readiness.not_ready) || []).map((n) => [Number(n.beat_number), n.text]));
   const overlaysByBeat = new Map();
@@ -67,6 +74,9 @@ function computeCoverage({ planRows = [], readiness = null, overlays = [] } = {}
     if (!overlaysByBeat.has(n)) overlaysByBeat.set(n, []);
     overlaysByBeat.get(n).push(o.label || 'Overlay');
   }
+
+  const clipAt = new Map();
+  for (const c of clips || []) clipAt.set(`${Number(c.canonical_beat_number)}:${c.performer}`, c);
 
   let required = 0;
   let met = 0;
@@ -84,11 +94,21 @@ function computeCoverage({ planRows = [], readiness = null, overlays = [] } = {}
         else if (notReady.has(beat.number)) { state = false; text = notReady.get(beat.number); }
         else { state = true; }
       } else if (key === 'interface') {
-        const placed = overlaysByBeat.get(beat.number) || [];
-        state = placed.length > 0;
-        text = state ? placed.join(', ') : 'No overlay placed on this beat';
-      } else {
+        if (overlays === null) {
+          text = OVERLAYS_UNTRACKED;
+        } else {
+          const placed = overlaysByBeat.get(beat.number) || [];
+          state = placed.length > 0;
+          text = state ? placed.join(', ') : 'No overlay placed on this beat';
+        }
+      } else if (clips === null) {
         text = UNTRACKED;
+      } else {
+        const clip = clipAt.get(`${beat.number}:${PERFORMER[key]}`);
+        state = !!clip;
+        text = clip
+          ? `${clip.label || (key === 'host' ? 'JustAWoman clip' : 'Lala clip')}${clip.status === 'approved' ? ' · approved' : ''}`
+          : 'No clip attached';
       }
       indicators[key] = { requirement: req[key], met: state, text };
       if (req[key] === 'required') {
@@ -106,4 +126,4 @@ function computeCoverage({ planRows = [], readiness = null, overlays = [] } = {}
   return { beats, required, met, untracked, covered, total: beats.length, next };
 }
 
-module.exports = { INDICATORS, LABELS, beatRequirements, computeCoverage };
+module.exports = { INDICATORS, LABELS, PERFORMER, beatRequirements, computeCoverage };
