@@ -23,7 +23,6 @@ import {
   getEpisodeTodoApi,
   getEpisodeTodoSocialApi,
   getEpisodeApi,
-  listShowEventsApi,
   completeTodoSlotApi,
   completeSocialTodoSlotApi,
 } from './EpisodeTodoPage';
@@ -49,12 +48,6 @@ describe('EpisodeTodoPage — Track 6 CP7 module-scope helpers', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { episode: {} } });
     await getEpisodeApi('ep-1');
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1');
-  });
-
-  test('listShowEventsApi GET on /world/:showId/events', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { events: [] } });
-    await listShowEventsApi('show-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/world/show-1/events');
   });
 
   test('completeTodoSlotApi POST on /episodes/:episodeId/todo/complete/:slot', async () => {

@@ -19,6 +19,7 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
@@ -74,12 +75,16 @@ export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
 // The Episodes ledger's "Tasks & Details" panel: the linked event's host,
 // guests and venue, and the episode's social tasks (EpisodeTasksPanel).
-const loadEpisodeTaskDetails = async (showId, epId) => {
-  const [todoRes, eventsRes] = await Promise.all([
+// The episode's event for its tasks panel: the anchor from GET
+// /episodes/:id/events (audit LINK-01, 2026-10-03), the same one the
+// episode page, its checklist and its phone read; never a scan of the
+// show's event list by used_in_episode_id, which named a different event
+// for a repaired or multi-event episode.
+export const loadEpisodeTaskDetails = async (epId) => {
+  const [todoRes, event] = await Promise.all([
     listEpisodeTodoSocialApi(epId).catch((err) => { console.error('[WorldAdmin] social tasks load failed:', err); return {}; }),
-    listWorldEventsApi(showId).catch((err) => { console.error('[WorldAdmin] events load failed:', err); return { events: [] }; }),
+    getEpisodeAnchorEvent(epId).catch((err) => { console.error('[WorldAdmin] episode event load failed:', err); return null; }),
   ]);
-  const event = (eventsRes.events || []).find((ev) => ev.used_in_episode_id === epId);
   return { event, automation: event?.canon_consequences?.automation, socialTasks: todoRes.social_tasks || [] };
 };
 export const listShowWardrobeApi = (showId) =>
@@ -2023,7 +2028,7 @@ The revised event should feel like a completely different experience from the si
                     {/* ── Social Tasks + Beats (load on demand; opens and closes) ── */}
                     <EpisodeTasksPanel
                       episodeId={ep.id}
-                      load={(epId) => loadEpisodeTaskDetails(showId, epId)}
+                      load={loadEpisodeTaskDetails}
                       buttonStyle={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
                     />
 

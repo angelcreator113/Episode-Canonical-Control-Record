@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../services/api';
 import { eventCreatorOrganizer } from '../utils/eventOrganizer';
+import { getEpisodeEvents } from '../services/episodeEventsApi';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import './WorldAdmin.css';
 
@@ -24,12 +25,25 @@ export const getEpisodeTodoSocialApi = (episodeId) =>
   apiClient.get(`/api/v1/episodes/${episodeId}/todo/social`);
 export const getEpisodeApi = (episodeId) =>
   apiClient.get(`/api/v1/episodes/${episodeId}`);
-export const listShowEventsApi = (showId) =>
-  apiClient.get(`/api/v1/world/${showId}/events`);
 export const completeTodoSlotApi = (episodeId, slot, payload) =>
   apiClient.post(`/api/v1/episodes/${episodeId}/todo/complete/${slot}`, payload);
 export const completeSocialTodoSlotApi = (episodeId, slot, payload) =>
   apiClient.post(`/api/v1/episodes/${episodeId}/todo/complete-social/${slot}`, payload);
+
+/**
+ * Which event the run sheet shows: the one it was made from
+ * (todoList.event_id) when the episode still lists it, else the episode's
+ * anchor. `stale` when the sheet's event is not the episode's current
+ * source event (repaired, re-anchored, or no longer linked).
+ */
+export function runSheetEvent(data, sheetEventId = null) {
+  const events = data?.events || [];
+  const anchor = events.find((e) => e.link?.anchor) || events[0] || null;
+  const sheet = sheetEventId ? events.find((e) => e.id === sheetEventId) || null : null;
+  const event = sheet || anchor;
+  const stale = Boolean(sheetEventId && anchor && sheetEventId !== anchor.id);
+  return { event, anchor, stale };
+}
 
 const TIMING_ORDER = { before: 0, during: 1, after: 2 };
 const TIMING_LABELS = { before: 'Before Event', during: 'During Event', after: 'After Event' };
@@ -42,6 +56,8 @@ export default function EpisodeTodoPage() {
   const [financials, setFinancials] = useState(null);
   const [episode, setEpisode] = useState(null);
   const [event, setEvent] = useState(null);
+  // The episode's current source event, when the sheet's snapshot is another.
+  const [staleAnchor, setStaleAnchor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -71,16 +87,22 @@ export default function EpisodeTodoPage() {
     }).catch(err => setError(err.message)).finally(() => setLoading(false));
   }, [episodeId]);
 
-  // Load linked event
+  // The run sheet's event (audit LINK-01, 2026-10-03): from GET
+  // /episodes/:id/events, the list every episode page reads, never a scan
+  // of the show's event list. The sheet was made from todoList.event_id,
+  // its snapshot; the episode's current source event is the anchor. When
+  // they differ, the header says so instead of showing one as the other.
   useEffect(() => {
-    if (!todoList?.event_id) return;
-    listShowEventsApi(todoList.show_id)
-      .then(res => {
-        const ev = (res.data?.events || []).find(e => e.id === todoList.event_id);
-        if (ev) setEvent(ev);
+    // After the sheet has loaded, so its event_id is known: one read.
+    if (!episodeId || loading) return;
+    getEpisodeEvents(episodeId)
+      .then((data) => {
+        const { event: ev, anchor, stale } = runSheetEvent(data, todoList?.event_id);
+        setEvent(ev);
+        setStaleAnchor(stale ? anchor : null);
       })
-      .catch(() => {});
-  }, [todoList]);
+      .catch((err) => { console.error('[EpisodeTodoPage] episode events load failed:', err); });
+  }, [episodeId, loading, todoList?.event_id]);
 
   // T7 (§8(bb); Task #2307): wardrobe rows have no toggle. A wardrobe
   // task is complete when Lala's outfit fills its slot; GET /todo derives
@@ -137,9 +159,14 @@ export default function EpisodeTodoPage() {
           {episode?.title || 'Episode'} — Episode Run Sheet
         </h1>
         {event && (
-          <div style={{ fontSize: 12, color: '#64748b' }}>
+          <div style={{ fontSize: 12, color: '#64748b' }} data-testid="run-sheet-event">
             {event.name}{hostedBy ? ` · Hosted by ${hostedBy}` : ''}
             {automation?.venue_name ? ` · ${automation.venue_name}` : ''}
+          </div>
+        )}
+        {staleAnchor && (
+          <div role="note" data-testid="run-sheet-stale" style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', color: '#2C2C2C', fontSize: 12 }}>
+            This run sheet was made from {event?.name ? <strong>{event.name}</strong> : 'an event the episode no longer lists'}. The episode's source event is now <strong>{staleAnchor.name}</strong>.
           </div>
         )}
       </div>
