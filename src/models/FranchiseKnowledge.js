@@ -28,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
       always_inject:    { type: DataTypes.BOOLEAN, defaultValue: false },
       source_document:  { type: DataTypes.STRING(200), allowNull: true },
       source_version:   { type: DataTypes.STRING(20), allowNull: true },
+      // The Brain sync's owning source item and its synced fingerprint
+      // (migration 20261003120000; docs/BRAIN_OWNERSHIP.md).
+      source_key:       { type: DataTypes.STRING(200), allowNull: true },
+      source_hash:      { type: DataTypes.STRING(64), allowNull: true },
       extracted_by: {
         type: DataTypes.ENUM(
           'document_ingestion', 'conversation_extraction', 'direct_entry', 'system'

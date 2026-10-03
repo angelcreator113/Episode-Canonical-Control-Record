@@ -202,6 +202,14 @@ router.patch('/franchise-brain/entries/:id', requireAuth, async (req, res) => {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
 
+    // A source owns what it synced (docs/BRAIN_OWNERSHIP.md): its words are
+    // edited on the source page, never as a second copy here.
+    if (entry.source_key && [title, content, category, severity].some((v) => v !== undefined)) {
+      const { sourceLabelFor } = require('../services/brainSyncService');
+      const managedBy = sourceLabelFor(entry.source_key) || 'its source page';
+      return res.status(409).json({ error: `Managed by ${managedBy}. Edit it there, then review the Brain update.`, managed_by: managedBy });
+    }
+
     const updates = {};
     if (title !== undefined) updates.title = title.trim();
     if (content !== undefined) updates.content = content.trim();
