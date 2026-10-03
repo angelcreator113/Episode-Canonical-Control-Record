@@ -30,7 +30,7 @@ import OpenInSceneSets from '../components/OpenInSceneSets';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
-import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, computeEventState, countEventsByState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
 import {
   hydrateEventForModal, sameEditorValue, changedFields, withoutOrganizerKeys, missingForMarkReady,
 } from '../utils/eventEditorChanges';
@@ -252,6 +252,18 @@ function WorldAdmin() {
   const [decisions, setDecisions] = useState([]);
   const [worldEvents, setWorldEvents] = useState([]);
   const [sceneSets, setSceneSets] = useState([]);
+  // True totals from the lists' pagination (the lists stop at 100 / 200).
+  const [episodesTotal, setEpisodesTotal] = useState(null);
+  const [wardrobeTotal, setWardrobeTotal] = useState(null);
+  // The sections whose load failed this time, for the "Couldn't load" banner.
+  const [loadFailures, setLoadFailures] = useState([]);
+  // The Events queue's states, counted (Ready, Used, …), for the Overview.
+  const eventCounts = React.useMemo(() => countEventsByState(worldEvents), [worldEvents]);
+  // This show's scene sets: the list answers every show's.
+  const showSceneSetCount = React.useMemo(
+    () => sceneSets.filter((x) => String(x.show_id || '') === String(showId)).length,
+    [sceneSets, showId],
+  );
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   // Upload processing state (Task #1769): cards for items this session
@@ -679,38 +691,49 @@ function WorldAdmin() {
 
   const loadData = async () => {
     setLoading(true); setError(null);
+    // A section whose request fails is named in the "Couldn't load" banner,
+    // so an empty list there is never mistaken for "there are none".
+    const failed = [];
+    const miss = (label, reset) => (err) => {
+      console.error(`[LoadData] ${label} load failed:`, err?.response?.status, err?.response?.data || err?.message);
+      failed.push(label);
+      if (reset) reset();
+    };
     try {
-      const results = await Promise.allSettled([
+      await Promise.allSettled([
         // GET /shows/:id answers { success, data: show }; the show's name is `name`.
-        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || null)).catch((err) => {
-          console.error('[WorldAdmin] show load failed:', err);
-          setShow(null);
-        }),
-        api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(() => {}),
+        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || null)).catch(miss('the show', () => setShow(null))),
+        api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(miss("Lala's state")),
         api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
           const list = r.data?.episodes || r.data?.data || r.data || [];
-          setEpisodes(Array.isArray(list) ? list : []);
-        }).catch(() => setEpisodes([])),
-        api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(() => setStateHistory([])),
+          const rows = Array.isArray(list) ? list : [];
+          setEpisodes(rows);
+          // The true count; the list itself stops at 100.
+          setEpisodesTotal(Number.isFinite(r.data?.pagination?.total) ? r.data.pagination.total : rows.length);
+        }).catch(miss('episodes', () => { setEpisodes([]); setEpisodesTotal(null); })),
+        api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(miss('state history', () => setStateHistory([]))),
         api.get(`/api/v1/shows/${showId}/financial-summary`).then(r => {
           const byId = {};
           for (const e of r.data?.by_episode || []) byId[e.episode_id] = e;
           setEpisodeMoney(byId);
-        }).catch((err) => { console.error('[LoadData] Episode money load failed:', err.message); setEpisodeMoney({}); }),
-        api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
-        api.get(`/api/v1/world/${showId}/events`).then(r => { console.log('[LoadData] Events loaded:', r.data?.events?.length || 0); setWorldEvents(r.data?.events || []); }).catch(err => { console.error('[LoadData] Events load FAILED:', err.response?.status, err.response?.data || err.message); setWorldEvents([]); }),
-        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
-        api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(() => setOverlayData([])),
-        api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
-        api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(() => setOpportunities([])),
-        api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(() => setWorldLocations([])),
+        }).catch(miss('episode money', () => setEpisodeMoney({}))),
+        api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(miss('decisions', () => setDecisions([]))),
+        api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
+        // The list answers every show's sets (it ignores show_id and limit); the
+        // pickers use them all, the Overview counts this show's.
+        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(miss('scene sets', () => setSceneSets([]))),
+        api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(miss('overlays', () => setOverlayData([]))),
+        api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(miss('career goals', () => setGoals([]))),
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => {
+          const rows = r.data?.data || [];
+          setWardrobeItems(rows);
+          // The true count; the list itself stops at 200.
+          setWardrobeTotal(Number.isFinite(r.data?.pagination?.total) ? r.data.pagination.total : rows.length);
+        }).catch(miss('wardrobe', () => { setWardrobeItems([]); setWardrobeTotal(null); })),
+        api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(miss('opportunities', () => setOpportunities([]))),
+        api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(miss('world locations', () => setWorldLocations([]))),
       ]);
-      // Show error only if ALL calls failed (not just some timeouts)
-      const failures = results.filter(r => r.status === 'rejected');
-      if (failures.length === results.length) {
-        setError('Unable to connect to server. Please try refreshing.');
-      }
+      setLoadFailures(failed);
     } finally { setLoading(false); }
   };
 
@@ -1599,6 +1622,12 @@ The revised event should feel like a completely different experience from the si
       </div>
 
       {error && <div style={S.errorBanner}>{error}<button onClick={() => setError(null)} style={S.xBtn}>✕</button></div>}
+      {loadFailures.length > 0 && (
+        <div className="wa-load-failed" role="alert" data-testid="wa-load-failed">
+          Couldn't load {loadFailures.join(', ')}. Those sections may look empty until they load.
+          <button type="button" onClick={loadData}>Retry</button>
+        </div>
+      )}
       {successMsg && (
         <div style={S.successBanner}>
           {successMsg}
@@ -1688,16 +1717,17 @@ The revised event should feel like a completely different experience from the si
           {/* Production Dashboard */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
             {[
-              { v: episodes.length, l: 'Episodes', icon: '📺', color: '#6366f1' },
-              { v: worldEvents.filter(e => e.status === 'ready').length, l: 'Events Ready', icon: '📅', color: '#22c55e' },
-              { v: worldEvents.filter(e => e.status === 'used').length, l: 'Events Used', icon: '✓', color: '#059669' },
+              { v: episodesTotal ?? episodes.length, l: 'Episodes', icon: '📺', color: '#6366f1', testId: 'wa-stat-episodes' },
+              // One definition of Ready and Used: the Events queue's (computeEventState).
+              { v: eventCounts.ready, l: 'Events Ready', icon: '📅', color: '#22c55e', testId: 'wa-stat-events-ready' },
+              { v: eventCounts.used, l: 'Events Used', icon: '✓', color: '#059669', testId: 'wa-stat-events-used' },
               { v: opportunities.filter(o => !['archived','declined','expired'].includes(o.status)).length, l: 'Active Opps', icon: '💼', color: '#B8962E' },
-              { v: wardrobeItems.length, l: 'Wardrobe', icon: '👗', color: '#ec4899' },
-              { v: sceneSets.length, l: 'Locations', icon: '📍', color: '#8b5cf6' },
+              { v: wardrobeTotal ?? wardrobeItems.length, l: 'Wardrobe', icon: '👗', color: '#ec4899', testId: 'wa-stat-wardrobe' },
+              { v: showSceneSetCount, l: 'Locations', icon: '📍', color: '#8b5cf6', testId: 'wa-stat-locations' },
             ].map((s, i) => (
               <div key={i} style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 10px', textAlign: 'center' }}>
                 <div style={{ fontSize: 20, marginBottom: 2 }}>{s.icon}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.v}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: s.color }} data-testid={s.testId}>{s.v}</div>
                 <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>{s.l}</div>
               </div>
             ))}
@@ -1705,7 +1735,7 @@ The revised event should feel like a completely different experience from the si
 
           {/* Next Steps */}
           {(() => {
-            const noEvents = worldEvents.filter(e => e.status === 'ready').length === 0;
+            const noEvents = eventCounts.ready === 0;
             const noWardrobe = wardrobeItems.length === 0;
             const noEpisodes = episodes.length === 0;
             const steps = [];
@@ -1822,7 +1852,9 @@ The revised event should feel like a completely different experience from the si
             const epHistory = stateHistory.filter(h => h.episode_id === ep.id);
             const deltas = epHistory.length > 0 ? (typeof epHistory[0].deltas_json === 'string' ? JSON.parse(epHistory[0].deltas_json) : epHistory[0].deltas_json) : null;
             const stateAfter = epHistory.length > 0 ? (typeof epHistory[0].state_after_json === 'string' ? JSON.parse(epHistory[0].state_after_json) : epHistory[0].state_after_json) : null;
-            const linkedEvent = worldEvents.find(ev => ep.script_content?.includes(ev.name));
+            // The saved event–episode link (the event's used_in_episode_id), not
+            // the event's name appearing in the script.
+            const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id && String(ev.used_in_episode_id) === String(ep.id));
 
             return (
               <div key={ep.id} style={{ background: '#fff', border: isExpanded ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12, marginBottom: 10, overflow: 'hidden', transition: 'border 0.2s' }}>

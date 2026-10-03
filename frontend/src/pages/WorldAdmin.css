@@ -354,3 +354,10 @@
 .wa-context-section { font-family: 'DM Mono', monospace; font-size: 11px; color: #8a6d1f; }
 .wa-context-section:empty { display: none; }
 .wa-context-link { margin-left: auto; font-size: 12px; color: #8a6d1f; }
+
+/* A section that failed to load says so, with Retry, instead of looking empty. */
+.wa-load-failed {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px;
+  border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 13px;
+}
+.wa-load-failed button { font: inherit; font-weight: 600; padding: 3px 10px; border: 1px solid #dc2626; border-radius: 6px; background: #fff; color: #b91c1c; cursor: pointer; }
