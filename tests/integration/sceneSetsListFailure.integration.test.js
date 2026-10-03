@@ -56,6 +56,7 @@ const shouldSkip =
     jest.spyOn(models.SceneSet, 'findAll').mockResolvedValue([]);
     const res = await list();
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: true, count: 0, data: [] });
+    expect(res.body).toEqual({ success: true, count: 0, data: [], scope: 'all' });
+    expect(res.body.degraded).toBeUndefined();
   });
 });

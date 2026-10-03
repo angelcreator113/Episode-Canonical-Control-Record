@@ -780,9 +780,10 @@ function WorldAdmin() {
         }).catch(miss('episode money', () => setEpisodeMoney({}))),
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(miss('decisions', () => setDecisions([]))),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
-        // The list answers every show's sets (it ignores show_id and limit); the
-        // pickers use them all, the Overview counts this show's.
-        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(miss('scene sets', () => setSceneSets([]))),
+        // This show's sets plus the shared ones (audit CTX-03: the list is
+        // scoped on the server); the pickers offer those, the Overview counts
+        // this show's.
+        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`).then(r => setSceneSets(r.data?.data || [])).catch(miss('scene sets', () => setSceneSets([]))),
         api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(miss('overlays', () => setOverlayData([]))),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(miss('career goals', () => setGoals([]))),
         api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => {
