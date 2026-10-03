@@ -38,6 +38,7 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 import {
   listEpisodeTodoSocialApi,
+  loadEpisodeTaskDetails,
   listWorldEventsApi,
   listShowWardrobeApi,
   updateWardrobeItemApi,
@@ -257,5 +258,25 @@ describe('WorldAdmin — Track 6 CP13 module-scope helpers', () => {
         response: { data: { error: 'server overload' } },
       });
     });
+  });
+});
+
+describe('loadEpisodeTaskDetails reads the episode\'s anchor event (audit LINK-01)', () => {
+  test('GET /episodes/:id/events, never the show\'s event list', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/todo/social') return { data: { social_tasks: [{ slot: 'post' }] } };
+      if (url === '/api/v1/episodes/ep-1/events') {
+        return { data: { events: [
+          { id: 'ev-old', name: 'Old stamp', link: { anchor: false, stamped: true }, canon_consequences: { automation: { venue_name: 'Old venue' } } },
+          { id: 'ev-anchor', name: 'Gala', link: { anchor: true }, canon_consequences: { automation: { venue_name: 'The Grand' } } },
+        ] } };
+      }
+      return { data: {} };
+    });
+    const out = await loadEpisodeTaskDetails('ep-1');
+    expect(out.event.id).toBe('ev-anchor');
+    expect(out.automation.venue_name).toBe('The Grand');
+    expect(out.socialTasks).toEqual([{ slot: 'post' }]);
+    expect(api.get.mock.calls.map(([u]) => u).some((u) => u.includes('/world/'))).toBe(false);
   });
 });
