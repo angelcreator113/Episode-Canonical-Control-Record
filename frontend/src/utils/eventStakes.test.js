@@ -6,7 +6,7 @@ import { createRequire } from 'module';
 import {
   DEADLINE_TYPES, CAREER_TIERS, COLUMN_DEFAULTS,
   projectEventDifficulty, describeEventMoney, resolveEventStakes,
-  stakesDraftFrom, buildStakesUpdate, EDITABLE_STAKES,
+  stakesDraftFrom, buildStakesUpdate, EDITABLE_STAKES, STAKES_TEXTS,
 } from './eventStakes';
 import { calcEventDifficulty } from './eventReadiness';
 
@@ -35,6 +35,10 @@ describe('the PUT allowlist', () => {
     for (const k of EDITABLE_STAKES) expect(allowed).toContain(k);
     expect(integers).toEqual(expect.arrayContaining(['prestige', 'strictness', 'career_tier']));
     expect(strings).toContain('deadline_type');
+    for (const { key } of STAKES_TEXTS) {
+      expect(allowed).toContain(key);
+      expect(strings).toContain(key);
+    }
   });
 
   test('deadline types match the old editor select and the formula weight table', () => {
@@ -167,9 +171,24 @@ describe('buildStakesUpdate', () => {
   test('an empty draft leaves a field alone; prestige/strictness are never sent null', () => {
     const ev = { prestige: null, strictness: 5, deadline_type: null, career_tier: null };
     const draft = stakesDraftFrom(ev);
-    expect(draft).toEqual({ prestige: '', strictness: '5', deadline_type: '', career_tier: '' });
+    expect(draft).toEqual({
+      prestige: '', strictness: '5', deadline_type: '', career_tier: '',
+      narrative_stakes: '', fail_consequence: '', career_milestone: '', success_unlock: '',
+    });
     expect(buildStakesUpdate(ev, { ...draft, strictness: '' }).unchanged).toBe(true);
     expect(buildStakesUpdate(ev, { ...draft, career_tier: '4' }).body).toEqual({ career_tier: 4 });
+  });
+
+  test('story-stakes texts are sent trimmed when changed, and null when emptied (Evoni, 2026-10-03)', () => {
+    const ev = { ...full(), narrative_stakes: 'Her first seat at the table.', fail_consequence: null };
+    const draft = stakesDraftFrom(ev);
+    expect(draft.narrative_stakes).toBe('Her first seat at the table.');
+    expect(buildStakesUpdate(ev, { ...draft, fail_consequence: '  She is not asked back.  ' }).body)
+      .toEqual({ fail_consequence: 'She is not asked back.' });
+    expect(buildStakesUpdate(ev, { ...draft, narrative_stakes: '   ' }).body).toEqual({ narrative_stakes: null });
+    expect(buildStakesUpdate(ev, { ...draft, narrative_stakes: 'Her first seat at the table.  ' }).unchanged).toBe(true);
+    // A key the draft does not carry is left alone.
+    expect(buildStakesUpdate(ev, { prestige: '9' }).body).toEqual({ prestige: 9 });
   });
 
   test('out-of-range or unknown values are refused, nothing sent', () => {

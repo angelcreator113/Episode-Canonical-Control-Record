@@ -1226,7 +1226,8 @@
   font-size: 12px;
   color: var(--lala-ink-muted, #6B6557);
 }
-.epp-stakes-field select {
+.epp-stakes-field select,
+.epp-stakes-field textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 8px 10px;
@@ -1681,3 +1682,76 @@
 .epp-set-angle img, .epp-set-angle .epp-set-thumb-empty { width: 88px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid var(--lala-parchment-3, #E8E0D0); background: #fff; }
 .epp-set-angle figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6B6557; }
 
+
+/* Continue → (Evoni, 2026-10-03): the Package's one next step, at the top.
+   Soft pink while something is left, teal when it is ready (Evoni: the
+   site's colours are soft pink and teal; values from Home.css). */
+.epp-next {
+  --epp-pink: #E8A0B4;
+  --epp-pink-soft: #FBEFF3;
+  --epp-teal: #82C8BE;
+  --epp-teal-soft: #EAF7F5;
+  --epp-teal-deep: #2F7F76;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--epp-pink);
+  border-left: 4px solid var(--epp-pink);
+  border-radius: 8px;
+  background: var(--epp-pink-soft);
+}
+.epp-next.is-ready {
+  border-color: var(--epp-teal);
+  background: var(--epp-teal-soft);
+}
+.epp-next-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #C06E87;
+}
+.epp-next.is-ready .epp-next-count { color: var(--epp-teal-deep); }
+.epp-next-text {
+  flex: 1 1 200px;
+  font-size: 14px;
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-next-btn.epp-btn-primary {
+  margin-left: auto;
+  background: var(--epp-teal-deep);
+  border-color: var(--epp-teal-deep);
+  color: #FFFFFF;
+}
+.epp-next-btn.epp-btn-primary:hover:not(:disabled) { background: #26695F; border-color: #26695F; }
+.epp-section { scroll-margin-top: 16px; }
+.epp-stakes-field textarea { resize: vertical; font-size: 13px; }
+
+/* Money: Lala's balance, the planned lines and the projection. */
+.epp-money-preview {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #E8A0B4;
+}
+.epp-money-lines {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+.epp-money-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+.epp-money-lines .is-neg { color: var(--lala-danger, #B84D2E); }
+.epp-money-lines .is-pos { color: #2F7F76; }
+
+@media (max-width: 480px) {
+  .epp-next-btn.epp-btn-primary { margin-left: 0; width: 100%; justify-content: center; }
+}

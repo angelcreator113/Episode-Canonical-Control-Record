@@ -306,6 +306,25 @@ export function describeMissing(sections, which = 'blocking') {
   });
 }
 
+/**
+ * The Package's one next step (Evoni, 2026-10-03: "N of M ready ·
+ * Continue → …" at the top). Counts every item, gate and warning, and
+ * names the first one missing in page order: gates first, since they hold
+ * Start Episode, then warnings. Returns { done, total, next, kind } where
+ * next is { section, sectionLabel, ...item } or null and kind is 'gate',
+ * 'warning' or 'ready'.
+ */
+export function nextPackageStep(readiness) {
+  const sections = readiness?.sections || [];
+  const all = sections.flatMap((s) => s.items || []);
+  const done = all.filter((i) => i.satisfied).length;
+  const first = (list) => (list && list.length ? list[0] : null);
+  const gate = first(readiness?.blockingItems);
+  const warning = first(readiness?.warningItems);
+  const next = gate || warning || null;
+  return { done, total: all.length, next, kind: gate ? 'gate' : warning ? 'warning' : 'ready' };
+}
+
 // Producer Mode → Events queue states (docs/EVENT_EPISODE_FLOW.md §8(m),
 // Evoni's ruling, Task #1648; needs_host renamed to needs_organizer per
 // §8(p)'s organizer ruling, Task #1676/#1681 — a brand-hosted event with

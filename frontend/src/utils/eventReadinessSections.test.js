@@ -4,7 +4,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  computeEventPackageReadiness, computeEventState, describeMissing, moneyItem,
+  computeEventPackageReadiness, computeEventState, describeMissing, moneyItem, nextPackageStep,
   EVENT_PACKAGE_SECTIONS, READINESS_ITEMS, EVENT_QUEUE_STATES,
 } from './eventReadinessSections';
 import { resolveEventBasics, AUTO_DATE_KEY } from './eventBasics';
@@ -388,5 +388,34 @@ describe('waiting for format counts as not ready (Task #2148)', () => {
   test('waiting never satisfies: the same event with the values set is complete', () => {
     const r = computeEventPackageReadiness({ ...noFormat(), format: 'gala', event_time: '20:00', dress_code: 'black tie formal' });
     expect(r.allComplete).toBe(true);
+  });
+});
+
+describe('nextPackageStep: "N of M ready · Continue →" (Evoni, 2026-10-03)', () => {
+  const total = () => computeEventPackageReadiness(full()).sections.flatMap((s) => s.items).length;
+
+  test('a complete event is ready, every item counted', () => {
+    const step = nextPackageStep(computeEventPackageReadiness(full()));
+    expect(step).toEqual({ done: total(), total: total(), next: null, kind: 'ready' });
+  });
+
+  test('a missing gate comes before an earlier warning, and names its section', () => {
+    // time (identity, a warning) comes before the venue (place, a gate) on the page.
+    const ev = { ...full(), event_time: null, venue_location_id: null };
+    const step = nextPackageStep(computeEventPackageReadiness(ev));
+    expect(step.kind).toBe('gate');
+    expect(step.next).toMatchObject({ section: 'place', key: 'venue' });
+    expect(step.done).toBe(total() - 2);
+  });
+
+  test('with every gate met, the first warning in page order is next', () => {
+    const ev = { ...full(), narrative_stakes: null, outfit_pieces: [] };
+    const step = nextPackageStep(computeEventPackageReadiness(ev));
+    expect(step.kind).toBe('warning');
+    expect(step.next).toMatchObject({ section: 'look', key: 'outfit' });
+  });
+
+  test('no readiness reads as nothing to count', () => {
+    expect(nextPackageStep(null)).toEqual({ done: 0, total: 0, next: null, kind: 'ready' });
   });
 });
