@@ -32,7 +32,10 @@ const BEAT_NAMES = [
   { number: 14, name: 'Cliffhanger',            icon: '🔥', color: '#145A32' },
 ];
 
-function parseScriptIntoBeats(scriptText) {
+// Episode creation step 7 (§8(j)): a canonical header, `## BEAT: 5 · Reveal`,
+// names its beat by number (src/utils/canonicalScriptBeats.js); an older
+// name-only header still falls back to its position.
+export function parseScriptIntoBeats(scriptText) {
   if (!scriptText?.trim()) return [];
   if (/##\s*BEAT:/i.test(scriptText)) {
     const sections = scriptText.split(/(?=##\s*BEAT:)/i);
@@ -41,8 +44,11 @@ function parseScriptIntoBeats(scriptText) {
       const header = lines[0] || '';
       const beatMatch = header.match(/##\s*BEAT:\s*(.+)/i);
       const beatLabel = beatMatch?.[1]?.trim() || `Beat ${i + 1}`;
-      const info = BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: '#888' };
-      return { id: `beat-${i}`, number: i + 1, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: false, raw: section };
+      const numbered = Number((beatLabel.match(/^(\d{1,2})\b/) || [])[1]);
+      const canon = numbered >= 1 && numbered <= BEAT_NAMES.length ? BEAT_NAMES[numbered - 1] : null;
+      const info = canon || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: '#888' };
+      const number = canon ? canon.number : i + 1;
+      return { id: `beat-${i}`, number, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: false, raw: section };
     });
   }
   const lines = scriptText.split('\n').filter(l => l.trim());
@@ -215,13 +221,18 @@ export default function EpisodeScriptTab({ episode, show }) {
       setScriptText(script); setDevScript(script);
       try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: script }); } catch {}
 
+      // §8(j): every canonical beat should come back under its own header.
+      const check = res.data.beat_check;
+      const beatGap = check && !check.complete
+        ? ` — ⚠️ beat${check.missing?.length === 1 ? '' : 's'} ${(check.missing || []).join(', ') || '?'} came back without ${check.missing?.length === 1 ? 'its' : 'their'} header`
+        : '';
       // Check for auto-guard results
       if (res.data.guardResult) {
         setGuardResult(res.data.guardResult);
         const v = res.data.guardResult.violations?.length || 0;
-        setToast({ msg: v > 0 ? `✦ Script generated — ⚠️ ${v} franchise violation(s)` : '✦ Script generated — ✅ Passed franchise guard', type: v > 0 ? 'error' : 'success' });
+        setToast({ msg: (v > 0 ? `✦ Script generated — ⚠️ ${v} franchise violation(s)` : '✦ Script generated — ✅ Passed franchise guard') + beatGap, type: v > 0 || beatGap ? 'error' : 'success' });
       } else {
-        setToast({ msg: '✦ Script generated!', type: 'success' });
+        setToast({ msg: `✦ Script generated!${beatGap}`, type: beatGap ? 'error' : 'success' });
       }
       setTimeout(() => setToast(null), 5000);
     } catch (err) { setGenError(err.response?.data?.error || 'Generation failed'); }

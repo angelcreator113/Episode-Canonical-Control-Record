@@ -36,22 +36,19 @@ LALA voice rules — NEVER VIOLATE:
 - Examples: "Bestie, I love my photos.", "I'm a baddie in these internet streets.", "Bestie, this purse is everything!"
 `.trim();
 
-const BEAT_TEMPLATES = {
-  1:  { name: 'Opening Ritual',       jawihp: true,  lala: false, ui: 'HEADPHONES_ON' },
-  2:  { name: 'Login Sequence',       jawihp: true,  lala: true,  ui: 'LOGIN' },
-  3:  { name: 'Welcome',              jawihp: true,  lala: false, ui: 'WELCOME' },
-  4:  { name: 'Interruption Pulse 1', jawihp: true,  lala: true,  ui: 'MAIL_NOTIFICATION' },
-  5:  { name: 'Reveal',               jawihp: true,  lala: true,  ui: 'OPEN_LETTER_INVITE_OVERLAY' },
-  6:  { name: 'Strategic Reaction',   jawihp: true,  lala: true,  ui: 'LALA_VOICE_COMMAND' },
-  7:  { name: 'Interruption Pulse 2', jawihp: true,  lala: true,  ui: 'SIDE_QUEST' },
-  8:  { name: 'Transformation Loop',  jawihp: true,  lala: true,  ui: 'CLOSET_OPEN' },
-  9:  { name: 'Reminder/Deadline',    jawihp: true,  lala: false, ui: 'TODO_LIST' },
-  10: { name: 'Event Travel',         jawihp: true,  lala: false, ui: 'LOCATION_ICON' },
-  11: { name: 'Event Outcome',        jawihp: true,  lala: true,  ui: 'ARRIVAL' },
-  12: { name: 'Deliverable Creation', jawihp: false, lala: true,  ui: 'CONTENT_CREATE' },
-  13: { name: 'Recap Panel',          jawihp: true,  lala: false, ui: 'STATS_UPDATE' },
-  14: { name: 'Cliffhanger',          jawihp: true,  lala: false, ui: 'FADE_OUT' },
+// The 14 beats come from canonicalBeats.js (§8(j); the §8(g) "owed" local
+// list, episode creation step 7): name and screen action are canonical.
+// Who speaks in each beat is this writer's own direction, kept here.
+const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+const { beatHeader } = require('../utils/canonicalScriptBeats');
+const SPEAKS = {
+  1: [true, false], 2: [true, true], 3: [true, false], 4: [true, true], 5: [true, true],
+  6: [true, true], 7: [true, true], 8: [true, true], 9: [true, false], 10: [true, false],
+  11: [true, true], 12: [false, true], 13: [true, false], 14: [true, false],
 };
+const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
+  name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
+}]));
 
 async function generateGroundedScript(episodeId, showId, models) {
   const { EpisodeBrief, ScenePlan, SceneSet, FranchiseKnowledge, sequelize } = models;
@@ -186,23 +183,26 @@ function seasonPurposeLines(sc) {
 }
 
 function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }) {
-  const beatContext = scenePlan.length > 0
-    ? scenePlan.map(b => {
-        const tpl = BEAT_TEMPLATES[b.beat_number] || {};
+  // Every canonical beat, in order, whether or not the plan has its row
+  // (§8(j): Generate Script instantiates all 14; it never invents its own).
+  const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
+  const beatContext = CANONICAL_BEATS.map((canon) => {
+        const b = planByBeat.get(canon.number) || {};
+        const tpl = BEAT_TEMPLATES[canon.number];
         const loc = b.sceneSet?.worldLocation;
-        let entry = `BEAT ${b.beat_number}: ${b.beat_name || tpl.name}
-  Location: ${b.sceneSet?.name || 'Unknown'} (${b.sceneSet?.scene_type || ''})
+        let entry = `${beatHeader(canon)}
+  Purpose: ${canon.narrative_purpose}
+  Location: ${b.sceneSet?.name || 'Not planned yet'}${b.sceneSet?.scene_type ? ` (${b.sceneSet.scene_type})` : ''}
   Angle: ${b.angle_label || ''} | Shot: ${b.shot_type || ''}
   Scene context: ${b.scene_context || b.sceneSet?.script_context || 'No description'}
-  Emotional intent: ${b.emotional_intent || ''}
+  Emotional intent: ${b.emotional_intent || canon.emotional_intent || ''}
   Director note: ${b.director_note || ''}
   UI action: ${tpl.ui || ''}
   JAWIHP speaks: ${tpl.jawihp} | Lala speaks: ${tpl.lala}`;
         if (loc?.narrative_role) entry += `\n  Narrative role: ${loc.narrative_role}`;
         if (loc?.sensory_details?.atmosphere) entry += `\n  Atmosphere: ${loc.sensory_details.atmosphere}`;
         return entry;
-      }).join('\n\n')
-    : 'No scene plan — write based on standard 14-beat structure';
+      }).join('\n\n');
 
   const wardrobeBySlot = {};
   wardrobeItems.forEach(item => {
@@ -290,6 +290,11 @@ ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitSc
 ${beatContext}
 
 ═══ FORMAT ═══
+Each of the 14 beats opens with its header line, exactly as written above, in order from 1 to 14:
+${beatHeader(CANONICAL_BEATS[0])}
+...
+${beatHeader(CANONICAL_BEATS[CANONICAL_BEATS.length - 1])}
+Do not add, merge, rename or skip beats. Under each header:
 Me: [JAWIHP dialogue]
 (Action description)
 Lala: [Lala dialogue]
