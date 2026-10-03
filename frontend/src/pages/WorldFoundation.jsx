@@ -9,6 +9,7 @@ import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
+import { tabFromSearch } from '../utils/worldRedirects';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -63,7 +64,8 @@ const labelStyle = { fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily
 const inputStyle = { padding: '7px 10px', borderRadius: 6, border: '1px solid #e0d9ce', fontSize: 12, width: '100%', boxSizing: 'border-box' };
 
 export default function WorldFoundation() {
-  const [tab, setTab] = useState('map');
+  // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map'));
   const [editItem, setEditItem] = useState(null);
   const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 

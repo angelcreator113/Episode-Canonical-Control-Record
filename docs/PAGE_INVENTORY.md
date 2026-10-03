@@ -161,17 +161,17 @@ not via any page's UI.
 |---|---|---|---|
 | `/continuity` | `pages/ContinuityEnginePage.jsx` (App.jsx:436) | live | in-app link (`pages/Home.jsx:276`) |
 | `/relationships` | `pages/RelationshipEngine.jsx` (App.jsx:439) | live | Sidebar (WRITE zone, `Sidebar.jsx:50`) |
-| `/cultural-calendar` | `pages/CulturalCalendar.jsx` (App.jsx:442) | live | URL only (named in a `Sidebar.jsx` auto-expand string array, `:123`, but no `buildNav()` item points at it — see §2b-style Sidebar note below) |
+| `/cultural-calendar` | — (`utils/worldRedirects.js`) | redirect → `/culture-events?tab=events` (audit IA-04, 2026-10-03; `docs/WORLD_ROUTE_OWNERSHIP.md`); `CulturalCalendar.jsx` deleted | in-app link (`pages/NewEpisodeStarter.jsx` now links the target) |
 | `/world-setup` | `pages/WorldSetupGuide.jsx` (App.jsx:443) | live | URL only |
 | `/property-manager` | `pages/PropertyManager.jsx` (App.jsx:444) | live | URL only |
-| `/influencer-systems` | `pages/InfluencerSystems.jsx` (App.jsx:447) | live | URL only (same Sidebar auto-expand-only note) |
-| `/world-infrastructure` | `pages/WorldInfrastructure.jsx` (App.jsx:450) | live | URL only (same Sidebar auto-expand-only note) |
+| `/influencer-systems` | — (`utils/worldRedirects.js`) | redirect → `/social-systems?tab=archetypes` (audit IA-04); `InfluencerSystems.jsx` deleted | URL only |
+| `/world-infrastructure` | — (`utils/worldRedirects.js`) | redirect → `/world-foundation?tab=map` (audit IA-04); `WorldInfrastructure.jsx` deleted | URL only |
 | `/social-timeline` | `pages/SocialTimeline.jsx` (App.jsx:453) | live | URL only — `components/FranchiseBrain.jsx:88-92` lists this route in a nav array, but `FranchiseBrain.jsx` is never imported/rendered anywhere in `frontend/src` (confirmed by grep; only its own test file references it) — dead code, doesn't count as reachable. Same Sidebar auto-expand-only note. |
 | `/social-personality` | `pages/SocialPersonality.jsx` (App.jsx:456) | live | URL only (same `FranchiseBrain.jsx` dead-code note; same Sidebar note) |
 | `/character-life-simulation` | `pages/CharacterLifeSimulation.jsx` (App.jsx:459) | live | URL only (same `FranchiseBrain.jsx` dead-code note; same Sidebar note) |
-| `/cultural-memory` | `pages/CulturalMemory.jsx` (App.jsx:462) | live | URL only (same Sidebar note) |
+| `/cultural-memory` | — (`utils/worldRedirects.js`) | redirect → `/culture-events?tab=history` (audit IA-04); `CulturalMemory.jsx` deleted | URL only |
 | `/character-depth-engine` | `pages/CharacterDepthEngine.jsx` (App.jsx:465) | live | URL only (same `FranchiseBrain.jsx` dead-code note; same Sidebar note) |
-| `/world-locations` | `pages/WorldLocations.jsx` (App.jsx:468) | live | URL only — the only hits outside `App.jsx`/`Sidebar.jsx` are `pages/NarrativeControlCenter.jsx:555,564,571`, which are backend API calls (`` fetchJSON(`${API}/tier/world-locations`) ``), not frontend navigation. Same Sidebar note. |
+| `/world-locations` | — (`utils/worldRedirects.js`) | redirect → `/world-foundation?tab=locations` (audit IA-04); `WorldLocations.jsx` deleted (its CSS stays: `WorldSetupGuide` imports it) | URL only |
 | `/world-dashboard` | `pages/WorldDashboard.jsx` (App.jsx:471) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:24`) |
 | `/world-foundation` | `pages/WorldFoundation.jsx` (App.jsx:472) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:25`) |
 | `/social-systems` | `pages/SocialSystems.jsx` (App.jsx:473) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:26`) |
@@ -220,10 +220,10 @@ not via any page's UI.
 `Sidebar.jsx:123` has a "Universe" auto-expand effect that sets
 `universeOpen` to `true` when the current path starts with any of:
 `/universe`, `/intelligence`, `/world-dashboard`, `/world-foundation`,
-`/social-systems`, `/culture-events`, `/cultural-calendar`,
-`/influencer-systems`, `/world-infrastructure`, `/social-timeline`,
-`/social-personality`, `/character-life-simulation`, `/cultural-memory`,
-`/character-depth-engine`, `/world-locations`, `/amber`, `/scene-studio`.
+`/social-systems`, `/culture-events`, `/social-timeline`,
+`/social-personality`, `/character-life-simulation`,
+`/character-depth-engine`, `/amber`, `/scene-studio` (the five redirected
+routes were dropped from it, audit IA-04).
 But the render logic's grouped-nav branch (`item.groups`, `Sidebar.jsx:229-283`,
 which `universeOpen` controls) only fires for a `buildNav()` item that has a
 `.groups` field — and **no item in `buildNav()` (`Sidebar.jsx:14-82`) has
@@ -607,17 +607,17 @@ on by this document.
 | `/chapter-structure/:bookId/:chapterId` | `pages/ChapterStructureEditor.jsx` | Structured chapter writing editor with visual hierarchy (headings, quotes, reflections), collapsible sections, auto-TOC, and templates. |
 | `/setup` | `pages/SetupWizard.jsx` | Conversational onboarding wizard that walks the user through 7 world-building "beats" to build the universe. |
 | `/therapy/:registryId` | `pages/CharacterTherapy.jsx` | Psychological narrative engine where a character processes story events via therapy-style sessions driven by wound patterns. |
-| `/cultural-calendar` | `pages/CulturalCalendar.jsx` | Displays the LalaVerse cultural/social calendar system (major/micro events, awards, icon birthdays, drama mechanics). |
+| `/cultural-calendar` | redirect | → Culture & Events, Events tab (audit IA-04). |
 | `/world-setup` | `pages/WorldSetupGuide.jsx` | Step-by-step checklist guiding the user through world-building setup, with links to each page. |
 | `/property-manager` | `pages/PropertyManager.jsx` | Manages character properties (mansions, penthouses, etc.), letting the user create properties and add rooms from style/room templates. |
-| `/influencer-systems` | `pages/InfluencerSystems.jsx` | Reference/editor page for the influencer social systems doc: personality archetypes, relationship graph, creator economy, trend engines. |
-| `/world-infrastructure` | `pages/WorldInfrastructure.jsx` | Reference/editor page documenting the LalaVerse's cities, universities, corporations, and legendary figures. |
+| `/influencer-systems` | redirect | → Social Systems, Archetypes tab (audit IA-04). |
+| `/world-infrastructure` | redirect | → World Foundation, The Map tab (audit IA-04). |
 | `/social-timeline` | `pages/SocialTimeline.jsx` | Reference/editor page for how the in-world social feed algorithm works (timeline layers, virality stages, engagement signals, drama triggers, trend cycle). |
 | `/social-personality` | `pages/SocialPersonality.jsx` | Reference/editor page defining social-media personality traits, posting archetypes, motivations, and relationship dynamics for characters. |
 | `/character-life-simulation` | `pages/CharacterLifeSimulation.jsx` | Reference/editor page simulating a character's life progression: career stages, paths, relationships, friend groups, rivalries, migration. |
-| `/cultural-memory` | `pages/CulturalMemory.jsx` | Reference/editor page for the in-world "cultural memory" system: memory types, strength levels, archives, anniversaries, nostalgia waves. |
+| `/cultural-memory` | redirect | → Culture & Events, History tab (audit IA-04). |
 | `/character-depth-engine` | `pages/CharacterDepthEngine.jsx` | Reference/editor page defining deep character-psychology fields (body relationship, money patterns, time orientation, luck beliefs, self-narrative). |
-| `/world-locations` | `pages/WorldLocations.jsx` | Manages the world's location database (cities, districts, venues, properties) with create/edit/delete and infrastructure seeding. |
+| `/world-locations` | redirect | → World Foundation, Locations tab, the same `/world/locations` records (audit IA-04). |
 | `/narrative-control` | `pages/NarrativeControlCenter.jsx` | Unified dashboard hub for narrative-intelligence features: pipeline tracker, continuity checks, character arcs, timelines, locations, snapshots, threads, plot holes, beats. |
 | `/texture-review/:storyNumber` | `pages/TextureReviewPage.jsx` | Review/confirm/regenerate page for a character's "texture layers" (inner thought, conflict, body narrator, private moment, post, bleed) for a given story. |
 | `/scene-proposer` | `pages/StoryProposer.jsx` | Scene Intelligence Engine UI: the system proposes candidate scenes/character-growth flags for the user to adjust, accept, or dismiss. |
