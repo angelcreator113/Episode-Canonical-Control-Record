@@ -131,8 +131,43 @@ async function ensureGenerationJobsTable() {
 const DEGRADED_OMITTED = ['angles', 'show', 'episodes'];
 const DEGRADED_TEXT = 'Views, show names and episode links could not be read for this list';
 
+// Audit CTX-03 (2026-10-03): the list is scoped on the server. A shared set
+// belongs to no show or is marked a franchise asset; it is usable by every
+// show. scope: 'show' (this show only), 'shared', 'all'; with show_id and
+// no scope, this show's sets plus the shared ones. limit and offset apply.
+const SHARED_WHERE = { [Op.or]: [{ show_id: null }, { is_franchise_asset: true }] };
+const SCOPES = ['show', 'shared', 'all'];
+const MAX_LIMIT = 500;
+
+/** The query's where, or { error } for a bad request. Exported for tests. */
+function sceneSetListScope(query = {}) {
+  const showId = typeof query.show_id === 'string' && query.show_id.trim() ? query.show_id.trim() : null;
+  const scope = query.scope == null || query.scope === '' ? null : String(query.scope);
+  if (scope !== null && !SCOPES.includes(scope)) return { error: `scope must be one of ${SCOPES.join(', ')}` };
+  if (scope === 'show' && !showId) return { error: 'scope=show needs show_id' };
+  let limit = null;
+  if (query.limit != null && query.limit !== '') {
+    limit = Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) return { error: `limit must be a whole number from 1 to ${MAX_LIMIT}` };
+  }
+  let offset = 0;
+  if (query.offset != null && query.offset !== '') {
+    offset = Number(query.offset);
+    if (!Number.isInteger(offset) || offset < 0) return { error: 'offset must be a whole number of 0 or more' };
+  }
+  let where = {};
+  let effective = 'all';
+  if (scope === 'show') { where = { show_id: showId }; effective = 'show'; }
+  else if (scope === 'shared') { where = SHARED_WHERE; effective = 'shared'; }
+  else if (scope === null && showId) { where = { [Op.or]: [{ show_id: showId }, ...SHARED_WHERE[Op.or]] }; effective = 'show+shared'; }
+  return { where, scope: effective, showId, limit, offset };
+}
+
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const scoped = sceneSetListScope(req.query);
+    if (scoped.error) return res.status(400).json({ success: false, error: scoped.error });
+    const { where, limit, offset } = scoped;
     let sets;
     let degraded = null;
     try {
@@ -148,13 +183,15 @@ router.get('/', requireAuth, async (req, res) => {
         });
       }
       sets = await SceneSet.findAll({
+        where,
         include: includes,
         order: [['created_at', 'DESC']],
+        ...(limit ? { limit, offset, distinct: true, subQuery: false } : {}),
       });
     } catch (includeErr) {
       console.warn('Scene Sets query with includes failed, retrying minimal:', includeErr.message);
       try {
-        sets = await SceneSet.findAll({ order: [['created_at', 'DESC']] });
+        sets = await SceneSet.findAll({ where, order: [['created_at', 'DESC']], ...(limit ? { limit, offset } : {}) });
         degraded = { omitted: DEGRADED_OMITTED, text: DEGRADED_TEXT, reason: includeErr.message };
       } catch (minErr) {
         console.error('Scene Sets minimal query also failed:', minErr.message);
@@ -162,7 +199,19 @@ router.get('/', requireAuth, async (req, res) => {
       }
     }
     const data = await withApprovals(sets || []);
-    res.json({ success: true, count: data.length, data, ...(degraded ? { degraded } : {}) });
+    const body = { success: true, count: data.length, data, scope: scoped.scope, ...(degraded ? { degraded } : {}) };
+    if (scoped.showId) {
+      body.show_id = scoped.showId;
+      // The scope buttons' counts, from the same reads as the cards.
+      const [show, shared, all] = await Promise.all([
+        SceneSet.count({ where: { show_id: scoped.showId } }),
+        SceneSet.count({ where: SHARED_WHERE }),
+        SceneSet.count(),
+      ]);
+      body.counts = { show, shared, all };
+    }
+    if (limit) body.total = await SceneSet.count({ where });
+    res.json(body);
   } catch (err) {
     console.error('Scene Sets GET / error:', err);
     res.status(500).json({ success: false, error: 'Scene sets could not be read', code: 'SCENE_SETS_UNAVAILABLE', detail: err.message });
@@ -3043,3 +3092,4 @@ router.get('/:id/comparison', validateUUIDParam('id'), requireAuth, async (req, 
 });
 
 module.exports = router;
+module.exports.sceneSetListScope = sceneSetListScope;

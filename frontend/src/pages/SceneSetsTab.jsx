@@ -63,8 +63,9 @@ export const SCENE_SETS_PAGE_SIZE = 24;
 export function filterSceneSets(sets, { scope = 'all', showId = null, type = 'ALL', status = 'all', query = '', sort = 'newest' } = {}) {
   let result = sets || [];
   if (scope === 'show' && showId) result = result.filter((s) => String(s.show_id || '') === String(showId));
-  // Shared: the sets that belong to no show, usable by every show.
-  if (scope === 'shared') result = result.filter((s) => !s.show_id);
+  // Shared: the sets that belong to no show or are marked franchise assets,
+  // usable by every show (the server's definition, audit CTX-03).
+  if (scope === 'shared') result = result.filter((s) => !s.show_id || s.is_franchise_asset);
   if (type !== 'ALL') result = result.filter((s) => s.scene_type === type);
   if (status !== 'all') result = result.filter((s) => setProgress(s) === status);
   const q = query.trim().toLowerCase();
@@ -2862,6 +2863,14 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [searchQuery, setSearchQuery] = useState('');
   // In a show the library opens on that show's sets; All shows widens it.
   const [scope, setScope] = useState(pageShowId ? 'show' : 'all');
+  const activeScope = pageShowId ? scope : 'all';
+  // Audit CTX-03 (2026-10-03): the list is scoped on the server. This show
+  // and Shared read this show's sets plus the shared ones; All shows reads
+  // every set, deliberately. The scope buttons' counts come with the read.
+  const scopedToShow = Boolean(pageShowId) && activeScope !== 'all';
+  const scopedRef = useRef(scopedToShow);
+  scopedRef.current = scopedToShow;
+  const [scopeCounts, setScopeCounts] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [visibleCount, setVisibleCount] = useState(SCENE_SETS_PAGE_SIZE);
@@ -2894,8 +2903,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [degraded, setDegraded] = useState(null);
   const fetchSets = useCallback(async () => {
     try {
-      const res = await listSceneSetsApi();
+      const res = await listSceneSetsApi(scopedRef.current ? `show_id=${encodeURIComponent(pageShowId)}` : undefined);
       setSets(res.data?.data || []);
+      setScopeCounts(res.data?.counts || null);
       setDegraded(res.data?.degraded || null);
       setLoadError(null);
       initialLoadDone.current = true;
@@ -2908,9 +2918,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pageShowId]);
 
-  useEffect(() => { fetchSets(); }, [fetchSets]);
+  // This show and Shared share one read; only All shows reads differently.
+  useEffect(() => { fetchSets(); }, [fetchSets, scopedToShow]);
 
   // Each show's saved default home and closet (L3, Q12): loaded for the
   // shows that own a Home Base or Closet set. A set with no show has no
@@ -3596,12 +3607,11 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const activeScope = pageShowId ? scope : 'all';
   const filtered = useMemo(
     () => filterSceneSets(sets, { scope: activeScope, showId: pageShowId, type: filterType, status: statusFilter, query: searchQuery, sort: sortBy }),
     [sets, activeScope, pageShowId, filterType, statusFilter, searchQuery, sortBy],
   );
-  const sharedSetCount = useMemo(() => sets.filter((s) => !s.show_id).length, [sets]);
+  const sharedSetCount = useMemo(() => sets.filter((s) => !s.show_id || s.is_franchise_asset).length, [sets]);
   const showSetCount = useMemo(
     () => (pageShowId ? sets.filter((s) => String(s.show_id || '') === String(pageShowId)).length : sets.length),
     [sets, pageShowId],
@@ -3618,7 +3628,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   }, [filtered, visibleCount, focusSetId, sets]);
   const remaining = Math.max(0, filtered.length - visibleCount);
 
-  const totalCost = sets.reduce((sum, s) => {
+  // The cost of the sets in view, not of every show's (audit CTX-03).
+  const scopedSets = useMemo(() => filterSceneSets(sets, { scope: activeScope, showId: pageShowId }), [sets, activeScope, pageShowId]);
+  const totalCost = scopedSets.reduce((sum, s) => {
     const setCost = parseFloat(s.generation_cost || 0);
     const anglesCost = (s.angles || []).reduce((a, ang) => a + parseFloat(ang.generation_cost || 0), 0);
     return sum + setCost + anglesCost;
@@ -3690,14 +3702,14 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
             {pageShowId && (
               <div className="scene-sets-scope" role="group" aria-label="Which shows">
                 <button type="button" aria-pressed={activeScope === 'show'} className={`scene-sets-scope-btn${activeScope === 'show' ? ' active' : ''}`} onClick={() => setScope('show')}>
-                  This show <span className="scene-sets-scope-count">{showSetCount}</span>
+                  This show <span className="scene-sets-scope-count">{scopeCounts?.show ?? showSetCount}</span>
                 </button>
                 <button type="button" aria-pressed={activeScope === 'shared'} className={`scene-sets-scope-btn${activeScope === 'shared' ? ' active' : ''}`} onClick={() => setScope('shared')}
-                  title="Sets that belong to no show, usable by every show">
-                  Shared <span className="scene-sets-scope-count">{sharedSetCount}</span>
+                  title="Sets that belong to no show or are marked franchise assets, usable by every show">
+                  Shared <span className="scene-sets-scope-count">{scopeCounts?.shared ?? sharedSetCount}</span>
                 </button>
                 <button type="button" aria-pressed={activeScope === 'all'} className={`scene-sets-scope-btn${activeScope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>
-                  All shows <span className="scene-sets-scope-count">{sets.length}</span>
+                  All shows <span className="scene-sets-scope-count">{scopeCounts?.all ?? sets.length}</span>
                 </button>
               </div>
             )}
