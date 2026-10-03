@@ -123,10 +123,18 @@ async function ensureGenerationJobsTable() {
 }
 
 // ─── GET /  — list all scene sets ─────────────────────────────────────────────
+// Audit TRUTH-02 (2026-10-03): a failed read is a failed read. Both queries
+// failing is a 500 with code SCENE_SETS_UNAVAILABLE, never an empty success;
+// the minimal query standing in for the one with includes is a success
+// marked degraded, naming what it left out.
+
+const DEGRADED_OMITTED = ['angles', 'show', 'episodes'];
+const DEGRADED_TEXT = 'Views, show names and episode links could not be read for this list';
 
 router.get('/', requireAuth, async (req, res) => {
   try {
     let sets;
+    let degraded = null;
     try {
       const includes = [{ model: SceneAngle, as: 'angles', required: false }];
       if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'], required: false });
@@ -147,16 +155,17 @@ router.get('/', requireAuth, async (req, res) => {
       console.warn('Scene Sets query with includes failed, retrying minimal:', includeErr.message);
       try {
         sets = await SceneSet.findAll({ order: [['created_at', 'DESC']] });
+        degraded = { omitted: DEGRADED_OMITTED, text: DEGRADED_TEXT, reason: includeErr.message };
       } catch (minErr) {
-        console.warn('Scene Sets minimal query also failed:', minErr.message);
-        return res.json({ success: true, count: 0, data: [], note: minErr.message });
+        console.error('Scene Sets minimal query also failed:', minErr.message);
+        return res.status(500).json({ success: false, error: 'Scene sets could not be read', code: 'SCENE_SETS_UNAVAILABLE', detail: minErr.message });
       }
     }
     const data = await withApprovals(sets || []);
-    res.json({ success: true, count: data.length, data });
+    res.json({ success: true, count: data.length, data, ...(degraded ? { degraded } : {}) });
   } catch (err) {
     console.error('Scene Sets GET / error:', err);
-    res.json({ success: true, count: 0, data: [], note: err.message });
+    res.status(500).json({ success: false, error: 'Scene sets could not be read', code: 'SCENE_SETS_UNAVAILABLE', detail: err.message });
   }
 });
 
