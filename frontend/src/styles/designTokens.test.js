@@ -7,26 +7,14 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { contrast, readToken } from './contrast';
 
 const here = (f) => resolve(__dirname, f);
 const tokens = readFileSync(here('design-tokens.css'), 'utf8');
 const index = readFileSync(here('../index.css'), 'utf8');
 const shared = readFileSync(here('shared-components.css'), 'utf8');
 
-const token = (name) => {
-  const m = tokens.match(new RegExp(`^\\s*${name.replace(/[-]/g, '\\-')}:\\s*([^;]+);`, 'm'));
-  if (!m) throw new Error(`token ${name} not found`);
-  let v = m[1].trim();
-  const alias = v.match(/^var\((--[a-z0-9-]+)\)$/i);
-  return alias ? token(alias[1]) : v;
-};
-const lum = (hex) => {
-  const h = hex.replace('#', '');
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  const f = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-};
-export const contrast = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+const token = (name) => readToken([tokens], name);
 
 const PAIRS = [
   ['--text-inverse', '--primary'],
