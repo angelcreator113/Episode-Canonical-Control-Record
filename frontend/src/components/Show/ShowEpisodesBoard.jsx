@@ -23,7 +23,8 @@ function evaluation(ep) {
   }
 }
 
-export default function ShowEpisodesBoard({ showId, episodes = [], onChanged }) {
+// total: the show's true episode count (the list stops at 100), when known.
+export default function ShowEpisodesBoard({ showId, episodes = [], total = null, onChanged }) {
   const navigate = useNavigate();
   const [view, setView] = useState('grid');
   const completed = episodes.filter((e) => e.evaluation_status === 'accepted').length;
@@ -53,8 +54,10 @@ export default function ShowEpisodesBoard({ showId, episodes = [], onChanged }) 
   return (
     <div className="show-episodes-board" data-testid="show-episodes-board">
       <div className="seb-head">
-        <p className="seb-count">
-          {episodes.length} episode{episodes.length !== 1 ? 's' : ''}{completed > 0 && ` · ${completed} completed`}
+        <p className="seb-count" data-testid="seb-count">
+          {(total ?? episodes.length)} episode{(total ?? episodes.length) !== 1 ? 's' : ''}
+          {total != null && total > episodes.length && ` · showing the first ${episodes.length}`}
+          {completed > 0 && ` · ${completed} completed`}
         </p>
         <div className="seb-actions">
           <div className="seb-views" role="group" aria-label="Episode view">

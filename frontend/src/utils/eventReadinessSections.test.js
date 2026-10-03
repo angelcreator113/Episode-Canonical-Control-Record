@@ -4,7 +4,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  computeEventPackageReadiness, computeEventState, countEventsByState, describeMissing, moneyItem,
+  computeEventPackageReadiness, computeEventState, describeMissing, moneyItem,
   EVENT_PACKAGE_SECTIONS, READINESS_ITEMS, EVENT_QUEUE_STATES,
 } from './eventReadinessSections';
 import { resolveEventBasics, AUTO_DATE_KEY } from './eventBasics';
@@ -390,17 +390,3 @@ describe('waiting for format counts as not ready (Task #2148)', () => {
     expect(r.allComplete).toBe(true);
   });
 });
-
-describe('countEventsByState: one definition of Ready for every count', () => {
-  test('counts by the queue state, not the raw status', () => {
-    const counts = countEventsByState([
-      { ...full(), id: 'a', status: 'draft' },            // all gates met: Ready, though its status says draft
-      { ...full(), id: 'b', status: 'ready', invitation_asset_id: null }, // status says ready, a gate is missing
-      { ...full(), id: 'c', status: 'ready', used_in_episode_id: 'ep-1' }, // used by an episode
-      { ...full(), id: 'd', status: 'declined' },
-    ]);
-    expect(counts).toMatchObject({ ready: 1, needs_setup: 1, used: 1, archived: 1, needs_organizer: 0 });
-    expect(countEventsByState(null).ready).toBe(0);
-  });
-});
-

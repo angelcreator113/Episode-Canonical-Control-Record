@@ -342,17 +342,3 @@ export function computeEventState(event, readiness) {
   const { gatesMet } = readiness || computeEventPackageReadiness(ev);
   return gatesMet ? 'ready' : 'needs_setup';
 }
-
-/**
- * How many events are in each queue state (computeEventState), the one
- * definition of "Ready" for every count: the Events queue, Producer Mode's
- * Overview and the show page's Studio tab.
- */
-export function countEventsByState(events) {
-  const counts = Object.fromEntries(Object.keys(EVENT_QUEUE_STATES).map((k) => [k, 0]));
-  for (const ev of events || []) {
-    const state = computeEventState(ev);
-    counts[state] = (counts[state] || 0) + 1;
-  }
-  return counts;
-}

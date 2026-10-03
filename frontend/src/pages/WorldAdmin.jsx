@@ -22,6 +22,7 @@ import api from '../services/api';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import ShowOverview from '../components/Show/ShowOverview';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
@@ -33,7 +34,7 @@ import OpenInSceneSets from '../components/OpenInSceneSets';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
-import { computeEventPackageReadiness, computeEventState, countEventsByState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
 import {
   hydrateEventForModal, sameEditorValue, changedFields, withoutOrganizerKeys, missingForMarkReady,
 } from '../utils/eventEditorChanges';
@@ -270,13 +271,6 @@ function WorldAdmin() {
   const [wardrobeTotal, setWardrobeTotal] = useState(null);
   // The sections whose load failed this time, for the "Couldn't load" banner.
   const [loadFailures, setLoadFailures] = useState([]);
-  // The Events queue's states, counted (Ready, Used, …), for the Overview.
-  const eventCounts = React.useMemo(() => countEventsByState(worldEvents), [worldEvents]);
-  // This show's scene sets: the list answers every show's.
-  const showSceneSetCount = React.useMemo(
-    () => sceneSets.filter((x) => String(x.show_id || '') === String(showId)).length,
-    [sceneSets, showId],
-  );
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   // Upload processing state (Task #1769): cards for items this session
@@ -426,6 +420,14 @@ function WorldAdmin() {
     if (landing) setSubTab(landing);
   }, []);
 
+  // Open a section by its tab or sub-tab key (the Overview's links).
+  const goTo = (key) => {
+    const [main, sub] = resolveTab(key);
+    setActiveTab(main);
+    const landing = sub || TABS.find((t) => t.key === main)?.subs?.[0]?.key || null;
+    setSubTab(landing);
+    setSearchParams({ tab: landing || main });
+  };
   const switchTab = (tabKey) => {
     setActiveTab(tabKey);
     const tab = TABS.find(t => t.key === tabKey);
@@ -1718,68 +1720,38 @@ The revised event should feel like a completely different experience from the si
       })()}
 
       {/* ════════════════════════ OVERVIEW ════════════════════════ */}
+      {/* What you're producing, what needs attention, what comes next, what
+          changed (ShowOverview). The full state history is in Cast &
+          Continuity; tiers are in Episodes → Results. */}
       {activeTab === 'overview' && (
         <div style={S.content}>
-          <div style={{ ...S.card, background: 'linear-gradient(135deg, #fff 0%, #FAF7F0 100%)', borderColor: 'rgba(184,150,46,0.12)' }}>
-            <h2 style={{ ...S.cardTitle, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 24 }}>👑</span> Lala's Current State
-            </h2>
-            {charState ? (
-              <div style={S.statsRow}>
-                {Object.entries(charState.state || {}).map(([k, v]) => (
-                  <div key={k} style={{ ...S.statBox, background: 'linear-gradient(135deg, #fff 0%, #FDFCF9 100%)' }}>
-                    <div style={{ fontSize: 26, marginBottom: 4 }}>{STAT_ICONS[k]}</div>
-                    <div style={S.statVal(k, v)}>{v}</div>
-                    <div style={S.statLbl}>{k.replace(/_/g, ' ')}</div>
-                  </div>
-                ))}
-              </div>
-            ) : <p style={S.muted}>No state yet. Evaluate an episode to initialize.</p>}
-          </div>
+          <ShowOverview
+            showId={showId}
+            episodes={episodes}
+            events={worldEvents}
+            stateHistory={stateHistory}
+            decisions={decisions}
+            charState={charState}
+            wardrobeCount={wardrobeTotal ?? wardrobeItems.length}
+            goTo={goTo}
+          />
+        </div>
+      )}
 
-          {/* Production Dashboard */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
-            {[
-              { v: episodesTotal ?? episodes.length, l: 'Episodes', icon: '📺', color: '#6366f1', testId: 'wa-stat-episodes' },
-              // One definition of Ready and Used: the Events queue's (computeEventState).
-              { v: eventCounts.ready, l: 'Events Ready', icon: '📅', color: '#22c55e', testId: 'wa-stat-events-ready' },
-              { v: eventCounts.used, l: 'Events Used', icon: '✓', color: '#059669', testId: 'wa-stat-events-used' },
-              { v: opportunities.filter(o => !['archived','declined','expired'].includes(o.status)).length, l: 'Active Opps', icon: '💼', color: '#B8962E' },
-              { v: wardrobeTotal ?? wardrobeItems.length, l: 'Wardrobe', icon: '👗', color: '#ec4899', testId: 'wa-stat-wardrobe' },
-              { v: showSceneSetCount, l: 'Locations', icon: '📍', color: '#8b5cf6', testId: 'wa-stat-locations' },
-            ].map((s, i) => (
-              <div key={i} style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 10px', textAlign: 'center' }}>
-                <div style={{ fontSize: 20, marginBottom: 2 }}>{s.icon}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: s.color }} data-testid={s.testId}>{s.v}</div>
-                <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>{s.l}</div>
-              </div>
-            ))}
-          </div>
+      {activeTab === 'episodes' && subTab === 'episodes-production' && (
+        <div style={S.content}>
+          <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={loadData} />
+        </div>
+      )}
 
-          {/* Next Steps */}
-          {(() => {
-            const noEvents = eventCounts.ready === 0;
-            const noWardrobe = wardrobeItems.length === 0;
-            const noEpisodes = episodes.length === 0;
-            const steps = [];
-            if (noWardrobe) steps.push({ text: 'Upload wardrobe pieces', action: () => setActiveTab('wardrobe'), icon: '👗' });
-            if (noEvents) steps.push({ text: 'Create events from feed', action: () => setActiveTab('events'), icon: '📅' });
-            if (!noEvents && noEpisodes) steps.push({ text: 'Generate first episode from an event', action: () => setActiveTab('events'), icon: '🎬' });
-            if (steps.length === 0) return null;
-            return (
-              <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>Next Steps</div>
-                {steps.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }} onClick={s.action}>
-                    <span style={{ fontSize: 16 }}>{s.icon}</span>
-                    <span style={{ fontSize: 13, color: '#2C2C2C', fontWeight: 500 }}>{s.text}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: '#B8962E', fontWeight: 600 }}>→</span>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+      {activeTab === 'episodes' && subTab === 'season' && (
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
+      )}
 
+      {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
+      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (
+        <div style={S.content}>
+          {/* Tiers across the season's evaluated episodes (moved from the Overview). */}
           {Object.keys(tierCounts).length > 0 && (
             <div style={S.card}>
               <h2 style={S.cardTitle}>🏆 Tier Distribution</h2>
@@ -1795,45 +1767,6 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          {stateHistory.length > 0 && (
-            <div style={S.card}>
-              <h2 style={S.cardTitle}>📈 Canon Timeline</h2>
-              {stateHistory.slice(0, 20).map((h, i) => {
-                const deltas = typeof h.deltas_json === 'string' ? JSON.parse(h.deltas_json) : h.deltas_json;
-                return (
-                  <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: h.source === 'override' ? '#eab308' : h.source === 'manual' ? '#dc2626' : '#6366f1' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{h.episode_title || h.episode_id?.substring(0, 8)}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                        {Object.entries(deltas || {}).filter(([, v]) => typeof v === 'number' && v !== 0).map(([k, v]) => (
-                          <span key={k} style={S.deltaBadge(v)}>{STAT_ICONS[k]} {v > 0 ? '+' : ''}{v}</span>
-                        ))}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{new Date(h.created_at).toLocaleDateString()} · {h.source}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ════════════════════════ SEASON ════════════════════════ */}
-      {activeTab === 'episodes' && subTab === 'episodes-production' && (
-        <div style={S.content}>
-          <ShowEpisodesBoard showId={showId} episodes={episodes} onChanged={loadData} />
-        </div>
-      )}
-
-      {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
-      )}
-
-      {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
-      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (
-        <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
