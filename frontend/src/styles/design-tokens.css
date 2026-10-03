@@ -33,6 +33,7 @@
   --accent:        #C06E87;
   --accent-dark:   #9E4E68;
   --accent-subtle: #FBEFF3;
+  --accent-light:  #E8A0B4;  /* pink borders and fills under ink; never text (2.07:1 on white) */
 
   /* The same two, by name, for pages that say pink and teal. */
   --lala-teal:        var(--primary);
@@ -41,6 +42,7 @@
   --lala-pink:        var(--accent);
   --lala-pink-dark:   var(--accent-dark);
   --lala-pink-soft:   var(--accent-subtle);
+  --lala-pink-light:  var(--accent-light);
 
   /* --secondary is secondary TEXT everywhere it is used (AuditLog,
      AdminPanel, Header, LoadingSpinner); it stays readable text. */

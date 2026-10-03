@@ -23,7 +23,7 @@ used to redeclare `--primary`, `--text-primary` and the status colors in its own
 | Token | Value | Use |
 |---|---|---|
 | `--primary` / `--primary-dark` / `--primary-light` / `--primary-subtle` / `--primary-text` | `#2F7F76` / `#276B63` / `#4C9A91` / `#EAF5F3` / `#276B63` | every primary action, hover, selected surface, teal text |
-| `--accent` / `--accent-dark` / `--accent-subtle` | `#C06E87` / `#9E4E68` / `#FBEFF3` | pink borders, badges, attention surfaces; pink **text** is `--accent-dark` |
+| `--accent` / `--accent-dark` / `--accent-light` / `--accent-subtle` | `#C06E87` / `#9E4E68` / `#E8A0B4` / `#FBEFF3` | pink borders, badges, attention surfaces; pink **text** is `--accent-dark`; `--accent-light` is a border or fill under ink, never text (2.07:1 on white) |
 | `--lala-teal*`, `--lala-pink*` | aliases of the two above | for pages written in those words |
 | `--surface-bg` / `--surface-card` | `#FAF7F0` (= `--lala-parchment`) / `#FFFFFF` | page / cards |
 | `--text-primary` / `--text-secondary` / `--text-muted` / `--text-faint` / `--text-inverse` | `#2C2C2C` / `#6B6557` / `#6B6557` / `#A09889` / `#FFFFFF` | ink; `--text-faint` is placeholders and disabled controls only, never information |
@@ -61,6 +61,9 @@ are listed for the record.
 | `--lala-gold-text` on `--lala-gold-soft` | 5.48 | fashion template category |
 | *`--danger` on `--danger-bg`* | **4.13** | failed; red text is `--danger-text` |
 | *white on `#B8962E`* (the old Events pager current page, Auto-Fill and the Ideas buttons) | **2.82** | failed; replaced by `--primary` |
+| *`--lala-gold` as text on white* (the Event Package's links, labels and section marks) | **2.82** | failed; gold text is `--lala-gold-text` |
+| *`--lala-gold-hover` as text on white* | **3.56** | failed; the hover keeps `--lala-gold-text` |
+| *`#C06E87` as text* (the Event Package's Continue count, look prices) | **3.61** | failed; pink text is `--accent-dark` |
 | *white on `#B8962E`* (the old "+ New Entry") | **2.82** | failed; replaced |
 | *`#A09889` as text* (the old `--text-muted`) | **2.86** | failed; now `--text-faint`, decorative only |
 | *`#C06E87` as text* | **3.61** | failed; pink text is `--accent-dark` |
@@ -76,7 +79,8 @@ are listed for the record.
 | Sidebar (`Sidebar.css`) | done: its `--ps-*` palette is scoped to `.ps-sidebar` and mapped to the tokens (the old `:root` block lost to whichever page stylesheet loaded last; `RelationshipEngine.css` and `SocialProfileGenerator.css` still carry their own `:root` `--ps-*` blocks until their own migration). The old palette failed on its own: rose-deep on cream 4.11:1, on blush 3.40:1, tan-soft 2.82:1. Fonts (Jost / Cormorant via Google Fonts) are a later pass. |
 | Producer Overview (`WorldAdmin`'s shared style object `S`, its tabs and sub-tabs, `ShowOverview`'s `.sov-*` rules) | done: every color in `S` is a token, the primary action and the active tab are `--primary`, the active tab carries `aria-current`. |
 | Events queue (`WorldAdmin`'s Events tab: header, bulk bar, filter bar, templates panel, generate-options toolbar, cards, empty state, pager, Ideas drawer; the `.wa-ev-*` rules; `EVENT_QUEUE_STATES` in `eventReadinessSections.js`) | done: no color literal in the queue JSX, the pager's current page and the Auto-Fill / Generate / Ideas buttons are `--primary` (they were white on gold or green), the five queue states read `--*-text` on `--*-bg` pairs, template categories map to the gold, pink, info, teal, warning and success families. The inline event editor and the "Edit details" modal in the same tab are the Event Package's and migrate with it. |
-| Event Package (`/shows/:showId/events/:eventId`, plus the Events tab's inline editor and "Edit details" modal) → Episode → Scene Sets (the audit's order) | next, one screen per PR: inline hex colors become tokens, fixed-column grids become `auto-fit` or named classes |
+| Event Package page (`EventPackagePage.css`, `EventLookImage.css`; `/shows/:showId/events/:eventId`) | done: the 208 `var(--lala-*, #hex)` fallbacks are gone so the tokens reach the page; `.epp-btn-primary`, the Continue button and "Use this look" are `--primary` (they were gold under white, 2.82:1); the 19 rules that drew gold or its hover as text read `--lala-gold-text`; the Continue bar's own `--epp-pink` / `--epp-teal` alias `--accent-light`, `--accent-subtle`, `--primary-light`, `--primary-subtle`, `--primary`; statuses, the used banner, invitation states, readiness sections, money warnings and the look cards read the token families. |
+| Events tab editors (`WorldAdmin`'s inline event editor, "Edit details" modal and compare modal) → Episode → Scene Sets (the audit's order) | next, one screen per PR: inline hex colors become tokens, fixed-column grids become `auto-fit` or named classes |
 | Remaining screens | after |
 
 Rules for a migrated screen: no new hex literals in JSX for colors the tokens have;
