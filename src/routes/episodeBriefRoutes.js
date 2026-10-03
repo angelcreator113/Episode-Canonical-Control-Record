@@ -187,6 +187,23 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
   }
 });
 
+// ── PRODUCTION COVERAGE ───────────────────────────────────────────────────────
+// §8(o) item 2 (episode creation step 8): per canonical beat, the four
+// indicators (Environment, JustAWoman clip, Lala clip, Interface), what each
+// requires and what is met, and the first required thing still missing.
+// Reads only (productionCoverageService).
+
+router.get('/:episodeId/production-coverage', requireAuth, async (req, res) => {
+  try {
+    const { loadCoverage } = require('../services/productionCoverageService');
+    const coverage = await loadCoverage(models, req.params.episodeId);
+    return res.json({ success: true, data: coverage });
+  } catch (err) {
+    console.error('[ProductionCoverage] read failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── RETRY UNSAVED FEED MOMENTS ───────────────────────────────────────────────
 // Re-runs the feed moment save for the beats the plan reports in
 // feed_moment_missing, and only those (§8(w) P5, Task #2220). Template-built,

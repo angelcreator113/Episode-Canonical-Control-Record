@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
+import ProductionCoveragePanel from './ProductionCoveragePanel';
 
 /**
  * EpisodeProductionChecklist
@@ -463,6 +464,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
               )}
             </div>
           )}
+          {/* Production coverage (§8(o) item 2, episode creation step 8). */}
+          {section.id === 'scene' && <ProductionCoveragePanel episodeId={episode.id} />}
           {section.items.map(item => (
             <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
