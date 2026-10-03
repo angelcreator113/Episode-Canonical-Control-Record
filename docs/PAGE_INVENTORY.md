@@ -73,7 +73,7 @@ not via any page's UI.
 | Path | Component | Live/Redirect | Reachable via |
 |---|---|---|---|
 | `/episodes` | redirect → `/shows` (App.jsx:344) | redirect | — |
-| `/episodes/create` | `pages/CreateEpisode.jsx` (App.jsx:345) | live | in-app link (`pages/StudioTimelinePage.jsx:66`, `pages/Home.jsx:264`) |
+| `/episodes/create` | `pages/NewEpisodeRedirect.jsx` | redirect (audit IA-03, 2026-10-03): opens the host-first New Episode starter for `?show_id=`, else the active show; `pages/CreateEpisode.jsx` is no longer routed (kept per `EVENT_EPISODE_FLOW.md` §6 ruling 2: redirected, not deleted) | in-app link (`pages/StudioTimelinePage.jsx`, `pages/Home.jsx`) |
 | `/episodes/:episodeId/edit` | `components/QuickEpisodeCreator.jsx` (App.jsx:346) | live | in-app link (`pages/EpisodeDetail.jsx:457,605`) |
 | `/episodes/:id/evaluate` | `pages/EvaluateEpisode.jsx` (App.jsx:347) | live | in-app link (`pages/WorldAdmin.jsx:1780`) |
 | `/episodes/:episodeId/todo` | `pages/EpisodeTodoPage.jsx` (App.jsx:348) | live | in-app link (`pages/WorldAdmin.jsx:1779`, `pages/EpisodeScriptWriterPage.jsx:293`) |
@@ -84,7 +84,7 @@ not via any page's UI.
 | `/shows/:id` | `pages/ShowDetail.jsx` (App.jsx:357) | live | Sidebar (Shows sub-list per-show links, `Sidebar.jsx:361-371`) + in-app link (`pages/ShowManagement.jsx:328`) |
 | `/shows/:id/edit` | `pages/EditShow.jsx` (App.jsx:358) | live | in-app link (`pages/ShowManagement.jsx:335`) |
 | `/shows/:id/world` | `pages/WorldAdmin.jsx` (App.jsx:359) | live | Sidebar (Producer Mode item, conditional on a show existing, `Sidebar.jsx:34`) + in-app link (`pages/ShowDetail.jsx:222`, `components/Show/ProductionTab.jsx:282,288,294`) |
-| `/shows/:showId/quick-episode` | `components/QuickEpisodeCreator.jsx` (App.jsx:360) | live | in-app link (`pages/ShowDetail.jsx:147,321,351`, `components/Show/ProductionTab.jsx:337`) |
+| `/shows/:showId/quick-episode` | `pages/NewEpisodeRedirect.jsx` | redirect (audit IA-03, 2026-10-03): opens `/shows/:showId/new-episode`; `QuickEpisodeCreator` remains the edit page at `/episodes/:episodeId/edit` | URL only |
 | `/shows/:id/settings` | `pages/ShowSettings.jsx` (App.jsx:361) | live | in-app link (`components/Show/ProductionTab.jsx:222,450`) |
 | `/studio/timeline` | `pages/StudioTimelinePage.jsx` (App.jsx:363) | live | Sidebar (STUDIO zone, `Sidebar.jsx:56`) |
 | `/studio/scene/:sceneId` | `pages/SceneStudioPage.jsx` (App.jsx:366) | live | in-app link (`components/Episodes/EpisodeScenesTab.jsx:453`) |
