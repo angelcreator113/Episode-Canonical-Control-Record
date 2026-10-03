@@ -76,8 +76,8 @@ function EpisodePhoneMissionsTab({ episode }) {
   const activeCount = missions.filter(m => m.is_active).length;
 
   const S = {
-    card: { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 12 },
-    sectionTitle: { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" },
+    card: { background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px', marginBottom: 12 },
+    sectionTitle: { fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" },
     scopeBadge: (showWide) => ({
       padding: '1px 6px',
       borderRadius: 3,
@@ -85,11 +85,11 @@ function EpisodePhoneMissionsTab({ episode }) {
       fontWeight: 700,
       fontFamily: "'DM Mono', monospace",
       letterSpacing: 0.4,
-      background: showWide ? '#eef2ff' : '#fdf2f8',
-      color: showWide ? '#6366f1' : '#be185d',
+      background: showWide ? 'var(--primary-subtle)' : 'var(--accent-subtle)',
+      color: showWide ? 'var(--primary-text)' : 'var(--accent-dark)',
     }),
-    primaryBtn: { padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
-    ghostBtn: { padding: '5px 10px', borderRadius: 6, background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 10, fontWeight: 600, cursor: 'pointer' },
+    primaryBtn: { padding: '6px 14px', borderRadius: 6, background: 'var(--primary)', border: 'none', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
+    ghostBtn: { padding: '5px 10px', borderRadius: 6, background: 'transparent', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, cursor: 'pointer' },
     statPill: { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 4, fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 600 },
   };
 
@@ -99,8 +99,8 @@ function EpisodePhoneMissionsTab({ episode }) {
           (EpisodeLalasPhoneTab, issue #1908), so the heading is an h3. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
         <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#6B6557', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" }}>Missions</h3>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" }}>Missions</h3>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
             Read-only observers that watch playthrough state and report progress. Show-wide missions run on every episode; episode-scoped missions only run here.
           </div>
         </div>
@@ -112,18 +112,18 @@ function EpisodePhoneMissionsTab({ episode }) {
       {/* Stats bar */}
       {!loading && !error && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          <span style={{ ...S.statPill, background: '#f0fdf4', color: '#16a34a' }}>✓ {activeCount} active</span>
-          <span style={{ ...S.statPill, background: '#eef2ff', color: '#6366f1' }}>🌍 {showWide.length} show-wide</span>
-          <span style={{ ...S.statPill, background: '#fdf2f8', color: '#be185d' }}>📍 {episodeOnly.length} this episode</span>
+          <span style={{ ...S.statPill, background: 'var(--success-bg)', color: 'var(--success-text)' }}>✓ {activeCount} active</span>
+          <span style={{ ...S.statPill, background: 'var(--primary-subtle)', color: 'var(--primary-text)' }}>🌍 {showWide.length} show-wide</span>
+          <span style={{ ...S.statPill, background: 'var(--accent-subtle)', color: 'var(--accent-dark)' }}>📍 {episodeOnly.length} this episode</span>
         </div>
       )}
 
       {/* Mission list */}
-      {loading && <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Loading missions…</div>}
-      {error && <div style={{ padding: 20, color: '#dc2626', background: '#fef2f2', borderRadius: 8, fontSize: 12 }}>Error: {error}</div>}
+      {loading && <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading missions…</div>}
+      {error && <div style={{ padding: 20, color: 'var(--danger-text)', background: 'var(--danger-bg)', borderRadius: 8, fontSize: 12 }}>Error: {error}</div>}
       {!loading && !error && missions.length === 0 && (
         <div style={S.card}>
-          <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>
+          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)' }}>
             <div style={{ fontSize: 13, marginBottom: 6 }}>No missions yet.</div>
             <div style={{ fontSize: 11, lineHeight: 1.5 }}>Click <strong>Manage missions</strong> to create one — show-wide for cross-episode goals (onboarding, follow Lala) or episode-scoped for one-off objectives (find the invite, complete the date).</div>
           </div>
@@ -138,14 +138,14 @@ function EpisodePhoneMissionsTab({ episode }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{m.name}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{m.name}</div>
                   <span style={S.scopeBadge(isShowWide)}>{isShowWide ? 'SHOW-WIDE' : 'THIS EPISODE'}</span>
-                  {!m.is_active && <span style={{ ...S.scopeBadge(false), background: '#f1f5f9', color: '#64748b' }}>INACTIVE</span>}
+                  {!m.is_active && <span style={{ ...S.scopeBadge(false), background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)' }}>INACTIVE</span>}
                 </div>
                 {m.description && (
-                  <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 6 }}>{m.description}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 6 }}>{m.description}</div>
                 )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
                   <span>🎯 {objectivesCount} {objectivesCount === 1 ? 'objective' : 'objectives'}</span>
                   {Array.isArray(m.reward_actions) && m.reward_actions.length > 0 && (
                     <span>🎁 {m.reward_actions.length} reward {m.reward_actions.length === 1 ? 'action' : 'actions'}</span>
@@ -158,7 +158,7 @@ function EpisodePhoneMissionsTab({ episode }) {
                   onClick={() => toggleActive(m)}
                   disabled={togglingId === m.id}
                   title={m.is_active ? 'Deactivate this mission' : 'Activate this mission'}
-                  style={{ ...S.ghostBtn, color: m.is_active ? '#16a34a' : '#94a3b8', borderColor: m.is_active ? '#bbf7d0' : '#e2e8f0' }}
+                  style={{ ...S.ghostBtn, color: m.is_active ? 'var(--success-text)' : 'var(--text-secondary)', borderColor: m.is_active ? 'var(--success-border)' : 'var(--lala-parchment-3)' }}
                 >
                   {togglingId === m.id ? '…' : (m.is_active ? '● Active' : '○ Inactive')}
                 </button>
