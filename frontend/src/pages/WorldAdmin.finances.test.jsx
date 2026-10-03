@@ -45,7 +45,7 @@ describe("Lala's Finances: one home", () => {
     renderAt('finances');
     const section = await screen.findByTestId('lala-finances');
     expect(within(section).getByRole('heading', { name: "💰 Lala's Finances" })).toBeTruthy();
-    expect(tabButton("Lala's Finances").style.color).toBe('rgb(99, 102, 241)');
+    expect(tabButton("Lala's Finances").getAttribute('aria-current')).toBe('page');
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/shows/show-1/financial-summary'));
     // A page section: no fixed overlay around it.
     expect(section.closest('[style*="position: fixed"]')).toBeNull();

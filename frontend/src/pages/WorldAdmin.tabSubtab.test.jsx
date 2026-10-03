@@ -27,8 +27,8 @@ function renderAt(tab) {
 }
 
 // The active sub-tab button is the one drawn in the active colour.
-const ACTIVE = 'rgb(99, 102, 241)';
-const isActive = (name) => screen.getByRole('button', { name }).style.color === ACTIVE;
+// The active tab says so (aria-current), whatever the theme colors it.
+const isActive = (name) => screen.getByRole('button', { name }).getAttribute('aria-current') === 'page';
 
 describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
   beforeEach(() => {
