@@ -1,12 +1,12 @@
 /* Production → Money (Episode Money, Phase A; Task #2278). */
 
 .em-tab {
-  --em-positive: #2F7D4F;
+  --em-positive: var(--success-text);
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 16px;
-  color: var(--lala-ink, #2C2C2C);
+  color: var(--lala-ink);
 }
 
 .em-summary {
@@ -16,8 +16,8 @@
 }
 
 .em-card {
-  background: var(--lala-surface, #FFFFFF);
-  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: var(--lala-radius, 8px);
   padding: 12px 14px;
 }
@@ -30,7 +30,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-card-value {
@@ -44,7 +44,7 @@
 .em-explain {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-section {
@@ -63,16 +63,16 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--lala-gold, #B8962E);
+  color: var(--lala-gold-text);
 }
 
 .em-rows {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: var(--lala-radius, 8px);
-  background: var(--lala-surface, #FFFFFF);
+  background: var(--lala-surface);
 }
 
 .em-row {
@@ -82,7 +82,7 @@
   gap: 8px;
   padding: 10px 12px;
   font-size: 13px;
-  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+  border-top: 1px solid var(--lala-parchment-2);
 }
 
 .em-row:first-child {
@@ -92,7 +92,7 @@
 .em-row-date {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-row-category {
@@ -101,7 +101,7 @@
 }
 
 .em-row-desc {
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
   overflow-wrap: anywhere;
 }
 
@@ -112,8 +112,8 @@
 }
 
 .em-row-expected {
-  background: var(--lala-parchment, #FAF7F0);
-  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-parchment);
+  color: var(--lala-ink-muted);
   font-style: italic;
 }
 
@@ -122,21 +122,21 @@
 }
 
 .em-neg {
-  color: var(--lala-danger, #B84D2E);
+  color: var(--lala-danger);
 }
 
 .em-empty {
   padding: 12px 14px;
   font-size: 13px;
-  color: var(--lala-ink-muted, #6B6557);
-  background: var(--lala-parchment, #FAF7F0);
-  border: 1px dashed var(--lala-parchment-3, #E8E0D0);
+  color: var(--lala-ink-muted);
+  background: var(--lala-parchment);
+  border: 1px dashed var(--lala-parchment-3);
   border-radius: var(--lala-radius, 8px);
 }
 
 .em-error {
-  color: var(--lala-danger, #B84D2E);
-  background: var(--lala-danger-soft, #F7E4DC);
+  color: var(--lala-danger);
+  background: var(--lala-danger-soft);
 }
 
 /* Event spending (the event cost split ruling, 2026-09-30). */
@@ -157,7 +157,7 @@
   background: none;
   font-family: 'DM Mono', monospace;
   font-size: 12px;
-  color: var(--lala-gold, #B8962E);
+  color: var(--lala-gold-text);
   cursor: pointer;
 }
 
@@ -167,7 +167,7 @@
 }
 
 .em-link-danger {
-  color: var(--lala-danger, #B84D2E);
+  color: var(--lala-danger);
 }
 
 .em-spend {
@@ -181,7 +181,7 @@
   row-gap: 2px;
   padding: 10px 12px;
   font-size: 13px;
-  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+  border-top: 1px solid var(--lala-parchment-2);
 }
 
 .em-spend:first-child {
@@ -189,8 +189,8 @@
 }
 
 .em-spend-label { grid-area: label; font-weight: 600; overflow-wrap: anywhere; }
-.em-spend-qty { grid-area: qty; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
-.em-spend-total { grid-area: total; text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; color: var(--lala-danger, #B84D2E); }
+.em-spend-qty { grid-area: qty; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--lala-ink-muted); }
+.em-spend-total { grid-area: total; text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; color: var(--lala-danger); }
 
 .em-spend-meta {
   grid-area: meta;
@@ -204,7 +204,7 @@
 .em-spend-note {
   font-size: 11px;
   font-style: italic;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-spend-actions {
@@ -217,7 +217,7 @@
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   text-align: right;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-form {
@@ -226,8 +226,8 @@
   gap: 10px;
   align-items: end;
   padding: 12px;
-  background: var(--lala-parchment, #FAF7F0);
-  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  background: var(--lala-parchment);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: var(--lala-radius, 8px);
 }
 
@@ -238,17 +238,17 @@
   min-width: 0;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-field input {
   min-height: 36px;
   padding: 6px 8px;
   font-size: 14px;
-  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 6px;
-  background: var(--lala-surface, #FFFFFF);
-  color: var(--lala-ink, #2C2C2C);
+  background: var(--lala-surface);
+  color: var(--lala-ink);
   min-width: 0;
 }
 
@@ -264,8 +264,8 @@
   padding: 0 16px;
   border: none;
   border-radius: 6px;
-  background: var(--lala-gold, #B8962E);
-  color: #FFFFFF;
+  background: var(--primary);
+  color: var(--text-inverse);
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   cursor: pointer;
@@ -282,7 +282,7 @@
   gap: 4px;
   margin: 0;
   font-size: 12px;
-  color: var(--lala-danger, #B84D2E);
+  color: var(--lala-danger);
 }
 
 /* 375px: the summary cards stack and each row wraps into two lines. */
@@ -334,7 +334,7 @@
   row-gap: 4px;
   padding: 10px 12px;
   font-size: 13px;
-  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+  border-top: 1px solid var(--lala-parchment-2);
 }
 
 .em-line:first-child {
@@ -352,19 +352,19 @@
   gap: 4px 10px;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-line-planned,
 .em-line-covered,
 .em-line-not_earned {
-  background: var(--lala-parchment, #FAF7F0);
+  background: var(--lala-parchment);
 }
 
 .em-line-not_earned .em-line-label,
 .em-line-not_earned .em-line-amount {
   text-decoration: line-through;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-chip {
@@ -375,14 +375,14 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border: 1px solid var(--lala-parchment-3, #E8E0D0);
-  color: var(--lala-ink-muted, #6B6557);
-  background: var(--lala-surface, #FFFFFF);
+  border: 1px solid var(--lala-parchment-3);
+  color: var(--lala-ink-muted);
+  background: var(--lala-surface);
 }
 
-.em-chip-pending { color: #8A5A00; border-color: #E9C46A; background: #FFF6DC; }
-.em-chip-posted { color: var(--em-positive); border-color: #A9D3B8; background: #EAF5EE; }
-.em-chip-conditional { text-transform: none; color: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); }
+.em-chip-pending { color: var(--warning-text); border-color: var(--warning-border); background: var(--warning-bg); }
+.em-chip-posted { color: var(--em-positive); border-color: var(--success-border); background: var(--success-bg); }
+.em-chip-conditional { text-transform: none; color: var(--lala-gold-text); border-color: var(--lala-gold); }
 
 .em-conditional {
   display: flex;
@@ -400,10 +400,10 @@
 /* MB4 (§8(gg)): early warnings, never blocking. */
 .em-warnings {
   padding: 10px 12px;
-  border: 1px solid #E9C46A;
+  border: 1px solid var(--warning-border);
   border-radius: var(--lala-radius, 8px);
-  background: #FFF6DC;
-  color: #6B4A00;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 13px;
 }
 
@@ -429,7 +429,7 @@
 .em-warnings-note {
   margin: 6px 0 0;
   font-size: 11px;
-  color: #8A6A20;
+  color: var(--warning-text);
 }
 
 /* MB6 (§8(gg), Q7): the reconciliation after Complete. */
@@ -445,7 +445,7 @@
   row-gap: 4px;
   padding: 10px 12px;
   font-size: 13px;
-  border-top: 1px solid var(--lala-parchment-2, #F4EFE4);
+  border-top: 1px solid var(--lala-parchment-2);
 }
 
 .em-recon:first-child {
@@ -456,7 +456,7 @@
 .em-recon .em-chip { grid-area: chip; }
 
 .em-recon-diff {
-  background: #FFF6DC;
+  background: var(--warning-bg);
 }
 
 .em-recon-figures {
@@ -466,14 +466,14 @@
   gap: 4px 12px;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
 
 .em-recon-note {
   grid-area: note;
   font-size: 11px;
   font-style: italic;
-  color: #8A5A00;
+  color: var(--warning-text);
 }
 
 .em-recon-chip-changed,
@@ -481,13 +481,13 @@
 .em-recon-chip-removed,
 .em-recon-chip-added,
 .em-recon-chip-unplanned,
-.em-recon-chip-outstanding { color: #8A5A00; border-color: #E9C46A; background: #FFF6DC; }
+.em-recon-chip-outstanding { color: var(--warning-text); border-color: var(--warning-border); background: var(--warning-bg); }
 .em-recon-chip-as_planned,
-.em-recon-chip-earned { color: var(--em-positive); border-color: #A9D3B8; background: #EAF5EE; }
+.em-recon-chip-earned { color: var(--em-positive); border-color: var(--success-border); background: var(--success-bg); }
 
 .em-recon-totals {
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   text-align: right;
-  color: var(--lala-ink-muted, #6B6557);
+  color: var(--lala-ink-muted);
 }
