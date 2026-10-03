@@ -216,8 +216,10 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
   }, [reload]);
 
   const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
+  // Scene Sets' way back names the episode ("Back to Episode 10").
+  const scenesFromLabel = episode?.episode_number ? `Episode ${episode.episode_number}` : 'Scenes tab';
   const beats = useBeatActions({
-    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds, fromLabel: 'Scenes tab',
+    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds, fromLabel: scenesFromLabel,
   });
 
   // Re-run the save for the missing beats only, then refresh the warning
@@ -376,7 +378,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
               <li key={item.beat_number} className="est-issue" data-testid={`est-issue-${item.beat_number}`}>
                 <span className="est-issue-text">Beat {item.beat_number} · {item.beat_name} — {item.text}</span>
                 {item.fix?.kind === 'scene_set' && (
-                  <OpenInSceneSets showId={showId} setId={item.fix.scene_set_id} zone={item.fix.zone || null} fromLabel="Scenes tab" className="est-issue-action" />
+                  <OpenInSceneSets showId={showId} setId={item.fix.scene_set_id} zone={item.fix.zone || null} fromLabel={scenesFromLabel}
+                    need={`Beat ${item.beat_number}: ${item.text}`} className="est-issue-action" />
                 )}
                 {item.fix?.kind === 'locations' && (
                   <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={openLocations}>Edit locations</button>

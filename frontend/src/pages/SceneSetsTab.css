@@ -4190,3 +4190,14 @@
   display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
   margin: 16px 0 8px; font-family: 'DM Mono', monospace; font-size: 11px; color: #8a7d63;
 }
+
+/* Arriving from an episode or event: what it needs, and the way back. */
+.scene-sets-handoff {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 10px 12px; margin-bottom: 12px; border: 1px solid #e8e0d0; border-radius: 8px; background: #FAF7F0;
+}
+.scene-sets-handoff.is-ready { border-color: #bbf7d0; background: #f0fdf4; }
+.scene-sets-handoff-line { margin: 0; flex: 1 1 220px; min-width: 0; font-size: 13px; color: #2C2C2C; overflow-wrap: anywhere; }
+.scene-sets-handoff-ready { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #15803d; }
+.scene-sets-handoff-back { text-decoration: none; }
+.scene-sets-modal-handoff { padding: 8px 16px 0; } .scene-sets-modal-handoff .scene-sets-handoff { margin-bottom: 8px; }

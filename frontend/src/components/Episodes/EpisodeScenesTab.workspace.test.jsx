@@ -72,6 +72,19 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: { success: true } });
   });
 
+  // The handoff: Scene Sets names the episode and what the beat needs.
+  test('a missing angle opens Scene Sets naming the episode and what is needed', async () => {
+    render(
+      <MemoryRouter>
+        <EpisodeScenesTab episode={{ id: 'ep-1', show_id: 'show-1', episode_number: 10 }} onToast={vi.fn()} />
+      </MemoryRouter>
+    );
+    const href = new URL((await screen.findByTestId('beat-open-scene-sets-10')).getAttribute('href'), 'http://x');
+    expect(href.searchParams.get('fromLabel')).toBe('Episode 10');
+    expect(href.searchParams.get('need')).toBe('Entrance angle missing');
+    expect(href.searchParams.get('zone')).toBe('entrance');
+  });
+
   // S9 (c) (§8(hh)): the locked count and the next step moved to the Checklist.
   test('the status bar is the background summary, with no locked count or next step', async () => {
     renderTab();
