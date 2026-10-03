@@ -148,6 +148,17 @@ describe('EventLookImage (L7-L9)', () => {
     expect(onToast).toHaveBeenCalledWith('The look is ready');
   });
 
+  test('a load that fails says so, not "No look image yet", and Try again reloads', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    lookState = { scene_set: SET, approved_base: null, look: null };
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network'));
+    renderIt();
+    expect(await screen.findByTestId('event-look-load-failed')).toBeTruthy();
+    expect(screen.queryByText('No look image yet.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.queryByTestId('event-look-load-failed')).toBeNull());
+  });
+
   test('a failed base says so with its reason', async () => {
     lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'generating' }, approved_base: null, look: null };
     const { onToast } = renderIt();

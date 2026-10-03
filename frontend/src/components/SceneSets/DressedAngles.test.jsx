@@ -66,4 +66,60 @@ describe('DressedAngles (S8, answer 2)', () => {
     render(<DressedAngles episodeId="ep-1" setId="set-1" />);
     expect(await screen.findByText('Dressed angles are made once this look is ready.')).toBeTruthy();
   });
+
+  test('a load that fails says so, apart from "no look yet", and Try again reloads', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network'));
+    render(<DressedAngles episodeId="ep-1" setId="set-1" />);
+    expect(await screen.findByTestId('dressed-angles-load-failed')).toBeTruthy();
+    expect(screen.queryByText('Dressed angles are made once this look is ready.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByTestId('dressed-angle-a-front')).toBeTruthy();
+  });
+
+  test('shows Loading before the first answer', async () => {
+    let resolve;
+    vi.mocked(api.get).mockImplementation(() => new Promise((r) => { resolve = r; }));
+    render(<DressedAngles episodeId="ep-1" setId="set-1" />);
+    expect(screen.getByTestId('dressed-angles-loading')).toBeTruthy();
+    resolve({ data: { data } });
+    expect(await screen.findByTestId('dressed-angle-a-front')).toBeTruthy();
+  });
+
+  test('a dressing angle refreshes until it is done, then says so', async () => {
+    const onToast = vi.fn();
+    data.angles[0].dressed = { status: 'generating', image_url: null };
+    render(<DressedAngles episodeId="ep-1" setId="set-1" onToast={onToast} pollMs={20} />);
+    expect((await screen.findByTestId('dressed-angle-status-a-front')).textContent).toBe('Dressing…');
+    expect(within(screen.getByTestId('dressed-angle-a-front')).getByRole('button', { name: 'Generate dressed' }).disabled).toBe(true);
+    data = { ...data, angles: [{ ...data.angles[0], dressed: { status: 'complete', image_url: 'https://x/f-dressed.jpg' } }, data.angles[1]] };
+    await waitFor(() => expect(screen.getByTestId('dressed-angle-status-a-front').textContent).toBe('Dressed'));
+    expect(onToast).toHaveBeenCalledWith('Front steps is dressed');
+    const calls = vi.mocked(api.get).mock.calls.length;
+    await new Promise((r) => setTimeout(r, 80));
+    expect(vi.mocked(api.get).mock.calls.length).toBe(calls);
+  });
+
+  test('a failed dressing shows its reason and offers Try again', async () => {
+    const onToast = vi.fn();
+    data.angles[0].dressed = { status: 'generating', image_url: null };
+    render(<DressedAngles episodeId="ep-1" setId="set-1" onToast={onToast} pollMs={20} />);
+    await screen.findByText('Dressing…');
+    data = { ...data, angles: [{ ...data.angles[0], dressed: { status: 'failed', image_url: null, error: 'Kontext timed out' } }, data.angles[1]] };
+    await waitFor(() => expect(screen.getByTestId('dressed-angle-status-a-front').textContent).toBe('Failed: Kontext timed out'));
+    expect(onToast).toHaveBeenCalledWith('Front steps could not be dressed: Kontext timed out', 'error');
+    fireEvent.click(within(screen.getByTestId('dressed-angle-a-front')).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByTestId('scene-brief-confirm')).toBeTruthy();
+  });
+
+  test('a refresh that fails keeps the list shown', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    data.angles[0].dressed = { status: 'generating', image_url: null };
+    render(<DressedAngles episodeId="ep-1" setId="set-1" pollMs={20} />);
+    await screen.findByText('Dressing…');
+    vi.mocked(api.get).mockRejectedValue(new Error('network'));
+    await new Promise((r) => setTimeout(r, 60));
+    expect(screen.getByTestId('dressed-angle-a-front')).toBeTruthy();
+    expect(screen.queryByTestId('dressed-angles-load-failed')).toBeNull();
+  });
 });
