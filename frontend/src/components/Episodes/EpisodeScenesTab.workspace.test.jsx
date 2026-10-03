@@ -72,6 +72,18 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: { success: true } });
   });
 
+  // The library cover chosen in Scene Sets is the location's thumbnail here too.
+  test('a location shows its set\'s library cover (without one, the main background: the Locations test above)', async () => {
+    const withCover = { ...LOCATIONS, locations: LOCATIONS.locations.map((l) => (l.scene_set_id === HOME.id
+      ? { ...l, scene_set: { ...HOME, cover_image_url: 'https://x/home-cover.jpg' } } : l)) };
+    const base = vi.mocked(apiClient.get).getMockImplementation();
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1/locations'
+      ? { data: { success: true, data: withCover } } : base(url)));
+    renderTab();
+    fireEvent.click(await screen.findByTestId('est-location-chip-set-home'));
+    expect(screen.getByTestId('est-location-detail-set-home').querySelector('img').getAttribute('src')).toBe('https://x/home-cover.jpg');
+  });
+
   // The handoff: Scene Sets names the episode and what the beat needs.
   test('a missing angle opens Scene Sets naming the episode and what is needed', async () => {
     render(

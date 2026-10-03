@@ -144,6 +144,38 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(beat11.scene_set_id).toBe(sets.glasshouse);
   });
 
+  it('each location carries its set\'s library cover image (chosen in Scene Sets), in the list and the proposal', async () => {
+    const angle = uuid(); const spare = uuid();
+    await run(`INSERT INTO scene_angles (id, scene_set_id, angle_label, angle_name, generation_status, still_image_url, created_at, updated_at)
+               VALUES (:angle, :set, 'WIDE', 'Window', 'complete', 'https://x/cover.jpg', NOW(), NOW()),
+                      (:spare, :set, 'CLOSE', 'Desk', 'complete', 'https://x/desk.jpg', NOW(), NOW())`,
+    { angle, spare, set: sets.glasshouse });
+    await run("UPDATE scene_sets SET base_still_url = 'https://x/base.jpg', cover_angle_id = :angle WHERE id = :set", { angle, set: sets.glasshouse });
+    try {
+      const event = await readyEvent(sets.glasshouse);
+      const proposal = await auth(request(app).get(`/api/v1/world/${show}/events/${event}/episode-locations`));
+      expect(proposal.body.data.locations.find((l) => l.role === 'event').scene_set)
+        .toMatchObject({ base_still_url: 'https://x/base.jpg', cover_image_url: 'https://x/cover.jpg' });
+
+      const res = await start(event, { locations: [
+        { role: 'event', scene_set_id: sets.glasshouse }, { role: 'home', scene_set_id: sets.apartment },
+      ] });
+      expect(res.status).toBe(201);
+      const list = await auth(request(app).get(`/api/v1/episodes/${res.body.data.episode.id}/locations`));
+      const byRole = Object.fromEntries(list.body.data.locations.map((l) => [l.role, l.scene_set]));
+      expect(byRole.event).toMatchObject({ base_still_url: 'https://x/base.jpg', cover_image_url: 'https://x/cover.jpg' });
+      expect(byRole.home.cover_image_url).toBeNull();
+
+      // A cover view that was deleted is no cover.
+      await run('UPDATE scene_angles SET deleted_at = NOW() WHERE id = :angle', { angle });
+      const after = await auth(request(app).get(`/api/v1/episodes/${res.body.data.episode.id}/locations`));
+      expect(after.body.data.locations.find((l) => l.role === 'event').scene_set.cover_image_url).toBeNull();
+    } finally {
+      await run("UPDATE scene_sets SET base_still_url = NULL, cover_angle_id = NULL WHERE id = :set", { set: sets.glasshouse });
+      await run('DELETE FROM scene_angles WHERE id IN (:angle, :spare)', { angle, spare });
+    }
+  });
+
   it('refuses invalid locations before anything is created', async () => {
     const event = await readyEvent(sets.glasshouse);
 

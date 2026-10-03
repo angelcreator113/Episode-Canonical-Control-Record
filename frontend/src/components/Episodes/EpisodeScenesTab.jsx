@@ -35,7 +35,7 @@ import {
   ROLE_LABELS, SHOT_LABELS, fmtType, ChosenBadge, MissingAngle, BeatEditor, beatImage, beatImageLabel, beatSetName, isDressed,
 } from '../BeatPlan/BeatPlanParts';
 import useBeatActions from '../BeatPlan/useBeatActions';
-import { sceneSetPath } from '../../utils/sceneSets';
+import { sceneSetPath, sceneSetThumb } from '../../utils/sceneSets';
 import { listBeats } from '../../utils/sceneSteps';
 import usePlanRefresh from '../BeatPlan/usePlanRefresh';
 import RemovedSetsBanner from '../BeatPlan/RemovedSetsBanner';
@@ -416,8 +416,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
           const views = l.angle_count ?? 0;
           return (
             <div className="est-location-detail" data-testid={`est-location-detail-${l.scene_set_id}`}>
-              {l.scene_set?.base_still_url
-                ? <img className="est-location-thumb" src={l.scene_set.base_still_url} alt="" />
+              {sceneSetThumb(l.scene_set)
+                ? <img className="est-location-thumb" src={sceneSetThumb(l.scene_set)} alt="" />
                 : <span className="est-location-thumb is-empty" aria-hidden="true"><MapPin size={16} /></span>}
               <span className="est-location-text">
                 <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>

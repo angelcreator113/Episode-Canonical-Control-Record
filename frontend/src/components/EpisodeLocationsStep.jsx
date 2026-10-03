@@ -33,6 +33,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import OpenInSceneSets from './OpenInSceneSets';
+import { sceneSetThumb } from '../utils/sceneSets';
 import './EpisodeLocationsStep.css';
 
 const ROLE_LABELS = { event: 'Event', home: 'Home', closet: 'Closet', extra: 'Extra location' };
@@ -54,8 +55,9 @@ function initialRows(initial) {
 }
 
 function SetThumb({ set }) {
-  return set?.base_still_url
-    ? <img className="els-thumb" src={set.base_still_url} alt="" />
+  const thumb = sceneSetThumb(set);
+  return thumb
+    ? <img className="els-thumb" src={thumb} alt="" />
     : <div className="els-thumb els-thumb-empty" aria-hidden="true">No image</div>;
 }
 
