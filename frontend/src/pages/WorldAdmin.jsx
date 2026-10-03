@@ -1743,7 +1743,7 @@ The revised event should feel like a completely different experience from the si
       {/* ─── TABS ─── */}
       <div className="wa-tab-bar" style={S.tabBar}>
         {TABS.map(t => (
-          <button key={t.key} onClick={() => switchTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
+          <button key={t.key} onClick={() => switchTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab} aria-current={activeTab === t.key ? 'page' : undefined}>
             {t.icon} {t.label}
           </button>
         ))}
@@ -1755,10 +1755,10 @@ The revised event should feel like a completely different experience from the si
         return (
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
             {currentTab.subs.map(s => (
-              <button key={s.key} onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} style={{
+              <button key={s.key} onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} aria-current={subTab === s.key ? 'page' : undefined} style={{
                 padding: '6px 14px', background: 'transparent', border: 'none',
-                borderBottom: subTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
-                color: subTab === s.key ? '#6366f1' : '#94a3b8',
+                borderBottom: subTab === s.key ? '2px solid var(--primary)' : '2px solid transparent',
+                color: subTab === s.key ? 'var(--primary-text)' : 'var(--text-muted)',
                 fontSize: 12, fontWeight: subTab === s.key ? 600 : 500,
                 cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
               }}>
@@ -8250,64 +8250,66 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   );
 }
 
-const S = {
-  page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
-  center: { textAlign: 'center', padding: 60, color: '#94a3b8' },
+export const S = {
+  // Producer Mode's chrome, in the studio theme's tokens (audit VISUAL-01,
+  // batch 4): one token edit recolors every tab, card and button here.
+  page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: 'var(--font-sans)' },
+  center: { textAlign: 'center', padding: 60, color: 'var(--text-muted)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  backLink: { color: '#B8962E', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
-  title: { margin: '4px 0 4px', fontSize: 24, fontWeight: 700, color: '#1a1a2e', fontFamily: "'Lora', serif" },
-  subtitle: { margin: 0, color: '#94a3b8', fontSize: 13, fontWeight: 400 },
-  refreshBtn: { padding: '8px 16px', background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.2)', borderRadius: 10, color: '#B8962E', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
-  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13, marginBottom: 12 },
-  successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#16a34a', fontSize: 13, marginBottom: 12, fontWeight: 600 },
-  xBtn: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
-  tabBar: { display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid rgba(0,0,0,0.06)', overflowX: 'auto', position: 'sticky', top: 0, background: '#FAF7F0', zIndex: 50, paddingTop: 4, scrollbarWidth: 'none' },
-  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#94a3b8', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.15s' },
-  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #B8962E', color: '#B8962E', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
+  backLink: { color: 'var(--primary-text)', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
+  title: { margin: '4px 0 4px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'Lora', serif" },
+  subtitle: { margin: 0, color: 'var(--text-muted)', fontSize: 13, fontWeight: 400 },
+  refreshBtn: { padding: '8px 16px', background: 'var(--surface-bg)', border: '1px solid var(--primary-subtle)', borderRadius: 10, color: 'var(--primary-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10, color: 'var(--danger)', fontSize: 13, marginBottom: 12 },
+  successBanner: { padding: '10px 16px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10, color: 'var(--success)', fontSize: 13, marginBottom: 12, fontWeight: 600 },
+  xBtn: { background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 14 },
+  tabBar: { display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid rgba(0,0,0,0.06)', overflowX: 'auto', position: 'sticky', top: 0, background: 'var(--surface-bg)', zIndex: 50, paddingTop: 4, scrollbarWidth: 'none' },
+  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.15s' },
+  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid var(--primary)', color: 'var(--primary-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
   content: { display: 'flex', flexDirection: 'column', gap: 16, animation: 'waFadeIn 0.2s ease' },
-  card: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
-  cardTitle: { fontSize: 15, fontWeight: 600, color: '#1a1a2e', margin: '0 0 16px' },
-  muted: { color: '#94a3b8', fontSize: 13 },
-  primaryBtn: { padding: '8px 18px', background: 'linear-gradient(135deg, #C9A83A, #B8962E)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(184,150,46,0.2)', transition: 'all 0.15s' },
-  secBtn: { padding: '8px 18px', background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.2)', borderRadius: 8, color: '#B8962E', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
-  smBtn: { padding: '5px 12px', background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#475569', fontWeight: 500, transition: 'all 0.12s' },
-  smBtnDanger: { padding: '5px 12px', background: 'rgba(220,53,53,0.05)', border: '1px solid rgba(220,53,53,0.12)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#dc2626', fontWeight: 500, transition: 'all 0.12s' },
+  card: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  cardTitle: { fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' },
+  muted: { color: 'var(--text-muted)', fontSize: 13 },
+  primaryBtn: { padding: '8px 18px', background: 'var(--primary)', border: 'none', borderRadius: 8, color: 'var(--surface-card)', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-primary)', transition: 'all 0.15s' },
+  secBtn: { padding: '8px 18px', background: 'var(--surface-bg)', border: '1px solid var(--primary-subtle)', borderRadius: 8, color: 'var(--primary-text)', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
+  smBtn: { padding: '5px 12px', background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 500, transition: 'all 0.12s' },
+  smBtnDanger: { padding: '5px 12px', background: 'rgba(220,53,53,0.05)', border: '1px solid rgba(220,53,53,0.12)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--danger)', fontWeight: 500, transition: 'all 0.12s' },
   // Overflow-menu item (Task #1648's per-card and header "⋯" menus —
   // WorldAdmin.jsx's own style, not shared with any other page).
-  menuItem: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 500, color: '#475569', cursor: 'pointer' },
+  menuItem: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', borderBottom: '1px solid var(--lala-parchment-2)', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', cursor: 'pointer' },
   // Marks a card's venue/date value resolved from the saved automation
   // copy rather than the event's own column (Task #1656) — same meaning
   // as EventPackagePage.css's .epp-saved-copy, kept inline here since this
   // file has no shared stylesheet of its own.
-  savedCopyTag: { display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: '#FDF8EE', border: '1px solid #E8D9A8', color: '#B8962E', verticalAlign: 'middle' },
+  savedCopyTag: { display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', verticalAlign: 'middle' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  statBox: { flex: '1 1 90px', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
-  statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? '#dc2626' : '#1a1a2e' }),
-  statLbl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 4, fontWeight: 500 },
+  statBox: { flex: '1 1 90px', background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? 'var(--danger)' : 'var(--text-primary)' }),
+  statLbl: { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 4, fontWeight: 500 },
   qGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 },
-  qBox: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
-  qVal: { fontSize: 22, fontWeight: 700, color: '#1a1a2e' },
-  qLbl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginTop: 4, fontWeight: 500, letterSpacing: '0.3px' },
-  tHead: { display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: '#94a3b8', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.3px' },
+  qBox: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  qVal: { fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' },
+  qLbl: { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: 4, fontWeight: 500, letterSpacing: '0.3px' },
+  tHead: { display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.3px' },
   tRow: { display: 'flex', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', alignItems: 'center', fontSize: 13, transition: 'background 0.1s' },
   tCol: { flex: 1, minWidth: 0 },
-  empty: { padding: 40, textAlign: 'center', color: '#aaa', fontSize: 13 },
+  empty: { padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 },
   tierPill: (t) => ({ padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: TIER_COLORS[t] + '15', color: TIER_COLORS[t] }),
   statusPill: (s) => {
     const cfg = EVENT_STATUS_CONFIG[s] || EVENT_STATUS_CONFIG.draft;
     return { padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: cfg.bg, color: cfg.color };
   },
-  sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
-  deltaBadge: (v) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
+  sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: s === 'override' ? 'var(--warning-bg)' : s === 'manual' ? 'var(--danger-bg)' : 'var(--primary-subtle)', color: s === 'override' ? 'var(--warning-text)' : s === 'manual' ? 'var(--danger)' : 'var(--primary-text)' }),
+  deltaBadge: (v) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: v > 0 ? 'var(--success-bg)' : 'var(--danger-bg)', color: v > 0 ? 'var(--success)' : 'var(--danger)' }),
   toastOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, pointerEvents: 'none' },
-  toastBox: { padding: '20px 40px', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', background: '#2C2C2C', color: '#FAF7F0', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(0,0,0,0.3)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
-  toastBoxFailed: { background: '#B42318', boxShadow: '0 12px 40px rgba(180,35,24,0.35)' },
-  evCard: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' },
-  eTag: { padding: '2px 8px', background: 'rgba(184,150,46,0.08)', borderRadius: 6, fontSize: 11, color: '#B8962E', fontWeight: 500 },
-  fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
-  inp: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', boxSizing: 'border-box', transition: 'border-color 0.15s', outline: 'none' },
-  sel: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', background: '#fff', transition: 'border-color 0.15s' },
-  tArea: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
+  toastBox: { padding: '20px 40px', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', background: 'var(--text-primary)', color: 'var(--surface-bg)', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(0,0,0,0.3)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
+  toastBoxFailed: { background: 'var(--danger)', boxShadow: '0 12px 40px rgba(180,35,24,0.35)' },
+  evCard: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' },
+  eTag: { padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 6, fontSize: 11, color: 'var(--primary-text)', fontWeight: 500 },
+  fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
+  inp: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', boxSizing: 'border-box', transition: 'border-color 0.15s', outline: 'none' },
+  sel: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', background: 'var(--surface-card)', transition: 'border-color 0.15s' },
+  tArea: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
 };
 
 // ─── OPPORTUNITIES TAB COMPONENT ─────────────────────────────────────────────

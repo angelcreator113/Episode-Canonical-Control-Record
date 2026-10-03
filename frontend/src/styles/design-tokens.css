@@ -55,6 +55,7 @@
   --warning: #f59e0b;
   --warning-bg: #fef3c7;
   --warning-border: #fbbf24;
+  --warning-text: #92400e;   /* warning as text, 6.37:1 on --warning-bg, 7.09:1 on white */
   
   --danger: #B84D2E;         /* on-brand red; white on it 5.07:1 */
   --danger-bg: #F7E4DC;
