@@ -1,7 +1,8 @@
 /**
  * The standalone Lala's Phone page (/phone-hub) opens on the active show
- * (utils/activeShow) rather than the first show the API returns, and a show
- * chosen there becomes the active show.
+ * (utils/activeShow) rather than the first show the API returns; with
+ * several shows and none active it asks (audit CTX-01); a show chosen there
+ * becomes the active show.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -39,7 +40,29 @@ describe('UIOverlaysTab standalone: the active show', () => {
     expect(overlayLoads().some((u) => u.startsWith('/api/v1/ui-overlays/show-a'))).toBe(false);
   });
 
-  test('with no active show, the first show; choosing one makes it the active show', async () => {
+  test('with several shows and none active it asks which, loading nothing; the choice becomes the active show (audit CTX-01)', async () => {
+    render(<UIOverlaysTab />);
+    const chooser = await screen.findByTestId('show-chooser');
+    expect(chooser.textContent).toContain('Another Show');
+    expect(overlayLoads()).toEqual([]);
+    fireEvent.click(screen.getByTestId('show-chooser-show-b'));
+    await waitFor(() => expect(overlayLoads().some((u) => u.startsWith('/api/v1/ui-overlays/show-b'))).toBe(true));
+    expect(overlayLoads().some((u) => u.startsWith('/api/v1/ui-overlays/show-a'))).toBe(false);
+    expect(rememberedShowId()).toBe('show-b');
+    expect(screen.queryByTestId('show-chooser')).toBeNull();
+  });
+
+  test('the only show opens without asking', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (
+      url === '/api/v1/shows' ? { data: { data: [SHOWS[1]] } } : { data: { success: true, data: [], missions: [] } }
+    ));
+    render(<UIOverlaysTab />);
+    await waitFor(() => expect(overlayLoads().some((u) => u.startsWith('/api/v1/ui-overlays/show-b'))).toBe(true));
+    expect(screen.queryByTestId('show-chooser')).toBeNull();
+  });
+
+  test('the header select still switches shows and makes the choice the active show', async () => {
+    rememberShow('show-a');
     render(<UIOverlaysTab />);
     await waitFor(() => expect(overlayLoads().some((u) => u.startsWith('/api/v1/ui-overlays/show-a'))).toBe(true));
     fireEvent.change(screen.getByLabelText('Show'), { target: { value: 'show-b' } });

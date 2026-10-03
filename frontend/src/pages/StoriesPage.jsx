@@ -8,6 +8,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
+import ShowChooser from '../components/ShowChooser';
 
 const FORMAT_CONFIG = {
   short_story: { icon: '📖', label: 'Short Story', color: '#6366f1' },
@@ -30,7 +32,8 @@ export default function StoriesPage() {
   const [searchParams] = useSearchParams();
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showId, setShowId] = useState(null);
+  // Audit CTX-01 (2026-10-03): the active show, never the first returned.
+  const { shows, show, showId, loaded: showsLoaded, needsChoice, choose } = useActiveShow();
   const [filter, setFilter] = useState('all'); // all | episode | original
   const [formatFilter, setFormatFilter] = useState('all');
   const [selectedStory, setSelectedStory] = useState(null);
@@ -43,14 +46,10 @@ export default function StoriesPage() {
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   useEffect(() => {
-    // Get show ID
-    api.get('/api/v1/shows').then(r => {
-      const shows = r.data?.data || r.data || [];
-      const first = Array.isArray(shows) ? shows[0] : null;
-      if (first) { setShowId(first.id); loadStories(first.id); }
-      else setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    if (!showsLoaded) return;
+    if (showId) loadStories(showId);
+    else setLoading(false);
+  }, [showsLoaded, showId]);
 
   const loadStories = async (sid) => {
     setLoading(true);
@@ -129,6 +128,7 @@ export default function StoriesPage() {
   });
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading stories...</div>;
+  if (needsChoice) return <ShowChooser shows={shows} onChoose={choose} purpose="to open its stories" />;
 
   // Story detail/editor view
   if (selectedStory) {
@@ -217,7 +217,7 @@ export default function StoriesPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Stories</h1>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Stories{show ? <span style={{ fontSize: 13, fontWeight: 500, color: '#7a6d62', marginLeft: 10 }}>{show.name || show.title}</span> : null}</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
             {stories.length} stor{stories.length !== 1 ? 'ies' : 'y'} · {Object.keys(episodeGroups).length} from episodes · {originalStories.length} original
           </p>

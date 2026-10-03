@@ -4,20 +4,24 @@
  * Shows the show's world at a glance: stats, characters, locations,
  * series/books, and links to the production pipeline.
  *
- * No longer depends on a hardcoded universe ID — loads from the
- * first available show, which is the actual production context.
+ * No hardcoded universe ID: it loads the active show (useActiveShow,
+ * audit CTX-01) and asks which show when several exist and none is active.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import api from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
+import ShowChooser from '../components/ShowChooser';
 
 export default function UniversePage() {
   const navigate = useNavigate();
-  const [show, setShow] = useState(null);
+  // Audit CTX-01 (2026-10-03): the active show, never the first one the
+  // API returned; with several and none active, Evoni chooses.
+  const { shows, show, showId, loaded, failed, needsChoice, choose } = useActiveShow();
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [universe, setUniverse] = useState(null);
   const [series, setSeries] = useState([]);
   const [books, setBooks] = useState([]);
@@ -26,22 +30,15 @@ export default function UniversePage() {
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!show) { setStats(null); return; }
+    setStatsLoading(true);
     try {
-      // Load show
-      const showRes = await api.get('/api/v1/shows');
-      const shows = showRes.data?.data || showRes.data?.shows || showRes.data || [];
-      const firstShow = Array.isArray(shows) ? shows[0] : null;
-      setShow(firstShow);
-
-      if (!firstShow) { setLoading(false); return; }
-
       // Load stats in parallel
       const [eventsRes, wardrobeRes, episodesRes, overlaysRes, charsRes, booksRes] = await Promise.allSettled([
-        api.get(`/api/v1/world/${firstShow.id}/events?limit=100`),
-        api.get(`/api/v1/wardrobe?show_id=${firstShow.id}&limit=500`),
-        api.get(`/api/v1/episodes?show_id=${firstShow.id}&limit=100`),
-        api.get(`/api/v1/ui-overlays/${firstShow.id}`),
+        api.get(`/api/v1/world/${show.id}/events?limit=100`),
+        api.get(`/api/v1/wardrobe?show_id=${show.id}&limit=500`),
+        api.get(`/api/v1/episodes?show_id=${show.id}&limit=100`),
+        api.get(`/api/v1/ui-overlays/${show.id}`),
         api.get('/api/v1/character-registry/registries?limit=50').catch(() => ({ data: {} })),
         api.get('/api/v1/storyteller/books').catch(() => ({ data: {} })),
       ]);
@@ -70,7 +67,7 @@ export default function UniversePage() {
 
       // Try loading universe from show's universe_id (or first available)
       try {
-        const universeId = firstShow.universe_id;
+        const universeId = show.universe_id;
         if (universeId) {
           const uRes = await api.get(`/api/v1/universe/${universeId}`);
           setUniverse(uRes.data?.universe || null);
@@ -82,20 +79,20 @@ export default function UniversePage() {
     } catch (err) {
       console.error('UniversePage load error:', err);
     } finally {
-      setLoading(false);
+      setStatsLoading(false);
     }
-  }, []);
+  }, [show]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading LalaVerse...</div>;
-
-  const showId = show?.id;
+  if (!loaded || statsLoading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading LalaVerse...</div>;
+  if (needsChoice) return <ShowChooser shows={shows} onChoose={choose} purpose="to open its LalaVerse overview" />;
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast.msg}</div>}
 
+      {failed && <div role="alert" style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', fontSize: 13 }}>The shows could not be loaded, so this overview has no show to describe.</div>}
       {/* Hero */}
       <div style={{ background: 'linear-gradient(135deg, #F5F0E8, #EDE4D3)', borderRadius: 12, padding: '24px 28px', marginBottom: 16, border: '1px solid rgba(184,150,46,0.15)' }}>
         <div style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>

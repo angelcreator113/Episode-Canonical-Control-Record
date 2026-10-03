@@ -1,6 +1,7 @@
 // frontend/src/pages/AssetLibrary.jsx - Global Asset Library Page
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { activeShowId } from '../utils/activeShow';
 import { assetService } from '../services/assetService';
 import showService from '../services/showService';
 import AssetUploader from '../components/Assets/AssetUploader';
@@ -19,6 +20,7 @@ const ASSET_CATEGORIES = {
 
 function AssetLibrary({ embedded = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [assets, setAssets] = useState([]);
   const [shows, setShows] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -302,7 +304,11 @@ function AssetLibrary({ embedded = false }) {
             {shows.length > 0 && (
               <button
                 className="btn-secondary"
-                onClick={() => navigate(`/shows/${shows[0].id}?tab=assets`)}
+                onClick={() => {
+                  // The active show, else the shows list to choose one (audit CTX-01).
+                  const active = activeShowId({ pathname: location.pathname, shows });
+                  navigate(active ? `/shows/${active}?tab=assets` : '/shows');
+                }}
               >
                 📁 Go to Show Assets
               </button>

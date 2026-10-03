@@ -10,6 +10,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
 import usePageData from '../hooks/usePageData';
 import BrainUpdate from '../components/BrainUpdate';
+import { ShowSelect } from '../components/ShowChooser';
+import useActiveShow from '../hooks/useActiveShow';
 import EventsTab from '../components/Culture/EventsTab';
 import AwardsMediaTab from '../components/Culture/AwardsMediaTab';
 import HistoryTab from '../components/Culture/HistoryTab';
@@ -46,12 +48,12 @@ export default function CultureEvents() {
   // Calendar events from API
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [shows, setShows] = useState([]);
+  // Audit CTX-01 (2026-10-03): a created event goes to the active show,
+  // never the first one returned; with several and none active, choose.
+  const { shows, showId, needsChoice, choose } = useActiveShow();
   const [toast, setToast] = useState(null);
 
   const flash = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
-
-  useEffect(() => { listShowsApi().then(d => setShows(d.data || [])).catch(() => {}); }, []);
 
   useEffect(() => {
     listCalendarEventsApi('lalaverse_cultural')
@@ -60,14 +62,13 @@ export default function CultureEvents() {
   }, []);
 
   const handleCreateEvent = useCallback(async (ev) => {
-    const showId = shows[0]?.id;
-    if (!showId) { alert('No show found — create a show first'); return; }
+    if (!showId) { flash(needsChoice ? 'Choose a show first (top right)' : 'No show found — create a show first', 'error'); return; }
     try {
       const d = await autoSpawnEventApi(ev.id, { show_id: showId, event_count: 1, max_guests: 6 });
       if (d.success) flash(`Created "${d.data?.events?.[0]?.name || 'event'}" — check the Events tab`);
       else flash(d.error || 'Failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
-  }, [shows]);
+  }, [showId, needsChoice]);
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -98,6 +99,7 @@ export default function CultureEvents() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
           <div style={{ display: 'none' }}>
+            {shows.length > 1 && <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Create events in…" />}
             <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />
             <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />
           </div>
