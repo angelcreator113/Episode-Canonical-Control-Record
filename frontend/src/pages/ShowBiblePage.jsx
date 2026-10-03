@@ -146,13 +146,14 @@ export default function ShowBiblePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false }); setShowForm(true); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ New Entry</button>
+          <button onClick={() => { setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false }); setShowForm(true); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ New Entry</button>
           <button onClick={handleSeed} style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>🌱 Seed</button>
         </div>
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 16 }}>
+      {/* Audit LAYOUT-02: the stats reflow; six fixed tracks squeezed 375px. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Active Rules', value: activeCount, color: '#16a34a' },
           { label: '🌍 Franchise', value: franchiseCount, color: '#6366f1' },

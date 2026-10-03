@@ -38,7 +38,8 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary, #3b82f6) 0%, var(--primary-dark, #2563eb) 100%);
+  /* One token (--primary) sets every primary action (audit VISUAL-01). */
+  background: var(--primary);
   color: var(--text-inverse, #ffffff);
   border: none;
   border-radius: var(--radius-sm, 8px);
@@ -51,18 +52,20 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  box-shadow: var(--shadow-primary, 0 4px 14px rgba(59, 130, 246, 0.25));
+  box-shadow: var(--shadow-primary);
   white-space: nowrap;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+  box-shadow: var(--shadow-primary);
 }
 
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .btn-primary:disabled {

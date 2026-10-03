@@ -8,16 +8,45 @@
 :root {
   /* === COLORS === */
   
-  /* Primary Brand Colors */
-  --primary: #3b82f6;
-  --primary-dark: #2563eb;
-  --primary-light: #60a5fa;
-  --primary-subtle: #dbeafe;
-  
-  /* Secondary Colors */
-  --secondary: #8b5cf6;
-  --secondary-dark: #7c3aed;
-  
+  /* ════════════════════════════════════════════════════════════
+     STUDIO THEME (audit VISUAL-01/02, Evoni, 2026-10-03)
+     ════════════════════════════════════════════════════════════
+     One restrained theme for the producer controls: a warm neutral
+     page, white surfaces, dark ink, TEAL for every primary action,
+     SOFT PINK for accents, selection and attention, gold reserved for
+     Lala's own marks. Semantic colors (success, warning, danger, info)
+     stay separate so a normal button never competes with a warning.
+     Every text/background pair below is measured in
+     frontend/src/styles/designTokens.test.js and must hold 4.5:1.
+     docs/VISUAL_SYSTEM.md is the map.
+  */
+
+  /* Primary action: teal. White text on --primary is 4.75:1. */
+  --primary:        #2F7F76;
+  --primary-dark:   #276B63;  /* hover; white on it 6.23:1 */
+  --primary-light:  #4C9A91;
+  --primary-subtle: #EAF5F3;  /* selected / soft teal surface; ink on it 12.5:1 */
+  --primary-text:   #276B63;  /* teal as text on white, 6.23:1 */
+
+  /* Accent: soft pink. A surface, border and badge color; as text use
+     --accent-dark (5.61:1 on white, 5.01:1 on the blush). */
+  --accent:        #C06E87;
+  --accent-dark:   #9E4E68;
+  --accent-subtle: #FBEFF3;
+
+  /* The same two, by name, for pages that say pink and teal. */
+  --lala-teal:        var(--primary);
+  --lala-teal-dark:   var(--primary-dark);
+  --lala-teal-soft:   var(--primary-subtle);
+  --lala-pink:        var(--accent);
+  --lala-pink-dark:   var(--accent-dark);
+  --lala-pink-soft:   var(--accent-subtle);
+
+  /* --secondary is secondary TEXT everywhere it is used (AuditLog,
+     AdminPanel, Header, LoadingSpinner); it stays readable text. */
+  --secondary:      #6B6557;
+  --secondary-dark: #4B463D;
+
   /* Semantic Colors */
   --success: #10b981;
   --success-bg: #d1fae5;
@@ -27,9 +56,9 @@
   --warning-bg: #fef3c7;
   --warning-border: #fbbf24;
   
-  --danger: #ef4444;
-  --danger-bg: #fee2e2;
-  --danger-border: #fca5a5;
+  --danger: #B84D2E;         /* on-brand red; white on it 5.07:1 */
+  --danger-bg: #F7E4DC;
+  --danger-border: #E0A28E;
   
   --info: #3b82f6;
   --info-bg: #dbeafe;
@@ -47,18 +76,20 @@
   --gray-800: #1f2937;
   --gray-900: #111827;
   
-  /* Surface Colors */
-  --surface-bg: #f8f9fb;
+  /* Surface Colors: a warm neutral page, white surfaces */
+  --surface-bg: #FAF7F0;        /* = --lala-parchment */
   --surface-card: #ffffff;
   --surface-elevated: #ffffff;
   
-  /* Text Colors */
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  /* Text Colors: ink. --text-muted is still readable text (5.79:1 on
+     white); --text-faint (2.86:1) is for placeholders and disabled
+     controls only, never for information. */
+  --text-primary: #2C2C2C;
+  --text-secondary: #6B6557;
+  --text-muted: #6B6557;
+  --text-faint: #A09889;
   --text-inverse: #ffffff;
   
-  /* Border Colors */
   --border-light: #f3f4f6;
   --border: #e5e7eb;
   --border-medium: #d1d5db;
@@ -90,9 +121,10 @@
   --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.18);
   
   /* Colored Shadows */
-  --shadow-primary: 0 4px 14px rgba(59, 130, 246, 0.25);
+  --shadow-primary: 0 4px 14px rgba(47, 127, 118, 0.25);
   --shadow-success: 0 4px 14px rgba(16, 185, 129, 0.25);
-  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.25);
+  --shadow-danger: 0 4px 14px rgba(184, 77, 46, 0.25);
+  --focus-ring: 0 0 0 3px var(--primary-subtle), 0 0 0 4px var(--primary);
   
   /* === TYPOGRAPHY === */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -205,8 +237,9 @@
   --lala-ink-muted:   #6B6557;  /* labels, meta, secondary text */
   --lala-ink-faint:   #A09889;  /* placeholders, disabled */
 
-  --lala-gold:        #B8962E;  /* primary CTA + active state */
+  --lala-gold:        #B8962E;  /* Lala's mark: a fill under INK text (4.95:1), never under white (2.82:1) */
   --lala-gold-hover:  #A68324;  /* darker gold on hover */
+  --lala-gold-text:   #7A6314;  /* gold as text on white, 5.80:1 */
   --lala-gold-soft:   #FDF8EE;  /* gold @ 6% tint — selected card bg */
   --lala-gold-line:   #E8D9A8;  /* gold @ border tint */
 
@@ -229,7 +262,7 @@
        --zone-icon    icon placements (the Connect editor's icon zones)
        --zone-content content-bound regions (ContentZoneEditor rects)
   */
-  --zone-tap:     var(--primary);   /* #3b82f6 blue */
+  --zone-tap:     var(--info);      /* #3b82f6 blue — a zone color, not an action */
   --zone-icon:    var(--lala-gold); /* #B8962E */
   --zone-content: #d946ef;          /* magenta */
 }

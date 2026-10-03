@@ -13,36 +13,27 @@
 /* Custom CSS */
 
 :root {
-  /* Primary Colors */
-  --primary-color: #2563eb;
-  --primary-dark: #1e40af;
-  --primary: #2563eb;
+  /* Legacy names, aliased to the studio theme in styles/design-tokens.css
+     (audit VISUAL-01): this block used to redeclare --primary and the text
+     colors with other values, after importing the tokens, so the tokens
+     never won. One source now. */
+  --primary-color: var(--primary);
   
   /* Dark & Light */
-  --dark: #1e293b;
-  --light: #f5f5f5;
-  --light-gray: #f5f5f5;
+  --dark: var(--gray-800);
+  --light: var(--surface-bg);
+  --light-gray: var(--surface-bg);
   
   /* Status Colors */
-  --success: #16a34a;
-  --success-color: #16a34a;
-  --warning: #ea580c;
-  --warning-color: #ea580c;
-  --danger: #dc2626;
-  --danger-color: #dc2626;
-  --info: #0284c7;
-  --info-color: #0284c7;
+  --success-color: var(--success);
+  --warning-color: var(--warning);
+  --danger-color: var(--danger);
+  --info-color: var(--info);
   
   /* Neutral Colors & Text */
-  --border: #e5e7eb;
-  --border-color: #e5e7eb;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --border-color: var(--border);
   
   /* Shadows & Effects */
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   --transition: all 0.3s ease;
 }
 
@@ -104,16 +95,16 @@ textarea {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--lala-parchment-2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--lala-parchment-3);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--text-faint);
 }
 
 /* Canonical .btn, .card, .badge live in styles/shared-components.css.
