@@ -1,17 +1,17 @@
 /* EventLookImage (L7-L9; S8): the event's look, in the Place (status) and the Scene Sets panel (generate). */
 /* "Generate this look" (L7-L9, §8(hh)). */
-.ell { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3, #E8E0D0); display: grid; gap: 8px; min-width: 0; }
+.ell { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); display: grid; gap: 8px; min-width: 0; }
 .ell-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .ell-figure { margin: 0; }
-.ell-figure img { width: 100%; max-width: 420px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--lala-parchment-3, #E8E0D0); }
-.ell-status { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #6B6557; }
-.ell-note { margin: 0; font-size: 13px; color: #6B6557; }
-.ell-error { margin: 0; font-size: 13px; color: #B42318; }
+.ell-figure img { width: 100%; max-width: 420px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--lala-parchment-3); }
+.ell-status { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--lala-ink-muted); }
+.ell-note { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.ell-error { margin: 0; font-size: 13px; color: var(--danger-text); }
 .ell-open { justify-self: start; }
 .ell-choose { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ell-choose .ell-note { flex-basis: 100%; }
 
 /* S8: in the Scene Sets panel the Place's button styles are not loaded. */
-.ell .epp-btn { font-size: 12px; padding: 4px 10px; border: 1px solid #B8962E; border-radius: 6px; background: #fff; color: #8a6d1f; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.ell .epp-btn { font-size: 12px; padding: 4px 10px; border: 1px solid var(--lala-gold); border-radius: 6px; background: var(--lala-surface); color: var(--lala-gold-text); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .ell .epp-btn:disabled { opacity: 0.5; cursor: default; }
 .ell-link { background: none; border: none; padding: 0; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }

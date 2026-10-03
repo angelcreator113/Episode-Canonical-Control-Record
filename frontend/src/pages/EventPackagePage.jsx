@@ -490,7 +490,7 @@ export default function EventPackagePage() {
   if (loadError || !data?.event) {
     return (
       <div className="epp-page epp-center">
-        <AlertCircle size={28} color="var(--lala-danger, #B84D2E)" />
+        <AlertCircle size={28} color="var(--lala-danger)" />
         <p className="epp-error">{loadError || 'Event not found'}</p>
         <button className="epp-btn epp-btn-secondary" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
           <ArrowLeft size={16} /> Back to Events
