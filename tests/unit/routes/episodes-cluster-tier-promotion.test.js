@@ -74,7 +74,8 @@ const REQUIRE_AUTH_COUNTS = {
   // +1 for GET /:episodeId/dressed-angles (S8, §8(dd), requireAuth).
   // +1 for GET /:episodeId/production-coverage (§8(o) item 2, episode creation step 8, requireAuth).
   // +3 for GET, PUT /:episodeId/performance-clips and DELETE .../:clipId (the clip home, requireAuth).
-  'episodeBriefRoutes.js': 21,
+  // +1 for POST /:episodeId/setup/resume (audit STATE-01, requireAuth).
+  'episodeBriefRoutes.js': 22,
   'episodeOrchestrationRoute.js': 2,
   'episodeScriptWriterRoutes.js': 8,
   'gameShows.js': 7,
@@ -278,7 +279,8 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(279);
+    // +1 for episodeBriefRoutes.js POST /:episodeId/setup/resume (audit STATE-01).
+      expect(total).toBe(280);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {

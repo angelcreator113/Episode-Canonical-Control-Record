@@ -465,6 +465,26 @@ router.post('/:episodeId/plan/lock-all', requireAuth, async (req, res) => {
   }
 });
 
+// ── RESUME SETUP (audit STATE-01) ─────────────────────────────────────────────
+// Makes the scene-plan beats a partly initialised episode is missing and
+// records the outcome on episodes.setup_status. Never a second episode.
+router.post('/:episodeId/setup/resume', requireAuth, async (req, res) => {
+  try {
+    const { resumeEpisodeSetup } = require('../services/episodeGeneratorService');
+    const result = await resumeEpisodeSetup(models, req.params.episodeId);
+    if (!result) return res.status(404).json({ success: false, error: 'Episode not found' });
+    const step = result.scene_plan;
+    return res.json({
+      success: result.setup_status.complete,
+      ...(result.setup_status.complete ? {} : { error: `Setup is still incomplete: ${step.missing.length} beat${step.missing.length !== 1 ? 's' : ''} missing (${step.missing.join(', ')})`, code: 'SETUP_INCOMPLETE' }),
+      data: result,
+    });
+  } catch (err) {
+    console.error('[EpisodeBrief] POST /:episodeId/setup/resume error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GENERATE GROUNDED SCRIPT ──────────────────────────────────────────────────
 
 router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (req, res) => {
