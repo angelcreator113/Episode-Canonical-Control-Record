@@ -41,7 +41,7 @@ const CP3_FILES = [
 // Per-file ref counts captured at CP3 close.
 // requireAuth count = imports (1) + handler-level invocations (Tier 1 only).
 // For worldStudio: 1 import + 34 mutations.
-// worldEvents.js: 75, not the CP3-close 62 — Task #1642 added
+// worldEvents.js: 76, not the CP3-close 62 — Task #1642 added
 // GET /world/:showId/events/:eventId (requireAuth), the Event Package
 // page's single-event read; Task #1670 added
 // POST /world/:showId/events/:eventId/suggest-names (requireAuth +
@@ -60,10 +60,12 @@ const CP3_FILES = [
 // (requireAuth) and POST .../venue-look/draft (requireAuth + aiRateLimiter,
 // D4 pattern); L7-L9 (§8(hh)) added GET .../look and POST .../look/brief
 // (requireAuth) and POST .../look/generate (requireAuth + aiRateLimiter, D4
-// pattern); no other CP3-zone route changed.
+// pattern); Pitch Me (episode creation step 6, Evoni 2026-10-03) added
+// POST /world/:showId/episode-pitches (requireAuth + aiRateLimiter, D4
+// pattern, writes nothing); no other CP3-zone route changed.
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 75,
+  'worldEvents.js': 76,
   'worldStudio.js': 35,
   'worldTemperatureRoutes.js': 3,
 };
@@ -207,10 +209,17 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       );
     });
 
-    test('all 9 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // Pitch Me (episode creation step 6): three episode pitches (Haiku).
+    test('POST /episode-pitches uses requireAuth + aiRateLimiter (Pitch Me)', () => {
+      expect(src).toMatch(
+        /router\.post\(['"]\/world\/:showId\/episode-pitches['"],\s*requireAuth,\s*aiRateLimiter,/,
+      );
+    });
+
+    test('all 10 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(9);
+      expect(matches.length).toBe(10);
     });
   });
 
@@ -315,14 +324,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
   });
 
   describe('CP3 zone aggregate consumer counts', () => {
-    // 118, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
-    test('CP3 zone contains 118 total requireAuth references across 4 files (4 imports + 114 handlers)', () => {
+    // 119, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
+    test('CP3 zone contains 119 total requireAuth references across 4 files (4 imports + 115 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(118);
+      expect(total).toBe(119);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {

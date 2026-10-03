@@ -473,6 +473,33 @@ Return ONLY this JSON, no other text:
 
 
 // ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/episode-pitches
+//
+// Pitch Me (episode creation step 6): three episode setups from the living
+// world (episodePitchService), one Haiku call per click. Writes nothing:
+// the New Episode page builds the chosen pitch through POST
+// /world/:showId/events below.
+// ═══════════════════════════════════════════
+
+router.post('/world/:showId/episode-pitches', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ success: false, error: 'ANTHROPIC_API_KEY not configured' });
+    }
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { pitchEpisodes } = require('../services/episodePitchService');
+    const result = await pitchEpisodes(models, req.params.showId);
+    if (result.error) return res.status(result.status || 500).json({ success: false, error: result.error });
+    return res.json({ success: true, pitches: result.pitches });
+  } catch (err) {
+    console.error('[EpisodePitch] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
 // POST /api/v1/world/:showId/events
 // ═══════════════════════════════════════════
 

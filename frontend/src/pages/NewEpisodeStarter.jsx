@@ -14,7 +14,11 @@
  *   Career Opportunity  → an offered opportunity,
  *                         POST /feed-pipeline/:showId/schedule/:id
  *   Personal Story      → not built: who organizes it is Evoni's to rule
- *   Surprise Me         → not built: comes with Pitch Me (step 6)
+ *   Surprise Me         → Pitch Me (step 6): three AI pitches from the
+ *                         living world, POST /world/:showId/episode-pitches
+ *                         (Haiku, rate-limited, one call per click, writes
+ *                         nothing); Build this episode creates the event
+ *                         through POST /world/:showId/events
  *
  * ?start=creator opens the creator path so Back returns here.
  */
@@ -23,6 +27,7 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { ArrowLeft, UserRound, Tag, Globe2, Briefcase, Heart, Sparkles } from 'lucide-react';
 import api from '../services/api';
 import { filterBrands, BRAND_NAME_MAX } from '../utils/eventOrganizer';
+import { buildEventFromPitch } from '../utils/pitchEvent';
 import './NewEpisodeStarter.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -33,7 +38,7 @@ export const STARTING_POINTS = [
   { key: 'world', icon: Globe2, title: 'World Event', text: 'A gala, premiere or cultural moment from the calendar.' },
   { key: 'opportunity', icon: Briefcase, title: 'Career Opportunity', text: 'A campaign, appearance or collaboration already offered.' },
   { key: 'personal', icon: Heart, title: 'Personal Story', text: 'A friend, family or relationship story.', soon: 'Needs your ruling first: who organizes a personal story.' },
-  { key: 'surprise', icon: Sparkles, title: 'Surprise Me', text: 'Prime Studios pitches the whole setup.', soon: 'Comes with Pitch Me.' },
+  { key: 'surprise', icon: Sparkles, title: 'Surprise Me', text: 'Prime Studios pitches three episodes from where Lala is now.' },
 ];
 
 // Opportunities the Ideas drawer offers to schedule (WorldAdmin): not yet an
@@ -250,6 +255,93 @@ function OpportunityStart({ showId, onCreated }) {
   );
 }
 
+const KIND_LABEL = { career: 'Career move', relationship: 'Relationship move', chaos: 'Chaos move' };
+const words = (v) => String(v || '').replace(/_/g, ' ');
+
+function PitchStart({ showId, onCreated }) {
+  const [pitches, setPitches] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [building, setBuilding] = useState(null);
+  const [error, setError] = useState(null);
+
+  // One AI call per click, never on load.
+  const pitch = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/episode-pitches`);
+      setPitches(res.data?.pitches || []);
+    } catch (err) {
+      console.error('[NewEpisode] pitch failed:', err);
+      setError(errorOf(err, 'Could not get pitches'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const build = async (p, i) => {
+    const body = buildEventFromPitch(p);
+    if (!body || building !== null) return;
+    setBuilding(i);
+    setError(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events`, body);
+      const id = res.data?.event?.id;
+      if (id) onCreated(id);
+      else setError('The event was created but no id came back.');
+    } catch (err) {
+      console.error('[NewEpisode] build from pitch failed:', err);
+      setError(errorOf(err, 'Could not build the episode'));
+    } finally {
+      setBuilding(null);
+    }
+  };
+
+  return (
+    <div className="nes-panel" data-testid="start-surprise">
+      <h2 className="nes-panel-title">Pitch me an episode</h2>
+      <p className="nes-note">
+        Prime Studios looks at Lala&apos;s state, the season, the Feed, the brands and the places, and pitches three setups. You choose which becomes canon.
+      </p>
+      <button type="button" className="nes-primary" onClick={pitch} disabled={loading} data-testid="pitch-go">
+        {loading ? 'Pitching…' : pitches ? 'Pitch three more' : 'Pitch me three episodes'}
+      </button>
+      {error && <p className="nes-error" role="alert">{error}</p>}
+      {pitches && pitches.length === 0 && !error && <p className="nes-note">No pitches came back. Try again.</p>}
+      {pitches && pitches.length > 0 && (
+        <ul className="nes-pitches">
+          {pitches.map((p, i) => (
+            <li key={`${p.title}-${i}`} className="nes-pitch" data-testid={`pitch-${i}`}>
+              {p.kind && <span className="nes-pitch-kind">{KIND_LABEL[p.kind] || p.kind}</span>}
+              <h3 className="nes-pitch-title">{p.title}</h3>
+              <p className="nes-pitch-meta">
+                {[p.category && words(p.category), p.format && words(p.format), p.venue?.name].filter(Boolean).join(' · ')}
+              </p>
+              <p className="nes-pitch-premise">{p.premise}</p>
+              <dl className="nes-pitch-facts">
+                <div><dt>Organizer</dt><dd>{p.organizer.name}{p.organizer.kind === 'brand' ? ' (brand)' : ''}</dd></div>
+                {p.featured?.length > 0 && (
+                  <div><dt>Featured</dt><dd>{p.featured.map((f) => `${f.display_name}${f.role ? ` (${f.role})` : ''}`).join(', ')}</dd></div>
+                )}
+                {p.opportunity && <div><dt>Opportunity</dt><dd>{p.opportunity}</dd></div>}
+                {p.pressure && <div><dt>Pressure</dt><dd>{p.pressure}</dd></div>}
+                {p.wildcard && <div><dt>Wildcard</dt><dd>{p.wildcard}</dd></div>}
+              </dl>
+              <button
+                type="button" className="nes-primary" onClick={() => build(p, i)}
+                disabled={building !== null} data-testid={`pitch-build-${i}`}
+              >
+                {building === i ? 'Building…' : 'Build this episode'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function NewEpisodeStarter() {
   const { showId } = useParams();
   const navigate = useNavigate();
@@ -271,7 +363,7 @@ export default function NewEpisodeStarter() {
     );
   }
 
-  const Panel = { brand: BrandStart, world: WorldStart, opportunity: OpportunityStart }[start] || null;
+  const Panel = { brand: BrandStart, world: WorldStart, opportunity: OpportunityStart, surprise: PitchStart }[start] || null;
   return (
     <div className="nes-page">
       <div className="nes-head">

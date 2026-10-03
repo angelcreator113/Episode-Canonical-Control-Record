@@ -123,3 +123,40 @@
   .nes-grid { grid-template-columns: 1fr; }
   .nes-primary { width: 100%; }
 }
+
+/* Pitch Me (episode creation step 6). */
+.nes-pitches {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.nes-pitch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #F5D5DF;
+  border-radius: 10px;
+  background: #FBEFF3;
+}
+.nes-pitch-kind {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #EAF7F5;
+  color: #2F7F76;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+.nes-pitch-title { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 17px; }
+.nes-pitch-meta { margin: 0; font-size: 12px; color: #7a6d62; text-transform: capitalize; }
+.nes-pitch-premise { margin: 0; font-size: 14px; line-height: 1.45; }
+.nes-pitch-facts { margin: 0; font-size: 13px; }
+.nes-pitch-facts div { display: grid; grid-template-columns: 90px 1fr; gap: 6px; padding: 2px 0; }
+.nes-pitch-facts dt { font-weight: 600; color: #6b5e53; }
+.nes-pitch-facts dd { margin: 0; }
+.nes-pitch .nes-primary { margin-top: auto; }
