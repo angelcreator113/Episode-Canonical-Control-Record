@@ -132,14 +132,18 @@ export function computeSectionState(section, checks) {
 
 // Soft pink for what is required and missing, teal for what is done
 // (Evoni: the site's colors are soft pink and teal).
-const PINK = '#C06E87';
-const TEAL = '#2F7F76';
+// Fills and borders use the family color; text uses its text-safe twin
+// (pink and teal as text on white fail 4.5:1; docs/VISUAL_SYSTEM.md §3).
+const PINK = 'var(--accent)';
+const PINK_TEXT = 'var(--accent-dark)';
+const TEAL = 'var(--primary)';
+const TEAL_TEXT = 'var(--primary-text)';
 
 const STATE_STYLES = {
-  complete: { label: 'Complete', color: TEAL, background: '#EAF5F3' },
-  in_progress: { label: 'In progress', color: '#a16207', background: '#fef3c7' },
-  needs_setup: { label: 'Needs setup', color: '#64748b', background: '#f1f5f9' },
-  unavailable: { label: 'System unavailable', color: '#94a3b8', background: '#f8fafc' },
+  complete: { label: 'Complete', color: TEAL_TEXT, background: 'var(--primary-subtle)' },
+  in_progress: { label: 'In progress', color: 'var(--warning-text)', background: 'var(--warning-bg)' },
+  needs_setup: { label: 'Needs setup', color: 'var(--text-secondary)', background: 'var(--lala-parchment-2)' },
+  unavailable: { label: 'System unavailable', color: 'var(--text-secondary)', background: 'var(--surface-bg)' },
 };
 
 /**
@@ -188,33 +192,33 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
     }}>
       <div style={{
         width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-        border: checked ? 'none' : `1.5px solid ${item.required ? PINK : '#CCC'}`,
+        border: checked ? 'none' : `1.5px solid ${item.required ? PINK : 'var(--lala-parchment-3)'}`,
         background: checked ? TEAL : 'transparent',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {checked && <span style={{ color: '#FFF', fontSize: 11, fontWeight: 700 }}>✓</span>}
+        {checked && <span style={{ color: 'var(--text-inverse)', fontSize: 11, fontWeight: 700 }}>✓</span>}
       </div>
       <span style={{
         fontSize: 13, flex: 1,
-        color: checked ? '#555' : item.required ? PINK : '#999',
+        color: checked ? 'var(--text-primary)' : item.required ? PINK_TEXT : 'var(--text-secondary)',
         fontWeight: item.required && !checked ? 600 : 400,
         textDecoration: checked ? 'line-through' : 'none',
       }}>
         {item.label}
         {item.required && !checked && (
-          <span style={{ marginLeft: 6, fontSize: 9, color: PINK, fontWeight: 700, textTransform: 'uppercase' }}>
+          <span style={{ marginLeft: 6, fontSize: 9, color: PINK_TEXT, fontWeight: 700, textTransform: 'uppercase' }}>
             required
           </span>
         )}
         {note && (
-          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: item.required ? PINK : '#92400e', textDecoration: 'none' }}>{note}</span>
+          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: item.required ? PINK_TEXT : 'var(--warning-text)', textDecoration: 'none' }}>{note}</span>
         )}
       </span>
       {!checked && onAction && (
         <button onClick={onAction} disabled={unavailable} style={{
           padding: '2px 8px', borderRadius: 4, border: 'none',
-          background: unavailable ? '#e2e8f0' : '#B8962E',
-          color: unavailable ? '#94a3b8' : '#fff', fontSize: 9,
+          background: unavailable ? 'var(--lala-parchment-3)' : 'var(--lala-gold)',
+          color: unavailable ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 9,
           fontWeight: 600, cursor: unavailable ? 'not-allowed' : 'pointer', flexShrink: 0,
         }}>{actionLabel || 'Fix'}</button>
       )}
@@ -481,9 +485,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 9999,
-          background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9',
-          color: toast.type === 'error' ? '#C62828' : '#16a34a',
-          border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`,
+          background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)',
+          color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)',
+          border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`,
           borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500,
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
         }}>
@@ -492,20 +496,20 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>Production Checklist</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Production Checklist</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>{completedCount}/{totalCount}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{completedCount}/{totalCount}</span>
           <button onClick={checkReadiness} disabled={loading} style={{
-            background: 'none', border: '1px solid #e2e8f0', borderRadius: 6,
-            padding: '3px 10px', fontSize: 11, color: '#94a3b8', cursor: 'pointer',
+            background: 'none', border: '1px solid var(--lala-parchment-3)', borderRadius: 6,
+            padding: '3px 10px', fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer',
           }}>↻</button>
         </div>
       </div>
 
-      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, marginBottom: 16, overflow: 'hidden' }}>
+      <div style={{ height: 5, background: 'var(--lala-parchment-2)', borderRadius: 3, marginBottom: 16, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 3, width: `${pct}%`,
-          background: pct === 100 ? TEAL : pct >= 60 ? '#B8962E' : PINK,
+          background: pct === 100 ? TEAL : pct >= 60 ? 'var(--lala-gold)' : PINK,
           transition: 'width 0.4s ease',
         }} />
       </div>
@@ -517,12 +521,12 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
           return (
         <div key={section.id} style={{
-          background: '#fafaf7', border: '1px solid #f0ede6',
+          background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)',
           borderRadius: 10, padding: '12px 14px', marginBottom: 8,
         }}>
           <h4 style={{
             margin: '0 0 6px', fontSize: 12, fontWeight: 600,
-            color: '#64748b', display: 'flex', alignItems: 'center', gap: 6,
+            color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6,
           }}>
             {section.icon} {section.label}
             <span style={{
@@ -533,17 +537,17 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
               {stateStyle.label}
             </span>
           </h4>
-          <div style={{ marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>{sectionStatus.why}</div>
+          <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-secondary)' }}>{sectionStatus.why}</div>
           {section.id === 'scene' && sceneStep && (
             <div data-testid="checklist-scene-next" style={{
               display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8,
-              padding: '6px 10px', borderRadius: 8, background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.35)',
-              fontSize: 12, color: '#2C2C2C',
+              padding: '6px 10px', borderRadius: 8, background: 'var(--surface-bg)', border: '1px solid rgba(184,150,46,0.35)',
+              fontSize: 12, color: 'var(--text-primary)',
             }}>
               <span style={{ flex: '1 1 180px', minWidth: 0 }}><strong>Next:</strong> {sceneStep.text}</span>
               {sceneStepAction && (
                 <button type="button" data-testid="checklist-scene-next-action" onClick={sceneStepAction.onClick} disabled={locking} style={{
-                  padding: '3px 10px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff',
+                  padding: '3px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)',
                   fontSize: 11, fontWeight: 600, cursor: locking ? 'wait' : 'pointer',
                 }}>{sceneStepAction.label}</button>
               )}
@@ -551,14 +555,14 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           )}
           {/* Production coverage (§8(o) item 2, episode creation step 8). */}
           {section.id === 'scene' && setupIncomplete && (
-            <div role="alert" data-testid="setup-incomplete" style={{ margin: '0 0 8px', padding: '8px 10px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', fontSize: 12, color: '#2C2C2C', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div role="alert" data-testid="setup-incomplete" style={{ margin: '0 0 8px', padding: '8px 10px', borderRadius: 8, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', fontSize: 12, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ flex: 1 }}>
                 <strong>Setup did not finish.</strong>{' '}
                 {coverage && !coverage.complete ? coverage.text : null}
                 {setupStatus?.steps?.scene_plan?.failed?.length ? ` · ${setupStatus.steps.scene_plan.failed.map((f) => `beat ${f.beat}: ${f.reason}`).join('; ')}` : ''}
                 {setupStatus?.steps?.locations?.status === 'failed' ? ` · locations: ${setupStatus.steps.locations.reason}` : ''}
               </span>
-              <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2F7F76', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+              <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                 {resuming ? 'Resuming…' : 'Resume setup'}
               </button>
             </div>
@@ -576,15 +580,15 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
       <div style={{ marginTop: 16 }}>
         {!allRequired && (
-          <p style={{ fontSize: 12, color: PINK, marginBottom: 6 }}>
+          <p style={{ fontSize: 12, color: PINK_TEXT, marginBottom: 6 }}>
             Complete all required items to unlock script generation.
           </p>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => window.location.href = `/episodes/${episode.id}/script-writer`} style={{
             flex: 1,
-            background: allRequired ? 'linear-gradient(135deg, #C9A83A, #B8962E)' : '#e2e8f0',
-            color: allRequired ? '#fff' : '#94a3b8',
+            background: allRequired ? 'var(--primary)' : 'var(--lala-parchment-3)',
+            color: allRequired ? 'var(--text-inverse)' : 'var(--text-secondary)',
             border: 'none', borderRadius: 10, padding: '12px 0',
             fontSize: 14, fontWeight: 600, cursor: allRequired ? 'pointer' : 'not-allowed',
             boxShadow: allRequired ? '0 2px 8px rgba(184,150,46,0.25)' : 'none',
@@ -592,8 +596,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             ✦ Write Script
           </button>
           <button onClick={() => window.location.href = `/episodes/${episode.id}/plan`} style={{
-            padding: '12px 16px', border: '1px solid #e0d9cc', borderRadius: 10,
-            background: '#fff', color: '#666', fontSize: 12, cursor: 'pointer',
+            padding: '12px 16px', border: '1px solid var(--lala-parchment-3)', borderRadius: 10,
+            background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
           }}>
             🎬 Scene Plan
           </button>
@@ -608,8 +612,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         <Link to={`/episodes/${episode.id}/todo`} style={{
           display: 'block', textAlign: 'center', padding: '10px 0',
           borderRadius: 10, textDecoration: 'none',
-          border: '1px solid #e0d9cc', background: '#fff',
-          color: '#666', fontSize: 13, fontWeight: 600,
+          border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)',
+          color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
         }}>
           📋 Episode Run Sheet
         </Link>
@@ -623,8 +627,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         <Link to={`/episodes/${episode.id}/evaluate`} style={{
           display: 'block', textAlign: 'center', padding: '12px 0',
           borderRadius: 10, textDecoration: 'none',
-          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-          color: '#fff', fontSize: 14, fontWeight: 700,
+          background: 'var(--primary)',
+          color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700,
         }}>
           👑 Evaluate Episode
         </Link>
