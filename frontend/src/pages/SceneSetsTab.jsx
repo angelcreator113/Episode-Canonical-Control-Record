@@ -7,7 +7,7 @@ import { SceneSetsBackLink } from '../components/OpenInSceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import './SceneSetsTab.css';
-import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
+import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -1503,8 +1503,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       </div>
                       <div className="scene-sets-ws-main-info">
                         <div className="scene-sets-ws-main-label">Main background</div>
+                        {/* S6: Evoni approves the base here, beside the image; nothing is approved by itself. */}
+                        <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
                         {set.base_approved && (
-                          <p className="scene-sets-ws-main-note">This is the location's approved base. Un-approve it under Event Looks to replace it.</p>
+                          <p className="scene-sets-ws-main-note">Event versions at this location are made from this image. Un-approve it to replace it.</p>
+                        )}
+                        {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
+                          <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>To approve this image as the base, the set needs a World Location.</p>
                         )}
                         <div className="scene-sets-ws-main-actions">
                           {/* S6: an approved base is not replaced until it is un-approved. */}
@@ -2606,7 +2611,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [filterType, setFilterType] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showModelCompare, setShowModelCompare] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
   const [descBuilderLoading, setDescBuilderLoading] = useState(false);
@@ -3355,8 +3359,12 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   return (
     <div className="scene-sets-container">
-      {/* S8: the way back to the page that opened Scene Sets. */}
-      <SceneSetsBackLink />
+      {/* S8: the way back to the page that opened Scene Sets; else, in a show, back to the show. */}
+      {searchParams.get('from') ? <SceneSetsBackLink /> : pageShowId && (
+        <Link className="scene-sets-back-link" to={`/shows/${pageShowId}`} data-testid="scene-sets-back-to-show">
+          ← Back to {allShows.find((sh) => sh.id === pageShowId)?.name || 'show'}
+        </Link>
+      )}
       {/* Toast */}
       {toast && (
         <div className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
@@ -3383,13 +3391,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           >
             {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Scene Set</>}
           </button>
-          <button
-            className="scene-sets-btn-details"
-            onClick={() => setShowModelCompare(v => !v)}
-            aria-expanded={showModelCompare}
-          >
-            <Sparkles size={14} /> Compare base models
-          </button>
           <div className="scene-sets-filters">
             <div className="scene-sets-search-wrap">
               <Search size={12} className="scene-sets-search-icon" />
@@ -3413,9 +3414,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         </div>
       </div>
 
-      {showModelCompare && (
-        <SceneModelComparison sets={sets} onClose={() => setShowModelCompare(false)} />
-      )}
 
       {deleting && (
         <DeleteSetDialog

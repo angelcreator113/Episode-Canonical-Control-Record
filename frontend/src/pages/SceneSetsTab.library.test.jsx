@@ -103,4 +103,59 @@ describe('SceneSetsTab: the library', () => {
     expect(card('set-1')).toBeTruthy();
     expect(card('set-3')).toBeTruthy();
   });
+
+  test('no Compare base models in the header', async () => {
+    renderAt();
+    await screen.findByRole('heading', { name: 'Scene Sets' });
+    expect(screen.queryByRole('button', { name: /Compare base models/ })).toBeNull();
+  });
+
+  test('approving the base is on the main background, beside the image', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true } });
+    const SET = { id: 'set-9', name: 'Velour Hall', scene_type: 'EVENT_LOCATION', generation_status: 'complete', base_still_url: 'https://x/v.jpg', world_location_id: 'loc-9', angles: [] };
+    const LOOSE = { id: 'set-8', name: 'Side Street', scene_type: 'OTHER', generation_status: 'complete', base_still_url: 'https://x/s.jpg', angles: [] };
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (
+      url.includes('/scene-sets') ? { data: { success: true, data: [SET, LOOSE] } } : { data: { success: true, data: [] } }
+    ));
+    renderAt();
+    fireEvent.click(await screen.findByTestId('scene-set-open-set-9'));
+    const main = screen.getByTestId('scene-set-main-bg-set-9');
+    fireEvent.click(within(main).getByRole('button', { name: /Approve as the location's base/ }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-9/approve-base', {}));
+    fireEvent.click(document.querySelector('.scene-sets-modal-close'));
+    fireEvent.click(screen.getByTestId('scene-set-open-set-8'));
+    expect(screen.getByTestId('approve-needs-location-set-8')).toBeTruthy();
+  });
+});
+
+describe('SceneSetsTab: back to the show', () => {
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn.mockReset());
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url.endsWith('/shows')) return { data: { success: true, data: [{ id: 'show-1', name: 'Styling Adventures' }] } };
+      return url.includes('/scene-sets') ? { data: { success: true, data: SETS } } : { data: { success: true, data: [] } };
+    });
+  });
+  const renderInShow = (search = '?tab=scene-sets') => render(
+    <MemoryRouter initialEntries={[`/shows/show-1/world${search}`]}><SceneSetsTab showId="show-1" /></MemoryRouter>,
+  );
+
+  test('in a show, the page links back to the show by name', async () => {
+    renderInShow();
+    const back = await screen.findByTestId('scene-sets-back-to-show');
+    expect(back.getAttribute('href')).toBe('/shows/show-1');
+    await waitFor(() => expect(back.textContent).toBe('← Back to Styling Adventures'));
+  });
+
+  test('opened from another page, the way back is to that page instead', async () => {
+    renderInShow('?tab=scene-sets&from=%2Fepisodes%2Fep-1%2Fplan&fromLabel=Beat%20Plan');
+    expect((await screen.findByTestId('scene-sets-back')).getAttribute('href')).toBe('/episodes/ep-1/plan');
+    expect(screen.queryByTestId('scene-sets-back-to-show')).toBeNull();
+  });
+
+  test('outside a show there is no Back to show', async () => {
+    renderAt();
+    await screen.findByRole('heading', { name: 'Scene Sets' });
+    expect(screen.queryByTestId('scene-sets-back-to-show')).toBeNull();
+  });
 });
