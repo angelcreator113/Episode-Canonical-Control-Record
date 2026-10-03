@@ -16,20 +16,20 @@ export const getWorldMapApi = () =>
 const DreamMap = lazy(() => import('../DreamMap'));
 
 const BEAT_NAMES = [
-  { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: '#5C3D8F' },
-  { number: 2,  name: 'Login Sequence',         icon: '🔐', color: '#5C3D8F' },
-  { number: 3,  name: 'Welcome',                icon: '👋', color: '#5C3D8F' },
-  { number: 4,  name: 'Interruption Pulse 1',   icon: '📩', color: '#B8960C' },
-  { number: 5,  name: 'Reveal',                 icon: '✨', color: '#B8960C' },
-  { number: 6,  name: 'Strategic Reaction',     icon: '🎯', color: '#B8960C' },
-  { number: 7,  name: 'Interruption Pulse 2',   icon: '💬', color: '#B8960C' },
-  { number: 8,  name: 'Transformation Loop',    icon: '👗', color: '#C2185B' },
-  { number: 9,  name: 'Reminder / Deadline',    icon: '⏰', color: '#C2185B' },
-  { number: 10, name: 'Event Travel',           icon: '✈️', color: '#1A5276' },
-  { number: 11, name: 'Event Outcome',          icon: '🏆', color: '#1A5276' },
-  { number: 12, name: 'Deliverable Creation',   icon: '🎨', color: '#1A5276' },
-  { number: 13, name: 'Recap Panel',            icon: '📊', color: '#145A32' },
-  { number: 14, name: 'Cliffhanger',            icon: '🔥', color: '#145A32' },
+  { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: 'var(--primary-text)' },
+  { number: 2,  name: 'Login Sequence',         icon: '🔐', color: 'var(--primary-text)' },
+  { number: 3,  name: 'Welcome',                icon: '👋', color: 'var(--primary-text)' },
+  { number: 4,  name: 'Interruption Pulse 1',   icon: '📩', color: 'var(--lala-gold-text)' },
+  { number: 5,  name: 'Reveal',                 icon: '✨', color: 'var(--lala-gold-text)' },
+  { number: 6,  name: 'Strategic Reaction',     icon: '🎯', color: 'var(--lala-gold-text)' },
+  { number: 7,  name: 'Interruption Pulse 2',   icon: '💬', color: 'var(--lala-gold-text)' },
+  { number: 8,  name: 'Transformation Loop',    icon: '👗', color: 'var(--accent-dark)' },
+  { number: 9,  name: 'Reminder / Deadline',    icon: '⏰', color: 'var(--accent-dark)' },
+  { number: 10, name: 'Event Travel',           icon: '✈️', color: 'var(--info-text)' },
+  { number: 11, name: 'Event Outcome',          icon: '🏆', color: 'var(--info-text)' },
+  { number: 12, name: 'Deliverable Creation',   icon: '🎨', color: 'var(--info-text)' },
+  { number: 13, name: 'Recap Panel',            icon: '📊', color: 'var(--success-text)' },
+  { number: 14, name: 'Cliffhanger',            icon: '🔥', color: 'var(--success-text)' },
 ];
 
 // Episode creation step 7 (§8(j)): a canonical header, `## BEAT: 5 · Reveal`,
@@ -46,7 +46,7 @@ export function parseScriptIntoBeats(scriptText) {
       const beatLabel = beatMatch?.[1]?.trim() || `Beat ${i + 1}`;
       const numbered = Number((beatLabel.match(/^(\d{1,2})\b/) || [])[1]);
       const canon = numbered >= 1 && numbered <= BEAT_NAMES.length ? BEAT_NAMES[numbered - 1] : null;
-      const info = canon || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: '#888' };
+      const info = canon || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: 'var(--text-secondary)' };
       const number = canon ? canon.number : i + 1;
       return { id: `beat-${i}`, number, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: false, raw: section };
     });
@@ -75,14 +75,14 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting }) {
   const lineStr = typeof line === 'string' ? line : '';
   const parsed = parseLine(lineStr);
   if (!parsed || parsed.hidden) return null;
-  const sc = { Prime: '#5C3D8F', Lala: '#C2185B', Kelli: '#1A5276', Guest: '#145A32' };
+  const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
 
   if (editing) return (
     <div style={{ padding: '6px 0' }}>
-      <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #5C3D8F', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+      <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} style={{ width: '100%', padding: '8px 12px', border: '1.5px solid var(--primary)', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: '#5C3D8F', color: '#FFF', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
-        <button onClick={() => setEditing(false)} style={{ background: '#F5F5F5', color: '#888', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+        <button onClick={() => setEditing(false)} style={{ background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
   );
@@ -91,13 +91,13 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting }) {
     <div className="script-line-hover" style={{ padding: '5px 8px', borderRadius: 6, cursor: 'pointer' }} onClick={() => { setEditText(lineStr); setEditing(true); }}>
       {parsed.type === 'dialogue' && (
         <div>
-          <span style={{ fontWeight: 700, fontSize: 12, color: sc[parsed.speaker] || '#333', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 8 }}>{parsed.speaker}</span>
-          <span style={{ fontSize: 14, color: '#1A1A1A', lineHeight: 1.7 }}>"{parsed.text}"</span>
-          <button onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting} className="rewrite-btn" style={{ marginLeft: 8, opacity: 0, background: 'none', border: 'none', fontSize: 10, color: '#5C3D8F', cursor: 'pointer', fontWeight: 600 }}>{rewriting ? '⏳' : '✦ Rewrite'}</button>
+          <span style={{ fontWeight: 700, fontSize: 12, color: sc[parsed.speaker] || 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 8 }}>{parsed.speaker}</span>
+          <span style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>"{parsed.text}"</span>
+          <button onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting} className="rewrite-btn" style={{ marginLeft: 8, opacity: 0, background: 'none', border: 'none', fontSize: 10, color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 600 }}>{rewriting ? '⏳' : '✦ Rewrite'}</button>
         </div>
       )}
-      {parsed.type === 'action' && <div style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>{parsed.text}</div>}
-      {parsed.type === 'narration' && <div style={{ fontSize: 14, color: '#444', lineHeight: 1.7 }}>{parsed.text}</div>}
+      {parsed.type === 'action' && <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{parsed.text}</div>}
+      {parsed.type === 'narration' && <div style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>{parsed.text}</div>}
     </div>
   );
 }
@@ -105,27 +105,27 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting }) {
 function BeatSection({ beat, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   return (
-    <div style={{ background: '#FFF', border: `1px solid ${beat.approved ? '#D4AF37' : '#EEE'}`, borderLeft: `4px solid ${beat.color}`, borderRadius: 12, marginBottom: 10, overflow: 'hidden', boxShadow: beat.approved ? '0 2px 8px rgba(212,175,55,0.15)' : '0 1px 3px rgba(0,0,0,0.04)' }}>
-      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer', background: beat.approved ? '#FFFDF0' : '#FFF' }}>
+    <div style={{ background: 'var(--surface-card)', border: `1px solid ${beat.approved ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`, borderLeft: `4px solid ${beat.color}`, borderRadius: 12, marginBottom: 10, overflow: 'hidden', boxShadow: beat.approved ? '0 2px 8px rgba(184, 150, 46, 0.15)' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer', background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--surface-card)' }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: beat.color + '18', color: beat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{beat.number}</div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 16 }}>{beat.icon}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>{beat.name}</span>
-            {beat.approved && <span style={{ background: '#D4AF37', color: '#FFF', padding: '1px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>✓ APPROVED</span>}
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{beat.name}</span>
+            {beat.approved && <span style={{ background: 'var(--lala-gold)', color: 'var(--text-primary)', padding: '1px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>✓ APPROVED</span>}
           </div>
-          {scene?.scene_set_name && <div onClick={(e) => { e.stopPropagation(); setShowMap(true); }} style={{ fontSize: 11, color: '#7ab3d4', marginTop: 2, cursor: 'pointer' }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
+          {scene?.scene_set_name && <div onClick={(e) => { e.stopPropagation(); setShowMap(true); }} style={{ fontSize: 11, color: 'var(--primary-text)', marginTop: 2, cursor: 'pointer' }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
         </div>
-        <span style={{ fontSize: 12, color: '#AAA' }}>{beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length} lines</span>
-        <span style={{ fontSize: 12, color: '#CCC', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length} lines</span>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
       </div>
       {expanded && (
         <div style={{ padding: '4px 18px 16px' }}>
-          {scene?.scene_context && <div style={{ background: '#F5F0FF', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#5C3D8F', lineHeight: 1.5, fontStyle: 'italic' }}>🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
-          {scene?.emotional_intent && <div style={{ background: '#FFF8E1', borderRadius: 8, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: '#B8960C' }}>✦ {scene.emotional_intent}</div>}
+          {scene?.scene_context && <div style={{ background: 'var(--primary-subtle)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: 'var(--primary-text)', lineHeight: 1.5, fontStyle: 'italic' }}>🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
+          {scene?.emotional_intent && <div style={{ background: 'var(--lala-gold-soft)', borderRadius: 8, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: 'var(--lala-gold-text)' }}>✦ {scene.emotional_intent}</div>}
           <div>{beat.lines.map((line, i) => <ScriptLine key={i} line={line} beatId={beat.id} lineIndex={i} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} />)}</div>
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? '#FFF8E1' : 'linear-gradient(135deg, #2D1B69, #5C3D8F)', color: beat.approved ? '#B8960C' : '#FFF', border: beat.approved ? '1px solid #D4AF37' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{beat.approved ? '🔒 Approved' : '✓ Approve Beat'}</button>
+            <button onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--primary)', color: beat.approved ? 'var(--lala-gold-text)' : 'var(--text-inverse)', border: beat.approved ? '1px solid var(--lala-gold)' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{beat.approved ? '🔒 Approved' : '✓ Approve Beat'}</button>
           </div>
         </div>
       )}
@@ -254,30 +254,30 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 0' }}>
-      <style>{`.script-line-hover:hover{background:#F9F5FF}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
-      {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
+      <style>{`.script-line-hover:hover{background:var(--primary-subtle)}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
+      {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)', color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)', border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
 
       {unsaved && (
-        <div data-testid="script-unsaved" role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', color: '#2C2C2C', fontSize: 13 }}>
+        <div data-testid="script-unsaved" role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontSize: 13 }}>
           <span style={{ flex: '1 1 240px', minWidth: 0 }}><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
-          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2F7F76', color: '#fff', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
         </div>
       )}
       {hasScript && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1A1A1A' }}>{episode?.title}</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>{beats.length} beats · {approvedCount} approved{allApproved && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 600 }}>✓ Complete</span>}</p>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{episode?.title}</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>{beats.length} beats · {approvedCount} approved{allApproved && <span style={{ marginLeft: 8, color: 'var(--success-text)', fontWeight: 600 }}>✓ Complete</span>}</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setDeveloperMode(d => !d)} style={{ background: developerMode ? '#5C3D8F' : '#F5F5F5', color: developerMode ? '#FFF' : '#888', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 11, cursor: 'pointer', fontWeight: developerMode ? 600 : 400 }}>{developerMode ? '📖 Beat View' : '✎ Raw Editor'}</button>
-            <button onClick={() => { if (!window.confirm('Regenerate the entire script? Your current script will be replaced.')) return; handleGenerate(); }} disabled={generating} style={{ background: '#F5F0FF', color: '#5C3D8F', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: generating ? 'not-allowed' : 'pointer', fontWeight: 600 }}>{generating ? '⏳ Generating...' : '✦ Regenerate'}</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#E8F5E9' : 'linear-gradient(135deg, #C9A83A, #B8962E)', color: saved ? '#16a34a' : '#FFF', border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '⏳' : saved ? '✓ Saved' : '💾 Save'}</button>
+            <button onClick={() => setDeveloperMode(d => !d)} style={{ background: developerMode ? 'var(--primary)' : 'var(--lala-parchment-2)', color: developerMode ? 'var(--text-inverse)' : 'var(--text-secondary)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 11, cursor: 'pointer', fontWeight: developerMode ? 600 : 400 }}>{developerMode ? '📖 Beat View' : '✎ Raw Editor'}</button>
+            <button onClick={() => { if (!window.confirm('Regenerate the entire script? Your current script will be replaced.')) return; handleGenerate(); }} disabled={generating} style={{ background: 'var(--primary-subtle)', color: 'var(--primary-text)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: generating ? 'not-allowed' : 'pointer', fontWeight: 600 }}>{generating ? '⏳ Generating...' : '✦ Regenerate'}</button>
+            <button onClick={handleSave} disabled={saving} style={{ background: saved ? 'var(--success-bg)' : 'var(--primary)', color: saved ? 'var(--success-text)' : 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '⏳' : saved ? '✓ Saved' : '💾 Save'}</button>
           </div>
         </div>
       )}
 
-      {hasScript && developerMode && <textarea value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} style={{ width: '100%', padding: 16, fontFamily: 'monospace', fontSize: 13, border: '1px solid #EEE', borderRadius: 10, resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box', marginBottom: 24 }} />}
+      {hasScript && developerMode && <textarea value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} style={{ width: '100%', padding: 16, fontFamily: 'monospace', fontSize: 13, border: '1px solid var(--lala-parchment-3)', borderRadius: 10, resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box', marginBottom: 24 }} />}
 
       {!developerMode && (hasScript ? (
         <div>
@@ -286,15 +286,15 @@ export default function EpisodeScriptTab({ episode, show }) {
           {guardResult && (
             <div style={{
               marginTop: 16, borderRadius: 10, padding: '14px 18px',
-              background: guardResult.violations?.length > 0 ? '#fef2f2' : '#f0fdf4',
-              border: `1px solid ${guardResult.violations?.length > 0 ? '#fecaca' : '#bbf7d0'}`,
+              background: guardResult.violations?.length > 0 ? 'var(--danger-bg)' : 'var(--success-bg)',
+              border: `1px solid ${guardResult.violations?.length > 0 ? 'var(--danger-border)' : 'var(--success-border)'}`,
             }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: guardResult.violations?.length > 0 ? '#dc2626' : '#16a34a', marginBottom: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: guardResult.violations?.length > 0 ? 'var(--danger-text)' : 'var(--success-text)', marginBottom: 6 }}>
                 {guardResult.violations?.length > 0 ? `🛡️ ${guardResult.violations.length} franchise violation(s)` : '🛡️ Passed franchise guard'}
-                <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>({guardResult.rules_checked || '?'} rules checked)</span>
+                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 8 }}>({guardResult.rules_checked || '?'} rules checked)</span>
               </div>
               {guardResult.violations?.map((v, i) => (
-                <div key={i} style={{ padding: '6px 10px', background: '#fff', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#dc2626', border: '1px solid #fecaca' }}>
+                <div key={i} style={{ padding: '6px 10px', background: 'var(--surface-card)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: 'var(--danger-text)', border: '1px solid var(--danger-border)' }}>
                   <strong>{v.rule}:</strong> {v.explanation}
                 </div>
               ))}
@@ -302,9 +302,9 @@ export default function EpisodeScriptTab({ episode, show }) {
           )}
 
           {allApproved && (
-            <div style={{ background: 'linear-gradient(135deg, #E8F5E9, #F1F8E9)', border: '1px solid #A5D6A7', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
-              <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#16a34a' }}>✦ All beats approved — script is ready</p>
-              <button onClick={handleSave} style={{ background: '#16a34a', color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💾 Save Final Script</button>
+            <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
+              <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--success-text)' }}>✦ All beats approved — script is ready</p>
+              <button onClick={handleSave} style={{ background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💾 Save Final Script</button>
             </div>
           )}
         </div>
@@ -312,15 +312,15 @@ export default function EpisodeScriptTab({ episode, show }) {
         <div style={{ maxWidth: 500, margin: '0 auto', padding: '40px 20px' }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
-            <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Generate Episode Script</h2>
-            <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>Generate Episode Script</h2>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               AI writes a 14-beat script using your event, outfit, and character data.
             </p>
           </div>
 
           {/* What feeds the script */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Script will use</div>
+          <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 8 }}>Script will use</div>
             {[
               { icon: '💌', label: 'Event + host + guests', ok: !!episode?.description },
               { icon: '👗', label: 'Wardrobe + brand intelligence', ok: true },
@@ -333,17 +333,17 @@ export default function EpisodeScriptTab({ episode, show }) {
               { icon: '📊', label: 'Season arc + emotional phase', ok: true },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
-                <span style={{ color: item.ok ? '#16a34a' : '#f59e0b' }}>{item.ok ? '✓' : '○'}</span>
+                <span style={{ color: item.ok ? 'var(--success-text)' : 'var(--warning-text)' }}>{item.ok ? '✓' : '○'}</span>
                 <span>{item.icon} {item.label}</span>
               </div>
             ))}
           </div>
 
-          {genError && <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
+          {genError && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
 
           <button onClick={handleGenerate} disabled={generating} style={{
-            width: '100%', background: generating ? '#EEE' : 'linear-gradient(135deg, #C9A83A, #B8962E)',
-            color: generating ? '#999' : '#FFF', border: 'none', borderRadius: 10, padding: '12px 0',
+            width: '100%', background: generating ? 'var(--lala-parchment-2)' : 'var(--primary)',
+            color: generating ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '12px 0',
             fontSize: 15, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer',
             boxShadow: generating ? 'none' : '0 2px 8px rgba(184,150,46,0.25)',
           }}>
@@ -355,12 +355,12 @@ export default function EpisodeScriptTab({ episode, show }) {
       {/* DREAM Map Modal */}
       {showMap && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMap(false)}>
-          <div style={{ width: '90vw', maxWidth: 1200, maxHeight: '85vh', background: '#1a1a2e', borderRadius: 16, overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <div style={{ width: '90vw', maxWidth: 1200, maxHeight: '85vh', background: 'var(--gray-900)', borderRadius: 16, overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.4)' }}>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, color: '#B8962E', letterSpacing: 2 }}>DREAM MAP</span>
-              <button onClick={() => setShowMap(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>x</button>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, color: 'var(--lala-gold)', letterSpacing: 2 }}>DREAM MAP</span>
+              <button onClick={() => setShowMap(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: 'var(--surface-card)', fontSize: 16, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>x</button>
             </div>
-            <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading map...</div>}>
+            <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'var(--lala-parchment-3)' }}>Loading map...</div>}>
               <DreamMap locations={mapLocations} mapImageUrl={mapImageUrl} />
             </Suspense>
           </div>
