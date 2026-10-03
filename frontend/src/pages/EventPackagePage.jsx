@@ -205,7 +205,7 @@ export { sceneSetThumb, sceneSetPath };
 // Event Package owns the event's facts." Season, phase, slot and purpose.
 function SeasonContextBlock({ context, showId }) {
   if (!context) return null;
-  const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Arc</Link>;
+  const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Plan</Link>;
   if (!context.in_slot) {
     return (
       <div className="epp-season" data-testid="season-context" role="note">

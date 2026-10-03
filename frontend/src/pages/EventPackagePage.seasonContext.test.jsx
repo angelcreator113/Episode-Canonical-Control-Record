@@ -54,7 +54,7 @@ describe('EventPackagePage Season Context (§8(ff) A4)', () => {
 
     const block = await screen.findByTestId('season-context');
     expect(block.textContent).toMatch(/Not on the roadmap yet; the next open slot is S1 · E2/);
-    expect(within(block).getByRole('link', { name: 'Season Arc' }).getAttribute('href')).toBe('/shows/show-1/world?tab=season');
+    expect(within(block).getByRole('link', { name: 'Season Plan' }).getAttribute('href')).toBe('/shows/show-1/world?tab=season');
   });
 
   test('a show with no season shows no block', async () => {
