@@ -230,6 +230,7 @@ Analyze this image and return a complete JSON SceneSpec:
   "camera_contracts": [
     {
       "angle": "WIDE | CLOSE | VANITY | WINDOW | DOORWAY | OVERHEAD | DETAIL | or custom",
+      "kind": "front | inside | back | area | zone | extra",
       "description": "what this shot shows and why",
       "required": ["obj-id-1", "obj-id-2"],
       "expected": ["obj-id-3"],
@@ -254,7 +255,7 @@ RULES:
 2. Zone bounds are 0-1 relative coordinates on a top-down floor plan. (0,0) = front-left, (1,1) = back-right. Zones can overlap.
 3. Object categories: "signature" = must be correct in every visible angle. "anchor" = large furniture defining layout. "character" = personal items revealing who lives here. Others are descriptive.
 4. Continuity rules: only include locked_ fields that matter for that object. Don't force-fill all fields.
-5. Camera contracts: "required" = generation FAILS without these. "expected" = should appear, warning if missing. "out_of_frame" = should NOT appear (prevents hallucination).
+5. Camera contracts: "required" = generation FAILS without these. "expected" = should appear, warning if missing. "out_of_frame" = should NOT appear (prevents hallucination). "kind" is the zone of the place the shot serves: front (exterior, entrance, arrival), inside (the main room), back (backstage, private or quiet area), area (a named event area), zone (a named area of a home, e.g. bed area, vanity) or extra (a close-up or other framing that belongs to a zone). Every contract names one.
 6. ${angleRule}
 7. ${stateRule}
 8. List EVERY visible object — furniture, decor, lighting, architecture. Don't skip small items.

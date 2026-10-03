@@ -376,6 +376,25 @@ export const generateSceneSpecApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/spec/generate`, payload);
 export const createAnglesFromSpecApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/spec/create-angles`, payload);
+/**
+ * What create-angles did (audit SCENE-02, 2026-10-03): the views made, the
+ * ones the set already had, and the ones that failed, by name and reason,
+ * so a partial result never reads as a finished step.
+ */
+export function createAnglesOutcome(body) {
+  const d = body?.data || {};
+  const created = d.created?.length ?? d.angles_created ?? 0;
+  const failed = d.failed || [];
+  const existing = d.existing || [];
+  if (!body?.success && !failed.length) return { tone: 'error', text: body?.error || 'Failed' };
+  const parts = [`${created} camera angle${created !== 1 ? 's' : ''} created`];
+  if (existing.length) parts.push(`${existing.length} already there`);
+  if (failed.length) {
+    parts.push(`${failed.length} failed: ${failed.map((f) => `${f.angle_label} (${f.reason})`).join(', ')}`);
+    return { tone: 'error', text: parts.join(' · ') + ' — try again for just those' };
+  }
+  return { tone: 'success', text: parts.join(' · ') + (created ? ' — ready to generate images' : '') };
+}
 export const previewPromptApi = (setId) =>
   apiClient.get(`${API_BASE}/scene-sets/${setId}/preview-prompt`);
 
@@ -1904,11 +1923,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               showToast('Creating camera angles from spec...');
                               try {
                                 const r = await createAnglesFromSpecApi(set.id, {});
-                                const d = r.data;
-                                if (d.success) {
-                                  showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
-                                  if (onRefresh) await onRefresh();
-                                } else showToast(d.error || 'Failed', 'error');
+                                const outcome = createAnglesOutcome(r.data);
+                                showToast(outcome.text, outcome.tone === 'error' ? 'error' : undefined);
+                                // The views that were made stay, so the set is reread either way.
+                                if ((r.data?.data?.created?.length || r.data?.data?.angles_created) && onRefresh) await onRefresh();
                               } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                               setSeeding(false);
                             }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
