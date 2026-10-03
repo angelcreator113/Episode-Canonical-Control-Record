@@ -31,6 +31,44 @@ export const getSceneSetUsesApi = (setId) => apiClient.get(`${API_BASE}/scene-se
 // to it; deleting without a replacement shows how many uses will be left
 // pointing at a removed set."
 const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene']];
+// The library's status filter, and the card's status line: one progress
+// state per set, from its main background and its views.
+export const SET_PROGRESS_LABELS = {
+  no_background: 'Needs a main background',
+  failed: 'Has failed views',
+  to_generate: 'Views to generate',
+  ready: 'Ready',
+};
+export function setProgress(set) {
+  if (!(set.base_still_url || set.base_runway_seed)) return 'no_background';
+  const angles = set.angles || [];
+  if (angles.some((a) => a.generation_status === 'failed')) return 'failed';
+  if (angles.some((a) => a.generation_status === 'pending')) return 'to_generate';
+  return 'ready';
+}
+
+const SORTS = {
+  newest: { label: 'Newest', cmp: (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) },
+  updated: { label: 'Recently updated', cmp: (a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')) },
+  name: { label: 'Name A–Z', cmp: (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }) },
+};
+export const SCENE_SETS_PAGE_SIZE = 24;
+
+/**
+ * The library's sets after its filters: scope ('show' = this page's show,
+ * 'all'), type, progress status and search, sorted. Pure, for the page and
+ * its tests.
+ */
+export function filterSceneSets(sets, { scope = 'all', showId = null, type = 'ALL', status = 'all', query = '', sort = 'newest' } = {}) {
+  let result = sets || [];
+  if (scope === 'show' && showId) result = result.filter((s) => String(s.show_id || '') === String(showId));
+  if (type !== 'ALL') result = result.filter((s) => s.scene_type === type);
+  if (status !== 'all') result = result.filter((s) => setProgress(s) === status);
+  const q = query.trim().toLowerCase();
+  if (q) result = result.filter((s) => s.name?.toLowerCase().includes(q) || s.show?.name?.toLowerCase().includes(q));
+  return [...result].sort((SORTS[sort] || SORTS.newest).cmp);
+}
+
 export function usesText(uses) {
   const parts = USE_WORDS.filter(([k]) => uses?.[k] > 0).map(([k, w]) => `${uses[k]} ${w}${uses[k] === 1 ? '' : 's'}`);
   return parts.length ? `Used by ${parts.join(', ')}.` : 'Not used anywhere.';
@@ -2715,6 +2753,11 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  // In a show the library opens on that show's sets; All shows widens it.
+  const [scope, setScope] = useState(pageShowId ? 'show' : 'all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
+  const [visibleCount, setVisibleCount] = useState(SCENE_SETS_PAGE_SIZE);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
@@ -3439,14 +3482,26 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const filtered = useMemo(() => {
-    let result = filterType === 'ALL' ? sets : sets.filter(s => s.scene_type === filterType);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(s => s.name?.toLowerCase().includes(q) || s.show?.name?.toLowerCase().includes(q));
-    }
-    return result;
-  }, [sets, filterType, searchQuery]);
+  const activeScope = pageShowId ? scope : 'all';
+  const filtered = useMemo(
+    () => filterSceneSets(sets, { scope: activeScope, showId: pageShowId, type: filterType, status: statusFilter, query: searchQuery, sort: sortBy }),
+    [sets, activeScope, pageShowId, filterType, statusFilter, searchQuery, sortBy],
+  );
+  const showSetCount = useMemo(
+    () => (pageShowId ? sets.filter((s) => String(s.show_id || '') === String(pageShowId)).length : sets.length),
+    [sets, pageShowId],
+  );
+  // A changed filter starts the list again from the first page.
+  useEffect(() => { setVisibleCount(SCENE_SETS_PAGE_SIZE); }, [activeScope, filterType, statusFilter, searchQuery, sortBy]);
+  // The page shows the first visibleCount sets, plus a set a link focuses on
+  // (?set=) wherever it falls, so arriving from an episode always lands on it.
+  const visibleSets = useMemo(() => {
+    const page = filtered.slice(0, visibleCount);
+    if (!focusSetId || page.some((s) => s.id === focusSetId)) return page;
+    const focusedSet = sets.find((s) => s.id === focusSetId);
+    return focusedSet ? [focusedSet, ...page] : page;
+  }, [filtered, visibleCount, focusSetId, sets]);
+  const remaining = Math.max(0, filtered.length - visibleCount);
 
   const totalCost = sets.reduce((sum, s) => {
     const setCost = parseFloat(s.generation_cost || 0);
@@ -3459,8 +3514,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     ALL: 'All', HOME_BASE: 'Home Base', CLOSET: 'Closet',
     EVENT_LOCATION: 'Events', TRANSITION: 'Transitions', OTHER: 'Other',
   };
-  const isFiltering = filterType !== 'ALL' || searchQuery.trim() !== '';
-  const clearFilters = () => { setFilterType('ALL'); setSearchQuery(''); };
+  const isFiltering = filterType !== 'ALL' || searchQuery.trim() !== '' || statusFilter !== 'all';
+  const clearFilters = () => { setFilterType('ALL'); setSearchQuery(''); setStatusFilter('all'); };
 
   return (
     <div className="scene-sets-container">
@@ -3482,7 +3537,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         <div>
           <h2 className="scene-sets-title">Scene Sets</h2>
           <p className="scene-sets-subtitle">
-            Create backgrounds and event looks for your locations · {sets.length} set{sets.length !== 1 ? 's' : ''}
+            Create backgrounds and event looks for your locations
             {totalCost > 0 && (
               <span className="scene-sets-total-cost"> · {totalCost.toFixed(1)} credits used</span>
             )}
@@ -3515,6 +3570,25 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
                 {typeLabels[t]}
               </button>
             ))}
+          </div>
+          <div className="scene-sets-filters-row2">
+            {pageShowId && (
+              <div className="scene-sets-scope" role="group" aria-label="Which shows">
+                <button type="button" aria-pressed={activeScope === 'show'} className={`scene-sets-scope-btn${activeScope === 'show' ? ' active' : ''}`} onClick={() => setScope('show')}>
+                  This show <span className="scene-sets-scope-count">{showSetCount}</span>
+                </button>
+                <button type="button" aria-pressed={activeScope === 'all'} className={`scene-sets-scope-btn${activeScope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>
+                  All shows <span className="scene-sets-scope-count">{sets.length}</span>
+                </button>
+              </div>
+            )}
+            <select className="scene-sets-select-sm" aria-label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="all">Any status</option>
+              {Object.entries(SET_PROGRESS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+            <select className="scene-sets-select-sm" aria-label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              {Object.entries(SORTS).map(([k, { label }]) => <option key={k} value={k}>{label}</option>)}
+            </select>
           </div>
         </div>
       </div>
@@ -3605,7 +3679,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       )}
 
       {/* Empty state */}
-      {!loading && !error && filtered.length === 0 && (sets.length > 0 && isFiltering ? (
+      {!loading && !error && filtered.length === 0 && (sets.length > 0 && !isFiltering && activeScope === 'show' ? (
+        <div className="scene-sets-empty" data-testid="scene-sets-show-empty">
+          <Camera size={32} strokeWidth={1} />
+          <p className="scene-sets-empty-title">No scene sets in this show yet</p>
+          <button type="button" className="scene-sets-btn-details" onClick={() => setScope('all')}>See all shows</button>
+        </div>
+      ) : sets.length > 0 && (isFiltering || activeScope === 'show') ? (
         <div className="scene-sets-empty" data-testid="scene-sets-no-match">
           <Search size={32} strokeWidth={1} />
           <p className="scene-sets-empty-title">No scene sets match your search</p>
@@ -3645,7 +3725,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       )}
       {!loading && filtered.length > 0 && (
         <div className="scene-sets-grid">
-          {filtered.map(set => (
+          {visibleSets.map(set => (
             <SceneSetCard
               key={set.id}
               set={set}
@@ -3678,6 +3758,16 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onMakeDefault={handleMakeDefault}
             />
           ))}
+        </div>
+      )}
+      {!loading && filtered.length > 0 && (
+        <div className="scene-sets-pager" data-testid="scene-sets-pager">
+          <span>Showing {Math.min(visibleCount, filtered.length)} of {filtered.length}</span>
+          {remaining > 0 && (
+            <button type="button" className="scene-sets-btn-details" onClick={() => setVisibleCount((n) => n + SCENE_SETS_PAGE_SIZE)}>
+              Load {Math.min(remaining, SCENE_SETS_PAGE_SIZE)} more
+            </button>
+          )}
         </div>
       )}
 
