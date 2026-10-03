@@ -8,6 +8,7 @@ import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../co
 import BrainUpdate from '../components/BrainUpdate';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
 import { CELEBRITY_HIERARCHY, FASHION_TIERS, BEAUTY_TIERS, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, AWARD_SHOWS, CALENDAR_DEFAULTS } from '../data/calendarData';
+import { tabFromSearch } from '../utils/worldRedirects';
 
 const LEGENDARY_GROUPS = [
   { group: 'Fashion Icons', icon: '👗', color: '#d4789a', roles: [
@@ -94,7 +95,8 @@ const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, paddi
 const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono', monospace", marginBottom:6 };
 
 export default function SocialSystems() {
-  const [tab, setTab] = useState('archetypes');
+  // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes'));
   const [editItem, setEditItem] = useState(null);
   const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
   const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);

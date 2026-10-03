@@ -17,6 +17,7 @@ import AwardsMediaTab from '../components/Culture/AwardsMediaTab';
 import HistoryTab from '../components/Culture/HistoryTab';
 import { CALENDAR_DEFAULTS } from '../data/calendarData';
 import { MEMORY_DEFAULTS } from '../data/memoryData';
+import { tabFromSearch } from '../utils/worldRedirects';
 
 // File-local cross-CP duplicates of CP10 CulturalCalendar helpers per
 // v2.12 §9.11 file-local convention. listShowsApi reaches 5-fold
@@ -41,7 +42,8 @@ const TABS = [
 ];
 
 export default function CultureEvents() {
-  const [tab, setTab] = useState('events');
+  // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'events'));
   const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
   const { data: cmData, saving: cmSaving, loaded: cmLoaded } = usePageData('cultural_memory', MEMORY_DEFAULTS);
 

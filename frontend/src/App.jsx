@@ -57,6 +57,7 @@ const EditShow = lazy(() => import('./pages/EditShow'));
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
 import EpisodeComposerRedirect from './components/EpisodeComposerRedirect';
+import { WORLD_REDIRECTS } from './utils/worldRedirects';
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
@@ -152,17 +153,12 @@ const SiteOrganizer = lazy(() => import('./pages/SiteOrganizer'));
 const DesignAgent = lazy(() => import('./pages/DesignAgent'));
 const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
-const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const WorldSetupGuide = lazy(() => import('./pages/WorldSetupGuide'));
 const PropertyManager = lazy(() => import('./pages/PropertyManager'));
-const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
-const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
-const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
-const WorldLocations = lazy(() => import('./pages/WorldLocations'));
 const WorldFoundation = lazy(() => import('./pages/WorldFoundation'));
 const SocialSystemsPage = lazy(() => import('./pages/SocialSystems'));
 const CultureEvents = lazy(() => import('./pages/CultureEvents'));
@@ -458,16 +454,13 @@ function AppContent() {
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
           <Route path="/relationships" element={<RelationshipEngine />} />
 
-          {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
-          <Route path="/cultural-calendar" element={<CulturalCalendar />} />
+          {/* The duplicate world editors' routes open their owner's page on
+              the matching tab (audit IA-04; docs/WORLD_ROUTE_OWNERSHIP.md). */}
+          {Object.entries(WORLD_REDIRECTS).map(([path, to]) => (
+            <Route key={path} path={path} element={<Navigate to={to} replace />} />
+          ))}
           <Route path="/world-setup" element={<WorldSetupGuide />} />
           <Route path="/property-manager" element={<PropertyManager />} />
-
-          {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
-          <Route path="/influencer-systems" element={<InfluencerSystems />} />
-
-          {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
-          <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
 
           {/* Social Timeline Engine — Feed layers, viral spread, engagement, drama, cultural memory */}
           <Route path="/social-timeline" element={<SocialTimeline />} />
@@ -478,14 +471,8 @@ function AppContent() {
           {/* Character Life Simulation — Career stages, paths, relationships, rivalries, migration, persona */}
           <Route path="/character-life-simulation" element={<CharacterLifeSimulation />} />
 
-          {/* Cultural Memory System — Archives, legends, feuds, nostalgia, time capsules, influence rankings */}
-          <Route path="/cultural-memory" element={<CulturalMemory />} />
-
           {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
           <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
-
-          {/* World Locations — Places and spaces of the universe */}
-          <Route path="/world-locations" element={<WorldLocations />} />
 
           {/* Consolidated World Building Pages (DREAM) */}
           <Route path="/world-dashboard" element={<WorldDashboard />} />
