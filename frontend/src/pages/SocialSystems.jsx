@@ -5,7 +5,7 @@
 import { useState, Fragment } from 'react';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
 import { CELEBRITY_HIERARCHY, FASHION_TIERS, BEAUTY_TIERS, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, AWARD_SHOWS, CALENDAR_DEFAULTS } from '../data/calendarData';
 
@@ -96,7 +96,7 @@ const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono
 export default function SocialSystems() {
   const [tab, setTab] = useState('archetypes');
   const [editItem, setEditItem] = useState(null);
-  const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
+  const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
   const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
   const [openLegend, setOpenLegend] = useState('Fashion Icons');
   const [expandedArch, setExpandedArch] = useState(null);
@@ -113,7 +113,7 @@ export default function SocialSystems() {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {saving && <span style={{ fontSize:11, color:'#B8962E' }}>Saving...</span>}
-          <PushToBrain pageName="influencer_systems" data={isData} />
+          <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />
         </div>
       </div>
 

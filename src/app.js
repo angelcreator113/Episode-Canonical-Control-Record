@@ -1318,6 +1318,15 @@ try {
   console.error('✗ Failed to load Franchise Brain routes:', e.message);
 }
 
+// Brain Update: a source page's reviewed sync into the Brain (docs/BRAIN_OWNERSHIP.md)
+try {
+  const brainSyncRoutes = require('./routes/brainSyncRoutes');
+  app.use('/api/v1', brainSyncRoutes);
+  console.log('✓ Brain sync routes loaded at /api/v1');
+} catch (e) {
+  console.error('✗ Failed to load Brain sync routes:', e.message);
+}
+
 // PDF ingestion route (multer + pdf-parse → Claude extraction)
 try {
   const pdfIngestRoute = require('./routes/pdfIngestRoute');

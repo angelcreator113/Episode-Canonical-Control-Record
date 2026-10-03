@@ -20,12 +20,15 @@ export const deletePageContentKeyApi = (pageName, constantKey) =>
  *
  * @param {string} pageName  e.g. 'cultural_calendar'
  * @param {Object} defaultsMap  e.g. { CELEBRITY_HIERARCHY: [...], FASHION_TIERS: [...] }
- * @returns {{ data, updateItems, addItem, removeItem, resetKey, saving, editMode, setEditMode }}
+ * @returns {{ data, updateItems, addItem, removeItem, resetKey, saving, editMode, setEditMode, loaded }}
+ *   loaded is true once the saved content has been read; until then data is
+ *   only the defaults (and stays so if the read fails).
  */
 export default function usePageData(pageName, defaultsMap) {
   const [overrides, setOverrides] = useState({});
   const [saving, setSaving]       = useState(false);
   const [editMode, setEditMode]   = useState(false);
+  const [loaded, setLoaded]       = useState(false);
   const defaultsRef = useRef(defaultsMap);
   defaultsRef.current = defaultsMap;
 
@@ -35,7 +38,7 @@ export default function usePageData(pageName, defaultsMap) {
     (async () => {
       try {
         const saved = await getPageContentApi(pageName);
-        if (!cancelled) setOverrides(saved);
+        if (!cancelled) { setOverrides(saved); setLoaded(true); }
       } catch (err) {
         console.error(`[usePageData] load error for ${pageName}:`, err);
       }
@@ -105,5 +108,5 @@ export default function usePageData(pageName, defaultsMap) {
     }
   }, [pageName]);
 
-  return { data, updateItems, updateItem, addItem, removeItem, resetKey, saving, editMode, setEditMode };
+  return { data, updateItems, updateItem, addItem, removeItem, resetKey, saving, editMode, setEditMode, loaded };
 }
