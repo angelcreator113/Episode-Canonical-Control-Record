@@ -46,6 +46,7 @@ const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
 export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, canGenerate = false, fromLabel = 'Event' }) {
   const base = `/api/v1/world/${showId}/events/${eventId}/look`;
   const [state, setState] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [asking, setAsking] = useState(false);
   const [choose, setChoose] = useState(null); // options
   const [chosenSet, setChosenSet] = useState(null);
@@ -72,9 +73,12 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       if (last.current) announce(last.current, data);
       last.current = data;
       setState(data);
+      setLoadFailed(false);
       return data;
     } catch (err) {
       console.error('[EventLookImage] load failed:', err);
+      // A failed refresh keeps what is shown; a first load that fails says so.
+      if (!last.current) setLoadFailed(true);
       return null;
     }
   }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -206,7 +210,14 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
           </figcaption>
         </figure>
       )}
-      {!generating && !lookReady && !baseWaiting && !look && !baseFailed && !approved && (
+      {loadFailed && (
+        <p className="ell-error" data-testid="event-look-load-failed">
+          Couldn't load this look.{' '}
+          <button type="button" className="ell-link" onClick={() => load()}>Try again</button>
+        </p>
+      )}
+      {!loadFailed && !state && !generating && <p className="ell-note" data-testid="event-look-loading">Loading…</p>}
+      {state && !generating && !lookReady && !baseWaiting && !look && !baseFailed && !approved && (
         <p className="ell-note">{canGenerate || openSetId ? 'No look image yet.' : "Choose the event's scene set, then make its look in Scene Sets."}</p>
       )}
       {locked && (

@@ -12,3 +12,13 @@
 }
 .dressed-angles-actions button:disabled { opacity: 0.5; cursor: default; }
 .dressed-angles-note { margin: 6px 0 0; font-size: 12px; color: #8a7a55; }
+.dressed-angles-note.is-error { color: #b91c1c; }
+.dressed-angles li.is-failed .dressed-angles-status { color: #b91c1c; overflow-wrap: anywhere; }
+.dressed-angles li.is-generating .dressed-angles-status { color: #5C3D8F; }
+.dressed-angles-status { display: inline-flex; align-items: center; gap: 4px; }
+.dressed-angles-spin {
+  width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: dressed-angles-spin 0.8s linear infinite;
+}
+@keyframes dressed-angles-spin { to { transform: rotate(360deg); } }
+.dressed-angles-link { background: none; border: none; padding: 0; color: #8a6d1f; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
