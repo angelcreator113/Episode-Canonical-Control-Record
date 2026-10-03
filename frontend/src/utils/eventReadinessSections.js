@@ -334,11 +334,11 @@ export function nextPackageStep(readiness) {
 // free string, written inconsistently across five call sites). This is a
 // separate, read-only view over the same fields, not a new source of truth.
 export const EVENT_QUEUE_STATES = {
-  needs_organizer: { label: 'Needs Organizer', icon: '👤', color: '#dc2626', bg: '#fef2f2', primaryAction: 'Choose Organizer' },
-  needs_setup:      { label: 'Needs Setup',     icon: '🛠️', color: '#b45309', bg: '#fef3c7', primaryAction: 'Continue Setup' },
-  ready:            { label: 'Ready',           icon: '✓',  color: '#16a34a', bg: '#f0fdf4', primaryAction: 'Start Episode' },
-  used:             { label: 'Used',            icon: '◉',  color: '#6366f1', bg: '#eef2ff', primaryAction: 'Open Episode' },
-  archived:         { label: 'Archived',        icon: '□',  color: '#94a3b8', bg: '#f1f5f9', primaryAction: 'View' },
+  needs_organizer: { label: 'Needs Organizer', icon: '👤', color: 'var(--danger-text)', bg: 'var(--danger-bg)', primaryAction: 'Choose Organizer' },
+  needs_setup:      { label: 'Needs Setup',     icon: '🛠️', color: 'var(--warning-text)', bg: 'var(--warning-bg)', primaryAction: 'Continue Setup' },
+  ready:            { label: 'Ready',           icon: '✓',  color: 'var(--success-text)', bg: 'var(--success-bg)', primaryAction: 'Start Episode' },
+  used:             { label: 'Used',            icon: '◉',  color: 'var(--primary-text)', bg: 'var(--primary-subtle)', primaryAction: 'Open Episode' },
+  archived:         { label: 'Archived',        icon: '□',  color: 'var(--text-secondary)', bg: 'var(--lala-parchment-2)', primaryAction: 'View' },
 };
 
 // Terminal states (archived, used) are checked before organizer/readiness —

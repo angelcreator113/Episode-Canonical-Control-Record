@@ -17,7 +17,7 @@
   width: min(520px, 100vw);
   display: flex;
   flex-direction: column;
-  background: var(--lala-parchment, #FAF7F0);
+  background: var(--surface-bg);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
 }
 
@@ -27,7 +27,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-bottom: 1px solid var(--lala-parchment-3);
 }
 
 .wa-ev-drawer-title {
@@ -39,7 +39,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--lala-gold, #B8962E);
+  color: var(--lala-gold-text);
 }
 
 .wa-ev-drawer-close {
@@ -51,7 +51,7 @@
   border: none;
   border-radius: 8px;
   background: none;
-  color: #64748b;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
@@ -64,7 +64,7 @@
 
 .wa-ev-pager-btn:focus-visible,
 .wa-ev-drawer-close:focus-visible {
-  outline: 2px solid var(--lala-gold, #B8962E);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -76,10 +76,10 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border: 1px solid #fecaca;
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--danger-bg);
+  color: var(--danger-text);
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
@@ -89,14 +89,14 @@
 .wa-ev-card-meta {
   margin: 0 0 8px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .wa-ev-card-meta-missing {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .wa-ev-card-chips {
@@ -118,7 +118,7 @@
   min-width: 0;
   height: 6px;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: var(--lala-parchment-2);
   overflow: hidden;
 }
 
@@ -131,7 +131,7 @@
   flex: 0 0 auto;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 /* Events pagination: under the grid, wraps at 375px. */
@@ -148,10 +148,10 @@
   min-width: 36px;
   min-height: 36px;
   padding: 6px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 8px;
-  background: #fff;
-  color: #334155;
+  background: var(--surface-card);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -162,9 +162,9 @@
 }
 
 .wa-ev-pager-btn.is-current {
-  background: var(--lala-gold, #B8962E);
-  border-color: var(--lala-gold, #B8962E);
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-inverse);
 }
 
 .wa-ev-pager-btn:disabled {
@@ -173,7 +173,7 @@
 }
 
 .wa-ev-pager-gap {
-  color: #94a3b8;
+  color: var(--text-secondary);
   padding: 0 2px;
 }
 
@@ -181,7 +181,7 @@
   flex-basis: 100%;
   text-align: center;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 /* ── Tablet: 768px ──────────────────────────────────────────────────── */
