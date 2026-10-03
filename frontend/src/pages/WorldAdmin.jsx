@@ -21,6 +21,9 @@ import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../services/api';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
+import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import ShowDistributionTab from '../components/Show/ShowDistributionTab';
+import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
@@ -213,25 +216,35 @@ const EVENT_STATUS_CONFIG = {
   filmed:   { label: 'Filmed', color: '#0284c7', bg: '#f0f9ff', icon: '★' },
 };
 
+// One show workspace (Evoni, 2026-10-03: the consolidation as proposed):
+// Overview · Episodes · Events · Assets · Cast & Continuity · Release. The
+// show page's tabs moved here (its Episodes became Production, Distribution
+// and Insights became Release); Career Goals moved into the Season Plan and
+// the Decision Log into Activity & Decisions. Keys stay as they were so
+// existing ?tab= links keep working.
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📺', label: 'Episodes', subs: [
-    { key: 'season', label: 'Season Arc' },
-    { key: 'episodes-ledger', label: 'Episode Ledger' },
+    { key: 'episodes-production', label: 'Production' },
+    { key: 'season', label: 'Season Plan' },
+    { key: 'episodes-ledger', label: 'Results' },
   ]},
   // Lala's Feed moved out of Producer Mode into its own Sidebar destination
   // (Task #1631) — this tab is Events only now, no sub-tabs.
   { key: 'events', icon: '🎭', label: 'Events' },
   { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
-    { key: 'overlays-tab', label: "Lala's Phone" },
-    { key: 'production-overlays', label: 'UI Overlays' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
-    { key: 'goals', label: 'Career Goals' },
+    { key: 'overlays-tab', label: "Lala's Phone" },
+    { key: 'production-overlays', label: 'Audience Overlays' },
   ]},
-  { key: 'characters', icon: '👑', label: 'Characters', subs: [
-    { key: 'characters-list', label: 'Character Stats' },
-    { key: 'decisions', label: 'Decision Log' },
+  { key: 'characters', icon: '👑', label: 'Cast & Continuity', subs: [
+    { key: 'characters-list', label: "Lala's State & Continuity" },
+    { key: 'decisions', label: 'Activity & Decisions' },
+  ]},
+  { key: 'release', icon: '🚀', label: 'Release', subs: [
+    { key: 'distribution', label: 'Distribution' },
+    { key: 'insights', label: 'Insights' },
   ]},
 ];
 
@@ -368,7 +381,9 @@ function WorldAdmin() {
     // to a specific sub-tab when deep-linked.
     const oldToNew = {
       'season': ['episodes', 'season'],
-      'episodes': ['episodes', 'episodes-ledger'],
+      'episodes': ['episodes', 'episodes-production'],
+      'episodes-production': ['episodes', 'episodes-production'],
+      'episodes-ledger': ['episodes', 'episodes-ledger'],
       // Feed Events and Events Library merged into one 'events' top-level tab —
       // both old ?tab= values resolve to the same destination. 'feed' and
       // 'feed-timeline' are NOT mapped here — Lala's Feed no longer lives in
@@ -380,10 +395,14 @@ function WorldAdmin() {
       'overlays': ['wardrobe', 'overlays-tab'],
       'overlays-tab': ['wardrobe', 'overlays-tab'],
       'production-overlays': ['wardrobe', 'production-overlays'],
-      'goals': ['wardrobe', 'goals'],
+      // Career Goals live in the Season Plan.
+      'goals': ['episodes', 'season'],
       'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
       'decisions': ['characters', 'decisions'],
+      'release': ['release', 'distribution'],
+      'distribution': ['release', 'distribution'],
+      'insights': ['release', 'insights'],
     };
     return oldToNew[tab] || [tab, null];
   };
@@ -1660,7 +1679,11 @@ The revised event should feel like a completely different experience from the si
             <span className="wa-context-section">
               {tab ? tab.label : ''}{sub ? ` / ${sub.label}` : ''}
             </span>
-            <Link className="wa-context-link" to={`/shows/${showId}`}>Show page</Link>
+            {/* The show menu: the show's own settings live here, not on a separate show page. */}
+            <span className="wa-context-menu">
+              <Link className="wa-context-link" to={`/shows/${showId}/edit`}>Edit show</Link>
+              <Link className="wa-context-link" to={`/shows/${showId}/settings`}>Settings</Link>
+            </span>
           </div>
         );
       })()}
@@ -1798,6 +1821,12 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ SEASON ════════════════════════ */}
+      {activeTab === 'episodes' && subTab === 'episodes-production' && (
+        <div style={S.content}>
+          <ShowEpisodesBoard showId={showId} episodes={episodes} onChanged={loadData} />
+        </div>
+      )}
+
       {activeTab === 'episodes' && subTab === 'season' && (
         <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
       )}
@@ -4386,7 +4415,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
 
       {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
-      {activeTab === 'wardrobe' && subTab === 'goals' && (
+      {/* Career Goals: part of the Season Plan, below the arc. */}
+      {activeTab === 'episodes' && subTab === 'season' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
@@ -7199,6 +7229,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
       {/* ════════════════════════ DECISIONS ════════════════════════ */}
+      {/* ════════════════════════ RELEASE ════════════════════════ */}
+      {activeTab === 'release' && show && (
+        <div style={S.content}>
+          {subTab === 'distribution' && (
+            <ShowDistributionTab
+              show={show}
+              onUpdate={async (updates) => {
+                await showService.updateShow(showId, updates);
+                const fresh = await showService.getShowById(showId);
+                if (fresh) setShow(fresh);
+              }}
+            />
+          )}
+          {subTab === 'insights' && <ShowInsightsTab show={show} />}
+        </div>
+      )}
+
       {activeTab === 'characters' && subTab === 'decisions' && (
         <div style={S.content}>
           <div style={S.card}>

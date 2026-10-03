@@ -216,9 +216,9 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
   /* ── Studio tools ───────────────────────────────────────────── */
   const studioTools = showId ? [
     { icon: '🌍', label: 'World Admin',      route: `/shows/${showId}/world?from=universe` },
-    { icon: '📋', label: 'Episode Ledger',    route: `/shows/${showId}/world?tab=episodes&from=universe` },
+    { icon: '📋', label: 'Episode Results',   route: `/shows/${showId}/world?tab=episodes-ledger&from=universe` },
     { icon: '💝', label: 'Events Library',    route: `/shows/${showId}/world?tab=events&from=universe` },
-    { icon: '👑', label: 'Characters Admin',  route: `/shows/${showId}/world?tab=characters&from=universe` },
+    { icon: '👑', label: 'Cast & Continuity', route: `/shows/${showId}/world?tab=characters&from=universe` },
     { icon: '⚙️', label: 'Show Settings',    route: `/shows/${showId}/settings` },
     { icon: '👗', label: 'Wardrobe',          route: `/shows/${showId}/world?tab=wardrobe-items&from=universe` },
   ] : [];
@@ -285,7 +285,7 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
           </button>
           <button
             className="prod-hero-btn"
-            onClick={() => navigate(`/shows/${showId}/world?tab=episodes&from=universe`)}
+            onClick={() => navigate(`/shows/${showId}/world?tab=episodes-ledger&from=universe`)}
           >
             📊 View Timeline
           </button>
@@ -334,7 +334,7 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
           </div>
           <button
             className="prod-new-ep-btn"
-            onClick={() => navigate(`/shows/${showId}/quick-episode`)}
+            onClick={() => navigate(`/shows/${showId}/new-episode`)}
           >
             + New Episode
           </button>

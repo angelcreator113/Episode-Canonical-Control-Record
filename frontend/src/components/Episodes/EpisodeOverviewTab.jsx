@@ -697,7 +697,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             </>
           ) : (
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-              Not in a season slot yet. Place it on Producer Mode → Episodes → Season Arc.
+              Not in a season slot yet. Place it on Producer Mode → Episodes → Season Plan.
             </div>
           )}
         </div>
