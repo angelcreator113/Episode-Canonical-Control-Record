@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
+import { sceneSetPath } from '../../utils/sceneSets';
 import EpisodeTodoList from './EpisodeTodoList';
 
 /**
@@ -20,6 +21,22 @@ const STATUS_STYLES = {
   pending: { bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏳', label: 'Pending' },
   missing: { bg: '#f8f8f8', color: '#94a3b8', border: '#e2e8f0', icon: '⬜', label: 'Not generated' },
 };
+
+/**
+ * Where the venue's Fix button goes (audit LINK-03, 2026-10-03): the
+ * event's scene set in this show's Scene Sets, with this tab as the way
+ * back; the event panel when the event has no set yet; nowhere without an
+ * event. Never the clip library, which it used to open at a route that does
+ * not exist.
+ */
+export function venueFixTarget({ event, episode, showId } = {}) {
+  if (!event || !showId) return null;
+  if (event.scene_set_id) {
+    const from = episode?.id ? `/episodes/${episode.id}?tab=assets` : null;
+    return { label: 'Open in Scene Sets', url: sceneSetPath(showId, event.scene_set_id, { from, fromLabel: episode?.title || 'the episode assets', need: 'Venue image' }) };
+  }
+  return { label: 'Event Panel', url: `/shows/${showId}/world?tab=events` };
+}
 
 function EpisodeAssetsTab({ episode, show }) {
   const navigate = useNavigate();
@@ -99,7 +116,7 @@ function EpisodeAssetsTab({ episode, show }) {
           detail: event?.scene_set_id
             ? `Scene set linked${event?.video_clip_url ? ' + video' : ''}`
             : 'Generate venue from event panel',
-          action: { label: 'Scene Library', url: `/shows/${showId}/scene-library` },
+          action: venueFixTarget({ event, episode, showId }),
         },
         {
           id: 'outfit', icon: '👗', name: 'Outfit',

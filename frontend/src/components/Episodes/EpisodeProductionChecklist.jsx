@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
+import { sceneSetsPath } from '../../utils/sceneSets';
 import ProductionCoveragePanel from './ProductionCoveragePanel';
 
 /**
@@ -140,6 +141,43 @@ const STATE_STYLES = {
   needs_setup: { label: 'Needs setup', color: '#64748b', background: '#f1f5f9' },
   unavailable: { label: 'System unavailable', color: '#94a3b8', background: '#f8fafc' },
 };
+
+/**
+ * Where an unchecked item's Fix button goes (audit LINK-03, 2026-10-03):
+ * the page where that work is done, in this app. Show work opens Producer
+ * Mode's tab for it, so a missing scene set opens this show's Scene Sets
+ * (never the clip library), carrying this checklist as the way back; the
+ * phone's screens open Lala's Phone. Null when the item has no page, or the
+ * show is unknown and the page is the show's.
+ */
+export function checklistFixTarget(itemId, { episode, showId } = {}) {
+  const episodeId = episode?.id;
+  const plan = { href: `/episodes/${episodeId}/plan`, label: 'Set up' };
+  const events = { href: `/shows/${showId}/world?tab=events` };
+  const wardrobe = { href: `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' };
+  const targets = {
+    arc_position: plan,
+    archetype: plan,
+    designed_intent: plan,
+    event_linked: { ...events, label: 'Events' },
+    venue_set: { ...events, label: 'Add venue' },
+    scene_sets: {
+      href: sceneSetsPath(showId, { from: `/episodes/${episodeId}?tab=checklist`, fromLabel: episode?.title || 'the episode checklist', need: 'Scene sets assigned' }),
+      label: 'Scene Sets',
+    },
+    scene_plan: { ...plan, label: 'Generate' },
+    scene_images: { href: `/episodes/${episodeId}?tab=scenes`, label: 'Open Scenes' },
+    wardrobe_inventory: wardrobe,
+    wardrobe_ready: wardrobe,
+    outfit_picked: { ...events, label: 'Pick outfit' },
+    overlays_generated: { href: `/shows/${showId}/world?tab=overlays-tab`, label: "Lala's Phone" },
+    character_state: { href: `/shows/${showId}/world?tab=overview`, label: 'Set up' },
+  };
+  const target = targets[itemId];
+  if (!target || !episodeId) return null;
+  if (target.href.startsWith('/shows/') && !showId) return null;
+  return target;
+}
 
 function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable, note }) {
   return (
@@ -372,22 +410,13 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     }
   };
 
-  // Action handlers for checklist items
-  const actions = {
-    arc_position: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
-    archetype: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
-    designed_intent: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
-    event_linked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Events' },
-    venue_set: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Add venue' },
-    scene_sets: { action: () => window.location.href = `/scene-library`, label: 'Scene Library' },
-    scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
-    scene_images: { action: () => window.location.href = `/episodes/${episode.id}?tab=scenes`, label: 'Open Scenes' },
-    wardrobe_inventory: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
-    wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
-    outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
-    overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
-    character_state: { action: () => window.location.href = `/shows/${showId}/world?tab=overview`, label: 'Set up' },
-  };
+  // Each unchecked item's Fix button opens the page where that work is done
+  // (checklistFixTarget), in this app, so Back returns to this checklist.
+  const navigate = useNavigate();
+  const actions = Object.fromEntries(CHECKLIST_SECTIONS.flatMap((s) => s.items).flatMap((item) => {
+    const target = checklistFixTarget(item.id, { episode, showId });
+    return target ? [[item.id, { action: () => navigate(target.href), label: target.label }]] : [];
+  }));
 
   // S9 (c): lock every beat, then re-check.
   const lockAllBeats = async () => {

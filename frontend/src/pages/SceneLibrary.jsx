@@ -35,8 +35,10 @@ const SceneLibrary = () => {
   // Shows for filter
   const [shows, setShows] = useState([]);
 
-  // Tab — read from URL if provided (e.g., /scene-library?tab=overlays)
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'sets');
+  // Tab — read from URL if provided (e.g., /scene-library?tab=overlays).
+  // Clips first (audit LINK-03, 2026-10-03): this page is the clip library;
+  // show work opens in Producer Mode.
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'clips');
 
   // Pagination
   const [pagination, setPagination] = useState({
@@ -240,8 +242,8 @@ const SceneLibrary = () => {
       {/* Header */}
       <div className="library-header">
         <div className="header-left">
-          <h1>🎬 Scene Library</h1>
-          <p>Master repository of scene clips</p>
+          <h1>🎬 Scene Clips</h1>
+          <p>The scene video clips. Backgrounds and locations live in each show's Scene Sets.</p>
         </div>
         <div className="header-right">
           <button className="btn-secondary" onClick={() => navigate(-1)}>
