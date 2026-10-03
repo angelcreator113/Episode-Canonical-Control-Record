@@ -4133,3 +4133,37 @@
 .scene-sets-desc-review p { margin: 0 0 0.35rem; overflow-wrap: anywhere; }
 .scene-sets-desc-review-suggested { font-style: italic; }
 .scene-sets-desc-review-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+/* The browsing card: one status line and Open Set, always visible (touch has no hover). */
+.scene-sets-card-status {
+  margin-top: 6px; font-size: 11px; font-family: 'DM Mono', monospace;
+  display: flex; align-items: center; gap: 4px; color: #8a6d1f;
+}
+.scene-sets-card-status.is-error { color: #b91c1c; }
+.scene-sets-card-status.is-busy { color: #5C3D8F; }
+.scene-sets-card-open { display: flex; margin-top: 8px; }
+.scene-sets-card-open .scene-sets-btn-generate { flex: 1; justify-content: center; }
+
+/* The set's workspace: the main background, then additional views. */
+.scene-sets-ws-main {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  padding: 10px; margin-bottom: 12px; border: 1px solid #e8e0d0; border-radius: 8px; background: #FAF7F0;
+}
+.scene-sets-ws-main-preview { flex: 1 1 220px; max-width: 360px; min-width: 0; }
+.scene-sets-ws-main-preview img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; cursor: zoom-in; display: block; }
+.scene-sets-ws-main-empty {
+  display: flex; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 16 / 9;
+  border: 1px dashed #d6c9a8; border-radius: 6px; color: #94a3b8; font-size: 12px;
+}
+.scene-sets-ws-main-info { flex: 1 1 180px; min-width: 0; }
+.scene-sets-ws-main-label,
+.scene-sets-ws-subhead {
+  font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #B8962E; margin-bottom: 6px;
+}
+.scene-sets-ws-subhead { margin-top: 12px; }
+.scene-sets-ws-main-note { font-size: 11px; color: #666; margin: 0 0 6px; line-height: 1.4; }
+.scene-sets-ws-main-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.scene-sets-ws-empty { font-size: 12px; color: #94a3b8; text-align: center; padding: 16px; margin: 0; }
+/* Five workspace tabs scroll sideways on a phone rather than clip. */
+.scene-sets-modal-tabs { overflow-x: auto; scrollbar-width: none; }
+.scene-sets-modal-tabs .scene-sets-modal-tab { flex-shrink: 0; white-space: nowrap; }

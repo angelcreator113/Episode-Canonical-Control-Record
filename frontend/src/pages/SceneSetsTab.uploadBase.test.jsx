@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -45,10 +45,15 @@ describe('SceneSetsTab: replacing a base by upload (DJ 5)', () => {
     expect(posts().filter((u) => /spec\/generate|spec\/create-angles|generate-base|\/generate$/.test(u))).toEqual([]);
   });
 
+  // Replace lives in the set's workspace, under its main background.
   test('an approved base offers no Replace (S6); an unapproved one does', async () => {
     render(<MemoryRouter initialEntries={['/shows/show-1/world?tab=scene-sets']}><SceneSetsTab /></MemoryRouter>);
     await waitFor(() => expect(card('set-2')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-2'));
+    expect(screen.getByTestId('scene-set-main-bg-set-2')).toBeTruthy();
     expect(document.querySelector('[data-testid="scene-set-replace-base-set-2"]')).toBeNull();
+    fireEvent.click(document.querySelector('.scene-sets-modal-close'));
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
     expect(document.querySelector('[data-testid="scene-set-replace-base-set-1"]')).toBeTruthy();
   });
 });
