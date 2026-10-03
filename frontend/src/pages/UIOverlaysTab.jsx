@@ -26,6 +26,7 @@ import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
+import { activeShowId, rememberShow } from '../utils/activeShow';
 
 // Browser-only skin key from before Task #1964; read once for the carry-over.
 const LEGACY_SKIN_KEY = 'phone_hub_skin';
@@ -483,8 +484,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get('/api/v1/shows').then(r => {
       const s = r.data?.data || [];
       setShows(s);
-      if (s.length > 0 && !showId) setShowId(s[0].id);
-    }).catch(() => {});
+      // The standalone page opens on the active show (utils/activeShow), else the first.
+      if (s.length > 0 && !showId) setShowId(activeShowId({ shows: s }) || s[0].id);
+    }).catch((err) => { console.error('[UIOverlaysTab] shows load failed:', err); });
   }, [propShowId]);
 
   // Load overlays — auto-select home screen as default
@@ -1459,7 +1461,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             {!propShowId && shows.length > 0 && (
               <select
                 value={showId || ''}
-                onChange={(e) => setShowId(e.target.value)}
+                onChange={(e) => { setShowId(e.target.value); rememberShow(e.target.value); }}
+                aria-label="Show"
                 className="overlays-show-select"
               >
                 <option value="" disabled>Select show...</option>

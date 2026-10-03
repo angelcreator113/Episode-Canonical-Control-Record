@@ -19,6 +19,8 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import showService from '../services/showService';
+import { rememberShow } from '../utils/activeShow';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
@@ -557,6 +559,15 @@ function WorldAdmin() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   useEffect(() => { loadData(); }, [showId]);
+  // Producer Mode's show is the active show the Sidebar and other pages open.
+  useEffect(() => { rememberShow(showId); }, [showId]);
+  // The context bar's show switcher.
+  const [allShows, setAllShows] = useState([]);
+  useEffect(() => {
+    showService.getAllShows()
+      .then((list) => setAllShows((list || []).map((s) => ({ id: s.id, name: s.name || s.title || 'Untitled show' }))))
+      .catch((err) => { console.error('[WorldAdmin] shows load failed:', err); setAllShows([]); });
+  }, []);
 
   // Fetch the show's overlay types so the event modal can render the
   // Phone-vs-UI picker with real options (vs the prior free-text input).
@@ -670,7 +681,11 @@ function WorldAdmin() {
     setLoading(true); setError(null);
     try {
       const results = await Promise.allSettled([
-        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data)).catch(() => setShow({ id: showId, title: 'Show' })),
+        // GET /shows/:id answers { success, data: show }; the show's name is `name`.
+        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || null)).catch((err) => {
+          console.error('[WorldAdmin] show load failed:', err);
+          setShow(null);
+        }),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(() => {}),
         api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
           const list = r.data?.episodes || r.data?.data || r.data || [];
@@ -1578,7 +1593,7 @@ The revised event should feel like a completely different experience from the si
       <div className="wa-header" style={S.header}>
         <div>
           <h1 style={S.title}>🌍 Producer Mode</h1>
-          <p style={S.subtitle}>{show?.title || 'Show'} — World Rules &amp; Canon</p>
+          <p style={S.subtitle} data-testid="wa-show-name">{show?.name || 'Loading show…'}</p>
         </div>
         <button onClick={loadData} style={S.refreshBtn}>🔄 Refresh</button>
       </div>
@@ -1594,6 +1609,32 @@ The revised event should feel like a completely different experience from the si
           )}
         </div>
       )}
+
+      {/* ─── CONTEXT BAR: which show, which section ─── */}
+      {(() => {
+        const tab = TABS.find((t) => t.key === activeTab);
+        const sub = tab?.subs?.find((x) => x.key === subTab);
+        return (
+          <div className="wa-context-bar" data-testid="wa-context-bar">
+            {allShows.length > 1 ? (
+              <select
+                className="wa-context-show"
+                aria-label="Show"
+                value={showId}
+                onChange={(e) => navigate(`/shows/${e.target.value}/world?tab=${encodeURIComponent(searchParams.get('tab') || 'overview')}`)}
+              >
+                {allShows.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            ) : (
+              <strong className="wa-context-show-name">{show?.name || '…'}</strong>
+            )}
+            <span className="wa-context-section">
+              {tab ? tab.label : ''}{sub ? ` / ${sub.label}` : ''}
+            </span>
+            <Link className="wa-context-link" to={`/shows/${showId}`}>Show page</Link>
+          </div>
+        );
+      })()}
 
       {/* ─── TABS ─── */}
       <div className="wa-tab-bar" style={S.tabBar}>

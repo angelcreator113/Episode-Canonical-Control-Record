@@ -56,12 +56,15 @@ export const SCENE_SETS_PAGE_SIZE = 24;
 
 /**
  * The library's sets after its filters: scope ('show' = this page's show,
- * 'all'), type, progress status and search, sorted. Pure, for the page and
+ * 'shared' = sets with no show, 'all'), type, progress status and search,
+ * sorted. Pure, for the page and
  * its tests.
  */
 export function filterSceneSets(sets, { scope = 'all', showId = null, type = 'ALL', status = 'all', query = '', sort = 'newest' } = {}) {
   let result = sets || [];
   if (scope === 'show' && showId) result = result.filter((s) => String(s.show_id || '') === String(showId));
+  // Shared: the sets that belong to no show, usable by every show.
+  if (scope === 'shared') result = result.filter((s) => !s.show_id);
   if (type !== 'ALL') result = result.filter((s) => s.scene_type === type);
   if (status !== 'all') result = result.filter((s) => setProgress(s) === status);
   const q = query.trim().toLowerCase();
@@ -3591,6 +3594,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     () => filterSceneSets(sets, { scope: activeScope, showId: pageShowId, type: filterType, status: statusFilter, query: searchQuery, sort: sortBy }),
     [sets, activeScope, pageShowId, filterType, statusFilter, searchQuery, sortBy],
   );
+  const sharedSetCount = useMemo(() => sets.filter((s) => !s.show_id).length, [sets]);
   const showSetCount = useMemo(
     () => (pageShowId ? sets.filter((s) => String(s.show_id || '') === String(pageShowId)).length : sets.length),
     [sets, pageShowId],
@@ -3680,6 +3684,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               <div className="scene-sets-scope" role="group" aria-label="Which shows">
                 <button type="button" aria-pressed={activeScope === 'show'} className={`scene-sets-scope-btn${activeScope === 'show' ? ' active' : ''}`} onClick={() => setScope('show')}>
                   This show <span className="scene-sets-scope-count">{showSetCount}</span>
+                </button>
+                <button type="button" aria-pressed={activeScope === 'shared'} className={`scene-sets-scope-btn${activeScope === 'shared' ? ' active' : ''}`} onClick={() => setScope('shared')}
+                  title="Sets that belong to no show, usable by every show">
+                  Shared <span className="scene-sets-scope-count">{sharedSetCount}</span>
                 </button>
                 <button type="button" aria-pressed={activeScope === 'all'} className={`scene-sets-scope-btn${activeScope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>
                   All shows <span className="scene-sets-scope-count">{sets.length}</span>
@@ -3783,13 +3791,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       )}
 
       {/* Empty state */}
-      {!loading && !error && visibleSets.length === 0 && (sets.length > 0 && !isFiltering && activeScope === 'show' ? (
+      {!loading && !error && visibleSets.length === 0 && (sets.length > 0 && !isFiltering && activeScope !== 'all' ? (
         <div className="scene-sets-empty" data-testid="scene-sets-show-empty">
           <Camera size={32} strokeWidth={1} />
-          <p className="scene-sets-empty-title">No scene sets in this show yet</p>
+          <p className="scene-sets-empty-title">{activeScope === 'shared' ? 'No shared scene sets yet' : 'No scene sets in this show yet'}</p>
           <button type="button" className="scene-sets-btn-details" onClick={() => setScope('all')}>See all shows</button>
         </div>
-      ) : sets.length > 0 && (isFiltering || activeScope === 'show') ? (
+      ) : sets.length > 0 && (isFiltering || activeScope !== 'all') ? (
         <div className="scene-sets-empty" data-testid="scene-sets-no-match">
           <Search size={32} strokeWidth={1} />
           <p className="scene-sets-empty-title">No scene sets match your search</p>

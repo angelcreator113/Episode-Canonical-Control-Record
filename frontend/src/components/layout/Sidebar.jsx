@@ -11,12 +11,14 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import showService from '../../services/showService';
+import { activeShowId } from '../../utils/activeShow';
 import './Sidebar.css';
 
 /* ─── Navigation map ────────────────────────────────────────── */
-function buildNav(shows) {
-  const showId = shows[0]?.id;
-  const showName = shows[0]?.name || 'Show';
+// activeId: the show Producer Mode opens (utils/activeShow). With several
+// shows and none active, Producer Mode opens the shows list to choose one.
+function buildNav(shows, activeId) {
+  const active = shows.find((s) => String(s.id) === String(activeId)) || null;
 
   return [
     {
@@ -34,8 +36,10 @@ function buildNav(shows) {
     {
       zone: 'PRODUCE',
       items: [
-        ...(showId ? [
-          { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
+        ...(active ? [
+          { icon: '📅', label: 'Producer Mode', route: `/shows/${active.id}/world?tab=overview`, hint: active.name },
+        ] : shows.length > 1 ? [
+          { icon: '📅', label: 'Producer Mode', route: '/shows', hint: 'Choose a show' },
         ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
@@ -190,7 +194,7 @@ function Sidebar({ isOpen, onClose }) {
           </NavLink>
 
           {/* Zones */}
-          {buildNav(shows).map(({ zone, items }) => {
+          {buildNav(shows, activeShowId({ pathname: location.pathname, shows })).map(({ zone, items }) => {
             const zoneCollapsed = collapsedZones[zone];
             return (
             <div className="ps-zone" key={zone}>
