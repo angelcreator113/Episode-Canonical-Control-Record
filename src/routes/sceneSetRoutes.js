@@ -2325,23 +2325,22 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), requireAuth, aiRateLi
     if (!set.base_still_url) return res.status(400).json({ success: false, error: 'No base image — upload a base still first' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ success: false, error: 'ANTHROPIC_API_KEY not configured on server' });
 
-    // Force regeneration by clearing cached spec
-    if (req.body.force) {
-      try {
-        await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
-      } catch {
-        // Column may not exist yet — clear from visual_language instead
-        const vl = set.visual_language || {};
-        delete vl.scene_spec;
-        await SceneSet.update({ visual_language: vl }, { where: { id: set.id } });
-      }
-      set.scene_spec = null;
-    }
+    // A forced rebuild bypasses the cached spec; the saved one is never
+    // cleared first (audit SCENE-03): the service replaces it only once a
+    // usable candidate exists, keeping the old one as scene_spec_previous.
+    const force = Boolean(req.body?.force);
+    const previous = set.scene_spec || set.visual_language?.scene_spec || null;
 
     console.log(`[SceneSpec] Starting spec generation for ${set.name} (${set.id}), base_still_url: ${set.base_still_url?.slice(0, 80)}`);
-    const spec = await sceneSpecService.buildSceneSpec(set, SceneSet);
+    const spec = await sceneSpecService.buildSceneSpec(set, SceneSet, { force });
 
-    res.json({ success: true, data: spec });
+    res.json({
+      success: true,
+      data: spec,
+      // Whether this call built a spec (else the cached one came back).
+      rebuilt: !previous || spec !== previous,
+      replaced_previous: Boolean(previous) && spec !== previous,
+    });
   } catch (err) {
     console.error('POST /:id/spec/generate error:', err.message, err.stack?.slice(0, 500));
     res.status(500).json({ success: false, error: `Spec generation failed: ${err.message}` });
