@@ -89,6 +89,7 @@ import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventLookRecommendations from '../components/EventPackage/EventLookRecommendations';
+import EventGuestRecommendations from '../components/EventPackage/EventGuestRecommendations';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
@@ -804,6 +805,24 @@ export default function EventPackagePage() {
     saveGuestProfiles([...guestList, newGuest], `${newGuest.display_name} added and featured`);
   };
 
+  // A recommended attendee (episode creation step 5): an invited guest is
+  // featured with the role; anyone else joins the guest list featured, in
+  // the shape Add from Feed writes.
+  const featureRecommended = (rec) => {
+    if (guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
+      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
+      return;
+    }
+    const at = guestList.findIndex((g) => String(g.profile_id) === String(rec.profile_id));
+    const updated = at >= 0
+      ? guestList.map((g, i) => (i === at ? { ...g, featured: true, story_role: rec.role } : g))
+      : [...guestList, {
+        profile_id: rec.profile_id, handle: rec.handle, display_name: rec.display_name,
+        featured: true, story_role: rec.role,
+      }];
+    saveGuestProfiles(updated, `${rec.display_name} featured as ${rec.role}`);
+  };
+
   const fetchNameSuggestions = async () => {
     setNameSuggesting(true);
     setNameSuggestError(null);
@@ -1288,6 +1307,17 @@ export default function EventPackagePage() {
                 ))}
               </ul>
             ) : <div className="epp-empty">No featured attendees yet</div>}
+
+            {!used && featuredGuests.length < MAX_FEATURED_GUESTS && (
+              <EventGuestRecommendations
+                guests={guestList}
+                organizerProfileId={event.source_profile_id}
+                venueLocationId={event.venue_location_id}
+                slots={MAX_FEATURED_GUESTS - featuredGuests.length}
+                onFeature={featureRecommended}
+                saving={guestSaving}
+              />
+            )}
 
             <button
               type="button" className="epp-btn epp-btn-small epp-guest-list-toggle"
