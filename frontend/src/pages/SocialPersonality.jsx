@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './SocialPersonality.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 06 · Social Personality v1.0
@@ -430,7 +430,7 @@ const TAB_RENDERERS = {
 export default function SocialPersonality() {
   const [activeTab, setActiveTab] = useState('traits');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving } = usePageData('social_personality', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('social_personality', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
@@ -441,7 +441,7 @@ export default function SocialPersonality() {
           <h1 className="sp-title">The Social Personality Engine</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="social_personality" data={data} />
+            <BrainUpdate source="social_personality" data={data} ready={loaded} />
           </span>
         </div>
         <p className="sp-subtitle">Doc 06 · v1.0 · March 2026 — What characters post, how they react, and how they grow</p>

@@ -24,9 +24,16 @@
 
 const crypto = require('crypto');
 
-const MANIFESTS = {
-  social_systems: require('./brainManifests/socialSystems'),
-};
+const MANIFESTS = Object.fromEntries([
+  require('./brainManifests/socialSystems'),
+  require('./brainManifests/culturalCalendar'),
+  require('./brainManifests/culturalMemory'),
+  require('./brainManifests/worldFoundation'),
+  require('./brainManifests/socialTimeline'),
+  require('./brainManifests/socialPersonality'),
+  require('./brainManifests/characterLifeSimulation'),
+  require('./brainManifests/characterDepthEngine'),
+].map((m) => [m.SOURCE, m]));
 
 class SyncError extends Error {
   constructor(status, message) {

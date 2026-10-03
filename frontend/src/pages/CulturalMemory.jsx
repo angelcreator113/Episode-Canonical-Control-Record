@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './CulturalMemory.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import { BrainUpdateElsewhere } from '../components/BrainUpdate';
 
 /* ═══════════════════════════════════════════════════════════════
    The Cultural Memory System — Doc 08 · v1.0
@@ -380,7 +380,7 @@ export default function CulturalMemory() {
           <h1>The Cultural Memory System</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="cultural_memory" data={data} />
+            <BrainUpdateElsewhere to="/culture-events" label="Culture & Events" />
           </span>
         </div>
         <p className="cm-subtitle">Doc 08 · v1.0 — A living archive of moments that become part of LalaVerse history</p>

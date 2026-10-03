@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './CharacterLifeSimulation.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 
 /* ═══════════════════════════════════════════════════════════════
    Character Life Simulation System — Doc 07 · v1.0
@@ -406,7 +406,7 @@ const TAB_RENDERERS = {
 export default function CharacterLifeSimulation() {
   const [activeTab, setActiveTab] = useState('stages');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving } = usePageData('character_life_simulation', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('character_life_simulation', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
@@ -417,7 +417,7 @@ export default function CharacterLifeSimulation() {
           <h1>Character Life Simulation</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="character_life_simulation" data={data} />
+            <BrainUpdate source="character_life_simulation" data={data} ready={loaded} />
           </span>
         </div>
         <p className="cls-subtitle">Doc 07 · v1.0 — How characters evolve through career stages, relationships, cities, and life events</p>

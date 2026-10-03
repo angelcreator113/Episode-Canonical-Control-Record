@@ -25,7 +25,7 @@ vi.mock('../components/EditItemModal', () => ({
   PageEditContext: { Provider: ({ children }) => children },
   EditableList: () => null,
 }));
-vi.mock('../components/PushToBrain', () => ({ default: () => null }));
+vi.mock('../components/BrainUpdate', () => ({ default: () => null, BrainUpdateElsewhere: () => null }));
 
 import apiClient from '../services/api';
 import {

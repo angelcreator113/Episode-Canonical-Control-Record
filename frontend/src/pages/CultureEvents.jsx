@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
 import usePageData from '../hooks/usePageData';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 import EventsTab from '../components/Culture/EventsTab';
 import AwardsMediaTab from '../components/Culture/AwardsMediaTab';
 import HistoryTab from '../components/Culture/HistoryTab';
@@ -40,8 +40,8 @@ const TABS = [
 
 export default function CultureEvents() {
   const [tab, setTab] = useState('events');
-  const { data: ccData, saving: ccSaving } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
-  const { data: cmData, saving: cmSaving } = usePageData('cultural_memory', MEMORY_DEFAULTS);
+  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
+  const { data: cmData, saving: cmSaving, loaded: cmLoaded } = usePageData('cultural_memory', MEMORY_DEFAULTS);
 
   // Calendar events from API
   const [events, setEvents] = useState([]);
@@ -98,8 +98,8 @@ export default function CultureEvents() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
           <div style={{ display: 'none' }}>
-            <PushToBrain pageName="cultural_calendar" data={ccData} data-push-calendar />
-            <PushToBrain pageName="cultural_memory" data={cmData} data-push-memory />
+            <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />
+            <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />
           </div>
           <button onClick={handlePushAll} style={{
             padding: '6px 14px', fontSize: 11, fontWeight: 600,

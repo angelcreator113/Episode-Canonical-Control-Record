@@ -1,8 +1,8 @@
 # Brain Ownership
 
 **Status: proposal, awaiting Evoni's rulings (§7).** Written 2026-10-03 as step 1 of the
-Brain Update redesign. The code in step 1 (§8) follows the proposal for one page,
-Social Systems, and changes nothing anywhere else.
+Brain Update redesign. Step 1 (§8) follows the proposal for one page, Social Systems.
+Step 2 (§9) adds the other seven world-building sources and retires Push to Brain.
 
 This takes up the open ruling recorded in `docs/DIRECTOR_BRAIN_DESIGN_INPUT.md` ("The open
 ruling: which store is canon?") and its proposal that authoring pages own structured
@@ -59,7 +59,7 @@ changed them.
 | POST `/franchise-brain/entries` (Show Bible create) | The Brain | `direct_entry`, `pending_review` |
 | PATCH `/franchise-brain/entries/:id` (Show Bible edit) | (edit) | Title, content, category, severity, always_inject. Step 1 refuses edits to a source-keyed entry's words (409). |
 | POST `/franchise-brain/ingest-document`, POST `/franchise-brain/ingest-pdf` | The document | AI extraction, `pending_review` |
-| POST `/franchise-brain/push-from-page` (`PushToBrain`, 8 page names) | The page | The whole page as JSON, cut at 50,000 characters, AI extraction, one `create` per fact, `pending_review`. Never compares with what exists. |
+| ~~POST `/franchise-brain/push-from-page`~~ (`PushToBrain`, 8 page names), retired in step 2 (§9) | The page | The whole page as JSON, cut at 50,000 characters, AI extraction, one `create` per fact, `pending_review`. Never compared with what existed. |
 | Amber `push_page_to_brain`, `develop_world` (`memories/assistant.js`, `executeAssistantAction`) | The page / Amber | AI extraction or AI generation, raw INSERT |
 | POST `/scene-sets/:id/learn-location` | The scene set | Finds by title, else creates; `active` with no review |
 | `completeEpisode` step 16 (`episodeCompletionService`) | The episode | Two rows per completion; the character-state one is `always_inject` and supersedes the last (without setting `superseded_by`) |
@@ -74,7 +74,8 @@ Verified on a database migrated from `src/migrations` (the canon tree):
   `conversation_extraction`, `direct_entry`, `system`). A create with it fails:
   `invalid input value for enum enum_franchise_knowledge_extracted_by: "page_push"`. That
   failure comes after the AI extraction has already run and been paid for. Production may
-  have the value added outside the migrations; that is unverified from here.
+  have the value added outside the migrations; that is unverified from here. Retired in
+  step 2 (§9), so this no longer applies.
 
 Found by reading, not yet run:
 
@@ -85,10 +86,23 @@ Found by reading, not yet run:
 - The Show Bible's Ingest sends `{ text, source }` but `ingest-document` requires
   `document_text`. The Show Bible's Guard sends `{ scene_text }` but `/guard` requires
   `scene_brief`. Both return 400.
-- `InfluencerSystems.jsx` (routed at `/influencer-systems`, not in the Sidebar) keeps its
-  own literal copy of the eight Social Systems arrays and saves to the same
-  `influencer_systems` page content as Social Systems. Two editors, two default sets, one
-  stored record.
+- **Four sources have two editors with different defaults.** Each pair saves to one
+  `page_content` record, but each page carries its own defaults, and they disagree.
+  Measured in step 2 by comparing each page's defaults:
+
+  | Source (`page_content`) | Editor in the Sidebar | Older editor (routed, not in the Sidebar) | Defaults that differ |
+  |---|---|---|---|
+  | `influencer_systems` | Social Systems (`data/influencerData.js`) | `InfluencerSystems.jsx` | 4 of 8 keys |
+  | `cultural_calendar` | Culture & Events (`data/calendarData.js`) | `CulturalCalendar.jsx` | 2 of 9 keys |
+  | `cultural_memory` | Culture & Events (`data/memoryData.js`) | `CulturalMemory.jsx` | 9 of 10 keys |
+  | `world_infrastructure` | World Foundation (`data/dreamCities.js`) | `WorldInfrastructure.jsx` | Different keys: `CITIES` (Velvet City, Glow District, Pulse City, Creator Harbor, Horizon City) and `LEGENDARY_GROUPS`, where World Foundation has `DREAM_CITIES` (Dazzle District, Radiance Row, Echo Park, Ascent Tower, Maverick Harbor). Universities and corporations differ too. |
+
+  Where a key has no saved edit, each page shows its own defaults. If both editors could
+  sync, the Brain would change back and forth depending on which page synced last. So
+  only the Sidebar editor syncs (§9).
+- `CharacterLifeSimulation.jsx`'s defaults still name the old cities ("Velvet City" in
+  `CAREER_PATHS`). The sync sends what the page says; that disagreement is a conflict,
+  for redesign step 7.
 - `components/FranchiseBrain.jsx` is imported only by its test, so `PdfIngestZone`
   (`/ingest-pdf`) is unreachable from the UI.
 
@@ -159,8 +173,8 @@ Implemented for Social Systems (§8). Each page with a Brain Manifest gets the s
 | R1 | Adopt the rule in §1? | Yes |
 | R2 | Social Systems' eight seeded laws (`influencer-systems-v1.0`, critical, always_inject) describe the same eight domains as the synced cards, in older prose. Once the page is connected, should its first sync retire them? | Not until "Used By" routing exists. Today those eight are what the AI reads, and the synced cards are read by no one (§4). Retiring them first would remove Social Systems from every prompt. Retire them in the step that routes the cards. |
 | R3 | A page's truth is its frontend defaults plus its `page_content` overrides, and only the browser has both. Accept the browser sending the page to the sync (as Push to Brain did), or move the defaults server-side first? | Accept it for now. Sync requires login, and the reviewed fingerprint ties what is written to what was shown. Moving defaults server-side is its own step. |
-| R4 | `InfluencerSystems.jsx` duplicates Social Systems with a private copy of its defaults. | Redirect `/influencer-systems` to `/social-systems` and delete the copy. |
-| R5 | The old Push to Brain on the other pages fails in canon (§3) and, where it works, creates piles. | Leave it until each page gets a manifest (redesign step 3), then remove it page by page. Don't fix its enum value, which would turn the pile-making back on. |
+| R4 | Four older editors (`InfluencerSystems`, `CulturalCalendar`, `CulturalMemory`, `WorldInfrastructure`) duplicate a Sidebar page with their own, different defaults (§3). | Redirect each route to its Sidebar page and delete the copy. Until then they don't sync; they show "Brain updates on <page> →" (§9). |
+| R5 | ~~The old Push to Brain on the other pages fails in canon (§3) and, where it works, creates piles.~~ | Done in step 2: every page has a manifest and Push to Brain is retired (§9). |
 | R6 | What is `Universe` for? | Undecided here, as in `DIRECTOR_BRAIN_DESIGN_INPUT.md` |
 | R7 | Episode completion and Amber write values the schema rejects (§3). | Fix as their own tasks, outside the Brain redesign. They are bugs either way. |
 | R8 | Amber's `push_page_to_brain` and `develop_world` | `push_page_to_brain` should call the page's sync preview instead of extracting. `develop_world` creates new content, so it should write to the page, not the Brain. |
@@ -190,3 +204,39 @@ Implemented for Social Systems (§8). Each page with a Brain Manifest gets the s
 
 Not in step 1: conflicts (they need the AI), Law / Rule / Fact / Guidance, Used By, the
 Brain landing page, and the other pages.
+
+---
+
+## 9. Step 2: every world-building source (implemented)
+
+- `src/services/brainManifests/makeManifest.js` (`makeManifest`): the shared builder. A
+  manifest is a table of domains: the page data key, what one item is, and the field
+  that names it. The builder handles:
+  - lists (joined) and lists of records (one line each);
+  - whole values (a core rule, a list of questions, JustAWoman's social profile), which
+    become one card;
+  - presentation, dropped even inside a field (icon, color, `num`, accent, plus a
+    manifest's own list).
+
+  Social Systems moved onto it with byte-identical output.
+- Seven new manifests:
+
+  | Source | Synced on | Cards from the defaults | Legacy source document |
+  |---|---|---|---|
+  | `cultural_calendar` | Culture & Events ("Calendar") | 64 | `cultural-system-v2.0` |
+  | `cultural_memory` | Culture & Events ("Memory") | 44 | `cultural-memory-v1.0` |
+  | `world_foundation` (page content `world_infrastructure`) | World Foundation | 19 | `world-infrastructure-v1.0` |
+  | `social_timeline` | Social Timeline | 59 | `social-timeline-v1.0` |
+  | `social_personality` | Social Personality | 53 | `social-personality-v1.0` |
+  | `character_life_simulation` | Character Life Simulation | 52 | `character-life-simulation-v1.0` |
+  | `character_depth_engine` | Character Depth Engine | 63 | `character-depth-engine-v1.0` |
+
+  Social Systems makes 48 cards, so 402 in all.
+- One editor per source. The four older editors in §3 show `BrainUpdateElsewhere`, a link
+  to the page that syncs, instead of a Brain button.
+- Push to Brain is retired: the `PushToBrain` component, and POST
+  `/franchise-brain/push-from-page` with its AI extraction. Amber's own copy
+  (`push_page_to_brain`) is untouched (R8).
+- Unchanged from step 1: synced cards are `important` and not `always_inject`, so no
+  generator reads them yet. The seeded laws for each source are counted as legacy and
+  left alone (R2).

@@ -14,9 +14,14 @@
  * Props: source (manifest name, e.g. 'social_systems'), data (the page's
  * usePageData data map), ready (usePageData's loaded: until the saved
  * content is read, data is only the defaults, so nothing is previewed or
- * applied).
+ * applied), name (optional: which of the page's sources this is, when a
+ * page has more than one, e.g. 'Calendar').
+ *
+ * BrainUpdateElsewhere: for a page that edits a source but is not where it
+ * syncs (an older editor with its own defaults), a link to the page that is.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
@@ -32,7 +37,12 @@ export const applyBrainSync = (source, pageData, fingerprint) =>
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-function buttonFor(preview, failed) {
+function buttonFor(preview, failed, name) {
+  const b = baseButton(preview, failed);
+  return name ? { ...b, label: b.label.replace('🧠 ', `🧠 ${name}: `) } : b;
+}
+
+function baseButton(preview, failed) {
   if (failed) return { label: '🧠 Brain unavailable', color: MUTED, bg: '#f4f1ec' };
   if (!preview) return { label: '🧠 Checking Brain…', color: MUTED, bg: '#f4f1ec' };
   if (preview.state === 'not_connected') return { label: '🧠 Connect to Brain', color: TEAL, bg: '#EAF5F3' };
@@ -59,7 +69,7 @@ function Card({ title, children, testId }) {
   );
 }
 
-export default function BrainUpdate({ source, data, ready = true }) {
+export default function BrainUpdate({ source, data, ready = true, name }) {
   const [preview, setPreview] = useState(null);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -105,11 +115,11 @@ export default function BrainUpdate({ source, data, ready = true }) {
     }
   };
 
-  const b = buttonFor(preview, failed);
+  const b = buttonFor(preview, failed, name);
   return (
     <>
       <button
-        type="button" data-testid="brain-update-button" data-state={failed ? 'failed' : (preview?.state || 'loading')}
+        type="button" data-testid={name ? `brain-update-button-${name.toLowerCase()}` : 'brain-update-button'} data-state={failed ? 'failed' : (preview?.state || 'loading')}
         onClick={() => { setMessage(null); setOpen(true); if (failed) refresh(); }}
         style={{
           padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, whiteSpace: 'nowrap', cursor: 'pointer',
@@ -233,5 +243,19 @@ export default function BrainUpdate({ source, data, ready = true }) {
         </div>
       )}
     </>
+  );
+}
+
+export function BrainUpdateElsewhere({ to, label }) {
+  return (
+    <Link
+      to={to} data-testid="brain-update-elsewhere" title={`This page's data reaches the Brain from ${label}`}
+      style={{
+        padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, whiteSpace: 'nowrap', textDecoration: 'none',
+        border: `1px solid ${MUTED}`, background: '#f4f1ec', color: MUTED,
+      }}
+    >
+      🧠 Brain updates on {label} →
+    </Link>
   );
 }

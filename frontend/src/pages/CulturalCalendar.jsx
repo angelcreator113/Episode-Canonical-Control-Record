@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './CulturalCalendar.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import { BrainUpdateElsewhere } from '../components/BrainUpdate';
 import apiClient from '../services/api';
 
 // ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -359,7 +359,7 @@ export default function CulturalCalendar() {
           <h1>Cultural Calendar</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="cultural_calendar" data={data} />
+            <BrainUpdateElsewhere to="/culture-events" label="Culture & Events" />
           </span>
         </div>
         <p>LalaVerse Cultural & Social Systems — franchise_law · always_inject</p>
