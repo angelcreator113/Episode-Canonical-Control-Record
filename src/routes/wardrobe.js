@@ -470,6 +470,26 @@ router.post('/outfit-score/:episodeId', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/v1/wardrobe/slot-coverage?show_id=<id>
+// Audit GATE-02 (2026-10-03): which of the show's required wardrobe slots
+// have a piece (wardrobeSlotCoverageService). The Production Checklist's
+// "Required wardrobe slots covered" reads this instead of "any piece exists".
+router.get('/slot-coverage', requireAuth, async (req, res) => {
+  try {
+    const showId = typeof req.query.show_id === 'string' && req.query.show_id ? req.query.show_id : null;
+    if (!showId) return res.status(400).json({ error: 'show_id is required' });
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not available' });
+    const { wardrobeSlotCoverage } = require('../services/wardrobeSlotCoverageService');
+    const data = await wardrobeSlotCoverage(models, showId);
+    if (!data) return res.status(404).json({ error: 'Show not found' });
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('Wardrobe slot coverage error:', error);
+    return res.status(500).json({ error: 'Failed to compute slot coverage', detail: error.message });
+  }
+});
+
 // List all wardrobe items
 router.get('/', requireAuth, asyncHandler(wardrobeController.listWardrobeItems));
 

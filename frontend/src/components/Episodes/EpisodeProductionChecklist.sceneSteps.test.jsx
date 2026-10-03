@@ -29,6 +29,13 @@ describe('nextStep (L12, moved by S9 c)', () => {
     expect(nextStep([{ locked: true }, { locked: false }], ready)).toEqual({ kind: 'lock', text: 'Lock the beats' });
     expect(nextStep([{ locked: true }, { locked: true }], ready)).toEqual({ kind: 'script', text: 'Write the script' });
   });
+
+  test('a plan short of the 14 beats is still at the plan step (audit GATE-01)', () => {
+    const ready = { ready: 1, total: 1, not_ready: [] };
+    const coverage = { complete: false, text: '1 of 14 beats · missing beats 2, 3 and 4' };
+    expect(nextStep([{ locked: true }], ready, coverage)).toEqual({ kind: 'plan', text: 'Complete the beat plan: 1 of 14 beats · missing beats 2, 3 and 4' });
+    expect(nextStep([{ locked: true }], ready, { complete: true, text: '14 of 14 beats' })).toEqual({ kind: 'script', text: 'Write the script' });
+  });
 });
 
 describe('EpisodeProductionChecklist: the scenes\' next step (S9 c)', () => {

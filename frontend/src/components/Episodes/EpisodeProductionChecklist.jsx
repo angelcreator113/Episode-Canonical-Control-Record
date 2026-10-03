@@ -54,7 +54,10 @@ const CHECKLIST_SECTIONS = [
     icon: '👗',
     label: 'Wardrobe & Outfit',
     items: [
-      { id: 'wardrobe_ready',    label: 'Wardrobe pieces uploaded',   required: true  },
+      // Audit GATE-02 (2026-10-03): inventory and required-slot coverage are
+      // separate facts; one shoe no longer satisfies the wardrobe gate.
+      { id: 'wardrobe_inventory', label: 'Wardrobe pieces uploaded',  required: false },
+      { id: 'wardrobe_ready',    label: 'Required wardrobe slots covered', required: true },
       { id: 'outfit_picked',     label: 'Outfit picked for event',    required: false },
     ],
   },
@@ -126,8 +129,13 @@ export function computeSectionState(section, checks) {
   return { state: 'needs_setup', why: 'Nothing set up yet' };
 }
 
+// Soft pink for what is required and missing, teal for what is done
+// (Evoni: the site's colors are soft pink and teal).
+const PINK = '#C06E87';
+const TEAL = '#2F7F76';
+
 const STATE_STYLES = {
-  complete: { label: 'Complete', color: '#16a34a', background: '#dcfce7' },
+  complete: { label: 'Complete', color: TEAL, background: '#EAF5F3' },
   in_progress: { label: 'In progress', color: '#a16207', background: '#fef3c7' },
   needs_setup: { label: 'Needs setup', color: '#64748b', background: '#f1f5f9' },
   unavailable: { label: 'System unavailable', color: '#94a3b8', background: '#f8fafc' },
@@ -142,26 +150,26 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
     }}>
       <div style={{
         width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-        border: checked ? 'none' : `1.5px solid ${item.required ? '#E57373' : '#CCC'}`,
-        background: checked ? '#16a34a' : 'transparent',
+        border: checked ? 'none' : `1.5px solid ${item.required ? PINK : '#CCC'}`,
+        background: checked ? TEAL : 'transparent',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {checked && <span style={{ color: '#FFF', fontSize: 11, fontWeight: 700 }}>✓</span>}
       </div>
       <span style={{
         fontSize: 13, flex: 1,
-        color: checked ? '#555' : item.required ? '#C62828' : '#999',
+        color: checked ? '#555' : item.required ? PINK : '#999',
         fontWeight: item.required && !checked ? 600 : 400,
         textDecoration: checked ? 'line-through' : 'none',
       }}>
         {item.label}
         {item.required && !checked && (
-          <span style={{ marginLeft: 6, fontSize: 9, color: '#E57373', fontWeight: 700, textTransform: 'uppercase' }}>
+          <span style={{ marginLeft: 6, fontSize: 9, color: PINK, fontWeight: 700, textTransform: 'uppercase' }}>
             required
           </span>
         )}
         {note && (
-          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: '#92400e', textDecoration: 'none' }}>{note}</span>
+          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: item.required ? PINK : '#92400e', textDecoration: 'none' }}>{note}</span>
         )}
       </span>
       {!checked && onAction && (
@@ -244,8 +252,13 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       try {
         const { data } = await api.get(`/api/v1/episode-brief/${episode.id}/plan`);
         const plan = data?.data || [];
-        results.scene_plan        = plan.length > 0;
-        results.scene_plan_locked = plan.length > 0 && plan.every(b => b.locked);
+        // Audit GATE-01 (2026-10-03): generated means the server's coverage
+        // says every canonical beat is planned once; never a row count.
+        const coverage = data?.coverage || null;
+        results.scene_plan        = Boolean(coverage?.complete);
+        if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
+        else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
+        results.scene_plan_locked = Boolean(coverage?.complete) && plan.every(b => b.locked);
         // L5, Q21: every planned beat has an angle with an image.
         const readiness = data?.readiness;
         results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
@@ -255,20 +268,26 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           const beats = readiness.not_ready.map((b) => b.beat_number).join(', ');
           checkNotes.scene_images = `${readiness.ready} ready · ${n} ${n === 1 ? 'needs' : 'need'} attention: beat${n === 1 ? '' : 's'} ${beats}`;
         }
-        setSceneStep(nextStep(plan, readiness));
+        setSceneStep(nextStep(plan, readiness, coverage));
       } catch (err) {
         console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
         results.scene_plan = results.scene_plan_locked = results.scene_images = false;
         setSceneStep(null);
       }
 
-      // ── Check Wardrobe ──
+      // ── Check Wardrobe (audit GATE-02, 2026-10-03): the show's required
+      // slots, each with a piece, not "any piece exists" ──
       try {
-        const { data } = await api.get(`/api/v1/wardrobe?show_id=${showId}&limit=5`);
-        const items = data?.data || [];
-        results.wardrobe_ready = items.length > 0;
-      } catch {
+        const { data } = await api.get(`/api/v1/wardrobe/slot-coverage?show_id=${showId}`);
+        const slotCoverage = data?.data || null;
+        results.wardrobe_inventory = (slotCoverage?.inventory || 0) > 0;
+        results.wardrobe_ready = Boolean(slotCoverage?.covered);
+        if (slotCoverage && !slotCoverage.covered) checkNotes.wardrobe_ready = slotCoverage.text;
+      } catch (err) {
+        console.error('[EpisodeProductionChecklist] wardrobe slot coverage failed:', err.response?.status || err.message);
+        results.wardrobe_inventory = false;
         results.wardrobe_ready = false;
+        checkNotes.wardrobe_ready = 'Wardrobe could not be read';
       }
 
       // ── Check Character state ──
@@ -336,8 +355,14 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           throw err;
         }
       }
-      setToast({ msg: '✅ Script generated! Check the Script tab.', type: 'success' });
-      setTimeout(() => setToast(null), 4000);
+      // Audit GATE-03 (2026-10-03): generated is not saved.
+      if (res.data?.saved === false) {
+        setToast({ msg: `⚠️ ${res.data.error || 'The script was generated but could not be saved.'} Open the Script tab and save it.`, type: 'error' });
+        setTimeout(() => setToast(null), 8000);
+      } else {
+        setToast({ msg: '✅ Script generated! Check the Script tab.', type: 'success' });
+        setTimeout(() => setToast(null), 4000);
+      }
       if (onScriptGenerate) onScriptGenerate(res.data);
     } catch (err) {
       setToast({ msg: err.response?.data?.error || 'Script generation failed', type: 'error' });
@@ -357,6 +382,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     scene_sets: { action: () => window.location.href = `/scene-library`, label: 'Scene Library' },
     scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
     scene_images: { action: () => window.location.href = `/episodes/${episode.id}?tab=scenes`, label: 'Open Scenes' },
+    wardrobe_inventory: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
     wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' },
     outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
     overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
@@ -420,7 +446,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, marginBottom: 16, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 3, width: `${pct}%`,
-          background: pct === 100 ? '#16a34a' : pct >= 60 ? '#B8962E' : '#E57373',
+          background: pct === 100 ? TEAL : pct >= 60 ? '#B8962E' : PINK,
           transition: 'width 0.4s ease',
         }} />
       </div>
@@ -478,7 +504,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
       <div style={{ marginTop: 16 }}>
         {!allRequired && (
-          <p style={{ fontSize: 12, color: '#E57373', marginBottom: 6 }}>
+          <p style={{ fontSize: 12, color: PINK, marginBottom: 6 }}>
             Complete all required items to unlock script generation.
           </p>
         )}
