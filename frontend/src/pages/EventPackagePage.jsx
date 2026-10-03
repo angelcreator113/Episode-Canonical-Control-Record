@@ -1002,11 +1002,12 @@ export default function EventPackagePage() {
       if (res.data.success) {
         const ep = res.data.data.episode;
         setLocationsStep(null);
-        // Start Episode lands on Production -> Assets, where the building
-        // happens (Evoni's ruling, 2026-09-25, Task #1905). A scoped
-        // reversal of #1531's Checklist landing for this caller only;
-        // EpisodeDetail's default tab stays 'checklist'.
-        if (ep?.id) navigate(`/episodes/${ep.id}?tab=assets`);
+        // Start Episode lands on the Overview, whose Planning card shows what
+        // the episode inherited and the next decision (Evoni, 2026-10-03,
+        // episode creation step 2). This replaces Production -> Assets
+        // (Task #1905, 2026-09-25) for this caller only; EpisodeDetail's
+        // default tab stays 'checklist'.
+        if (ep?.id) navigate(`/episodes/${ep.id}?tab=overview`);
         else setToast('Episode created but no episode id was returned.');
       } else {
         setToast(res.data.error || 'Failed to start episode');

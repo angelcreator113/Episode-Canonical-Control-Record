@@ -1,9 +1,11 @@
 /**
  * Event Package — Start Episode destination (Task #1905).
  *
- * Start Episode lands on Production -> Assets (`?tab=assets`), per Evoni's
- * ruling of 2026-09-25. EpisodeDetail's own default tab (Checklist, #1531)
- * is unchanged; this only pins where this caller sends her.
+ * Start Episode lands on the Overview (`?tab=overview`), whose Planning card
+ * shows what the episode inherited and the next decision (Evoni, 2026-10-03,
+ * episode creation step 2; it was Production -> Assets, ruling of
+ * 2026-09-25). EpisodeDetail's own default tab (Checklist, #1531) is
+ * unchanged; this only pins where this caller sends her.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -75,7 +77,7 @@ function renderPage() {
   );
 }
 
-describe('EventPackagePage — Start Episode lands on Production -> Assets', () => {
+describe('EventPackagePage — Start Episode lands on the Overview', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     stored = JSON.parse(JSON.stringify(GATED_EVENT));
@@ -102,7 +104,7 @@ describe('EventPackagePage — Start Episode lands on Production -> Assets', () 
     });
   });
 
-  test('with warnings open: Start Anyway navigates to /episodes/:id?tab=assets', async () => {
+  test('with warnings open: Start Anyway navigates to /episodes/:id?tab=overview', async () => {
     renderPage();
     const start = await screen.findByTestId('start-episode');
     expect(start.disabled).toBe(false);
@@ -111,14 +113,14 @@ describe('EventPackagePage — Start Episode lands on Production -> Assets', () 
     fireEvent.click(await screen.findByTestId('start-anyway'));
     fireEvent.click(await screen.findByTestId('els-confirm'));
 
-    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=assets'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(api.post).toHaveBeenCalledWith(START_URL, {
       draft_script: false,
       locations: [{ role: 'home', scene_set_id: HOME.id, name: null }],
     });
   });
 
-  test('with no warnings: Start Episode starts directly and lands on ?tab=assets', async () => {
+  test('with no warnings: Start Episode starts directly and lands on ?tab=overview', async () => {
     stored = JSON.parse(JSON.stringify(COMPLETE_EVENT));
     renderPage();
     const start = await screen.findByTestId('start-episode');
@@ -126,7 +128,7 @@ describe('EventPackagePage — Start Episode lands on Production -> Assets', () 
     fireEvent.click(start);
     fireEvent.click(await screen.findByTestId('els-confirm'));
 
-    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=assets'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
   });
 });
@@ -200,7 +202,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     fireEvent.change(screen.getByLabelText('Extra location 1 name'), { target: { value: 'Car' } });
 
     fireEvent.click(screen.getByTestId('els-confirm'));
-    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=assets'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(api.post).toHaveBeenCalledWith(START_URL, {
       draft_script: false,
       locations: [
