@@ -50,7 +50,7 @@ function buildNav(shows, activeId) {
       zone: 'LIBRARY',
       items: [
         { icon: '🗃️', label: 'Assets', route: '/assets' },
-        { icon: '🏞️', label: 'Scene Library', route: '/scene-library' },
+        { icon: '🏞️', label: 'Scene Clips', route: '/scene-library' },
         { icon: '🧩', label: 'Templates', route: '/template-studio' },
         { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
       ],

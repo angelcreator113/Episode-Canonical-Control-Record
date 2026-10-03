@@ -4085,7 +4085,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             description: `Custom ${scope}-level ${category}: ${name}`,
                             beat: scope === 'show' ? 'Various' : 'Custom',
                           });
-                          if (res.data.success) setToast(`Custom overlay "${name}" created — go to Scene Library → Overlays to generate it`);
+                          if (res.data.success) setToast(`Custom overlay "${name}" created — generate it in Assets → Lala's Phone`);
                         } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
                       }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px dashed #94a3b8', background: '#fff', color: '#64748b', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                         + Add Custom Overlay

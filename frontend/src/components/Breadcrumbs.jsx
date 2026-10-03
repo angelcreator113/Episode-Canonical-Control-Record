@@ -28,7 +28,7 @@ const ROUTE_LABELS = {
   'shows': 'Shows',
   'wardrobe': 'Wardrobe',
   'wardrobe-library': 'Wardrobe Library',
-  'scene-library': 'Scene Library',
+  'scene-library': 'Scene Clips',
   'template-studio': 'Template Studio',
   'assets': 'Asset Library',
   'settings': 'Settings',

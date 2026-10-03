@@ -18,22 +18,31 @@ export function sceneSetThumb(set) {
 }
 
 /**
- * Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set.
- * S8 (Evoni, 2026-10-02): "landing on the exact set and zone, with a way
- * back to the page it came from": zone (an angle id, a zone kind or
- * look:<eventId>), from (a path in this app), fromLabel and need.
+ * The extra URL parameters of a hand-off into Scene Sets. S8 (Evoni,
+ * 2026-10-02): "landing on the exact set and zone, with a way back to the
+ * page it came from": zone (an angle id, a zone kind or look:<eventId>),
+ * from (a path in this app), fromLabel and need.
  */
-export const sceneSetPath = (showId, setId, { zone = null, from = null, fromLabel = null, need = null } = {}) => {
-  const extra = [
-    zone ? `&zone=${encodeURIComponent(zone)}` : '',
-    from ? `&from=${encodeURIComponent(from)}` : '',
-    fromLabel ? `&fromLabel=${encodeURIComponent(fromLabel)}` : '',
-    // What the page that sent Evoni here needs from the set, in its words
-    // ("Entrance angle missing"); Scene Sets shows it in its handoff line.
-    need ? `&need=${encodeURIComponent(String(need).slice(0, 140))}` : '',
-  ].join('');
-  return `/shows/${showId}/world?tab=scene-sets&set=${setId}${extra}`;
-};
+const handoffParams = ({ zone = null, from = null, fromLabel = null, need = null } = {}) => [
+  zone ? `&zone=${encodeURIComponent(zone)}` : '',
+  from ? `&from=${encodeURIComponent(from)}` : '',
+  fromLabel ? `&fromLabel=${encodeURIComponent(fromLabel)}` : '',
+  // What the page that sent Evoni here needs from the set, in its words
+  // ("Entrance angle missing"); Scene Sets shows it in its handoff line.
+  need ? `&need=${encodeURIComponent(String(need).slice(0, 140))}` : '',
+].join('');
+
+/** Where a scene set opens: Producer Mode → Assets → Scene Sets, on that set. */
+export const sceneSetPath = (showId, setId, opts = {}) =>
+  `/shows/${showId}/world?tab=scene-sets&set=${setId}${handoffParams(opts)}`;
+
+/**
+ * Where a show's Scene Sets open with no set chosen yet (audit LINK-03,
+ * 2026-10-03): the checklist's "Scene sets assigned" sends Evoni to this
+ * show's sets, not the clip library, with the same way back.
+ */
+export const sceneSetsPath = (showId, opts = {}) =>
+  `/shows/${showId}/world?tab=scene-sets${handoffParams(opts)}`;
 
 /** A "from" path that stays in this app: one leading slash, not two. */
 export const isAppPath = (p) => typeof p === 'string' && /^\/(?!\/)/.test(p);
