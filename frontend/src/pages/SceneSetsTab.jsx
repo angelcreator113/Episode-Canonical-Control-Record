@@ -119,6 +119,26 @@ export function SceneSetsHandoff({ set = null, zone = null }) {
   );
 }
 
+/**
+ * Making a view the main background (promote-to-base) also clears the
+ * other views' images: each goes back to "to generate". The confirmation
+ * says so, with the count.
+ */
+export function promoteConfirmText(set, angle) {
+  const name = angle?.angle_name || angle?.angle_label || 'this view';
+  const others = (set?.angles || []).filter((a) => a.id !== angle?.id && a.still_image_url).length;
+  return `Make "${name}" the main background?\n\n`
+    + (others > 0
+      ? `The set's other ${others} view${others !== 1 ? 's' : ''} will lose ${others !== 1 ? 'their images' : 'its image'} and go back to "to generate".`
+      : 'The current main background is replaced.');
+}
+
+/** The image a set's card shows in the library: its cover view, else its main background. */
+export function libraryCoverUrl(set) {
+  const cover = set?.cover_angle_id ? (set.angles || []).find((a) => a.id === set.cover_angle_id && a.still_image_url) : null;
+  return cover?.still_image_url || set?.base_still_url || null;
+}
+
 export function usesText(uses) {
   const parts = USE_WORDS.filter(([k]) => uses?.[k] > 0).map(([k, w]) => `${uses[k]} ${w}${uses[k] === 1 ? '' : 's'}`);
   return parts.length ? `Used by ${parts.join(', ')}.` : 'Not used anywhere.';
@@ -512,7 +532,7 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, setId }) {
+function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, onPromoteError, setId, confirmText = null }) {
   const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
   const current = images[idx] || images[0];
@@ -579,15 +599,17 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
           <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
           {current.angleId && onPromoteToBase && (
             <button className="scene-sets-lightbox-promote" onClick={async () => {
-              if (!confirm(`Use "${current.label}" as the new base image? All other angles will be reset.`)) return;
+              if (!window.confirm(confirmText ? confirmText(current.angleId) : `Make "${current.label}" the main background?`)) return;
               try {
-                // Defensive `typeof API_BASE !== 'undefined'` ternary in pre-Track-6
-                // version was dead code (API_BASE is module-scope const, always defined).
                 const r = await promoteToBaseApi(setId, { angle_id: current.angleId });
-                if (r.data?.success) { onPromoteToBase(); onClose(); }
-              } catch { /* handled by caller */ }
-            }} title="Use this image as the base">
-              <Heart size={14} /> Use as Base
+                if (r.data?.success) { onPromoteToBase(current); onClose(); }
+                else onPromoteError?.(r.data?.error || 'Could not change the main background');
+              } catch (err) {
+                console.error('[SceneSets] promote failed:', err);
+                onPromoteError?.(err.response?.data?.error || 'Could not change the main background');
+              }
+            }} title="Make this view the set's main background">
+              <ImageIcon size={14} /> Make main background
             </button>
           )}
           {current.angleId && onDeleteAngle && (
@@ -919,6 +941,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
           onClick={() => act(unapproveBaseApi, `${set.name} is no longer the approved base`)}>
           Un-approve
         </button>
+        <span className="scene-sets-approved-hint">Event versions at this location are made from this image. It can't be replaced until it is un-approved.</span>
       </div>
     );
   }
@@ -936,6 +959,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
           onClick={() => act(approveBaseApi, `${set.name} is now the location's approved base`)}>
           <ShieldCheck size={11} /> Approve as the location's base
         </button>
+        <span className="scene-sets-approved-hint">Approving makes this the original that event versions at this location are made from, and locks it until un-approved.</span>
       </div>
     );
   }
@@ -978,6 +1002,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     [set.base_still_url]
   );
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
+  // The card shows the library cover (a view chosen for browsing), else the main background.
+  const cardImageRaw = libraryCoverUrl(set);
+  const cardImage = useMemo(() => cardImageRaw ? bustUrl(cardImageRaw) : null, [cardImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
@@ -1238,13 +1265,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     <div className={`scene-sets-card${focused ? ' scene-sets-card-focused' : ''}`} data-scene-set-id={set.id}>
       {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
-        className={`scene-sets-card-preview${heroImage ? ' has-image' : ''}`}
-        onDoubleClick={() => { if (heroImage) setShowBaseLightbox(true); }}
-        title={heroImage ? 'Double-click to view full size' : undefined}
+        className={`scene-sets-card-preview${cardImage ? ' has-image' : ''}`}
+        onDoubleClick={() => { if (cardImage) setShowBaseLightbox(true); }}
+        title={cardImage ? 'Double-click to view full size' : undefined}
       >
-        {heroImage ? (
+        {cardImage ? (
           <>
-            <img src={heroImage} alt={set.name} />
+            <img src={cardImage} alt={set.name} data-testid={`scene-set-card-image-${set.id}`} />
             {set.generation_status === 'complete' && !isGenerating && (
               <div className="scene-sets-base-ready-badge">Base Set</div>
             )}
@@ -2065,20 +2092,41 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 </button>
                               )}
                               {isComplete && (
+                                set.cover_angle_id === a.id ? (
+                                  <button type="button" className="scene-sets-angle-row-btn scene-sets-cover-btn is-cover" data-testid={`cover-${a.id}`}
+                                    title="This view is the set's library cover. Click to show the main background on the card again."
+                                    onClick={() => onSetCoverAngle(set, null)}>
+                                    <Eye size={12} /> Library cover ✓
+                                  </button>
+                                ) : (
+                                  <button type="button" className="scene-sets-angle-row-btn scene-sets-cover-btn" data-testid={`cover-${a.id}`}
+                                    title="Show this view on the set's card in the library. Only the card's picture changes (Scene Studio also opens on this view)."
+                                    onClick={() => onSetCoverAngle(set, a.id)}>
+                                    <Eye size={12} /> Set as library cover
+                                  </button>
+                                )
+                              )}
+                              {/* S6: an approved base is not replaced, so it offers no promote. */}
+                              {isComplete && !set.base_approved && (
                                 <button
+                                  type="button"
                                   className="scene-sets-angle-row-btn scene-sets-promote-btn"
-                                  title="Use this image as the base — regenerate all other angles from it"
+                                  data-testid={`promote-${a.id}`}
+                                  title="Make this view the set's main background. The other views lose their images and go back to 'to generate'."
                                   onClick={async () => {
-                                    if (!confirm(`Use "${a.angle_name}" as the new base image? All other angles will be reset and regenerated from this one.`)) return;
+                                    if (!window.confirm(promoteConfirmText(set, a))) return;
                                     try {
                                       const r = await promoteToBaseApi(set.id, { angle_id: a.id });
                                       const d = r.data;
-                                      if (d.success) showToast(d.message);
+                                      if (d.success) { showToast(`${a.angle_name || a.angle_label} is now the main background`); onRefresh?.(); }
                                       else showToast(d.error, 'error');
-                                    } catch { showToast('Failed to promote', 'error'); }
+                                    } catch (err) {
+                                      console.error('[SceneSets] promote failed:', err);
+                                      showToast(err.response?.data?.error || 'Could not change the main background', 'error');
+                                    }
                                   }}
                                 >
-                                  <Heart size={12} /> Use as Base
+                                  <ImageIcon size={12} /> Make main background
                                 </button>
                               )}
                               {isComplete && <CheckCircle2 size={14} style={{ color: '#16a34a' }} />}
@@ -2680,7 +2728,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
           const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
           if (found >= 0) startIdx = found;
         }
-        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} setId={set.id} onPromoteToBase={() => showToast('Promoted to base! Refresh to see changes.')} />;
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} setId={set.id}
+          onPromoteToBase={set.base_approved ? null : (img) => { showToast(`${img.label} is now the main background`); onRefresh?.(); }}
+          onPromoteError={(msg) => showToast(msg, 'error')}
+          confirmText={(angleId) => promoteConfirmText(set, sortedAngles.find((x) => x.id === angleId))} />;
       })()}
 
       {showPromptPreview && previewData && createPortal(
