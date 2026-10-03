@@ -64,22 +64,22 @@ export default function SceneSuggestionReview({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 640, maxHeight: '85vh',
-          background: '#FAF7F0', borderRadius: 16,
+          background: 'var(--surface-bg)', borderRadius: 16,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          border: '1px solid #e8e0d0',
+          border: '1px solid var(--lala-parchment-3)',
         }}
       >
         {/* Header */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #e8e0d0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Sparkles size={18} color="#B8962E" />
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Sparkles size={18} color="var(--lala-gold-text)" />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C' }}>Scene Suggestions</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Scene Suggestions</div>
             {contextSummary && (
-              <div style={{ fontSize: 11, color: '#888', fontFamily: "'DM Mono', monospace" }}>{contextSummary}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>{contextSummary}</div>
             )}
           </div>
-          <button onClick={onReject} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#888' }}>
+          <button onClick={onReject} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: 'var(--text-secondary)' }}>
             <X size={16} />
           </button>
         </div>
@@ -87,7 +87,7 @@ export default function SceneSuggestionReview({
         {/* Beats list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
           {beats.length === 0 ? (
-            <div style={{ padding: 30, textAlign: 'center', color: '#999', fontSize: 13 }}>
+            <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
               No beats proposed.
             </div>
           ) : (
@@ -99,8 +99,8 @@ export default function SceneSuggestionReview({
                   key={i}
                   style={{
                     display: 'flex', gap: 10, padding: '10px 8px',
-                    background: isOn ? '#fdf8ee' : '#fff',
-                    border: `1px solid ${isOn ? '#e6d9b8' : '#eceadf'}`,
+                    background: isOn ? 'var(--lala-gold-soft)' : 'var(--surface-card)',
+                    border: `1px solid ${isOn ? 'var(--lala-gold-line)' : 'var(--lala-parchment-3)'}`,
                     borderRadius: 8, marginBottom: 8,
                     opacity: matched ? 1 : 0.85,
                   }}
@@ -114,34 +114,34 @@ export default function SceneSuggestionReview({
                     title={matched ? '' : 'No matching scene set — create one first'}
                   />
                   {b.scene_set_thumb ? (
-                    <img src={b.scene_set_thumb} alt={b.scene_set_name} style={{ width: 56, height: 36, borderRadius: 4, objectFit: 'cover', border: '1px solid #e8e0d0', flexShrink: 0 }} />
+                    <img src={b.scene_set_thumb} alt={b.scene_set_name} style={{ width: 56, height: 36, borderRadius: 4, objectFit: 'cover', border: '1px solid var(--lala-parchment-3)', flexShrink: 0 }} />
                   ) : (
-                    <div style={{ width: 56, height: 36, borderRadius: 4, background: '#f1eee6', border: '1px solid #e8e0d0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#bbb', fontSize: 16 }}>📍</div>
+                    <div style={{ width: 56, height: 36, borderRadius: 4, background: 'var(--lala-parchment-2)', border: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--text-faint)', fontSize: 16 }}>📍</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>BEAT {b.beat_number}</span>
-                      <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>· {b.stills_to_use} still{b.stills_to_use === 1 ? '' : 's'}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace" }}>BEAT {b.beat_number}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>· {b.stills_to_use} still{b.stills_to_use === 1 ? '' : 's'}</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#2C2C2C', fontWeight: 600, lineHeight: 1.3, marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.3, marginBottom: 4 }}>
                       {b.beat_summary || '—'}
                     </div>
                     {matched ? (
-                      <div style={{ fontSize: 11, color: '#5a8f3b' }}>
+                      <div style={{ fontSize: 11, color: 'var(--success-text)' }}>
                         → {b.scene_set_name}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 11, color: '#B84D2E', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 11, color: 'var(--danger-text)', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Plus size={11} /> Suggests new set: <strong>{b.new_set_name || 'Unnamed'}</strong>
                       </div>
                     )}
                     {b.reason && (
-                      <div style={{ fontSize: 10, color: '#888', marginTop: 4, fontStyle: 'italic', lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.4 }}>
                         {b.reason}
                       </div>
                     )}
                     {!matched && b.new_set_description && (
-                      <div style={{ fontSize: 10, color: '#888', marginTop: 4, padding: '4px 6px', background: '#fef7f3', borderRadius: 4, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, padding: '4px 6px', background: 'var(--lala-parchment-2)', borderRadius: 4, lineHeight: 1.4 }}>
                         {b.new_set_description}
                       </div>
                     )}
@@ -153,14 +153,14 @@ export default function SceneSuggestionReview({
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '10px 14px', borderTop: '1px solid #e8e0d0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: '#888', flex: 1, fontFamily: "'DM Mono', monospace" }}>
+        <div style={{ padding: '10px 14px', borderTop: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, fontFamily: "'DM Mono', monospace" }}>
             {acceptedCount} / {beats.length} beats selected
           </span>
           <button
             onClick={onReject}
             disabled={busy}
-            style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #e8e0d0', background: '#fff', color: '#666', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}
+            style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}
           >
             Discard
           </button>
@@ -169,8 +169,8 @@ export default function SceneSuggestionReview({
             disabled={busy || acceptedCount === 0}
             style={{
               padding: '7px 14px', borderRadius: 6, border: 'none',
-              background: acceptedCount === 0 ? '#ccc' : '#B8962E',
-              color: '#fff', fontSize: 12, fontWeight: 600,
+              background: acceptedCount === 0 ? 'var(--lala-parchment-3)' : 'var(--primary)',
+              color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600,
               cursor: busy || acceptedCount === 0 ? 'not-allowed' : 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}

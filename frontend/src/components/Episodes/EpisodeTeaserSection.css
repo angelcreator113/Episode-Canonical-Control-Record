@@ -1,8 +1,8 @@
 /* EpisodeTeaserSection.css: viewer teaser card on the episode Overview (Task #2386). */
 
 .ets {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface-card);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 10px;
   padding: 14px 16px;
   margin-bottom: 12px;
@@ -10,8 +10,8 @@
 }
 
 .ets.is-auto_drafted {
-  border-color: #e8dcb8;
-  background: #fffdf7;
+  border-color: var(--lala-gold-line);
+  background: var(--lala-gold-soft);
 }
 
 .ets-head {
@@ -25,7 +25,7 @@
   margin: 0;
   font-size: 10px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -35,18 +35,18 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #B8962E;
+  color: var(--lala-gold-text);
 }
 
-.ets.is-edited .ets-state { color: #64748b; }
-.ets.is-missing .ets-state { color: #b45309; }
+.ets.is-edited .ets-state { color: var(--text-secondary); }
+.ets.is-missing .ets-state { color: var(--warning-text); }
 
 .ets-head .ets-btn { margin-left: auto; }
 
 .ets-note {
   margin: 4px 0 8px;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
@@ -55,29 +55,29 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #2C2C2C;
+  color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 
-.ets-hook { color: #2C2C2C; }
+.ets-hook { color: var(--text-primary); }
 
-.ets-rest { color: #94a3b8; }
+.ets-rest { color: var(--text-secondary); }
 
 .ets-preview {
   margin-top: 6px;
   padding: 8px 10px;
-  background: #FAF7F0;
+  background: var(--surface-bg);
   border-radius: 6px;
 }
 
 .ets-preview .ets-hook {
-  border-bottom: 2px solid #B8962E;
+  border-bottom: 2px solid var(--lala-gold);
 }
 
 .ets-empty {
   margin: 0;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -85,7 +85,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: 8px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
@@ -95,14 +95,14 @@
 .ets-counter {
   margin-top: 4px;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-secondary);
   font-family: 'DM Mono', monospace;
 }
 
 .ets-error {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #dc2626;
+  color: var(--danger-text);
 }
 
 .ets-actions {
@@ -119,9 +119,9 @@
   gap: 4px;
   padding: 5px 12px;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #64748b;
+  border: 1px solid var(--lala-parchment-3);
+  background: var(--surface-card);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -130,9 +130,9 @@
 .ets-btn:disabled { opacity: 0.6; cursor: default; }
 
 .ets-btn-primary {
-  border-color: #B8962E;
-  background: #B8962E;
-  color: #fff;
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--text-inverse);
 }
 
 .ets-sr {
