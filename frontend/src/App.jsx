@@ -99,14 +99,6 @@ const BookToWriteRedirect = () => {
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Lora,serif',color:'rgba(28,24,20,0.4)'}}>Opening book…</div>;
   return null;
 };
-// New Episode (Task #1628): Lala's Feed in choose-host mode. Reuses
-// SocialProfileGenerator wholesale rather than a bespoke page — picking or
-// creating a host builds the event automatically and opens it in Producer
-// Mode's existing event editor.
-const NewEpisodeChooseHost = () => {
-  const { showId } = useParams();
-  return <SocialProfileGenerator chooseHost showId={showId} defaultFeedLayer="lalaverse" />;
-};
 // Lala's Feed, standalone (Task #1631). The Sidebar's FRANCHISE entry links
 // here with ?layer=lalaverse so it opens on the LalaVerse feed with the
 // switcher still available (unlike New Episode's choose-host mode, which
@@ -147,6 +139,10 @@ const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
+// New Episode (episode creation step 4): "What starts this episode?", each
+// way in leading to the Event Package. Its creator path is Lala's Feed in
+// choose-host mode (Task #1628).
+const NewEpisodeStarter = lazy(() => import('./pages/NewEpisodeStarter'));
 const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
 const AICostTracker = lazy(() => import('./pages/AICostTracker'));
@@ -376,7 +372,7 @@ function AppContent() {
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
-          <Route path="/shows/:showId/new-episode" element={<NewEpisodeChooseHost />} />
+          <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Studio — universe-level entry points */}
