@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { countEventsByState } from '../../utils/eventReadinessSections';
 
 /**
  * StudioTab — Production Dashboard
@@ -25,26 +26,34 @@ function StudioTab({ show, episodes = [] }) {
   const loadStats = async () => {
     try {
       const [eventsRes, wardrobeRes, balanceRes] = await Promise.allSettled([
-        api.get(`/api/v1/world/${showId}/events?limit=100`).catch(() => ({ data: {} })),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).catch(() => ({ data: {} })),
-        api.get(`/api/v1/world/${showId}/balance`).catch(() => ({ data: {} })),
+        api.get(`/api/v1/world/${showId}/events`),
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`),
+        api.get(`/api/v1/world/${showId}/balance`),
       ]);
-
-      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
-      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+      // A failed load shows "—" with the reason in its title, not a 0.
+      for (const [label, r] of [['events', eventsRes], ['wardrobe', wardrobeRes], ['balance', balanceRes]]) {
+        if (r.status === 'rejected') console.error(`[StudioTab] ${label} load failed:`, r.reason);
+      }
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : null;
+      const wardrobePage = wardrobeRes.status === 'fulfilled' ? wardrobeRes.value.data : null;
       const balance = balanceRes.status === 'fulfilled' ? (balanceRes.value.data?.balance ?? null) : null;
 
       setStats({
-        events: events.length,
-        eventsReady: events.filter(e => e.status !== 'draft').length,
-        wardrobe: wardrobe.length,
+        events: events ? events.length : null,
+        // The Events queue's definition of Ready (computeEventState).
+        eventsReady: events ? countEventsByState(events).ready : null,
+        // The true count from the list's pagination; the list stops at 200.
+        wardrobe: wardrobePage
+          ? (Number.isFinite(wardrobePage.pagination?.total) ? wardrobePage.pagination.total : (wardrobePage.data || []).length)
+          : null,
         balance,
         episodes: episodes.length,
         completed: episodes.filter(e => e.evaluation_status === 'accepted').length,
         drafted: episodes.filter(e => e.status === 'draft').length,
       });
-    } catch {
-      setStats({ events: 0, eventsReady: 0, wardrobe: 0, balance: null, episodes: episodes.length, completed: 0, drafted: 0 });
+    } catch (err) {
+      console.error('[StudioTab] stats failed:', err);
+      setStats({ events: null, eventsReady: null, wardrobe: null, balance: null, episodes: episodes.length, completed: 0, drafted: 0 });
     }
   };
 
@@ -76,11 +85,11 @@ function StudioTab({ show, episodes = [] }) {
       {stats && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
           <div style={S.card}>
-            <div style={S.statNum}>{stats.events}</div>
+            <div style={S.statNum} data-testid="studio-stat-events" title={stats.events === null ? "Couldn't load events" : undefined}>{stats.events ?? '—'}</div>
             <div style={S.statLabel}>Events</div>
           </div>
           <div style={S.card}>
-            <div style={S.statNum}>{stats.wardrobe}</div>
+            <div style={S.statNum} data-testid="studio-stat-wardrobe" title={stats.wardrobe === null ? "Couldn't load the wardrobe" : undefined}>{stats.wardrobe ?? '—'}</div>
             <div style={S.statLabel}>Wardrobe</div>
           </div>
           <div style={S.card}>
