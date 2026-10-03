@@ -37,6 +37,12 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         allowNull: true,
       },
+      // Audit STATE-01: what Start Episode's downstream setup did, step by
+      // step (episodeGeneratorService.recordSetupStatus), for the repair.
+      setup_status: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,

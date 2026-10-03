@@ -248,20 +248,25 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     }
   } catch { /* scene_sets query failed — no scene sets linked */ }
 
-  let existingCount = 0;
+  // The beats the episode already has (audit STATE-01, 2026-10-03). Only
+  // the missing ones are made: a retry after a partial first run fills the
+  // gaps and leaves the rows that exist alone, and the unique index on
+  // (episode_id, beat_number) keeps it to one row per beat.
+  const existingBeats = new Set();
   try {
     const [existingRows] = await models.sequelize.query(
-      `SELECT COUNT(*)::int AS count FROM scene_plans WHERE episode_id = :episode_id`,
+      `SELECT beat_number FROM scene_plans WHERE episode_id = :episode_id`,
       { replacements: { episode_id: episode.id } }
     );
-    existingCount = existingRows?.[0]?.count || 0;
+    for (const r of existingRows || []) existingBeats.add(Number(r.beat_number));
   } catch (existingErr) {
     console.warn('[EpisodeGenerator] Scene plan existence check failed, proceeding with insert:', existingErr.message);
   }
-
-  if (existingCount > 0) {
-    console.log(`[EpisodeGenerator] Skipped scene plan insert for episode ${episode.id}: ${existingCount} row(s) already exist.`);
-    return { scenePlanRows, sceneSetIds };
+  const failedBeats = [];
+  const missing = BEAT_TEMPLATES.filter((b) => !existingBeats.has(b.beat));
+  if (missing.length === 0) {
+    console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id} is complete: ${existingBeats.size} beats exist, nothing to make.`);
+    return { scenePlanRows, sceneSetIds, existingBeats: [...existingBeats].sort((a, b) => a - b), failedBeats };
   }
 
   // L4 (Evoni, 2026-10-02; Q17, Q18, §8(hh)): each beat goes to the
@@ -279,7 +284,7 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
   }
 
-  for (const beat of BEAT_TEMPLATES) {
+  for (const beat of missing) {
     const placed = placeBeat(beat.beat, roleSets, anglesBySet);
     const sceneSetId = placed.scene_set_id;
     const angleLabel = placed.angle?.angle_label || null;
@@ -297,11 +302,75 @@ async function createScenePlanRows(episode, event, models, locations = null) {
       );
       scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
     } catch (beatErr) {
-      console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+      console.error(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+      failedBeats.push({ beat: beat.beat, reason: beatErr.message });
     }
   }
+  console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id}: ${existingBeats.size} existing, ${scenePlanRows.length} created, ${failedBeats.length} failed.`);
 
-  return { scenePlanRows, sceneSetIds };
+  return { scenePlanRows, sceneSetIds, existingBeats: [...existingBeats].sort((a, b) => a - b), failedBeats };
+}
+
+/**
+ * The scene-plan step's record for setup_status: complete when every
+ * canonical beat exists (made now or before), partial when some are
+ * missing, with the failures by beat and reason.
+ */
+function scenePlanStep({ scenePlanRows, existingBeats = [], failedBeats = [] }) {
+  const have = new Set([...existingBeats, ...scenePlanRows.map((r) => r.beat_number)]);
+  const missing = BEAT_TEMPLATES.map((b) => b.beat).filter((n) => !have.has(n));
+  return {
+    status: missing.length === 0 ? 'complete' : (have.size === 0 ? 'failed' : 'partial'),
+    created: scenePlanRows.length,
+    existing: existingBeats.length,
+    missing,
+    failed: failedBeats,
+  };
+}
+
+/**
+ * Persist what the downstream setup did (audit STATE-01): episodes.
+ * setup_status. Never throws: before the migration the column is absent,
+ * and the record is a convenience for the repair, not a gate.
+ */
+async function recordSetupStatus(models, episodeId, steps) {
+  const complete = Object.values(steps).every((st) => st.status === 'complete');
+  const status = { complete, updated_at: new Date().toISOString(), steps };
+  try {
+    await models.sequelize.query(
+      `UPDATE episodes SET setup_status = :status::jsonb WHERE id = :id`,
+      { replacements: { status: JSON.stringify(status), id: episodeId } }
+    );
+  } catch (err) {
+    console.warn('[EpisodeGenerator] setup_status not recorded:', err.message);
+  }
+  return status;
+}
+
+/**
+ * Resume a partly initialised episode's setup (audit STATE-01): make the
+ * scene-plan beats it is missing, from its brief's event and its linked
+ * locations, and record the outcome. Idempotent: a complete episode is
+ * left as it is. Never a second episode.
+ */
+async function resumeEpisodeSetup(models, episodeId) {
+  const { Episode, EpisodeBrief, WorldEvent } = models;
+  const episode = await Episode.findByPk(episodeId);
+  if (!episode) return null;
+  const brief = EpisodeBrief ? await EpisodeBrief.findOne({ where: { episode_id: episodeId } }) : null;
+  const event = brief?.event_id && WorldEvent ? await WorldEvent.findByPk(brief.event_id) : null;
+  const { listLocations } = require('./episodeLocationsService');
+  let locations = null;
+  try {
+    locations = (await listLocations(models.sequelize, episodeId)).map((l) => ({ role: l.role, scene_set_id: l.scene_set_id, name: l.name }));
+  } catch (locErr) {
+    console.warn('[EpisodeGenerator] Episode locations read failed on resume:', locErr.message);
+  }
+  const result = await createScenePlanRows(episode, event || { show_id: episode.show_id }, models, locations);
+  const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep(result) };
+  if (!steps.locations) steps.locations = { status: 'complete' };
+  const setup_status = await recordSetupStatus(models, episodeId, steps);
+  return { episode_id: episodeId, scene_plan: steps.scene_plan, setup_status };
 }
 
 // ─── MAIN: GENERATE EPISODE FROM EVENT ───────────────────────────────────────
@@ -728,7 +797,9 @@ Return ONLY JSON.` }],
   // ── 3. Create Scene Plan (14 beats) ──
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
-  const { scenePlanRows } = await createScenePlanRows(episode, event, models, locations);
+  const scenePlanResult = await createScenePlanRows(episode, event, models, locations);
+  const { scenePlanRows } = scenePlanResult;
+  const setupSteps = { scene_plan: scenePlanStep(scenePlanResult) };
 
   // ── 3b. The approved invitation is this episode's invitation overlay ──
   // P10 (Evoni, 2026-09-30; Task #2386): approved before Start, it is
@@ -755,9 +826,14 @@ Return ONLY JSON.` }],
     if (locations.length) {
       await models.sequelize.transaction((transaction) => applyLocations(models.sequelize, { episodeId: episode.id, locations, transaction }));
     }
+    setupSteps.locations = { status: 'complete', count: locations.length };
   } catch (linkErr) {
     console.error(`[EpisodeGenerator] Episode locations link failed for ${episode.id}:`, linkErr.message);
+    setupSteps.locations = { status: 'failed', reason: linkErr.message };
   }
+  // What the setup did (audit STATE-01): the episode stays visibly
+  // incomplete until Resume setup repairs it.
+  await recordSetupStatus(models, episode.id, setupSteps);
 
   // ── Parse automation data from event (used by feed moments + social tasks) ──
   const automation = (typeof event.canon_consequences === 'string'
@@ -1035,6 +1111,9 @@ module.exports = {
   generateEpisodeFromEvent,
   stampEventUsed,
   createScenePlanRows,
+  scenePlanStep,
+  recordSetupStatus,
+  resumeEpisodeSetup,
   buildSocialTasks,
   calculateFinancials,
   computeAffordabilityWarning,

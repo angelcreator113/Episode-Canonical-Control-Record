@@ -225,6 +225,9 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
 export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
+  // Audit STATE-01: the server's beat coverage, and the setup repair.
+  const [coverage, setCoverage] = useState(null);
+  const [resuming, setResuming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
@@ -293,6 +296,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         // Audit GATE-01 (2026-10-03): generated means the server's coverage
         // says every canonical beat is planned once; never a row count.
         const coverage = data?.coverage || null;
+        setCoverage(coverage);
         results.scene_plan        = Boolean(coverage?.complete);
         if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
         else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
@@ -432,6 +436,32 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       setLocking(false);
     }
   };
+  // Audit STATE-01: a partly initialised episode (setup_status.complete
+  // false, or canonical beats missing) is repaired in place, never by a
+  // second episode. The server makes only the missing beats.
+  const setupStatus = episode.setup_status || null;
+  const setupIncomplete = setupStatus?.complete === false || Boolean(coverage && !coverage.complete && coverage.present > 0);
+  const resumeSetup = async () => {
+    setResuming(true);
+    try {
+      const res = await api.post(`/api/v1/episode-brief/${episode.id}/setup/resume`);
+      const step = res.data?.data?.scene_plan;
+      if (res.data?.success) {
+        setToast({ msg: `✅ Setup resumed: ${step?.created ?? 0} beat${step?.created === 1 ? '' : 's'} made, ${step?.existing ?? 0} already there.`, type: 'success' });
+      } else {
+        setToast({ msg: `⚠️ ${res.data?.error || 'Setup is still incomplete'}${step?.failed?.length ? ` — ${step.failed.map((f) => `beat ${f.beat}: ${f.reason}`).join('; ')}` : ''}`, type: 'error' });
+      }
+      setTimeout(() => setToast(null), 8000);
+      await checkReadiness();
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] resume setup failed:', err);
+      setToast({ msg: err.response?.data?.error || 'Could not resume setup', type: 'error' });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setResuming(false);
+    }
+  };
+
   // Each action is offered once on the list: the plan and the script by the
   // footer's Scene Plan and Write Script, the images by their row's Open
   // Scenes; only locking every beat has no other button.
@@ -520,6 +550,19 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             </div>
           )}
           {/* Production coverage (§8(o) item 2, episode creation step 8). */}
+          {section.id === 'scene' && setupIncomplete && (
+            <div role="alert" data-testid="setup-incomplete" style={{ margin: '0 0 8px', padding: '8px 10px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', fontSize: 12, color: '#2C2C2C', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ flex: 1 }}>
+                <strong>Setup did not finish.</strong>{' '}
+                {coverage && !coverage.complete ? coverage.text : null}
+                {setupStatus?.steps?.scene_plan?.failed?.length ? ` · ${setupStatus.steps.scene_plan.failed.map((f) => `beat ${f.beat}: ${f.reason}`).join('; ')}` : ''}
+                {setupStatus?.steps?.locations?.status === 'failed' ? ` · locations: ${setupStatus.steps.locations.reason}` : ''}
+              </span>
+              <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2F7F76', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                {resuming ? 'Resuming…' : 'Resume setup'}
+              </button>
+            </div>
+          )}
           {section.id === 'scene' && <ProductionCoveragePanel episodeId={episode.id} />}
           {section.items.map(item => (
             <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
