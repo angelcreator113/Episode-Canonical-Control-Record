@@ -62,7 +62,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
+  ArrowLeft, ArrowRight, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
   Lightbulb, CircleDashed, CalendarClock, Building2, Hourglass,
   ChevronDown, ChevronUp, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
@@ -70,7 +70,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
-import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, describeMissing, nextPackageStep } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import EventConceptSection from '../components/EventConceptSection';
 import {
@@ -78,7 +78,7 @@ import {
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import {
-  resolveEventStakes, stakesDraftFrom, buildStakesUpdate,
+  resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
 } from '../utils/eventStakes';
 import {
@@ -119,6 +119,17 @@ const BASICS_FIELDS = {
   format: { label: 'Format', title: 'Format', column: 'format', input: 'select', options: EVENT_FORMATS },
 };
 const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
+// Readiness items Continue → opens in the Basics dialog (BASICS_FIELDS key).
+const CONTINUE_BASICS = {
+  'identity.category': 'category',
+  'identity.format': 'format',
+  'identity.date': 'date',
+  'identity.time': 'time',
+  'look.dress_code': 'dressCode',
+};
+const coins = (n) => Number(n || 0).toLocaleString();
+const signedCoins = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(Math.abs(n))}`;
+const nextStepLabel = (it) => (it.label === it.sectionLabel ? it.label : `${it.sectionLabel}: ${it.label.toLowerCase()}`);
 const BASICS_STATE_LABEL = { set: 'Set', edited: 'Edited', suggested: 'Suggested', missing: 'Missing' };
 // Task #2128 (doctrine rule 14): a drafted field reads "Auto-drafted ·
 // <source>" until Evoni changes it, then "Edited".
@@ -498,6 +509,7 @@ export default function EventPackagePage() {
   const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
+  const nextStep = nextPackageStep(readiness);
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics
   // too, set / suggested / missing like the others. The organizer is the
   // linked creator profile, when there is one.
@@ -615,6 +627,29 @@ export default function EventPackagePage() {
     setStakesDraft(stakesDraftFrom(event));
   };
   const stakesUpdate = stakesDraft ? buildStakesUpdate(event, stakesDraft) : null;
+
+  // Continue → (Evoni, 2026-10-03): scrolls to the next item's section and
+  // opens what sets it, where the page has one. An item with no editor here
+  // (the invitation, the featured attendees, a default cost) only scrolls.
+  const continueTo = (it) => {
+    if (!it || used) return;
+    const anchor = it.section === 'organizer' ? 'people' : it.section;
+    const el = document.getElementById(`epp-sec-${anchor}`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const basicsKey = CONTINUE_BASICS[`${it.section}.${it.key}`];
+    if (basicsKey) { openBasicsEditor(basicsKey); return; }
+    switch (`${it.section}.${it.key}`) {
+      case 'organizer.organizer': openOrganizerPicker(); break;
+      case 'identity.name': openNameSuggest(); break;
+      case 'place.venue': setVenuePickerOpen(true); break;
+      case 'place.scene_set':
+        openScenePicker(venueDate.venueLocationId ? { id: venueDate.venueLocationId, name: venueDate.venueName } : null);
+        break;
+      case 'look.outfit': setOutfitPickerOpen(true); break;
+      case 'stakes.story_stakes': openStakesEditor(); break;
+      default: break;
+    }
+  };
   const saveStakes = async () => {
     if (used || stakesSaving || !stakesUpdate || stakesUpdate.unchanged || stakesUpdate.errors.length) return;
     setStakesSaving(true);
@@ -1028,8 +1063,37 @@ export default function EventPackagePage() {
 
       <SeasonContextBlock context={seasonContext} showId={showId} />
 
+      {!used && (
+        <div className={`epp-next is-${nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
+          <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
+          {nextStep.next ? (
+            <>
+              <span className="epp-next-text">
+                {nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}
+              </span>
+              <button
+                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+                data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
+              >
+                Continue <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="epp-next-text">Every section is complete.</span>
+              <button
+                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+                data-testid="package-continue-start" onClick={requestStartEpisode} disabled={starting}
+              >
+                <PlayCircle size={14} aria-hidden="true" /> Start Episode
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="epp-sections">
-        <section className="epp-section">
+        <section id="epp-sec-identity" className="epp-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title">Basics</h2>
             {!used && !nameSuggestOpen && (
@@ -1109,7 +1173,7 @@ export default function EventPackagePage() {
         </section>
         <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} />
 
-        <section className="epp-section">
+        <section id="epp-sec-people" className="epp-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title">People</h2>
             {!used && (
@@ -1254,7 +1318,7 @@ export default function EventPackagePage() {
           </div>
         </section>
 
-        <section className="epp-section">
+        <section id="epp-sec-place" className="epp-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title">Place</h2>
             {!used && (
@@ -1316,7 +1380,7 @@ export default function EventPackagePage() {
           <EventLookImage showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
         </section>
 
-        <section className="epp-section">
+        <section id="epp-sec-invitation" className="epp-section">
           <h2 className="epp-section-title">Invitation</h2>
           {/* The invitation names the organizer (Task #1790): with none set
               it would read "A Special Host", so it waits for one. */}
@@ -1348,7 +1412,7 @@ export default function EventPackagePage() {
             /outfit, saved on world_events.outfit_pieces) as the Events
             card's ⋯ menu. Once used it stays read-only, as the rest of the
             package does. */}
-        <section className="epp-section" data-testid="style-section">
+        <section id="epp-sec-look" className="epp-section" data-testid="style-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title">Style</h2>
             {!used && (
@@ -1408,7 +1472,7 @@ export default function EventPackagePage() {
           onToast={setToast}
         />
 
-        <section className="epp-section epp-stakes" data-testid="stakes-section">
+        <section id="epp-sec-stakes" className="epp-section epp-stakes" data-testid="stakes-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title">Stakes &amp; Money</h2>
             {!used && (
@@ -1462,6 +1526,35 @@ export default function EventPackagePage() {
               {stakes.money.summary
                 ? <p className="epp-stake-text">{stakes.money.summary}</p>
                 : <div className="epp-basic-unset">Not set</div>}
+              {!used && moneyPreview && (() => {
+                const counted = (moneyPreview.lines || []).filter((l) => !l.covered && !l.conditional);
+                const bonus = moneyPreview.projection?.conditional || [];
+                return (
+                  <div className="epp-money-preview" data-testid="money-preview">
+                    <p className="epp-stake-text" data-testid="money-preview-balance">Lala has {coins(moneyPreview.balance)} coins.</p>
+                    {counted.length ? (
+                      <ul className="epp-money-lines">
+                        {counted.map((l) => (
+                          <li key={l.key} data-testid={`money-preview-line-${l.key}`}>
+                            <span>{l.label}</span>
+                            <span className={l.signed < 0 ? 'is-neg' : 'is-pos'}>{signedCoins(l.signed)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="epp-stake-text">No planned income or costs.</p>
+                    )}
+                    {moneyPreview.projection && (
+                      <p className="epp-stake-text" data-testid="money-preview-after">
+                        After this episode: <strong>{coins(moneyPreview.projection.projected_balance)} coins</strong> projected.
+                      </p>
+                    )}
+                    {bonus.map((b) => (
+                      <p key={`${b.tier}-${b.label}`} className="epp-stake-note">Plus up to {coins(b.amount)} if she earns it ({b.label}).</p>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -1770,6 +1863,15 @@ export default function EventPackagePage() {
                   </select>
                 </label>
                 {numberSelect('career_tier', 'Career tier', 5, (n) => `${n}: ${CAREER_TIERS[n].label}`)}
+                {STAKES_TEXTS.map(({ key, label, placeholder }) => (
+                  <label key={key} className="epp-stakes-field epp-stakes-text">
+                    <span>{label}</span>
+                    <textarea
+                      rows={2} value={stakesDraft[key]} placeholder={placeholder}
+                      onChange={(e) => setDraft(key, e.target.value)} data-testid={`stakes-input-${key}`}
+                    />
+                  </label>
+                ))}
                 <p className="epp-basics-note"><Lock size={13} aria-hidden="true" /> {COST_READ_ONLY_REASON}</p>
                 {stakesUpdate?.errors.map((e) => <p key={e.key} className="epp-invitation-error"><AlertCircle size={13} /> {e.message}</p>)}
               </div>

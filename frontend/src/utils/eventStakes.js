@@ -270,23 +270,39 @@ export function resolveEventStakes(event) {
 
 export const EDITABLE_STAKES = ['prestige', 'strictness', 'deadline_type', 'career_tier'];
 
+// The story stakes in words (Evoni, 2026-10-03): edited here, so the
+// "Story stakes" warning can be cleared from the Package. All four are
+// nullable text columns in the PUT's allowedFields and scalarStringFields
+// (an empty value is stored as NULL). Order is the dialog's.
+export const STAKES_TEXTS = [
+  { key: 'narrative_stakes', label: "What's at stake", placeholder: 'What this event means to Lala, in a sentence or two' },
+  { key: 'fail_consequence', label: 'If it goes wrong', placeholder: 'What failing here costs her' },
+  { key: 'career_milestone', label: 'Career milestone', placeholder: 'The step this is in her career' },
+  { key: 'success_unlock', label: 'If it goes well', placeholder: 'What succeeding opens up' },
+];
+
 const RANGES = { prestige: [1, 10], strictness: [1, 10], career_tier: [1, 5] };
 
 /** Draft values for the edit dialog: the stored value as a string, '' when missing. */
 export function stakesDraftFrom(event) {
   const ev = event || {};
-  return {
+  const draft = {
     prestige: positive(ev.prestige) !== null ? String(ev.prestige) : '',
     strictness: positive(ev.strictness) !== null ? String(ev.strictness) : '',
     deadline_type: DEADLINE_TYPES.includes(ev.deadline_type) ? ev.deadline_type : '',
     career_tier: careerTier(ev.career_tier) ? String(ev.career_tier) : '',
   };
+  for (const { key } of STAKES_TEXTS) draft[key] = text(ev[key]);
+  return draft;
 }
 
 /**
  * The PUT body for what Evoni changed. Returns { body, unchanged, errors }.
- * An empty draft value means "leave it": a missing field stays missing and
- * a stored one is never cleared from here.
+ * For the numbers and the deadline type, an empty draft value means "leave
+ * it": a missing field stays missing and a stored one is never cleared from
+ * here (prestige and strictness cannot be empty). A story-stakes text can
+ * be cleared: emptied, it is sent as null. A key absent from the draft is
+ * left alone.
  */
 export function buildStakesUpdate(event, draft) {
   const ev = event || {};
@@ -310,6 +326,12 @@ export function buildStakesUpdate(event, draft) {
   if (dl !== '' && dl !== null && dl !== undefined) {
     if (!DEADLINE_TYPES.includes(dl)) errors.push({ key: 'deadline_type', message: 'Unknown deadline type' });
     else if (ev.deadline_type !== dl) body.deadline_type = dl;
+  }
+
+  for (const { key } of STAKES_TEXTS) {
+    if (typeof d[key] !== 'string') continue;
+    const next = d[key].trim();
+    if (next !== text(ev[key])) body[key] = next || null;
   }
 
   return { body: errors.length ? {} : body, unchanged: !errors.length && Object.keys(body).length === 0, errors };
