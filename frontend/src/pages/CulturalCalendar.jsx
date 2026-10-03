@@ -3,6 +3,8 @@ import './CulturalCalendar.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList } from '../components/EditItemModal';
 import { BrainUpdateElsewhere } from '../components/BrainUpdate';
+import { ShowSelect } from '../components/ShowChooser';
+import useActiveShow from '../hooks/useActiveShow';
 import apiClient from '../services/api';
 
 // ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -276,21 +278,17 @@ export default function CulturalCalendar() {
   const [loading, setLoading]     = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [editItem, setEditItem]   = useState(null);
-  const [shows, setShows]         = useState([]);
+  // Audit CTX-01 (2026-10-03): the active show for new events, never the
+  // first one returned; with several and none active, choose.
+  const { shows, showId, needsChoice, choose } = useActiveShow();
   const [spawning, setSpawning]   = useState(null);
   const [spawnResult, setSpawnResult] = useState(null);
 
   const { data, updateItem, addItem, removeItem, saving } = usePageData('cultural_calendar', DEFAULTS);
 
-  // Fetch shows for event creation
-  useEffect(() => {
-    listShowsApi().then(res => setShows(res.data?.data || [])).catch(() => {});
-  }, []);
-
   // Create world event from calendar event
   const handleCreateEvent = async (calendarEvent) => {
-    const showId = shows[0]?.id;
-    if (!showId) { alert('No show found — create a show first'); return; }
+    if (!showId) { setSpawnResult({ type: 'error', message: needsChoice ? 'Choose a show first (top right)' : 'No show found — create a show first' }); return; }
     setSpawning(calendarEvent.id);
     setSpawnResult(null);
     try {
@@ -359,6 +357,7 @@ export default function CulturalCalendar() {
           <h1>Cultural Calendar</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
+            {shows.length > 1 && <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Create events in…" />}
             <BrainUpdateElsewhere to="/culture-events" label="Culture & Events" />
           </span>
         </div>

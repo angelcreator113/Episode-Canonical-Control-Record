@@ -27,6 +27,7 @@ import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSe
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 import { activeShowId, rememberShow } from '../utils/activeShow';
+import ShowChooser from '../components/ShowChooser';
 
 // Browser-only skin key from before Task #1964; read once for the carry-over.
 const LEGACY_SKIN_KEY = 'phone_hub_skin';
@@ -484,8 +485,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get('/api/v1/shows').then(r => {
       const s = r.data?.data || [];
       setShows(s);
-      // The standalone page opens on the active show (utils/activeShow), else the first.
-      if (s.length > 0 && !showId) setShowId(activeShowId({ shows: s }) || s[0].id);
+      // The standalone page opens on the active show (utils/activeShow). With
+      // several shows and none active it asks (audit CTX-01), never the first.
+      if (s.length > 0 && !showId) {
+        const active = activeShowId({ pathname: typeof window !== 'undefined' ? window.location.pathname : '', shows: s });
+        if (active) setShowId(active);
+      }
     }).catch((err) => { console.error('[UIOverlaysTab] shows load failed:', err); });
   }, [propShowId]);
 
@@ -1445,6 +1450,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         <div className={`overlays-toast overlays-toast--${toast.type === 'error' ? 'error' : 'success'}`}>
           {toast.msg}
         </div>
+      )}
+
+      {/* Several shows and none active: choose one first (audit CTX-01). */}
+      {!propShowId && !showId && shows.length > 1 && (
+        <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open its Phone Hub" />
       )}
 
       {/* Header */}
