@@ -11,6 +11,7 @@ import episodeService from '../services/episodeService';
 // NextEventSuggestionsOverlay (mounts only while showNextSuggestions is
 // true — the wrap transition or the header button, never on page load).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
+import EpisodePlanningCard from '../components/Episodes/EpisodePlanningCard';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
 import EpisodeTitleChip from '../components/Episodes/EpisodeTitleChip';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
@@ -212,6 +213,13 @@ const EpisodeDetail = () => {
       .catch((err) => { console.error('[EpisodeDetail] balance load failed:', err); });
     return () => { cancelled = true; };
   }, [chipShowId]);
+  // Opens any tab or sub-tab by its URL key (resolveEpTab), as a link would.
+  const openTab = (tab) => {
+    const [main, sub] = resolveEpTab(tab);
+    setActiveTabState(main);
+    setEpSubTab(sub);
+    setSearchParams({ tab });
+  };
   const openMoneyTab = () => {
     setActiveTabState('production');
     setEpSubTab('money');
@@ -770,6 +778,9 @@ const EpisodeDetail = () => {
         <div className="ed-content">
         <Suspense fallback={<div className="ed-loading"><div className="ed-spinner" /></div>}>
         {/* Overview Tab */}
+        {/* Planning (episode creation step 2): what Start Episode carried
+            from the event, and the next decision. */}
+        {tabKey === 'overview' && <EpisodePlanningCard episode={episode} onOpenTab={openTab} />}
         {tabKey === 'overview' && (
           <EpisodeOverviewTab
             episode={episode} 

@@ -1,0 +1,68 @@
+/**
+ * episodePlanning — what an episode inherited from its event, and the next
+ * decision (Evoni, 2026-10-03, episode creation step 2).
+ */
+import { describe, test, expect } from 'vitest';
+import { episodePlanning } from './episodePlanning';
+
+const EVENT = {
+  id: 'ev-1',
+  name: 'Velour Awards Night',
+  host_brand: 'Velour',
+  venue_location_id: 'loc-1',
+  venue_name: 'Club Noir',
+  scene_set_id: 'set-1',
+  outfit_pieces: [{ id: 'p1' }, { id: 'p2' }],
+  narrative_stakes: 'Her first red carpet',
+  canon_consequences: { automation: { guest_profiles: [
+    { profile_id: 1, display_name: 'Maya Chen', featured: true },
+    { profile_id: 2, display_name: 'Dana', featured: true },
+    { profile_id: 3, display_name: 'Tasha' },
+  ] } },
+};
+
+const byKey = (p) => Object.fromEntries(p.items.map((i) => [i.key, i]));
+
+describe('episodePlanning', () => {
+  test('a fully planned episode: five items done, next is Generate Script', () => {
+    const p = episodePlanning({ episode: { script_content: '' }, event: EVENT, sceneSet: { name: 'Club Noir · Main Room' } });
+    expect(p.done).toBe(5);
+    expect(p.total).toBe(5);
+    const items = byKey(p);
+    expect(items.event.detail).toBe('Velour Awards Night · organized by Velour');
+    expect(items.cast.detail).toBe('2 featured: Maya Chen, Dana');
+    expect(items.location.detail).toBe('Club Noir · Club Noir · Main Room');
+    expect(items.look.detail).toBe('2 pieces chosen');
+    expect(items.stakes.detail).toBe('Her first red carpet');
+    expect(p.next).toEqual({ key: 'script', label: 'Generate Script', tab: 'scripts' });
+  });
+
+  test('with a script, next is the production checklist', () => {
+    const p = episodePlanning({ episode: { script_content: 'Me: hi\nLala: hi' }, event: EVENT });
+    expect(p.hasScript).toBe(true);
+    expect(p.next.tab).toBe('checklist');
+  });
+
+  test('gaps say what is missing and where to finish them', () => {
+    const p = episodePlanning({
+      episode: {},
+      event: { ...EVENT, scene_set_id: null, outfit_pieces: [], narrative_stakes: null, canon_consequences: { automation: { guest_profiles: [{ profile_id: 3 }] } } },
+    });
+    const items = byKey(p);
+    expect(p.done).toBe(1);
+    expect(items.cast).toMatchObject({ done: false, detail: '1 invited, none featured; the script draws on the full guest list' });
+    expect(items.location).toMatchObject({ done: false, detail: 'Club Noir · no scene set yet', fix: 'package' });
+    expect(items.look).toMatchObject({ done: false, fix: 'wardrobe' });
+    expect(items.stakes).toMatchObject({ done: false, fix: null });
+  });
+
+  test('fail_consequence alone counts as stakes; an outfit set alone counts as a look', () => {
+    const p = byKey(episodePlanning({ episode: {}, event: { ...EVENT, narrative_stakes: '', fail_consequence: 'Velour never calls', outfit_pieces: null, outfit_set_id: 'os-1' } }));
+    expect(p.stakes).toMatchObject({ done: true, detail: 'Velour never calls' });
+    expect(p.look).toMatchObject({ done: true, detail: 'Outfit set chosen' });
+  });
+
+  test('an episode with no source event has no planning view', () => {
+    expect(episodePlanning({ episode: {}, event: null })).toBeNull();
+  });
+});
