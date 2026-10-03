@@ -11,7 +11,8 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import BrainUpdate from './BrainUpdate';
+import { MemoryRouter } from 'react-router-dom';
+import BrainUpdate, { BrainUpdateElsewhere } from './BrainUpdate';
 
 const card = (key, title, content) => ({ source_key: key, title, content, category: 'world', severity: 'important', domain: 'Social Archetype' });
 const PREVIEW = {
@@ -103,5 +104,21 @@ describe('BrainUpdate', () => {
     expect((await screen.findByTestId('brain-update-message')).textContent).toMatch(/changed since this review/);
     await waitFor(() => expect(vi.mocked(api.post).mock.calls.filter(([u]) => u.endsWith('/preview'))).toHaveLength(2));
     spy.mockRestore();
+  });
+
+  test('a page with two sources names each button', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { data: UP_TO_DATE } });
+    render(<><BrainUpdate source="cultural_calendar" name="Calendar" data={DATA} /><BrainUpdate source="cultural_memory" name="Memory" data={DATA} /></>);
+    await waitFor(() => expect(screen.getByTestId('brain-update-button-calendar').textContent).toBe('🧠 Calendar: Brain Up to Date ✓'));
+    expect(screen.getByTestId('brain-update-button-memory').textContent).toBe('🧠 Memory: Brain Up to Date ✓');
+    expect(api.post).toHaveBeenCalledWith('/api/v1/franchise-brain/sync/cultural_memory/preview', { page_data: DATA });
+  });
+
+  test('an older editor links to the page its data syncs from, and never calls the Brain', () => {
+    render(<MemoryRouter><BrainUpdateElsewhere to="/culture-events" label="Culture & Events" /></MemoryRouter>);
+    const link = screen.getByTestId('brain-update-elsewhere');
+    expect(link.textContent).toBe('🧠 Brain updates on Culture & Events →');
+    expect(link.getAttribute('href')).toBe('/culture-events');
+    expect(api.post).not.toHaveBeenCalled();
   });
 });

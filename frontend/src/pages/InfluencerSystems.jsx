@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './InfluencerSystems.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import { BrainUpdateElsewhere } from '../components/BrainUpdate';
 
 /* ═══════════════════════════════════════════════════════════════════════
    InfluencerSystems.jsx — Doc 03 · v1.0
@@ -282,7 +282,7 @@ export default function InfluencerSystems() {
           <h1>Influencer Systems & Mechanics</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="influencer_systems" data={data} />
+            <BrainUpdateElsewhere to="/social-systems" label="Social Systems" />
           </span>
         </div>
         <p>Doc 03 — franchise_law · always_inject — Archetypes, relationships, economy, trends, momentum, influence, legacy</p>

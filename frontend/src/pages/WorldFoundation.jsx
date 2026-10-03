@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
@@ -65,7 +65,7 @@ const inputStyle = { padding: '7px 10px', borderRadius: 6, border: '1px solid #e
 export default function WorldFoundation() {
   const [tab, setTab] = useState('map');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving } = usePageData('world_infrastructure', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 
   // Location state
   const [locations, setLocations] = useState([]);
@@ -176,7 +176,7 @@ export default function WorldFoundation() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
-          <PushToBrain pageName="world_infrastructure" data={data} />
+          <BrainUpdate source="world_foundation" data={data} ready={loaded} />
         </div>
       </div>
 

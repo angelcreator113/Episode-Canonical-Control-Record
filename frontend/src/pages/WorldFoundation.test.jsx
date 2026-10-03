@@ -29,7 +29,7 @@ vi.mock('../components/EditItemModal', () => ({
   EditableList: () => null,
   usePageEdit: () => ({ editing: false, setEditing: vi.fn() }),
 }));
-vi.mock('../components/PushToBrain', () => ({ default: () => null }));
+vi.mock('../components/BrainUpdate', () => ({ default: () => null, BrainUpdateElsewhere: () => null }));
 vi.mock('../components/DreamMap', () => ({ default: () => null }));
 vi.mock('../data/dreamCities', () => ({
   DREAM_CITIES: [],

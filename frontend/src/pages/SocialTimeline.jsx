@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import './SocialTimeline.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 05 · Social Timeline v1.0
@@ -673,7 +673,7 @@ const TAB_RENDERERS = {
 export default function SocialTimeline() {
   const [activeTab, setActiveTab] = useState('layers');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving } = usePageData('social_timeline', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('social_timeline', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
@@ -684,7 +684,7 @@ export default function SocialTimeline() {
           <h1 className="st-title">The Social Timeline Engine</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="social_timeline" data={data} />
+            <BrainUpdate source="social_timeline" data={data} ready={loaded} />
           </span>
         </div>
         <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How the Feed works, spreads, amplifies, and remembers</p>

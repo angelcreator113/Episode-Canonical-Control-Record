@@ -132,6 +132,26 @@ const PAGE = () => ({
     expect((await request(app).post('/api/v1/franchise-brain/sync/social_systems/preview').send({ page_data: PAGE() })).status).toBe(401);
   });
 
+  test('each page syncs only its own entries: Cultural Memory and Social Systems never retire each other', async () => {
+    await rows("DELETE FROM franchise_knowledge WHERE source_key LIKE 'cultural_memory:%'");
+    const memory = { LEGEND_PATHS: [{ path: 'The Long Game', requires: 'A decade of showing up' }] };
+    const murl = (a) => `/api/v1/franchise-brain/sync/cultural_memory/${a}`;
+    const p = (await auth(request(app).post(murl('preview'))).send({ page_data: memory })).body.data;
+    expect(p).toMatchObject({ source: 'cultural_memory', label: 'Cultural Memory', state: 'not_connected', pending: 1, retired: [] });
+    const res = await auth(request(app).post(murl('apply'))).send({ page_data: memory, fingerprint: p.fingerprint });
+    expect(res.body.data.applied).toEqual({ new: 1, changed: 0, retired: 0 });
+
+    const social = (await preview(PAGE())).body.data;
+    expect(social.retired.map((r) => r.source_key).filter((k) => k.startsWith('cultural_memory:'))).toEqual([]);
+    const [{ n }] = await rows("SELECT COUNT(*)::int AS n FROM franchise_knowledge WHERE source_key = 'cultural_memory:legend-path:the-long-game' AND status = 'active'");
+    expect(n).toBe(1);
+  });
+
+  test('the retired Push to Brain route is gone', async () => {
+    const res = await auth(request(app).post('/api/v1/franchise-brain/push-from-page')).send({ page_name: 'influencer_systems', page_data: PAGE() });
+    expect(res.status).toBe(404);
+  });
+
   test('a synced entry is edited on its page, not in the Brain; an unkeyed entry still edits', async () => {
     const [connector] = (await active()).filter((e) => e.source_key === 'social_systems:archetype:the-connector');
     const res = await auth(request(app).patch(`/api/v1/franchise-brain/entries/${connector.id}`)).send({ content: 'A second copy' });

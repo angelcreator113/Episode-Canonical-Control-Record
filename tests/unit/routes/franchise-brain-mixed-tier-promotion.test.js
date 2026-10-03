@@ -1,11 +1,13 @@
 // ============================================================================
 // UNIT TESTS — franchiseBrainRoutes.js Q13 mixed Tier 1+4 (Step 3 CP7, D2 lock)
 // ============================================================================
-// 16 handlers in src/routes/franchiseBrainRoutes.js:
-//   - 11 writes (POST/PATCH/DELETE) → Tier 1 (requireAuth)
+// 15 handlers in src/routes/franchiseBrainRoutes.js:
+//   - 10 writes (POST/PATCH/DELETE) → Tier 1 (requireAuth)
 //   - 5 GETs                         → Tier 4 PUBLIC (plain optionalAuth, no req.user gate)
-//   - 2 AI POSTs (/ingest-document, /push-from-page) additionally get aiRateLimiter
-//   - Legacy authenticateToken at L560 (push-from-page) converted to requireAuth (D3)
+//   - 1 AI POST (/ingest-document) additionally gets aiRateLimiter
+//   - Legacy authenticateToken at L560 (push-from-page) converted to requireAuth (D3);
+//     push-from-page itself retired 2026-10-03 (Brain Update; docs/BRAIN_OWNERSHIP.md):
+//     pages sync through routes/brainSyncRoutes.js instead
 //
 // Per F-AUTH-1 fix plan v2.31 §5.21 — mixed Tier 1+4 within single file
 // architectural primitive, 3rd cumulative instance after worldStudio.js at CP3
@@ -51,12 +53,12 @@ describe('Step 3 CP7 — franchiseBrainRoutes.js Q13 mixed Tier 1+4', () => {
     });
   });
 
-  describe('AI POSTs (2 — D2 + D3 locks)', () => {
+  describe('AI POSTs (1 — D2 lock; push-from-page retired)', () => {
     test('POST /franchise-brain/ingest-document → requireAuth + aiRateLimiter', () => {
       expect(SRC).toMatch(/router\.post\('\/franchise-brain\/ingest-document',\s*requireAuth,\s*aiRateLimiter,\s*async/);
     });
-    test('POST /franchise-brain/push-from-page → requireAuth + aiRateLimiter (D3 — converted from legacy authenticateToken)', () => {
-      expect(SRC).toMatch(/router\.post\('\/franchise-brain\/push-from-page',\s*requireAuth,\s*aiRateLimiter,\s*async/);
+    test('POST /franchise-brain/push-from-page is retired: no handler remains (Brain Update)', () => {
+      expect(SRC).not.toMatch(/router\.\w+\('\/franchise-brain\/push-from-page'/);
     });
   });
 

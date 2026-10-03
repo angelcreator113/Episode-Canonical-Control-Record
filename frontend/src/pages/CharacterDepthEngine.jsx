@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './CharacterDepthEngine.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
-import PushToBrain from '../components/PushToBrain';
+import BrainUpdate from '../components/BrainUpdate';
 
 /* ═══════════════════════════════════════════════════════════════
    The Character Depth Engine — Doc 09 · v1.0
@@ -484,7 +484,7 @@ const TAB_RENDERERS = {
 
 export default function CharacterDepthEngine() {
   const [activeTab, setActiveTab] = useState('body');
-  const { data, updateItem, addItem, removeItem, saving } = usePageData('character_depth_engine', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('character_depth_engine', DEFAULTS);
   const [editItem, setEditItem] = useState(null);
   const Renderer = TAB_RENDERERS[activeTab];
 
@@ -496,7 +496,7 @@ export default function CharacterDepthEngine() {
           <h1>The Character Depth Engine</h1>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saving && <span className="eim-saving">Saving…</span>}
-            <PushToBrain pageName="character_depth_engine" data={data} />
+            <BrainUpdate source="character_depth_engine" data={data} ready={loaded} />
           </span>
         </div>
         <p className="cde-subtitle">Doc 09 · v1.0 — The missing dimensions that make characters irreducible</p>
