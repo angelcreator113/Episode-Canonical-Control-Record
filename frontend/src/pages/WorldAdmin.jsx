@@ -2325,7 +2325,7 @@ The revised event should feel like a completely different experience from the si
 
           {/* Event editor */}
           {editingEvent && (
-            <div ref={eventEditorRef} data-testid="event-editor" style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16, scrollMarginTop: 16 }}>
+            <div ref={eventEditorRef} data-testid="event-editor" style={{ background: 'var(--surface-card)', border: '2px solid var(--primary)', borderRadius: 12, padding: 20, marginBottom: 16, scrollMarginTop: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 16px' }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
                 {/* Read-only badge when this event was spawned from a feed
@@ -2336,7 +2336,7 @@ The revised event should feel like a completely different experience from the si
                 {eventForm.source_profile_id && (
                   <span
                     title="Created from a feed profile — edit the profile to change brand, lifestyle, or persona traits."
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fdf2f8', color: '#be185d', border: '1px solid #fbcfe8', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'var(--accent-subtle)', color: 'var(--accent-dark)', border: '1px solid var(--accent-light)', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}
                   >
                     🌐 FROM FEED · profile #{eventForm.source_profile_id}
                   </span>
@@ -2344,13 +2344,13 @@ The revised event should feel like a completely different experience from the si
               </div>
               {/* Duplicate detection warning + AI Revise */}
               {eventForm.name && findSimilarEvents(eventForm.name).length > 0 && (
-                <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1, fontSize: 12, color: '#b45309' }}>
+                <div style={{ padding: '10px 14px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, fontSize: 12, color: 'var(--warning-text)' }}>
                     ⚠️ Similar events: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
                   </div>
                   <button onClick={handleAiRevise} disabled={aiRevising} style={{
-                    padding: '5px 14px', background: aiRevising ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                    color: aiRevising ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                    padding: '5px 14px', background: aiRevising ? 'var(--lala-parchment-2)' : 'var(--primary)',
+                    color: aiRevising ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 8,
                     fontSize: 11, fontWeight: 700, cursor: aiRevising ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                   }}>
                     {aiRevising ? '⏳ Revising...' : '✨ AI Revise'}
@@ -2359,7 +2359,7 @@ The revised event should feel like a completely different experience from the si
               )}
 
               {/* Venue & Location — WorldLocation picker + scene set */}
-              <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ marginBottom: 12, padding: '10px 14px', background: 'var(--surface-bg)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)' }}>
                 <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Venue & Location</label>
 
                 {/* WorldLocation venue picker — auto-fills name + address */}
@@ -2438,8 +2438,8 @@ The revised event should feel like a completely different experience from the si
                     const ss = sceneSets.find(s => s.id === eventForm.scene_set_id);
                     return ss ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />}
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>✓ {ss.name}</span>
+                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }} />}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success-text)' }}>✓ {ss.name}</span>
                       </div>
                     ) : null;
                   })()}
@@ -2491,9 +2491,9 @@ The revised event should feel like a completely different experience from the si
                   {(eventForm.dress_code_keywords || []).length > 0 && (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
                       {eventForm.dress_code_keywords.map((kw, i) => (
-                        <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, color: '#4338ca', fontWeight: 600 }}>
+                        <span key={i} style={{ padding: '2px 8px', background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 6, fontSize: 11, color: 'var(--primary-text)', fontWeight: 600 }}>
                           {kw}
-                          <button onClick={() => setEventForm(p => ({ ...p, dress_code_keywords: p.dress_code_keywords.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', marginLeft: 4, fontSize: 12 }}>×</button>
+                          <button onClick={() => setEventForm(p => ({ ...p, dress_code_keywords: p.dress_code_keywords.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', marginLeft: 4, fontSize: 12 }}>×</button>
                         </span>
                       ))}
                     </div>
@@ -2522,7 +2522,7 @@ The revised event should feel like a completely different experience from the si
               <InvitationStyleFields formData={eventForm} setFormData={setEventForm} />
 
               {/* Career & Payment */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12, padding: 12, background: 'var(--surface-bg)', borderRadius: 8 }}>
                 <div>
                   <label style={S.fLabel}>Career Tier</label>
                   <select value={eventForm.career_tier} onChange={e => setEventForm(p => ({ ...p, career_tier: parseInt(e.target.value) }))} style={S.sel}>
@@ -2540,8 +2540,8 @@ The revised event should feel like a completely different experience from the si
                     <option value="yes">Yes — Lala gets paid</option>
                     <option value="free">Free — No cost to attend</option>
                   </select>
-                  {eventForm.is_paid === 'free' && <div style={{ fontSize: 10, color: '#16a34a', marginTop: 2 }}>Free event — no cost.</div>}
-                  {eventForm.is_paid === 'yes' && <div style={{ fontSize: 10, color: '#6366f1', marginTop: 2 }}>Lala earns coins for attending.</div>}
+                  {eventForm.is_paid === 'free' && <div style={{ fontSize: 10, color: 'var(--success-text)', marginTop: 2 }}>Free event — no cost.</div>}
+                  {eventForm.is_paid === 'yes' && <div style={{ fontSize: 10, color: 'var(--primary-text)', marginTop: 2 }}>Lala earns coins for attending.</div>}
                 </div>
                 <FG label="Payment (if paid)" value={eventForm.payment_amount} onChange={v => setEventForm(p => ({ ...p, payment_amount: parseInt(v) || 0 }))} type="number" min={0} />
               </div>
@@ -2558,7 +2558,7 @@ The revised event should feel like a completely different experience from the si
                   these (chain continuation +30, seed match +18) and the
                   brief snapshot captures them. Optional — leave parent
                   empty for standalone events. */}
-              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
                 <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🔗 Narrative Chain (optional)</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
                   <div>
@@ -2605,7 +2605,7 @@ The revised event should feel like a completely different experience from the si
                   }))}
                   placeholder={'One per line — threads this event plants for later.\nExample:\nMaison Belle press meeting\nLala\'s number with Ari\nUnpaid invoice from Static Frequency'}
                   rows={3}
-                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
                 />
               </div>
 
@@ -2673,25 +2673,25 @@ The revised event should feel like a completely different experience from the si
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                         padding: '4px 8px', borderRadius: 6, fontSize: 11,
                         fontFamily: "'DM Mono', monospace", cursor: 'pointer',
-                        border: `1px solid ${sel ? '#B8962E' : '#e2e8f0'}`,
-                        background: sel ? '#fdf8ee' : '#fff',
-                        color: sel ? '#1a1a2e' : '#64748b',
+                        border: `1px solid ${sel ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`,
+                        background: sel ? 'var(--lala-gold-soft)' : 'var(--surface-card)',
+                        color: sel ? 'var(--text-primary)' : 'var(--text-secondary)',
                         fontWeight: sel ? 700 : 500,
                       }}
                     >
-                      <span style={{ fontSize: 9, color: ready ? '#16a34a' : '#a16207' }}>{ready ? '●' : '○'}</span>
+                      <span style={{ fontSize: 9, color: ready ? 'var(--success-text)' : 'var(--warning-text)' }}>{ready ? '●' : '○'}</span>
                       {t.name || t.type_key}
                     </button>
                   );
                 };
 
-                const sectionStyle = { gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 };
+                const sectionStyle = { gridColumn: '1 / -1', marginTop: 8, padding: 12, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 };
                 const renderSection = (label, types, helperText, customInputId) => (
                   <div style={sectionStyle}>
                     <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>{label}</label>
-                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{helperText}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>{helperText}</div>
                     {types.length === 0 ? (
-                      <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0' }}>
                         No types defined for this category yet — generate them in the UI Overlays tab, or add a custom name below.
                       </div>
                     ) : (
@@ -2715,7 +2715,7 @@ The revised event should feel like a completely different experience from the si
                         });
                         e.currentTarget.value = '';
                       }}
-                      style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
                     />
                   </div>
                 );
@@ -2723,12 +2723,12 @@ The revised event should feel like a completely different experience from the si
                 return (
                   <>
                     <div style={{ gridColumn: '1 / -1', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>📺 Required UI Overlays</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>📺 Required UI Overlays</div>
                       <button
                         type="button"
                         onClick={autoSuggest}
                         title="Replace selection with sensible defaults based on this event's type + prestige"
-                        style={{ padding: '4px 10px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid #e8d8b8', background: '#fdf8ee', color: '#B8962E', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
+                        style={{ padding: '4px 10px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid var(--lala-gold-line)', background: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
                       >
                         ✦ Auto-suggest
                       </button>
@@ -2746,16 +2746,16 @@ The revised event should feel like a completely different experience from the si
                       'ui-overlay-custom'
                     )}
                     {customs.length > 0 && (
-                      <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
-                        <div style={{ fontSize: 10, color: '#a16207', fontFamily: "'DM Mono', monospace", marginBottom: 4, fontWeight: 700, letterSpacing: 0.4 }}>CUSTOM NAMES (no type defined yet)</div>
+                      <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: '8px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
+                        <div style={{ fontSize: 10, color: 'var(--warning-text)', fontFamily: "'DM Mono', monospace", marginBottom: 4, fontWeight: 700, letterSpacing: 0.4 }}>CUSTOM NAMES (no type defined yet)</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                           {customs.map((name, i) => (
-                            <span key={`custom-${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 11, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                            <span key={`custom-${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'var(--surface-card)', border: '1px solid var(--warning-border)', borderRadius: 4, fontSize: 11, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace" }}>
                               {name}
                               <button
                                 type="button"
                                 onClick={() => setEventForm(p => ({ ...p, required_ui_overlays: (p.required_ui_overlays || []).filter(n => n !== name) }))}
-                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                                style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
                                 title="Remove"
                               >×</button>
                             </span>
@@ -2775,12 +2775,12 @@ The revised event should feel like a completely different experience from the si
                   applies a -5 score penalty when reputation_min or
                   brand_trust_min isn't met). All numeric — leave at 0 to
                   skip that gate or reward. */}
-              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
                 <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🏆 Rewards & Requirements</label>
 
                 {/* Rewards row */}
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ ...S.fLabel, fontSize: 10, color: '#16a34a', marginBottom: 6 }}>REWARDS — granted on success</div>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: 'var(--success-text)', marginBottom: 6 }}>REWARDS — granted on success</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
                     {[
                       { key: 'coins', label: '🪙 Coins', placeholder: '500' },
@@ -2799,7 +2799,7 @@ The revised event should feel like a completely different experience from the si
                             rewards: { ...(p.rewards || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
                           }))}
                           placeholder={f.placeholder}
-                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
                         />
                       </div>
                     ))}
@@ -2816,13 +2816,13 @@ The revised event should feel like a completely different experience from the si
                     }))}
                     placeholder={'One per line — what unlocks narratively.\nExample:\nLala lands on the Maison Belle radar\nFirst paid styling gig confirmed'}
                     rows={2}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
                   />
                 </div>
 
                 {/* Requirements row */}
                 <div>
-                  <div style={{ ...S.fLabel, fontSize: 10, color: '#dc2626', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: 'var(--danger)', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {[
                       { key: 'reputation_min', label: '⭐ Reputation min', placeholder: '3' },
@@ -2840,7 +2840,7 @@ The revised event should feel like a completely different experience from the si
                             requirements: { ...(p.requirements || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
                           }))}
                           placeholder={f.placeholder}
-                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
                         />
                       </div>
                     ))}
@@ -3414,7 +3414,7 @@ The revised event should feel like a completely different experience from the si
             const dl = difficultyLabel(diff);
             return (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEventDetailModal(null)}>
-              <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 640, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ background: 'var(--surface-card)', borderRadius: 16, width: '90vw', maxWidth: 640, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
                 {/* Location banner */}
                 {linkedScene?.base_still_url && (
                   <div style={{ height: 140, overflow: 'hidden', position: 'relative', borderRadius: '16px 16px 0 0' }}>
@@ -3423,10 +3423,10 @@ The revised event should feel like a completely different experience from the si
                     ) : (
                       <img src={linkedScene.base_still_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
-                    <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>
+                    <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: 'var(--text-inverse)', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>
                       📍 {linkedScene.name} {linkedScene.video_clip_url && '🎬'}
                     </div>
-                    <button onClick={() => updateField('scene_set_id', null)} style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 9, color: '#fff', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Change</button>
+                    <button onClick={() => updateField('scene_set_id', null)} style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 9, color: 'var(--text-inverse)', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Change</button>
                   </div>
                 )}
 
@@ -3436,9 +3436,9 @@ The revised event should feel like a completely different experience from the si
                     {Object.entries(EVENT_TYPE_ICONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                   <input value={md.name} onChange={e => setEventDetailModal({ ...md, name: e.target.value })} onBlur={e => updateField('name', e.target.value)}
-                    style={{ flex: 1, fontSize: 18, fontWeight: 700, color: '#1a1a2e', border: 'none', borderBottom: '1px dashed #e2e8f0', outline: 'none', padding: '2px 0' }} />
+                    style={{ flex: 1, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', border: 'none', borderBottom: '1px dashed var(--lala-parchment-3)', outline: 'none', padding: '2px 0' }} />
                   <span style={S.statusPill(md.status)}>{md.status}</span>
-                  <button onClick={() => setEventDetailModal(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                  <button onClick={() => setEventDetailModal(null)} style={{ background: 'var(--lala-parchment-2)', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
 
                 {/* Editable fields grid */}
@@ -3468,9 +3468,9 @@ The revised event should feel like a completely different experience from the si
                         <label style={S.fLabel}>Guest List ({guests.length})</label>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {guests.map((g, i) => (
-                            <span key={i} style={{ padding: '3px 8px', background: '#f0f0f0', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#333' }}>
+                            <span key={i} style={{ padding: '3px 8px', background: 'var(--lala-parchment-2)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
                               {g.display_name || g.handle}
-                              <span style={{ fontSize: 9, color: '#999', marginLeft: 4 }}>{g.relationship || ''}</span>
+                              <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>{g.relationship || ''}</span>
                             </span>
                           ))}
                         </div>
@@ -3490,7 +3490,7 @@ The revised event should feel like a completely different experience from the si
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={S.fLabel}>Location (Scene Set)</label>
                       {linkedScene && (
-                          <div style={{ background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6, overflow: 'hidden' }}>
+                          <div style={{ background: 'var(--success-bg)', borderRadius: 8, border: '1px solid var(--success-border)', marginBottom: 6, overflow: 'hidden' }}>
                             {linkedScene.base_still_url && (
                               <div style={{ position: 'relative' }}>
                                 {linkedScene.video_clip_url ? (
@@ -3502,18 +3502,18 @@ The revised event should feel like a completely different experience from the si
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px' }}>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
-                                <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)' }}>✓ {linkedScene.name}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
                               </div>
                               {linkedScene.video_clip_url && (
-                                <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#dbeafe', color: '#1e40af' }}>🎬 Video</span>
+                                <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: 'var(--info-bg)', color: 'var(--info-text)' }}>🎬 Video</span>
                               )}
                               <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
                             </div>
                             {/* S8: its images are made in Scene Sets. */}
                             <div style={{ padding: '0 10px 8px' }}>
                               {!linkedScene.base_still_url && (
-                                <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>No image yet: make its base in Scene Sets.</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>No image yet: make its base in Scene Sets.</div>
                               )}
                               <OpenInSceneSets showId={showId} setId={linkedScene.id} fromLabel="the event"
                                 from={`/shows/${showId}/world?tab=events&event=${md.id}`}
@@ -3522,8 +3522,8 @@ The revised event should feel like a completely different experience from the si
                           </div>
                       )}
                       {hasInvalidSceneLink && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#fff7ed', borderRadius: 8, border: '1px solid #fed7aa', marginBottom: 6 }}>
-                          <div style={{ flex: 1, fontSize: 11, color: '#9a3412' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--warning-bg)', borderRadius: 8, border: '1px solid var(--warning-border)', marginBottom: 6 }}>
+                          <div style={{ flex: 1, fontSize: 11, color: 'var(--warning-text)' }}>
                             This event is linked to a scene set that no longer exists. Pick a new scene set below.
                           </div>
                           <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>Clear</button>
@@ -3533,26 +3533,26 @@ The revised event should feel like a completely different experience from the si
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6 }}>
                           {sceneSets.map(ss => (
                             <button key={ss.id} onClick={() => updateField('scene_set_id', ss.id)} style={{
-                              padding: 0, border: '2px solid #e2e8f0', borderRadius: 8, background: '#fff',
+                              padding: 0, border: '2px solid var(--lala-parchment-3)', borderRadius: 8, background: 'var(--surface-card)',
                               cursor: 'pointer', overflow: 'hidden', textAlign: 'left', transition: 'border-color 0.12s',
                             }}
-                            onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
-                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--lala-parchment-3)'}>
                               {ss.base_still_url ? (
                                 <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 60, objectFit: 'cover' }} />
                               ) : (
-                                <div style={{ width: '100%', height: 60, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>📍</div>
+                                <div style={{ width: '100%', height: 60, background: 'var(--surface-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)' }}>📍</div>
                               )}
                               <div style={{ padding: '4px 6px' }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: '#1a1a2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ss.name}</div>
-                                <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ss.name}</div>
+                                <div style={{ fontSize: 8, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
                               </div>
                             </button>
                           ))}
                         </div>
                       )}
                       {!md.scene_set_id && sceneSets.length === 0 && (
-                        <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No scene sets yet. Create one for this venue below, or in Scene Sets.</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic' }}>No scene sets yet. Create one for this venue below, or in Scene Sets.</div>
                       )}
                       {/* S8, answer 3: the venue's scene set, created and linked; its images are made in Scene Sets. */}
                       {!linkedScene && (
@@ -3564,7 +3564,7 @@ The revised event should feel like a completely different experience from the si
                               setToast(`“${set.name}” created and linked: make its images in Scene Sets`);
                             }
                           }}
-                          style={{ marginTop: 6, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px dashed #6366f1', background: '#eef2ff', color: '#6366f1', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
+                          style={{ marginTop: 6, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px dashed var(--primary)', background: 'var(--primary-subtle)', color: 'var(--primary-text)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
                         >
                           Create the scene set
                         </button>
@@ -3721,8 +3721,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         setTimeout(() => setToast(null), 3000);
                       } finally { setAiRevising(false); }
                     }} disabled={aiRevising} style={{
-                      padding: '4px 14px', background: aiRevising ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                      color: aiRevising ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                      padding: '4px 14px', background: aiRevising ? 'var(--lala-parchment-2)' : 'var(--primary)',
+                      color: aiRevising ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 8,
                       fontSize: 11, fontWeight: 700, cursor: aiRevising ? 'wait' : 'pointer',
                     }}>
                       {aiRevising ? '⏳ Enhancing...' : '✨ AI Enhance'}
@@ -3736,14 +3736,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       onBlur={e => updateField('dress_code_keywords', e.target.value.split(',').map(k => k.trim()).filter(Boolean))} placeholder="romantic, garden, floral" style={S.sel} />
                     {(md.dress_code_keywords || []).length > 0 && (
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                        {md.dress_code_keywords.map((kw, i) => <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>)}
+                        {md.dress_code_keywords.map((kw, i) => <span key={i} style={{ padding: '2px 8px', background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 6, fontSize: 10, color: 'var(--primary-text)', fontWeight: 600 }}>{kw}</span>)}
                       </div>
                     )}
                   </div>
 
                   {/* Invite Preview — phone notification mockup */}
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Invite Preview</div>
+                  <div style={{ borderTop: '1px solid var(--lala-parchment-2)', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Invite Preview</div>
                     <EventInvitePreview event={md} />
                   </div>
 
@@ -3809,29 +3809,29 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     const currentBalance = financeConfig?.current_balance ?? 0;
                     const balanceAfter = aff.balance_after ?? currentBalance;
                     return (
-                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                      <div style={{ borderTop: '1px solid var(--lala-parchment-2)', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Financial Preview</div>
-                          {loading && <div style={{ fontSize: 10, color: '#94a3b8' }}>calculating…</div>}
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>Financial Preview</div>
+                          {loading && <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>calculating…</div>}
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income (coins)</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{income.toLocaleString()}</div>
-                            {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {fc.income.event_payment}</div>}
-                            {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content est: +{fc.income.content_revenue_est}</div>}
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: 'var(--success-bg)', borderRadius: 8, border: '1px solid var(--success-border)' }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--success-text)' }}>Income (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--success-text)' }}>{income.toLocaleString()}</div>
+                            {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: 'var(--success-text)' }}>Payment: {fc.income.event_payment}</div>}
+                            {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: 'var(--success-text)' }}>Content est: +{fc.income.content_revenue_est}</div>}
                             {/* A deal's payouts (deal build PR 5): components at Complete, content fees on approval. */}
-                            {fc?.income?.deal_components > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Deal fees: {fc.income.deal_components}</div>}
-                            {fc?.income?.content_fees > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content fees: +{fc.income.content_fees}</div>}
+                            {fc?.income?.deal_components > 0 && <div style={{ fontSize: 9, color: 'var(--success-text)' }}>Deal fees: {fc.income.deal_components}</div>}
+                            {fc?.income?.content_fees > 0 && <div style={{ fontSize: 9, color: 'var(--success-text)' }}>Content fees: +{fc.income.content_fees}</div>}
                           </div>
-                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses (coins)</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{expenses.toLocaleString()}</div>
-                            {fc?.expenses?.event_cost > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {fc.expenses.event_cost}</div>}
-                            {fc?.expenses?.outfit_retail > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit ({fc.outfit_source === 'actual' ? `${fc.outfit_piece_count} pieces` : 'est'}): {fc.expenses.outfit_retail}</div>}
-                            {fc?.expenses?.outfit_rentals > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Rentals: +{fc.expenses.outfit_rentals}</div>}
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: 'var(--danger-bg)', borderRadius: 8, border: '1px solid var(--danger-border)' }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--danger-text)' }}>Expenses (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger-text)' }}>{expenses.toLocaleString()}</div>
+                            {fc?.expenses?.event_cost > 0 && <div style={{ fontSize: 9, color: 'var(--danger-text)' }}>Event: {fc.expenses.event_cost}</div>}
+                            {fc?.expenses?.outfit_retail > 0 && <div style={{ fontSize: 9, color: 'var(--danger-text)' }}>Outfit ({fc.outfit_source === 'actual' ? `${fc.outfit_piece_count} pieces` : 'est'}): {fc.expenses.outfit_retail}</div>}
+                            {fc?.expenses?.outfit_rentals > 0 && <div style={{ fontSize: 9, color: 'var(--danger-text)' }}>Rentals: +{fc.expenses.outfit_rentals}</div>}
                             {(fc?.expenses?.drinks_est || fc?.expenses?.valet_est || fc?.expenses?.photo_booth_est) ? (
-                              <div style={{ fontSize: 9, color: '#dc262680' }}>
+                              <div style={{ fontSize: 9, color: 'var(--danger-text)' }}>
                                 Extras: {[
                                   fc.expenses.drinks_est && `drinks ${fc.expenses.drinks_est}`,
                                   fc.expenses.valet_est && `valet ${fc.expenses.valet_est}`,
@@ -3842,25 +3842,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             {/* A deal event's itemised costs (Task #2365): Lala's
                                 rows count, comped rows are listed but never. */}
                             {fc?.expenses?.itemised?.costs?.length > 0 && (
-                              <div style={{ fontSize: 9, color: '#dc262680' }} data-testid="forecast-itemised">
+                              <div style={{ fontSize: 9, color: 'var(--danger-text)' }} data-testid="forecast-itemised">
                                 Costs: {fc.expenses.itemised.lala_total}
                                 {fc.expenses.itemised.comped_total > 0 ? ` (comped ${fc.expenses.itemised.comped_total})` : ''}
                               </div>
                             )}
                           </div>
-                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)', borderRadius: 8, border: `1px solid ${net >= 0 ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L (baseline)</span>
+                              <span style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>Net P&L (baseline)</span>
                               {/* EST pill — shown when outfit cost is a
                                   prestige-tier fallback (no outfit picked) so
                                   the bottom-line balance reads as projection,
                                   not fact. Hides once an outfit is saved. */}
                               {fc?.outfit_source === 'estimate' && (
-                                <span title="Outfit cost is a prestige-based estimate. Pick an outfit to lock the real number." style={{ padding: '0 4px', borderRadius: 3, fontSize: 7, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+                                <span title="Outfit cost is a prestige-based estimate. Pick an outfit to lock the real number." style={{ padding: '0 4px', borderRadius: 3, fontSize: 7, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' }}>EST</span>
                               )}
                             </div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
-                            <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
+                            <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>
                               {aff.balance_before != null
                                 ? `${aff.balance_before.toLocaleString()} → ${balanceAfter.toLocaleString()}`
                                 : (net >= 0 ? 'Profitable' : 'Costs more than earns')}
@@ -3873,8 +3873,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             event reward are retired (Q12; deal build PR 5), so
                             this row shows only when the deal contains a bonus. */}
                         {fc?.tier_bonuses && (fc.tier_bonuses.slay.total !== 0 || fc.tier_bonuses.pass.total !== 0) && (
-                          <div style={{ marginTop: 8, padding: '8px 10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8 }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#854d0e', marginBottom: 4 }}>
+                          <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--warning-text)', marginBottom: 4 }}>
                               On Complete (tier-dependent)
                             </div>
                             {[
@@ -3884,8 +3884,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               const parts = [];
                               if (row.bonus.deal_bonus > 0) parts.push(`deal bonus +${row.bonus.deal_bonus}`);
                               return (
-                                <div key={row.tier} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: '#854d0e', marginBottom: 2 }}>
-                                  <span>{row.label} <span style={{ fontSize: 9, color: '#a16207' }}>· {parts.join(', ')}</span></span>
+                                <div key={row.tier} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: 'var(--warning-text)', marginBottom: 2 }}>
+                                  <span>{row.label} <span style={{ fontSize: 9, color: 'var(--warning-text)' }}>· {parts.join(', ')}</span></span>
                                   <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
                                     +{row.bonus.total} → balance {row.projected != null ? row.projected.toLocaleString() : '—'}
                                   </span>
@@ -3896,17 +3896,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         )}
                         {/* Milestones progress — "next goal" bar + reward preview. */}
                         {nextGoal && (
-                          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>
+                          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#854d0e' }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning-text)' }}>
                                 Next: {nextGoal.label}
                                 {nextGoal.episode_id && (
-                                  <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 500, color: '#a16207' }}>
+                                  <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 500, color: 'var(--warning-text)' }}>
                                     · ep-scoped
                                   </span>
                                 )}
                               </span>
-                              <span style={{ fontSize: 10, color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>
+                              <span style={{ fontSize: 10, color: 'var(--warning-text)', fontFamily: "'DM Mono', monospace" }}>
                                 {balanceAfter.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()} coins
                               </span>
                             </div>
@@ -3914,7 +3914,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               <div style={{
                                 width: `${Math.max(0, Math.min(100, (balanceAfter / Number(nextGoal.threshold)) * 100))}%`,
                                 height: '100%',
-                                background: balanceAfter >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017',
+                                background: balanceAfter >= Number(nextGoal.threshold) ? 'var(--success)' : 'var(--lala-gold)',
                                 transition: 'width 0.3s',
                               }} />
                             </div>
@@ -3930,14 +3930,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 .replace(/\s*Current balance is [-\d,]+\s*coins?\.?/gi, '')
                                 .trim();
                               return (
-                                <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>
+                                <div style={{ fontSize: 10, color: 'var(--warning-text)', marginTop: 3 }}>
                                   🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins{cleanDesc ? ` — ${cleanDesc}` : ''}
                                 </div>
                               );
                             })()}
                           </div>
                         )}
-                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 6 }}>
+                        <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 6 }}>
                           {fc ? `From ${fc.outfit_source === 'actual' ? 'picked outfit' : 'prestige estimate'} + event extras. Refreshes when outfit changes.` : 'Loading forecast…'}
                         </div>
                         {/* Finalize Financials button — executes real transactions */}
@@ -3963,7 +3963,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               btn.disabled = false;
                               btn.textContent = 'Finalize Financials';
                             }}
-                            style={{ marginTop: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                            style={{ marginTop: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
                           >
                             Finalize Financials
                           </button>
@@ -3974,11 +3974,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                   {/* ═══ Overlay Command Center ═══ */}
                   {/* ═══ Overlay Command Center ═══ */}
-                  <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: 14, marginTop: 12, marginBottom: 4 }}>
+                  <div style={{ borderTop: '2px solid var(--lala-parchment-2)', paddingTop: 14, marginTop: 12, marginBottom: 4 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>Episode Overlays</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)' }}>Episode Overlays</div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => { setOutfitPickerEvent(md); }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                        <button onClick={() => { setOutfitPickerEvent(md); }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--lala-gold-line)', background: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                           👗 Pick Outfit
                         </button>
                       </div>
@@ -3986,10 +3986,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                     {/* Show-level overlays (always present) */}
                     <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Show Overlays (always on)</div>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Show Overlays (always on)</div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {['show_title', 'login_screen', 'phone_screen', 'icon_holder', 'cursor', 'exit_icon', 'minimize_icon'].map(id => (
-                          <span key={id} style={{ padding: '2px 8px', background: '#f0fdf4', color: '#16a34a', borderRadius: 6, fontSize: 9, fontWeight: 600 }}>
+                          <span key={id} style={{ padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 6, fontSize: 9, fontWeight: 600 }}>
                             ✓ {id.replace(/_/g, ' ')}
                           </span>
                         ))}
@@ -4024,7 +4024,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                       return (
                         <div style={{ marginBottom: 10 }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Episode Overlays (select for this episode)</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Episode Overlays (select for this episode)</div>
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             {episodeOverlays.map(o => {
                               const selected = selections.includes(o.id);
@@ -4038,9 +4038,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                   } catch { /* non-blocking */ }
                                 }} style={{
                                   padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer',
-                                  background: selected ? '#eef2ff' : '#f8f8f8',
-                                  color: selected ? '#6366f1' : '#94a3b8',
-                                  border: `1px solid ${selected ? '#c7d2fe' : '#e2e8f0'}`,
+                                  background: selected ? 'var(--primary-subtle)' : 'var(--lala-parchment-2)',
+                                  color: selected ? 'var(--primary-text)' : 'var(--text-secondary)',
+                                  border: `1px solid ${selected ? 'var(--primary-light)' : 'var(--lala-parchment-3)'}`,
                                 }}>
                                   {o.icon} {o.name} {selected ? '✓' : ''}
                                 </button>
@@ -4071,7 +4071,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             if (status === 404 && data.stale_link_cleared) loadData();
                           }
                           btn.disabled = false; btn.textContent = '🎬 Generate Episode Title';
-                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                           🎬 Generate Episode Title
                         </button>
                       )}
@@ -4090,7 +4090,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           });
                           if (res.data.success) setToast(`Custom overlay "${name}" created — generate it in Assets → Lala's Phone`);
                         } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                      }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px dashed #94a3b8', background: '#fff', color: '#64748b', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                      }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px dashed var(--lala-ink-faint)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                         + Add Custom Overlay
                       </button>
                     </div>
@@ -4144,7 +4144,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           setToast('Failed: ' + (err.response?.data?.error || err.message));
                         }
                       }}
-                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--lala-gold-line)', background: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
                     >
                       Regenerate Social Tasks
                     </button>
@@ -4165,11 +4165,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   />
 
                   {/* Episode linking */}
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Link to Episode</div>
+                  <div style={{ borderTop: '1px solid var(--lala-parchment-2)', paddingTop: 14, marginTop: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Link to Episode</div>
                     {sceneSetReconnect?.eventId === md.id && (
-                      <div data-testid="scene-set-reconnect" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', marginBottom: 6, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
-                        <div style={{ flex: '1 1 180px', fontSize: 11, color: '#9a3412' }}>
+                      <div data-testid="scene-set-reconnect" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', marginBottom: 6, background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
+                        <div style={{ flex: '1 1 180px', fontSize: 11, color: 'var(--warning-text)' }}>
                           <div style={{ fontWeight: 700 }}>
                             {sceneSetReconnect.status === 'choose' ? 'Event attached · Choose its scene set' : 'Event attached · Scene set needs reconnecting'}
                           </div>
@@ -4191,7 +4191,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     )}
                     {injectSuccess?.eventId === md.id ? (
-                      <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 13, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
+                      <div style={{ padding: 10, background: 'var(--success-bg)', borderRadius: 8, border: '2px solid var(--success)', textAlign: 'center', fontSize: 13, color: 'var(--success-text)', fontWeight: 700 }}>{injectSuccess.message}</div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
                         {episodes.map(ep => {
@@ -4199,12 +4199,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           return (
                             <button key={ep.id} onClick={() => injectEvent(md.id, ep.id)} disabled={injecting} style={{
                               textAlign: 'left', padding: '5px 8px',
-                              background: isLinked ? '#f0fdf4' : '#fff',
-                              border: isLinked ? '2px solid #22c55e' : '1px solid #e2e8f0',
-                              borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e',
+                              background: isLinked ? 'var(--success-bg)' : 'var(--surface-card)',
+                              border: isLinked ? '2px solid var(--success)' : '1px solid var(--lala-parchment-3)',
+                              borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-primary)',
                             }}>
                               <div style={{ fontWeight: 600 }}>{ep.episode_number || '?'}. {(ep.title || '').slice(0, 14)}</div>
-                              {isLinked && <div style={{ fontSize: 9, color: '#16a34a' }}>✓ Linked</div>}
+                              {isLinked && <div style={{ fontSize: 9, color: 'var(--success-text)' }}>✓ Linked</div>}
                             </button>
                           );
                         })}
@@ -4214,7 +4214,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ padding: '10px 24px', borderTop: '1px solid var(--lala-parchment-2)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
                   {md.status === 'ready' && (
                     <button onClick={async () => {
@@ -4226,7 +4226,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         setEventDetailModal({ ...md, status: 'declined' });
                         setToast(`"${md.name}" declined — tracked for future callbacks`);
                       } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid var(--warning)', background: 'var(--warning-bg)', color: 'var(--warning-text)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                       Decline Invite
                     </button>
                   )}
@@ -4305,7 +4305,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           setToast('Failed: ' + (e2.response?.data?.error || err.message));
                         }
                       }
-                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #22c55e', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid var(--success)', background: 'var(--success-bg)', color: 'var(--success-text)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                       Mark Ready
                     </button>
                   )}
@@ -4328,7 +4328,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           }
                         }
                       } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                       👑 Complete Episode
                     </button>
                   )}
@@ -4359,7 +4359,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
                     💾 Save
                   </button>
-                  <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: '#f1f5f9' }}>Close</button>
+                  <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: 'var(--lala-parchment-2)' }}>Close</button>
                 </div>
               </div>
             </div>
@@ -4369,27 +4369,27 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* ── Event Comparison Modal ── */}
       {compareEvents && compareEvents.length === 2 && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setCompareEvents(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 800, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--surface-card)', borderRadius: 16, width: '90vw', maxWidth: 800, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--lala-parchment-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Compare Events</h3>
-              <button onClick={() => setCompareEvents(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setCompareEvents(null)} style={{ background: 'var(--lala-parchment-2)', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
               {compareEvents.map((ev, idx) => (
-                <div key={ev.id} style={{ padding: 16, borderRight: idx === 0 ? '1px solid #f1f5f9' : 'none' }}>
-                  <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{ev.name}</h4>
+                <div key={ev.id} style={{ padding: 16, borderRight: idx === 0 ? '1px solid var(--lala-parchment-2)' : 'none' }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{ev.name}</h4>
                   {[
                     ['Type', ev.event_type], ['Host', ev.host || '—'], ['Prestige', ev.prestige],
                     ['Cost', ev.cost_coins], ['Strictness', ev.strictness], ['Deadline', ev.deadline_type],
                     ['Dress Code', ev.dress_code || '—'], ['Tier', ev.career_tier], ['Status', ev.status],
                     ['Difficulty', calcDifficulty(ev).toFixed(1)],
                   ].map(([label, val]) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, borderBottom: '1px solid #f8fafc' }}>
-                      <span style={{ color: '#64748b' }}>{label}</span>
-                      <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{val}</span>
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, borderBottom: '1px solid var(--surface-bg)' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{val}</span>
                     </div>
                   ))}
-                  {ev.narrative_stakes && <div style={{ fontSize: 11, color: '#475569', fontStyle: 'italic', marginTop: 8, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
+                  {ev.narrative_stakes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 8, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
                 </div>
               ))}
             </div>
