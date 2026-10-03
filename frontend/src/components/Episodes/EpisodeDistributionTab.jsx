@@ -69,10 +69,10 @@ const PLATFORMS = {
 };
 
 const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft', color: '#94a3b8' },
-  { value: 'scheduled', label: 'Scheduled', color: '#f59e0b' },
-  { value: 'published', label: 'Published', color: '#10b981' },
-  { value: 'unlisted', label: 'Unlisted', color: '#64748b' }
+  { value: 'draft', label: 'Draft', color: 'var(--text-secondary)' },
+  { value: 'scheduled', label: 'Scheduled', color: 'var(--warning-text)' },
+  { value: 'published', label: 'Published', color: 'var(--success-text)' },
+  { value: 'unlisted', label: 'Unlisted', color: 'var(--text-secondary)' }
 ];
 
 function EpisodeDistributionTab({ episode, onUpdate }) {
@@ -232,7 +232,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
               btn.disabled = false;
               btn.textContent = '✨ Generate from Episode';
             }}
-            style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
           >
             ✨ Generate from Episode
           </button>
@@ -258,7 +258,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
               className={`platform-card ${selectedPlatform === p.id ? 'active' : ''} ${enabled ? 'enabled' : ''}`}
               onClick={() => setSelectedPlatform(p.id)}
               style={{
-                borderColor: selectedPlatform === p.id ? p.color : '#e2e8f0'
+                borderColor: selectedPlatform === p.id ? p.color : 'var(--lala-parchment-3)'
               }}
             >
               <div className="platform-icon" style={{ color: p.color }}>
