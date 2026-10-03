@@ -17,6 +17,15 @@ vi.mock('./SocialProfileGenerator', () => ({
 import api from '../services/api';
 import NewEpisodeStarter from './NewEpisodeStarter';
 
+const PITCH = {
+  title: 'Champagne Before Noon', kind: 'career', category: 'brunch_dining', format: 'brunch',
+  organizer: { kind: 'brand', name: 'Ori Beauty' },
+  featured: [{ profile_id: 11, handle: 'maya', display_name: 'Maya Chen', role: 'opportunity' }],
+  venue: { id: 'loc-1', name: 'The Honey Table' },
+  premise: 'Ori Beauty hosts an intimate creator brunch.',
+  opportunity: 'A first real relationship with Ori Beauty.', pressure: 'Brunch chic on 425 coins.', wildcard: 'Tasha is there.',
+};
+
 function Landed() {
   const loc = useLocation();
   return <div data-testid="landed">{loc.pathname}</div>;
@@ -50,14 +59,14 @@ beforeEach(() => {
 });
 
 describe('New Episode: what starts this episode?', () => {
-  test('six starting points; Personal Story and Surprise Me are not open yet', () => {
+  test('six starting points; Personal Story is not open yet', () => {
     renderAt();
     for (const key of ['creator', 'brand', 'world', 'opportunity', 'personal', 'surprise']) {
       expect(screen.getByTestId(`start-${key}-card`)).toBeTruthy();
     }
     expect(screen.getByTestId('start-personal-card').disabled).toBe(true);
     expect(screen.getByTestId('start-personal-card').textContent).toMatch(/Needs your ruling/);
-    expect(screen.getByTestId('start-surprise-card').disabled).toBe(true);
+    expect(screen.getByTestId('start-surprise-card').disabled).toBe(false);
   });
 
   test('Creator Invitation opens Lala\'s Feed in choose-host mode, and Back returns', async () => {
@@ -116,5 +125,45 @@ describe('New Episode: what starts this episode?', () => {
     fireEvent.click(await screen.findByTestId('opportunity-option-op-1'));
     expect((await screen.findByRole('alert')).textContent).toBe('This opportunity already has an event scheduled');
     expect(screen.queryByTestId('landed')).toBeNull();
+  });
+
+  test('Surprise Me: one pitch call per click, never on opening', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, pitches: [PITCH] } });
+    renderAt();
+    fireEvent.click(screen.getByTestId('start-surprise-card'));
+    expect(await screen.findByTestId('start-surprise')).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('pitch-go'));
+    const card = await screen.findByTestId('pitch-0');
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/episode-pitches');
+    expect(card.textContent).toMatch(/Career move/);
+    expect(card.textContent).toMatch(/Champagne Before Noon/);
+    expect(card.textContent).toMatch(/Ori Beauty \(brand\)/);
+    expect(card.textContent).toMatch(/Maya Chen \(opportunity\)/);
+    expect(card.textContent).toMatch(/Brunch chic on 425 coins/);
+  });
+
+  test('Build this episode creates the event from the pitch, drafted, and opens its Package', async () => {
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/episode-pitches') return { data: { success: true, pitches: [PITCH] } };
+      return { data: { success: true, event: { id: 'ev-20' } } };
+    });
+    renderAt('/shows/show-1/new-episode?start=surprise');
+    fireEvent.click(await screen.findByTestId('pitch-go'));
+    fireEvent.click(await screen.findByTestId('pitch-build-0'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/events', expect.objectContaining({
+      name: 'Champagne Before Noon', host_brand: 'Ori Beauty', venue_location_id: 'loc-1',
+    })));
+    const body = vi.mocked(api.post).mock.calls.find(([u]) => u === '/api/v1/world/show-1/events')[1];
+    expect(body.canon_consequences.automation.auto_drafted.name).toBe('ai_draft');
+    expect((await screen.findByTestId('landed')).textContent).toBe('/shows/show-1/events/ev-20');
+  });
+
+  test('a failed pitch says why', async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { data: { error: 'The AI service is temporarily overloaded. Please try again.' } } });
+    renderAt('/shows/show-1/new-episode?start=surprise');
+    fireEvent.click(await screen.findByTestId('pitch-go'));
+    expect((await screen.findByRole('alert')).textContent).toBe('The AI service is temporarily overloaded. Please try again.');
   });
 });
