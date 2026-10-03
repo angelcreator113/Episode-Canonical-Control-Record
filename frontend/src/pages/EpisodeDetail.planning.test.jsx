@@ -142,7 +142,7 @@ describe('EpisodeDetail Planning card', () => {
     fireEvent.click(within(card).getByTestId('episode-planning-fix-look'));
     // Production -> Wardrobe (its body waits for the episode's events).
     await waitFor(() => expect(screen.getByTitle('Production').className).toContain('ed-tab-active'));
-    expect(screen.getByRole('button', { name: 'Wardrobe' }).style.borderBottom).toMatch(/solid/);
+    expect(screen.getByRole('button', { name: 'Wardrobe' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('button', { name: 'Wardrobe' }).style.fontWeight).toBe('600');
     expect(screen.queryByTestId('episode-planning')).toBeNull();
   });
