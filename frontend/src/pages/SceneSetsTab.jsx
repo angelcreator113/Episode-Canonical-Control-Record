@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
+import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
 import apiClient from '../services/api';
 import { SceneSetsBackLink } from '../components/OpenInSceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import './SceneSetsTab.css';
-import SceneModelComparison, { BaseModelSelect } from '../components/SceneModelComparison';
+import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -107,6 +107,100 @@ export function SetShowSelect({ set, shows, onSaved, onError }) {
       <option value="">No show</option>
       {(shows || []).map(sh => <option key={sh.id} value={sh.id}>{sh.name || sh.title || sh.id}</option>)}
     </select>
+  );
+}
+
+export const listWorldLocationsApi = () => apiClient.get(`${API_BASE}/world/locations`);
+export const createWorldLocationApi = (payload) => apiClient.post(`${API_BASE}/world/locations`, payload);
+
+/**
+ * The set's World Location: choose an existing one, or make a new one named
+ * after the set. Approving a base needs one (S6). An approved base keeps its
+ * location until it is un-approved, so the choice is locked then.
+ */
+export function SetWorldLocationSelect({ set, onSaved, onError }) {
+  const [locations, setLocations] = useState(null);
+  const [value, setValue] = useState(set.world_location_id || '');
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  useEffect(() => { setValue(set.world_location_id || ''); }, [set.world_location_id]);
+  useEffect(() => {
+    let cancelled = false;
+    listWorldLocationsApi()
+      .then((r) => { if (!cancelled) setLocations(r.data?.locations || []); })
+      .catch((err) => {
+        console.error('[SceneSets] world locations load failed:', err);
+        if (!cancelled) setLocations([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+  const save = async (next) => {
+    const prev = value;
+    setValue(next);
+    setSaving(true);
+    try {
+      await updateSceneSetApi(set.id, { world_location_id: next || null });
+      onSaved?.(next || null);
+    } catch (err) {
+      console.error('[SceneSets] world location save failed:', err);
+      setValue(prev);
+      onError?.(err.response?.data?.error || 'Could not change the World Location');
+    }
+    setSaving(false);
+  };
+  const create = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      const r = await createWorldLocationApi({ name, location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior' });
+      const loc = r.data?.location;
+      if (!loc?.id) throw new Error('No location was returned');
+      setLocations((ls) => [...(ls || []), loc]);
+      setCreating(false);
+      setSaving(false);
+      await save(loc.id);
+    } catch (err) {
+      console.error('[SceneSets] world location create failed:', err);
+      onError?.(err.response?.data?.error || err.message || 'Could not make the World Location');
+      setSaving(false);
+    }
+  };
+  if (set.base_approved) {
+    const name = (locations || []).find((l) => l.id === set.world_location_id)?.name;
+    return (
+      <div className="scene-sets-location-locked" data-testid={`set-location-${set.id}`}>
+        <span>{name || 'Linked'}</span>
+        <span className="scene-sets-location-hint">Its base is this location's approved base. Un-approve it to change the location.</span>
+      </div>
+    );
+  }
+  if (creating) {
+    return (
+      <div className="scene-sets-location-create">
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="New World Location name"
+          onKeyDown={(e) => { if (e.key === 'Enter') create(); if (e.key === 'Escape') setCreating(false); }} autoFocus disabled={saving} />
+        <button type="button" className="scene-sets-btn-generate" onClick={create} disabled={saving || !newName.trim()}>
+          {saving ? <Loader size={11} className="spin" /> : <Plus size={11} />} Create
+        </button>
+        <button type="button" className="scene-sets-btn-details" onClick={() => setCreating(false)} disabled={saving}>Cancel</button>
+      </div>
+    );
+  }
+  const list = [...(locations || [])].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  return (
+    <div className="scene-sets-location-row">
+      <select value={value} onChange={(e) => save(e.target.value)} disabled={saving || locations === null}
+        aria-label="World Location" className="scene-sets-select-sm" data-testid={`set-location-${set.id}`}>
+        <option value="">{locations === null ? 'Loading…' : 'No World Location'}</option>
+        {value && !list.some((l) => l.id === value) && <option value={value}>Linked location</option>}
+        {list.map((l) => <option key={l.id} value={l.id}>{l.city ? `${l.name} · ${l.city}` : l.name}</option>)}
+      </select>
+      <button type="button" className="scene-sets-btn-details" onClick={() => { setNewName(set.name || ''); setCreating(true); }} disabled={saving}>
+        <Plus size={11} /> New location
+      </button>
+    </div>
   );
 }
 
@@ -760,9 +854,8 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
   const fileInputRef = useRef(null);
-  const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
   const progress = isGeneratingProp ? generationProgress : null;
@@ -791,13 +884,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   // Selected angle for detail panel — initializes to cover_angle_id if set
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
-  const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
   // Card hero always shows the base image — angle images only in detail panel
   const heroImageRaw = useMemo(
     () => set.base_still_url || null,
     [set.base_still_url]
   );
-  const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -808,7 +899,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   useEffect(() => {
     if (!focused || !focusZone) return undefined;
     if (String(focusZone).startsWith('look:')) {
-      // A look zone: the event's block in the Looks row.
+      // A look zone: the set opens on its Event Looks, at the event's block.
+      setShowDetails(true);
+      setShowAddAngle(false);
+      setActiveModalTab('looks');
       const t = setTimeout(() => {
         const el = document.querySelector(`[data-testid="scene-set-event-${String(focusZone).slice(5).replace(/[^\w-]/g, '')}"]`);
         if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -827,7 +921,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [editingAngleLabel, setEditingAngleLabel] = useState('');
   const angleQuickUploadRef = useRef(null);
   const [quickUploadAngleId, setQuickUploadAngleId] = useState(null);
-  const [activeModalTab, setActiveModalTab] = useState('details');
+  const [activeModalTab, setActiveModalTab] = useState('angles');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
@@ -884,6 +978,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const showToast = onToast || (() => {});
   const activeGenerationStart = progress?.startTime || genStartTime;
   const baseElapsed = useElapsedTime(activeGenerationStart, !isGenerating);
+  // The card is for browsing; everything else happens in the set's workspace.
+  const openWorkspace = useCallback((tab = 'angles') => {
+    setActiveModalTab(tab);
+    setShowAddAngle(false);
+    setShowDetails(true);
+  }, []);
+  const eventLookCount = (set.events || []).length;
+  // One plain line on the card: what is happening, or the next thing to do.
+  const cardStatus = isGenerating ? { tone: 'busy', text: 'Generating…' }
+    : (specStage && specStage !== 'done') ? { tone: 'busy', text: 'Setting up…' }
+    : !hasBase ? { tone: 'todo', text: 'Needs a main background' }
+    : failedAngles.length > 0 ? { tone: 'error', text: `${failedAngles.length} view${failedAngles.length !== 1 ? 's' : ''} failed` }
+    : pendingAngles.length > 0 ? { tone: 'todo', text: `${pendingAngles.length} view${pendingAngles.length !== 1 ? 's' : ''} to generate` }
+    : null;
 
   // Track generation start time
   useEffect(() => {
@@ -1054,10 +1162,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
             )}
           </>
         ) : (
-          <div className="scene-sets-card-placeholder" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} style={{ cursor: 'pointer' }}>
-            <Upload size={28} strokeWidth={1.2} />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Upload Base Image</span>
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>or drag & drop</span>
+          <div className="scene-sets-card-placeholder" onClick={(e) => { e.stopPropagation(); openWorkspace('angles'); }} style={{ cursor: 'pointer' }}>
+            <ImageIcon size={28} strokeWidth={1.2} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>No background yet</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>Open the set to upload or generate one</span>
           </div>
         )}
 
@@ -1095,55 +1203,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
                   onClick={e => e.stopPropagation()}
                 >
-                  {/* S6: an approved base is not replaced until it is un-approved. */}
-                  {!set.base_approved && (
-                    <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }}>
-                      <Upload size={12} /> {hasBase ? 'Replace Base Image' : 'Upload Base Image'}
-                    </button>
-                  )}
-                  {hasBase && (
-                    <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
-                      <Pencil size={12} /> Edit Description
-                    </button>
-                  )}
-                  {hasBase && (
-                    <button onClick={async () => {
-                      setShowMenu(false);
-                      setSeeding(true);
-                      showToast('Analyzing your image for camera angles...');
-                      try {
-                        const r = await suggestAnglesFromImageApi(set.id);
-                        const d = r.data;
-                        if (d.success) {
-                          showToast(`${d.angles_created || 0} angles suggested! Click "Generate All" to create images.`);
-                        } else {
-                          showToast(d.error || 'Failed to suggest angles', 'error');
-                        }
-                      } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
-                      setSeeding(false);
-                    }} disabled={isGenerating || seeding}>
-                      <Sparkles size={12} /> {seeding ? 'Analyzing...' : 'Suggest Angles'}
-                    </button>
-                  )}
-                  {hasBase && !set.base_approved && sortedAngles.some(a => a.still_image_url) && (
-                    <button onClick={async () => {
-                      setShowMenu(false);
-                      const targetAngle = selectedAngle?.still_image_url
-                        ? selectedAngle
-                        : sortedAngles.find(a => a.still_image_url);
-                      if (!targetAngle) return;
-                      try {
-                        const res = await promoteToBaseApi(set.id, { angle_id: targetAngle.id });
-                        const d = res.data;
-                        if (d.success) showToast(d.message);
-                        else showToast(d.error, 'error');
-                      } catch { showToast('Failed to set base', 'error'); }
-                    }}>
-                      <Camera size={12} /> Use {selectedAngle?.angle_label || sortedAngles.find(a => a.still_image_url)?.angle_label || 'Angle'} as Base
-                    </button>
-                  )}
-                  <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); }}>
-                    <Eye size={12} /> Details
+                  <button onClick={() => { setShowMenu(false); openWorkspace('angles'); }}>
+                    <Eye size={12} /> Open Set
+                  </button>
+                  <button onClick={() => { setShowMenu(false); openWorkspace('details'); }}>
+                    <FileText size={12} /> Details &amp; Usage
                   </button>
                   {onMakeDefault && DEFAULT_KEY[set.scene_type] && set.show_id && !defaultRole && (
                     <button onClick={() => { setShowMenu(false); onMakeDefault(set); }} data-testid={`make-default-${set.id}`}>
@@ -1158,422 +1222,31 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               document.body
             )}
           </div>
-          {/* Hidden file input for kebab menu upload */}
-          <input
-            ref={menuUploadRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length > 0) onUploadBase(set, files);
-              e.target.value = '';
-            }}
-          />
         </div>
 
-        {selectedAngle?.video_clip_url && (
-          <div className="scene-sets-card-video-ready">
-            <Play size={12} /> Video ready
-          </div>
-        )}
-
-        {/* Hero label showing which angle is displayed */}
-        {selectedAngle && (
-          <div className="scene-sets-card-hero-label">
-            {isCoverAngle(selectedAngle.id) && <Heart size={10} fill="currentColor" />}
-            {selectedAngle.angle_label}
-          </div>
-        )}
-        {/* Base heart indicator when viewing the cover angle or base */}
-        {((!selectedAngleId && set.base_still_url) || (selectedAngle && isCoverAngle(selectedAngle.id))) && (
-          <div className="scene-sets-card-base-heart">
-            <Heart size={14} fill="currentColor" />
-          </div>
-        )}
       </div>
 
       {/* ── Compact Card Body ────────────────────────────────── */}
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
-          <h3 className="scene-sets-card-title" onClick={() => setShowDetails(true)} style={{ cursor: 'pointer' }}>{set.name}</h3>
+          <h3 className="scene-sets-card-title" onClick={() => openWorkspace('angles')} style={{ cursor: 'pointer' }}>{set.name}</h3>
 
-          {/* Scene type badge */}
-          {set.scene_type && (
-            <div style={{ marginBottom: 4 }}>
-              <span style={{
-                fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.3px',
-                padding: '2px 7px', borderRadius: 4,
-                background: set.scene_type === 'EVENT_LOCATION' ? '#fef3c7' : set.scene_type === 'HOME_BASE' ? '#dbeafe' : set.scene_type === 'CLOSET' ? '#fce7f3' : set.scene_type === 'TRANSITION' ? '#e0e7ff' : '#f3f4f6',
-                color: set.scene_type === 'EVENT_LOCATION' ? '#92400e' : set.scene_type === 'HOME_BASE' ? '#1e40af' : set.scene_type === 'CLOSET' ? '#9d174d' : set.scene_type === 'TRANSITION' ? '#4338ca' : '#6b7280',
-              }}>{set.scene_type.replace('_', ' ')}</span>
-            </div>
-          )}
-
-          {/* S6: the location's approved permanent base. Evoni approves it
-              here; nothing is approved by itself. Event versions at the
-              location are made from it, and it is not replaced until it is
-              un-approved. */}
-          <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-          <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
-
-          {/* Compact metadata */}
           <div className="scene-sets-card-meta-line">
             {set.show && <span className="scene-sets-meta-chip"><Tv size={9} /> {set.show.name}</span>}
+            {totalAngles > 0 && <span className="scene-sets-meta-chip" data-testid={`scene-set-views-${set.id}`}><Camera size={9} /> {readyAngles === totalAngles ? `${totalAngles} view${totalAngles !== 1 ? 's' : ''}` : `${readyAngles}/${totalAngles} views`}</span>}
+            {eventLookCount > 0 && <span className="scene-sets-meta-chip" data-testid={`scene-set-event-looks-count-${set.id}`}><Sparkles size={9} /> {eventLookCount} event look{eventLookCount !== 1 ? 's' : ''}</span>}
             {set.episodes?.length > 0 && <span className="scene-sets-meta-chip"><Film size={9} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || '?'}` : `${set.episodes.length} eps`}</span>}
-            {set.time_of_day && <span className="scene-sets-meta-chip"><Clock size={9} /> {set.time_of_day.replace('_', ' ')}</span>}
-            {set.season && <span className="scene-sets-meta-chip"><RefreshCw size={9} /> {set.season}</span>}
           </div>
-
-          {/* Angle thumbnail strip — shows completed angles as clickable mini previews */}
-          {readyAngles > 0 && (
-            <div className="scene-sets-card-thumbstrip">
-              {sortedAngles.filter(a => a.still_image_url && a.generation_status === 'complete').slice(0, 6).map(a => (
-                <img
-                  key={a.id}
-                  src={bustUrl(a.still_image_url)}
-                  alt={a.angle_label}
-                  className="scene-sets-card-thumb"
-                  onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }}
-                  title={a.angle_name}
-                />
-              ))}
-              {readyAngles > 6 && <span className="scene-sets-card-thumb-more">+{readyAngles - 6}</span>}
-              <button
-                className="scene-sets-card-thumb-gallery"
-                onClick={() => { setSelectedAngleId(null); setShowBaseLightbox(true); }}
-                title="View gallery"
-              >
-                <Grid3X3 size={10} />
-              </button>
+          {cardStatus && (
+            <div className={`scene-sets-card-status is-${cardStatus.tone}`} data-testid={`scene-set-status-${set.id}`}>
+              {cardStatus.tone === 'busy' && <Loader size={10} className="spin" />} {cardStatus.text}
             </div>
           )}
-
-          {/* Progress bar — only when there are pending angles */}
-          {totalAngles > 0 && readyAngles < totalAngles && (
-            <div className="scene-sets-progress-row">
-              <div className="scene-sets-progress-bar">
-                <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
-              </div>
-              <span className="scene-sets-progress-label">{readyAngles}/{totalAngles}</span>
-            </div>
-          )}
-
-          {/* ── Pipeline Progress Panel — shows during upload+spec+angles flow ── */}
-          {specStage && specStage !== 'done' && (
-            <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
-              {[
-                { key: 'uploading', label: 'Uploading image', icon: Upload },
-                { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
-                { key: 'creating_angles', label: 'Creating camera angles from spec', icon: Camera },
-              ].map((step) => {
-                const stages = ['uploading', 'building_spec', 'creating_angles'];
-                const currentIdx = stages.indexOf(specStage);
-                const stepIdx = stages.indexOf(step.key);
-                const isDone = stepIdx < currentIdx;
-                const isCurrent = stepIdx === currentIdx;
-                const Icon = step.icon;
-                return (
-                  <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: isDone ? 0.5 : isCurrent ? 1 : 0.3 }}>
-                    <div style={{ width: 18, display: 'flex', justifyContent: 'center' }}>
-                      {isDone ? <CheckCircle2 size={12} style={{ color: '#16a34a' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: '#B8962E' }} /> : <Icon size={12} style={{ color: '#ccc' }} />}
-                    </div>
-                    <span style={{ fontSize: 11, color: isCurrent ? '#2C2C2C' : '#888', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
-          {!specStage && hasBase && (
-            <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
-              {hasSpec && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                  <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-                    Step 1 complete: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
-                  </span>
-                </div>
-              )}
-
-              {!hasSpec && totalAngles > 0 && (
-                <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
-                  Step 1 is not done yet for this location. Angles exist, but no Scene Spec is saved. Build Scene Spec to lock object/zones continuity.
-                </div>
-              )}
-
-              {/* Step 1: No spec yet */}
-              {!hasSpec && totalAngles === 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 1: Build Scene Spec</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-                    Analyze your image to catalog every object, define zones, and create camera contracts for consistent angle generation.
-                  </div>
-                  <button onClick={async () => {
-                    setBuildingSpec(true);
-                    setSpecProgress('sending');
-                    try {
-                      const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                      const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                      const r = await generateSceneSpecApi(set.id, {});
-                      clearTimeout(progressTimer);
-                      clearTimeout(parseTimer);
-                      const d = r.data;
-                      if (d.success) {
-                        setSpecProgress('done');
-                        showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                        if (onRefresh) await onRefresh();
-                      } else {
-                        setSpecProgress('error');
-                        showToast(d.error || 'Failed', 'error');
-                      }
-                    } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
-                    setBuildingSpec(false);
-                    setTimeout(() => setSpecProgress(null), 2000);
-                  }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image to Claude...' : specProgress === 'analyzing' ? 'Claude is cataloging every object...' : specProgress === 'parsing' ? 'Building zones + camera contracts...' : 'Analyzing room...'}</> : <><FileText size={12} /> Build Scene Spec</>}
-                  </button>
-                  {buildingSpec && (
-                    <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f1', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
-                      Claude Vision is analyzing your image to identify every object, define spatial zones, set up continuity rules, and create camera contracts. This takes 15-30 seconds.
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Step 2: Spec exists, no angles */}
-              {hasSpec && totalAngles === 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                    <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-                      Spec: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
-                    </span>
-                  </div>
-                  {cameraContractCount === 0 ? (
-                    <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
-                      This spec was saved without any camera contracts, so angle creation cannot run yet. Rebuild the spec to generate valid camera angles.
-                    </div>
-                  ) : null}
-                  {set.scene_type === 'EVENT_LOCATION' && cameraContractCount > 3 && (
-                    <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
-                      This event venue has {cameraContractCount} angles — events typically only need 1-2. Hit "Rebuild Spec" in the Spec tab to regenerate with fewer angles.
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>{cameraContractCount > 0 ? 'Step 2: Create Camera Angles' : 'Step 2: Rebuild Scene Spec'}</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-                    {cameraContractCount > 0
-                      ? `Create ${cameraContractCount} camera angles from your spec — each with required objects and validation rules.`
-                      : 'Your current spec has objects and zones but no camera contracts. Rebuild it so the angle generator has valid camera instructions.'}
-                  </div>
-                  <button onClick={async () => {
-                    if (cameraContractCount === 0) {
-                      setBuildingSpec(true);
-                      setSpecProgress('sending');
-                      showToast('Rebuilding spec to generate camera contracts...');
-                      try {
-                        const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                        const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                        const r = await generateSceneSpecApi(set.id, { force: true });
-                        clearTimeout(progressTimer);
-                        clearTimeout(parseTimer);
-                        const d = r.data;
-                        if (d.success) {
-                          showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                          if (onRefresh) await onRefresh();
-                        } else {
-                          showToast(d.error || 'Failed', 'error');
-                        }
-                      } catch (e) {
-                        showToast(e.response?.data?.error || e.message, 'error');
-                      }
-                      setBuildingSpec(false);
-                      setSpecProgress(null);
-                      return;
-                    }
-
-                    setSeeding(true);
-                    showToast('Creating camera angles from spec...');
-                    try {
-                      const r = await createAnglesFromSpecApi(set.id, {});
-                      const d = r.data;
-                      if (d.success) {
-                        showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
-                        if (onRefresh) await onRefresh();
-                      } else showToast(d.error || 'Failed', 'error');
-                    } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
-                    setSeeding(false);
-                  }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {cameraContractCount === 0
-                      ? (buildingSpec
-                        ? <><Loader size={12} className="spin" /> Rebuilding spec...</>
-                        : <><RefreshCw size={12} /> Rebuild Spec For Angles</>)
-                      : (seeding
-                        ? <><Loader size={12} className="spin" /> Creating {cameraContractCount} angles...</>
-                        : <><Camera size={12} /> Create {cameraContractCount} Camera Angles</>)}
-                  </button>
-                </>
-              )}
-
-              {/* Step 3: Spec + angles exist, ready to generate */}
-              {hasSpec && totalAngles > 0 && generableAngles.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                    <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-                      Spec: {sceneSpec?.objects?.length || 0} objects · {cameraContractCount} contracts
-                    </span>
-                  </div>
-                  {set.scene_type === 'EVENT_LOCATION' && totalAngles > 3 && (
-                    <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
-                      This event venue has {totalAngles} angles — events only need 1-2.
-                      <button onClick={async () => {
-                        setBuildingSpec(true);
-                        setSpecProgress('sending');
-                        showToast('Rebuilding spec with fewer angles...');
-                        try {
-                          // Delete existing angles first
-                          await onDeleteAllAngles(set);
-                          const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                          const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                          const r = await generateSceneSpecApi(set.id, { force: true });
-                          clearTimeout(progressTimer);
-                          clearTimeout(parseTimer);
-                          const d = r.data;
-                          if (d.success) {
-                            showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} angles`);
-                            if (onRefresh) await onRefresh();
-                          } else showToast(d.error || 'Failed', 'error');
-                        } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
-                        setBuildingSpec(false);
-                        setSpecProgress(null);
-                      }} disabled={buildingSpec} style={{ display: 'inline', background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0, marginLeft: 4 }}>
-                        {buildingSpec ? 'Rebuilding...' : 'Rebuild for 1-2 angles'}
-                      </button>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
-                  </div>
-                  <button onClick={async () => {
-                    if (failedAngles.length > 0) {
-                      for (const a of failedAngles) {
-                        try { await updateAngleApi(set.id, a.id, { generation_status: 'pending' }); } catch { /* continue */ }
-                      }
-                    }
-                    onGenerateAll(set, false);
-                  }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
-                  </button>
-                </>
-              )}
-
-              {/* All done: spec + angles all generated */}
-              {hasSpec && totalAngles > 0 && generableAngles.length === 0 && readyAngles === totalAngles && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
-                    Complete — {readyAngles} angles generated with spec enforcement
-                  </span>
-                </div>
-              )}
-
-              {/* No spec but has angles (legacy) */}
-              {!hasSpec && totalAngles > 0 && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
-                    {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
-                  </div>
-                  <button
-                    onClick={async () => {
-                      setBuildingSpec(true);
-                      setSpecProgress('sending');
-                      showToast('Building Scene Spec for this location...');
-                      try {
-                        const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
-                        const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                        const r = await generateSceneSpecApi(set.id, { force: true });
-                        clearTimeout(progressTimer);
-                        clearTimeout(parseTimer);
-                        const d = r.data;
-                        if (d.success) {
-                          showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
-                          if (onRefresh) await onRefresh();
-                        } else {
-                          showToast(d.error || 'Failed', 'error');
-                        }
-                      } catch (e) {
-                        showToast(e.response?.data?.error || e.message, 'error');
-                      }
-                      setBuildingSpec(false);
-                      setSpecProgress(null);
-                    }}
-                    disabled={buildingSpec}
-                    className="scene-sets-btn-details"
-                    style={{ fontSize: 10, padding: '4px 8px' }}
-                  >
-                    {buildingSpec ? <><Loader size={10} className="spin" /> Building spec...</> : <><FileText size={10} /> Build Scene Spec</>}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Generate All — for sets without spec but with pending angles */}
-          {!specStage && hasBase && !hasSpec && generableAngles.length > 0 && (
-            <div style={{ marginTop: 6 }}>
-              <button onClick={async () => {
-                // Reset failed angles to pending first so they get included
-                if (failedAngles.length > 0) {
-                  for (const a of failedAngles) {
-                    try {
-                      await updateAngleApi(set.id, a.id, { generation_status: 'pending' });
-                    } catch { /* continue */ }
-                  }
-                }
-                onGenerateAll(set, false);
-              }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
-              </button>
-            </div>
-          )}
-
-          {/* No base — show upload + generate as always-visible buttons */}
-          {!hasBase && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="scene-sets-btn-generate" style={{ flex: 1 }}>
-                <Upload size={12} /> Upload Image
-              </button>
-              <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-details">
-                {isGenerating ? <Loader size={12} className="spin" /> : <Sparkles size={12} />} AI Generate
-              </button>
-            </div>
-          )}
-
-          {/* Has base — details on hover */}
-          {hasBase && (
-            <div className="scene-sets-card-actions">
-              <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
-                <Eye size={12} /> Details
-              </button>
-              {/* S6: an approved base is not replaced until it is un-approved. */}
-              {!set.base_approved && (
-                <button onClick={() => fileInputRef.current?.click()} className="scene-sets-btn-details" data-testid={`scene-set-replace-base-${set.id}`}>
-                  <Upload size={12} /> Replace
-                </button>
-              )}
-            </div>
-          )}
+          <div className="scene-sets-card-open">
+            <button type="button" onClick={() => openWorkspace('angles')} className="scene-sets-btn-generate" data-testid={`scene-set-open-${set.id}`}>
+              Open Set
+            </button>
+          </div>
 
           <input
             ref={fileInputRef}
@@ -1624,7 +1297,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         title="Click to rename"
                       >{set.name}</h3>
                     )}
-                    <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} angles</span>
+                    <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} views</span>
                   </div>
                 </div>
                 <button className="scene-sets-modal-close" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); }}>
@@ -1632,22 +1305,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                 </button>
               </div>
 
-              {/* Tab bar — just 2 tabs */}
+              {/* The set's workspace: backgrounds, event looks, details, and the advanced scene spec. */}
               <div className="scene-sets-modal-tabs">
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'details' ? 'active' : ''}`} onClick={() => { setActiveModalTab('details'); setShowDetails(true); setShowAddAngle(false); }}>
-                  <Eye size={12} /> Overview
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('angles')}>
+                  <Camera size={12} /> Backgrounds <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowAddAngle(false); }}>
-                  <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'looks' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('looks')} data-testid={`scene-set-tab-looks-${set.id}`}>
+                  <Sparkles size={12} /> Event Looks {eventLookCount > 0 && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{eventLookCount}</span>}
+                </button>
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'details' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('details')}>
+                  <Eye size={12} /> Details &amp; Usage
                 </button>
                 {hasBase && (
-                  <button className={`scene-sets-modal-tab ${activeModalTab === 'spec' ? 'active' : ''}`} onClick={() => { setActiveModalTab('spec'); setShowDetails(true); setShowAddAngle(false); }}>
-                    <FileText size={12} /> Spec {hasSpec && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>✓</span>}
+                  <button className={`scene-sets-modal-tab ${activeModalTab === 'spec' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('spec')}>
+                    <FileText size={12} /> Advanced {hasSpec && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>✓</span>}
                   </button>
                 )}
                 {hasBase && (
                   <button className={`scene-sets-modal-tab ${showAddAngle ? 'active' : ''}`} onClick={() => { setActiveModalTab('add-angle'); setShowAddAngle(true); setShowDetails(false); }}>
-                    <Plus size={12} /> Add Angle
+                    <Plus size={12} /> Add View
                   </button>
                 )}
               </div>
@@ -1753,6 +1429,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     <div className="scene-sets-modal-field">
                       <label>Show</label>
                       <SetShowSelect set={set} shows={allShows} onSaved={() => { showToast('Show updated'); onRefresh?.(); }} onError={(msg) => showToast(msg, 'error')} />
+                    </div>
+
+                    {/* The set's World Location: approving its base needs one (S6). */}
+                    <div className="scene-sets-modal-field" id={`set-location-field-${set.id}`}>
+                      <label><MapPin size={11} /> World Location</label>
+                      <SetWorldLocationSelect set={set} onSaved={(id) => { showToast(id ? 'World Location linked' : 'World Location removed'); onRefresh?.(); }} onError={(msg) => showToast(msg, 'error')} />
                     </div>
 
                     {/* Time of Day & Season */}
@@ -1912,13 +1594,312 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                 {/* ═══ ANGLES TAB ═══ */}
                 {activeModalTab === 'angles' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Action bar */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                      {generableAngles.length > 0 && (
-                        <button className="scene-sets-btn-generate" onClick={() => onGenerateAll(set, false)} disabled={isGenerating}>
-                          <Sparkles size={11} /> Generate All ({generableAngles.length})
+                    {/* The main background: the set's primary image. */}
+                    <div className="scene-sets-ws-main" data-testid={`scene-set-main-bg-${set.id}`}>
+                      <div className="scene-sets-ws-main-preview">
+                        {heroImage
+                          ? <img src={heroImage} alt={set.name} onClick={() => setShowBaseLightbox(true)} title="View full size" />
+                          : <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>}
+                      </div>
+                      <div className="scene-sets-ws-main-info">
+                        <div className="scene-sets-ws-main-label">Main background</div>
+                        {/* S6: Evoni approves the base here, beside the image; nothing is approved by itself. */}
+                        <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
+                        {set.base_approved && (
+                          <p className="scene-sets-ws-main-note">Event versions at this location are made from this image. Un-approve it to replace it.</p>
+                        )}
+                        {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
+                          <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
+                            To approve this image as the base, the set needs a World Location.{' '}
+                            <button type="button" className="scene-sets-link-btn" onClick={() => openWorkspace('details')} data-testid={`link-location-${set.id}`}>Link a World Location</button>
+                          </p>
+                        )}
+                        <div className="scene-sets-ws-main-actions">
+                          {/* S6: an approved base is not replaced until it is un-approved. */}
+                          {!set.base_approved && (
+                            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isGenerating}
+                              className={hasBase ? 'scene-sets-btn-details' : 'scene-sets-btn-generate'}
+                              {...(hasBase ? { 'data-testid': `scene-set-replace-base-${set.id}` } : {})}>
+                              <Upload size={12} /> {hasBase ? 'Replace' : 'Upload image'}
+                            </button>
+                          )}
+                          {!hasBase && (
+                            <button type="button" onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-details">
+                              {isGenerating ? <Loader size={12} className="spin" /> : <Sparkles size={12} />} Generate image
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress bar — only when there are pending angles */}
+                    {totalAngles > 0 && readyAngles < totalAngles && (
+                      <div className="scene-sets-progress-row">
+                        <div className="scene-sets-progress-bar">
+                          <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
+                        </div>
+                        <span className="scene-sets-progress-label">{readyAngles}/{totalAngles}</span>
+                      </div>
+                    )}
+
+                    {/* ── Pipeline Progress Panel — shows during upload+spec+angles flow ── */}
+                    {specStage && specStage !== 'done' && (
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
+                        {[
+                          { key: 'uploading', label: 'Uploading image', icon: Upload },
+                          { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
+                          { key: 'creating_angles', label: 'Creating camera angles from spec', icon: Camera },
+                        ].map((step) => {
+                          const stages = ['uploading', 'building_spec', 'creating_angles'];
+                          const currentIdx = stages.indexOf(specStage);
+                          const stepIdx = stages.indexOf(step.key);
+                          const isDone = stepIdx < currentIdx;
+                          const isCurrent = stepIdx === currentIdx;
+                          const Icon = step.icon;
+                          return (
+                            <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: isDone ? 0.5 : isCurrent ? 1 : 0.3 }}>
+                              <div style={{ width: 18, display: 'flex', justifyContent: 'center' }}>
+                                {isDone ? <CheckCircle2 size={12} style={{ color: '#16a34a' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: '#B8962E' }} /> : <Icon size={12} style={{ color: '#ccc' }} />}
+                              </div>
+                              <span style={{ fontSize: 11, color: isCurrent ? '#2C2C2C' : '#888', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
+                    {!specStage && hasBase && (
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+                        {hasSpec && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                            <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                              Step 1 complete: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
+                            </span>
+                          </div>
+                        )}
+
+                        {!hasSpec && totalAngles > 0 && (
+                          <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                            Step 1 is not done yet for this location. Angles exist, but no Scene Spec is saved. Build Scene Spec to lock object/zones continuity.
+                          </div>
+                        )}
+
+                        {/* Step 1: No spec yet */}
+                        {!hasSpec && totalAngles === 0 && (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 1: Build Scene Spec</span>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+                              Analyze your image to catalog every object, define zones, and create camera contracts for consistent angle generation.
+                            </div>
+                            <button onClick={async () => {
+                              setBuildingSpec(true);
+                              setSpecProgress('sending');
+                              try {
+                                const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                                const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                                const r = await generateSceneSpecApi(set.id, {});
+                                clearTimeout(progressTimer);
+                                clearTimeout(parseTimer);
+                                const d = r.data;
+                                if (d.success) {
+                                  setSpecProgress('done');
+                                  showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                                  if (onRefresh) await onRefresh();
+                                } else {
+                                  setSpecProgress('error');
+                                  showToast(d.error || 'Failed', 'error');
+                                }
+                              } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
+                              setBuildingSpec(false);
+                              setTimeout(() => setSpecProgress(null), 2000);
+                            }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                              {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image to Claude...' : specProgress === 'analyzing' ? 'Claude is cataloging every object...' : specProgress === 'parsing' ? 'Building zones + camera contracts...' : 'Analyzing room...'}</> : <><FileText size={12} /> Build Scene Spec</>}
+                            </button>
+                            {buildingSpec && (
+                              <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f1', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
+                                Claude Vision is analyzing your image to identify every object, define spatial zones, set up continuity rules, and create camera contracts. This takes 15-30 seconds.
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Step 2: Spec exists, no angles */}
+                        {hasSpec && totalAngles === 0 && (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                              <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                                Spec: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
+                              </span>
+                            </div>
+                            {cameraContractCount === 0 ? (
+                              <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                                This spec was saved without any camera contracts, so angle creation cannot run yet. Rebuild the spec to generate valid camera angles.
+                              </div>
+                            ) : null}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>{cameraContractCount > 0 ? 'Step 2: Create Camera Angles' : 'Step 2: Rebuild Scene Spec'}</span>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+                              {cameraContractCount > 0
+                                ? `Create ${cameraContractCount} camera angles from your spec — each with required objects and validation rules.`
+                                : 'Your current spec has objects and zones but no camera contracts. Rebuild it so the angle generator has valid camera instructions.'}
+                            </div>
+                            <button onClick={async () => {
+                              if (cameraContractCount === 0) {
+                                setBuildingSpec(true);
+                                setSpecProgress('sending');
+                                showToast('Rebuilding spec to generate camera contracts...');
+                                try {
+                                  const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                                  const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                                  const r = await generateSceneSpecApi(set.id, { force: true });
+                                  clearTimeout(progressTimer);
+                                  clearTimeout(parseTimer);
+                                  const d = r.data;
+                                  if (d.success) {
+                                    showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                                    if (onRefresh) await onRefresh();
+                                  } else {
+                                    showToast(d.error || 'Failed', 'error');
+                                  }
+                                } catch (e) {
+                                  showToast(e.response?.data?.error || e.message, 'error');
+                                }
+                                setBuildingSpec(false);
+                                setSpecProgress(null);
+                                return;
+                              }
+
+                              setSeeding(true);
+                              showToast('Creating camera angles from spec...');
+                              try {
+                                const r = await createAnglesFromSpecApi(set.id, {});
+                                const d = r.data;
+                                if (d.success) {
+                                  showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
+                                  if (onRefresh) await onRefresh();
+                                } else showToast(d.error || 'Failed', 'error');
+                              } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                              setSeeding(false);
+                            }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                              {cameraContractCount === 0
+                                ? (buildingSpec
+                                  ? <><Loader size={12} className="spin" /> Rebuilding spec...</>
+                                  : <><RefreshCw size={12} /> Rebuild Spec For Angles</>)
+                                : (seeding
+                                  ? <><Loader size={12} className="spin" /> Creating {cameraContractCount} angles...</>
+                                  : <><Camera size={12} /> Create {cameraContractCount} Camera Angles</>)}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Step 3: Spec + angles exist, ready to generate */}
+                        {hasSpec && totalAngles > 0 && generableAngles.length > 0 && (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                              <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                                Spec: {sceneSpec?.objects?.length || 0} objects · {cameraContractCount} contracts
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
+                            </div>
+                            <button onClick={async () => {
+                              if (failedAngles.length > 0) {
+                                for (const a of failedAngles) {
+                                  try { await updateAngleApi(set.id, a.id, { generation_status: 'pending' }); } catch { /* continue */ }
+                                }
+                              }
+                              onGenerateAll(set, false);
+                            }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                              {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
+                            </button>
+                          </>
+                        )}
+
+                        {/* All done: spec + angles all generated */}
+                        {hasSpec && totalAngles > 0 && generableAngles.length === 0 && readyAngles === totalAngles && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+                              Complete — {readyAngles} angles generated with spec enforcement
+                            </span>
+                          </div>
+                        )}
+
+                        {/* No spec but has angles (legacy) */}
+                        {!hasSpec && totalAngles > 0 && (
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+                              {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                            </div>
+                            <button
+                              onClick={async () => {
+                                setBuildingSpec(true);
+                                setSpecProgress('sending');
+                                showToast('Building Scene Spec for this location...');
+                                try {
+                                  const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                                  const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                                  const r = await generateSceneSpecApi(set.id, { force: true });
+                                  clearTimeout(progressTimer);
+                                  clearTimeout(parseTimer);
+                                  const d = r.data;
+                                  if (d.success) {
+                                    showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
+                                    if (onRefresh) await onRefresh();
+                                  } else {
+                                    showToast(d.error || 'Failed', 'error');
+                                  }
+                                } catch (e) {
+                                  showToast(e.response?.data?.error || e.message, 'error');
+                                }
+                                setBuildingSpec(false);
+                                setSpecProgress(null);
+                              }}
+                              disabled={buildingSpec}
+                              className="scene-sets-btn-details"
+                              style={{ fontSize: 10, padding: '4px 8px' }}
+                            >
+                              {buildingSpec ? <><Loader size={10} className="spin" /> Building spec...</> : <><FileText size={10} /> Build Scene Spec</>}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Generate All — for sets without spec but with pending angles */}
+                    {!specStage && hasBase && !hasSpec && generableAngles.length > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <button onClick={async () => {
+                          // Reset failed angles to pending first so they get included
+                          if (failedAngles.length > 0) {
+                            for (const a of failedAngles) {
+                              try {
+                                await updateAngleApi(set.id, a.id, { generation_status: 'pending' });
+                              } catch { /* continue */ }
+                            }
+                          }
+                          onGenerateAll(set, false);
+                        }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                          {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
                         </button>
-                      )}
+                      </div>
+                    )}
+
+                    {/* Additional views */}
+                    <div className="scene-sets-ws-subhead">Additional views</div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                       {hasBase && (
                         <button className="scene-sets-btn-details" disabled={seeding} onClick={async () => {
                           setSeeding(true);
@@ -2044,6 +2025,22 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <Camera size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
                         <div style={{ fontSize: 13 }}>No angles yet. Upload a base image first.</div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ EVENT LOOKS TAB ═══ */}
+                {activeModalTab === 'looks' && !showAddAngle && (
+                  <div className="scene-sets-modal-section" data-testid={`scene-set-looks-tab-${set.id}`}>
+                    {/* S6: the location's approved permanent base. Evoni approves it
+                        here; nothing is approved by itself. Event versions at the
+                        location are made from it, and it is not replaced until it is
+                        un-approved. */}
+                    <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
+                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
+                    {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)
+                      && (set.looks || []).length === 0 && eventLookCount === 0 && (
+                      <p className="scene-sets-ws-empty">No events use this set yet. When an event is held here, its look is made on this tab.</p>
                     )}
                   </div>
                 )}
@@ -2641,6 +2638,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   // Only re-render when meaningful rendering data changes, not on every poll
   if (prev.focused !== next.focused || prev.focusZone !== next.focusZone) return false;
   if (prev.isGeneratingProp !== next.isGeneratingProp) return false;
+  if (prev.specStage !== next.specStage) return false;
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
   if (prev.defaultRole !== next.defaultRole) return false;
@@ -2653,6 +2651,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.base_approved !== ns.base_approved) return false;
+  if (ps.world_location_id !== ns.world_location_id) return false;
+  if (ps.location_approved_base?.scene_set_id !== ns.location_approved_base?.scene_set_id) return false;
   const pe = ps.events || [], ne = ns.events || [];
   if (pe.length !== ne.length) return false;
   for (let i = 0; i < pe.length; i++) {
@@ -2716,7 +2716,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [filterType, setFilterType] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showModelCompare, setShowModelCompare] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
   const [descBuilderLoading, setDescBuilderLoading] = useState(false);
@@ -3310,19 +3309,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const handleDeleteAllAngles = async (set) => {
-    const count = set.angles?.length || 0;
-    if (count === 0) return;
-    if (!window.confirm(`Delete all ${count} angles for "${set.name}"? They will be soft-deleted and can be recovered.`)) return;
-    try {
-      await deleteAllAnglesApi(set.id);
-      showToast(`Deleted ${count} angles — create new ones or regenerate`);
-      fetchSets();
-    } catch {
-      showToast('Failed to delete angles', 'error');
-    }
-  };
-
   const handleReviewAngle = (set, angle) => {
     setReviewModal({ setId: set.id, angle });
   };
@@ -3468,16 +3454,22 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     return sum + setCost + anglesCost;
   }, 0);
 
-  const types = ['ALL', 'HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION'];
+  const types = ['ALL', 'HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'];
   const typeLabels = {
     ALL: 'All', HOME_BASE: 'Home Base', CLOSET: 'Closet',
-    EVENT_LOCATION: 'Events', TRANSITION: 'Transitions',
+    EVENT_LOCATION: 'Events', TRANSITION: 'Transitions', OTHER: 'Other',
   };
+  const isFiltering = filterType !== 'ALL' || searchQuery.trim() !== '';
+  const clearFilters = () => { setFilterType('ALL'); setSearchQuery(''); };
 
   return (
     <div className="scene-sets-container">
-      {/* S8: the way back to the page that opened Scene Sets. */}
-      <SceneSetsBackLink />
+      {/* S8: the way back to the page that opened Scene Sets; else, in a show, back to the show. */}
+      {searchParams.get('from') ? <SceneSetsBackLink /> : pageShowId && (
+        <Link className="scene-sets-back-link" to={`/shows/${pageShowId}`} data-testid="scene-sets-back-to-show">
+          ← Back to {allShows.find((sh) => sh.id === pageShowId)?.name || 'show'}
+        </Link>
+      )}
       {/* Toast */}
       {toast && (
         <div className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
@@ -3488,9 +3480,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       {/* Header row */}
       <div className="scene-sets-header">
         <div>
-          <h2 className="scene-sets-title">Locations</h2>
+          <h2 className="scene-sets-title">Scene Sets</h2>
           <p className="scene-sets-subtitle">
-            {sets.length} location{sets.length !== 1 ? 's' : ''} — Canonical LalaVerse world
+            Create backgrounds and event looks for your locations · {sets.length} set{sets.length !== 1 ? 's' : ''}
             {totalCost > 0 && (
               <span className="scene-sets-total-cost"> · {totalCost.toFixed(1)} credits used</span>
             )}
@@ -3502,21 +3494,14 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
             className="scene-sets-btn-create"
             onClick={() => setShowCreateForm(f => !f)}
           >
-            {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Set</>}
-          </button>
-          <button
-            className="scene-sets-btn-details"
-            onClick={() => setShowModelCompare(v => !v)}
-            aria-expanded={showModelCompare}
-          >
-            <Sparkles size={14} /> Compare base models
+            {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Scene Set</>}
           </button>
           <div className="scene-sets-filters">
             <div className="scene-sets-search-wrap">
               <Search size={12} className="scene-sets-search-icon" />
               <input
                 className="scene-sets-search-input"
-                placeholder="Search locations..."
+                placeholder="Search scene sets..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -3534,9 +3519,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         </div>
       </div>
 
-      {showModelCompare && (
-        <SceneModelComparison sets={sets} onClose={() => setShowModelCompare(false)} />
-      )}
 
       {deleting && (
         <DeleteSetDialog
@@ -3553,7 +3535,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         <div className="scene-sets-create-form">
           <div className="scene-sets-create-row">
             <div className="scene-sets-create-field" style={{ flex: 2 }}>
-              <label>Location Name</label>
+              <label>Scene Set Name</label>
               <input
                 type="text"
                 placeholder="e.g. Lala's Bedroom, The Gala Venue"
@@ -3623,16 +3605,22 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       )}
 
       {/* Empty state */}
-      {!loading && !error && filtered.length === 0 && (
-        <div className="scene-sets-empty">
+      {!loading && !error && filtered.length === 0 && (sets.length > 0 && isFiltering ? (
+        <div className="scene-sets-empty" data-testid="scene-sets-no-match">
+          <Search size={32} strokeWidth={1} />
+          <p className="scene-sets-empty-title">No scene sets match your search</p>
+          <button type="button" className="scene-sets-btn-details" onClick={clearFilters}>Clear filters</button>
+        </div>
+      ) : (
+        <div className="scene-sets-empty" data-testid="scene-sets-empty">
           <Camera size={40} strokeWidth={1} />
-          <p className="scene-sets-empty-title">No locations yet</p>
+          <p className="scene-sets-empty-title">No scene sets yet</p>
           <p className="scene-sets-empty-body">
-            Locations are canonical LalaVerse worlds. Each location contains
-            multiple camera angles that map to episode beats.
+            A scene set is a location's backgrounds: a main image, any additional
+            views, and the event looks made there. Start with New Scene Set.
           </p>
         </div>
-      )}
+      ))}
 
       {briefAsk && (
         <SceneBriefConfirm
@@ -3669,7 +3657,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onUploadAngleImage={handleUploadAngleImage}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
-              onDeleteAllAngles={handleDeleteAllAngles}
               onDeleteSet={handleDeleteSet}
               onAddAngle={handleAddAngle}
               onUpdatePrompt={handleUpdatePrompt}

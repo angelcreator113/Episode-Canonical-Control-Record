@@ -235,6 +235,33 @@ function mockProviders() {
     expect((await locationRow()).approved_base_scene_set_id).toBeNull();
   });
 
+  it('a set is linked to a World Location from Scene Sets; an approved base keeps its location until un-approved', async () => {
+    const put = (setId, body) => auth(request(app).put(`/api/v1/scene-sets/${setId}`)).send(body);
+    const loose = await models.SceneSet.create({ name: 'Unplaced', scene_type: 'OTHER', show_id: ids.show, base_still_url: BASE_URL });
+    createdSetIds.push(loose.id);
+    expect((await approve(loose.id)).status).toBe(400);
+
+    expect((await put(loose.id, { world_location_id: uuid() })).status).toBe(400);
+    expect((await put(loose.id, { world_location_id: 'not-an-id' })).status).toBe(400);
+    const linked = await put(loose.id, { world_location_id: ids.location });
+    expect(linked.status).toBe(200);
+    expect(linked.body.data.world_location_id).toBe(ids.location);
+    expect((await approve(loose.id)).status).toBe(200);
+
+    // Approved: its location is not changed or cleared.
+    const moved = await put(loose.id, { world_location_id: ids.parent });
+    expect(moved.status).toBe(409);
+    expect(moved.body.error).toMatch(/Un-approve it before changing its World Location/);
+    expect((await put(loose.id, { world_location_id: null })).status).toBe(409);
+    // The same location, again, is not a change.
+    expect((await put(loose.id, { world_location_id: ids.location })).status).toBe(200);
+
+    expect((await unapprove(loose.id)).status).toBe(200);
+    const cleared = await put(loose.id, { world_location_id: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.world_location_id).toBeNull();
+  });
+
   it('an approved base is not replaced: regenerate, cascade, promote, upload and restyle are refused until un-approved', async () => {
     const set = await approvedSet();
     const angle = await models.SceneAngle.create({ scene_set_id: set.id, angle_label: 'WINDOW', angle_name: 'Window', still_image_url: 'https://bucket.example/w.jpg' });

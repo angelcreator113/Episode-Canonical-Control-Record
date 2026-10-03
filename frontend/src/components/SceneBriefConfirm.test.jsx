@@ -128,13 +128,13 @@ describe('SceneBriefConfirm (S2)', () => {
   });
 });
 
-describe('SceneSetsTab opens the brief before "AI Generate" (S2)', () => {
+describe('SceneSetsTab opens the brief before "Generate image" (S2)', () => {
   beforeEach(() => {
     vi.mocked(apiClient.get).mockReset();
     vi.mocked(apiClient.post).mockReset();
   });
 
-  test('AI Generate shows the brief; nothing is generated until confirmed, then the overrides are sent', async () => {
+  test('Generate image shows the brief; nothing is generated until confirmed, then the overrides are sent', async () => {
     const SceneSetsTab = (await import('../pages/SceneSetsTab')).default;
     const SET = { id: 'set-1', name: 'The Glasshouse', scene_type: 'OTHER', angles: [], generation_status: 'pending', base_still_url: null };
     vi.mocked(apiClient.get).mockImplementation((url) => {
@@ -148,7 +148,9 @@ describe('SceneSetsTab opens the brief before "AI Generate" (S2)', () => {
       return ok({});
     });
     render(<MemoryRouter><SceneSetsTab /></MemoryRouter>);
-    fireEvent.click(await screen.findByRole('button', { name: /AI Generate/ }));
+    // Generate lives in the set's workspace, under its main background.
+    fireEvent.click(await screen.findByTestId('scene-set-open-set-1'));
+    fireEvent.click(screen.getByRole('button', { name: /Generate image/ }));
     expect(await screen.findByTestId('scene-brief-confirm')).toBeTruthy();
     await screen.findByTestId('sbc-line-architecture');
     expect(apiClient.post.mock.calls.some(([u]) => u.endsWith('/generate-base'))).toBe(false);
