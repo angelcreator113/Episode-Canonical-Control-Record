@@ -444,7 +444,19 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       console.warn('[ScriptGen] Could not save to episode:', saveErr.message);
     }
 
-    return res.json({ success: true, script, episodeId });
+    // §8(j) (episode creation step 7): every canonical beat keeps its number.
+    // The script is saved as written either way; beats lists what was found
+    // and missing names any canonical beat whose header did not come back.
+    const { splitCanonicalBeats } = require('../utils/canonicalScriptBeats');
+    const check = splitCanonicalBeats(script);
+    if (!check.complete) {
+      console.warn(`[ScriptGen] Episode ${episodeId}: canonical beats incomplete (missing ${check.missing.join(', ') || 'none'}; unknown ${check.unknown.join(', ') || 'none'}; out of order ${check.outOfOrder}).`);
+    }
+    return res.json({
+      success: true, script, episodeId,
+      beats: check.beats.map(({ number, name }) => ({ number, name })),
+      beat_check: { complete: check.complete, missing: check.missing, unknown: check.unknown, out_of_order: check.outOfOrder },
+    });
   } catch (err) {
     console.error('[ScriptGen] Error:', err.message);
     return res.status(500).json({ error: err.message });
