@@ -89,4 +89,26 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     await waitFor(() => expect(screen.queryByTestId('wa-load-failed')).toBeNull());
     expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
   });
+
+  test('nothing answering is a connection failure, not an empty show (audit TRUTH-01)', async () => {
+    failing = new Set(['/api/v1/']);
+    renderIt();
+    const banner = await screen.findByTestId('wa-load-failed');
+    expect(banner.textContent).toContain("Couldn't reach the server: nothing loaded");
+    expect(banner.textContent).not.toMatch(/Couldn't load events/);
+    expect(within(banner).getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  test('a failed refresh keeps what loaded before and says so (audit TRUTH-01)', async () => {
+    failing = new Set(['/api/v1/wardrobe']);
+    renderIt();
+    const first = await screen.findByTestId('wa-load-failed');
+    expect(first.textContent).toContain("Couldn't load wardrobe");
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+    failing = new Set(['/api/v1/world/show-1/events']);
+    fireEvent.click(within(first).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByTestId('wa-load-failed').textContent).toContain("Couldn't refresh events; showing what loaded before."));
+    // The events read before the failed refresh are still on the page.
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+  });
 });

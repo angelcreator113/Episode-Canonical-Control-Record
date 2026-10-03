@@ -272,6 +272,11 @@ function WorldAdmin() {
   const [wardrobeTotal, setWardrobeTotal] = useState(null);
   // The sections whose load failed this time, for the "Couldn't load" banner.
   const [loadFailures, setLoadFailures] = useState([]);
+  // How the last load failed (audit TRUTH-01, 2026-10-03): 'initial' (nothing
+  // to show for those sections), 'refresh' (what loaded before stays), 'all'
+  // (nothing answered: a connection failure, not an empty show).
+  const [loadFailureKind, setLoadFailureKind] = useState('initial');
+  const loadedOnceRef = useRef(false);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   // Upload processing state (Task #1769): cards for items this session
@@ -748,13 +753,15 @@ function WorldAdmin() {
     // A section whose request fails is named in the "Couldn't load" banner,
     // so an empty list there is never mistaken for "there are none".
     const failed = [];
+    const refresh = loadedOnceRef.current;
     const miss = (label, reset) => (err) => {
       console.error(`[LoadData] ${label} load failed:`, err?.response?.status, err?.response?.data || err?.message);
       failed.push(label);
-      if (reset) reset();
+      // A failed refresh keeps what loaded before (audit TRUTH-01).
+      if (reset && !refresh) reset();
     };
     try {
-      await Promise.allSettled([
+      const requests = [
         // GET /shows/:id answers { success, data: show }; the show's name is `name`.
         api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || null)).catch(miss('the show', () => setShow(null))),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(miss("Lala's state")),
@@ -786,8 +793,11 @@ function WorldAdmin() {
         }).catch(miss('wardrobe', () => { setWardrobeItems([]); setWardrobeTotal(null); })),
         api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(miss('opportunities', () => setOpportunities([]))),
         api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(miss('world locations', () => setWorldLocations([]))),
-      ]);
+      ];
+      await Promise.allSettled(requests);
       setLoadFailures(failed);
+      setLoadFailureKind(failed.length === requests.length ? 'all' : (refresh ? 'refresh' : 'initial'));
+      if (failed.length < requests.length) loadedOnceRef.current = true;
     } finally { setLoading(false); }
   };
 
@@ -1678,7 +1688,11 @@ The revised event should feel like a completely different experience from the si
       {error && <div style={S.errorBanner}>{error}<button onClick={() => setError(null)} style={S.xBtn}>✕</button></div>}
       {loadFailures.length > 0 && (
         <div className="wa-load-failed" role="alert" data-testid="wa-load-failed">
-          Couldn't load {loadFailures.join(', ')}. Those sections may look empty until they load.
+          {loadFailureKind === 'all'
+            ? "Couldn't reach the server: nothing loaded. Check the connection, then retry."
+            : loadFailureKind === 'refresh'
+              ? `Couldn't refresh ${loadFailures.join(', ')}; showing what loaded before.`
+              : `Couldn't load ${loadFailures.join(', ')}. Those sections may look empty until they load.`}
           <button type="button" onClick={loadData}>Retry</button>
         </div>
       )}

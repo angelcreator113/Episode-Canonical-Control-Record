@@ -2887,17 +2887,24 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   };
 
   const initialLoadDone = useRef(false);
+  // Audit TRUTH-02 (2026-10-03): a failed read of the list, with Retry, and
+  // a read the server answered without its views, show names and episode
+  // links (degraded). Neither is an empty library.
+  const [loadError, setLoadError] = useState(null);
+  const [degraded, setDegraded] = useState(null);
   const fetchSets = useCallback(async () => {
     try {
       const res = await listSceneSetsApi();
       setSets(res.data?.data || []);
-      setError(null);
+      setDegraded(res.data?.degraded || null);
+      setLoadError(null);
       initialLoadDone.current = true;
-    } catch {
-      // Only show error on initial load, not on poll failures
-      if (!initialLoadDone.current) {
-        setError('Failed to load locations');
-      }
+    } catch (err) {
+      console.error('[SceneSetsTab] scene sets load failed:', err.response?.status || err.message);
+      const reason = err.response?.data?.error || '';
+      // The first read failing leaves nothing to show; a later one keeps
+      // what loaded before and says the refresh failed.
+      setLoadError(`${initialLoadDone.current ? 'Could not refresh the scene sets; showing what loaded before.' : 'Could not load the scene sets.'}${reason ? ` ${reason}.` : ''}`);
     } finally {
       setLoading(false);
     }
@@ -3783,6 +3790,20 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         </div>
       )}
 
+      {/* A failed read, or a read without its views and links (audit TRUTH-02) */}
+      {loadError && (
+        <div className="scene-sets-error" role="alert" data-testid="scene-sets-load-failed">
+          <AlertCircle size={16} /> {loadError}
+          <button type="button" className="scene-sets-btn-details" onClick={fetchSets} disabled={loading}>Retry</button>
+        </div>
+      )}
+      {degraded && !loadError && (
+        <div className="scene-sets-error" role="status" data-testid="scene-sets-degraded">
+          <AlertCircle size={16} /> Partial data: {degraded.text || 'some of this list could not be read'}.
+          <button type="button" className="scene-sets-btn-details" onClick={fetchSets} disabled={loading}>Retry</button>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="scene-sets-error">
@@ -3790,8 +3811,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && !error && visibleSets.length === 0 && (sets.length > 0 && !isFiltering && activeScope !== 'all' ? (
+      {/* Empty state: only a read that answered (audit TRUTH-02) */}
+      {!loading && !error && !loadError && visibleSets.length === 0 && (sets.length > 0 && !isFiltering && activeScope !== 'all' ? (
         <div className="scene-sets-empty" data-testid="scene-sets-show-empty">
           <Camera size={32} strokeWidth={1} />
           <p className="scene-sets-empty-title">{activeScope === 'shared' ? 'No shared scene sets yet' : 'No scene sets in this show yet'}</p>
