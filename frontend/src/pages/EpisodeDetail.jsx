@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Compass } from 'lucide-react';
@@ -31,6 +31,7 @@ const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
+import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -75,11 +76,8 @@ const EpisodeDetail = () => {
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'checklist');
-  const [epSubTab, setEpSubTab] = useState(null);
 
   const [sceneView, setSceneView] = useState('composer');
-  const [tabLoading, setTabLoading] = useState(false);
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
 
@@ -88,77 +86,16 @@ const EpisodeDetail = () => {
   // and exposes a single start() that fetches lazily on the first click.
   const phone = usePhonePlayback(episode);
 
-  // Tab structure: 4 main tabs with sub-tabs. Brief was merged into Overview
-  // — the snapshot now flows inline under Identity / Source / Stakes /
-  // Reference bands instead of living on its own tab.
-  const EP_TABS = [
-    { key: 'overview', icon: '📋', label: 'Overview' },
-    { key: 'scripts', icon: '📝', label: 'Script' },
-    { key: 'production', icon: '🎬', label: 'Production', subs: [
-      { key: 'assets', label: 'Assets' },
-      { key: 'scenes', label: 'Scenes' },
-      { key: 'wardrobe', label: 'Wardrobe' },
-      // §8(aa) M1: Money follows Wardrobe (Episode Money Phase A, #2278).
-      { key: 'money', label: 'Money' },
-      { key: 'phone', label: 'Phone' },
-      // P15: every on-screen piece of the episode.
-      { key: 'overlays', label: 'Overlays' },
-      { key: 'checklist', label: 'Production Checklist' },
-    ]},
-    { key: 'results', icon: '👑', label: 'Results', subs: [
-      { key: 'evaluation', label: 'Evaluation' },
-      { key: 'story', label: 'Story' },
-      { key: 'distribution', label: 'Distribution' },
-    ]},
-  ];
-
-  // Map old tab keys to new structure
-  const resolveEpTab = (tab) => {
-    const map = {
-      'assets': ['production', 'assets'],
-      'scenes': ['production', 'scenes'],
-      'wardrobe': ['production', 'wardrobe'],
-      'money': ['production', 'money'],
-      'phone': ['production', 'phone'],
-      'overlays': ['production', 'overlays'],
-      'checklist': ['production', 'checklist'],
-      'production': ['production', 'assets'],
-      'evaluation': ['results', 'evaluation'],
-      'story': ['results', 'story'],
-      'distribution': ['results', 'distribution'],
-      // Brief was merged into Overview — old links land back on Overview.
-      'brief': ['overview', null],
-    };
-    return map[tab] || [tab, null];
-  };
-
-  // Single tab identifier for the body switch — `'main'` for top-level tabs
-  // without sub-tabs (overview, scripts), `'main.sub'` otherwise. Lets each
-  // tab body render check one equality instead of two.
-  const tabKey = epSubTab ? `${activeTab}.${epSubTab}` : activeTab;
-
-  // Tab management with URL persistence
-  const setActiveTab = (tab) => {
-    setTabLoading(true);
-    setActiveTabState(tab);
-    const epTab = EP_TABS.find(t => t.key === tab);
-    setEpSubTab(epTab?.subs?.[0]?.key || null);
-    setSearchParams({ tab });
-    setTimeout(() => setTabLoading(false), 300);
-  };
-
-  // Resolve initial tab on mount
-  useEffect(() => {
-    const initial = searchParams.get('tab') || 'checklist';
-    const [main, sub] = resolveEpTab(initial);
-    if (main !== initial) {
-      setActiveTabState(main);
-      if (sub) setEpSubTab(sub);
-    } else {
-      const epTab = EP_TABS.find(t => t.key === main);
-      if (epTab?.subs && !epSubTab) setEpSubTab(epTab.subs[0].key);
-    }
-  }, []);
+  // The tab is the URL (audit LINK-04, 2026-10-03): ?tab= resolved by one
+  // parser (utils/episodeTabs) for clicks, shortcuts, deep links and
+  // Back/Forward alike, so no path can leave a main tab with another tab's
+  // sub-tab. tabKey is `main` for a tab without sub-tabs, `main.sub`
+  // otherwise; each tab body checks one equality.
+  const tabParam = searchParams.get('tab');
+  const { main: activeTab, sub: epSubTab, key: tabKey } = useMemo(() => resolveEpisodeTab(tabParam), [tabParam]);
+  // The one tab transition: any tab or sub-tab by its URL key, keeping the
+  // page's other parameters.
+  const openTab = useCallback((tab) => setSearchParams((prev) => withEpisodeTab(prev, tab)), [setSearchParams]);
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -167,39 +104,29 @@ const EpisodeDetail = () => {
         switch(e.key) {
           case '1':
             e.preventDefault();
-            setActiveTab('overview');
+            openTab('overview');
             break;
           case '2':
             e.preventDefault();
-            setActiveTab('wardrobe');
+            openTab('wardrobe');
             break;
           case '3':
             e.preventDefault();
-            setActiveTab('scripts');
+            openTab('scripts');
             break;
           case 's':
             e.preventDefault();
-            setActiveTab('scenes');
+            openTab('scenes');
             break;
           default:
             break;
         }
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
-
-  // Sync with URL params
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab) {
-      const [main, sub] = resolveEpTab(tab);
-      setActiveTabState(main);
-      if (sub) setEpSubTab(sub);
-    }
-  }, [searchParams]);
+  }, [openTab]);
 
   // The header's balance chip (§8(aa) M1): Lala's ledger balance, from the
   // same /balance the Dashboard reads. It opens Production → Money.
@@ -213,27 +140,12 @@ const EpisodeDetail = () => {
       .catch((err) => { console.error('[EpisodeDetail] balance load failed:', err); });
     return () => { cancelled = true; };
   }, [chipShowId]);
-  // Opens any tab or sub-tab by its URL key (resolveEpTab), as a link would.
-  const openTab = (tab) => {
-    const [main, sub] = resolveEpTab(tab);
-    setActiveTabState(main);
-    setEpSubTab(sub);
-    setSearchParams({ tab });
-  };
-  const openMoneyTab = () => {
-    setActiveTabState('production');
-    setEpSubTab('money');
-    setSearchParams({ tab: 'money' });
-  };
+  const openMoneyTab = () => openTab('money');
   // P15: the banner's title chip opens Production → Overlays; the tab bumps
   // overlaysVersion after an action so the chip reloads.
   const [overlaysVersion, setOverlaysVersion] = useState(0);
   const bumpOverlays = useCallback(() => setOverlaysVersion((v) => v + 1), []);
-  const openOverlaysTab = () => {
-    setActiveTabState('production');
-    setEpSubTab('overlays');
-    setSearchParams({ tab: 'overlays' });
-  };
+  const openOverlaysTab = () => openTab('overlays');
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [episodeEvents, setEpisodeEvents] = useState([]);
@@ -361,7 +273,7 @@ const EpisodeDetail = () => {
   }, [episodeId, activeTab, toast]);
 
   // Load events + character state for wardrobe gameplay. Gated on the
-  // Production → Wardrobe sub-tab: since #534 resolveEpTab maps `wardrobe`
+  // Production → Wardrobe sub-tab: since #534 resolveEpisodeTab maps `wardrobe`
   // to activeTab 'production' / sub 'wardrobe', so the old
   // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
@@ -510,7 +422,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Add your first scene',
         description: 'Start building your episode by adding scenes from the library',
-        action: () => setActiveTab('scenes'),
+        action: () => openTab('scenes'),
         buttonText: 'Go to Scenes'
       };
     }
@@ -519,7 +431,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Add wardrobe items',
         description: 'Configure wardrobe items for your characters',
-        action: () => setActiveTab('wardrobe'),
+        action: () => openTab('wardrobe'),
         buttonText: 'Go to Wardrobe'
       };
     }
@@ -540,7 +452,7 @@ const EpisodeDetail = () => {
     const primaryAction = getPrimaryNextAction();
     
     if (episodeScenes.length === 0 && primaryAction?.title !== 'Add your first scene') {
-      steps.push({ title: 'Add Scenes', status: 'pending', action: () => setActiveTab('scenes') });
+      steps.push({ title: 'Add Scenes', status: 'pending', action: () => openTab('scenes') });
     } else if (episodeScenes.length > 0) {
       steps.push({ title: 'Add Scenes', status: 'complete', count: episodeScenes.length });
     }
@@ -553,7 +465,7 @@ const EpisodeDetail = () => {
     }
     
     if (episode.wardrobeCount === 0 && primaryAction?.title !== 'Add wardrobe items') {
-      steps.push({ title: 'Add Wardrobe', status: 'pending', action: () => setActiveTab('wardrobe') });
+      steps.push({ title: 'Add Wardrobe', status: 'pending', action: () => openTab('wardrobe') });
     } else if (episode.wardrobeCount > 0) {
       steps.push({ title: 'Add Wardrobe', status: 'complete', count: episode.wardrobeCount });
     }
@@ -743,7 +655,7 @@ const EpisodeDetail = () => {
           {EP_TABS.map(t => (
             <button key={t.key}
               className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
-              onClick={() => setActiveTab(t.key)}
+              onClick={() => openTab(t.key)}
               title={t.label}
             >
               <span className="ed-tab-icon">{t.icon}</span>
@@ -758,7 +670,7 @@ const EpisodeDetail = () => {
           return (
             <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8 }}>
               {currentTab.subs.map(s => (
-                <button key={s.key} onClick={() => setEpSubTab(s.key)} style={{
+                <button key={s.key} onClick={() => openTab(s.key)} style={{
                   padding: '6px 14px', background: 'transparent', border: 'none',
                   borderBottom: epSubTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
                   color: epSubTab === s.key ? '#6366f1' : '#94a3b8',
@@ -790,7 +702,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Brief tab merged into Overview as inline section bands. Old
-            ?tab=brief URLs fall through to overview via resolveEpTab. */}
+            ?tab=brief URLs fall through to overview via resolveEpisodeTab. */}
 
         {/* Scripts Tab */}
         {tabKey === 'scripts' && (
