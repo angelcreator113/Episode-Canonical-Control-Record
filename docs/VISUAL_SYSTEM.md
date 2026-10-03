@@ -64,7 +64,7 @@ are listed for the record.
 | Shell: `App.css` page background, scrollbars | done |
 | Shared buttons: `.btn-primary` is one solid `--primary` with a hover and a focus ring | done |
 | `ShowBiblePage` "+ New Entry" (VISUAL-02's cited control) and its six-column stats grid (LAYOUT-02's) | done |
-| Sidebar (`Sidebar.css`, its own atelier palette `--ps-*`) | next: point `--ps-pink` at `--accent-dark`, `--ps-bg` at `--surface-bg` |
+| Sidebar (`Sidebar.css`) | done: its `--ps-*` palette is scoped to `.ps-sidebar` and mapped to the tokens (the old `:root` block lost to whichever page stylesheet loaded last; `RelationshipEngine.css` and `SocialProfileGenerator.css` still carry their own `:root` `--ps-*` blocks until their own migration). The old palette failed on its own: rose-deep on cream 4.11:1, on blush 3.40:1, tan-soft 2.82:1. Fonts (Jost / Cormorant via Google Fonts) are a later pass. |
 | Producer Overview → Events → Event Package → Episode → Scene Sets (the audit's order) | next, one screen per PR: inline hex colors become tokens, fixed-column grids become `auto-fit` or named classes |
 | Remaining screens | after |
 
