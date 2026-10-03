@@ -88,6 +88,7 @@ import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersio
 import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
+import EventLookRecommendations from '../components/EventPackage/EventLookRecommendations';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
@@ -1435,6 +1436,14 @@ export default function EventPackagePage() {
               )}
             </div>
           </dl>
+          {/* Recommended looks (episode creation step 3): whole outfits from
+              the closet while none is chosen. */}
+          {!used && outfitPieces.length === 0 && (
+            <EventLookRecommendations
+              showId={showId} eventId={eventId}
+              onSaved={load} onToast={setToast} onBrowse={() => setOutfitPickerOpen(true)}
+            />
+          )}
         </section>
 
         {outfitPickerOpen && !used && (

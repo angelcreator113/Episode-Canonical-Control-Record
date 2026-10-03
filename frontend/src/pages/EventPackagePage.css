@@ -1755,3 +1755,53 @@
 @media (max-width: 480px) {
   .epp-next-btn.epp-btn-primary { margin-left: 0; width: 100%; justify-content: center; }
 }
+
+/* Recommended looks (episode creation step 3): whole outfits from the
+   closet. Soft pink cards, teal Use this look. */
+.epp-looks { margin-top: 10px; }
+.epp-looks-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #C06E87;
+}
+.epp-looks-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.epp-look {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #F5D5DF;
+  border-radius: 8px;
+  background: #FBEFF3;
+}
+.epp-look-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.epp-look-label { font-weight: 700; color: var(--lala-ink, #2C2C2C); }
+.epp-look-match { font-family: 'DM Mono', monospace; font-size: 11px; color: #2F7F76; font-weight: 700; }
+.epp-look-pieces { list-style: none; margin: 0; padding: 0; font-size: 13px; color: var(--lala-ink, #2C2C2C); }
+.epp-look-pieces li { padding: 1px 0; }
+.epp-look-buy { color: #C06E87; font-size: 11px; }
+.epp-look-note { margin: 0; font-size: 12px; color: var(--lala-ink-muted, #6B6557); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.epp-look-missing { color: var(--lala-danger, #B84D2E); }
+.epp-btn.epp-look-use {
+  align-self: flex-start;
+  margin-top: auto;
+  background: #2F7F76;
+  border-color: #2F7F76;
+  color: #FFFFFF;
+}
+.epp-btn.epp-look-use:hover:not(:disabled) { background: #26695F; border-color: #26695F; }
+.epp-looks-note { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted, #6B6557); }
