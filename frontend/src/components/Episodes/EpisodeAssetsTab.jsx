@@ -16,10 +16,10 @@ import EpisodeTodoList from './EpisodeTodoList';
  */
 
 const STATUS_STYLES = {
-  approved: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', icon: '✅', label: 'Approved' },
-  generated: { bg: '#eef2ff', color: '#6366f1', border: '#c7d2fe', icon: '🔵', label: 'Generated' },
-  pending: { bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏳', label: 'Pending' },
-  missing: { bg: '#f8f8f8', color: '#94a3b8', border: '#e2e8f0', icon: '⬜', label: 'Not generated' },
+  approved: { bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)', icon: '✅', label: 'Approved' },
+  generated: { bg: 'var(--primary-subtle)', color: 'var(--primary-text)', border: 'var(--primary-light)', icon: '🔵', label: 'Generated' },
+  pending: { bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)', icon: '⏳', label: 'Pending' },
+  missing: { bg: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'var(--lala-parchment-3)', icon: '⬜', label: 'Not generated' },
 };
 
 /**
@@ -173,11 +173,11 @@ function EpisodeAssetsTab({ episode, show }) {
   };
 
   if (!episode) {
-    return <div style={{ padding: 24, color: '#94a3b8' }}>Loading episode...</div>;
+    return <div style={{ padding: 24, color: 'var(--text-secondary)' }}>Loading episode...</div>;
   }
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading production checklist...</div>;
+    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading production checklist...</div>;
   }
 
   const pct = readiness.total > 0 ? Math.round((readiness.ready / readiness.total) * 100) : 0;
@@ -187,8 +187,8 @@ function EpisodeAssetsTab({ episode, show }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Production Readiness</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Production Readiness</h2>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
             {readiness.ready}/{readiness.total} assets ready — {pct}% complete
           </p>
         </div>
@@ -197,17 +197,17 @@ function EpisodeAssetsTab({ episode, show }) {
               them. The builder that makes one is the release workflow, batch 5. */}
           <Link to={`/thumbnails/${episodeId}`} data-testid="episode-thumbnails-link" style={{
             fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
-            border: '1px solid #2F7F76', color: '#2F7F76', background: '#EAF5F3', textDecoration: 'none',
+            border: '1px solid var(--primary)', color: 'var(--primary-text)', background: 'var(--primary-subtle)', textDecoration: 'none',
           }}>Thumbnails →</Link>
           <div style={{
             width: 48, height: 48, borderRadius: '50%',
-            background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,
+            background: `conic-gradient(${pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'} ${pct * 3.6}deg, var(--lala-parchment-2) 0deg)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <div style={{
-              width: 38, height: 38, borderRadius: '50%', background: '#fff',
+              width: 38, height: 38, borderRadius: '50%', background: 'var(--surface-card)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 800, color: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+              fontSize: 12, fontWeight: 800, color: pct >= 80 ? 'var(--success-text)' : pct >= 50 ? 'var(--warning-text)' : 'var(--danger-text)',
             }}>
               {pct}%
             </div>
@@ -216,11 +216,11 @@ function EpisodeAssetsTab({ episode, show }) {
       </div>
 
       {/* Progress bar */}
-      <div style={{ height: 4, background: '#f1f5f9', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
+      <div style={{ height: 4, background: 'var(--lala-parchment-2)', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 2, transition: 'width 0.3s',
           width: `${pct}%`,
-          background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+          background: pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)',
         }} />
       </div>
 
@@ -240,7 +240,7 @@ function EpisodeAssetsTab({ episode, show }) {
 
               {/* Name + detail */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
                 <div style={{ fontSize: 10, color: st.color }}>{item.detail}</div>
               </div>
 
@@ -248,7 +248,7 @@ function EpisodeAssetsTab({ episode, show }) {
               {item.thumbnail && (
                 <img src={item.thumbnail} alt="" style={{
                   width: 32, height: 32, borderRadius: 6, objectFit: 'cover',
-                  border: '1px solid #e2e8f0', flexShrink: 0,
+                  border: '1px solid var(--lala-parchment-3)', flexShrink: 0,
                 }} onError={e => e.target.style.display = 'none'} />
               )}
 
@@ -256,7 +256,7 @@ function EpisodeAssetsTab({ episode, show }) {
               {item.action && item.status === 'missing' && (
                 <button onClick={() => navigate(item.action.url)} style={{
                   fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 6,
-                  border: '1px solid #c7d2fe', background: '#eef2ff', color: '#6366f1',
+                  border: '1px solid var(--primary-light)', background: 'var(--primary-subtle)', color: 'var(--primary-text)',
                   cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                 }}>
                   {item.action.label}
@@ -268,10 +268,10 @@ function EpisodeAssetsTab({ episode, show }) {
       </div>
 
       <section style={{ marginTop: 24 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
           Episode To-Do Overlays
         </h2>
-        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
           Show/game overlays the audience sees during the episode — not the production checklist.
         </p>
         <EpisodeTodoList episodeId={episode.id} showId={show.id} />
