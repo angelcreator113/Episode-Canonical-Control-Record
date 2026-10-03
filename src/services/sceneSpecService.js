@@ -13,7 +13,28 @@ const SPEC_VERSION = '2.0';
  * @param {object} SceneSetModel — Sequelize model class (for persisting)
  * @returns {object|null} The generated SceneSpec
  */
-async function buildSceneSpec(sceneSet, SceneSetModel) {
+/**
+ * A candidate spec is usable when it has the parts the rest of the system
+ * reads: zones and objects (arrays) and at least one camera contract. The
+ * problems are named so a refused rebuild says why.
+ */
+function validateSpecCandidate(spec) {
+  const problems = [];
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return { ok: false, problems: ['not a JSON object'] };
+  if (!Array.isArray(spec.zones)) problems.push('zones is not a list');
+  if (!Array.isArray(spec.objects)) problems.push('objects is not a list');
+  if (!Array.isArray(spec.camera_contracts) || spec.camera_contracts.length === 0) problems.push('no camera contracts');
+  return { ok: problems.length === 0, problems };
+}
+
+/**
+ * @param {{ force?: boolean }} [opts] force: bypass the cached spec and
+ *   build a new one. The saved spec is never cleared first (audit SCENE-03,
+ *   2026-10-03): a candidate is built, validated, then saved in one write
+ *   with the one it replaces kept as visual_language.scene_spec_previous.
+ *   An AI failure or an unusable candidate leaves the old spec in place.
+ */
+async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -21,9 +42,9 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
     throw new Error('No base_still_url on scene set');
   }
 
-  // Check cache — scene_spec column or visual_language fallback
-  const existing = sceneSet.scene_spec || sceneSet.visual_language?.scene_spec;
-  if (existing?.version === SPEC_VERSION && existing?._meta?.base_still_url === sceneSet.base_still_url) {
+  // The spec on record: scene_spec column, else the pre-migration fallback.
+  const existing = sceneSet.scene_spec || sceneSet.visual_language?.scene_spec || null;
+  if (!force && existing?.version === SPEC_VERSION && existing?._meta?.base_still_url === sceneSet.base_still_url) {
     console.log(`[SceneSpec] Using cached spec for ${sceneSet.name}`);
     return existing;
   }
@@ -97,27 +118,40 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
     }
   }
 
+    // The candidate must be usable before it replaces anything.
+    const check = validateSpecCandidate(spec);
+    if (!check.ok) {
+      throw new Error(`Claude's spec is not usable (${check.problems.join('; ')}); the saved spec is unchanged`);
+    }
+
     // Add metadata
     spec.version = SPEC_VERSION;
     spec._meta = {
       base_still_url: sceneSet.base_still_url,
       generated_at: new Date().toISOString(),
       source: 'base_image_analysis',
+      forced: Boolean(force),
       edited_fields: [],
+      // What this spec replaced, so a rebuild is visibly a rebuild.
+      previous: existing ? { generated_at: existing._meta?.generated_at || null, base_still_url: existing._meta?.base_still_url || null, source: existing._meta?.source || null } : null,
     };
 
-    // Persist
+    // Persist: one write, the new spec and the one it replaces together.
     if (SceneSetModel) {
+      const vl = { ...(sceneSet.visual_language || {}) };
+      if (existing) vl.scene_spec_previous = existing;
+      // The fallback copy must not outlive the column's spec: a stale
+      // visual_language.scene_spec would be read back as current.
+      delete vl.scene_spec;
       try {
         await SceneSetModel.update(
-          { scene_spec: spec },
+          { scene_spec: spec, visual_language: vl },
           { where: { id: sceneSet.id } }
         );
       } catch (persistErr) {
         // Column may not exist yet (migration pending) — fall back to visual_language
         if (persistErr.message?.includes('scene_spec') || persistErr.message?.includes('column')) {
           console.warn(`[SceneSpec] scene_spec column not found, storing in visual_language.scene_spec`);
-          const vl = sceneSet.visual_language || {};
           await SceneSetModel.update(
             { visual_language: { ...vl, scene_spec: spec } },
             { where: { id: sceneSet.id } }
@@ -513,6 +547,7 @@ function mergeSpecEdits(existingSpec, edits) {
 
 module.exports = {
   buildSceneSpec,
+  validateSpecCandidate,
   buildAngleConstraints,
   buildStateAmbient,
   getValidationPrompt,
