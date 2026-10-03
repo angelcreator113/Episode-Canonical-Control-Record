@@ -384,3 +384,24 @@
 .seb-table tbody tr:hover { background: #fafafa; }
 .seb-title { font-weight: 600; color: #1a1a2e; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+
+/* Overview: four questions, each with a way to act (ShowOverview). */
+.sov { display: grid; gap: 12px; }
+.sov-lala { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid rgba(184, 150, 46, 0.2); border-radius: 8px; background: #FAF7F0; font-size: 12px; }
+.sov-lala-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; color: #B8962E; margin-right: 4px; }
+.sov-chip { padding: 2px 8px; border-radius: 999px; background: #fff; border: 1px solid #eadfc4; text-transform: capitalize; }
+.sov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.sov-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.sov-card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #1a1a2e; }
+.sov-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 8px; }
+.sov-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.sov-main { display: grid; gap: 2px; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.sov-sub { font-size: 11px; color: #8a7a55; }
+.sov-empty { margin: 0 0 6px; font-size: 13px; color: #94a3b8; }
+.sov-btn { flex: none; padding: 5px 12px; border-radius: 6px; border: none; background: #2D1B69; color: #fff; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.sov-btn-outline { background: #fff; color: #8a6d1f; border: 1px solid #B8962E; }
+.sov-link { background: none; border: none; padding: 0; color: #8a6d1f; font: inherit; font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.sov-activity li { align-items: baseline; }
+.sov-start ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+.sov-start li.done { text-decoration: line-through; color: #94a3b8; }
+.sov-start button { background: none; border: none; padding: 0; color: #8a6d1f; font: inherit; text-decoration: underline; cursor: pointer; }

@@ -1,13 +1,13 @@
 /**
- * Producer Mode's Overview counts what is true: Events Ready and Used by the
- * Events queue's definition (computeEventState), episodes and wardrobe by
- * their lists' totals (the lists stop at 100 / 200), Locations by this
- * show's sets (the list answers every show's). A section that fails to load
- * says so, with Retry, instead of looking empty.
+ * Producer Mode's Overview answers four questions (ShowOverview): what is in
+ * production, what needs attention, what comes next, what changed. Ready is
+ * the Events queue's definition (computeEventState). Production counts the
+ * show's episodes by the list's total (the list stops at 100). A section
+ * that fails to load says so, with Retry, instead of looking empty.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -34,7 +34,7 @@ const renderIt = () => render(
   </MemoryRouter>,
 );
 
-describe('WorldAdmin Overview: counts that are true', () => {
+describe('WorldAdmin Overview: four questions, true counts', () => {
   beforeEach(() => {
     failing = new Set();
     Object.values(api).forEach((fn) => fn?.mockReset?.());
@@ -43,7 +43,7 @@ describe('WorldAdmin Overview: counts that are true', () => {
       if (url === '/api/v1/shows/show-1') return { data: { success: true, data: { id: 'show-1', name: 'Styling Adventures' } } };
       if (url === '/api/v1/world/show-1/events') return { data: { events: EVENTS } };
       if (url.startsWith('/api/v1/episodes?show_id=show-1')) {
-        return { data: { data: [{ id: 'ep-1', title: 'One', status: 'draft' }], pagination: { total: 137 } } };
+        return { data: { data: [{ id: 'ep-1', episode_number: 1, title: 'One', status: 'draft' }], pagination: { total: 137 } } };
       }
       if (url.startsWith('/api/v1/wardrobe?show_id=show-1')) return { data: { data: [{ id: 'w1' }], pagination: { total: 412 } } };
       if (url.startsWith('/api/v1/scene-sets')) {
@@ -54,14 +54,29 @@ describe('WorldAdmin Overview: counts that are true', () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
-  test('Ready and Used by the queue; episodes and wardrobe by their totals; Locations by this show', async () => {
+  test('the four questions, from the queue\'s definition of Ready', async () => {
     renderIt();
-    await waitFor(() => expect(screen.getByTestId('wa-stat-episodes').textContent).toBe('137'));
-    expect(screen.getByTestId('wa-stat-events-ready').textContent).toBe('1');
-    expect(screen.getByTestId('wa-stat-events-used').textContent).toBe('1');
-    expect(screen.getByTestId('wa-stat-wardrobe').textContent).toBe('412');
-    expect(screen.getByTestId('wa-stat-locations').textContent).toBe('2');
+    const producing = await screen.findByTestId('sov-producing');
+    await waitFor(() => expect(producing.textContent).toContain('One'));
+    expect(producing.querySelector('a').getAttribute('href')).toBe('/episodes/ep-1');
+    // e2 says "ready" but lacks its invitation: it needs attention, with what is missing.
+    const attention = screen.getByTestId('sov-attention');
+    expect(attention.textContent).toMatch(/Missing: .*invitation/i);
+    expect(attention.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e2');
+    // e1 says "draft" but meets every gate: it is the next ready event. e3 is used.
+    const nextEvent = screen.getByTestId('sov-next-event');
+    expect(nextEvent.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
     expect(screen.queryByTestId('wa-load-failed')).toBeNull();
+  });
+
+  test('Production counts the show\'s episodes by the list\'s total', async () => {
+    render(
+      <MemoryRouter initialEntries={['/shows/show-1/world?tab=episodes']}>
+        <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByTestId('seb-count').textContent).toContain('137 episodes'));
+    expect(screen.getByTestId('seb-count').textContent).toContain('showing the first 1');
   });
 
   test('a failed load says what could not load, and Retry loads again', async () => {
@@ -70,8 +85,8 @@ describe('WorldAdmin Overview: counts that are true', () => {
     const banner = await screen.findByTestId('wa-load-failed');
     expect(banner.textContent).toContain("Couldn't load events, wardrobe");
     failing = new Set();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByTestId('wa-load-failed')).toBeNull());
-    expect(screen.getByTestId('wa-stat-events-ready').textContent).toBe('1');
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
   });
 });
