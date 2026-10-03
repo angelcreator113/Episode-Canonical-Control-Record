@@ -33,7 +33,7 @@ const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
-const CreateEpisode = lazy(() => import('./pages/CreateEpisode'));
+const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
 const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
@@ -358,7 +358,8 @@ function AppContent() {
           
           {/* Episodes — listing redirects to Shows */}
           <Route path="/episodes" element={<Navigate to="/shows" replace />} />
-          <Route path="/episodes/create" element={<CreateEpisode />} />
+          {/* Legacy creation doors open the host-first New Episode starter (audit IA-03). */}
+          <Route path="/episodes/create" element={<NewEpisodeRedirect />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
           <Route path="/episodes/:episodeId/todo" element={<EpisodeTodoPage />} />
@@ -373,7 +374,7 @@ function AppContent() {
           <Route path="/shows/:id" element={<ShowDetail />} />
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
-          <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
+          <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
           <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />

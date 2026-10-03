@@ -11,7 +11,9 @@
  *   4. Click "Create Episode" → creates episode + event + injects event + generates script skeleton
  *   5. Redirects to episode detail page ready for wardrobe + evaluate
  * 
- * Route: /shows/:showId/quick-episode
+ * Route: /episodes/:episodeId/edit (the episode's edit page). Its create
+ * mode's door, /shows/:showId/quick-episode, opens the host-first New
+ * Episode starter instead (audit IA-03, 2026-10-03): no blank SAL episodes.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
