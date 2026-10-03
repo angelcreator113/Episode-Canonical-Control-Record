@@ -51,6 +51,7 @@
   --success: #10b981;
   --success-bg: #d1fae5;
   --success-border: #6ee7b7;
+  --success-text: #166534;   /* success as text, 6.29:1 on --success-bg, 7.13:1 on white */
   
   --warning: #f59e0b;
   --warning-bg: #fef3c7;
@@ -60,10 +61,12 @@
   --danger: #B84D2E;         /* on-brand red; white on it 5.07:1 */
   --danger-bg: #F7E4DC;
   --danger-border: #E0A28E;
+  --danger-text: #9A3F24;    /* danger as text, 5.49:1 on --danger-bg, 6.75:1 on white (--danger itself is 4.13:1 on its bg) */
   
   --info: #3b82f6;
   --info-bg: #dbeafe;
   --info-border: #93c5fd;
+  --info-text: #1e40af;      /* info as text, 7.15:1 on --info-bg, 8.72:1 on white */
   
   /* Neutral Grays */
   --gray-50: #f9fafb;

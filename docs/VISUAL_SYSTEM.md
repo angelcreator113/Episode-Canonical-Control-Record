@@ -29,7 +29,8 @@ used to redeclare `--primary`, `--text-primary` and the status colors in its own
 | `--text-primary` / `--text-secondary` / `--text-muted` / `--text-faint` / `--text-inverse` | `#2C2C2C` / `#6B6557` / `#6B6557` / `#A09889` / `#FFFFFF` | ink; `--text-faint` is placeholders and disabled controls only, never information |
 | `--secondary` / `--secondary-dark` | `#6B6557` / `#4B463D` | secondary **text** (what every consumer of it already meant) |
 | `--lala-gold` / `--lala-gold-text` | `#B8962E` / `#7A6314` | Lala's mark: a fill under ink text, or gold text on white; never white on gold |
-| `--danger` / `--danger-bg` | `#B84D2E` / `#F7E4DC` | on-brand red |
+| `--danger` / `--danger-bg` / `--danger-text` | `#B84D2E` / `#F7E4DC` / `#9A3F24` | on-brand red; red **text** is `--danger-text` (`--danger` itself is 4.13:1 on its surface) |
+| `--success-text` / `--info-text` | `#166534` / `#1e40af` | green and blue as text on their `-bg` surfaces and on white |
 | `--focus-ring` | teal double ring | `:focus-visible` on buttons |
 
 ## 3. Measured contrast (sRGB, WCAG formula)
@@ -52,6 +53,14 @@ are listed for the record.
 | `--lala-gold-text` on `--surface-card` | 5.80 | gold text |
 | `--text-primary` on `--lala-gold` | 4.95 | ink on a gold fill |
 | `--text-inverse` on `--danger` | 5.07 | danger buttons |
+| `--danger-text` on `--danger-bg` | 5.49 | Needs Organizer chip, wardrobe-conflict chip |
+| `--success-text` on `--success-bg` | 6.29 | Ready chip, templates panel |
+| `--info-text` on `--info-bg` | 7.15 | creator-economy template category |
+| `--primary-text` on `--primary-subtle` | 5.60 | Used chip, bulk bar |
+| `--text-secondary` on `--lala-parchment-2` | 5.05 | Archived chip |
+| `--lala-gold-text` on `--lala-gold-soft` | 5.48 | fashion template category |
+| *`--danger` on `--danger-bg`* | **4.13** | failed; red text is `--danger-text` |
+| *white on `#B8962E`* (the old Events pager current page, Auto-Fill and the Ideas buttons) | **2.82** | failed; replaced by `--primary` |
 | *white on `#B8962E`* (the old "+ New Entry") | **2.82** | failed; replaced |
 | *`#A09889` as text* (the old `--text-muted`) | **2.86** | failed; now `--text-faint`, decorative only |
 | *`#C06E87` as text* | **3.61** | failed; pink text is `--accent-dark` |
@@ -65,7 +74,9 @@ are listed for the record.
 | Shared buttons: `.btn-primary` is one solid `--primary` with a hover and a focus ring | done |
 | `ShowBiblePage` "+ New Entry" (VISUAL-02's cited control) and its six-column stats grid (LAYOUT-02's) | done |
 | Sidebar (`Sidebar.css`) | done: its `--ps-*` palette is scoped to `.ps-sidebar` and mapped to the tokens (the old `:root` block lost to whichever page stylesheet loaded last; `RelationshipEngine.css` and `SocialProfileGenerator.css` still carry their own `:root` `--ps-*` blocks until their own migration). The old palette failed on its own: rose-deep on cream 4.11:1, on blush 3.40:1, tan-soft 2.82:1. Fonts (Jost / Cormorant via Google Fonts) are a later pass. |
-| Producer Overview → Events → Event Package → Episode → Scene Sets (the audit's order) | next, one screen per PR: inline hex colors become tokens, fixed-column grids become `auto-fit` or named classes |
+| Producer Overview (`WorldAdmin`'s shared style object `S`, its tabs and sub-tabs, `ShowOverview`'s `.sov-*` rules) | done: every color in `S` is a token, the primary action and the active tab are `--primary`, the active tab carries `aria-current`. |
+| Events queue (`WorldAdmin`'s Events tab: header, bulk bar, filter bar, templates panel, generate-options toolbar, cards, empty state, pager, Ideas drawer; the `.wa-ev-*` rules; `EVENT_QUEUE_STATES` in `eventReadinessSections.js`) | done: no color literal in the queue JSX, the pager's current page and the Auto-Fill / Generate / Ideas buttons are `--primary` (they were white on gold or green), the five queue states read `--*-text` on `--*-bg` pairs, template categories map to the gold, pink, info, teal, warning and success families. The inline event editor and the "Edit details" modal in the same tab are the Event Package's and migrate with it. |
+| Event Package (`/shows/:showId/events/:eventId`, plus the Events tab's inline editor and "Edit details" modal) → Episode → Scene Sets (the audit's order) | next, one screen per PR: inline hex colors become tokens, fixed-column grids become `auto-fit` or named classes |
 | Remaining screens | after |
 
 Rules for a migrated screen: no new hex literals in JSX for colors the tokens have;

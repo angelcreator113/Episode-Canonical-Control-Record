@@ -2122,7 +2122,7 @@ The revised event should feel like a completely different experience from the si
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
             <div>
               <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
-              <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span>{worldEvents.length} events</span>
               </div>
             </div>
@@ -2163,7 +2163,7 @@ The revised event should feel like a completely different experience from the si
                 }
                 setAutoFilling(false);
                 setTimeout(() => setToast(null), 6000);
-              }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
+              }} disabled={autoFilling} style={S.primaryBtn}>
                 {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
               </button>
               {/* + New Event opens the choose-host flow (Task #1628), same
@@ -2187,7 +2187,7 @@ The revised event should feel like a completely different experience from the si
               {eventsHeaderMenuOpen && (
                 <>
                   <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 180, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 180, overflow: 'hidden' }}>
                     <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
                     <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
                     <button onClick={async () => {
@@ -2198,7 +2198,7 @@ The revised event should feel like a completely different experience from the si
                         setToast(`Deleted ${res.data.deleted} draft events`);
                         loadData();
                       } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: '#dc2626' }}>Delete Drafts</button>
+                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
                     <button onClick={async () => {
                       setEventsHeaderMenuOpen(false);
                       if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
@@ -2208,7 +2208,7 @@ The revised event should feel like a completely different experience from the si
                         setToast(`Deleted ${res.data.deleted} events`);
                         loadData();
                       } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: '#dc2626' }}>Delete All</button>
+                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
                   </div>
                 </>
               )}
@@ -2217,10 +2217,10 @@ The revised event should feel like a completely different experience from the si
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
-            <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#4338ca' }}>{selectedEvents.size} selected</span>
+            <div style={{ background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-text)' }}>{selectedEvents.size} selected</span>
               {selectedEvents.size === 2 && (
-                <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#7c3aed', fontWeight: 600 }}>🔍 Compare</button>
+                <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--accent-dark)', fontWeight: 600 }}>🔍 Compare</button>
               )}
               {/* Multi-event generate — anchored on the first selected
                   event, the rest auto-link via used_in_episode_id so
@@ -2254,13 +2254,13 @@ The revised event should feel like a completely different experience from the si
                     setToast('Multi-event generate failed: ' + (err.response?.data?.error || err.message));
                   }
                   setTimeout(() => setToast(null), 6000);
-                }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer' }}>
+                }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', cursor: 'pointer' }}>
                   🎬 Generate from {selectedEvents.size} event{selectedEvents.size === 1 ? '' : 's'}
                 </button>
               )}
-              <span style={{ fontSize: 11, color: '#64748b' }}>Link to:</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Link to:</span>
               {episodes.slice(0, 6).map(ep => (
-                <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: '#fff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e', fontWeight: 600 }}>
+                <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: 'var(--surface-card)', border: '1px solid var(--primary-light)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600 }}>
                   {ep.episode_number}. {ep.title?.slice(0, 12) || 'Untitled'}
                 </button>
               ))}
@@ -2270,8 +2270,8 @@ The revised event should feel like a completely different experience from the si
           {/* Search + filter + sort bar */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <input type="text" value={eventSearch} onChange={e => { setEventSearch(e.target.value); setEventPage(1); }} placeholder="Search events..."
-              style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
+              style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', gap: 3, background: 'var(--lala-parchment-2)', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
               {[
                 /* Filter bar over the five computed queue states (Task
                    #1648, docs/EVENT_EPISODE_FLOW.md §8(m)) — replaces the
@@ -2285,20 +2285,20 @@ The revised event should feel like a completely different experience from the si
               ].map(f => (
                 <button key={f.key} data-testid={`events-filter-${f.key}`} onClick={() => { setEventStatusFilter(f.key); setEventPage(1); }} style={{
                   padding: '4px 10px', border: 'none', borderRadius: 6,
-                  background: eventStatusFilter === f.key ? '#6366f1' : 'transparent',
-                  color: eventStatusFilter === f.key ? '#fff' : '#64748b',
+                  background: eventStatusFilter === f.key ? 'var(--primary)' : 'transparent',
+                  color: eventStatusFilter === f.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
                   fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                 }}>{f.label} ({f.count})</button>
               ))}
             </div>
             <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
               onChange={e => { setEventDealFilter(e.target.value); setEventPage(1); }}
-              style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? '#fff' : '#eef2ff', cursor: 'pointer', maxWidth: '100%' }}>
+              style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
               {dealTypeFilterOptions(worldEvents).map(o => (
                 <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
               ))}
             </select>
-            <select value={eventSort} onChange={e => { setEventSort(e.target.value); setEventPage(1); }} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: '#fff', cursor: 'pointer' }}>
+            <select value={eventSort} onChange={e => { setEventSort(e.target.value); setEventPage(1); }} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
               <option value="name">Sort: Name</option>
               <option value="prestige">Sort: Prestige ↓</option>
               <option value="cost">Sort: Cost ↓</option>
@@ -2309,14 +2309,14 @@ The revised event should feel like a completely different experience from the si
 
           {/* Templates panel */}
           {showTemplates && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#16a34a' }}>📋 Event Templates — click to start from a template</div>
+            <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--success-text)' }}>📋 Event Templates — click to start from a template</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
                 {EVENT_TEMPLATES.map((tpl, i) => (
                   <button key={i} onClick={() => { setEventForm({ ...EMPTY_EVENT, ...tpl }); setEditingEvent('new'); setShowTemplates(false); }}
-                    style={{ textAlign: 'left', padding: '8px 12px', background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
-                    <div style={{ fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{tpl.name}</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>⭐{tpl.prestige} 🪙{tpl.cost_coins} 👗{tpl.dress_code}</div>
+                    style={{ textAlign: 'left', padding: '8px 12px', background: 'var(--surface-card)', border: '1px solid var(--success-border)', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{tpl.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>⭐{tpl.prestige} 🪙{tpl.cost_coins} 👗{tpl.dress_code}</div>
                   </button>
                 ))}
               </div>
@@ -2863,11 +2863,11 @@ The revised event should feel like a completely different experience from the si
               "Generate from N events" pick it up. Bulk-select toggle
               isn't here because it already exists above the page in
               the toolbar that drives Compare / Bulk Inject. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '6px 10px', background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 8 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#2C2C2C', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '6px 10px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer' }}>
               <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
               <strong>Also draft script when generating an episode</strong>
-              <span style={{ color: '#666', fontSize: 11 }}>(applies to single + bulk Generate)</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(applies to single + bulk Generate)</span>
             </label>
           </div>
 
@@ -2918,26 +2918,26 @@ The revised event should feel like a completely different experience from the si
                 openPackage();
               };
               return (
-              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, minWidth: 0, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
+              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, minWidth: 0, cursor: 'pointer', border: isSelected ? '2px solid var(--primary)' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
-                      style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer', marginTop: 2 }} />
+                      style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer', marginTop: 2 }} />
                   )}
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{ev.name}</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{ev.name}</h3>
                   <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94a3b8', borderRadius: 4 }} title="More actions" aria-label="More actions">
+                    <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-secondary)', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
                     </button>
                     {menuOpen && (
                       <>
                         <div data-testid="event-menu-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => { setOpenEventMenuId(null); setStatusMenuEventId(null); }} />
-                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 200, overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 200, overflow: 'hidden' }}>
                           <button onClick={() => { setEventDetailModal(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Edit details</button>
                           <button onClick={() => { copyEvent(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Duplicate as New Event</button>
                           {statusMenuEventId === ev.id ? (
-                            <div style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Change status to…</div>
+                            <div style={{ borderBottom: '1px solid var(--lala-parchment-2)' }}>
+                              <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Change status to…</div>
                               {STATUS_OVERRIDE_OPTIONS.map(s => (
                                 <button key={s} disabled={s === ev.status} onClick={() => { changeEventStatus(ev, s); setStatusMenuEventId(null); setOpenEventMenuId(null); }}
                                   style={{ ...S.menuItem, borderBottom: 'none', paddingLeft: 24, opacity: s === ev.status ? 0.4 : 1, cursor: s === ev.status ? 'default' : 'pointer' }}>
@@ -2971,7 +2971,7 @@ The revised event should feel like a completely different experience from the si
                               setTimeout(() => setToast(null), 5000);
                             }} style={S.menuItem}>♻️ Regenerate Episode</button>
                           )}
-                          <button onClick={() => { setOpenEventMenuId(null); deleteEvent(ev.id); }} style={{ ...S.menuItem, color: '#dc2626', borderBottom: 'none' }}>Delete</button>
+                          <button onClick={() => { setOpenEventMenuId(null); deleteEvent(ev.id); }} style={{ ...S.menuItem, color: 'var(--danger)', borderBottom: 'none' }}>Delete</button>
                         </div>
                       </>
                     )}
@@ -3016,7 +3016,7 @@ The revised event should feel like a completely different experience from the si
                   {state === 'used' && (
                     <button type="button" data-testid={`event-card-view-package-${ev.id}`}
                       onClick={e => { e.stopPropagation(); openPackage(); }}
-                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: '#fff', borderColor: stateCfg.color, color: stateCfg.color }}>
+                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: 'var(--surface-card)', borderColor: stateCfg.color, color: stateCfg.color }}>
                       View Event Package
                     </button>
                   )}
@@ -3030,10 +3030,10 @@ The revised event should feel like a completely different experience from the si
               );
             })}
             {worldEvents.length === 0 && !editingEvent && (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 12 }}>
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 12 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>🗓️</div>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#2C2C2C' }}>No events yet</div>
-                <div style={{ fontSize: 13, color: '#666', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>No events yet</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.5 }}>
                   Events are the story moments — parties, brand deals, collabs, drama.
                   Auto-fill generates events from your Cultural Calendar with hosts from Lala's Feed.
                 </div>
@@ -3058,7 +3058,7 @@ The revised event should feel like a completely different experience from the si
                     } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
                     setAutoFilling(false);
                     setTimeout(() => setToast(null), 5000);
-                  }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E', padding: '10px 24px', fontSize: 14 }}>
+                  }} disabled={autoFilling} style={{ ...S.primaryBtn, padding: '10px 24px', fontSize: 14 }}>
                     {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
                   </button>
                   <button onClick={openNewEvent} style={{ ...S.smBtn, padding: '10px 20px', fontSize: 13 }}>+ Create Manually</button>
@@ -3110,9 +3110,9 @@ The revised event should feel like a completely different experience from the si
                 </div>
                 <div className="wa-ev-drawer-body">
                 {/* ── Pipeline: Opportunities → Events ── */}
-                <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+                <div style={{ background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E' }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)' }}>
                       Pipeline — Feed → Opportunities → Events
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -3126,7 +3126,7 @@ The revised event should feel like a completely different experience from the si
                           }
                         } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
                         setTimeout(() => setToast(null), 3000);
-                      }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
+                      }} style={{ ...S.smBtn, background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', fontSize: 10 }}>
                         🔍 Scan Feed
                       </button>
                       <button onClick={() => setOppQuickForm({ name: '', opportunity_type: 'modeling', prestige: 5, narrative_stakes: '' })} style={{ ...S.smBtn, fontSize: 10 }}>
@@ -3134,7 +3134,7 @@ The revised event should feel like a completely different experience from the si
                       </button>
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: '#666' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     Scan Lala's feed for opportunities, or pick a template below.
                   </div>
                 </div>
@@ -3145,10 +3145,11 @@ The revised event should feel like a completely different experience from the si
                     {['offered','considering','booked','active','completed'].map(s => {
                       const count = opportunities.filter(o => o.status === s).length;
                       if (!count) return null;
-                      const colors = { offered: '#f59e0b', considering: '#6366f1', booked: '#22c55e', active: '#16a34a', completed: '#059669' };
-                      return <span key={s} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 600, background: (colors[s] || '#999') + '18', color: colors[s] || '#999' }}>{s}: {count}</span>;
+                      const colors = { offered: ['var(--warning-text)', 'var(--warning-bg)'], considering: ['var(--primary-text)', 'var(--primary-subtle)'], booked: ['var(--success-text)', 'var(--success-bg)'], active: ['var(--success-text)', 'var(--success-bg)'], completed: ['var(--success-text)', 'var(--success-bg)'] };
+                      const [fg, bg] = colors[s] || ['var(--text-secondary)', 'var(--lala-parchment-2)'];
+                      return <span key={s} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 600, background: bg, color: fg }}>{s}: {count}</span>;
                     })}
-                    <span style={{ fontSize: 9, color: '#888', padding: '2px 4px' }}>
+                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', padding: '2px 4px' }}>
                       ${opportunities.filter(o => ['booked','active','completed','paid'].includes(o.status)).reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0).toLocaleString()} booked
                     </span>
                   </div>
@@ -3156,17 +3157,17 @@ The revised event should feel like a completely different experience from the si
 
                 {/* Quick create opportunity form */}
                 {oppQuickForm && (
-                  <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                  <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa' }}>name</label><input value={oppQuickForm.name} onChange={e => setOppQuickForm(p => ({ ...p, name: e.target.value }))} placeholder="Velour Magazine Cover" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa' }}>type</label><select value={oppQuickForm.opportunity_type} onChange={e => setOppQuickForm(p => ({ ...p, opportunity_type: e.target.value }))} style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }}>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>name</label><input value={oppQuickForm.name} onChange={e => setOppQuickForm(p => ({ ...p, name: e.target.value }))} placeholder="Velour Magazine Cover" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12 }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>type</label><select value={oppQuickForm.opportunity_type} onChange={e => setOppQuickForm(p => ({ ...p, opportunity_type: e.target.value }))} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12 }}>
                         {['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'casting_call', 'podcast', 'interview', 'award_show', 'social_event'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
                       </select></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa' }}>prestige</label><input type="number" value={oppQuickForm.prestige} onChange={e => setOppQuickForm(p => ({ ...p, prestige: parseInt(e.target.value) || 5 }))} min="1" max="10" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>prestige</label><input type="number" value={oppQuickForm.prestige} onChange={e => setOppQuickForm(p => ({ ...p, prestige: parseInt(e.target.value) || 5 }))} min="1" max="10" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12 }} /></div>
                     </div>
-                    <div style={{ marginBottom: 8 }}><label style={{ fontSize: 10, color: '#aaa' }}>stakes</label><input value={oppQuickForm.narrative_stakes} onChange={e => setOppQuickForm(p => ({ ...p, narrative_stakes: e.target.value }))} placeholder="Why this matters for Lala..." style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                    <div style={{ marginBottom: 8 }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>stakes</label><input value={oppQuickForm.narrative_stakes} onChange={e => setOppQuickForm(p => ({ ...p, narrative_stakes: e.target.value }))} placeholder="Why this matters for Lala..." style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12 }} /></div>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setOppQuickForm(null)} style={{ padding: '5px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => setOppQuickForm(null)} style={{ padding: '5px 14px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                       <button disabled={!oppQuickForm.name} onClick={async () => {
                         try {
                           await api.post(`/api/v1/opportunities/${showId}`, { ...oppQuickForm, category: 'fashion' });
@@ -3174,7 +3175,7 @@ The revised event should feel like a completely different experience from the si
                           setToast('Opportunity created');
                           loadData();
                         } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                      }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: !oppQuickForm.name ? 0.4 : 1 }}>Create</button>
+                      }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: !oppQuickForm.name ? 0.4 : 1 }}>Create</button>
                     </div>
                   </div>
                 )}
@@ -3185,26 +3186,26 @@ The revised event should feel like a completely different experience from the si
                   if (schedulable.length === 0) return null;
                   return (
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>
                         Active Opportunities — ready to schedule ({schedulable.length})
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
                         {schedulable.map(opp => (
-                          <div key={opp.id} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: '4px solid #B8962E', borderRadius: 10, padding: '12px 14px' }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C', marginBottom: 2 }}>{opp.name}</div>
-                            <div style={{ fontSize: 10, color: '#888', marginBottom: 4, display: 'flex', gap: 6 }}>
+                          <div key={opp.id} style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderLeft: '4px solid var(--lala-gold)', borderRadius: 10, padding: '12px 14px' }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{opp.name}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4, display: 'flex', gap: 6 }}>
                               <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
                               {opp.connector_handle && <span>via @{opp.connector_handle}</span>}
                               {opp.prestige && <span>⭐ {opp.prestige}</span>}
                             </div>
-                            {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}
+                            {opp.narrative_stakes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}
                             <button onClick={async () => {
                               setToast(`Scheduling "${opp.name}"...`);
                               try {
                                 const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
                                 if (res.data.success) { setToast(`"${opp.name}" → Event created!`); loadData(); }
                               } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                            }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                            }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%' }}>
                               📅 Schedule as Event
                             </button>
                           </div>
@@ -3232,12 +3233,12 @@ The revised event should feel like a completely different experience from the si
                     { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising', venue_theme: 'Intimate theater with velvet curtains, spotlit stage, orchestra seating, gold balcony railings, dramatic drapes' },
                   ].map(template => {
                     const catColors = {
-                      fashion: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
-                      beauty: { bg: '#fce7f3', border: '#ec4899', text: '#9d174d' },
-                      creator_economy: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
-                      creative: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3' },
-                      music: { bg: '#fae8ff', border: '#a855f7', text: '#6b21a8' },
-                      lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
+                      fashion: { bg: 'var(--lala-gold-soft)', border: 'var(--lala-gold)', text: 'var(--lala-gold-text)' },
+                      beauty: { bg: 'var(--accent-subtle)', border: 'var(--accent)', text: 'var(--accent-dark)' },
+                      creator_economy: { bg: 'var(--info-bg)', border: 'var(--info)', text: 'var(--info-text)' },
+                      creative: { bg: 'var(--primary-subtle)', border: 'var(--primary)', text: 'var(--primary-text)' },
+                      music: { bg: 'var(--warning-bg)', border: 'var(--warning)', text: 'var(--warning-text)' },
+                      lifestyle: { bg: 'var(--success-bg)', border: 'var(--success)', text: 'var(--success-text)' },
                     };
                     const cc = catColors[template.category] || catColors.creator_economy;
                     // Check if an event already exists from this template
@@ -3247,31 +3248,31 @@ The revised event should feel like a completely different experience from the si
                     );
 
                     return (
-                      <div key={template.name} style={{ background: existingEvent ? '#fafffe' : '#fff', border: `1px solid ${existingEvent ? '#a3cfbb' : cc.border + '30'}`, borderLeft: `4px solid ${existingEvent ? '#22c55e' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
+                      <div key={template.name} style={{ background: existingEvent ? 'var(--success-bg)' : 'var(--surface-card)', border: `1px solid ${existingEvent ? 'var(--success-border)' : 'var(--lala-parchment-3)'}`, borderLeft: `4px solid ${existingEvent ? 'var(--success)' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontSize: 20 }}>{template.icon}</span>
                           <div>
-                            <div style={{ fontWeight: 700, fontSize: 14, color: '#2C2C2C' }}>{template.name}</div>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{template.name}</div>
                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: cc.bg, color: cc.text, fontWeight: 600 }}>{template.category.replace(/_/g, ' ')}</span>
                           </div>
                         </div>
-                        <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px', lineHeight: 1.5 }}>{template.desc}</p>
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.5 }}>{template.desc}</p>
                         <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
                         </div>
                         {(feedEventResults[template.name]?.status === 'created' || existingEvent) ? (() => {
                           const created = feedEventResults[template.name]?.event || existingEvent;
                           const host = created?.host || created?.canon_consequences?.automation?.host_display_name || '';
                           return (
-                            <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
-                              <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created</div>
-                              <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
-                              <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
+                            <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
+                              <div style={{ fontWeight: 700, color: 'var(--success-text)', marginBottom: 4 }}>Event Created</div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{created?.name || template.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0' }}>
                                 {host ? `Host: ${host} · ` : ''}Prestige: {created?.prestige || 5}{created?.status ? ` · ${created.status}` : ''}
                               </div>
                               <button
                                 onClick={() => { setEventDetailModal(created); }}
-                                style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                                style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid var(--lala-gold)', background: 'var(--surface-card)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
                               >
                                 Edit Event Details
                               </button>
