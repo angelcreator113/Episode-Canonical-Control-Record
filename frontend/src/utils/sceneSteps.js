@@ -10,10 +10,16 @@ export const listBeats = (beats) => (beats.length < 2
   ? String(beats[0])
   : `${beats.slice(0, -1).join(', ')} and ${beats[beats.length - 1]}`);
 
-/** plan: the plan rows; readiness: planReadiness's { ready, total, not_ready }. */
-export function nextStep(plan, readiness) {
+/**
+ * plan: the plan rows; readiness: planReadiness's { ready, total, not_ready };
+ * coverage: the plan's beatPlanCoverage ({ complete, text }), when known.
+ */
+export function nextStep(plan, readiness, coverage) {
   const total = (plan || []).length;
   if (!total) return { kind: 'plan', text: 'Make the beat plan' };
+  // Audit GATE-01 (2026-10-03): a plan short of the 14 beats is still at
+  // the plan step, whatever its images and locks say.
+  if (coverage && !coverage.complete) return { kind: 'plan', text: `Complete the beat plan: ${coverage.text}` };
   if (readiness && readiness.ready < readiness.total) {
     const beats = (readiness.not_ready || []).map((b) => b.beat_number);
     return { kind: 'images', text: `Add the missing images: ${beats.length === 1 ? 'beat' : 'beats'} ${listBeats(beats)}` };

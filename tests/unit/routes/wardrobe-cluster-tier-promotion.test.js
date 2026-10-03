@@ -33,7 +33,7 @@ const CP5_FILES = [
 
 // Per-file requireAuth match counts (\brequireAuth\b — note import line is 1 match).
 const REQUIRE_AUTH_COUNTS = {
-  'wardrobe.js': 40,            // 1 import + 39 handlers (Task #1937 adds POST /lock-outfit-atomic; Task #1943 adds POST /outfit-score/:episodeId; W1 adds POST, PUT, DELETE /matching-sets)
+  'wardrobe.js': 41,            // 1 import + 40 handlers (Task #1937 adds POST /lock-outfit-atomic; Task #1943 adds POST /outfit-score/:episodeId; W1 adds POST, PUT, DELETE /matching-sets; audit GATE-02 adds GET /slot-coverage)
   'wardrobeLibrary.js': 26,     // 1 import + 25 handlers
   'wardrobeBrands.js': 8,       // 1 import + 7 handlers
   'wardrobeEventRoutes.js': 4,  // 1 import + 3 handlers
@@ -215,12 +215,12 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
   });
 
   describe('CP5 zone aggregate consumer counts', () => {
-    test('CP5 zone contains 98 total requireAuth references (7 imports + 91 handlers; +3 W1 matching sets)', () => {
+    test('CP5 zone contains 99 total requireAuth references (7 imports + 92 handlers; +3 W1 matching sets; +1 GATE-02 slot coverage)', () => {
       const total = CP5_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         return sum + ((src.match(/\brequireAuth\b/g) || []).length);
       }, 0);
-      expect(total).toBe(98);
+      expect(total).toBe(99);
     });
 
     test('CP5 zone contains 22 total aiRateLimiter references (5 files × 2 import-line matches + 12 handler invocations)', () => {

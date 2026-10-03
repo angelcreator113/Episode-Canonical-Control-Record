@@ -155,6 +155,11 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       }],
     });
 
+    // Audit GATE-01 (2026-10-03): exact coverage of the 14 canonical beats,
+    // the one result every readiness surface reads.
+    const { beatPlanCoverage } = require('../utils/beatPlanCoverage');
+    const coverage = beatPlanCoverage(plans);
+
     // L4 (§8(hh), Q19): each beat's angle and what is missing ("<Kind>
     // angle missing — Upload image / Generate angle"). A failed read leaves
     // the plan without it.
@@ -177,6 +182,7 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
     return res.json({
       data,
       count: plans.length,
+      coverage,
       readiness,
       feed_moment_missing: feedMomentMissing,
       ...(feedMomentCheckError ? { feed_moment_check_error: feedMomentCheckError } : {}),
@@ -491,14 +497,23 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     const models = require('../models');
     const script = await generateGroundedScript(episodeId, showId, models);
 
-    // Save script to episode
+    // Audit GATE-03 (2026-10-03): saving is part of success. A script that
+    // was generated but not saved comes back saying so (success false,
+    // saved false, the script kept), so the caller keeps the draft and
+    // retries the save, never the paid generation.
+    let saved = false;
+    let saveError = null;
     try {
       const episode = episodeForGuard || await models.Episode.findByPk(episodeId);
-      if (episode) {
+      if (!episode) {
+        saveError = 'Episode not found';
+      } else {
         await episode.update({ script_content: script });
+        saved = true;
       }
     } catch (saveErr) {
-      console.warn('[ScriptGen] Could not save to episode:', saveErr.message);
+      console.error('[ScriptGen] Could not save to episode:', saveErr.message);
+      saveError = saveErr.message;
     }
 
     // §8(j) (episode creation step 7): every canonical beat keeps its number.
@@ -509,11 +524,16 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     if (!check.complete) {
       console.warn(`[ScriptGen] Episode ${episodeId}: canonical beats incomplete (missing ${check.missing.join(', ') || 'none'}; unknown ${check.unknown.join(', ') || 'none'}; out of order ${check.outOfOrder}).`);
     }
-    return res.json({
-      success: true, script, episodeId,
+    const body = {
+      success: saved, saved, script, episodeId,
       beats: check.beats.map(({ number, name }) => ({ number, name })),
       beat_check: { complete: check.complete, missing: check.missing, unknown: check.unknown, out_of_order: check.outOfOrder },
-    });
+    };
+    if (!saved) {
+      body.code = 'SCRIPT_GENERATED_NOT_SAVED';
+      body.error = `The script was generated but could not be saved: ${saveError}`;
+    }
+    return res.json(body);
   } catch (err) {
     console.error('[ScriptGen] Error:', err.message);
     return res.status(500).json({ error: err.message });
@@ -583,14 +603,17 @@ Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation
 router.get('/:episodeId/script-context', requireAuth, async (req, res) => {
   try {
     const context = await getScenePlanForScriptGenerator(req.params.episodeId);
-    return res.json({
-      data: context,
-      count: context.length,
-      ready: context.every(b => b.locked),
-      message: context.every(b => b.locked)
-        ? 'All beats locked — ready for script generation.'
-        : `${context.filter(b => !b.locked).length} beats still unlocked.`,
-    });
+    // Audit GATE-01 (2026-10-03): ready means every canonical beat is
+    // planned once and locked; every(locked) alone was true for no beats.
+    const { beatPlanCoverage } = require('../utils/beatPlanCoverage');
+    const coverage = beatPlanCoverage(context);
+    const unlocked = context.filter((b) => !b.locked).length;
+    const ready = coverage.complete && unlocked === 0;
+    let message;
+    if (!coverage.complete) message = `Beat plan incomplete: ${coverage.text}.`;
+    else if (unlocked) message = `${unlocked} beats still unlocked.`;
+    else message = 'All beats locked — ready for script generation.';
+    return res.json({ data: context, count: context.length, coverage, ready, message });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

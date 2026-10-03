@@ -148,6 +148,9 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
+  // Audit GATE-03 (2026-10-03): a script the server generated but could not
+  // save. It lives here as a draft until Save keeps it; the reason is shown.
+  const [unsaved, setUnsaved] = useState(null);
   const [showMap, setShowMap] = useState(false);
   const [mapLocations, setMapLocations] = useState([]);
   const [mapImageUrl, setMapImageUrl] = useState(null);
@@ -173,7 +176,7 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   const handleSave = useCallback(async () => {
     setSaving(true);
-    try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText }); setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText }); setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000); }
     catch { setToast({ msg: 'Save failed', type: 'error' }); setTimeout(() => setToast(null), 3000); }
     finally { setSaving(false); }
   }, [episodeId, scriptText]);
@@ -219,7 +222,11 @@ export default function EpisodeScriptTab({ episode, show }) {
       }
       const script = res.data.script || res.data.script_text || '';
       setScriptText(script); setDevScript(script);
-      try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: script }); } catch {}
+      // The server saves as part of success (audit GATE-03). Generated but
+      // not saved: keep the draft here and say so; Save keeps it without
+      // another generation.
+      const notSaved = res.data.saved === false ? (res.data.error || 'The script was generated but could not be saved.') : null;
+      setUnsaved(notSaved);
 
       // §8(j): every canonical beat should come back under its own header.
       const check = res.data.beat_check;
@@ -227,7 +234,9 @@ export default function EpisodeScriptTab({ episode, show }) {
         ? ` — ⚠️ beat${check.missing?.length === 1 ? '' : 's'} ${(check.missing || []).join(', ') || '?'} came back without ${check.missing?.length === 1 ? 'its' : 'their'} header`
         : '';
       // Check for auto-guard results
-      if (res.data.guardResult) {
+      if (notSaved) {
+        setToast({ msg: `⚠️ Script generated but not saved — press Save to keep it${beatGap}`, type: 'error' });
+      } else if (res.data.guardResult) {
         setGuardResult(res.data.guardResult);
         const v = res.data.guardResult.violations?.length || 0;
         setToast({ msg: (v > 0 ? `✦ Script generated — ⚠️ ${v} franchise violation(s)` : '✦ Script generated — ✅ Passed franchise guard') + beatGap, type: v > 0 || beatGap ? 'error' : 'success' });
@@ -248,6 +257,12 @@ export default function EpisodeScriptTab({ episode, show }) {
       <style>{`.script-line-hover:hover{background:#F9F5FF}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
 
+      {unsaved && (
+        <div data-testid="script-unsaved" role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: '#FBEFF3', border: '1px solid #C06E87', color: '#2C2C2C', fontSize: 13 }}>
+          <span style={{ flex: '1 1 240px', minWidth: 0 }}><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
+          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2F7F76', color: '#fff', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+        </div>
+      )}
       {hasScript && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
