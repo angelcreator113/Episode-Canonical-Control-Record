@@ -3,12 +3,18 @@
  * Beat Plan's beat editor (§8(hh) L2, L11).
  */
 
-/** A set's thumbnail: its base image, else its cover or first angle with an image. */
+/**
+ * A set's thumbnail: its library cover (the view chosen in Scene Sets, as
+ * cover_image_url or among its angles), else its main background, else its
+ * first angle with an image.
+ */
 export function sceneSetThumb(set) {
-  if (set?.base_still_url) return set.base_still_url;
+  if (set?.cover_image_url) return set.cover_image_url;
   const angles = set?.angles || [];
-  const cover = angles.find((a) => a.id === set.cover_angle_id && a.still_image_url);
-  return (cover || angles.find((a) => a.still_image_url))?.still_image_url || null;
+  const cover = set?.cover_angle_id ? angles.find((a) => a.id === set.cover_angle_id && a.still_image_url) : null;
+  if (cover) return cover.still_image_url;
+  if (set?.base_still_url) return set.base_still_url;
+  return angles.find((a) => a.still_image_url)?.still_image_url || null;
 }
 
 /**

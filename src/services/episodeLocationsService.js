@@ -78,8 +78,10 @@ function readSceneDefaults(metadata) {
 async function liveSets(sequelize, ids, transaction) {
   if (!ids.length) return new Map();
   const [rows] = await sequelize.query(
-    `SELECT id, name, show_id, scene_type, base_still_url FROM scene_sets
-      WHERE id IN (:ids) AND deleted_at IS NULL`,
+    `SELECT s.id, s.name, s.show_id, s.scene_type, s.base_still_url,
+            (SELECT a.still_image_url FROM scene_angles a WHERE a.id = s.cover_angle_id AND a.deleted_at IS NULL) AS cover_image_url
+       FROM scene_sets s
+      WHERE s.id IN (:ids) AND s.deleted_at IS NULL`,
     { replacements: { ids }, transaction });
   return new Map(rows.map((r) => [r.id, r]));
 }
@@ -124,8 +126,13 @@ async function proposeLocations(sequelize, { showId, event, transaction }) {
   return { locations, missing: ['event', 'home', 'closet'].filter((r) => !have.has(r)), defaults };
 }
 
+// cover_image_url: the image of the set's library cover view (chosen in
+// Scene Sets), which pages show as the set's thumbnail before its base.
 function setSummary(set) {
-  return set ? { id: set.id, name: set.name, scene_type: set.scene_type, base_still_url: set.base_still_url || null } : null;
+  return set ? {
+    id: set.id, name: set.name, scene_type: set.scene_type,
+    base_still_url: set.base_still_url || null, cover_image_url: set.cover_image_url || null,
+  } : null;
 }
 
 /** The episode's locations as stored, in order. */
@@ -133,6 +140,7 @@ async function listLocations(sequelize, episodeId, transaction) {
   const [rows] = await sequelize.query(
     `SELECT l.scene_set_id, l.role, l.role_name, l.sort_order,
             s.name, s.scene_type, s.base_still_url,
+            (SELECT a.still_image_url FROM scene_angles a WHERE a.id = s.cover_angle_id AND a.deleted_at IS NULL) AS cover_image_url,
             (SELECT COUNT(*)::int FROM scene_angles a WHERE a.scene_set_id = s.id AND a.deleted_at IS NULL) AS angle_count
        FROM scene_set_episodes l JOIN scene_sets s ON s.id = l.scene_set_id AND s.deleted_at IS NULL
       WHERE l.episode_id = :episodeId AND l.deleted_at IS NULL
@@ -142,7 +150,7 @@ async function listLocations(sequelize, episodeId, transaction) {
     role: r.role || 'extra',
     scene_set_id: r.scene_set_id,
     name: r.role_name || null,
-    scene_set: setSummary({ id: r.scene_set_id, name: r.name, scene_type: r.scene_type, base_still_url: r.base_still_url }),
+    scene_set: setSummary({ id: r.scene_set_id, name: r.name, scene_type: r.scene_type, base_still_url: r.base_still_url, cover_image_url: r.cover_image_url }),
     // L12 (§8(hh)): the Scenes tab's Locations show each set's angle count.
     angle_count: r.angle_count ?? 0,
   }));

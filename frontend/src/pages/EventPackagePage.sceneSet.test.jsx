@@ -248,5 +248,12 @@ describe('Place: the scene-set picker shows thumbnails, search and angles (L2)',
     expect(searchSceneSets(groups, 'event location', {})).toEqual({ atVenue: [SETS[3]], others: [] });
     expect(sceneSetThumb({ angles: [{ id: 'a', still_image_url: null }, { id: 'b', still_image_url: 'b.jpg' }] })).toBe('b.jpg');
     expect(sceneSetThumb({})).toBeNull();
+    // The library cover (chosen in Scene Sets) comes before the main background.
+    const angles = [{ id: 'a', still_image_url: 'a.jpg' }, { id: 'b', still_image_url: 'b.jpg' }];
+    expect(sceneSetThumb({ base_still_url: 'base.jpg', angles })).toBe('base.jpg');
+    expect(sceneSetThumb({ base_still_url: 'base.jpg', cover_angle_id: 'b', angles })).toBe('b.jpg');
+    expect(sceneSetThumb({ base_still_url: 'base.jpg', cover_image_url: 'cover.jpg' })).toBe('cover.jpg');
+    // A cover view with no image falls back to the main background.
+    expect(sceneSetThumb({ base_still_url: 'base.jpg', cover_angle_id: 'c', angles: [{ id: 'c', still_image_url: null }] })).toBe('base.jpg');
   });
 });
