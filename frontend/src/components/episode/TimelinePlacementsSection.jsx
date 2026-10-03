@@ -114,11 +114,11 @@ export default function TimelinePlacementsSection({ episodeId }) {
   };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 12 }}>
+    <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px', marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>🎬 Video UI Overlays</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4 }}>🎬 Video UI Overlays</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
             Where invites, checklists, and other on-screen graphics appear in the rendered video.
           </div>
         </div>
@@ -127,7 +127,7 @@ export default function TimelinePlacementsSection({ episodeId }) {
             value=""
             disabled={busyId === 'adding'}
             onChange={(e) => { if (e.target.value) addPlacement(e.target.value); e.target.value = ''; }}
-            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}
           >
             <option value="">+ Add overlay…</option>
             {addable.map((a) => (
@@ -140,11 +140,11 @@ export default function TimelinePlacementsSection({ episodeId }) {
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>Loading…</div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Loading…</div>
       ) : error ? (
-        <div style={{ fontSize: 11, color: '#dc2626' }}>{error}</div>
+        <div style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</div>
       ) : placements.length === 0 ? (
-        <div style={{ fontSize: 11, color: '#94a3b8', padding: '6px 0' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '6px 0' }}>
           No overlays placed yet. Approve an invitation or lock the wardrobe checklist to auto-place one, or add a previously generated overlay from the dropdown above.
         </div>
       ) : (
@@ -161,25 +161,25 @@ export default function TimelinePlacementsSection({ episodeId }) {
                   alignItems: 'center',
                   gap: 10,
                   padding: 8,
-                  background: '#faf5ea',
-                  border: '1px solid #f3e2b3',
+                  background: 'var(--lala-gold-soft)',
+                  border: '1px solid var(--lala-gold-line)',
                   borderRadius: 8,
                 }}
               >
                 {thumb ? (
-                  <img src={thumb} alt="" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid #e8d8b8' }} />
+                  <img src={thumb} alt="" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--lala-gold-line)' }} />
                 ) : (
-                  <div style={{ width: 48, height: 32, background: '#fff', borderRadius: 4, border: '1px solid #e8d8b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🎬</div>
+                  <div style={{ width: 48, height: 32, background: 'var(--surface-card)', borderRadius: 4, border: '1px solid var(--lala-gold-line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🎬</div>
                 )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {roleLabel(p)}
                   </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
                     {sceneName} · {p.attachment_point || 'scene-start'} · z{p.z_index ?? 10}
                   </div>
                 </div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748b' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
                   <input
                     type="number"
                     min={0.5}
@@ -196,7 +196,7 @@ export default function TimelinePlacementsSection({ episodeId }) {
                       const v = parseFloat(e.target.value);
                       if (Number.isFinite(v) && v !== Number(p.duration)) updateDuration(p, v);
                     }}
-                    style={{ width: 56, padding: '3px 6px', border: '1px solid #e8d8b8', borderRadius: 4, fontSize: 11, background: '#fff' }}
+                    style={{ width: 56, padding: '3px 6px', border: '1px solid var(--lala-gold-line)', borderRadius: 4, fontSize: 11, background: 'var(--surface-card)' }}
                   />
                   <span>s</span>
                 </label>
@@ -205,7 +205,7 @@ export default function TimelinePlacementsSection({ episodeId }) {
                   onClick={() => removePlacement(p)}
                   disabled={busyId === p.id}
                   title="Remove this overlay placement (asset stays in the library)"
-                  style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 16, padding: '0 4px', lineHeight: 1 }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 16, padding: '0 4px', lineHeight: 1 }}
                 >×</button>
               </div>
             );

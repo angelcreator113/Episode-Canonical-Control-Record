@@ -26,10 +26,10 @@ const INTENTS = ['slay', 'pass', 'safe', 'fail'];
  */
 
 const TIER_CONFIG = {
-  slay: { emoji: '👑', label: 'SLAY', color: '#FFD700', bg: '#FFFBEB' },
-  pass: { emoji: '✨', label: 'PASS', color: '#22c55e', bg: '#f0fdf4' },
-  safe: { emoji: '😐', label: 'SAFE', color: '#eab308', bg: '#fefce8' },
-  fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: '#fef2f2' },
+  slay: { emoji: '👑', label: 'SLAY', color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)' },
+  pass: { emoji: '✨', label: 'PASS', color: 'var(--success-text)', bg: 'var(--success-bg)' },
+  safe: { emoji: '😐', label: 'SAFE', color: 'var(--warning-text)', bg: 'var(--warning-bg)' },
+  fail: { emoji: '💔', label: 'FAIL', color: 'var(--danger-text)', bg: 'var(--danger-bg)' },
 };
 
 /**
@@ -49,12 +49,12 @@ function SectionBand({ title, children }) {
         gap: 8,
         marginBottom: 10,
         paddingBottom: 6,
-        borderBottom: '1px solid #e8d8b8',
+        borderBottom: '1px solid var(--lala-gold-line)',
       }}>
         <span style={{
           fontSize: 10,
           fontWeight: 700,
-          color: '#B8962E',
+          color: 'var(--lala-gold-text)',
           textTransform: 'uppercase',
           letterSpacing: 1.2,
           fontFamily: "'DM Mono', monospace",
@@ -401,18 +401,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   };
 
   const S = {
-    card: { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 12 },
-    label: { fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6, display: 'block' },
+    card: { background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px', marginBottom: 12 },
+    label: { fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, display: 'block' },
   };
 
   if (isEditing) {
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Edit Episode</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Edit Episode</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setIsEditing(false)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-            <button onClick={handleSave} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+            <button onClick={() => setIsEditing(false)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+            <button onClick={handleSave} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
           </div>
         </div>
         {[
@@ -426,10 +426,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             <label style={S.label}>{f.label}</label>
             {f.type === 'textarea' ? (
               <textarea value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                placeholder={f.placeholder} rows={f.rows} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                placeholder={f.placeholder} rows={f.rows} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             ) : (
               <input type={f.type || 'text'} value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                placeholder={f.placeholder} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                placeholder={f.placeholder} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
             )}
           </div>
         ))}
@@ -446,7 +446,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             <span style={{ fontSize: 28 }}>{tier.emoji}</span>
             <div>
               <div style={{ fontSize: 16, fontWeight: 800, color: tier.color }}>{tier.label} — {evalData.score}/100</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>{evalData.narrative_lines?.short || ''}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{evalData.narrative_lines?.short || ''}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -455,8 +455,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
               { icon: '⭐', val: evalData.stat_deltas?.reputation, label: 'Rep' },
             ].map(s => s.val ? (
               <div key={s.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: s.val > 0 ? '#16a34a' : '#dc2626' }}>{s.val > 0 ? '+' : ''}{s.val}</div>
-                <div style={{ fontSize: 8, color: '#94a3b8' }}>{s.icon} {s.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: s.val > 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{s.val > 0 ? '+' : ''}{s.val}</div>
+                <div style={{ fontSize: 8, color: 'var(--text-secondary)' }}>{s.icon} {s.label}</div>
               </div>
             ) : null)}
           </div>
@@ -466,15 +466,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       {/* Header + Edit */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ flex: 1 }}>
-          <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>{episode.title}</h1>
+          <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{episode.title}</h1>
           {formData.description && (
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5 }} data-testid="episode-synopsis">
-              <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginRight: 6 }}>Synopsis (internal)</span>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }} data-testid="episode-synopsis">
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginRight: 6 }}>Synopsis (internal)</span>
               {formData.description}
             </p>
           )}
         </div>
-        <button onClick={() => setIsEditing(true)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>✏️ Edit</button>
+        <button onClick={() => setIsEditing(true)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>✏️ Edit</button>
       </div>
 
       {/* Viewer teaser (P12, Task #2386) */}
@@ -482,22 +482,22 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Status</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{episode.status || 'draft'}</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>#{episode.episode_number || '?'}</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: '#B8962E' }}>{primaryEvent?.prestige || '—'}/10</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: '#ec4899' }}>{outfitPieces.length || '—'} pcs</div></div>
+        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Status</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{episode.status || 'draft'}</div></div>
+        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>#{episode.episode_number || '?'}</div></div>
+        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--lala-gold-text)' }}>{primaryEvent?.prestige || '—'}/10</div></div>
+        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-dark)' }}>{outfitPieces.length || '—'} pcs</div></div>
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</span>
+            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net P&L</span>
             {/* EST pill: predictions from generator-time columns, not yet
                 committed to the ledger. Disappears once the episode is
                 completed and finalizeEpisodeFinancials writes real
                 transactions. Tooltip nudges creators toward Complete. */}
             {netIsPrediction && (
-              <span title="Estimate from event metadata — values become real after Complete Episode runs the financial pipeline." style={{ padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+              <span title="Estimate from event metadata — values become real after Complete Episode runs the financial pipeline." style={{ padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' }}>EST</span>
             )}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? 'var(--success-text)' : net < 0 ? 'var(--danger-text)' : 'var(--text-secondary)' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div>
         </div>
       </div>
 
@@ -513,8 +513,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <span style={S.label}>🎯 Creative Intent</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {savingBrief && <span style={{ fontSize: 10, color: '#94a3b8' }}>Saving…</span>}
-              {isLocked && <span style={{ padding: '1px 6px', background: '#fef2f2', color: '#dc2626', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>🔒 LOCKED</span>}
+              {savingBrief && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Saving…</span>}
+              {isLocked && <span style={{ padding: '1px 6px', background: 'var(--danger-bg)', color: 'var(--danger-text)', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>🔒 LOCKED</span>}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -524,7 +524,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 value={draft.episode_archetype || ''}
                 disabled={isLocked}
                 onChange={(e) => { setDraft(d => ({ ...d, episode_archetype: e.target.value })); saveBriefField('episode_archetype', e.target.value || null); }}
-                style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, background: isLocked ? '#f8fafc' : '#fff' }}
+                style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
               >
                 <option value="">— none —</option>
                 {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
@@ -546,7 +546,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                         setDraft(d => ({ ...d, designed_intent: next }));
                         saveBriefField('designed_intent', next || null);
                       }}
-                      style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#64748b', opacity: isLocked ? 0.6 : 1 }}
+                      style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : 'var(--lala-parchment-3)'}`, background: active ? cfg.bg : 'var(--surface-card)', color: active ? cfg.color : 'var(--text-secondary)', opacity: isLocked ? 0.6 : 1 }}
                     >{cfg.emoji} {i}</button>
                   );
                 })}
@@ -562,7 +562,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
               onBlur={() => brief.narrative_purpose !== draft.narrative_purpose && saveBriefField('narrative_purpose', draft.narrative_purpose)}
               placeholder="Why does this episode exist? What story job is it doing?"
               rows={2}
-              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
             />
           </div>
           <div>
@@ -574,7 +574,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
               onBlur={() => brief.forward_hook !== draft.forward_hook && saveBriefField('forward_hook', draft.forward_hook)}
               placeholder="What pulls the viewer into the next episode?"
               rows={2}
-              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
             />
           </div>
         </div>
@@ -595,7 +595,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                   type="button"
                   disabled={isLocked}
                   onClick={() => toggleOutcome(o)}
-                  style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#94a3b8', opacity: isLocked ? 0.6 : 1 }}
+                  style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : 'var(--lala-parchment-3)'}`, background: active ? cfg.bg : 'var(--surface-card)', color: active ? cfg.color : 'var(--text-secondary)', opacity: isLocked ? 0.6 : 1 }}
                 >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
               );
             })}
@@ -611,21 +611,21 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}>
           <span style={S.label}>💌 Events ({linkedEvents.length})</span>
           {linkedEvents.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>No events linked</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>No events linked</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {linkedEvents.map(ev => (
-                <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 8px', background: '#faf5ea', border: '1px solid #f3e2b3', borderRadius: 6 }}>
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 8px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', borderRadius: 6 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.name}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.name}</div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
                       {/* The brief's source event (Task #1906). It stays
                           listed while the brief names it, even if its
                           used_in_episode_id link is cleared. */}
-                      {ev.link?.anchor && <span title={ev.link.stamped ? 'The event this episode was started from' : 'The event this episode was started from; its link to this episode is missing or points elsewhere'} style={{ padding: '1px 5px', background: '#B8962E', borderRadius: 3, fontSize: 9, color: '#fff', fontWeight: 700 }}>source{ev.link.stamped ? '' : ' · unlinked'}</span>}
-                      {ev.host &&<span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#64748b' }}>{ev.host}</span>}
-                      {ev.dress_code && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#B8962E' }}>{ev.dress_code}</span>}
-                      {ev.event_type && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#6366f1' }}>{ev.event_type}</span>}
+                      {ev.link?.anchor && <span title={ev.link.stamped ? 'The event this episode was started from' : 'The event this episode was started from; its link to this episode is missing or points elsewhere'} style={{ padding: '1px 5px', background: 'var(--lala-gold)', borderRadius: 3, fontSize: 9, color: 'var(--text-primary)', fontWeight: 700 }}>source{ev.link.stamped ? '' : ' · unlinked'}</span>}
+                      {ev.host &&<span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--text-secondary)' }}>{ev.host}</span>}
+                      {ev.dress_code && <span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--lala-gold-text)' }}>{ev.dress_code}</span>}
+                      {ev.event_type && <span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--primary-text)' }}>{ev.event_type}</span>}
                     </div>
                     {/* Back to the event (Task #2356): its Event Package,
                         read-only once Start Episode has locked the terms. */}
@@ -633,7 +633,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                       <Link
                         to={`/shows/${ev.show_id || showId}/events/${ev.id}`}
                         data-testid={`overview-event-package-${ev.id}`}
-                        style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, color: '#8a6d1f', textDecoration: 'underline' }}
+                        style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, color: 'var(--lala-gold-text)', textDecoration: 'underline' }}
                       >
                         View Event Package →
                       </Link>
@@ -645,14 +645,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                       onClick={() => regenerateFromEvent(ev)}
                       disabled={linkBusy}
                       title="Regenerate this episode from the event (soft-deletes the current episode)"
-                      style={{ background: '#fdf8ee', border: '1px solid #e8d8b8', color: '#B8962E', cursor: 'pointer', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}
+                      style={{ background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', cursor: 'pointer', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}
                     >♻️</button>
                     <button
                       type="button"
                       onClick={() => unlinkEvent(ev.id)}
                       disabled={linkBusy}
                       title="Unlink event from this episode"
-                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
                     >×</button>
                   </div>
                 </div>
@@ -660,13 +660,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             </div>
           )}
           {linkError && (
-            <p role="alert" style={{ margin: '0 0 6px', fontSize: 12, color: '#b45309' }}>{linkError}</p>
+            <p role="alert" style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--warning-text)' }}>{linkError}</p>
           )}
           <select
             value=""
             disabled={linkBusy || linkableEvents.length === 0}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
-            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, color: '#64748b', cursor: linkableEvents.length === 0 ? 'not-allowed' : 'pointer' }}
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', fontSize: 12, color: 'var(--text-secondary)', cursor: linkableEvents.length === 0 ? 'not-allowed' : 'pointer' }}
           >
             <option value="">{linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
             {linkableEvents.map(ev => (
@@ -684,19 +684,19 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             <>
               <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 {Array.from({ length: 24 }, (_, i) => (
-                  <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === seasonContext.slot_number ? '#B8962E' : (i + 1) < seasonContext.slot_number ? '#d1fae5' : '#f1f5f9' }} />
+                  <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === seasonContext.slot_number ? 'var(--lala-gold)' : (i + 1) < seasonContext.slot_number ? 'var(--success-bg)' : 'var(--lala-parchment-2)' }} />
                 ))}
               </div>
-              <div style={{ fontSize: 12, color: '#B8962E', fontWeight: 700, marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--lala-gold-text)', fontWeight: 700, marginTop: 6 }}>
                 {seasonContext.label}
-                {seasonContext.phase?.title && <span style={{ fontWeight: 500, color: '#64748b' }}> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
+                {seasonContext.phase?.title && <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
               </div>
-              <div style={{ fontSize: 12, color: seasonContext.story_purpose ? '#334155' : '#94a3b8', marginTop: 4, fontStyle: seasonContext.story_purpose ? 'normal' : 'italic' }}>
+              <div style={{ fontSize: 12, color: seasonContext.story_purpose ? 'var(--text-primary)' : 'var(--text-secondary)', marginTop: 4, fontStyle: seasonContext.story_purpose ? 'normal' : 'italic' }}>
                 {seasonContext.story_purpose || 'No story purpose set for this slot yet.'}
               </div>
             </>
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
               Not in a season slot yet. Place it on Producer Mode → Episodes → Season Plan.
             </div>
           )}
@@ -724,16 +724,16 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 const district = entry.kind === 'location' ? entry.loc.district : null;
                 return (
                   <div key={i} style={{ flexShrink: 0, minWidth: 80 }}>
-                    <div style={{ width: 80, height: 50, background: '#f1f5f9', borderRadius: 6, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 18 }}>📍</div>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: '#1a1a2e', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                    {district && <div style={{ fontSize: 8, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{district}</div>}
-                    <div style={{ fontSize: 8, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {entry.eventName}</div>
+                    <div style={{ width: 80, height: 50, background: 'var(--lala-parchment-2)', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 18 }}>📍</div>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-primary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                    {district && <div style={{ fontSize: 8, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{district}</div>}
+                    <div style={{ fontSize: 8, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {entry.eventName}</div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
               {linkedEvents.length === 0 ? 'Link an event to see its location here' : 'Linked events have no venue set'}
             </div>
           )}
@@ -744,11 +744,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           <span style={S.label}>📝 Script</span>
           {scriptInfo?.exists ? (
             <div>
-              <span style={{ padding: '3px 10px', background: '#f0fdf4', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>✓ Script written</span>
-              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>{scriptInfo.wordCount?.toLocaleString()} words</span>
+              <span style={{ padding: '3px 10px', background: 'var(--success-bg)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var(--success-text)' }}>✓ Script written</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>{scriptInfo.wordCount?.toLocaleString()} words</span>
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>No script yet</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No script yet</div>
           )}
         </div>
       </div>
@@ -770,37 +770,37 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <SectionBand title="Source">
           {hasFeedOrigin && (
             <div style={S.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid var(--lala-parchment-2)' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>🌐 {feedOriginName}</div>
-                  {feedOriginHandle && <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{String(feedOriginHandle).replace(/^@/, '')}</div>}
-                  {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>🌐 {feedOriginName}</div>
+                  {feedOriginHandle && <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>@{String(feedOriginHandle).replace(/^@/, '')}</div>}
+                  {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
                 </div>
-                <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>
+                <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>
               </div>
               {(automation.follow_motivation || automation.follow_emotion || automation.follow_trigger || automation.event_excitement != null) && (
                 <div style={{ marginBottom: 8 }}>
                   <label style={{ ...S.label, marginBottom: 4 }}>Why this hooked Lala</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, fontSize: 11 }}>
-                    {automation.follow_motivation && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: '#1a1a2e' }}>{automation.follow_motivation}</div></div>}
-                    {automation.follow_emotion && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: '#1a1a2e' }}>{automation.follow_emotion}</div></div>}
-                    {automation.follow_trigger && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: '#1a1a2e' }}>{automation.follow_trigger}</div></div>}
-                    {automation.event_excitement != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: '#B8962E', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>}
+                    {automation.follow_motivation && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_motivation}</div></div>}
+                    {automation.follow_emotion && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_emotion}</div></div>}
+                    {automation.follow_trigger && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_trigger}</div></div>}
+                    {automation.event_excitement != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: 'var(--lala-gold-text)', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>}
                   </div>
                 </div>
               )}
               {(automation.lifestyle_claim || automation.lifestyle_reality || automation.lifestyle_gap) && (
                 <div style={{ marginBottom: 8 }}>
                   <label style={{ ...S.label, marginBottom: 4 }}>Lifestyle gap</label>
-                  {automation.lifestyle_claim && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}</div>}
-                  {automation.lifestyle_reality && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}</div>}
-                  {automation.lifestyle_gap && <div style={{ fontSize: 11, color: '#dc2626', fontStyle: 'italic' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}</div>}
+                  {automation.lifestyle_claim && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}</div>}
+                  {automation.lifestyle_reality && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}</div>}
+                  {automation.lifestyle_gap && <div style={{ fontSize: 11, color: 'var(--danger-text)', fontStyle: 'italic' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}</div>}
                 </div>
               )}
               {(automation.host_brand || automation.beauty_factor) && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
-                  {automation.host_brand && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: '#1a1a2e', fontWeight: 600 }}>{automation.host_brand}</div></div>}
-                  {automation.beauty_factor && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: '#1a1a2e' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>}
+                  {automation.host_brand && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{automation.host_brand}</div></div>}
+                  {automation.beauty_factor && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: 'var(--text-primary)' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>}
                 </div>
               )}
             </div>
@@ -809,23 +809,23 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             <div style={S.card}>
               <span style={S.label}>🔗 Narrative Chain</span>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: seeds.length || narChain.chain_reason ? 10 : 0, marginTop: 4 }}>
-                {narChain.chain_position != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain position</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{narChain.chain_position}</div></div>}
+                {narChain.chain_position != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Chain position</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{narChain.chain_position}</div></div>}
                 {narChain.parent_event_id && (
                   <div>
-                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Parent event</span>
+                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Parent event</span>
                     {parentEvent ? (
                       parentEvent.used_in_episode_id
-                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} style={{ display: 'block', fontSize: 12, color: '#B8962E', fontWeight: 600 }}>{parentEvent.name} →</Link>
-                        : <div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{parentEvent.name} <span style={{ fontSize: 9, color: '#94a3b8' }}>(no episode yet)</span></div>
-                    ) : <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>{String(narChain.parent_event_id).slice(0, 8)}…</div>}
+                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} style={{ display: 'block', fontSize: 12, color: 'var(--lala-gold-text)', fontWeight: 600 }}>{parentEvent.name} →</Link>
+                        : <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{parentEvent.name} <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>(no episode yet)</span></div>
+                    ) : <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>{String(narChain.parent_event_id).slice(0, 8)}…</div>}
                   </div>
                 )}
               </div>
-              {narChain.chain_reason && <div style={{ marginBottom: seeds.length ? 10 : 0 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain reason</span><div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, fontStyle: 'italic' }}>{narChain.chain_reason}</div></div>}
+              {narChain.chain_reason && <div style={{ marginBottom: seeds.length ? 10 : 0 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Chain reason</span><div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, fontStyle: 'italic' }}>{narChain.chain_reason}</div></div>}
               {seeds.length > 0 && (
                 <div>
-                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Seeds for future events</span>
-                  <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Seeds for future events</span>
+                  <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                     {seeds.map((seed, i) => <li key={i}>{typeof seed === 'string' ? seed : JSON.stringify(seed)}</li>)}
                   </ul>
                 </div>
@@ -851,9 +851,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         const tier = evalData?.tier_final || null;
         const rewardStatus = !tier ? 'pending' : (['slay', 'pass'].includes(tier) ? 'earned' : 'missed');
         const statusCfg = {
-          pending: { label: 'PENDING', bg: '#fefce8', color: '#a16207', border: '#fde68a' },
-          earned: { label: 'EARNED', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-          missed: { label: 'MISSED', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+          pending: { label: 'PENDING', bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)' },
+          earned: { label: 'EARNED', bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)' },
+          missed: { label: 'MISSED', bg: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'var(--danger-border)' },
         }[rewardStatus];
         const statIcons = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣' };
         return (
@@ -863,10 +863,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 <div style={S.card}>
                   <span style={S.label}>💼 Career Context</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                    {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
-                    {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
-                    {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
-                    {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                    {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
+                    {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
+                    {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: 'var(--success-text)', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
+                    {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: 'var(--danger-text)', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
                   </div>
                 </div>
               )}
@@ -874,9 +874,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 <div style={S.card}>
                   <span style={S.label}>⚡ Event Difficulty</span>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
-                    {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
-                    {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
-                    {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+                    {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{eventDiff.strictness}/10</div></div>}
+                    {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{eventDiff.deadline_type}</div></div>}
+                    {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{eventDiff.deadline_minutes}</div></div>}
                   </div>
                 </div>
               )}
@@ -897,16 +897,16 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(rewardStats.length, 4)}, 1fr)`, gap: 8, marginTop: 4 }}>
                       {rewardStats.map(k => (
                         <div key={k}>
-                          <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>{statIcons[k]} {k.replace('_', ' ')}</span>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: rewardStatus === 'earned' ? '#16a34a' : rewardStatus === 'missed' ? '#94a3b8' : '#1a1a2e' }}>+{rewards[k]}</div>
+                          <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>{statIcons[k]} {k.replace('_', ' ')}</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: rewardStatus === 'earned' ? 'var(--success-text)' : rewardStatus === 'missed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>+{rewards[k]}</div>
                         </div>
                       ))}
                     </div>
                   )}
                   {rewardOutcomes.length > 0 && (
                     <div style={{ marginTop: rewardStats.length ? 8 : 4 }}>
-                      <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Outcomes</span>
-                      <ul style={{ margin: '2px 0 0', padding: '0 0 0 16px', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                      <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Outcomes</span>
+                      <ul style={{ margin: '2px 0 0', padding: '0 0 0 16px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                         {rewardOutcomes.map((o, i) => <li key={i}>{o}</li>)}
                       </ul>
                     </div>
@@ -929,8 +929,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           {hasCanonCons && (
             <div style={S.card}>
               <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>🌐 Canon consequences</summary>
-                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>🌐 Canon consequences</summary>
+                <pre style={{ background: 'var(--surface-bg)', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", border: '1px solid var(--lala-parchment-3)' }}>
                   {JSON.stringify(canonConsCleaned, null, 2)}
                 </pre>
               </details>
@@ -939,12 +939,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           {beatOutline.length > 0 && (
             <div style={S.card}>
               <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📋 AI beat outline ({beatOutline.length})</summary>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📋 AI beat outline ({beatOutline.length})</summary>
                 <ol style={{ margin: '10px 0 0', padding: '0 0 0 22px' }}>
                   {beatOutline.map((beat, i) => (
-                    <li key={i} style={{ marginBottom: 6, fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
+                    <li key={i} style={{ marginBottom: 6, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
                       <div style={{ fontWeight: 600 }}>{beat.summary || beat.name || `Beat ${beat.beat_number || i + 1}`}</div>
-                      {beat.dramatic_function && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>{beat.dramatic_function}</div>}
+                      {beat.dramatic_function && <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, fontStyle: 'italic' }}>{beat.dramatic_function}</div>}
                     </li>
                   ))}
                 </ol>
@@ -954,8 +954,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           {hasEventMeta && (
             <div style={S.card}>
               <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📦 Event metadata</summary>
-                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📦 Event metadata</summary>
+                <pre style={{ background: 'var(--surface-bg)', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", border: '1px solid var(--lala-parchment-3)' }}>
                   {JSON.stringify(eventMeta, null, 2)}
                 </pre>
               </details>
@@ -966,9 +966,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
-        {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
-        <button onClick={() => navigate(`/episodes/${episode.id}/plan`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎬 Scene Plan</button>
+        <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--primary)', border: 'none', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
+        {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
+        <button onClick={() => navigate(`/episodes/${episode.id}/plan`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎬 Scene Plan</button>
         {/* AI scene-set suggester — disabled until the episode has a script
             since there's nothing to analyze otherwise. Fires the suggest
             endpoint then opens SceneSuggestionReview for the creator to
@@ -991,11 +991,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           }}
           disabled={!scriptInfo?.exists || suggestBusy}
           title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
-          style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e8d8b8', color: '#B8962E', fontSize: 11, fontWeight: 600, cursor: !scriptInfo?.exists || suggestBusy ? 'not-allowed' : 'pointer', opacity: !scriptInfo?.exists ? 0.55 : 1 }}
+          style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', fontSize: 11, fontWeight: 600, cursor: !scriptInfo?.exists || suggestBusy ? 'not-allowed' : 'pointer', opacity: !scriptInfo?.exists ? 0.55 : 1 }}
         >
           {suggestBusy ? '✦ Thinking…' : '✦ Suggest Scenes'}
         </button>
-        <button onClick={() => setIsEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Edit Details</button>
+        <button onClick={() => setIsEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Edit Details</button>
       </div>
       {sceneSuggestion && (
         <SceneSuggestionReview

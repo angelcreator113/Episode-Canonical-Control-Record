@@ -18,18 +18,18 @@ import api from '../../services/api';
 
 const coins = (n) => Math.abs(Math.round(Number(n) || 0)).toLocaleString();
 const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(n)}`;
-const tone = (n) => (n > 0 ? '#2F7D4F' : n < 0 ? '#B84D2E' : '#2C2C2C');
+const tone = (n) => (n > 0 ? 'var(--success-text)' : n < 0 ? 'var(--danger-text)' : 'var(--text-primary)');
 
 const S = {
-  card: { background: '#FFFFFF', border: '1px solid #E8E0D0', borderRadius: 8, padding: '12px 14px', marginTop: 12 },
+  card: { background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, padding: '12px 14px', marginTop: 12 },
   head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
-  label: { fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: '#B8962E' },
-  link: { fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#B8962E', textDecoration: 'none' },
+  label: { fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--lala-gold-text)' },
+  link: { fontFamily: "'DM Mono', monospace", fontSize: 12, color: 'var(--lala-gold-text)', textDecoration: 'none' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 },
-  statLabel: { fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: '#6B6557' },
+  statLabel: { fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-secondary)' },
   statValue: { fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 700, marginTop: 2 },
-  note: { fontSize: 12, color: '#6B6557', marginTop: 8 },
-  chip: { display: 'inline-block', padding: '1px 8px', marginRight: 4, borderRadius: 999, border: '1px solid #B8962E', color: '#B8962E', fontFamily: "'DM Mono', monospace", fontSize: 10 },
+  note: { fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 },
+  chip: { display: 'inline-block', padding: '1px 8px', marginRight: 4, borderRadius: 999, border: '1px solid var(--lala-gold)', color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", fontSize: 10 },
 };
 
 export default function EpisodeMoneyCard({ showId, episodeId }) {
