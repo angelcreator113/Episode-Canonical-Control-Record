@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { sceneSetPath } from '../../utils/sceneSets';
@@ -193,7 +193,12 @@ function EpisodeAssetsTab({ episode, show }) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Removed: "Create Thumbnail" button — opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
+          {/* The episode's thumbnails (audit LINK-02): the gallery that reads
+              them. The builder that makes one is the release workflow, batch 5. */}
+          <Link to={`/thumbnails/${episodeId}`} data-testid="episode-thumbnails-link" style={{
+            fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
+            border: '1px solid #2F7F76', color: '#2F7F76', background: '#EAF5F3', textDecoration: 'none',
+          }}>Thumbnails →</Link>
           <div style={{
             width: 48, height: 48, borderRadius: '50%',
             background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,

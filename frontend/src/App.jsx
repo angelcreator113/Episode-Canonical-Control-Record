@@ -56,6 +56,7 @@ const EditShow = lazy(() => import('./pages/EditShow'));
 // OutfitCalendar is still reachable at /wardrobe/calendar.
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
+import EpisodeComposerRedirect from './components/EpisodeComposerRedirect';
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
@@ -405,8 +406,9 @@ function AppContent() {
           {/* Wardrobe */}
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
           
-          {/* Thumbnail Composer / Template Studio */}
-          <Route path="/episodes/:episodeId/composer" element={<TemplateStudio />} />
+          {/* Template Library. The old episode composer link keeps its episode
+              (audit LINK-02): it opens that episode's Thumbnail Gallery. */}
+          <Route path="/episodes/:episodeId/composer" element={<EpisodeComposerRedirect />} />
           <Route path="/template-studio" element={<TemplateStudio />} />
           <Route path="/template-studio/designer" element={<TemplateDesigner />} />
           <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />

@@ -92,3 +92,12 @@ describe('ThumbnailGallery', () => {
     expect(thumbnailStatus({})).toBe('DRAFT');
   });
 });
+
+describe('ThumbnailGallery: the way back (audit LINK-02)', () => {
+  test('links back to the episode\'s Assets tab', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
+    renderAt('ep-1');
+    const back = await screen.findByTestId('thumbnail-back-to-episode');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=assets');
+  });
+});

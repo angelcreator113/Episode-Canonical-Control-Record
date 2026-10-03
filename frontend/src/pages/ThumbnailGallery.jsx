@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api, { episodeAPI } from '../services/api';
 import './ThumbnailGallery.css';
 
@@ -98,6 +98,7 @@ function ThumbnailGallery() {
         </div>
         <div className="header-right">
           {/* The per-video thumbnail builder (uploaded images, wardrobe, phone art, text) is the release workflow, audit batch 5. */}
+          <Link className="action-btn" to={`/episodes/${episodeId}?tab=assets`} data-testid="thumbnail-back-to-episode">← Back to the episode</Link>
         </div>
       </header>
 
