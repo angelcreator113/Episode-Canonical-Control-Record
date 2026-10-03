@@ -36,6 +36,7 @@ describe('setProgress and filterSceneSets', () => {
     expect(ids(filterSceneSets(ALL))).toEqual(['s-bare', 's-pending', 's-failed', 's-ready']);
     expect(ids(filterSceneSets(ALL, { scope: 'show', showId: 'show-1' }))).toEqual(['s-bare', 's-failed']);
     expect(ids(filterSceneSets(ALL, { scope: 'show', showId: null }))).toHaveLength(4);
+    expect(ids(filterSceneSets(ALL, { scope: 'shared' }))).toEqual(['s-ready']);
     expect(ids(filterSceneSets(ALL, { type: 'CLOSET' }))).toEqual(['s-pending']);
     expect(ids(filterSceneSets(ALL, { status: 'ready' }))).toEqual(['s-ready']);
     expect(ids(filterSceneSets(ALL, { query: 'GLASS' }))).toEqual(['s-ready']);
@@ -63,6 +64,10 @@ describe('SceneSetsTab: finding sets', () => {
     expect(screen.getByRole('button', { name: /This show/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: /All shows/ }));
     expect(cards()).toHaveLength(4);
+    // Shared: the sets that belong to no show.
+    fireEvent.click(screen.getByRole('button', { name: /Shared/ }));
+    expect(cards()).toEqual(['s-ready']);
+    expect(screen.getByRole('button', { name: /Shared/ }).textContent).toContain('1');
   });
 
   test('outside a show there is no This show / All shows choice', async () => {

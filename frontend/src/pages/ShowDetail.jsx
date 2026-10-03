@@ -12,6 +12,7 @@ import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import EpisodeCard from '../components/EpisodeCard';
 import EpisodeKanbanBoard from '../components/Episodes/EpisodeKanbanBoard';
 import './ShowDetail.css';
+import { rememberShow } from '../utils/activeShow';
 
 /**
  * ShowDetail - Tabbed Show Management Interface
@@ -95,6 +96,8 @@ function ShowDetail() {
       const showResponse = await showService.getShowById(showId);
       console.log('[ShowDetail] Got show:', showResponse?.name, 'ID:', showResponse?.id);
       setShow(showResponse);
+      // The show page's show is the active show (utils/activeShow).
+      rememberShow(showResponse?.id || showId);
       
       // Fetch episodes for this show
       const episodesResponse = await episodeService.getEpisodes(1, 100, { show_id: showId });
