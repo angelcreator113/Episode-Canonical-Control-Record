@@ -241,6 +241,7 @@ const TABS = [
   ]},
   { key: 'characters', icon: '👑', label: 'Cast & Continuity', subs: [
     { key: 'characters-list', label: "Lala's State & Continuity" },
+    { key: 'finances', label: "Lala's Finances" },
     { key: 'decisions', label: 'Activity & Decisions' },
   ]},
   { key: 'release', icon: '🚀', label: 'Release', subs: [
@@ -394,6 +395,7 @@ function WorldAdmin() {
       'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
       'decisions': ['characters', 'decisions'],
+      'finances': ['characters', 'finances'],
       'release': ['release', 'distribution'],
       'distribution': ['release', 'distribution'],
       'insights': ['release', 'insights'],
@@ -490,7 +492,6 @@ function WorldAdmin() {
   // Modal state for the finance editor (starting balance + goals ladder).
   // Kept separate from financeConfig so unsaved edits don't clobber the
   // fetched state until the user clicks Save.
-  const [financeEditorOpen, setFinanceEditorOpen] = useState(false);
   const [financeEditorDraft, setFinanceEditorDraft] = useState(null);
   const [financeEditorSaving, setFinanceEditorSaving] = useState(false);
   // Finance page tabs — Overview, Per-Episode, Goals (later: Breakdowns).
@@ -505,6 +506,38 @@ function WorldAdmin() {
   const [financeSuggestions, setFinanceSuggestions] = useState(null);
   // Breakdowns tab data — income/expense rollups by category + closet value.
   const [financeBreakdowns, setFinanceBreakdowns] = useState(null);
+  // Lala's Finances: the editable draft follows the saved config; the
+  // summary, suggestions and breakdowns load when the section opens.
+  const draftFromConfig = (cfg) => ({
+    starting_balance: cfg?.starting_balance ?? 1900,
+    goals: (cfg?.goals || []).map((g) => ({ ...g })),
+  });
+  useEffect(() => {
+    if (activeTab !== 'characters' || subTab !== 'finances') return undefined;
+    let cancelled = false;
+    setFinanceEditorDraft(draftFromConfig(financeConfig));
+    setFinanceSummaryLoading(true);
+    (async () => {
+      try {
+        const [sumRes, sugRes, brkRes] = await Promise.all([
+          api.get(`/api/v1/shows/${showId}/financial-summary`),
+          api.get(`/api/v1/shows/${showId}/financial-suggestions`).catch((err) => { console.error('[Finances] suggestions failed:', err); return null; }),
+          api.get(`/api/v1/shows/${showId}/financial-breakdowns`).catch((err) => { console.error('[Finances] breakdowns failed:', err); return null; }),
+        ]);
+        if (cancelled) return;
+        setFinanceSummary(sumRes.data);
+        setFinanceSuggestions(sugRes?.data?.suggestions || []);
+        setFinanceBreakdowns(brkRes?.data || null);
+      } catch (err) {
+        console.error('[Finances] summary failed:', err);
+        if (!cancelled) setFinanceSummary(null);
+      } finally {
+        if (!cancelled) setFinanceSummaryLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, subTab, showId, financeConfig]);
+
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   // Shared "Also draft a script" toggle — applies to single-event AND
@@ -1942,6 +1975,11 @@ The revised event should feel like a completely different experience from the si
                     {(epIncome > 0 || epExpenses > 0) && (
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
+                        {/* Lala's money across the season has one home: Cast & Continuity → Lala's Finances. */}
+                        <button type="button" onClick={() => goTo('finances')} data-testid={`ledger-finances-link-${ep.id}`}
+                          style={{ background: 'none', border: 'none', padding: 0, marginBottom: 8, color: '#8a6d1f', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>
+                          Lala's Finances →
+                        </button>
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                           <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
                             <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
@@ -5054,29 +5092,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     starting balance and goal ladder. Stays compact: when
                     there's no next goal (Legacy reached), just the balance. */}
                 <button
-                  onClick={async () => {
-                    setFinanceEditorDraft({
-                      starting_balance: financeConfig?.starting_balance ?? 1900,
-                      goals: (financeConfig?.goals || []).map(g => ({ ...g })),
-                    });
-                    setFinanceTab('overview');
-                    setFinanceEditorOpen(true);
-                    // Kick off the summary fetch so Overview renders real data.
-                    // Non-blocking: modal pops immediately with a loading state.
-                    setFinanceSummaryLoading(true);
-                    try {
-                      const [sumRes, sugRes, brkRes] = await Promise.all([
-                        api.get(`/api/v1/shows/${showId}/financial-summary`),
-                        api.get(`/api/v1/shows/${showId}/financial-suggestions`).catch(() => null),
-                        api.get(`/api/v1/shows/${showId}/financial-breakdowns`).catch(() => null),
-                      ]);
-                      setFinanceSummary(sumRes.data);
-                      setFinanceSuggestions(sugRes?.data?.suggestions || []);
-                      setFinanceBreakdowns(brkRes?.data || null);
-                    } catch { setFinanceSummary(null); }
-                    finally { setFinanceSummaryLoading(false); }
-                  }}
-                  title="Lala's finances — balance, trend, per-episode P&L, and goal ladder"
+                  type="button"
+                  onClick={() => goTo('finances')}
+                  data-testid="wardrobe-finance-pill"
+                  title="Open Lala's Finances (Cast & Continuity): balance, trend, per-episode P&L and goal ladder"
                   style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                 >
                   💰 {(financeConfig?.current_balance ?? 0).toLocaleString()}
@@ -6254,518 +6273,6 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             )}
 
-            {/* ── Finance Editor Modal ── */}
-            {financeEditorOpen && financeEditorDraft && (() => {
-              const d = financeEditorDraft;
-              const setDraft = (patch) => setFinanceEditorDraft(p => ({ ...p, ...patch }));
-              const updateGoal = (idx, patch) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.map((g, i) => i === idx ? { ...g, ...patch } : g) }));
-              const removeGoal = (idx) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.filter((_, i) => i !== idx) }));
-              const addGoal = () => setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
-                id: `goal-${Date.now().toString(36)}`,
-                threshold: 0,
-                reward_coins: 0,
-                label: '🎯 New milestone',
-                description: '',
-                triggered_at: null,
-              }] }));
-              const save = async () => {
-                setFinanceEditorSaving(true);
-                try {
-                  // Normalise + sort: make sure threshold/reward are numbers
-                  // and the ladder is ordered so the "next goal" logic works.
-                  const cleanGoals = (d.goals || [])
-                    .map(g => ({ ...g, threshold: Number(g.threshold) || 0, reward_coins: Number(g.reward_coins) || 0 }))
-                    .sort((a, b) => a.threshold - b.threshold);
-                  await api.put(`/api/v1/shows/${showId}/financial-config`, {
-                    starting_balance: Number(d.starting_balance) || 0,
-                    financial_goals: cleanGoals,
-                  });
-                  // Re-seed so the ledger reflects the new starting balance.
-                  // Force=true soft-deletes the old seed and writes a fresh one.
-                  await api.post(`/api/v1/shows/${showId}/seed-balance`, { force: true });
-                  // Refresh local state.
-                  const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
-                  setFinanceConfig(res.data);
-                  setFinanceEditorOpen(false);
-                  setToast('Finance config saved');
-                } catch (err) {
-                  setToast('Save failed: ' + (err.response?.data?.error || err.message));
-                } finally {
-                  setFinanceEditorSaving(false);
-                }
-              };
-              return (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !financeEditorSaving && setFinanceEditorOpen(false)}>
-                  <div style={{ background: '#fff', borderRadius: 14, maxWidth: 760, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance</h3>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {/* Seed finance apps — idempotent. Creates the 5 finance
-                            app screens + icons using AI-generated pink/teal
-                            frames, and appends the icons to the home screen in
-                            a 5-across grid at the bottom. Rerun any time to
-                            fill in missing apps. */}
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm('Create the 4 finance apps on Lala\'s phone?\n\n• Wallet / Insights / Breakdowns / Goals\n• Pink + teal AI-generated icons + screens\n• Icons auto-placed on the home screen\n\nCloset Value is skipped — add the closet_net_worth and closet_wishlist_grid content zones to your existing Closet screen instead.\n\nSafe to re-run — only fills in missing apps.')) return;
-                            try {
-                              const res = await api.post(`/api/v1/shows/${showId}/seed-finance-apps`, { auto_place: true });
-                              const created = (res.data.results || []).filter(r => r.created).length;
-                              const placed = res.data.placement?.placed;
-                              setToast(`Finance apps: ${created} created${placed ? ', icons placed on home screen' : ' (place manually in UI Overlays)'}`);
-                            } catch (err) {
-                              setToast('Seed failed: ' + (err.response?.data?.error || err.message));
-                            }
-                          }}
-                          title="Create 4 finance apps (Wallet, Insights, Breakdowns, Goals) on Lala's phone. Closet Value content zones go on your existing Closet screen."
-                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >📱 Seed Finance Apps</button>
-                        <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
-                      </div>
-                    </div>
-
-                    {/* Tab bar — switches between Overview (dashboard), Per-Episode
-                        (the P&L table), and Goals (starting balance + ladder editor). */}
-                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
-                      {[
-                        { key: 'overview',    label: 'Overview' },
-                        { key: 'per_episode', label: 'Per Episode' },
-                        { key: 'breakdowns',  label: 'Breakdowns' },
-                        { key: 'closet',      label: 'Closet' },
-                        { key: 'goals',       label: 'Goals' },
-                      ].map(t => {
-                        const active = financeTab === t.key;
-                        return (
-                          <button key={t.key} onClick={() => setFinanceTab(t.key)}
-                            style={{
-                              padding: '8px 16px', fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer',
-                              background: 'transparent', border: 'none',
-                              borderBottom: active ? '2px solid #B8962E' : '2px solid transparent',
-                              color: active ? '#1a1a2e' : '#64748b',
-                              marginBottom: -1,
-                            }}>{t.label}</button>
-                        );
-                      })}
-                    </div>
-
-                    {/* ── OVERVIEW TAB ────────────────────────────────────
-                        Balance, next-goal bar, lifetime totals, burn rate, runway,
-                        and a simple 12-episode trend sparkline. All derived from
-                        /financial-summary so the numbers match the ledger. */}
-                    {financeTab === 'overview' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {financeSummaryLoading && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
-                        {financeSummary && (() => {
-                          const t = financeSummary.totals || {};
-                          const balance = t.current_balance ?? 0;
-                          const trend = financeSummary.trend || [];
-                          const recentTrend = trend.slice(-12);
-                          const maxBal = Math.max(1, ...recentTrend.map(p => p.balance_after));
-                          const minBal = Math.min(0, ...recentTrend.map(p => p.balance_after));
-                          const range = maxBal - minBal || 1;
-                          const nextGoal = financeConfig?.next_goal;
-                          const progress = nextGoal ? Math.max(0, Math.min(1, balance / Number(nextGoal.threshold))) : 1;
-                          return (
-                            <>
-                              {/* Hero: balance + next goal */}
-                              <div style={{ padding: '14px 16px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
-                                <div style={{ fontSize: 11, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
-                                <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
-                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginLeft: 8 }}>coins</span>
-                                </div>
-                                {nextGoal && (
-                                  <div style={{ marginTop: 10 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                                      <span style={{ color: '#854d0e', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: '#a16207', marginLeft: 4 }}>· ep-scoped</span>}</span>
-                                      <span style={{ color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
-                                    </div>
-                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017', transition: 'width 0.3s' }} />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* KPI strip */}
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-                                {[
-                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: '#16a34a' },
-                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: '#dc2626' },
-                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? '#16a34a' : '#dc2626' },
-                                  { label: 'Burn rate', value: `${financeSummary.burn_rate_per_episode.toLocaleString()}/ep`, color: '#1a1a2e' },
-                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
-                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: '#1a1a2e' },
-                                ].map(kpi => (
-                                  <div key={kpi.label} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                                    <div style={{ fontSize: 9, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
-                                    <div style={{ fontSize: 15, fontWeight: 700, color: kpi.color, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{kpi.value}</div>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* Sparkline — last 12 episodes' ending balance. Rendered with
-                                  inline SVG (no chart library) so it survives any CSP + is
-                                  fast to paint. Each point is scaled into the 0-100 range */}
-                              {recentTrend.length > 1 && (
-                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
-                                  <svg viewBox={`0 0 100 40`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }}>
-                                    {/* Zero line */}
-                                    {minBal < 0 && (
-                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="#cbd5e1" strokeWidth="0.3" strokeDasharray="1,1" />
-                                    )}
-                                    <polyline
-                                      points={recentTrend.map((p, i) => {
-                                        const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
-                                        const y = 40 - ((p.balance_after - minBal) / range) * 40;
-                                        return `${x},${y}`;
-                                      }).join(' ')}
-                                      fill="none"
-                                      stroke="#B8962E"
-                                      strokeWidth="0.8"
-                                      vectorEffect="non-scaling-stroke"
-                                    />
-                                    {recentTrend.map((p, i) => {
-                                      const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
-                                      const y = 40 - ((p.balance_after - minBal) / range) * 40;
-                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? '#16a34a' : '#dc2626'} vectorEffect="non-scaling-stroke" />;
-                                    })}
-                                  </svg>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
-                                    <span>Ep {recentTrend[0]?.episode_number || '?'}</span>
-                                    <span>Ep {recentTrend[recentTrend.length - 1]?.episode_number || '?'}</span>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                        {!financeSummaryLoading && !financeSummary && (
-                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
-                            No summary yet. Finalize an episode to populate.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── PER-EPISODE TAB ────────────────────────────────────
-                        Full-history P&L table, newest first. Colour-codes the net
-                        column red/green. Click a row to jump to that episode (TODO). */}
-                    {financeTab === 'per_episode' && (
-                      <div>
-                        {financeSummary && financeSummary.by_episode.length > 0 ? (
-                          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr style={{ background: '#f8fafc', color: '#64748b', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
-                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Ep</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Title</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Outfit</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Event</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Tasks</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Net</th>
-                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Balance</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {financeSummary.by_episode.filter(e => e.tx_count > 0).map(e => (
-                                  <tr key={e.episode_id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{e.episode_number ?? '—'}</td>
-                                    <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title || '(untitled)'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#16a34a' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? '#16a34a' : '#dc2626' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#1a1a2e' }}>{e.balance_after.toLocaleString()}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 30 }}>
-                            No episode-level transactions yet. Finalize episodes to populate.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── BREAKDOWNS TAB ───────────────────────────────────
-                        Income and expense categories rendered as labelled bars
-                        (simpler + more scannable than a pie at this data size).
-                        Bars are scaled against the single largest category so
-                        the visual ratio reflects actual spend shape. */}
-                    {financeTab === 'breakdowns' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {!financeBreakdowns && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
-                        {financeBreakdowns && (() => {
-                          const incomeMax = Math.max(1, ...(financeBreakdowns.income?.breakdown || []).map(r => r.total));
-                          const expenseMax = Math.max(1, ...(financeBreakdowns.expenses?.breakdown || []).map(r => r.total));
-                          const renderBars = (items, max, color) => (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {items.map(r => (
-                                <div key={r.category} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ width: 140, fontSize: 11, color: '#475569', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
-                                  <div style={{ flex: 1, height: 14, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
-                                    <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
-                                  </div>
-                                  <div style={{ width: 80, fontSize: 11, textAlign: 'right', fontFamily: "'DM Mono', monospace", color, fontWeight: 700 }}>
-                                    {r.total.toLocaleString()}
-                                  </div>
-                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                          return (
-                            <>
-                              <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
-                                  <span style={{ fontSize: 11, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
-                                </div>
-                                {(financeBreakdowns.income?.breakdown || []).length > 0
-                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, '#16a34a')
-                                  : <div style={{ fontSize: 11, color: '#16a34a80', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
-                              </div>
-                              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
-                                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
-                                </div>
-                                {(financeBreakdowns.expenses?.breakdown || []).length > 0
-                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, '#dc2626')
-                                  : <div style={{ fontSize: 11, color: '#dc262680', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
-                              </div>
-                              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
-                                Bar length = share of its side's total. "×N" = how many transactions rolled into that row.
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* ── CLOSET TAB ───────────────────────────────────────
-                        Net-worth snapshot from the wardrobe. Owned value is the
-                        real money Lala has tied up in her closet; unowned is her
-                        aspirational inventory. Top 5 unowned-by-value shown so
-                        creators see the concrete upgrade path. */}
-                    {financeTab === 'closet' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
-                        {financeBreakdowns?.closet && (() => {
-                          const c = financeBreakdowns.closet;
-                          return (
-                            <>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                                <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#16a34a80', marginTop: 2 }}>{c.owned_count} pieces</div>
-                                </div>
-                                <div style={{ padding: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#4338ca80', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
-                                </div>
-                                <div style={{ padding: 12, background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#8a6d1f80', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
-                                </div>
-                              </div>
-                              {c.wishlist && c.wishlist.length > 0 && (
-                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    {c.wishlist.map(w => (
-                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: '#faf7f0', borderRadius: 6 }}>
-                                        {w.image_url && <img src={w.image_url} alt={w.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-                                          <div style={{ fontSize: 10, color: '#64748b' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
-                                        </div>
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-                                          💰 {w.coin_cost.toLocaleString()}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* ── GOALS TAB ──────────────────────────────────────── */}
-                    {financeTab === 'goals' && (
-                    <>
-                    {/* Auto-suggestions — generated from balance + upcoming events +
-                        wardrobe wishlist + best-ever episode. Each card shows the
-                        proposed label / threshold / reward plus a one-line rationale
-                        and a "+ Add" button that appends it to the draft goals list.
-                        Already-added suggestions are dimmed with an "Added" badge. */}
-                    {Array.isArray(financeSuggestions) && financeSuggestions.length > 0 && (
-                      <div style={{ marginBottom: 16, padding: '12px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
-                          <span style={{ fontSize: 10, color: '#6366f1' }}>— derived from your balance + calendar + closet</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {financeSuggestions.map(sug => {
-                            const already = sug.already_exists || d.goals.some(g => g.id === sug.id || Number(g.threshold) === Number(sug.threshold));
-                            return (
-                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #e0e7ff', opacity: already ? 0.55 : 1 }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
-                                    {sug.label}
-                                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6366f1', fontFamily: "'DM Mono', monospace" }}>
-                                      {Number(sug.threshold).toLocaleString()} coins · +{Number(sug.reward_coins).toLocaleString()} reward
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{sug.description}</div>
-                                  <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
-                                </div>
-                                {already ? (
-                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', padding: '4px 10px', background: '#f0fdf4', borderRadius: 5 }}>✓ Added</span>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
-                                        id: sug.id,
-                                        label: sug.label,
-                                        threshold: Number(sug.threshold),
-                                        reward_coins: Number(sug.reward_coins),
-                                        description: sug.description,
-                                        triggered_at: null,
-                                        episode_id: null,
-                                      }] }));
-                                    }}
-                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid #6366f1', borderRadius: 5, background: '#6366f1', color: '#fff', cursor: 'pointer' }}
-                                  >+ Add</button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {/* Starting balance */}
-                    <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
-                      <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-                        <input
-                          type="number"
-                          min="0"
-                          step="100"
-                          value={d.starting_balance}
-                          onChange={e => setDraft({ starting_balance: e.target.value })}
-                          style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 700 }}
-                        />
-                        <span style={{ fontSize: 11, color: '#8a6d1f' }}>coins</span>
-                      </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
-                        Current balance: {(financeConfig?.current_balance ?? 0).toLocaleString()} coins. Saving will re-seed the starting balance — non-seed transactions stay intact.
-                      </div>
-                    </div>
-
-                    {/* Goals ladder */}
-                    <div style={{ marginBottom: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Milestone ladder ({d.goals.length})</label>
-                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9cc', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#334155' }}>+ Add goal</button>
-                      </div>
-                      {d.goals.length === 0 && (
-                        <div style={{ fontSize: 12, color: '#94a3b8', padding: 12, textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
-                          No milestones yet. Add one above.
-                        </div>
-                      )}
-                      {d.goals.map((g, i) => (
-                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, background: g.triggered_at ? '#f0fdf4' : '#fff' }}>
-                          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                            <input
-                              value={g.label}
-                              onChange={e => updateGoal(i, { label: e.target.value })}
-                              placeholder="🌟 Rising Star"
-                              style={{ ...S.inp, flex: 2, margin: 0 }}
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="100"
-                              value={g.threshold}
-                              onChange={e => updateGoal(i, { threshold: e.target.value })}
-                              placeholder="threshold"
-                              title="Balance Lala must reach to trigger this goal"
-                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="50"
-                              value={g.reward_coins}
-                              onChange={e => updateGoal(i, { reward_coins: e.target.value })}
-                              placeholder="reward"
-                              title="Coins paid out when goal is reached"
-                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
-                            />
-                            <button
-                              onClick={() => removeGoal(i)}
-                              title="Delete this goal"
-                              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 6, color: '#dc2626', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
-                            >×</button>
-                          </div>
-                          <input
-                            value={g.description || ''}
-                            onChange={e => updateGoal(i, { description: e.target.value })}
-                            placeholder="Short description shown on the progress bar"
-                            style={{ ...S.inp, width: '100%', margin: 0, fontSize: 12 }}
-                          />
-                          {/* Episode scope — leave as "any episode" for ladder-style
-                              show-wide goals, or pin to a specific episode for per-
-                              episode targets ("hit 10k by end of Ep 3"). Episode-
-                              scoped goals only fire when that specific episode
-                              finalizes and the threshold gets crossed. */}
-                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <label style={{ fontSize: 10, color: '#8a7e65', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
-                            <select
-                              value={g.episode_id || ''}
-                              onChange={e => updateGoal(i, { episode_id: e.target.value || null })}
-                              style={{ ...S.sel, width: '100%', margin: 0, fontSize: 12 }}
-                            >
-                              <option value="">Any episode (show-wide ladder)</option>
-                              {episodes.map(ep => (
-                                <option key={ep.id} value={ep.id}>
-                                  Ep {ep.episode_number || '?'}: {ep.title || 'Untitled'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          {g.triggered_at && (
-                            <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
-                              ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
-                      <button onClick={() => setFinanceEditorOpen(false)} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Cancel</button>
-                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
-                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
-                      </button>
-                    </div>
-                    </>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
             {/* ── Create Outfit Set Modal ── */}
             {showCreateOutfitSet && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !creatingOutfitSet && setShowCreateOutfitSet(false)}>
@@ -7176,6 +6683,526 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             />
           )}
           {subTab === 'insights' && <ShowInsightsTab show={show} />}
+        </div>
+      )}
+
+      {/* ════════════════════ LALA'S FINANCES (one home) ════════════════════ */}
+      {/* Her in-world money: balance, trend, per-episode P&L, breakdowns,
+          closet value and the goal ladder. Item prices stay in Wardrobe and
+          event terms in the Event Package. */}
+      {activeTab === 'characters' && subTab === 'finances' && (
+        <div style={S.content}>
+          {financeSummaryLoading && !financeSummary && <p style={S.muted}>Loading Lala's finances…</p>}
+            {/* Lala's finances: balance, trend, per-episode P&L, breakdowns, closet, goals. */}
+            {financeEditorDraft && (() => {
+              const d = financeEditorDraft;
+              const setDraft = (patch) => setFinanceEditorDraft(p => ({ ...p, ...patch }));
+              const updateGoal = (idx, patch) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.map((g, i) => i === idx ? { ...g, ...patch } : g) }));
+              const removeGoal = (idx) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.filter((_, i) => i !== idx) }));
+              const addGoal = () => setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                id: `goal-${Date.now().toString(36)}`,
+                threshold: 0,
+                reward_coins: 0,
+                label: '🎯 New milestone',
+                description: '',
+                triggered_at: null,
+              }] }));
+              const save = async () => {
+                setFinanceEditorSaving(true);
+                try {
+                  // Normalise + sort: make sure threshold/reward are numbers
+                  // and the ladder is ordered so the "next goal" logic works.
+                  const cleanGoals = (d.goals || [])
+                    .map(g => ({ ...g, threshold: Number(g.threshold) || 0, reward_coins: Number(g.reward_coins) || 0 }))
+                    .sort((a, b) => a.threshold - b.threshold);
+                  await api.put(`/api/v1/shows/${showId}/financial-config`, {
+                    starting_balance: Number(d.starting_balance) || 0,
+                    financial_goals: cleanGoals,
+                  });
+                  // Re-seed so the ledger reflects the new starting balance.
+                  // Force=true soft-deletes the old seed and writes a fresh one.
+                  await api.post(`/api/v1/shows/${showId}/seed-balance`, { force: true });
+                  // Refresh local state.
+                  const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
+                  setFinanceConfig(res.data);
+                  setFinanceEditorDraft(draftFromConfig(res.data));
+                  setToast('Finance config saved');
+                } catch (err) {
+                  setToast('Save failed: ' + (err.response?.data?.error || err.message));
+                } finally {
+                  setFinanceEditorSaving(false);
+                }
+              };
+              return (
+                <div data-testid="lala-finances">
+                  <div style={{ ...S.card, maxWidth: 900 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Lala's Finances</h2>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Seed finance apps — idempotent. Creates the 5 finance
+                            app screens + icons using AI-generated pink/teal
+                            frames, and appends the icons to the home screen in
+                            a 5-across grid at the bottom. Rerun any time to
+                            fill in missing apps. */}
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Create the 4 finance apps on Lala\'s phone?\n\n• Wallet / Insights / Breakdowns / Goals\n• Pink + teal AI-generated icons + screens\n• Icons auto-placed on the home screen\n\nCloset Value is skipped — add the closet_net_worth and closet_wishlist_grid content zones to your existing Closet screen instead.\n\nSafe to re-run — only fills in missing apps.')) return;
+                            try {
+                              const res = await api.post(`/api/v1/shows/${showId}/seed-finance-apps`, { auto_place: true });
+                              const created = (res.data.results || []).filter(r => r.created).length;
+                              const placed = res.data.placement?.placed;
+                              setToast(`Finance apps: ${created} created${placed ? ', icons placed on home screen' : ' (place them in Lala’s Phone)'}`);
+                            } catch (err) {
+                              setToast('Seed failed: ' + (err.response?.data?.error || err.message));
+                            }
+                          }}
+                          title="Create 4 finance apps (Wallet, Insights, Breakdowns, Goals) on Lala's phone. Closet Value content zones go on your existing Closet screen."
+                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >📱 Seed Finance Apps</button>
+                      </div>
+                    </div>
+
+                    {/* Tab bar — switches between Overview (dashboard), Per-Episode
+                        (the P&L table), and Goals (starting balance + ladder editor). */}
+                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
+                      {[
+                        { key: 'overview',    label: 'Overview' },
+                        { key: 'per_episode', label: 'Per Episode' },
+                        { key: 'breakdowns',  label: 'Breakdowns' },
+                        { key: 'closet',      label: 'Closet' },
+                        { key: 'goals',       label: 'Goals' },
+                      ].map(t => {
+                        const active = financeTab === t.key;
+                        return (
+                          <button key={t.key} onClick={() => setFinanceTab(t.key)}
+                            style={{
+                              padding: '8px 16px', fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer',
+                              background: 'transparent', border: 'none',
+                              borderBottom: active ? '2px solid #B8962E' : '2px solid transparent',
+                              color: active ? '#1a1a2e' : '#64748b',
+                              marginBottom: -1,
+                            }}>{t.label}</button>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── OVERVIEW TAB ────────────────────────────────────
+                        Balance, next-goal bar, lifetime totals, burn rate, runway,
+                        and a simple 12-episode trend sparkline. All derived from
+                        /financial-summary so the numbers match the ledger. */}
+                    {financeTab === 'overview' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {financeSummaryLoading && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
+                        {financeSummary && (() => {
+                          const t = financeSummary.totals || {};
+                          const balance = t.current_balance ?? 0;
+                          const trend = financeSummary.trend || [];
+                          const recentTrend = trend.slice(-12);
+                          const maxBal = Math.max(1, ...recentTrend.map(p => p.balance_after));
+                          const minBal = Math.min(0, ...recentTrend.map(p => p.balance_after));
+                          const range = maxBal - minBal || 1;
+                          const nextGoal = financeConfig?.next_goal;
+                          const progress = nextGoal ? Math.max(0, Math.min(1, balance / Number(nextGoal.threshold))) : 1;
+                          return (
+                            <>
+                              {/* Hero: balance + next goal */}
+                              <div style={{ padding: '14px 16px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                <div style={{ fontSize: 11, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
+                                <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginLeft: 8 }}>coins</span>
+                                </div>
+                                {nextGoal && (
+                                  <div style={{ marginTop: 10 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                                      <span style={{ color: '#854d0e', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: '#a16207', marginLeft: 4 }}>· ep-scoped</span>}</span>
+                                      <span style={{ color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017', transition: 'width 0.3s' }} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* KPI strip */}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+                                {[
+                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: '#16a34a' },
+                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: '#dc2626' },
+                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? '#16a34a' : '#dc2626' },
+                                  { label: 'Burn rate', value: `${(financeSummary.burn_rate_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: '#1a1a2e' },
+                                ].map(kpi => (
+                                  <div key={kpi.label} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                                    <div style={{ fontSize: 9, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
+                                    <div style={{ fontSize: 15, fontWeight: 700, color: kpi.color, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{kpi.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Sparkline — last 12 episodes' ending balance. Rendered with
+                                  inline SVG (no chart library) so it survives any CSP + is
+                                  fast to paint. Each point is scaled into the 0-100 range */}
+                              {recentTrend.length > 1 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
+                                  <svg viewBox={`0 0 100 40`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }}>
+                                    {/* Zero line */}
+                                    {minBal < 0 && (
+                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="#cbd5e1" strokeWidth="0.3" strokeDasharray="1,1" />
+                                    )}
+                                    <polyline
+                                      points={recentTrend.map((p, i) => {
+                                        const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                        const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                        return `${x},${y}`;
+                                      }).join(' ')}
+                                      fill="none"
+                                      stroke="#B8962E"
+                                      strokeWidth="0.8"
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    {recentTrend.map((p, i) => {
+                                      const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                      const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? '#16a34a' : '#dc2626'} vectorEffect="non-scaling-stroke" />;
+                                    })}
+                                  </svg>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                                    <span>Ep {recentTrend[0]?.episode_number || '?'}</span>
+                                    <span>Ep {recentTrend[recentTrend.length - 1]?.episode_number || '?'}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {!financeSummaryLoading && !financeSummary && (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
+                            No summary yet. Finalize an episode to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── PER-EPISODE TAB ────────────────────────────────────
+                        Full-history P&L table, newest first. Colour-codes the net
+                        column red/green. Click a row to jump to that episode (TODO). */}
+                    {financeTab === 'per_episode' && (
+                      <div>
+                        {financeSummary && financeSummary.by_episode.length > 0 ? (
+                          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f8fafc', color: '#64748b', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Ep</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Title</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Outfit</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Event</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Tasks</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Net</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Balance</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {financeSummary.by_episode.filter(e => e.tx_count > 0).map(e => (
+                                  <tr key={e.episode_id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{e.episode_number ?? '—'}</td>
+                                    <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title || '(untitled)'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#16a34a' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? '#16a34a' : '#dc2626' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#1a1a2e' }}>{e.balance_after.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 30 }}>
+                            No episode-level transactions yet. Finalize episodes to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── BREAKDOWNS TAB ───────────────────────────────────
+                        Income and expense categories rendered as labelled bars
+                        (simpler + more scannable than a pie at this data size).
+                        Bars are scaled against the single largest category so
+                        the visual ratio reflects actual spend shape. */}
+                    {financeTab === 'breakdowns' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
+                        {financeBreakdowns && (() => {
+                          const incomeMax = Math.max(1, ...(financeBreakdowns.income?.breakdown || []).map(r => r.total));
+                          const expenseMax = Math.max(1, ...(financeBreakdowns.expenses?.breakdown || []).map(r => r.total));
+                          const renderBars = (items, max, color) => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {items.map(r => (
+                                <div key={r.category} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ width: 140, fontSize: 11, color: '#475569', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
+                                  <div style={{ flex: 1, height: 14, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                                    <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                                  </div>
+                                  <div style={{ width: 80, fontSize: 11, textAlign: 'right', fontFamily: "'DM Mono', monospace", color, fontWeight: 700 }}>
+                                    {r.total.toLocaleString()}
+                                  </div>
+                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          return (
+                            <>
+                              <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
+                                  <span style={{ fontSize: 11, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.income?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, '#16a34a')
+                                  : <div style={{ fontSize: 11, color: '#16a34a80', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
+                              </div>
+                              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
+                                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.expenses?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, '#dc2626')
+                                  : <div style={{ fontSize: 11, color: '#dc262680', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
+                                Bar length = share of its side's total. "×N" = how many transactions rolled into that row.
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── CLOSET TAB ───────────────────────────────────────
+                        Net-worth snapshot from the wardrobe. Owned value is the
+                        real money Lala has tied up in her closet; unowned is her
+                        aspirational inventory. Top 5 unowned-by-value shown so
+                        creators see the concrete upgrade path. */}
+                    {financeTab === 'closet' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
+                        {financeBreakdowns?.closet && (() => {
+                          const c = financeBreakdowns.closet;
+                          return (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                                <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#16a34a80', marginTop: 2 }}>{c.owned_count} pieces</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#4338ca80', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#8a6d1f80', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
+                                </div>
+                              </div>
+                              {c.wishlist && c.wishlist.length > 0 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {c.wishlist.map(w => (
+                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: '#faf7f0', borderRadius: 6 }}>
+                                        {w.image_url && <img src={w.image_url} alt={w.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+                                          <div style={{ fontSize: 10, color: '#64748b' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
+                                        </div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                                          💰 {w.coin_cost.toLocaleString()}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── GOALS TAB ──────────────────────────────────────── */}
+                    {financeTab === 'goals' && (
+                    <>
+                    {/* Auto-suggestions — generated from balance + upcoming events +
+                        wardrobe wishlist + best-ever episode. Each card shows the
+                        proposed label / threshold / reward plus a one-line rationale
+                        and a "+ Add" button that appends it to the draft goals list.
+                        Already-added suggestions are dimmed with an "Added" badge. */}
+                    {Array.isArray(financeSuggestions) && financeSuggestions.length > 0 && (
+                      <div style={{ marginBottom: 16, padding: '12px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
+                          <span style={{ fontSize: 10, color: '#6366f1' }}>— derived from your balance + calendar + closet</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {financeSuggestions.map(sug => {
+                            const already = sug.already_exists || d.goals.some(g => g.id === sug.id || Number(g.threshold) === Number(sug.threshold));
+                            return (
+                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #e0e7ff', opacity: already ? 0.55 : 1 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+                                    {sug.label}
+                                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6366f1', fontFamily: "'DM Mono', monospace" }}>
+                                      {Number(sug.threshold).toLocaleString()} coins · +{Number(sug.reward_coins).toLocaleString()} reward
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{sug.description}</div>
+                                  <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
+                                </div>
+                                {already ? (
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', padding: '4px 10px', background: '#f0fdf4', borderRadius: 5 }}>✓ Added</span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                                        id: sug.id,
+                                        label: sug.label,
+                                        threshold: Number(sug.threshold),
+                                        reward_coins: Number(sug.reward_coins),
+                                        description: sug.description,
+                                        triggered_at: null,
+                                        episode_id: null,
+                                      }] }));
+                                    }}
+                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid #6366f1', borderRadius: 5, background: '#6366f1', color: '#fff', cursor: 'pointer' }}
+                                  >+ Add</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {/* Starting balance */}
+                    <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={d.starting_balance}
+                          onChange={e => setDraft({ starting_balance: e.target.value })}
+                          style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 700 }}
+                        />
+                        <span style={{ fontSize: 11, color: '#8a6d1f' }}>coins</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+                        Current balance: {(financeConfig?.current_balance ?? 0).toLocaleString()} coins. Saving will re-seed the starting balance — non-seed transactions stay intact.
+                      </div>
+                    </div>
+
+                    {/* Goals ladder */}
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Milestone ladder ({d.goals.length})</label>
+                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9cc', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#334155' }}>+ Add goal</button>
+                      </div>
+                      {d.goals.length === 0 && (
+                        <div style={{ fontSize: 12, color: '#94a3b8', padding: 12, textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
+                          No milestones yet. Add one above.
+                        </div>
+                      )}
+                      {d.goals.map((g, i) => (
+                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, background: g.triggered_at ? '#f0fdf4' : '#fff' }}>
+                          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                            <input
+                              value={g.label}
+                              onChange={e => updateGoal(i, { label: e.target.value })}
+                              placeholder="🌟 Rising Star"
+                              style={{ ...S.inp, flex: 2, margin: 0 }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="100"
+                              value={g.threshold}
+                              onChange={e => updateGoal(i, { threshold: e.target.value })}
+                              placeholder="threshold"
+                              title="Balance Lala must reach to trigger this goal"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={g.reward_coins}
+                              onChange={e => updateGoal(i, { reward_coins: e.target.value })}
+                              placeholder="reward"
+                              title="Coins paid out when goal is reached"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <button
+                              onClick={() => removeGoal(i)}
+                              title="Delete this goal"
+                              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 6, color: '#dc2626', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
+                            >×</button>
+                          </div>
+                          <input
+                            value={g.description || ''}
+                            onChange={e => updateGoal(i, { description: e.target.value })}
+                            placeholder="Short description shown on the progress bar"
+                            style={{ ...S.inp, width: '100%', margin: 0, fontSize: 12 }}
+                          />
+                          {/* Episode scope — leave as "any episode" for ladder-style
+                              show-wide goals, or pin to a specific episode for per-
+                              episode targets ("hit 10k by end of Ep 3"). Episode-
+                              scoped goals only fire when that specific episode
+                              finalizes and the threshold gets crossed. */}
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <label style={{ fontSize: 10, color: '#8a7e65', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
+                            <select
+                              value={g.episode_id || ''}
+                              onChange={e => updateGoal(i, { episode_id: e.target.value || null })}
+                              style={{ ...S.sel, width: '100%', margin: 0, fontSize: 12 }}
+                            >
+                              <option value="">Any episode (show-wide ladder)</option>
+                              {episodes.map(ep => (
+                                <option key={ep.id} value={ep.id}>
+                                  Ep {ep.episode_number || '?'}: {ep.title || 'Untitled'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {g.triggered_at && (
+                            <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                              ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
+                      <button onClick={() => setFinanceEditorDraft(draftFromConfig(financeConfig))} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Discard changes</button>
+                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
+                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
+                      </button>
+                    </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
         </div>
       )}
 
