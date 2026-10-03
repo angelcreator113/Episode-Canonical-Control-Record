@@ -24,7 +24,7 @@ describe('beatRequirements', () => {
 });
 
 describe('computeCoverage', () => {
-  test('environment from plan readiness, interface from beat-anchored overlays, clips not tracked', () => {
+  test('environment from plan readiness, interface from beat-anchored overlays, clips not tracked when unread', () => {
     const c = computeCoverage({
       planRows: allPlanned(),
       readiness: { not_ready: [{ beat_number: 4, text: 'Bedroom has no base image' }] },
@@ -32,7 +32,7 @@ describe('computeCoverage', () => {
     });
     const b2 = c.beats.find((b) => b.number === 2);
     expect(b2.indicators.interface).toEqual({ requirement: 'required', met: true, text: 'Title — Beat 2' });
-    expect(b2.indicators.host).toEqual({ requirement: 'required', met: null, text: 'No clip home yet' });
+    expect(b2.indicators.host).toEqual({ requirement: 'required', met: null, text: 'Clips could not be read' });
     expect(b2.covered).toBe(false);
     const b4 = c.beats.find((b) => b.number === 4);
     expect(b4.indicators.environment).toEqual({ requirement: 'required', met: false, text: 'Bedroom has no base image' });
@@ -63,6 +63,36 @@ describe('computeCoverage', () => {
   });
 });
 
+describe('computeCoverage with performance clips (the clip home)', () => {
+  test('a clip for the beat\'s performer meets it; the wrong performer or beat does not', () => {
+    const c = computeCoverage({
+      planRows: allPlanned(),
+      readiness: { not_ready: [] },
+      overlays: [],
+      clips: [
+        { canonical_beat_number: 1, performer: 'justawoman', label: 'Headphones on', status: 'approved' },
+        { canonical_beat_number: 6, performer: 'justawoman', label: 'Wrong performer', status: 'draft' },
+        { canonical_beat_number: 12, performer: 'lala', label: null, status: 'draft' },
+      ],
+    });
+    const at = (n) => c.beats.find((b) => b.number === n).indicators;
+    expect(at(1).host).toEqual({ requirement: 'required', met: true, text: 'Headphones on · approved' });
+    expect(at(6).character).toEqual({ requirement: 'required', met: false, text: 'No clip attached' });
+    expect(at(12).character).toEqual({ requirement: 'required', met: true, text: 'Lala clip' });
+    expect(c.untracked).toBe(0);
+  });
+
+  test('with clips read, a missing clip can be next', () => {
+    const c = computeCoverage({
+      planRows: allPlanned(),
+      readiness: { not_ready: [] },
+      overlays: CANONICAL_BEATS.map((b) => ({ beat_number: b.number, label: `O${b.number}` })),
+      clips: [],
+    });
+    expect(c.next).toEqual({ beat_number: 1, beat_name: 'Opening Ritual', indicator: 'host', label: 'JustAWoman clip', text: 'No clip attached' });
+  });
+});
+
 describe('loadCoverage', () => {
   jest.resetModules();
   jest.doMock('../../../src/services/planLocationsService', () => ({
@@ -72,7 +102,9 @@ describe('loadCoverage', () => {
   const { loadCoverage } = require('../../../src/services/productionCoverageService');
 
   test('reads the plan and the beat-anchored overlays for the episode only', async () => {
-    const query = jest.fn(async () => [[{ label: 'Invitation — Beat 5: Reveal', beat_number: '5' }]]);
+    const query = jest.fn(async (sql) => (/episode_performance_clips/.test(sql)
+      ? [[{ canonical_beat_number: 5, performer: 'justawoman', label: 'Opens the letter', status: 'draft' }]]
+      : [[{ label: 'Invitation — Beat 5: Reveal', beat_number: '5' }]]));
     const models = {
       ScenePlan: { findAll: jest.fn(async () => allPlanned().map((r) => ({ toJSON: () => r }))) },
       SceneSet: {},
@@ -84,5 +116,33 @@ describe('loadCoverage', () => {
     expect(query.mock.calls[0][0]).toMatch(/deleted_at IS NULL/);
     expect(query.mock.calls[0][1]).toEqual({ replacements: { episodeId: 'ep-1' } });
     expect(c.beats.find((b) => b.number === 5).indicators.interface.met).toBe(true);
+    expect(c.beats.find((b) => b.number === 5).indicators.host).toMatchObject({ met: true, text: 'Opens the letter' });
+  });
+
+  test('a failed clip read is logged and leaves the clip indicators untracked', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const query = jest.fn(async (sql) => {
+      if (/episode_performance_clips/.test(sql)) throw new Error('relation does not exist');
+      return [[]];
+    });
+    const models = { ScenePlan: { findAll: jest.fn(async () => []) }, SceneSet: {}, sequelize: { query } };
+    const c = await loadCoverage(models, 'ep-1');
+    expect(spy).toHaveBeenCalledWith('[ProductionCoverage] clip read failed:', 'relation does not exist');
+    expect(c.untracked).toBe(6);
+    spy.mockRestore();
+  });
+
+  test('a failed overlay read (no timeline_placements table) is logged and leaves the interface indicator untracked', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const query = jest.fn(async (sql) => {
+      if (/timeline_placements/.test(sql)) throw new Error('relation "timeline_placements" does not exist');
+      return [[]];
+    });
+    const models = { ScenePlan: { findAll: jest.fn(async () => []) }, SceneSet: {}, sequelize: { query } };
+    const c = await loadCoverage(models, 'ep-1');
+    expect(spy).toHaveBeenCalledWith('[ProductionCoverage] overlay read failed:', 'relation "timeline_placements" does not exist');
+    expect(c.beats.find((b) => b.number === 2).indicators.interface).toEqual({ requirement: 'required', met: null, text: 'Overlays could not be read' });
+    expect(c.beats.find((b) => b.number === 6).indicators.character).toEqual({ requirement: 'required', met: false, text: 'No clip attached' });
+    spy.mockRestore();
   });
 });

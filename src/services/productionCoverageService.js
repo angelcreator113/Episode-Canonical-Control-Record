@@ -6,8 +6,11 @@
  * the episode's scene_plans rows with their sets and angles (the same read
  * GET /episode-brief/:id/plan makes, then planWithAngles and
  * planReadiness), and the overlays placed on a beat (timeline_placements
- * whose properties.anchor is 'beat', written by placeOverlayOnBeat). Reads
- * only.
+ * whose properties.anchor is 'beat', written by placeOverlayOnBeat), and
+ * the episode's performance clips (episode_performance_clips). A failed
+ * clip read is logged and leaves the two clip indicators "not tracked"; a
+ * failed overlay read does the same for the interface indicator.
+ * Reads only.
  */
 
 const { computeCoverage } = require('../utils/productionCoverage');
@@ -28,14 +31,29 @@ async function loadCoverage(models, episodeId) {
   const planRows = await planWithAngles(sequelize, plans.map((p) => (p.toJSON ? p.toJSON() : p)));
   const readiness = planReadiness(planRows);
 
-  const [placed] = await sequelize.query(
-    `SELECT label, properties->>'beat_number' AS beat_number
-       FROM timeline_placements
-      WHERE episode_id = :episodeId AND deleted_at IS NULL AND properties->>'anchor' = 'beat'`,
-    { replacements: { episodeId } });
-  const overlays = (placed || []).map((p) => ({ beat_number: Number(p.beat_number), label: p.label }));
+  // timeline_placements is not created by the canon migration tree, so a
+  // database without it reads the interface indicator as "not tracked".
+  let overlays = null;
+  try {
+    const [placed] = await sequelize.query(
+      `SELECT label, properties->>'beat_number' AS beat_number
+         FROM timeline_placements
+        WHERE episode_id = :episodeId AND deleted_at IS NULL AND properties->>'anchor' = 'beat'`,
+      { replacements: { episodeId } });
+    overlays = (placed || []).map((p) => ({ beat_number: Number(p.beat_number), label: p.label }));
+  } catch (err) {
+    console.error('[ProductionCoverage] overlay read failed:', err.message);
+  }
 
-  return computeCoverage({ planRows, readiness, overlays });
+  let clips = null;
+  try {
+    const { listClips } = require('./performanceClipsService');
+    clips = await listClips(sequelize, episodeId);
+  } catch (err) {
+    console.error('[ProductionCoverage] clip read failed:', err.message);
+  }
+
+  return computeCoverage({ planRows, readiness, overlays, clips });
 }
 
 module.exports = { loadCoverage };

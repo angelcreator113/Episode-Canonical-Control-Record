@@ -204,6 +204,46 @@ router.get('/:episodeId/production-coverage', requireAuth, async (req, res) => {
   }
 });
 
+// ── PERFORMANCE CLIPS ─────────────────────────────────────────────────────────
+// The clip home agreed with episode creation step 8 (§8(o) item 2): one
+// JustAWoman or Lala clip per canonical beat (episode_performance_clips,
+// performanceClipsService). PUT attaches or replaces the beat's clip for a
+// performer; DELETE removes it (soft).
+
+router.get('/:episodeId/performance-clips', requireAuth, async (req, res) => {
+  try {
+    const { listClips } = require('../services/performanceClipsService');
+    return res.json({ success: true, data: await listClips(models.sequelize, req.params.episodeId) });
+  } catch (err) {
+    console.error('[PerformanceClips] list failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:episodeId/performance-clips', requireAuth, async (req, res) => {
+  try {
+    const { attachClip } = require('../services/performanceClipsService');
+    const result = await attachClip(models.sequelize, req.params.episodeId, req.body || {});
+    return res.status(result.replaced ? 200 : 201).json({ success: true, data: result.clip, replaced: result.replaced });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ success: false, error: err.message });
+    console.error('[PerformanceClips] attach failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:episodeId/performance-clips/:clipId', requireAuth, async (req, res) => {
+  try {
+    const { removeClip } = require('../services/performanceClipsService');
+    const removed = await removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
+    if (!removed) return res.status(404).json({ success: false, error: 'Clip not found' });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[PerformanceClips] remove failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── RETRY UNSAVED FEED MOMENTS ───────────────────────────────────────────────
 // Re-runs the feed moment save for the beats the plan reports in
 // feed_moment_missing, and only those (§8(w) P5, Task #2220). Template-built,
