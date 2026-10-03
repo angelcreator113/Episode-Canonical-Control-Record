@@ -68,4 +68,32 @@ describe('TimelineEditor episode loading', () => {
     expect(timelineDataAPI.get).toHaveBeenCalledWith('ep-a');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  test('an episode with no scenes has an empty timeline, not three invented scenes (audit TRUTH-05)', async () => {
+    episodeAPI.getById.mockResolvedValue({ data: { id: 'ep-a', episode_number: 7, title: 'Episode A' } });
+    renderAt('ep-a');
+    const notice = await screen.findByTestId('timeline-empty');
+    expect(notice.textContent).toContain('No scenes yet');
+    expect(screen.queryByText(/Intro|Main Content|Outro/)).toBeNull();
+    expect(screen.getByTestId('timeline-tracks')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('scenes or timeline data failing to load is an error with Retry, never sample scenes (audit TRUTH-05)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    episodeAPI.getById.mockResolvedValue({ data: { id: 'ep-a', episode_number: 7, title: 'Episode A' } });
+    sceneAPI.getAll.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } }));
+    renderAt('ep-a');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('could not be loaded, so the timeline was not opened. Nothing was changed.');
+    expect(screen.queryByTestId('timeline-tracks')).toBeNull();
+    expect(screen.queryByText(/Intro|Main Content|Outro/)).toBeNull();
+
+    sceneAPI.getAll.mockResolvedValue({ data: [{ id: 's1', scene_number: 1, title: 'Arrival', duration_seconds: 4 }] });
+    screen.getByTestId('timeline-retry').click();
+    await waitFor(() => expect(screen.getByTestId('timeline-tracks')).toBeTruthy());
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByTestId('timeline-empty')).toBeNull();
+    spy.mockRestore();
+  });
 });

@@ -34,7 +34,7 @@ function TimelineEditor() {
   const [canvasZoom, setCanvasZoom] = useState(1.0); // Zoom for preview canvas
   const [timelineZoom, setTimelineZoom] = useState(1.0); // Zoom for timeline tracks
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null); // 'not_found' | 'failed' | null
+  const [loadError, setLoadError] = useState(null); // 'not_found' | 'failed' | 'data_failed' | null
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [loopMode, setLoopMode] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
@@ -368,11 +368,10 @@ function TimelineEditor() {
           scene_angle_id: s.sceneAngleId || s.scene_angle_id || null,
         })));
       } else {
-        setScenes([
-          { id: 'scene-1', scene_number: 1, title: 'Scene 1', duration_seconds: 5.0, background_url: null, characters: [], ui_elements: [] },
-          { id: 'scene-2', scene_number: 2, title: 'Scene 2', duration_seconds: 8.0, background_url: null, characters: [], ui_elements: [] },
-          { id: 'scene-3', scene_number: 3, title: 'Scene 3', duration_seconds: 10.0, background_url: null, characters: [], ui_elements: [] },
-        ]);
+        // Audit TRUTH-05 (2026-10-03): an episode with no scenes has an
+        // empty timeline. It used to get three invented scenes here that
+        // could not be told from the episode's own.
+        setScenes([]);
       }
 
       // Load timeline data (beats, markers, audio/character clips)
@@ -383,18 +382,11 @@ function TimelineEditor() {
       setCharacterClips(tl.characterClips || tl.character_clips || []);
       setKeyframes(tl.keyframes || []);
     } catch (error) {
-      console.warn('API unavailable, using mock data:', error.message);
-      setPlatform('youtube');
-      setScenes([
-        { id: 'scene-1', scene_number: 1, title: 'Intro', duration_seconds: 5.0, background_url: null, characters: [], ui_elements: [] },
-        { id: 'scene-2', scene_number: 2, title: 'Main Content', duration_seconds: 8.0, background_url: null, characters: [], ui_elements: [] },
-        { id: 'scene-3', scene_number: 3, title: 'Outro', duration_seconds: 10.0, background_url: null, characters: [], ui_elements: [] },
-      ]);
-      setBeats([]);
-      setCharacterClips([]);
-      setAudioClips([]);
-      setMarkers([]);
-      setKeyframes([]);
+      // Audit TRUTH-05: a failed read is an error state, never a sample
+      // Intro / Main Content / Outro timeline. Nothing can be saved or
+      // exported from data that did not load.
+      console.error('Timeline: scenes or timeline data load failed:', error?.response?.status || error.message);
+      setLoadError('data_failed');
     } finally {
       setLoading(false);
     }
@@ -788,8 +780,15 @@ function TimelineEditor() {
           <p>
             {loadError === 'not_found'
               ? `Episode ${episodeId || ''} was not found, so there is no timeline to open.`
-              : 'This episode could not be loaded, so its timeline was not opened.'}
+              : loadError === 'data_failed'
+                ? `The scenes or timeline data for episode ${episode?.episode_number ?? episodeId ?? ''} could not be loaded, so the timeline was not opened. Nothing was changed.`
+                : 'This episode could not be loaded, so its timeline was not opened.'}
           </p>
+          {loadError === 'data_failed' && (
+            <button className="back-btn" data-testid="timeline-retry" onClick={loadEpisodeData} style={{ marginRight: 8 }}>
+              Retry
+            </button>
+          )}
           <button className="back-btn" onClick={() => navigate(episodeId ? `/episodes/${episodeId}` : '/episodes')}>
             ← Back to the episode
           </button>
@@ -884,6 +883,11 @@ function TimelineEditor() {
 
           {/* Timeline Section */}
           <div className="timeline-section" style={{ height: timelineHeight }}>
+            {scenes.length === 0 && (
+              <div role="status" data-testid="timeline-empty" style={{ padding: '6px 12px', fontSize: 12, color: '#2C2C2C', background: '#EAF5F3', borderBottom: '1px solid #2F7F76' }}>
+                No scenes yet. This episode's timeline is empty until a scene is added with + Scene.
+              </div>
+            )}
             <div className="timeline-controls">
               <div className="controls-left">
                 <div className="timecode-display">
