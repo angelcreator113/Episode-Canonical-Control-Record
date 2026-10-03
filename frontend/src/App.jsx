@@ -342,6 +342,7 @@ function AppContent() {
           <Route path="/universe" element={<UniversePage />} />
           <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
           <Route path="/universe/series" element={<SeriesPage />} />
+          {/* Opens the active show's Producer Mode (audit IA-01); no dashboard of its own. */}
           <Route path="/universe/production" element={<UniverseProductionPage />} />
           <Route path="/universe/assets" element={<Navigate to="/assets" replace />} />
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
@@ -607,7 +608,6 @@ function AppContent() {
             '/universe': 'Universe Hub',
             '/universe/social-import': 'Social Import',
             '/universe/series': 'Series',
-            '/universe/production': 'Production',
             '/universe/wardrobe': 'Wardrobe Library',
             '/universe/assets': 'Assets',
             '/universe/world-state': 'World State',
