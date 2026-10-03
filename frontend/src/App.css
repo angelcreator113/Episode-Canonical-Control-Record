@@ -10,13 +10,13 @@ html, body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #F8F9FE;
+  background: var(--surface-bg);
 }
 
 .app-layout {
   display: flex;
   height: 100dvh; /* better on mobile than 100vh */
-  background-color: #F8F9FE;
+  background-color: var(--surface-bg);
   width: 100%;
   overflow: hidden;
   position: relative;
@@ -82,7 +82,7 @@ html, body {
   overflow-y: auto; /* main scroll lives here */
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  background-color: #FAFBFE;
+  background-color: var(--surface-bg);
   box-sizing: border-box;
   position: relative;
 }
@@ -208,7 +208,7 @@ body.page-story-engine .app-content {
 
 .app-footer {
   flex-shrink: 0;
-  background: linear-gradient(180deg, #F8F9FE 0%, #FAFAFE 100%);
+  background: linear-gradient(180deg, var(--surface-bg) 0%, #FAFAFE 100%);
   color: #94a3b8;
   text-align: center;
   border-top: 1px solid rgba(99, 102, 241, 0.08);
