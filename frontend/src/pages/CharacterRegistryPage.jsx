@@ -1,13 +1,16 @@
 /**
  * CharacterRegistryPage — Clean character hub
  *
- * Browse all characters in a grid, quick create, click to view profile.
+ * Browse a registry's characters in a grid (the active show's by default;
+ * audit IA-05: a chosen registry, never the first one the API returned),
+ * quick create into it, click to view profile.
  * Replaces the 5,750-line monolith with a focused, maintainable page.
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
 
 const ROLE_CONFIG = {
   protagonist: { color: '#B8962E', bg: '#FAF7F0', icon: '👑', label: 'Protagonist' },
@@ -25,10 +28,43 @@ const DEPTH_CONFIG = {
   alive: { color: '#B8962E', label: 'Alive', pct: 100 },
 };
 
+
+/**
+ * Which registry the page works in (audit IA-05, 2026-10-03): the one the
+ * URL names (?registry=), else the active show's, else the only one; null
+ * is "all registries", a read-only view. Quick create never falls back to
+ * the first registry the API returned.
+ */
+export function chooseRegistry(registries, { urlRegistryId = null, showId = null } = {}) {
+  if (!registries?.length) return null;
+  const byUrl = urlRegistryId && registries.find((r) => String(r.id) === String(urlRegistryId));
+  if (byUrl) return byUrl.id;
+  const byShow = showId && registries.find((r) => String(r.show_id || '') === String(showId));
+  if (byShow) return byShow.id;
+  return registries.length === 1 ? registries[0].id : null;
+}
+
+export const characterKeyFor = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+/**
+ * An existing character the new one would duplicate, in this registry: the
+ * same name (case aside) or the same key. Link or open it instead.
+ */
+export function duplicateIn(registry, name) {
+  const wanted = name.trim().toLowerCase();
+  const key = characterKeyFor(name);
+  return (registry?.characters || []).find((c) => (c.display_name || '').trim().toLowerCase() === wanted || c.character_key === key) || null;
+}
+
 export default function CharacterRegistryPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showId: activeShowId, loaded: showsLoaded } = useActiveShow();
   const [registries, setRegistries] = useState([]);
-  const [characters, setCharacters] = useState([]);
+  const [allCharacters, setAllCharacters] = useState([]);
+  // The registry in view (null: all, read-only); the one a new character goes into.
+  const [registryId, setRegistryId] = useState(null);
+  const [createRegistryId, setCreateRegistryId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -41,30 +77,58 @@ export default function CharacterRegistryPage() {
 
   useEffect(() => { loadCharacters(); }, []);
 
+  // The Feed's "Registry →" link names a character: open its profile.
+  const linkedCharacterId = searchParams.get('character');
+  useEffect(() => {
+    if (linkedCharacterId) navigate(`/character/${linkedCharacterId}`, { replace: true });
+  }, [linkedCharacterId, navigate]);
+
   const loadCharacters = async () => {
     setLoading(true);
     try {
       const res = await api.get('/api/v1/character-registry/registries?limit=50');
       const regs = res.data?.registries || [];
       setRegistries(regs);
-      setCharacters(regs.flatMap(r => (r.characters || []).map(c => ({ ...c, registry_id: r.id, registry_name: r.name }))));
-    } catch { setCharacters([]); }
+      setAllCharacters(regs.flatMap(r => (r.characters || []).map(c => ({ ...c, registry_id: r.id, registry_name: r.title }))));
+    } catch (err) { console.error('[CharacterRegistryPage] registries load failed:', err); setAllCharacters([]); }
     finally { setLoading(false); }
   };
 
+  // Once the registries and the active show are known, settle the registry
+  // in view; the URL keeps it so a link or Back lands on the same one.
+  const urlRegistryId = searchParams.get('registry');
+  useEffect(() => {
+    if (loading || !showsLoaded) return;
+    setRegistryId(chooseRegistry(registries, { urlRegistryId, showId: activeShowId }));
+  }, [loading, showsLoaded, registries, urlRegistryId, activeShowId]);
+  const selectRegistry = (id) => {
+    setRegistryId(id || null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set('registry', id); else next.delete('registry');
+      return next;
+    }, { replace: true });
+  };
+  const registry = registries.find((r) => r.id === registryId) || null;
+  const characters = registryId ? allCharacters.filter((c) => c.registry_id === registryId) : allCharacters;
+  const openCreate = () => { setCreateRegistryId(registryId); setShowCreate(true); };
+  const createRegistry = registries.find((r) => r.id === createRegistryId) || null;
+  const duplicate = createRegistry && createForm.display_name.trim() ? duplicateIn(createRegistry, createForm.display_name) : null;
+
   const handleCreate = async () => {
     if (!createForm.display_name.trim()) return;
+    // Never the first registry the API returned: the chosen one, or none.
+    if (!createRegistry) { showToast('Choose the registry this character belongs to'); return; }
+    if (duplicate) { showToast(`${duplicate.display_name} already exists in ${createRegistry.title}`); return; }
     setCreating(true);
     try {
-      const registryId = registries[0]?.id;
-      if (!registryId) { showToast('No registry found'); setCreating(false); return; }
-      await api.post(`/api/v1/character-registry/registries/${registryId}/characters`, {
-        ...createForm, character_key: createForm.display_name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      await api.post(`/api/v1/character-registry/registries/${createRegistry.id}/characters`, {
+        ...createForm, character_key: characterKeyFor(createForm.display_name),
       });
       setShowCreate(false);
       setCreateForm({ display_name: '', role_type: 'pressure', icon: '👤' });
       loadCharacters();
-      showToast('Character created');
+      showToast(`Character created in ${createRegistry.title}`);
     } catch (err) { showToast('Failed: ' + (err.response?.data?.error || err.message)); }
     finally { setCreating(false); }
   };
@@ -82,15 +146,26 @@ export default function CharacterRegistryPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
-      {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: '#E8F5E9', color: '#16a34a', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast}</div>}
+      {toast && <div role="status" style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: '#EAF5F3', color: '#2F7F76', border: '1px solid #2F7F76', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast}</div>}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Characters</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>{characters.length} character{characters.length !== 1 ? 's' : ''}</p>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }} data-testid="registry-count">
+            {characters.length} character{characters.length !== 1 ? 's' : ''}{registry ? ` in ${registry.title}` : registries.length > 1 ? ` across ${registries.length} registries` : ''}
+          </p>
         </div>
-        <button onClick={() => setShowCreate(true)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New Character</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {registries.length > 1 && (
+            <select aria-label="Registry" data-testid="registry-select" value={registryId || ''} onChange={(e) => selectRegistry(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${registryId ? '#2F7F76' : '#C06E87'}`, fontSize: 12, background: '#fff', color: '#2C2C2C' }}>
+              <option value="">All registries</option>
+              {registries.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+            </select>
+          )}
+          <button onClick={openCreate} data-testid="new-character" style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New Character</button>
+        </div>
       </div>
 
       {/* Role Filter + Search */}
@@ -113,7 +188,7 @@ export default function CharacterRegistryPage() {
         <div style={{ textAlign: 'center', padding: 40, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
           <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e' }}>{search ? 'No characters found' : 'No characters yet'}</h3>
-          {!search && <button onClick={() => setShowCreate(true)} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 8 }}>+ Create Character</button>}
+          {!search && <button onClick={openCreate} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 8 }}>+ Create Character</button>}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
@@ -158,11 +233,27 @@ export default function CharacterRegistryPage() {
       {showCreate && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowCreate(false)}>
           <div style={{ background: '#fff', borderRadius: 14, width: '90vw', maxWidth: 450, padding: 24 }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>New Character</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }} data-testid="create-title">New Character{createRegistry ? ` in ${createRegistry.title}` : ''}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* The registry is chosen here, never assumed (audit IA-05). */}
+              {(registries.length > 1 || !createRegistry) && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Registry</label>
+                  <select aria-label="Registry for the new character" data-testid="create-registry" value={createRegistryId || ''} onChange={(e) => setCreateRegistryId(e.target.value || null)}
+                    style={{ width: '100%', padding: '8px 12px', border: `1px solid ${createRegistry ? '#2F7F76' : '#C06E87'}`, borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                    <option value="" disabled>Choose a registry…</option>
+                    {registries.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Name</label>
-                <input value={createForm.display_name} onChange={e => setCreateForm({ ...createForm, display_name: e.target.value })} placeholder="Character name..." autoFocus style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }} />
+                <input value={createForm.display_name} onChange={e => setCreateForm({ ...createForm, display_name: e.target.value })} placeholder="Character name..." autoFocus aria-label="Name" style={{ width: '100%', padding: '8px 12px', border: `1px solid ${duplicate ? '#C06E87' : '#e2e8f0'}`, borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }} />
+                {duplicate && (
+                  <div role="alert" data-testid="create-duplicate" style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#FBEFF3', border: '1px solid #C06E87', fontSize: 12, color: '#2C2C2C' }}>
+                    {duplicate.display_name} already exists in {createRegistry.title}. <button type="button" onClick={() => navigate(`/character/${duplicate.id}`)} style={{ background: 'none', border: 'none', color: '#2F7F76', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 12 }}>Open it →</button>
+                  </div>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Role</label>
@@ -191,7 +282,7 @@ export default function CharacterRegistryPage() {
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={() => setShowCreate(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleCreate} disabled={creating || !createForm.display_name.trim()} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{creating ? '⏳' : 'Create'}</button>
+              <button onClick={handleCreate} data-testid="create-submit" disabled={creating || !createForm.display_name.trim() || !createRegistry || Boolean(duplicate)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{creating ? '⏳' : 'Create'}</button>
             </div>
           </div>
         </div>
