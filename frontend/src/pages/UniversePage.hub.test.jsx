@@ -47,6 +47,29 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByTestId('world-setup-count')).toBeTruthy();
   });
 
+  test('the Overview stays on its loader until the stats are in for the show, then renders once', async () => {
+    let releaseStats;
+    const held = new Promise((r) => { releaseStats = r; });
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/episodes')) { await held; }
+      return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
+    });
+    renderAt('/universe');
+    await screen.findByText('Loading LalaVerse...');
+    // The shows are in and the stats are not: no content, no setup section yet.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.queryByTestId('world-setup-count')).toBeNull();
+    releaseStats();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
+    expect(await screen.findAllByRole('button', { name: /^Step \d: / })).toHaveLength(7);
+    // ...and it stays: no second loader after the content.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByText('Loading LalaVerse...')).toBeNull();
+    expect(screen.getByTestId('world-setup-count')).toBeTruthy();
+  });
+
   test('the State tab holds World State and Tensions only; setup is gone from it', async () => {
     renderAt('/universe?tab=state');
     await screen.findByText('World State');

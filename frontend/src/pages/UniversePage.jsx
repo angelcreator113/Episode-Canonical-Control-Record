@@ -81,16 +81,18 @@ function Overview() {
   // API returned; with several and none active, Evoni chooses.
   const { shows, show, loaded, failed, needsChoice, choose } = useActiveShow();
   const [stats, setStats] = useState(null);
-  // Loading until the first stats arrive: the content never shows, then hides
-  // behind the loader, then shows again (which also remounted the setup section).
-  const [statsLoading, setStatsLoading] = useState(true);
+  // The show the stats were loaded for. The content shows only once the stats
+  // are in for the current show, whatever order the hook's and this page's
+  // state updates land in; a loading flag flipped by the previous show (or
+  // by "no show yet") let the content render once, hide behind the loader,
+  // then swap back, remounting the setup section and refiring its checks.
+  const [statsFor, setStatsFor] = useState(null);
   const [universe, setUniverse] = useState(null);
   const [series, setSeries] = useState([]);
   const [books, setBooks] = useState([]);
 
   const load = useCallback(async () => {
-    if (!show) { setStats(null); setStatsLoading(false); return; }
-    setStatsLoading(true);
+    if (!show) { setStats(null); return; }
     try {
       // Load stats in parallel
       const [eventsRes, wardrobeRes, episodesRes, overlaysRes, charsRes, booksRes] = await Promise.allSettled([
@@ -138,13 +140,13 @@ function Overview() {
     } catch (err) {
       console.error('UniversePage load error:', err);
     } finally {
-      setStatsLoading(false);
+      setStatsFor(String(show.id));
     }
   }, [show]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (!loaded || statsLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading LalaVerse...</div>;
+  if (!loaded || (show && statsFor !== String(show.id))) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading LalaVerse...</div>;
   if (needsChoice) return <ShowChooser shows={shows} onChoose={choose} purpose="to open its LalaVerse overview" />;
 
   return (
