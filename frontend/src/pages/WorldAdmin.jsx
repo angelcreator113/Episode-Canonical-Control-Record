@@ -5090,23 +5090,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 {/* Bulk selection indicator */}
                 {selectedWardrobeIds.size > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#fef3c7', borderRadius: 6, border: '1px solid #fcd34d' }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>{selectedWardrobeIds.size} selected</span>
-                    <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: '#92400e' }}>✕</button>
-                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
-                    <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--warning-bg)', borderRadius: 6, border: '1px solid var(--warning-border)' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)' }}>{selectedWardrobeIds.size} selected</span>
+                    <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: 'var(--warning-text)' }}>✕</button>
+                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
+                    <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: 'var(--danger)', color: 'var(--text-inverse)', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
                 )}
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{wardrobeItems.length} items</span>
                 {/* Grid / list toggle — list mode trades thumbnail size for more
                     metadata per row, which is useful once libraries get large. */}
-                <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ display: 'inline-flex', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, overflow: 'hidden' }}>
                   {['grid', 'list'].map(mode => (
                     <button key={mode} onClick={() => setWardrobeViewMode(mode)} title={`${mode} view`}
                       style={{
                         padding: '4px 10px', fontSize: 12, cursor: 'pointer', border: 'none',
-                        background: wardrobeViewMode === mode ? '#1e293b' : '#fff',
-                        color: wardrobeViewMode === mode ? '#fff' : '#64748b',
+                        background: wardrobeViewMode === mode ? 'var(--primary)' : 'var(--surface-card)',
+                        color: wardrobeViewMode === mode ? 'var(--text-inverse)' : 'var(--text-secondary)',
                       }}>{mode === 'grid' ? '▦' : '≣'}</button>
                   ))}
                 </div>
@@ -5122,7 +5122,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 >
                   💰 {(financeConfig?.current_balance ?? 0).toLocaleString()}
                   {financeConfig?.next_goal && (
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>→ {financeConfig.next_goal.label.replace(/[🌟👑💎🏆✨]\s*/, '')}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>→ {financeConfig.next_goal.label.replace(/[🌟👑💎🏆✨]\s*/, '')}</span>
                   )}
                 </button>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
@@ -5147,7 +5147,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         }
                       }}
                       title="Toggle whether every slot (including jewelry, accessories, fragrance) is required when scoring outfits against events"
-                      style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', background: requireAll ? '#fef3c7' : undefined, borderColor: requireAll ? '#d4a017' : undefined, color: requireAll ? '#854d0e' : undefined }}
+                      style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', background: requireAll ? 'var(--warning-bg)' : undefined, borderColor: requireAll ? 'var(--warning-border)' : undefined, color: requireAll ? 'var(--warning-text)' : undefined }}
                     >{label}</button>
                   );
                 })()}
@@ -5160,7 +5160,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <summary style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', listStyle: 'none', cursor: 'pointer', userSelect: 'none' }}>
                       ⚡ Bulk ops
                     </summary>
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 220, zIndex: 50, padding: 6 }}>
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 220, zIndex: 50, padding: 6 }}>
                       {[
                         { label: '✨ AI-enhance first 20', endpoint: '/api/v1/wardrobe/bulk/enhance', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id) }), confirmText: (n) => `Enhance ${n} items? This may take a while.`, emptyText: 'No items to enhance' },
                         { label: '🔍 AI-analyze first 20', endpoint: '/api/v1/wardrobe/bulk/analyze', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id), autoApply: true }), confirmText: (n) => `Analyze ${n} items with AI? This uses API credits.`, emptyText: 'No items to analyze' },
@@ -5192,8 +5192,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           } catch (err) {
                             setToast(`Bulk op failed: ${err.message}`);
                           }
-                        }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, borderRadius: 6, color: '#334155' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, borderRadius: 6, color: 'var(--text-primary)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--lala-parchment-2)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{op.label}</button>
                       ))}
@@ -5207,7 +5207,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Top tabs: All vs. Staging (never-used). The staging count lives
                 in the tab itself so creators can see at a glance how much of the
                 library is unassigned — catches the "forgot to assign" case fast. */}
-            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--lala-parchment-3)', marginBottom: 14 }}>
               {[
                 { key: 'all', label: 'All items', count: wardrobeItems.length },
                 { key: 'staging', label: 'Staging (never used)', count: stagingCount },
@@ -5218,11 +5218,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     style={{
                       padding: '10px 18px', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
                       background: 'transparent', border: 'none',
-                      borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
-                      color: active ? '#1e293b' : '#64748b',
+                      borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
                       marginBottom: -1,
                     }}>
-                    {tab.label} <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>({tab.count})</span>
+                    {tab.label} <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>({tab.count})</span>
                   </button>
                 );
               })}
@@ -5243,28 +5243,28 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     title={def.desc}
                     style={{
                       padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
-                      background: isActive ? '#6366f118' : '#fff',
-                      border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                      background: isActive ? 'var(--primary-subtle)' : 'var(--surface-card)',
+                      border: isActive ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
                       transition: 'all 0.2s',
                     }}>
                     <div style={{ fontSize: 20 }}>{def.icon}</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
-                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{def.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? 'var(--primary-text)' : 'var(--text-primary)' }}>{items.length}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>{def.label}</div>
                   </div>
                 );
               })}
               {(typeGroups.__unassigned?.length > 0) && (
                 <div title="These items have a clothing_category that doesn't map to any slot — edit to fix"
-                  style={{ padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'default', background: '#fff7ed', border: '1px solid #fdba74' }}>
+                  style={{ padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'default', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
                   <div style={{ fontSize: 20 }}>⚠️</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#c2410c' }}>{typeGroups.__unassigned.length}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#c2410c' }}>Unassigned</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--warning-text)' }}>{typeGroups.__unassigned.length}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--warning-text)' }}>Unassigned</div>
                 </div>
               )}
             </div>
 
             {/* Search + Category Filter */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: 'var(--surface-bg)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)' }}>
               <input
                 type="text"
                 placeholder="Search name, brand, color, tags..."
@@ -5286,7 +5286,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 <option value="last_used">Last used</option>
                 <option value="favorites">Favorites first</option>
               </select>
-              <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
+              <div style={{ width: 1, height: 24, background: 'var(--lala-parchment-3)', alignSelf: 'center' }} />
               {/* Category pills now filter by SLOT, not raw clothing_category.
                   "all" clears the filter; each slot button routes dress/top/bottom
                   under "Outfit", bag/accessory under "Accessories", etc. */}
@@ -5294,9 +5294,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 <button key={opt.key} onClick={() => setWardrobeCatFilter(opt.key)}
                   style={{
                     padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeCatFilter === opt.key ? '#6366f1' : '#fff',
-                    color: wardrobeCatFilter === opt.key ? '#fff' : '#64748b',
-                    border: wardrobeCatFilter === opt.key ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                    background: wardrobeCatFilter === opt.key ? 'var(--primary)' : 'var(--surface-card)',
+                    color: wardrobeCatFilter === opt.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                    border: wardrobeCatFilter === opt.key ? '1px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
                   }}>
                   {opt.icon} {opt.label}
                 </button>
@@ -5309,9 +5309,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 return (
                   <button onClick={() => setWardrobeFiltersOpen(o => !o)} style={{
                     padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeFiltersOpen || extraCount > 0 ? '#1e293b' : '#fff',
-                    color: wardrobeFiltersOpen || extraCount > 0 ? '#fff' : '#64748b',
-                    border: `1px solid ${wardrobeFiltersOpen || extraCount > 0 ? '#1e293b' : '#e2e8f0'}`,
+                    background: wardrobeFiltersOpen || extraCount > 0 ? 'var(--primary)' : 'var(--surface-card)',
+                    color: wardrobeFiltersOpen || extraCount > 0 ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                    border: `1px solid ${wardrobeFiltersOpen || extraCount > 0 ? 'var(--primary)' : 'var(--lala-parchment-3)'}`,
                   }}>⚙ Filters{extraCount > 0 ? ` (${extraCount})` : ''}</button>
                 );
               })()}
@@ -5319,9 +5319,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {/* Advanced filter panel — status, season, occasion, color swatches */}
             {wardrobeFiltersOpen && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16, padding: '12px 14px', background: 'var(--surface-bg)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)' }}>
                 <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Status</label>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Status</label>
                   <select value={wardrobeStatusFilter} onChange={e => setWardrobeStatusFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
                     <option value="all">All items</option>
                     <option value="used">Used at least once</option>
@@ -5330,27 +5330,27 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Season</label>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Season</label>
                   <select value={wardrobeSeasonFilter} onChange={e => setWardrobeSeasonFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
                     <option value="all">Any season</option>
                     {['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Occasion</label>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Occasion</label>
                   <select value={wardrobeOccasionFilter} onChange={e => setWardrobeOccasionFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
                     <option value="all">Any occasion</option>
                     {['gala', 'casual', 'formal', 'business', 'party', 'brunch', 'date_night', 'resort', 'editorial'].map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 6 }}>Color</label>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 6 }}>Color</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     <button onClick={() => setWardrobeColorFilter('all')} style={{
                       padding: '4px 10px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                      background: wardrobeColorFilter === 'all' ? '#1e293b' : '#fff',
-                      color: wardrobeColorFilter === 'all' ? '#fff' : '#64748b',
-                      border: `1px solid ${wardrobeColorFilter === 'all' ? '#1e293b' : '#e2e8f0'}`,
+                      background: wardrobeColorFilter === 'all' ? 'var(--primary)' : 'var(--surface-card)',
+                      color: wardrobeColorFilter === 'all' ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                      border: `1px solid ${wardrobeColorFilter === 'all' ? 'var(--primary)' : 'var(--lala-parchment-3)'}`,
                     }}>Any</button>
                     {Object.entries(COLOR_TO_HEX).map(([name, hex]) => {
                       const active = wardrobeColorFilter === name;
@@ -5358,9 +5358,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         <button key={name} onClick={() => setWardrobeColorFilter(active ? 'all' : name)} title={name} style={{
                           padding: '2px 6px', borderRadius: 16, fontSize: 10, cursor: 'pointer',
                           display: 'inline-flex', alignItems: 'center', gap: 4,
-                          background: active ? '#1e293b' : '#fff',
-                          color: active ? '#fff' : '#334155',
-                          border: `1px solid ${active ? '#1e293b' : '#e2e8f0'}`,
+                          background: active ? 'var(--primary)' : 'var(--surface-card)',
+                          color: active ? 'var(--text-inverse)' : 'var(--text-primary)',
+                          border: `1px solid ${active ? 'var(--primary)' : 'var(--lala-parchment-3)'}`,
                         }}>
                           <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: hex, border: '1px solid rgba(0,0,0,0.2)' }} />
                           {name}
@@ -5373,7 +5373,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {(wardrobeSeasonFilter !== 'all' || wardrobeOccasionFilter !== 'all' || wardrobeColorFilter !== 'all' || wardrobeStatusFilter !== 'all') && (
                   <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
                     <button onClick={() => { setWardrobeSeasonFilter('all'); setWardrobeOccasionFilter('all'); setWardrobeColorFilter('all'); setWardrobeStatusFilter('all'); }}
-                      style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Clear filters</button>
+                      style={{ padding: '5px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Clear filters</button>
                   </div>
                 )}
               </div>
@@ -5382,7 +5382,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* ─── Edit Panel ─── */}
             {editingWardrobeItem && (
               <div style={{
-                background: '#fff', border: '2px solid #6366f1', borderRadius: 14, padding: 24, marginBottom: 16,
+                background: 'var(--surface-card)', border: '2px solid var(--primary)', borderRadius: 14, padding: 24, marginBottom: 16,
                 boxShadow: '0 8px 32px rgba(99,102,241,0.15)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -5391,7 +5391,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <img src={editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url || editingWardrobeItem.image_url}
                         alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                     )}
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Editing: {editingWardrobeItem.name}</h3>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Editing: {editingWardrobeItem.name}</h3>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => deleteWardrobeItem(editingWardrobeItem)} style={S.smBtnDanger}>Delete</button>
@@ -5449,7 +5449,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <label style={S.fLabel}>Vendor</label>
                     <input value={wf.vendor} onChange={e => { setWardrobeEditBrandIsFictional(false); setWf('vendor', e.target.value); }} style={S.inp} placeholder="Brand name..." />
                     {wardrobeEditBrandIsFictional && (
-                      <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                      <div style={{ marginTop: 4, fontSize: 10, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace" }}>
                         Fictional brand (auto-filled)
                       </div>
                     )}
@@ -5469,7 +5469,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {/* Row 4: Tags, Website */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                   <div>
-                    <label style={S.fLabel}>Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
+                    <label style={S.fLabel}>Tags <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(comma-separated)</span></label>
                     <input value={wf.tags} onChange={e => setWf('tags', e.target.value)} style={S.inp} placeholder="elegant, evening, silk" />
                   </div>
                   <div>
@@ -5482,8 +5482,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     Same grid the upload modal uses so creators see consistent
                     fields whether they're authoring or editing. Backend PUT
                     already accepts all of these via updates.*. */}
-                <div style={{ marginBottom: 16, padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 10 }}>🎮 GAMEPLAY</div>
+                <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 10 }}>🎮 GAMEPLAY</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
                     <div>
                       <label style={S.fLabel}>Tier</label>
@@ -5534,8 +5534,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
 
                   {/* Advanced gameplay — same collapsible shape as the upload modal. */}
-                  <details style={{ marginTop: 14, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
-                    <summary style={{ fontSize: 12, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                  <details style={{ marginTop: 14, paddingTop: 10, borderTop: '1px dashed var(--lala-gold-line)' }}>
+                    <summary style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
                       ⋯ advanced gameplay
                     </summary>
                     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -5553,11 +5553,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
-                          <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(CSV)</span></label>
                           <input value={wf.aesthetic_tags || ''} onChange={e => setWf('aesthetic_tags', e.target.value)} style={S.inp} placeholder="romantic, bold, editorial" />
                         </div>
                         <div>
-                          <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(CSV)</span></label>
                           <input value={wf.event_types || ''} onChange={e => setWf('event_types', e.target.value)} style={S.inp} placeholder="gala, brunch, meetup" />
                         </div>
                       </div>
@@ -5576,11 +5576,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                           <input type="checkbox" checked={!!wf.is_owned} onChange={e => setWf('is_owned', e.target.checked)} />
                           Lala already owns it
                         </label>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                           <input type="checkbox" checked={wf.is_visible !== false} onChange={e => setWf('is_visible', e.target.checked)} />
                           Visible in closet
                         </label>
@@ -5628,7 +5628,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     } catch (err) { setToast('AI enhance failed: ' + err.message); }
                     btn.disabled = false;
                     btn.textContent = '✨ AI Enhance';
-                  }} style={{ ...S.secBtn, background: '#FAF7F0', borderColor: '#D4AF37', color: '#B8962E' }}>
+                  }} style={{ ...S.secBtn, background: 'var(--surface-bg)', borderColor: 'var(--lala-gold)', color: 'var(--lala-gold-text)' }}>
                     ✨ AI Enhance
                   </button>
                   <button onClick={async () => {
@@ -5677,8 +5677,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 return (
                   <div key={item.id} onClick={() => openEditItem(item)}
                     style={{
-                      background: '#fff',
-                      border: isBulkSelected ? '2px solid #eab308' : isEditing ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                      background: 'var(--surface-card)',
+                      border: isBulkSelected ? '2px solid var(--lala-gold)' : isEditing ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
                       borderRadius: 12,
                       overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
                       boxShadow: isBulkSelected ? '0 4px 16px rgba(234,179,8,0.25)' : isEditing ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
@@ -5695,13 +5695,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       style={{ 
                         position: 'absolute', top: 8, left: 8, zIndex: 10, 
                         width: 20, height: 20, borderRadius: 4,
-                        background: isBulkSelected ? '#eab308' : 'rgba(255,255,255,0.9)',
-                        border: isBulkSelected ? '2px solid #eab308' : '2px solid #d1d5db',
+                        background: isBulkSelected ? 'var(--lala-gold)' : 'rgba(255,255,255,0.9)',
+                        border: isBulkSelected ? '2px solid var(--lala-gold)' : '2px solid var(--lala-parchment-3)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer', transition: 'all 0.15s',
                       }}
                     >
-                      {isBulkSelected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+                      {isBulkSelected && <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 700 }}>✓</span>}
                     </div>
 
                     {/* Favorite heart — click to toggle. Stops propagation so card's
@@ -5727,10 +5727,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         position: 'absolute', top: 6, right: hasRecentUsage ? 68 : 6, zIndex: 10,
                         width: 26, height: 26, borderRadius: '50%',
                         background: item.is_favorite ? 'rgba(220,38,38,0.92)' : 'rgba(255,255,255,0.9)',
-                        border: item.is_favorite ? '1px solid #dc2626' : '1px solid #d1d5db',
+                        border: item.is_favorite ? '1px solid var(--danger)' : '1px solid var(--lala-parchment-3)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1,
-                        color: item.is_favorite ? '#fff' : '#9ca3af',
+                        color: item.is_favorite ? 'var(--text-inverse)' : 'var(--text-secondary)',
                       }}
                     >♥</button>
 
@@ -5738,8 +5738,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {hasRecentUsage && (
                       <div style={{
                         position: 'absolute', top: 8, right: 8, zIndex: 10,
-                        padding: '2px 6px', background: '#fef3c7', border: '1px solid #fcd34d',
-                        borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#92400e',
+                        padding: '2px 6px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                        borderRadius: 4, fontSize: 9, fontWeight: 600, color: 'var(--warning-text)',
                       }} title="Used recently - check continuity">
                         ⚠️ Recent
                       </div>
@@ -5752,20 +5752,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         width: isListMode ? 80 : '100%',
                         flexShrink: isListMode ? 0 : undefined,
                         aspectRatio: isListMode ? '1/1' : '3/4',
-                        background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
+                        background: 'var(--surface-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
                       }}
                       onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxVariant(null); setLightboxItem(item); } }}
                     >
                       {imgUrl ? (
-                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#f8fafc' }}
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--surface-bg)' }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
                       ) : null}
-                      <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: '#cbd5e1' }}>
+                      <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: 'var(--text-secondary)' }}>
                         {CAT_ICONS[itemType] || '👗'}
                       </div>
                       {/* Expand icon on hover */}
                       {imgUrl && processingState !== PROCESSING_STATES.PROCESSING && processingState !== PROCESSING_STATES.STALLED && (
-                        <div style={{ position: 'absolute', bottom: 6, right: 6, padding: '3px 6px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, fontSize: 10, color: '#fff', opacity: 0.7 }}>
+                        <div style={{ position: 'absolute', bottom: 6, right: 6, padding: '3px 6px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, fontSize: 10, color: 'var(--text-inverse)', opacity: 0.7 }}>
                           🔍
                         </div>
                       )}
@@ -5812,28 +5812,28 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                           }} title={item.color} />
                         )}
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.name}
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>
                         {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
                         {item.color && <span> · {item.color}</span>}
                         {item.vendor && <span> · {item.vendor}</span>}
                       </div>
                       {/* W1: a piece linked into a matching set says which. */}
                       {item.outfit_set_id && (
-                        <div data-testid={`wardrobe-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 4 }}>🔗 {item.outfit_set_name || 'Matching set'}</div>
+                        <div data-testid={`wardrobe-set-${item.id}`} style={{ fontSize: 10, color: 'var(--accent-dark)', marginBottom: 4 }}>🔗 {item.outfit_set_name || 'Matching set'}</div>
                       )}
                       {/* List mode: the 80px image is too small for the overlay,
                           so the processing state sits under the category line. */}
                       {isListMode && processingState === PROCESSING_STATES.PROCESSING && (
-                        <div className="wa-wd-processing-label" role="status" style={{ fontSize: 11, color: '#2C2C2C', fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>
+                        <div className="wa-wd-processing-label" role="status" style={{ fontSize: 11, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>
                           <Loader2 size={12} className="wa-wd-processing-spin" aria-hidden="true" /> Extracting item…
                         </div>
                       )}
                       {isListMode && processingState === PROCESSING_STATES.STALLED && (
-                        <div role="status" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: '#9a3412', fontFamily: "'DM Mono', monospace", marginBottom: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                        <div role="status" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--warning-text)', fontFamily: "'DM Mono', monospace", marginBottom: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                           <AlertTriangle size={12} aria-hidden="true" /> Extraction didn’t finish
                           <button type="button" className="wa-wd-processing-btn" onClick={e => { e.stopPropagation(); wardrobeProcessing.retry(item.id); }}>
                             <RotateCw size={12} aria-hidden="true" /> Retry
@@ -5848,19 +5848,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       {tags.length > 0 && (
                         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
                           {tags.slice(0, 3).map((tag, i) => (
-                            <span key={i} style={{ padding: '1px 6px', background: '#f3e8ff', borderRadius: 4, fontSize: 9, color: '#7c3aed' }}>{tag}</span>
+                            <span key={i} style={{ padding: '1px 6px', background: 'var(--accent-subtle)', borderRadius: 4, fontSize: 9, color: 'var(--accent-dark)' }}>{tag}</span>
                           ))}
-                          {tags.length > 3 && <span style={{ fontSize: 9, color: '#94a3b8' }}>+{tags.length - 3}</span>}
+                          {tags.length > 3 && <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>+{tags.length - 3}</span>}
                         </div>
                       )}
 
                       {/* Bottom row: price + usage */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                         {item.price ? (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>${parseFloat(item.price).toFixed(0)}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)' }}>${parseFloat(item.price).toFixed(0)}</span>
                         ) : <span />}
                         {(item.totalUsageCount || item.total_usage_count) > 0 && (
-                          <span style={{ fontSize: 9, color: '#94a3b8' }}>Used {item.totalUsageCount || item.total_usage_count}x</span>
+                          <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>Used {item.totalUsageCount || item.total_usage_count}x</span>
                         )}
                       </div>
                     </div>
@@ -5874,23 +5874,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {totalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '12px 0' }}>
                 <button onClick={() => setWardrobePage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                  style={{ padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? '#cbd5e1' : '#334155', fontSize: 12, fontWeight: 600 }}>← Prev</button>
-                <span style={{ fontSize: 12, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>
+                  style={{ padding: '6px 14px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 12, fontWeight: 600 }}>← Prev</button>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
                   Page {currentPage} of {totalPages} · {filteredItems.length} items
                 </span>
                 <button onClick={() => setWardrobePage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                  style={{ padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', color: currentPage === totalPages ? '#cbd5e1' : '#334155', fontSize: 12, fontWeight: 600 }}>Next →</button>
+                  style={{ padding: '6px 14px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', color: currentPage === totalPages ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 12, fontWeight: 600 }}>Next →</button>
               </div>
             )}
 
             {/* Empty state */}
             {filteredItems.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 48, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+              <div style={{ textAlign: 'center', padding: 48, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 12 }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>👗</div>
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
                   {wardrobeItems.length === 0 ? 'No wardrobe items yet' : 'No items match your search'}
                 </div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
                   {wardrobeItems.length === 0
                     ? 'Upload your first wardrobe piece to start building the closet.'
                     : 'Try a different search term or category filter.'}
@@ -5906,15 +5906,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* ── Upload Modal ── */}
             {showWardrobeUpload && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !wardrobeUploading && setShowWardrobeUpload(false)}>
-                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                <div style={{ background: 'var(--surface-card)', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#2C2C2C' }}>Add Wardrobe Item</h3>
-                    <button onClick={() => setShowWardrobeUpload(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Add Wardrobe Item</h3>
+                    <button onClick={() => setShowWardrobeUpload(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
                   </div>
 
                   {/* Image drop zone */}
                   <div
-                    style={{ border: '1.5px dashed #d1ccc0', borderRadius: 10, background: wardrobeUploadPreview ? '#fff' : '#faf9f6', marginBottom: 12, cursor: 'pointer', overflow: 'hidden' }}
+                    style={{ border: '1.5px dashed var(--lala-parchment-3)', borderRadius: 10, background: wardrobeUploadPreview ? 'var(--surface-card)' : 'var(--surface-bg)', marginBottom: 12, cursor: 'pointer', overflow: 'hidden' }}
                     onClick={() => document.getElementById('wardrobe-upload-input')?.click()}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }}
@@ -5922,10 +5922,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {wardrobeUploadPreview ? (
                       <div style={{ position: 'relative' }}>
                         <img src={wardrobeUploadPreview} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'contain', display: 'block', padding: 8 }} />
-                        <button type="button" onClick={e => { e.stopPropagation(); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); }} style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
+                        <button type="button" onClick={e => { e.stopPropagation(); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); }} style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', color: 'var(--text-inverse)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
                       </div>
                     ) : (
-                      <div style={{ padding: '28px 16px', textAlign: 'center', color: '#bbb' }}>
+                      <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         <div style={{ fontSize: 24, marginBottom: 4 }}>📸</div>
                         <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Drop image or click to browse</div>
                       </div>
@@ -5938,16 +5938,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       ANTHROPIC_API_KEY unset → server returns 503; we annotate that
                       case so users don't have to dig through network tab. */}
                   {wardrobeAutoFillError && (
-                    <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
+                    <div style={{ marginBottom: 10, padding: '8px 12px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 6, fontSize: 12, color: 'var(--danger-text)', lineHeight: 1.5 }}>
                       <div style={{ fontWeight: 600, marginBottom: 2 }}>Auto-fill failed</div>
                       <div>{wardrobeAutoFillError}</div>
                       {/ANTHROPIC_API_KEY/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
                           The dev server is missing an Anthropic API key. Ask an admin to set <code>ANTHROPIC_API_KEY</code> in EC2 .env and restart PM2.
                         </div>
                       )}
                       {/Failed to fetch|NetworkError|ERR_/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
                           The request didn't reach the server. Usually one of:
                           <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
                             <li>Backend not yet running the latest build (ask an admin to check <code>pm2 status</code>)</li>
@@ -5957,7 +5957,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         </div>
                       )}
                       {/^(413|payload too large)/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
                           Image exceeds the server's upload limit. Try a smaller photo (&lt; 5 MB) or crop it down.
                         </div>
                       )}
@@ -6044,7 +6044,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       } finally {
                         setWardrobeAnalyzing(false);
                       }
-                    }} style={{ width: '100%', padding: '8px 0', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', cursor: wardrobeAnalyzing ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: wardrobeAnalyzing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+                    }} style={{ width: '100%', padding: '8px 0', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', cursor: wardrobeAnalyzing ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: wardrobeAnalyzing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
                       {wardrobeAnalyzing ? '⏳ Analyzing...' : '✨ Auto-fill from image'}
                     </button>
                   )}
@@ -6052,12 +6052,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   {/* Form fields */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
                       <div>
-                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label>
-                        <input value={wardrobeUploadForm.brand} onChange={e => { setWardrobeUploadBrandIsFictional(false); setWardrobeUploadForm(p => ({ ...p, brand: e.target.value })); }} placeholder="e.g., Velvet House" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} />
+                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>brand</label>
+                        <input value={wardrobeUploadForm.brand} onChange={e => { setWardrobeUploadBrandIsFictional(false); setWardrobeUploadForm(p => ({ ...p, brand: e.target.value })); }} placeholder="e.g., Velvet House" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} />
                         {wardrobeUploadBrandIsFictional && (
-                          <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                          <div style={{ marginTop: 4, fontSize: 10, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace" }}>
                             Fictional brand (auto-filled)
                           </div>
                         )}
@@ -6065,11 +6065,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label>
+                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>category *</label>
                         {/* Grouped by the five UI slots (Outfit / Shoes / Jewelry /
                             Accessories / Fragrance) — DB still stores the granular
                             clothing_category so scoring + filters keep working. */}
-                        <select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                        <select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                           <option value="">Select...</option>
                           {SLOT_KEYS.map(slot => (
                             <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
@@ -6080,13 +6080,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           ))}
                         </select>
                       </div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
                       <div>
-                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label>
+                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>tier</label>
                         {/* Tier descriptors mirror the old WardrobeBrowser edit form so the
                             gameplay context is obvious — e.g. "Luxury" isn't just a label,
                             it signals Designer-tier in-story. */}
-                        <select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                        <select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                           <option value="">Auto</option>
                           <option value="basic">👟 Basic — Fast Fashion</option>
                           <option value="mid">👠 Mid — Contemporary</option>
@@ -6096,38 +6096,38 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>season</label><select value={wardrobeUploadForm.season || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, season: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Any</option>{['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>occasion</label><input value={wardrobeUploadForm.occasion || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, occasion: e.target.value }))} placeholder="gala, casual..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>season</label><select value={wardrobeUploadForm.season || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, season: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}><option value="">Any</option>{['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>occasion</label><input value={wardrobeUploadForm.occasion || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, occasion: e.target.value }))} placeholder="gala, casual..." style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
                     </div>
-                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa', resize: 'vertical', boxSizing: 'border-box' }} /></div>
-                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
                     {/* Purchase link so creators can source the real-world item later. Backend maps website → purchase_link. */}
-                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
 
                     {/* ── Gameplay section ─────────────────────────────────
                         Fields that drive the in-story unlock/purchase flow. Kept
                         visually separate from the "what is this thing?" fields
                         above so creators can scan past if they're just logging
                         a piece without gameplay intent. */}
-                    <div style={{ marginTop: 4, padding: '10px 12px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>🎮 GAMEPLAY (OPTIONAL)</div>
+                    <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>🎮 GAMEPLAY (OPTIONAL)</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                         <div>
-                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>story price (LalaVerse coins)</label>
-                          <input type="number" min="0" step="1" value={wardrobeUploadForm.coinCost || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, coinCost: e.target.value }))} placeholder="e.g., 2400" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>story price (LalaVerse coins)</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.coinCost || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, coinCost: e.target.value }))} placeholder="e.g., 2400" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                         </div>
                         <div>
-                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>how Lala got it</label>
-                          <select value={wardrobeUploadForm.acquisitionType || 'purchased'} onChange={e => setWardrobeUploadForm(p => ({ ...p, acquisitionType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>how Lala got it</label>
+                          <select value={wardrobeUploadForm.acquisitionType || 'purchased'} onChange={e => setWardrobeUploadForm(p => ({ ...p, acquisitionType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                             {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
                           </select>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                         <div>
-                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>lock type</label>
-                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>lock type</label>
+                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                             <option value="none">None (always available)</option>
                             <option value="coin">🪙 Coin (pay to unlock)</option>
                             <option value="reputation">⭐ Reputation gate</option>
@@ -6136,8 +6136,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           </select>
                         </div>
                         <div>
-                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>era alignment</label>
-                          <select value={wardrobeUploadForm.eraAlignment || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eraAlignment: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>era alignment</label>
+                          <select value={wardrobeUploadForm.eraAlignment || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eraAlignment: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                             <option value="">Any era</option>
                             <option value="foundation">Foundation</option>
                             <option value="glow_up">Glow Up</option>
@@ -6151,8 +6151,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           form compact when it's irrelevant. */}
                       {wardrobeUploadForm.lockType === 'reputation' && (
                         <div>
-                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>reputation required</label>
-                          <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>reputation required</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                         </div>
                       )}
 
@@ -6161,56 +6161,56 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           12 extra inputs. Expand only when the item needs Lala
                           reaction blurbs, aesthetic/event tag buckets, or the rarer
                           scoring/gate knobs. */}
-                      <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
-                        <summary style={{ fontSize: 11, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                      <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--lala-gold-line)' }}>
+                        <summary style={{ fontSize: 11, fontWeight: 600, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
                           ⋯ advanced gameplay
                         </summary>
                         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {/* Lala reaction blurbs — what she says about this item in three states. */}
                           <div>
-                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when she owns it)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionOwn || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionOwn: e.target.value }))} placeholder="e.g., 'My ride-or-die for red carpets'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when she owns it)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionOwn || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionOwn: e.target.value }))} placeholder="e.g., 'My ride-or-die for red carpets'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when locked)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionLocked || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionLocked: e.target.value }))} placeholder="e.g., 'One day...'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when locked)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionLocked || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionLocked: e.target.value }))} placeholder="e.g., 'One day...'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when rejected)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionReject || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionReject: e.target.value }))} placeholder="e.g., 'Not the vibe for tonight'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when rejected)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionReject || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionReject: e.target.value }))} placeholder="e.g., 'Not the vibe for tonight'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
                           </div>
                           {/* Tag buckets — distinct from the basic `tags` field above. */}
                           <div>
-                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>aesthetic tags (CSV)</label>
-                            <input value={wardrobeUploadForm.aestheticTags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, aestheticTags: e.target.value }))} placeholder="romantic, bold, editorial" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>aesthetic tags (CSV)</label>
+                            <input value={wardrobeUploadForm.aestheticTags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, aestheticTags: e.target.value }))} placeholder="romantic, bold, editorial" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>event types (CSV)</label>
-                            <input value={wardrobeUploadForm.eventTypes || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eventTypes: e.target.value }))} placeholder="gala, brunch, meetup" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>event types (CSV)</label>
+                            <input value={wardrobeUploadForm.eventTypes || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eventTypes: e.target.value }))} placeholder="gala, brunch, meetup" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                           </div>
                           {/* Numeric knobs — match-weight is 1-10, the rest are natural units. */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                             <div>
-                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>match weight (1-10)</label>
-                              <input type="number" min="1" max="10" step="1" value={wardrobeUploadForm.outfitMatchWeight || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, outfitMatchWeight: e.target.value }))} placeholder="5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>match weight (1-10)</label>
+                              <input type="number" min="1" max="10" step="1" value={wardrobeUploadForm.outfitMatchWeight || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, outfitMatchWeight: e.target.value }))} placeholder="5" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                             </div>
                             <div>
-                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>influence required</label>
-                              <input type="number" min="0" step="1" value={wardrobeUploadForm.influenceRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, influenceRequired: e.target.value }))} placeholder="0" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>influence required</label>
+                              <input type="number" min="0" step="1" value={wardrobeUploadForm.influenceRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, influenceRequired: e.target.value }))} placeholder="0" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                             </div>
                             <div>
-                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>unlock ep #</label>
-                              <input type="number" min="1" step="1" value={wardrobeUploadForm.seasonUnlockEpisode || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, seasonUnlockEpisode: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>unlock ep #</label>
+                              <input type="number" min="1" step="1" value={wardrobeUploadForm.seasonUnlockEpisode || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, seasonUnlockEpisode: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
                             </div>
                           </div>
                           {/* Visibility flags — is_visible defaults true so this only
                               surfaces for authors who want to hide an item or mark it owned up front. */}
                           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                               <input type="checkbox" checked={!!wardrobeUploadForm.isOwned} onChange={e => setWardrobeUploadForm(p => ({ ...p, isOwned: e.target.checked }))} />
                               Lala already owns it
                             </label>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                               <input type="checkbox" checked={wardrobeUploadForm.isVisible !== false} onChange={e => setWardrobeUploadForm(p => ({ ...p, isVisible: e.target.checked }))} />
                               Visible in closet
                             </label>
@@ -6219,15 +6219,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </details>
                     </div>
 
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                       <input type="checkbox" checked={!!wardrobeUploadForm.isFavorite} onChange={e => setWardrobeUploadForm(p => ({ ...p, isFavorite: e.target.checked }))} />
                       ♥ Mark as favorite
                     </label>
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid #ece5d5' }}>
-                    <button onClick={() => setShowWardrobeUpload(false)} style={{ padding: '7px 18px', border: '1px solid #e0d9cc', borderRadius: 6, background: '#fff', color: '#888', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--lala-parchment-3)' }}>
+                    <button onClick={() => setShowWardrobeUpload(false)} style={{ padding: '7px 18px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
                     <button disabled={wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory} onClick={async () => {
                       setWardrobeUploading(true);
                       const fd = new FormData();
@@ -6287,7 +6287,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           setToast('Upload failed: ' + msg);
                         }
                       setWardrobeUploading(false);
-                    }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
+                    }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
                       {wardrobeUploading ? 'Uploading...' : 'Upload Item'}
                     </button>
                   </div>
@@ -6298,15 +6298,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* ── Create Outfit Set Modal ── */}
             {showCreateOutfitSet && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !creatingOutfitSet && setShowCreateOutfitSet(false)}>
-                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                <div style={{ background: 'var(--surface-card)', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create Matching Set</h3>
-                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
                     {selectedWardrobeIds.size} pieces selected
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
                     In the styling game, choosing the set equips every piece in its own slot at once; each piece can still be chosen on its own. A piece already in another set moves to this one.
                   </div>
                   {/* Piece chips — visual confirmation of what goes into the set. */}
@@ -6316,24 +6316,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       if (!item) return null;
                       const img = item.s3_url_processed || item.s3_url || item.thumbnail_url;
                       return (
-                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px' }}>
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, padding: '4px 8px' }}>
                           {img && <img src={img} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
-                          <span style={{ fontSize: 11, color: '#334155' }}>{item.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>{item.name}</span>
                         </div>
                       );
                     })}
                   </div>
-                  <label style={{ fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>set name</label>
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>set name</label>
                   <input
                     type="text"
                     value={outfitSetName}
                     onChange={e => setOutfitSetName(e.target.value)}
                     placeholder="e.g., Floral Corset Set"
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 14, fontFamily: "'Lora', serif", marginTop: 4, marginBottom: 16, boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 14, fontFamily: "'Lora', serif", marginTop: 4, marginBottom: 16, boxSizing: 'border-box' }}
                     autoFocus
                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ padding: '7px 16px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ padding: '7px 16px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
                     <button
                       disabled={!outfitSetName.trim() || creatingOutfitSet}
                       onClick={async () => {
@@ -6368,7 +6368,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         } catch (err) { setToast('Failed to create set: ' + err.message); }
                         setCreatingOutfitSet(false);
                       }}
-                      style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!outfitSetName.trim() || creatingOutfitSet) ? 0.4 : 1 }}
+                      style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!outfitSetName.trim() || creatingOutfitSet) ? 0.4 : 1 }}
                     >{creatingOutfitSet ? 'Creating...' : 'Create set'}</button>
                   </div>
                 </div>
@@ -6378,31 +6378,31 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* ── Usage Modal — which episodes reference this item ── */}
             {usageModalItem && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setUsageModalItem(null); setItemUsage(null); }}>
-                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                <div style={{ background: 'var(--surface-card)', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Item Usage: {usageModalItem.name}</h3>
-                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
                   </div>
                   {/* Three states: loading, empty, populated — matches the existing WardrobeBrowser modal. */}
                   {itemUsage == null ? (
-                    <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading usage data...</div>
+                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Loading usage data...</div>
                   ) : !itemUsage.totalEpisodes ? (
                     <div style={{ padding: 20, textAlign: 'center' }}>
-                      <p style={{ margin: '4px 0', fontSize: 13, color: '#334155' }}>This item isn't used in any episodes yet.</p>
-                      <p style={{ margin: '4px 0', fontSize: 12, color: '#94a3b8' }}>It can be safely deleted.</p>
+                      <p style={{ margin: '4px 0', fontSize: 13, color: 'var(--text-primary)' }}>This item isn't used in any episodes yet.</p>
+                      <p style={{ margin: '4px 0', fontSize: 12, color: 'var(--text-secondary)' }}>It can be safely deleted.</p>
                     </div>
                   ) : (
                     <div>
-                      <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                      <div style={{ padding: '10px 14px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
                         <div><strong>Total episodes:</strong> {itemUsage.totalEpisodes}</div>
                         <div><strong>Total shows:</strong> {itemUsage.totalShows}</div>
                       </div>
                       {(itemUsage.shows || []).map(show => (
                         <div key={show.showId} style={{ marginBottom: 14 }}>
-                          <h4 style={{ margin: '4px 0 6px', fontSize: 13, color: '#1e293b' }}>{show.showName || 'Unknown Show'}</h4>
-                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                          <h4 style={{ margin: '4px 0 6px', fontSize: 13, color: 'var(--text-primary)' }}>{show.showName || 'Unknown Show'}</h4>
+                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                             {(show.episodes || []).map(ep => (
-                              <li key={ep.episodeId}>Episode {ep.episodeNumber}: {ep.title}{ep.isFavorite && <span style={{ marginLeft: 4, color: '#eab308' }}>★</span>}</li>
+                              <li key={ep.episodeId}>Episode {ep.episodeNumber}: {ep.title}{ep.isFavorite && <span style={{ marginLeft: 4, color: 'var(--lala-gold-text)' }}>★</span>}</li>
                             ))}
                           </ul>
                         </div>
@@ -6410,7 +6410,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ padding: '7px 20px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ padding: '7px 20px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Close</button>
                   </div>
                 </div>
               </div>
@@ -6449,7 +6449,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* Close button */}
                     <button
                       onClick={() => { setLightboxVariant(null); setLightboxItem(null); }}
-                      style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', padding: 8 }}
+                      style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: 'var(--text-inverse)', fontSize: 28, cursor: 'pointer', padding: 8 }}
                     >✕</button>
 
                     {/* Variant toggle — only renders when the row has more than one
@@ -6466,9 +6466,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               onClick={() => setLightboxVariant(v.key)}
                               style={{
                                 padding: '6px 12px',
-                                background: isActive ? '#fff' : 'rgba(255,255,255,0.15)',
-                                color: isActive ? '#1a1a2e' : '#fff',
-                                border: isActive ? '2px solid #fff' : '2px solid rgba(255,255,255,0.25)',
+                                background: isActive ? 'var(--surface-card)' : 'rgba(255,255,255,0.15)',
+                                color: isActive ? 'var(--text-primary)' : 'var(--text-inverse)',
+                                border: isActive ? '2px solid var(--surface-card)' : '2px solid rgba(255,255,255,0.25)',
                                 borderRadius: 20,
                                 fontSize: 12,
                                 fontWeight: 600,
@@ -6496,12 +6496,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         <div style={{ width: 20, height: 20, borderRadius: '50%', background: colorHex, border: '2px solid rgba(0,0,0,0.15)', flexShrink: 0 }} title={lightboxItem.color} />
                       )}
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{lightboxItem.name}</div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{lightboxItem.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                           {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
                           {lightboxItem.color && <span> · {lightboxItem.color}</span>}
                           {lightboxItem.vendor && <span> · {lightboxItem.vendor}</span>}
-                          {lightboxItem.price && <span style={{ color: '#16a34a', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
+                          {lightboxItem.price && <span style={{ color: 'var(--success-text)', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
                         </div>
                       </div>
                       {/* Only offer "Set as default for grid" when the user is
@@ -6512,7 +6512,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           onClick={() => promoteToPrimary(lightboxItem, active.key)}
                           disabled={promotingVariant}
                           title={`Make the ${active.label} the image shown in the grid for this item`}
-                          style={{ marginLeft: 'auto', padding: '6px 14px', background: promotingVariant ? '#94a3b8' : '#0f766e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: promotingVariant ? 'wait' : 'pointer' }}
+                          style={{ marginLeft: 'auto', padding: '6px 14px', background: promotingVariant ? 'var(--text-secondary)' : 'var(--primary-dark)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: promotingVariant ? 'wait' : 'pointer' }}
                         >{promotingVariant ? 'Saving…' : '★ Set as default'}</button>
                       )}
                       {/* "Send to phone" only makes sense for a colored-backdrop
@@ -6522,18 +6522,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           onClick={() => handleSendToPhone(lightboxItem, active.key)}
                           disabled={sendingToPhone}
                           title={`Create a Lala's-phone screen from the ${active.label} variant — opens the overlay editor so you can draw tap zones`}
-                          style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: sendingToPhone ? '#94a3b8' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: sendingToPhone ? 'wait' : 'pointer' }}
+                          style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: sendingToPhone ? 'var(--text-secondary)' : 'var(--accent-dark)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: sendingToPhone ? 'wait' : 'pointer' }}
                         >{sendingToPhone ? 'Sending…' : '📱 Send to phone'}</button>
                       )}
                       <button
                         onClick={() => handleRegenerateProductShot(lightboxItem)}
                         disabled={regeneratingItemId === lightboxItem.id}
                         title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
-                        style={{ padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
+                        style={{ padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? 'var(--text-secondary)' : 'var(--accent-dark)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
                       >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate'}</button>
                       <button
                         onClick={() => { setLightboxVariant(null); setLightboxItem(null); openEditItem(lightboxItem); }}
-                        style={{ padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        style={{ padding: '6px 14px', background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >Edit Item</button>
                     </div>
                   </div>
