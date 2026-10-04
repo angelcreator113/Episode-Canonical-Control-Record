@@ -3,7 +3,10 @@
  * out of World Dashboard's Setup Progress tab): seven steps, each a link
  * to the hub tab that does the work, a count and a bar of how many are
  * done; the events check reads the active show it is given, never the
- * first show the API returns (audit CTX-01).
+ * first show the API returns (audit CTX-01). The checks read the routes'
+ * real shapes (page-content answers the content object itself; the
+ * social-profiles list answers pagination.total), measure usable records,
+ * and tell "could not check" apart from "not done".
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -29,29 +32,44 @@ const renderIt = (showId) => render(
 );
 const calls = () => vi.mocked(api.get).mock.calls.map(([u]) => u);
 
+// The routes' real shapes.
+const REAL = (url) => {
+  if (url.includes('page-content/world_infrastructure')) return { data: { DREAM_CITIES: [{ name: 'Dazzle' }, { name: 'Radiance' }], UNIVERSITIES: [], CORPORATIONS: [{ name: 'Lumen' }] } };
+  if (url.includes('page-content/influencer_systems')) return { data: {} };
+  if (url.includes('page-content/cultural_memory')) return { data: { LEGENDS: [] } };
+  if (url.includes('calendar/events')) return { data: { events: [{ id: 1 }, { id: 2 }, { id: 3 }] } };
+  if (url.includes('world/locations')) return { data: { locations: [{ id: 1 }] } };
+  if (url.includes('social-profiles')) return { data: { profiles: [{ id: 'p1' }], pagination: { page: 1, limit: 1, total: 42, totalPages: 42 }, statusCounts: { total: 40 } } };
+  if (url.includes('/world/show-b/events')) return { data: { success: true, events: [{ id: 'e1' }] } };
+  return { data: {} };
+};
+
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
-  vi.mocked(api.get).mockImplementation(async (url) => {
-    if (url.includes('page-content/world_infrastructure')) return { data: { data: { cities: ['Dazzle'] } } };
-    if (url.includes('world/locations')) return { data: { locations: [{ id: 1 }] } };
-    if (url.includes('/world/show-b/events')) return { data: { events: [{ id: 'e1' }] } };
-    return { data: { data: {}, events: [], count: 0 } };
-  });
+  vi.mocked(api.get).mockImplementation(async (url) => REAL(url));
 });
 
 describe('WorldSetupProgress', () => {
-  test('seven steps, each linking into the hub; the done ones are marked and counted', async () => {
+  test('reads the real shapes and measures usable records: 5 of 7 done, with counts on each step', async () => {
     renderIt('show-b');
     expect(SETUP_STEPS).toHaveLength(7);
     expect(SETUP_STEPS.every((s) => s.route)).toBe(true);
-    // The checks resolve asynchronously; wait for the first done step, not the placeholder count.
     await screen.findByRole('button', { name: 'Step 1: World Foundation (done)' });
-    expect(screen.getByTestId('world-setup-count').textContent).toBe('3/7');
-    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
-    expect(screen.getByRole('button', { name: 'Step 5: Locations & Venues (done)' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Step 7: Create World Events (done)' })).toBeTruthy();
+    expect(screen.getByTestId('world-setup-count').textContent).toBe('5/7');
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('5');
+    // The page-content object is the content itself: 2 usable sections of 3 keys (the empty array is not configuration).
+    expect(screen.getByTestId('world-setup-count-infrastructure').textContent).toBe('2 sections');
     expect(screen.getByRole('button', { name: 'Step 2: Social Systems' })).toBeTruthy();
-    expect(screen.getAllByText('DONE')).toHaveLength(3);
+    expect(screen.getByTestId('world-setup-count-influencer').textContent).toBe('0 sections');
+    expect(screen.getByRole('button', { name: 'Step 4: Cultural Memory' })).toBeTruthy();
+    expect(screen.getByTestId('world-setup-count-calendar').textContent).toBe('3 events');
+    expect(screen.getByTestId('world-setup-count-locations').textContent).toBe('1 locations');
+    // The feed count is pagination.total, not a top-level count.
+    expect(screen.getByRole('button', { name: 'Step 6: Generate Feed (done)' })).toBeTruthy();
+    expect(screen.getByTestId('world-setup-count-feed').textContent).toBe('42 profiles');
+    expect(screen.getByTestId('world-setup-count-events').textContent).toBe('1 draft events');
+    expect(screen.getAllByText('DONE')).toHaveLength(5);
+    expect(screen.queryByTestId('world-setup-unreachable')).toBeNull();
   });
 
   test('a step opens its hub tab', async () => {
@@ -60,14 +78,29 @@ describe('WorldSetupProgress', () => {
     expect(screen.getByTestId('where').textContent).toBe('/universe?tab=world&sub=locations');
   });
 
-  test('the events check reads the active show only, and is false without one', async () => {
+  test('an endpoint that could not be reached is "could not check", not "not done"', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockImplementation(async (url) => { if (url.includes('world/locations')) throw Object.assign(new Error('boom'), { response: { status: 500 } }); return REAL(url); });
+    renderIt('show-b');
+    await screen.findByRole('button', { name: 'Step 5: Locations & Venues (could not check)' });
+    expect(screen.getByTestId('world-setup-unreachable').textContent).toContain('One step could not be checked');
+    expect(screen.getByText('COULD NOT CHECK')).toBeTruthy();
+    expect(screen.queryByTestId('world-setup-count-locations')).toBeNull();
+    expect(screen.getByTestId('world-setup-count').textContent).toBe('4/7');
+    spy.mockRestore();
+  });
+
+  test('checkSetup: the events check reads the active show only, and is 0 without one', async () => {
     const withShow = await checkSetup('show-b');
-    expect(withShow.events).toBe(true);
+    expect(withShow.done.events).toBe(true);
+    expect(withShow.counts).toEqual({ infrastructure: 2, influencer: 0, calendar: 3, memory: 0, locations: 1, feed: 42, events: 1 });
+    expect(withShow.unreachable).toEqual([]);
     expect(calls().some((u) => u.includes('/world/show-b/events?status=draft'))).toBe(true);
     expect(calls().some((u) => u.endsWith('/shows'))).toBe(false);
     vi.mocked(api.get).mockClear();
     const without = await checkSetup(undefined);
-    expect(without.events).toBe(false);
+    expect(without.done.events).toBe(false);
+    expect(without.counts.events).toBe(0);
     expect(calls().some((u) => u.includes('/events?status=draft'))).toBe(false);
   });
 });
