@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
 import { SECTIONS, sectionOf, summaryOf, parseContent } from './showBibleSections';
 
 /**
@@ -25,6 +26,8 @@ const EXTRACTED_BY_LABELS = { document_ingestion: '📄 Ingested', conversation_
 
 export default function ShowBiblePage({ embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  // Show-scoped entries belong to the active show (CTX-01).
+  const { show } = useActiveShow();
   // Inside the LalaVerse hub (2026-10-04) `?tab=` is the hub's; this page's
   // own tab is `?sub=`, read and written without touching the hub's.
   const param = embedded ? 'sub' : 'tab';
@@ -41,7 +44,7 @@ export default function ShowBiblePage({ embedded = false }) {
   const [scopeFilter, setScopeFilter] = useState('all'); // all | franchise | show
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false });
+  const [form, setForm] = useState({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false, scope: 'franchise' });
   const [saving, setSaving] = useState(false);
   const [guardText, setGuardText] = useState('');
   const [guardCharacters, setGuardCharacters] = useState('');
@@ -73,9 +76,11 @@ export default function ShowBiblePage({ embedded = false }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (editingId) { await api.patch(`/api/v1/franchise-brain/entries/${editingId}`, form); showToast('Updated'); }
-      else { await api.post('/api/v1/franchise-brain/entries', form); showToast('Created'); }
-      setShowForm(false); setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false });
+      // Scope is stored, never inferred (2026-10-04): a show entry carries the active show's id.
+      const body = { ...form, show_id: form.scope === 'show' ? (show?.id ?? null) : null };
+      if (editingId) { await api.patch(`/api/v1/franchise-brain/entries/${editingId}`, body); showToast('Updated'); }
+      else { await api.post('/api/v1/franchise-brain/entries', body); showToast('Created'); }
+      setShowForm(false); setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false, scope: 'franchise' });
       loadEntries();
     } catch (err) { showToast(err.response?.data?.error || 'Save failed', 'error'); }
     finally { setSaving(false); }
@@ -94,7 +99,7 @@ export default function ShowBiblePage({ embedded = false }) {
 
   const startEdit = (entry) => {
     setEditingId(entry.id);
-    setForm({ title: entry.title, content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content, null, 2), category: entry.category || 'franchise_law', severity: entry.severity || 'important', always_inject: entry.always_inject || false });
+    setForm({ title: entry.title, content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content, null, 2), category: entry.category || 'franchise_law', severity: entry.severity || 'important', always_inject: entry.always_inject || false, scope: getScope(entry) });
     setShowForm(true);
   };
 
@@ -138,10 +143,12 @@ export default function ShowBiblePage({ embedded = false }) {
   const getSection = sectionOf;
   const matchSearch = (e) => { if (!search) return true; const q = search.toLowerCase(); return (e.title || '').toLowerCase().includes(q) || getSummary(e).toLowerCase().includes(q); };
 
-  // Scope helpers
-  const FRANCHISE_CATS = ['franchise_law', 'character', 'narrative', 'world'];
-  const SHOW_CATS = ['technical', 'brand', 'locked_decision'];
-  const getScope = (e) => FRANCHISE_CATS.includes(e.category) ? 'franchise' : 'show';
+  // Scope is the entry's stored tier (franchise_knowledge.scope, migration
+  // 20261004120000), no longer guessed from its category.
+  const getScope = (e) => (e.scope === 'show' ? 'show' : 'franchise');
+  const scopeBadge = (e) => (getScope(e) === 'franchise'
+    ? <span title="Franchise: true for every show" style={{ fontSize: 8, padding: '1px 5px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>🌍</span>
+    : <span title={e.show_id ? `Show #${e.show_id}` : 'Show (not yet assigned to a show)'} style={{ fontSize: 8, padding: '1px 5px', background: '#FAF7F0', color: '#7A6314', borderRadius: 3, fontWeight: 600 }}>📺</span>);
   const matchScope = (e) => scopeFilter === 'all' || getScope(e) === scopeFilter;
 
   const activeCount = entries.filter(e => e.status === 'active').length;
@@ -171,7 +178,7 @@ export default function ShowBiblePage({ embedded = false }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false }); setShowForm(true); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ New Entry</button>
+          <button onClick={() => { setEditingId(null); setForm({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false, scope: 'franchise' }); setShowForm(true); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ New Entry</button>
           <button onClick={handleSeed} style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>🌱 Seed</button>
         </div>
       </div>
@@ -218,7 +225,7 @@ export default function ShowBiblePage({ embedded = false }) {
             {[
               { key: 'all', label: 'All', icon: '📋' },
               { key: 'franchise', label: 'Franchise', icon: '🌍' },
-              { key: 'show', label: 'Show', icon: '📺' },
+              { key: 'show', label: show?.name ? `Show · ${show.name}` : 'Show', icon: '📺' },
             ].map(s => (
               <button key={s.key} onClick={() => setScopeFilter(s.key)} style={{
                 padding: '4px 12px', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
@@ -231,7 +238,7 @@ export default function ShowBiblePage({ embedded = false }) {
           {activeTab === 'knowledge' && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {Object.entries(catCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
-                <span key={cat} style={{ padding: '2px 8px', background: FRANCHISE_CATS.includes(cat) ? '#eef2ff' : '#FAF7F0', borderRadius: 4, fontSize: 9, fontWeight: 600, color: FRANCHISE_CATS.includes(cat) ? '#6366f1' : '#B8962E' }}>
+                <span key={cat} style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#64748b' }}>
                   {cat.replace(/_/g, ' ')} ({count})
                 </span>
               ))}
@@ -280,7 +287,7 @@ export default function ShowBiblePage({ embedded = false }) {
                                 <span style={{ fontSize: 12 }}>{sev.icon}</span>
                                 <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{entry.title}</span>
                                 {entry.always_inject && <span style={{ fontSize: 8, padding: '1px 5px', background: '#6366f1', color: '#fff', borderRadius: 3, fontWeight: 700 }}>INJECT</span>}
-                                {getScope(entry) === 'franchise' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>🌍</span>}
+                                {scopeBadge(entry)}
                               </div>
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
                                 {entry.injection_count > 0 && <span title="Times used by AI">💉 {entry.injection_count}</span>}
@@ -356,7 +363,7 @@ export default function ShowBiblePage({ embedded = false }) {
                       <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: sev.bg, color: sev.color, fontWeight: 600 }}>{entry.severity}</span>
                       {entry.category && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#f1f5f9', color: '#64748b' }}>{entry.category.replace(/_/g, ' ')}</span>}
                       {entry.always_inject && <span style={{ fontSize: 8, padding: '1px 5px', background: '#6366f1', color: '#fff', borderRadius: 3, fontWeight: 700 }}>INJECT</span>}
-                                {getScope(entry) === 'franchise' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>🌍</span>}
+                                {scopeBadge(entry)}
                     </div>
                     <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 4 }}>{getSummary(entry).slice(0, 200)}</div>
                     <div style={{ display: 'flex', gap: 8, fontSize: 10, color: '#94a3b8' }}>
@@ -466,6 +473,7 @@ export default function ShowBiblePage({ embedded = false }) {
               <div><label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Title</label><input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={S.input} placeholder="Entry title..." /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div><label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Category</label><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={S.input}>{CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}</select></div>
+                <div><label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Scope</label><select aria-label="Scope" value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })} style={S.input}><option value="franchise">🌍 Franchise (every show)</option><option value="show">📺 {show?.name ? `Show · ${show.name}` : 'Show'}</option></select></div>
                 <div><label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Severity</label><select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })} style={S.input}><option value="critical">🔴 Critical</option><option value="important">🟡 Important</option><option value="context">⚪ Context</option></select></div>
               </div>
               <div><label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 3 }}>Content</label><textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={8} style={{ ...S.input, resize: 'vertical', lineHeight: 1.6 }} placeholder="Entry content..." /></div>

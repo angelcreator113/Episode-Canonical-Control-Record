@@ -104,7 +104,21 @@ Found by reading, not yet run:
   (`cultural-system` → Culture & Events, `influencer-systems` → Influencer Systems, …, the
   nine other seeders and the Brain Update manifests), else Uncategorized (written in the
   Show Bible, ingested, Amber, scene sets, episode completion). The section counts add
-  up to the active count; `ShowBiblePage.knowledge.test.jsx` pins it.
+  up to the active count; `ShowBiblePage.knowledge.test.jsx` pins it. The Show Bible's
+  Franchise / Show filter guessed scope from category (`technical`, `brand`,
+  `locked_decision` meant "show"), which says nothing about which show a rule belongs to.
+  **Fixed 2026-10-04:** migration `20261004120000-franchise-knowledge-scope` stores
+  `scope` (`franchise` | `show`, default `franchise`, check constraint) and `show_id`
+  (no foreign key; NULL until assigned); its one-time backfill marks the three show
+  categories and the Show Brain seeder's entries (`show-brain-v1.0`, the canon of
+  *Styling Adventures with Lala*) as `show` and gives them that show's id when it exists
+  exactly as named. The list route takes `?scope=` and `?show_id=` (the franchise tier
+  plus that show's own entries); create and update store scope and show_id; the Show
+  Bible filters and badges by the stored scope and a new entry carries the active show's
+  id. The §4 readers still read every active entry regardless of show (next: the
+  always-inject item). `tests/unit/migrations/franchise-knowledge-scope.test.js`,
+  `tests/unit/routes/franchise-brain-scope-contract.test.js` and
+  `ShowBiblePage.scope.test.jsx` pin it.
 - **Four sources have two editors with different defaults.** Each pair saves to one
   `page_content` record, but each page carries its own defaults, and they disagree.
   Measured in step 2 by comparing each page's defaults:

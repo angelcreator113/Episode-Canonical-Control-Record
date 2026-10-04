@@ -28,13 +28,35 @@ const client = new Anthropic();
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST ENTRIES
 // ─────────────────────────────────────────────────────────────────────────────
+// Scope (migration 20261004120000): ?scope=franchise|show lists one tier;
+// ?show_id=N lists what that show's generators should see, the franchise
+// tier plus that show's own entries.
+const SCOPES = ['franchise', 'show'];
+const scopeFields = ({ scope, show_id }) => {
+  if (scope !== undefined && !SCOPES.includes(scope)) return { error: 'scope must be franchise or show' };
+  const fields = {};
+  if (scope !== undefined) fields.scope = scope;
+  if (scope === 'franchise') fields.show_id = null;
+  else if (show_id !== undefined) fields.show_id = show_id === null || show_id === '' ? null : Number(show_id);
+  if (fields.show_id !== undefined && fields.show_id !== null && !Number.isInteger(fields.show_id)) return { error: 'show_id must be an integer' };
+  return { fields };
+};
+
 router.get('/franchise-brain/entries', optionalAuth, async (req, res) => {
-  const { category, status, severity } = req.query;
+  const { category, status, severity, scope, show_id } = req.query;
   try {
     const where = {};
     if (category) where.category = category;
     if (status) where.status = status;
     if (severity) where.severity = severity;
+    if (scope) {
+      if (!SCOPES.includes(scope)) return res.status(400).json({ error: 'scope must be franchise or show' });
+      where.scope = scope;
+    }
+    if (show_id) {
+      if (!Number.isInteger(Number(show_id))) return res.status(400).json({ error: 'show_id must be an integer' });
+      where[Op.or] = [{ scope: 'franchise' }, { show_id: Number(show_id) }];
+    }
 
     const entries = await db.FranchiseKnowledge.findAll({
       where,
@@ -136,11 +158,13 @@ router.post('/franchise-brain/seed', requireAuth, async (req, res) => {
 // CREATE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/franchise-brain/entries', requireAuth, async (req, res) => {
-  const { title, content, category, severity, always_inject, applies_to, source_document } = req.body;
+  const { title, content, category, severity, always_inject, applies_to, source_document, scope, show_id } = req.body;
 
   if (!title?.trim() || !content?.trim()) {
     return res.status(400).json({ error: 'title and content are required' });
   }
+  const scoped = scopeFields({ scope: scope === undefined ? 'franchise' : scope, show_id });
+  if (scoped.error) return res.status(400).json({ error: scoped.error });
 
   try {
     const entry = await db.FranchiseKnowledge.create({
@@ -153,6 +177,8 @@ router.post('/franchise-brain/entries', requireAuth, async (req, res) => {
       source_document: source_document || null,
       extracted_by: 'direct_entry',
       status: 'pending_review',
+      scope: scoped.fields.scope,
+      show_id: scoped.fields.show_id ?? null,
     });
 
     return res.json({ entry, message: 'Entry created — pending review' });
@@ -194,10 +220,14 @@ router.post('/franchise-brain/activate-all', requireAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPDATE ENTRY — edit title, content, category, severity, always_inject
+// UPDATE ENTRY — edit title, content, category, severity, always_inject, scope, show_id
 // ─────────────────────────────────────────────────────────────────────────────
 router.patch('/franchise-brain/entries/:id', requireAuth, async (req, res) => {
-  const { title, content, category, severity, always_inject } = req.body;
+  const { title, content, category, severity, always_inject, scope, show_id } = req.body;
+  // Scope is the Brain's own classification, so a synced entry's scope is
+  // editable here even though its words belong to the source page.
+  const scoped = scopeFields({ scope, show_id });
+  if (scoped.error) return res.status(400).json({ error: scoped.error });
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
@@ -216,6 +246,7 @@ router.patch('/franchise-brain/entries/:id', requireAuth, async (req, res) => {
     if (category !== undefined) updates.category = category;
     if (severity !== undefined) updates.severity = severity;
     if (always_inject !== undefined) updates.always_inject = always_inject;
+    Object.assign(updates, scoped.fields);
 
     await entry.update(updates);
     return res.json({ entry, message: 'Entry updated' });
