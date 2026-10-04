@@ -24,10 +24,20 @@
    `GET /feed-posts/:showId/timeline` answer live posts unless `?status=draft|all`.
    `GET /feed-posts/episode/:id` is the episode's own view and answers both, each marked.
 
+5. **A beat points at the post; the phone draws it.** `feed_moments.feed_post_id`
+   (migration `20261004160000`, `services/feedMomentLink.js`) names the post a phone
+   moment shows; `GET /feed-enhanced/:showId/moments/:episodeId` carries each moment's
+   `post`, and `PUT /feed-enhanced/:showId/moments/:momentId/post` links or unlinks
+   (the post must be the show's; a draft only to a beat of its own episode). The phone's
+   **One Post** zone (`ScreenContentRenderer`, zone `feed_post`, picker in
+   `ContentZoneEditor`) draws one stored post live by id through
+   `GET /feed-posts/post/:postId`, a draft marked. Fix the post on the feed and every
+   screen that points at it shows the fix.
+
 ## Still to come
 
-- A `FeedMoment.feed_post_id` so a beat points at a post instead of copying its text,
-  with single-post, notification and relationship-change phone zones (step 3).
+- Notification and relationship-change phone zones that read a post or a profile
+  change, and a way to pick a beat's post from the Social Media page.
 - Comments as records with a profile and a voice, and reaction drafting (step 4).
 - A story clock on posts and episodes, so "a post must exist by this point in story
   time" can be checked rather than trusted.

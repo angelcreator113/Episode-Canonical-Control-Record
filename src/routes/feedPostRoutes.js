@@ -135,6 +135,23 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
   }
 });
 
+// ── GET ONE POST ─────────────────────────────────────────────────────────────
+// GET /api/v1/feed-posts/post/:postId — the post a phone zone or a beat draws live.
+router.get('/post/:postId', optionalAuth, async (req, res) => {
+  try {
+    const { FeedPost, SocialProfile } = require('../models');
+    const post = await FeedPost.findOne({
+      where: { id: req.params.postId, deleted_at: null },
+      include: SocialProfile ? [{ model: SocialProfile, as: 'socialProfile', attributes: ['id', 'handle', 'display_name', 'platform'], required: false }] : [],
+    });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] Get post error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET EPISODE FEED ─────────────────────────────────────────────────────────
 // GET /api/v1/feed-posts/episode/:episodeId
 router.get('/episode/:episodeId', optionalAuth, async (req, res) => {

@@ -106,12 +106,15 @@ router.get('/:showId/chain/:eventId', requireAuth, async (req, res) => {
 // GET /api/v1/feed-enhanced/:showId/moments/:episodeId
 router.get('/:showId/moments/:episodeId', requireAuth, async (req, res) => {
   try {
-    const { FeedMoment } = require('../models');
+    const { FeedMoment, FeedPost } = require('../models');
     if (!FeedMoment) return res.status(404).json({ error: 'FeedMoment model not available' });
 
+    // Each moment carries the post it points at, drawn live (services/feedMomentLink.js).
+    const { POST_ATTRIBUTES } = require('../services/feedMomentLink');
     const moments = await FeedMoment.findAll({
       where: { show_id: req.params.showId, episode_id: req.params.episodeId, deleted_at: null },
       order: [['beat_number', 'ASC'], ['sort_order', 'ASC']],
+      include: FeedPost ? [{ model: FeedPost, as: 'post', attributes: POST_ATTRIBUTES, required: false }] : [],
     });
 
     return res.json({
@@ -122,6 +125,22 @@ router.get('/:showId/moments/:episodeId', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[FeedEnhanced] Moments error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── LINK A MOMENT TO THE POST IT SHOWS ──────────────────────────────────────
+// PUT /api/v1/feed-enhanced/:showId/moments/:momentId/post  { feed_post_id | null }
+router.put('/:showId/moments/:momentId/post', requireAuth, async (req, res) => {
+  try {
+    const { linkMomentToPost } = require('../services/feedMomentLink');
+    const { moment, post } = await linkMomentToPost(require('../models'), {
+      showId: req.params.showId, momentId: req.params.momentId, feedPostId: req.body?.feed_post_id ?? null,
+    });
+    return res.json({ success: true, data: { ...moment.toJSON(), post: post ? post.toJSON() : null } });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[FeedEnhanced] Link moment to post error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
