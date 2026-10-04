@@ -1913,7 +1913,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               {wordGoal > 0 && (() => {
                 const progress = Math.min(1, (wordCount - startingWordCountRef.current) / wordGoal);
                 const r = 12, c = 2 * Math.PI * r;
-                const color = progress >= 1 ? '#4A9B6F' : progress >= 0.5 ? '#B8962E' : '#B85C38';
+                const color = progress >= 1 ? 'var(--success)' : progress >= 0.5 ? 'var(--lala-gold)' : 'var(--danger)';
                 return (
                   <svg className="wm-goal-ring" width="28" height="28" viewBox="0 0 28 28">
                     <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(28,24,20,0.08)" strokeWidth="2.5" />
@@ -1992,7 +1992,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
             <div className="wm-goal-bar">
               <div
                 className="wm-goal-fill"
-                style={{ width: `${pct}%`, background: goalMet ? '#4A9B6F' : pct > 50 ? '#B8962E' : '#B85C38' }}
+                style={{ width: `${pct}%`, background: goalMet ? 'var(--success)' : pct > 50 ? 'var(--lala-gold)' : 'var(--danger)' }}
               />
             </div>
             <span className="wm-goal-label">
@@ -2423,7 +2423,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                   <svg className="wm-sparkline-svg" viewBox={`0 0 ${tensionAnalysis.length * 6} 40`} preserveAspectRatio="none">
                     <polyline
                       fill="none"
-                      stroke="#B8962E"
+                      stroke="var(--lala-gold)"
                       strokeWidth="1.5"
                       strokeLinejoin="round"
                       points={tensionAnalysis.map((p, i) => `${i * 6 + 3},${40 - p.score * 4}`).join(' ')}
@@ -2434,7 +2434,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                         cx={i * 6 + 3}
                         cy={40 - p.score * 4}
                         r={1.5}
-                        fill={p.tone === 'action' ? '#C0392B' : p.tone === 'interior' ? '#8E44AD' : p.tone === 'calm' ? '#27AE60' : '#B8962E'}
+                        fill={p.tone === 'action' ? 'var(--danger)' : p.tone === 'interior' ? 'var(--info)' : p.tone === 'calm' ? 'var(--success)' : 'var(--lala-gold)'}
                       >
                         <title>¶{i + 1}: {p.tone} ({p.score}/10, {p.words}w)</title>
                       </circle>
@@ -2783,12 +2783,12 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           >
             <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
               <rect x="9" y="3" width="10" height="16" rx="5"
-                fill={listening ? '#F5F0E8' : '#1a1a1a'} />
+                fill={listening ? 'var(--surface-bg)' : 'var(--text-primary)'} />
               <path d="M5 14c0 5 3.5 9 9 9s9-4 9-9"
-                stroke={listening ? '#F5F0E8' : '#1a1a1a'}
+                stroke={listening ? 'var(--surface-bg)' : 'var(--text-primary)'}
                 strokeWidth="2" strokeLinecap="round" fill="none"/>
               <line x1="14" y1="23" x2="14" y2="26"
-                stroke={listening ? '#F5F0E8' : '#1a1a1a'}
+                stroke={listening ? 'var(--surface-bg)' : 'var(--text-primary)'}
                 strokeWidth="2" strokeLinecap="round"/>
             </svg>
           </button>
