@@ -262,11 +262,12 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
   };
 
   const btn = (bg, color, border) => ({ borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: border || 'none', background: bg, color });
-  const goldBtn  = btn('#FAF7F0', '#B8962E', '1px solid #D4AF37');
-  const goldFill = btn('#B8962E', '#FFF');
-  const greenBtn = btn('#16a34a', '#FFF');
-  const redBtn   = btn('#FFF', '#DC2626', '1px solid #FECACA');
-  const grayBtn  = btn('#F5F5F5', '#666', '1px solid #EEE');
+  // Gold is an outline with gold text; the filled action is the primary (gold under white was 2.82:1).
+  const goldBtn  = btn('var(--surface-bg)', 'var(--lala-gold-text)', '1px solid var(--lala-gold)');
+  const goldFill = btn('var(--primary)', 'var(--text-inverse)');
+  const greenBtn = btn('var(--success-text)', 'var(--text-inverse)');
+  const redBtn   = btn('var(--surface-card)', 'var(--danger-text)', '1px solid var(--danger-border)');
+  const grayBtn  = btn('var(--lala-parchment-2)', 'var(--text-secondary)', '1px solid var(--lala-parchment-3)');
 
   // Inline mode (Task #1654): the Event Package page's Invitation section
   // embeds this same component and its same handlers/endpoints, but renders
@@ -277,7 +278,7 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
     return (
       <div className="epp-invitation-inline">
         {toast && (
-          <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10000, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#1A7A40', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+          <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10000, background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)', color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)', border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
             {toast.msg}
           </div>
         )}
@@ -401,27 +402,27 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
   return (
     <div style={{ position: 'relative' }}>
       {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10000, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#1A7A40', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10000, background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)', color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)', border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
           {toast.msg}
         </div>
       )}
 
       {showPreview && imageUrl && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }} onClick={() => setShowPreview(false)}>
-          <div style={{ background: '#FAF7F0', borderRadius: 18, width: '100%', maxWidth: 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'var(--surface-bg)', borderRadius: 18, width: '100%', maxWidth: 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ padding: '18px 22px 0', borderBottom: '1px solid rgba(184,150,46,0.2)', paddingBottom: 12 }}>
+            <div style={{ padding: '18px 22px 0', borderBottom: '1px solid var(--lala-gold-line)', paddingBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1A1A1A' }}>{event.name}</h3>
-                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#999', cursor: 'pointer' }}>x</button>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{event.name}</h3>
+                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-secondary)', cursor: 'pointer' }}>x</button>
               </div>
               {isPending && (
-                <div style={{ padding: '4px 12px', background: '#FEF3C7', color: '#92400E', borderRadius: 8, fontSize: 11, fontWeight: 600, marginBottom: 10, display: 'inline-block' }}>Pending your approval</div>
+                <div style={{ padding: '4px 12px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 8, fontSize: 11, fontWeight: 600, marginBottom: 10, display: 'inline-block' }}>Pending your approval</div>
               )}
               <div style={{ display: 'flex', gap: 0 }}>
                 {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }, { key: 'history', label: 'History' }].map(tab => (
                   <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); if (tab.key === 'edit') loadInvitationText(); }}
-                    style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid #B8962E' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? '#B8962E' : '#888', cursor: 'pointer' }}>
+                    style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid var(--lala-gold)' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? 'var(--lala-gold-text)' : 'var(--text-secondary)', cursor: 'pointer' }}>
                     {tab.label}
                   </button>
                 ))}
@@ -435,19 +436,19 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
               )}
               {modalTab === 'edit' && (
                 <div>
-                  <p style={{ margin: '0 0 16px', fontSize: 12, color: '#888', lineHeight: 1.5 }}>Edit the text, then re-render. No DALL-E call — fast and free.</p>
+                  <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Edit the text, then re-render. No DALL-E call — fast and free.</p>
                   {[
                     { key: 'opening', label: 'Opening Line', placeholder: 'e.g. You have been chosen for something rare.', rows: 2 },
                     { key: 'body', label: 'Body', placeholder: 'The main invitation prose — location, dress code, cost woven together...', rows: 5 },
                     { key: 'closing', label: 'Closing Line', placeholder: 'e.g. We look forward to your presence.', rows: 2 },
                   ].map(field => (
                     <div key={field.key} style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }}>{field.label}</label>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lala-gold-text)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }}>{field.label}</label>
                       <textarea value={editText[field.key]} onChange={e => setEditText(t => ({ ...t, [field.key]: e.target.value }))} placeholder={field.placeholder} rows={field.rows}
-                        style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', border: '1px solid #D4AF37', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', background: '#FFF', lineHeight: 1.6 }} />
+                        style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', border: '1px solid var(--lala-gold)', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', background: 'var(--surface-card)', lineHeight: 1.6 }} />
                     </div>
                   ))}
-                  {error && <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+                  {error && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>{error}</div>}
                   <button onClick={handleEditText} disabled={rerendering} style={{ ...goldFill, width: '100%', padding: '10px 0', opacity: rerendering ? 0.6 : 1, cursor: rerendering ? 'not-allowed' : 'pointer' }}>
                     {rerendering ? 'Saving...' : 'Save Text & Re-render'}
                   </button>
@@ -455,40 +456,40 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
               )}
               {modalTab === 'history' && (
                 <div>
-                  {loadingVersions && <p style={{ fontSize: 12, color: '#888' }}>Loading versions...</p>}
-                  {!loadingVersions && versions.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>No versions found.</p>}
+                  {loadingVersions && <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Loading versions...</p>}
+                  {!loadingVersions && versions.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No versions found.</p>}
                   {versions.map((v, i) => {
                     const isCurrent = v.id === event.invitation_asset_id;
                     return (
                       <div key={v.id} style={{
                         display: 'flex', gap: 12, padding: '10px 0',
-                        borderBottom: i < versions.length - 1 ? '1px solid #F0EDE6' : 'none',
+                        borderBottom: i < versions.length - 1 ? '1px solid var(--lala-parchment-3)' : 'none',
                         opacity: isCurrent ? 1 : 0.8,
                       }}>
                         <img src={v.image_url} alt={`v${v.version}`}
-                          style={{ width: 60, height: 90, objectFit: 'cover', borderRadius: 6, border: isCurrent ? '2px solid #B8962E' : '1px solid #EEE', cursor: 'pointer' }}
+                          style={{ width: 60, height: 90, objectFit: 'cover', borderRadius: 6, border: isCurrent ? '2px solid var(--lala-gold)' : '1px solid var(--lala-parchment-3)', cursor: 'pointer' }}
                           onClick={() => { setImageUrl(v.image_url); setModalTab('preview'); }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                             Version {v.version || i + 1}
-                            {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#E8F5E9', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>CURRENT</span>}
+                            {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 700 }}>CURRENT</span>}
                           </div>
-                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                             {v.theme && <span style={{ marginRight: 8 }}>{v.theme}</span>}
                             <span>{v.approval_status}</span>
-                            {v.composited === 'true' && <span style={{ marginLeft: 6, color: '#16a34a' }}>composited</span>}
+                            {v.composited === 'true' && <span style={{ marginLeft: 6, color: 'var(--success-text)' }}>composited</span>}
                           </div>
-                          <div style={{ fontSize: 10, color: '#AAA', marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
                             {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
                           <a href={v.image_url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 10, color: '#B8962E', textDecoration: 'none', fontWeight: 600 }}>Open</a>
+                            style={{ fontSize: 10, color: 'var(--lala-gold-text)', textDecoration: 'none', fontWeight: 600 }}>Open</a>
                           {!isCurrent && (
                             <button onClick={() => deleteVersion(v.id)}
-                              style={{ background: 'none', border: 'none', fontSize: 10, color: '#DC2626', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+                              style={{ background: 'none', border: 'none', fontSize: 10, color: 'var(--danger-text)', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
                               Delete
                             </button>
                           )}
@@ -501,7 +502,7 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '12px 22px', borderTop: '1px solid rgba(184,150,46,0.15)', background: '#FAF7F0' }}>
+            <div style={{ padding: '12px 22px', borderTop: '1px solid var(--lala-gold-line)', background: 'var(--surface-bg)' }}>
               {isPending ? (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={handleReject} style={{ ...redBtn, flex: 1 }}>Reject</button>
@@ -533,7 +534,7 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
       </div>
 
       {error && !showPreview && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 6, padding: '6px 10px', fontSize: 11, marginTop: 4, zIndex: 100 }}>{error}</div>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 6, padding: '6px 10px', fontSize: 11, marginTop: 4, zIndex: 100 }}>{error}</div>
       )}
     </div>
   );
@@ -550,14 +551,14 @@ export function InvitationStyleFields({ formData, setFormData }) {
   const [colorText, setColorText] = useState((formData.color_palette || []).join(', '));
   return (
     <div style={{
-      border: '1px solid #D4AF37', borderRadius: 10,
+      border: '1px solid var(--lala-gold)', borderRadius: 10,
       padding: '16px', marginTop: 12,
-      background: '#FDFBF5',
+      background: 'var(--surface-bg)',
     }}>
-      <h4 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#B8962E' }}>
+      <h4 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: 'var(--lala-gold-text)' }}>
         Invitation Style
       </h4>
-      <p style={{ margin: '0 0 12px', fontSize: 11, color: '#888' }}>
+      <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--text-secondary)' }}>
         These fields shape the invitation's visual personality. Each event gets its own look.
       </p>
 
@@ -636,16 +637,16 @@ export function InvitationStyleFields({ formData, setFormData }) {
 }
 
 const labelStyle = {
-  fontSize: 11, fontWeight: 600, color: '#666',
+  fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
   display: 'block', marginBottom: 4,
 };
 
 const inputStyle = {
   width: '100%', padding: '7px 10px',
-  border: '1px solid #e0ddd5', borderRadius: 7,
+  border: '1px solid var(--lala-parchment-3)', borderRadius: 7,
   fontSize: 12, outline: 'none',
   fontFamily: 'inherit', boxSizing: 'border-box',
-  background: '#FAFAFA',
+  background: 'var(--surface-bg)',
 };
 
 const selectStyle = {
