@@ -4421,13 +4421,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   if (res.data.success) { setSuccessMsg(`Seeded ${res.data.created} goals! (${res.data.skipped} already existed)`); loadData(); }
                 } catch (err) { setError(err.response?.data?.error || err.message); }
               }} style={S.secBtn}>🌱 Seed 24 Goals</button>
-              <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '#6366f1', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
+              <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
             </div>
           </div>
 
           {/* Goal editor */}
           {editingGoal && (
-            <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ background: 'var(--surface-card)', border: '2px solid var(--primary)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingGoal === 'new' ? '✨ New Goal' : '✏️ Edit Goal'}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Goal Title *" value={goalForm.title} onChange={v => setGoalForm(p => ({ ...p, title: v }))} placeholder="Break Into Luxury Fashion" />
@@ -4454,7 +4454,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
                 <FG label="Target Value" value={goalForm.target_value} onChange={v => setGoalForm(p => ({ ...p, target_value: parseFloat(v) || 0 }))} type="number" />
                 <FG label="Icon" value={goalForm.icon} onChange={v => setGoalForm(p => ({ ...p, icon: v }))} placeholder="🎯" />
-                <FG label="Color" value={goalForm.color} onChange={v => setGoalForm(p => ({ ...p, color: v }))} placeholder="#6366f1" />
+                <FG label="Color" value={goalForm.color} onChange={v => setGoalForm(p => ({ ...p, color: v }))} placeholder="#RRGGBB" />
               </div>
               <FG label="Description" value={goalForm.description} onChange={v => setGoalForm(p => ({ ...p, description: v }))} textarea full placeholder="What does achieving this goal mean for Lala's journey?" />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
@@ -4474,37 +4474,37 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             const typeLimit = goalType === 'primary' ? '(1 max)' : goalType === 'secondary' ? '(2 max)' : '';
             return (
               <div key={goalType}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 8 }}>{typeLabel} {typeLimit}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{typeLabel} {typeLimit}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: goalType === 'primary' ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 16 }}>
                   {typeGoals.map(g => {
                     const pct = g.progress || Math.min(100, Math.round(((g.current_value - (g.starting_value || 0)) / Math.max(1, (g.target_value - (g.starting_value || 0)))) * 100));
                     return (
-                      <div key={g.id} style={{ background: '#fff', border: goalType === 'primary' ? `2px solid ${g.color || '#6366f1'}` : '1px solid #e2e8f0', borderRadius: 12, padding: goalType === 'primary' ? 20 : 16 }}>
+                      <div key={g.id} style={{ background: 'var(--surface-card)', border: goalType === 'primary' ? `2px solid ${g.color || 'var(--primary)'}` : '1px solid var(--lala-parchment-3)', borderRadius: 12, padding: goalType === 'primary' ? 20 : 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontSize: goalType === 'primary' ? 28 : 20 }}>{g.icon || '🎯'}</span>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: goalType === 'primary' ? 16 : 14, fontWeight: 700, color: '#1a1a2e' }}>{g.title}</div>
-                            {g.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{g.description}</div>}
+                            <div style={{ fontSize: goalType === 'primary' ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>{g.title}</div>
+                            {g.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{g.description}</div>}
                           </div>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button onClick={() => { setGoalForm({ ...g }); setEditingGoal(g.id); }} style={S.smBtn}>✏️</button>
                             <button onClick={() => deleteGoal(g.id)} style={S.smBtnDanger}>🗑️</button>
                           </div>
                         </div>
-                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
                           {STAT_ICONS[g.target_metric] || '📊'} {g.target_metric?.replace(/_/g, ' ')}: <strong>{g.current_value}</strong> / {g.target_value}
                         </div>
-                        <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? '#16a34a' : (g.color || '#6366f1'), borderRadius: 4, transition: 'width 0.3s' }} />
+                        <div style={{ height: 8, background: 'var(--lala-parchment-2)', borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--success)' : (g.color || 'var(--primary)'), borderRadius: 4, transition: 'width 0.3s' }} />
                         </div>
-                        <div style={{ fontSize: 11, color: pct >= 100 ? '#16a34a' : '#94a3b8', fontWeight: pct >= 100 ? 700 : 400 }}>
+                        <div style={{ fontSize: 11, color: pct >= 100 ? 'var(--success-text)' : 'var(--text-secondary)', fontWeight: pct >= 100 ? 700 : 400 }}>
                           {pct >= 100 ? '✅ COMPLETE' : `${pct}% — ${Math.max(0, g.target_value - g.current_value)} remaining`}
                         </div>
                       </div>
                     );
                   })}
                   {typeGoals.length === 0 && (
-                    <div style={{ padding: 20, background: '#f8fafc', borderRadius: 8, textAlign: 'center', color: '#94a3b8', fontSize: 13, border: '1px dashed #e2e8f0' }}>
+                    <div style={{ padding: 20, background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, border: '1px dashed var(--lala-parchment-3)' }}>
                       No active {goalType} goal. Click "+ New Goal" to create one.
                     </div>
                   )}
@@ -4516,12 +4516,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           {/* Completed goals */}
           {goals.filter(g => g.status === 'completed').length > 0 && (
             <div style={S.card}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px', color: '#16a34a' }}>✅ Completed Goals</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px', color: 'var(--success-text)' }}>✅ Completed Goals</h3>
               {goals.filter(g => g.status === 'completed').map(g => (
-                <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--lala-parchment-3)' }}>
                   <span>{g.icon}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a' }}>{g.title}</span>
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>{g.completed_at ? new Date(g.completed_at).toLocaleDateString() : ''}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success-text)' }}>{g.title}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 'auto' }}>{g.completed_at ? new Date(g.completed_at).toLocaleDateString() : ''}</span>
                 </div>
               ))}
             </div>
@@ -4532,17 +4532,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             <div style={S.card}>
               <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px' }}>💡 Suggested Events (Based on Active Goals)</h3>
               {suggestions.map((s, i) => (
-                <div key={i} style={{ padding: 14, background: '#f8fafc', borderRadius: 10, marginBottom: 10, border: s.requirements_met === false ? '1px solid #fecaca' : '1px solid #bbf7d0' }}>
+                <div key={i} style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 10, marginBottom: 10, border: s.requirements_met === false ? '1px solid var(--danger-border)' : '1px solid var(--success-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[s.event_type] || '📌'}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', flex: 1 }}>{s.name}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{s.name}</span>
                     <span style={S.eTag}>⭐ {s.prestige}</span>
                     <span style={S.eTag}>🪙 {s.cost_coins}</span>
-                    {s.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid</span>}
-                    {!s.requirements_met && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>⚠️ Reqs not met</span>}
+                    {s.is_paid && <span style={{ padding: '2px 8px', background: 'var(--success-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--success-text)' }}>💰 Paid</span>}
+                    {!s.requirements_met && <span style={{ padding: '2px 8px', background: 'var(--danger-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--danger-text)' }}>⚠️ Reqs not met</span>}
                   </div>
-                  {s.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 6 }}>{s.narrative_stakes}</div>}
-                  <div style={{ fontSize: 11, color: '#6366f1', marginBottom: 8, lineHeight: 1.5 }}>
+                  {s.narrative_stakes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 6 }}>{s.narrative_stakes}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--primary-text)', marginBottom: 8, lineHeight: 1.5 }}>
                     {(s.suggestion_reasons || []).slice(0, 4).join(' · ')}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -4554,7 +4554,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <button onClick={() => {
                       setActiveTab('events');
                       setGenerateTarget(s.id);
-                    }} style={{ ...S.smBtn, background: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>📝 Generate Script</button>
+                    }} style={{ ...S.smBtn, background: 'var(--success-bg)', borderColor: 'var(--success-border)', color: 'var(--success-text)' }}>📝 Generate Script</button>
                   </div>
                 </div>
               ))}
@@ -4585,96 +4585,97 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* ════════════════════════ EPISODE BLUEPRINT MODAL ════════════════════════ */}
       {episodeBlueprint && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setEpisodeBlueprint(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'var(--surface-card)', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>🎬 Episode Blueprint</h2>
-              <button onClick={() => setEpisodeBlueprint(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+              <button onClick={() => setEpisodeBlueprint(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
             </div>
 
             {/* Episode info */}
-            <div style={{ background: '#FAF7F0', borderRadius: 10, padding: 14, marginBottom: 16, border: '1px solid #e8e0d0' }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: '#2C2C2C', marginBottom: 4 }}>{episodeBlueprint.episode?.title}</div>
-              <div style={{ fontSize: 12, color: '#666' }}>Episode {episodeBlueprint.episode?.episode_number} · {episodeBlueprint.brief?.episode_archetype} · Intent: {episodeBlueprint.brief?.designed_intent}</div>
+            <div style={{ background: 'var(--surface-bg)', borderRadius: 10, padding: 14, marginBottom: 16, border: '1px solid var(--lala-parchment-3)' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 4 }}>{episodeBlueprint.episode?.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Episode {episodeBlueprint.episode?.episode_number} · {episodeBlueprint.brief?.episode_archetype} · Intent: {episodeBlueprint.brief?.designed_intent}</div>
             </div>
 
             {/* Financials */}
             {episodeBlueprint.financials && (
               <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center', flex: 1 }}>
-                  <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{episodeBlueprint.financials.total_income}</div>
+                <div style={{ padding: '8px 14px', background: 'var(--success-bg)', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: 'var(--success-text)' }}>Income</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success-text)' }}>{episodeBlueprint.financials.total_income}</div>
                 </div>
-                <div style={{ padding: '8px 14px', background: '#fef2f2', borderRadius: 8, textAlign: 'center', flex: 1 }}>
-                  <div style={{ fontSize: 10, color: '#dc2626' }}>Expenses</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#dc2626' }}>{episodeBlueprint.financials.total_expenses}</div>
+                <div style={{ padding: '8px 14px', background: 'var(--danger-bg)', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>Expenses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--danger-text)' }}>{episodeBlueprint.financials.total_expenses}</div>
                 </div>
-                <div style={{ padding: '8px 14px', background: episodeBlueprint.financials.net_profit >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center', flex: 1 }}>
-                  <div style={{ fontSize: 10, color: '#666' }}>Net</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: episodeBlueprint.financials.net_profit >= 0 ? '#16a34a' : '#dc2626' }}>{episodeBlueprint.financials.net_profit}</div>
+                <div style={{ padding: '8px 14px', background: episodeBlueprint.financials.net_profit >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: episodeBlueprint.financials.net_profit >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{episodeBlueprint.financials.net_profit}</div>
                 </div>
               </div>
             )}
 
             {/* 14 Beats Timeline */}
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>14 Beats</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>14 Beats</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {(episodeBlueprint.beats || []).map((beat, i) => {
-                  const phaseColors = { before: '#fef3c7', during: '#dbeafe', after: '#f3e8ff' };
-                  const phaseDots = { before: '#f59e0b', during: '#3b82f6', after: '#8b5cf6' };
+                  // A beat's phase: a surface, and a dot the beat number reads white on (the text twins; the old fills were 2.2:1 to 3.0:1 under white).
+                  const phaseColors = { before: 'var(--warning-bg)', during: 'var(--info-bg)', after: 'var(--accent-subtle)' };
+                  const phaseDots = { before: 'var(--warning-text)', during: 'var(--info-text)', after: 'var(--accent-dark)' };
                   // Find feed moment for this beat from scene plan
                   const sp = episodeBlueprint.scenePlan?.find(s => s.beat_number === beat.beat);
                   const fm = sp?.feed_moment || episodeBlueprint.feedMoments?.[beat.beat];
                   return (
-                    <div key={i} style={{ padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
+                    <div key={i} style={{ padding: '6px 10px', background: phaseColors[beat.phase] || 'var(--surface-bg)', borderRadius: 6 }}>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || 'var(--text-secondary)', color: 'var(--text-inverse)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
-                          <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
-                          <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{beat.label}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{beat.description}</div>
+                          <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
                         </div>
-                        {fm && <span style={{ fontSize: 8, padding: '2px 6px', borderRadius: 4, background: '#1a1a1a', color: '#B8962E', fontWeight: 700, flexShrink: 0 }}>📱</span>}
+                        {fm && <span style={{ fontSize: 8, padding: '2px 6px', borderRadius: 4, background: 'var(--gray-900)', color: 'var(--text-inverse)', fontWeight: 700, flexShrink: 0 }}>📱</span>}
                       </div>
                       {/* Feed Moment — On-Screen Visual + Script Lines */}
                       {fm && (
                         <div style={{ marginTop: 6, marginLeft: 34, display: 'flex', gap: 6 }}>
                           {/* On-Screen Overlay (bright — what viewer sees) */}
-                          <div style={{ flex: 1, padding: '6px 10px', background: 'linear-gradient(135deg, #FAF7F0, #fff8e7)', borderRadius: 8, border: '1px solid #B8962E30' }}>
+                          <div style={{ flex: 1, padding: '6px 10px', background: 'var(--lala-gold-soft)', borderRadius: 8, border: '1px solid var(--lala-gold-line)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                              <span style={{ fontSize: 8, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>On Screen · {(fm.on_screen || fm.phone_screen)?.type || 'notification'}</span>
-                              <span style={{ fontSize: 8, color: '#94a3b8' }}>{fm.trigger_profile}</span>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--lala-gold-text)', textTransform: 'uppercase' }}>On Screen · {(fm.on_screen || fm.phone_screen)?.type || 'notification'}</span>
+                              <span style={{ fontSize: 8, color: 'var(--text-secondary)' }}>{fm.trigger_profile}</span>
                             </div>
-                            <div style={{ fontSize: 11, color: '#1a1a2e', lineHeight: 1.4 }}>{(fm.on_screen || fm.phone_screen)?.content}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.4 }}>{(fm.on_screen || fm.phone_screen)?.content}</div>
                           </div>
                           {/* Script Lines — Both Voices */}
                           {(fm.script_lines || fm.lala_dialogue) && (
-                            <div style={{ flex: 1, padding: '6px 10px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                            <div style={{ flex: 1, padding: '6px 10px', background: 'var(--surface-card)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
                               {/* JustAWoman — player voice */}
                               {fm.script_lines?.justawoman_line && (
                                 <div style={{ marginBottom: 4 }}>
-                                  <span style={{ fontSize: 8, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>JustAWoman</span>
-                                  <div style={{ fontSize: 11, color: '#92400e', marginTop: 1 }}>"{fm.script_lines.justawoman_line}"</div>
+                                  <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--lala-gold-text)', textTransform: 'uppercase' }}>JustAWoman</span>
+                                  <div style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 1 }}>"{fm.script_lines.justawoman_line}"</div>
                                 </div>
                               )}
                               {/* Lala — character voice */}
-                              <span style={{ fontSize: 8, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase' }}>Lala</span>
-                              <div style={{ fontSize: 11, color: '#1a1a2e', marginTop: 1, fontFamily: "'Lora', serif" }}>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--primary-text)', textTransform: 'uppercase' }}>Lala</span>
+                              <div style={{ fontSize: 11, color: 'var(--text-primary)', marginTop: 1, fontFamily: "'Lora', serif" }}>
                                 "{fm.script_lines?.lala_line || fm.lala_dialogue}"
                               </div>
                               {(fm.script_lines?.lala_internal || fm.lala_internal) && (
-                                <div style={{ fontSize: 10, color: '#6366f1', fontStyle: 'italic', marginTop: 2 }}>
+                                <div style={{ fontSize: 10, color: 'var(--primary-text)', fontStyle: 'italic', marginTop: 2 }}>
                                   [{fm.script_lines?.lala_internal || fm.lala_internal}]
                                 </div>
                               )}
                               {/* Financial indicator */}
                               {fm.financial && (
-                                <div style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, marginTop: 3, display: 'inline-block', background: fm.financial.affordable ? '#f0fdf4' : '#fef2f2', color: fm.financial.affordable ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                                <div style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, marginTop: 3, display: 'inline-block', background: fm.financial.affordable ? 'var(--success-bg)' : 'var(--danger-bg)', color: fm.financial.affordable ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}>
                                   Bank: {fm.financial.balance} → {fm.financial.affordable ? `-${fm.financial.outfit_cost} = ${fm.financial.remaining}` : `Need ${fm.financial.outfit_cost} (short ${fm.financial.outfit_cost - fm.financial.balance})`}
                                 </div>
                               )}
                               {(fm.script_lines?.direction || fm.behavior_shift) && (
-                                <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>→ {fm.script_lines?.direction || fm.behavior_shift}</div>
+                                <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 2 }}>→ {fm.script_lines?.direction || fm.behavior_shift}</div>
                               )}
                             </div>
                           )}
@@ -4689,19 +4690,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Social Tasks */}
             {episodeBlueprint.socialTasks?.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📱 Social Media Tasks ({episodeBlueprint.socialTasks.length})</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>📱 Social Media Tasks ({episodeBlueprint.socialTasks.length})</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
                   {episodeBlueprint.socialTasks.map((task, i) => (
-                    <div key={i} style={{ padding: '6px 10px', background: task.source ? '#faf7f0' : '#f8f8f8', borderRadius: 6, fontSize: 11, borderLeft: task.source ? '3px solid #B8962E' : undefined }}>
+                    <div key={i} style={{ padding: '6px 10px', background: task.source ? 'var(--lala-gold-soft)' : 'var(--surface-bg)', borderRadius: 6, fontSize: 11, borderLeft: task.source ? '3px solid var(--lala-gold)' : undefined }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                        <span style={{ color: '#999' }}>☐</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>☐</span>
                         <span style={{ fontWeight: 600 }}>{task.label}</span>
                         <SocialTaskBadge task={task} />
-                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3 }}>{task.platform}</span>}
-                        {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#d1fae5', color: '#065f46', borderRadius: 3 }}>niche</span>}
+                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: 'var(--info-bg)', color: 'var(--info-text)', borderRadius: 3 }}>{task.platform}</span>}
+                        {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 3 }}>niche</span>}
                       </div>
-                      <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{task.description}</div>
-                      <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{task.description}</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>
                     </div>
                   ))}
                 </div>
@@ -4711,13 +4712,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Feed Activity */}
             {episodeBlueprint.feedPosts?.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📢 Feed Activity ({episodeBlueprint.feedPosts.length} posts)</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>📢 Feed Activity ({episodeBlueprint.feedPosts.length} posts)</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {episodeBlueprint.feedPosts.map((post, i) => (
-                    <div key={i} style={{ padding: '8px 12px', background: '#fafafa', borderRadius: 8, borderLeft: '3px solid #B8962E' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{post.handle} <span style={{ fontWeight: 400, color: '#999' }}>({post.role})</span></div>
-                      <div style={{ fontSize: 12, color: '#333', fontStyle: 'italic' }}>"{post.content}"</div>
-                      <div style={{ fontSize: 9, color: '#aaa', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{post.platform}</div>
+                    <div key={i} style={{ padding: '8px 12px', background: 'var(--surface-bg)', borderRadius: 8, borderLeft: '3px solid var(--lala-gold)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{post.handle} <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>({post.role})</span></div>
+                      <div style={{ fontSize: 12, color: 'var(--text-primary)', fontStyle: 'italic' }}>"{post.content}"</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{post.platform}</div>
                     </div>
                   ))}
                 </div>
@@ -4730,17 +4731,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 // Open Episode lands on Overview (Task #1905), as the queue's does.
                 if (epId) window.location.href = `/episodes/${epId}?tab=overview`;
                 else { setActiveTab('episodes'); setEpisodeBlueprint(null); }
-              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Open Episode →
               </button>
               <button onClick={() => {
                 const epId = episodeBlueprint.episode?.id;
                 if (epId) window.location.href = `/episodes/${epId}/script-writer`;
                 else setEpisodeBlueprint(null);
-              }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--lala-gold)', background: 'transparent', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Write Script
               </button>
-              <button onClick={() => setEpisodeBlueprint(null)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #ddd', background: 'transparent', color: '#666', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+              <button onClick={() => setEpisodeBlueprint(null)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--lala-parchment-3)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Done
               </button>
             </div>
@@ -7317,9 +7318,9 @@ function BalanceTrend({ trend }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img"
       aria-label={`Balance trend from ${coins(values[0])} to ${coins(values[values.length - 1])}`} style={{ display: 'block' }}>
-      <path d={path} fill="none" stroke="#B8962E" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <path d={path} fill="none" stroke="var(--lala-gold)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       {trend.map((t, i) => t.between_episodes && (
-        <circle key={i} cx={x(i)} cy={y(t.balance_after)} r="2.5" fill="#6366f1" />
+        <circle key={i} cx={x(i)} cy={y(t.balance_after)} r="2.5" fill="var(--primary)" />
       ))}
     </svg>
   );
@@ -7336,8 +7337,8 @@ function PlanningInsights({ insights, S }) {
       + (health.without_range ? ` · ${health.without_range} had no range planned` : '');
   const stat = (label, value, color) => (
     <div style={{ flex: '1 1 70px', minWidth: 0 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: color || '#1a1a2e' }}>{value}</div>
-      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: color || 'var(--text-primary)' }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
     </div>
   );
   return (
@@ -7346,52 +7347,52 @@ function PlanningInsights({ insights, S }) {
       <p style={{ ...S.muted, margin: '0 0 10px', fontSize: 12 }}>
         Each slot's plan beside what happened. Money comes from the ledger only.
       </p>
-      <div data-testid="season-health" style={{ fontSize: 13, color: '#1a1a2e', marginBottom: 12 }}>
+      <div data-testid="season-health" style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 12 }}>
         <strong>Season health:</strong> {healthLine}
       </div>
 
       <div data-testid="season-money" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        {stat('Income', coins(money.season.income), '#15803d')}
-        {stat('Spend', coins(money.season.spend), '#dc2626')}
+        {stat('Income', coins(money.season.income), 'var(--success-text)')}
+        {stat('Spend', coins(money.season.spend), 'var(--danger-text)')}
         {stat('Net', signedCoins(money.season.net))}
-        {money.balance != null && stat('Balance', coins(money.balance), '#B8962E')}
+        {money.balance != null && stat('Balance', coins(money.balance), 'var(--lala-gold-text)')}
       </div>
       {trend.length >= 2 && (
         <div style={{ marginBottom: 12 }}>
           <BalanceTrend trend={trend} />
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
             Balance after each of {trend.length} ledger row{trend.length === 1 ? '' : 's'}
-            {between > 0 && <> · <span style={{ color: '#6366f1' }}>●</span> {between} between episodes</>}
+            {between > 0 && <> · <span style={{ color: 'var(--primary-text)' }}>●</span> {between} between episodes</>}
           </div>
         </div>
       )}
 
       {phases.map((p) => (
-        <div key={p.phase} data-testid={`insights-phase-${p.phase}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, marginTop: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>Phase {p.phase}{p.title ? ` · ${p.title}` : ''}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+        <div key={p.phase} data-testid={`insights-phase-${p.phase}`} style={{ borderTop: '1px solid var(--lala-parchment-3)', paddingTop: 10, marginTop: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Phase {p.phase}{p.title ? ` · ${p.title}` : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>
             Income {coins(p.totals.income)} · spend {coins(p.totals.spend)} · net {signedCoins(p.totals.net)}
           </div>
           {p.slots.map((sl) => {
             const pn = pressureNote(sl.pressure_delta);
             const range = sl.planned.outcome_range;
             return (
-              <div key={sl.slot_number} data-testid={`insights-slot-${sl.slot_number}`} style={{ padding: '6px 0', fontSize: 12, borderTop: '1px dashed #f1f5f9' }}>
-                <div style={{ fontWeight: 600, color: '#1a1a2e', overflowWrap: 'anywhere' }}>
+              <div key={sl.slot_number} data-testid={`insights-slot-${sl.slot_number}`} style={{ padding: '6px 0', fontSize: 12, borderTop: '1px dashed var(--lala-parchment-3)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
                   {sl.label}{sl.episode ? ` · ${sl.episode.title || 'Untitled'}` : ''}
                 </div>
-                <div style={{ color: '#64748b' }}>
+                <div style={{ color: 'var(--text-secondary)' }}>
                   Planned: {sl.planned.desired_pressure || 'no pressure set'}{range ? ` · ${range.min === range.max ? range.min : `${range.min} to ${range.max}`}` : ''}
                 </div>
-                <div style={{ color: '#64748b' }}>
+                <div style={{ color: 'var(--text-secondary)' }}>
                   Actual: {sl.actual.outcome ? `${sl.actual.outcome} · ${sl.actual.pressure || '—'}` : 'not accepted yet'}
                   {pn && <span style={{ color: pn.color, fontWeight: 600 }}> · {pn.text}</span>}
                   {sl.outcome_in_range != null && (
-                    <span style={{ color: sl.outcome_in_range ? '#15803d' : '#dc2626', fontWeight: 600 }}> · {sl.outcome_in_range ? 'in range' : 'outside range'}</span>
+                    <span style={{ color: sl.outcome_in_range ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}> · {sl.outcome_in_range ? 'in range' : 'outside range'}</span>
                   )}
                 </div>
                 {sl.money && (
-                  <div style={{ color: '#475569' }}>
+                  <div style={{ color: 'var(--text-secondary)' }}>
                     Income {coins(sl.money.income)} · spend {coins(sl.money.spend)} · net {signedCoins(sl.money.net)}
                   </div>
                 )}
@@ -7399,7 +7400,7 @@ function PlanningInsights({ insights, S }) {
             );
           })}
           {p.unplanned_count > 0 && (
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
               {p.unplanned_count} slot{p.unplanned_count === 1 ? '' : 's'} with nothing planned yet
             </div>
           )}
@@ -7413,16 +7414,16 @@ function PlanningInsights({ insights, S }) {
 // are offered from seeds_future_events. Acceptance can mark one
 // "advanced", and only you close one."
 const THREAD_STATUS = {
-  open: { label: 'Open', color: '#4f46e5' },
-  advanced: { label: 'Advanced', color: '#15803d' },
-  closed: { label: 'Closed', color: '#94a3b8' },
+  open: { label: 'Open', color: 'var(--primary-text)' },
+  advanced: { label: 'Advanced', color: 'var(--success-text)' },
+  closed: { label: 'Closed', color: 'var(--text-secondary)' },
 };
 
 function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
-  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6 };
+  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6 };
 
   const create = async (body, done) => {
     setBusy(true);
@@ -7485,15 +7486,15 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
       {threads.map((t) => {
         const st = THREAD_STATUS[t.status] || THREAD_STATUS.open;
         return (
-          <div key={t.id} data-testid={`story-thread-${t.id}`} style={{ padding: '8px 0', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div key={t.id} data-testid={`story-thread-${t.id}`} style={{ padding: '8px 0', borderTop: '1px solid var(--lala-parchment-3)', display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0, flex: '1 1 200px' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.status === 'closed' ? '#94a3b8' : '#1a1a2e' }}>{t.title}</div>
-              {t.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{t.description}</div>}
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.status === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{t.title}</div>
+              {t.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{t.description}</div>}
               <div style={{ fontSize: 11, marginTop: 2 }}>
                 <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
-                {Array.isArray(t.slot_numbers) && t.slot_numbers.length > 0 && <span style={{ color: '#94a3b8' }}> · in {t.slot_numbers.map((n) => `E${n}`).join(', ')}</span>}
-                {t.source === 'seed' && <span style={{ color: '#94a3b8' }}> · from a seed</span>}
-                {t.reopened_at && t.status !== 'closed' && <span style={{ color: '#94a3b8' }}> · reopened</span>}
+                {Array.isArray(t.slot_numbers) && t.slot_numbers.length > 0 && <span style={{ color: 'var(--text-secondary)' }}> · in {t.slot_numbers.map((n) => `E${n}`).join(', ')}</span>}
+                {t.source === 'seed' && <span style={{ color: 'var(--text-secondary)' }}> · from a seed</span>}
+                {t.reopened_at && t.status !== 'closed' && <span style={{ color: 'var(--text-secondary)' }}> · reopened</span>}
               </div>
             </div>
             {t.status !== 'closed' ? (
@@ -7505,19 +7506,19 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
         );
       })}
 
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
         <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} />
         <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
         <button onClick={add} disabled={busy || !title.trim()} style={{ ...S.primaryBtn, marginTop: 6 }}>Add thread</button>
       </div>
 
       {drafts.length > 0 && (
-        <div data-testid="story-thread-drafts" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Drafts from your episodes' seeds</div>
+        <div data-testid="story-thread-drafts" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Drafts from your episodes' seeds</div>
           {drafts.map((d) => (
             <div key={d.seed_text} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: '#334155', flex: '1 1 200px', minWidth: 0 }}>
-                {d.seed_text}{d.episode_title && <span style={{ color: '#94a3b8' }}> · {d.episode_title}</span>}
+              <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: '1 1 200px', minWidth: 0 }}>
+                {d.seed_text}{d.episode_title && <span style={{ color: 'var(--text-secondary)' }}> · {d.episode_title}</span>}
               </span>
               <button onClick={() => fromDraft(d)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Make a thread</button>
             </div>
@@ -7534,10 +7535,10 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
 // be placed in an open one (Q4). A started slot is locked (A7). When every
 // slot of the current phase is done, a summary asks before advancing (Q6).
 const SLOT_STATE_CONFIG = {
-  done:          { label: 'Done',            color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-  in_production: { label: 'In production',   color: '#B8962E', bg: '#faf5ea', border: 'rgba(184,150,46,0.35)' },
-  event_ready:   { label: 'Event ready',     color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
-  needs_event:   { label: 'Needs an event',  color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
+  done:          { label: 'Done',            color: 'var(--success-text)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
+  in_production: { label: 'In production',   color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)', border: 'var(--lala-gold-line)' },
+  event_ready:   { label: 'Event ready',     color: 'var(--primary-text)', bg: 'var(--primary-subtle)', border: 'var(--primary-light)' },
+  needs_event:   { label: 'Needs an event',  color: 'var(--text-secondary)', bg: 'var(--surface-bg)', border: 'var(--lala-parchment-3)' },
 };
 
 const PRESSURE_OPTIONS = ['Low', 'Medium', 'High', 'Peak'];
@@ -7578,8 +7579,8 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
     return next.length ? next : [{ text: '', primary: true, story_thread_id: '' }];
   });
   const [busy, setBusy] = useState(null);
-  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 4 };
-  const label = { fontSize: 11, fontWeight: 600, color: '#64748b', marginTop: 10, display: 'block' };
+  const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, marginTop: 4 };
+  const label = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 10, display: 'block' };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = async () => {
@@ -7623,22 +7624,22 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
   };
 
   return (
-    <div data-testid="season-intention-editor" style={{ marginTop: 4, marginBottom: 16, padding: '12px 14px', border: '1px solid rgba(184,150,46,0.35)', borderRadius: 10, background: '#fffef9' }}>
+    <div data-testid="season-intention-editor" style={{ marginTop: 4, marginBottom: 16, padding: '12px 14px', border: '1px solid var(--lala-gold-line)', borderRadius: 10, background: 'var(--lala-gold-soft)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{slot.label} intention</div>
-        {init.source && <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{slot.label} intention</div>
+        {init.source && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
       </div>
       {started && (
-        <div data-testid="season-intention-started" style={{ fontSize: 11, color: '#92400e', marginTop: 6 }}>
+        <div data-testid="season-intention-started" style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 6 }}>
           Started: editable while its episode is a draft. Saving updates the episode's season position; it locks once the episode is accepted. Draft with AI reads its event and script and keeps the purposes you edited.
         </div>
       )}
       <span style={label}>Story purposes (up to {MAX_PURPOSES}, one primary)</span>
       {purposes.map((p, i) => (
-        <div key={i} data-testid={`season-purpose-${i}`} style={{ marginTop: 6, padding: 8, border: '1px solid #f1f5f9', borderRadius: 8, background: '#fff' }}>
+        <div key={i} data-testid={`season-purpose-${i}`} style={{ marginTop: 6, padding: 8, border: '1px solid var(--lala-parchment-3)', borderRadius: 8, background: 'var(--surface-card)' }}>
           <textarea aria-label={`Story purpose ${i + 1}`} value={p.text} onChange={(e) => setPurpose(i, { text: e.target.value })} rows={2} style={{ ...field, marginTop: 0 }} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-            <label style={{ fontSize: 11, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <input type="radio" name={`primary-${slot.id}`} aria-label={`Primary purpose ${i + 1}`} checked={p.primary} onChange={() => makePrimary(i)} /> Primary
             </label>
             <select aria-label={`Story thread ${i + 1}`} value={p.story_thread_id} onChange={(e) => setPurpose(i, { story_thread_id: e.target.value })} style={{ ...field, marginTop: 0, flex: '1 1 140px', width: 'auto' }}>
@@ -7648,13 +7649,13 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
               ))}
             </select>
             {purposes.length > 1 && (
-              <button type="button" onClick={() => removePurpose(i)} style={{ fontSize: 11, border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' }}>Remove</button>
+              <button type="button" onClick={() => removePurpose(i)} style={{ fontSize: 11, border: 'none', background: 'none', color: 'var(--danger-text)', cursor: 'pointer' }}>Remove</button>
             )}
           </div>
         </div>
       ))}
       {purposes.length < MAX_PURPOSES && (
-        <button type="button" data-testid="season-purpose-add" onClick={addPurpose} style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#B8962E', cursor: 'pointer' }}>
+        <button type="button" data-testid="season-purpose-add" onClick={addPurpose} style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--lala-gold-text)', cursor: 'pointer' }}>
           + Add a purpose
         </button>
       )}
@@ -7673,7 +7674,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
           <option value="">From…</option>
           {OUTCOME_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: '#94a3b8' }}>to</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>to</span>
         <select aria-label="Highest outcome" value={form.max} onChange={set('max')} style={{ ...field, marginTop: 0 }}>
           <option value="">To…</option>
           {OUTCOME_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -7688,7 +7689,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
   );
 }
 
-const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#334155', minWidth: 0 };
+const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-primary)', minWidth: 0 };
 
 function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, threads = [] }) {
   const [busySlot, setBusySlot] = useState(null);
@@ -7731,24 +7732,24 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
         const pb = roadmap.phase_boundary;
         const outcomeText = Object.entries(pb.outcomes || {}).map(([tier, n]) => `${n} ${tier}`).join(' · ');
         return (
-          <div data-testid="season-phase-boundary" style={{ marginBottom: 16, padding: '12px 14px', background: '#faf5ea', border: '1px solid rgba(184,150,46,0.35)', borderRadius: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Phase {pb.phase}: {pb.title} is complete</div>
-            {outcomeText && <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>Results: {outcomeText}</div>}
+          <div data-testid="season-phase-boundary" style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Phase {pb.phase}: {pb.title} is complete</div>
+            {outcomeText && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>Results: {outcomeText}</div>}
             {pb.goals && (
-              <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>
                 Goals: {pb.goals.completed} of {pb.goals.total} complete{pb.goals.unmet > 0 ? `; ${pb.goals.unmet} unmet will be carried as narrative debt` : ''}
               </div>
             )}
-            <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>
               {pb.next_phase
                 ? `Advancing opens Phase ${pb.next_phase.phase}: ${pb.next_phase.title}${pb.next_phase.tagline ? ` (“${pb.next_phase.tagline}”)` : ''} and activates its goals.`
                 : 'Advancing completes the season.'}
             </div>
             {advanceWarning ? (
-              <div data-testid="season-phase-confirm" style={{ marginTop: 10, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
-                <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>{advanceWarning.warning}</div>
+              <div data-testid="season-phase-confirm" style={{ marginTop: 10, padding: '8px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--warning-text)', lineHeight: 1.5 }}>{advanceWarning.warning}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <button onClick={onConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: '#f59e0b' }}>
+                  <button onClick={onConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: 'var(--warning-text)' }}>
                     {advancing ? 'Advancing...' : 'Confirm: advance and carry the debt'}
                   </button>
                   <button onClick={onCancelAdvance} style={S.secBtn}>Cancel</button>
@@ -7765,9 +7766,9 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
 
       {phases.map((phase) => (
         <div key={phase.phase} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
             Phase {phase.phase} · {phase.title}
-            <span style={{ fontWeight: 400, color: '#94a3b8' }}> · E{phase.episode_start}–E{phase.episode_end}</span>
+            <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}> · E{phase.episode_start}–E{phase.episode_end}</span>
           </div>
           {/* auto-fit, not auto-fill: responsive.css §12 forces auto-fill grids to one
               column under 400px, but two 130px slots fit a phone without overflow. */}
@@ -7782,13 +7783,13 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                   style={{ border: `1px solid ${cfg.border}`, background: cfg.bg, borderRadius: 10, padding: '8px 10px', minWidth: 0 }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>{slot.label}</span>
-                    {slot.locked && <span title="Started: locked to its episode" style={{ fontSize: 10, color: '#94a3b8' }}>Locked</span>}
-                    {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span style={{ fontSize: 10, fontWeight: 700, color: '#B8962E' }}>Next</span>}
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace" }}>{slot.label}</span>
+                    {slot.locked && <span title="Started: locked to its episode" style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Locked</span>}
+                    {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)' }}>Next</span>}
                   </div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: cfg.color, marginTop: 4 }}>{cfg.label}</div>
                   {what && (
-                    <div style={{ fontSize: 11, color: '#334155', marginTop: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }} title={what}>
+                    <div style={{ fontSize: 11, color: 'var(--text-primary)', marginTop: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }} title={what}>
                       {what}
                     </div>
                   )}
@@ -7807,22 +7808,22 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                     </select>
                   )}
                   {slot.intention?.story_purpose && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }} data-testid={`season-slot-purpose-${slot.slot_number}`}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }} data-testid={`season-slot-purpose-${slot.slot_number}`}>
                       {slot.intention.story_purpose}
                       {(slot.intention.story_purposes?.length || 0) > 1 && (
-                        <span style={{ fontStyle: 'normal', color: '#B8962E', fontWeight: 600 }}> +{slot.intention.story_purposes.length - 1} more</span>
+                        <span style={{ fontStyle: 'normal', color: 'var(--lala-gold-text)', fontWeight: 600 }}> +{slot.intention.story_purposes.length - 1} more</span>
                       )}
-                      {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: '#94a3b8' }}> · Auto-drafted</span>}
+                      {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)' }}> · Auto-drafted</span>}
                     </div>
                   )}
                   {slot.intention?.story_thread && (
-                    <div style={{ fontSize: 10, color: '#4f46e5', marginTop: 4 }}>Thread: {slot.intention.story_thread.title}</div>
+                    <div style={{ fontSize: 10, color: 'var(--primary-text)', marginTop: 4 }}>Thread: {slot.intention.story_thread.title}</div>
                   )}
                   {(slot.intention_editable ?? !slot.locked) && (
                     <button
                       data-testid={`season-intention-${slot.slot_number}`}
                       onClick={() => setEditingSlotId(editingSlotId === slot.id ? null : slot.id)}
-                      style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#B8962E', cursor: 'pointer' }}
+                      style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--lala-gold-text)', cursor: 'pointer' }}
                     >
                       {slot.intention?.story_purpose ? 'Intention' : 'Add intention'}
                     </button>
@@ -7842,17 +7843,17 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
       ))}
 
       {unslotted.length > 0 && (
-        <div data-testid="season-unslotted" style={{ marginTop: 4, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>
+        <div data-testid="season-unslotted" style={{ marginTop: 4, padding: '10px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)', marginBottom: 6 }}>
             Not in a slot ({unslotted.length})
           </div>
-          <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 6px' }}>
+          <p style={{ fontSize: 11, color: 'var(--warning-text)', margin: '0 0 6px' }}>
             These episodes are not placed on the roadmap yet. Place one, or leave it unslotted.
           </p>
           {unslotted.map((ep) => (
-            <div key={ep.id} style={{ fontSize: 12, color: '#334155', padding: '4px 0' }}>
+            <div key={ep.id} style={{ fontSize: 12, color: 'var(--text-primary)', padding: '4px 0' }}>
               {ep.title || 'Untitled episode'}
-              <span style={{ color: '#94a3b8' }}> · {ep.evaluation_status === 'accepted' ? 'done' : (ep.status || 'draft')}</span>
+              <span style={{ color: 'var(--text-secondary)' }}> · {ep.evaluation_status === 'accepted' ? 'done' : (ep.status || 'draft')}</span>
               <select
                 aria-label={`Place ${ep.title || 'episode'} in a slot`}
                 data-testid={`season-place-${ep.id}`}
@@ -7997,19 +7998,19 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   const log = arc.progression_log || [];
 
   const TEMP_CONFIG = {
-    unstoppable: { color: '#B8962E', bg: '#faf5ea', label: 'Unstoppable' },
-    confident:   { color: '#22c55e', bg: '#f0fdf4', label: 'Confident' },
-    rising:      { color: '#6366f1', bg: '#eef2ff', label: 'Rising' },
-    anxious:     { color: '#f59e0b', bg: '#fffbeb', label: 'Anxious' },
-    desperate:   { color: '#ef4444', bg: '#fef2f2', label: 'Desperate' },
-    broken:      { color: '#dc2626', bg: '#fef2f2', label: 'Broken' },
+    unstoppable: { color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)', label: 'Unstoppable' },
+    confident:   { color: 'var(--success-text)', bg: 'var(--success-bg)', label: 'Confident' },
+    rising:      { color: 'var(--primary-text)', bg: 'var(--primary-subtle)', label: 'Rising' },
+    anxious:     { color: 'var(--warning-text)', bg: 'var(--warning-bg)', label: 'Anxious' },
+    desperate:   { color: 'var(--danger-text)', bg: 'var(--danger-bg)', label: 'Desperate' },
+    broken:      { color: 'var(--danger-text)', bg: 'var(--danger-bg)', label: 'Broken' },
   };
   const tempCfg = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
 
   const PHASE_STATUS_COLORS = {
-    active: { bg: '#f0fdf4', color: '#22c55e', border: '#bbf7d0' },
-    completed: { bg: '#f8fafc', color: '#94a3b8', border: '#e2e8f0' },
-    upcoming: { bg: '#faf5ea', color: '#B8962E', border: 'rgba(184,150,46,0.2)' },
+    active: { bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)' },
+    completed: { bg: 'var(--surface-bg)', color: 'var(--text-secondary)', border: 'var(--lala-parchment-3)' },
+    upcoming: { bg: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', border: 'var(--lala-gold-line)' },
   };
 
   // Goals grouped by phase
@@ -8036,7 +8037,7 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
             <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: tempCfg.bg, color: tempCfg.color }}>
               {tempCfg.label}
             </span>
-            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }}>
+            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, background: 'var(--surface-bg)', color: 'var(--text-secondary)', border: '1px solid var(--lala-parchment-3)' }}>
               Ep {arc.current_episode || 0} / {arc.episode_end}
             </span>
           </div>
@@ -8045,19 +8046,19 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
         {/* Quick Stats */}
         <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
           <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>{completedEpisodes}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{completedEpisodes}</div>
             <div style={S.statLbl}>Episodes Done</div>
           </div>
           <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>{goals.filter(g => g.status === 'completed').length}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{goals.filter(g => g.status === 'completed').length}</div>
             <div style={S.statLbl}>Goals Hit</div>
           </div>
           <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: debt.length > 0 ? '#dc2626' : '#1a1a2e' }}>{debt.length}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: debt.length > 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{debt.length}</div>
             <div style={S.statLbl}>Narrative Debt</div>
           </div>
           <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#B8962E' }}>{arc.current_phase}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--lala-gold-text)' }}>{arc.current_phase}</div>
             <div style={S.statLbl}>Current Phase</div>
           </div>
         </div>
@@ -8085,18 +8086,18 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
           return (
             <div key={phase.phase} style={{
               ...S.card,
-              borderColor: isCurrent ? '#B8962E' : statusCfg.border,
+              borderColor: isCurrent ? 'var(--lala-gold)' : statusCfg.border,
               borderWidth: isCurrent ? 2 : 1,
               borderStyle: 'solid',
-              background: isCurrent ? '#fffef9' : '#fff',
+              background: isCurrent ? 'var(--lala-gold-soft)' : 'var(--surface-card)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
                     Phase {phase.phase}: {phase.title}
-                    {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#f0fdf4', color: '#22c55e', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>}
+                    {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>}
                   </h3>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                     &ldquo;{phase.tagline}&rdquo; &middot; Episodes {phase.episode_start}-{phase.episode_end}
                   </p>
                 </div>
@@ -8108,14 +8109,14 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
 
               {/* Emotional arc */}
               {phase.emotional_arc && (
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
                   <strong>Emotional arc:</strong> {phase.emotional_arc}
                 </div>
               )}
 
               {/* Feed behavior */}
               {phase.feed_behavior && (
-                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10, padding: '6px 10px', background: '#f8fafc', borderRadius: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10, padding: '6px 10px', background: 'var(--surface-bg)', borderRadius: 6 }}>
                   <strong>Feed:</strong> {phase.feed_behavior.feed_tone || `Follow bias: ${phase.feed_behavior.follow_bias}`}
                   {phase.feed_behavior.event_prestige_max && <span> &middot; Max prestige: {phase.feed_behavior.event_prestige_max}</span>}
                 </div>
@@ -8124,15 +8125,15 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
               {/* Phase goals */}
               {pGoals.length > 0 && (
                 <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 6 }}>
                     Goals ({pGoals.filter(g => g.status === 'completed').length}/{pGoals.length} complete)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {pGoals.map(g => (
                       <span key={g.id} style={{
                         padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: g.status === 'completed' ? '#f0fdf4' : g.status === 'failed' ? '#fef2f2' : g.status === 'paused' ? '#f8fafc' : '#eef2ff',
-                        color: g.status === 'completed' ? '#16a34a' : g.status === 'failed' ? '#dc2626' : g.status === 'paused' ? '#94a3b8' : '#4338ca',
+                        background: g.status === 'completed' ? 'var(--success-bg)' : g.status === 'failed' ? 'var(--danger-bg)' : g.status === 'paused' ? 'var(--surface-bg)' : 'var(--primary-subtle)',
+                        color: g.status === 'completed' ? 'var(--success-text)' : g.status === 'failed' ? 'var(--danger-text)' : g.status === 'paused' ? 'var(--text-secondary)' : 'var(--primary-text)',
                         textDecoration: g.status === 'failed' ? 'line-through' : 'none',
                       }}>
                         {g.icon || '🎯'} {g.title}
@@ -8144,9 +8145,9 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
 
               {/* Goal summary for completed phases */}
               {phase.goal_summary && phase.status === 'completed' && (
-                <div style={{ marginTop: 8, fontSize: 11, color: '#64748b' }}>
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
                   Results: {phase.goal_summary.completed} completed, {phase.goal_summary.failed} failed
-                  {phase.goal_summary.carried > 0 && <span style={{ color: '#dc2626' }}>, {phase.goal_summary.carried} carried as debt</span>}
+                  {phase.goal_summary.carried > 0 && <span style={{ color: 'var(--danger-text)' }}>, {phase.goal_summary.carried} carried as debt</span>}
                 </div>
               )}
             </div>
@@ -8169,26 +8170,26 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
 
       {/* Warning Modal */}
       {warning && (
-        <div style={{ ...S.card, borderColor: '#f59e0b', borderWidth: 2, borderStyle: 'solid', background: '#fffbeb' }}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 8px', color: '#92400e' }}>⚠️ Advance Warning</h3>
-          <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 12px', lineHeight: 1.5 }}>
+        <div style={{ ...S.card, borderColor: 'var(--warning)', borderWidth: 2, borderStyle: 'solid', background: 'var(--warning-bg)' }}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 8px', color: 'var(--warning-text)' }}>⚠️ Advance Warning</h3>
+          <p style={{ fontSize: 13, color: 'var(--warning-text)', margin: '0 0 12px', lineHeight: 1.5 }}>
             {warning.warning}
           </p>
           {warning.goal_status?.goals?.filter(g => g.status === 'active' || g.type === 'primary').length > 0 && (
             <div style={{ marginBottom: 12 }}>
               {warning.goal_status.goals.filter(g => g.status !== 'completed').map((g, i) => (
-                <div key={i} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.7)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#92400e' }}>
+                <div key={i} style={{ padding: '6px 10px', background: 'var(--surface-card)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: 'var(--warning-text)' }}>
                   {g.icon} <strong>{g.title}</strong> — {g.current_value}/{g.target_value} {g.target_metric}
-                  {g.type === 'primary' && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#dc2626' }}>PRIMARY</span>}
+                  {g.type === 'primary' && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--danger-text)' }}>PRIMARY</span>}
                 </div>
               ))}
             </div>
           )}
-          <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 12px' }}>
+          <p style={{ fontSize: 11, color: 'var(--warning-text)', margin: '0 0 12px' }}>
             Advancing will mark incomplete goals as <strong>narrative debt</strong> — emotional weight that affects scripts, feed, and events.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: '#f59e0b' }}>
+            <button onClick={handleConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: 'var(--warning-text)' }}>
               {advancing ? 'Advancing...' : 'Advance Anyway'}
             </button>
             <button onClick={() => setWarning(null)} style={S.secBtn}>Cancel</button>
@@ -8199,7 +8200,7 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       {/* Narrative Debt */}
       {debt.length > 0 && (
         <div style={S.card}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: '#dc2626' }}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
             Narrative Debt ({debt.length})
           </h3>
           <p style={{ ...S.muted, marginBottom: 12 }}>
@@ -8207,16 +8208,16 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
           </p>
           {debt.map((d, i) => (
             <div key={i} style={{
-              padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca',
+              padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
               borderRadius: 8, marginBottom: 8,
             }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
                 {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
               </div>
-              <div style={{ fontSize: 12, color: '#7f1d1d', fontStyle: 'italic' }}>
+              <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
                 {d.narrative_weight}
               </div>
-              <div style={{ fontSize: 10, color: '#b91c1c', marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
                 From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
               </div>
             </div>
@@ -8235,15 +8236,15 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
             }}>
               <span style={{
                 padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                background: entry.triggered_by === 'manual' ? '#fef3c7' : '#eef2ff',
-                color: entry.triggered_by === 'manual' ? '#92400e' : '#4338ca',
+                background: entry.triggered_by === 'manual' ? 'var(--warning-bg)' : 'var(--primary-subtle)',
+                color: entry.triggered_by === 'manual' ? 'var(--warning-text)' : 'var(--primary-text)',
                 flexShrink: 0,
               }}>{entry.triggered_by}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: '#1a1a2e' }}>{entry.trigger_reason}</div>
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{entry.trigger_reason}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
                   {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ''}
-                  {entry.goals_carried > 0 && <span style={{ color: '#dc2626' }}> &middot; {entry.goals_carried} goals carried</span>}
+                  {entry.goals_carried > 0 && <span style={{ color: 'var(--danger-text)' }}> &middot; {entry.goals_carried} goals carried</span>}
                 </div>
               </div>
             </div>
