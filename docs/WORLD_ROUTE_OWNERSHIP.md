@@ -7,7 +7,8 @@ one canonical editor per domain, what it stores, and where the older routes go.
 
 **2026-10-04: the world pages are the LalaVerse hub's tabs.** `UniversePage` (`/universe`)
 holds `ShowBiblePage` (tab `bible`, the canon), `WorldFoundation` (tab `world`),
-`SocialSystems` (`society`), `CultureEvents` (`culture`) and `WorldDashboard` (`state`) in
+`SocialSystems` (`society`), `CultureEvents` (`culture`) and `WorldDashboard` (`state`: snapshots,
+timeline, tensions; its Setup Progress is the Overview's `components/WorldSetupProgress`) in
 embedded mode; the hub's `?tab=` names the
 tab and `?sub=` the page's own tab (`tabFromSearch(tabs, fallback, search, 'sub')`). The
 four pages keep their files and their owner rows below; only their doorway moved. Their

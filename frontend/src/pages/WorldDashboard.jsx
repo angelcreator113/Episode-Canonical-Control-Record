@@ -1,6 +1,7 @@
 /**
- * WorldDashboard — Setup Progress + World State + Tensions
- * Merges: WorldSetupGuide + UniverseWorldStatePage
+ * WorldDashboard — World State + Tensions (the LalaVerse hub's State tab)
+ * Merges: UniverseWorldStatePage. Its Setup Progress moved to the hub's
+ * Overview as components/WorldSetupProgress (2026-10-04).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,10 +12,7 @@ const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
 // 7 helpers covering 7 explicit-endpoint fetch sites on /world/* (snapshots,
-// timeline, tension-scanner, create-tension-proposal). The 8th site is the
-// component-local safeFetch helper at line 53 — refactored to use apiClient
-// internally, preserving its `safeFetch(url) → null on error` signature so
-// the 8 callers in the setup-status useEffect work unchanged.
+// timeline, tension-scanner, create-tension-proposal).
 export const listSnapshotsApi = () => apiClient.get(`${API}/world/state/snapshots`);
 export const listTimelineApi = () => apiClient.get(`${API}/world/state/timeline`);
 export const getTensionScannerApi = () => apiClient.get(`${API}/world/tension-scanner`);
@@ -27,18 +25,7 @@ export const deleteTimelineEventApi = (id) =>
 export const createTensionProposalApi = (payload) =>
   apiClient.post(`${API}/world/create-tension-proposal`, payload);
 
-const SETUP_STEPS = [
-  { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', route: '/universe?tab=world', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
-  { num: 2, key: 'influencer', icon: '⭐', title: 'Social Systems', route: '/universe?tab=society', description: 'How influence works — archetypes, relationships, economy, trends.', feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'] },
-  { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', route: '/universe?tab=culture', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
-  { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', route: '/universe?tab=culture&sub=history', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
-  { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', route: '/universe?tab=world&sub=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
-  { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', route: null, description: 'Create Lala\'s social world — influencers, rivals, friends.', feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
-  { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', route: '/universe?tab=culture&sub=events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
-];
-
 const TABS = [
-  { key: 'setup', label: 'Setup Progress' },
   { key: 'state', label: 'World State' },
   { key: 'tensions', label: 'Tensions' },
 ];
@@ -49,13 +36,9 @@ const inputStyle = { padding:'7px 10px', borderRadius:6, border:'1px solid #e0d9
 
 export default function WorldDashboard({ embedded = false }) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'setup', undefined, 'sub'));
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'state', undefined, 'sub'));
   const [toast, setToast] = useState(null);
   const flash = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
-
-  // Setup status
-  const [status, setStatus] = useState({});
-  const [statusLoading, setStatusLoading] = useState(true);
 
   // World state
   const [snapshots, setSnapshots] = useState([]);
@@ -68,36 +51,6 @@ export default function WorldDashboard({ embedded = false }) {
   // Tensions
   const [tensionPairs, setTensionPairs] = useState([]);
   const [tensionLoading, setTensionLoading] = useState(false);
-
-  // Check setup status — safe fetch that returns null on 404/error.
-  // Uses apiClient under the hood so auth is injected via the interceptor.
-  const safeFetch = async (url) => {
-    try { const res = await apiClient.get(url); return res.data; }
-    catch { return null; }
-  };
-
-  useEffect(() => {
-    (async () => {
-      const checks = {};
-      const infra = await safeFetch(`${API}/page-content/world_infrastructure`);
-      checks.infrastructure = infra?.data && Object.keys(infra.data).length > 0;
-      const infl = await safeFetch(`${API}/page-content/influencer_systems`);
-      checks.influencer = infl?.data && Object.keys(infl.data).length > 0;
-      const cal = await safeFetch(`${API}/calendar/events?event_type=lalaverse_cultural`);
-      checks.calendar = (cal?.events || []).length > 0;
-      const mem = await safeFetch(`${API}/page-content/cultural_memory`);
-      checks.memory = mem?.data && Object.keys(mem.data).length > 0;
-      const loc = await safeFetch(`${API}/world/locations`);
-      checks.locations = (loc?.locations || []).length > 0;
-      const feed = await safeFetch(`${API}/social-profiles?feed_layer=lalaverse&limit=1`);
-      checks.feed = (feed?.count || 0) > 0;
-      const ss = await safeFetch(`${API}/shows`);
-      const sid = (ss?.data || [])[0]?.id;
-      if (sid) { const ev = await safeFetch(`${API}/world/${sid}/events?status=draft`); checks.events = (ev?.events || []).length > 0; }
-      else checks.events = false;
-      setStatus(checks); setStatusLoading(false);
-    })();
-  }, []);
 
   // Load state data
   const loadSnapshots = useCallback(async () => { setSnapLoading(true); try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots||[]); } catch(e){console.error(e);} finally{setSnapLoading(false);} }, []);
@@ -122,57 +75,19 @@ export default function WorldDashboard({ embedded = false }) {
     try { const r = await createTensionProposalApi({char_a_id:pair.char_a_id,char_b_id:pair.char_b_id}); if (r.data?.proposal) navigate('/story-evaluation', {state:{sceneProposal:r.data.proposal}}); else flash('Could not generate','error'); } catch { flash('Failed','error'); }
   };
 
-  const completedCount = Object.values(status).filter(Boolean).length;
-
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding: embedded ? 0 : '24px 20px' }}>
       {/* Header; inside the LalaVerse hub the tab is the heading */}
       <div style={{ display:'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems:'flex-start', marginBottom: embedded ? 8 : 20 }}>
         {!embedded && <div>
           <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>World Dashboard</h1>
-          <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Setup progress, current world state, and character tensions</p>
+          <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Current world state and character tensions</p>
         </div>}
-        {!statusLoading && <div style={{ fontSize:28, fontWeight:700, color:completedCount===7?'#16a34a':'#B8962E' }}>{completedCount}/7</div>}
       </div>
 
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'1px solid #e8e0d0' }}>
         {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={tb(tab===t.key)}>{t.label}</button>)}
       </div>
-
-      {/* SETUP */}
-      {tab === 'setup' && (
-        <div>
-          <div style={{ background:'#eee', borderRadius:8, height:8, marginBottom:24, overflow:'hidden' }}>
-            <div style={{ background:completedCount===7?'#16a34a':'#B8962E', height:'100%', width:`${(completedCount/7)*100}%`, borderRadius:8, transition:'width 0.3s' }} />
-          </div>
-          <div style={{ background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:10, padding:'12px 16px', marginBottom:20, fontSize:12, color:'#555', lineHeight:1.6 }}>
-            <strong style={{ color:'#B8962E' }}>How it connects:</strong> Foundation defines the world → Social Systems govern behavior → Culture & Events creates yearly events → Memory gives depth → Locations are where things happen → Feed profiles are the people → Events are the story moments.
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {SETUP_STEPS.map(step => {
-              const done = status[step.key];
-              return (
-                <div key={step.key} onClick={() => step.route && navigate(step.route)} style={{ ...card, borderColor:done?'#d4edda':'#eee', cursor:step.route?'pointer':'default' }}>
-                  <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
-                    <div style={{ width:32, height:32, borderRadius:'50%', background:done?'#d4edda':'#FAF7F0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0, border:`2px solid ${done?'#16a34a':'#e8e0d0'}` }}>
-                      {done ? '✓' : step.icon}
-                    </div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2 }}>
-                        <span style={{ fontFamily:"'DM Mono', monospace", fontSize:10, color:'#B8962E' }}>STEP {step.num}</span>
-                        <span style={{ fontWeight:600, fontSize:13, color:'#2C2C2C' }}>{step.title}</span>
-                        {done && <span style={{ fontSize:9, padding:'2px 6px', background:'#d4edda', color:'#166534', borderRadius:4, fontWeight:600 }}>DONE</span>}
-                      </div>
-                      <p style={{ fontSize:11, color:'#666', margin:'0 0 4px', lineHeight:1.5 }}>{step.description}</p>
-                      <div style={{ fontSize:10, color:'#888' }}><strong style={{ color:'#B8962E' }}>Feeds:</strong> {step.feeds.join(' · ')}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* WORLD STATE */}
       {tab === 'state' && (

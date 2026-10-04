@@ -92,7 +92,7 @@ entries are listed after the table; they need no sidebar decision.
 |---|---|---|---|---|---|
 | `/universe` | `UniversePage` | E | World | Sidebar | The LalaVerse overview; the world's front door. |
 | `/show-bible` | `ShowBiblePage` | E | World | Sidebar | Canon reference for the show; answers "what exists". **2026-10-04:** the LalaVerse hub's Bible tab (`/universe?tab=bible`); the route redirects there and the Sidebar row deep-links to the tab. |
-| `/world-dashboard` | `WorldDashboard` | C of LalaVerse | link on `UniversePage` | Sidebar | Setup progress is a second world overview beside LalaVerse; one overview per question. **doorway needed** before the entry moves. **2026-10-04: done** — it is the hub's State tab; the route redirects there. |
+| `/world-dashboard` | `WorldDashboard` | C of LalaVerse | link on `UniversePage` | Sidebar | Setup progress is a second world overview beside LalaVerse; one overview per question. **doorway needed** before the entry moves. **2026-10-04: done** — it is the hub's State tab (World State, Tensions); the route redirects there, and its Setup Progress is the Overview's own section (`components/WorldSetupProgress`), so there is one world overview. |
 | `/world-foundation` | `WorldFoundation` | E | World | Sidebar | DREAM map, cities, locations. |
 | `/social-systems` | `SocialSystems` | E | World | Sidebar | Archetypes, legends, rules, trends. |
 | `/culture-events` | `CultureEvents` | E | World | Sidebar | The calendar and cultural memory. |
