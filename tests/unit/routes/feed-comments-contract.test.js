@@ -52,3 +52,27 @@ describe('feed comments contract', () => {
     expect(model).toMatch(/models\.FeedPost\.hasMany\(FeedComment, \{ foreignKey: 'feed_post_id', as: 'comments' \}\)/);
   });
 });
+
+describe('the wall\'s routes (2026-10-04)', () => {
+  test('POST /feed-posts writes a post by hand, live by default, requireAuth', () => {
+    expect(routes).toMatch(/router\.post\('\/',\s*requireAuth,\s*async/);
+    const create = slice("router.post('/', requireAuth", '// ── PENDING REACTION DRAFTS');
+    expect(create).toMatch(/if \(!show_id\) return res\.status\(400\)/);
+    expect(create).toMatch(/if \(!content_text\?\.trim\(\)\) return res\.status\(400\)/);
+    expect(create).toMatch(/statusWhere\(status === undefined \? 'live' : status\)/);
+    expect(create).toMatch(/posted_at: scoped\.status === 'live' \? new Date\(\) : null/);
+    expect(create).toMatch(/ai_generated: false/);
+  });
+  test('GET /feed-posts/comments/pending lists a show\'s draft reactions with their posts, requireAuth, before the param routes', () => {
+    expect(routes).toMatch(/router\.get\('\/comments\/pending',\s*requireAuth,\s*async/);
+    expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:showId/timeline'"));
+    expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:postId/comments'"));
+    const pending = slice("router.get('/comments/pending'", '// ── GENERATE FEED POSTS');
+    expect(pending).toMatch(/where: \{ show_id, status: 'draft', deleted_at: null \}/);
+  });
+  test('the list carries each post\'s live comments on ?with=comments and counts distinct posts', () => {
+    const list = slice("router.get('/', optionalAuth", "router.post('/', requireAuth");
+    expect(list).toMatch(/withWhat === 'comments' && FeedComment \? \[\{\s*model: FeedComment, as: 'comments', where: \{ status: 'live' \}, required: false/);
+    expect(list).toMatch(/FeedPost\.count\(\{ where, distinct: true, col: 'id' \}\)/);
+  });
+});

@@ -44,6 +44,18 @@
   --lala-pink-soft:   var(--accent-subtle);
   --lala-pink-light:  var(--accent-light);
 
+  /* Lavender (2026-10-04, the Social Media wall's banner, Evoni: "I want
+     the banner purple"). --lala-lavender under --text-inverse (8.6:1);
+     --lala-lavender-text is the link purple on white and on the soft
+     wash (7.9:1 / 6.6:1); -light is a fill under ink (avatars), never
+     text; -line is a border; -soft a wash. */
+  --lala-lavender:       #5B4B8A;
+  --lala-lavender-dark:  #463A6E;
+  --lala-lavender-text:  #4A3B7A;
+  --lala-lavender-light: #C9B8E8;
+  --lala-lavender-soft:  #ECE6F7;
+  --lala-lavender-line:  #D9CFEE;
+
   /* --secondary is secondary TEXT everywhere it is used (AuditLog,
      AdminPanel, Header, LoadingSpinner); it stays readable text. */
   --secondary:      #6B6557;

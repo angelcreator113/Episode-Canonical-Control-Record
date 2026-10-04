@@ -22,8 +22,8 @@ const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKE
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, limit, offset, status } = req.query;
-    const { FeedPost, SocialProfile } = require('../models');
+    const { show_id, episode_id, profile_id, narrative_function, limit, offset, status, with: withWhat } = req.query;
+    const { FeedPost, SocialProfile, FeedComment } = require('../models');
 
     if (!show_id && !episode_id) {
       return res.status(400).json({ error: 'show_id or episode_id is required' });
@@ -43,16 +43,23 @@ router.get('/', optionalAuth, async (req, res) => {
       order: [['posted_at', 'DESC'], ['sort_order', 'ASC']],
       limit: parseInt(limit, 10) || 50,
       offset: parseInt(offset, 10) || 0,
-      include: SocialProfile ? [{
-        model: SocialProfile,
-        as: 'socialProfile',
-        attributes: ['id', 'handle', 'display_name', 'platform', 'archetype',
-          'follower_tier', 'aesthetic_dna'],
-        required: false,
-      }] : [],
+      include: [
+        ...(SocialProfile ? [{
+          model: SocialProfile,
+          as: 'socialProfile',
+          attributes: ['id', 'handle', 'display_name', 'platform', 'archetype',
+            'follower_tier', 'aesthetic_dna'],
+          required: false,
+        }] : []),
+        // ?with=comments: each post's live comments, as records (the wall).
+        ...(withWhat === 'comments' && FeedComment ? [{
+          model: FeedComment, as: 'comments', where: { status: 'live' }, required: false,
+          attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id'],
+        }] : []),
+      ],
     });
 
-    const total = await FeedPost.count({ where });
+    const total = await FeedPost.count({ where, distinct: true, col: 'id' });
 
     return res.json({
       data: posts,
@@ -61,6 +68,61 @@ router.get('/', optionalAuth, async (req, res) => {
       hasMore: (parseInt(offset, 10) || 0) + posts.length < total,
     });
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── WRITE A POST BY HAND (the wall's "What's on your mind?", 2026-10-04) ────
+// POST /api/v1/feed-posts { show_id, content_text, poster_handle?, poster_display_name?,
+//   social_profile_id?, poster_platform?, post_type?, status? (live by default), episode_id? }
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const { FeedPost } = require('../models');
+    const { show_id, content_text, poster_handle, poster_display_name, social_profile_id, poster_platform, post_type, status, episode_id } = req.body || {};
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+    if (!content_text?.trim()) return res.status(400).json({ error: 'content_text is required' });
+    const scoped = statusWhere(status === undefined ? 'live' : status);
+    if (scoped.error || !scoped.status) return res.status(400).json({ error: 'status must be draft or live' });
+    const post = await FeedPost.create({
+      show_id,
+      episode_id: episode_id || null,
+      social_profile_id: social_profile_id || null,
+      poster_handle: String(poster_handle || 'lala').replace(/^@/, ''),
+      poster_display_name: poster_display_name || null,
+      poster_platform: poster_platform || 'lalaverse',
+      post_type: post_type || 'post',
+      content_text: content_text.trim(),
+      likes: 0, comments_count: 0, shares: 0, sample_comments: [],
+      posted_at: scoped.status === 'live' ? new Date() : null,
+      timeline_position: episode_id ? 'during_episode' : null,
+      narrative_function: null,
+      ai_generated: false,
+      status: scoped.status,
+      sort_order: 0,
+    });
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] Create error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PENDING REACTION DRAFTS ACROSS A SHOW (the wall's Requests box) ─────────
+// GET /api/v1/feed-posts/comments/pending?show_id=
+router.get('/comments/pending', requireAuth, async (req, res) => {
+  try {
+    const { FeedComment, FeedPost } = require('../models');
+    const { show_id } = req.query;
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+    const drafts = await FeedComment.findAll({
+      where: { show_id, status: 'draft', deleted_at: null },
+      order: [['created_at', 'DESC']],
+      limit: 100,
+      include: FeedPost ? [{ model: FeedPost, as: 'post', attributes: ['id', 'poster_handle', 'content_text', 'status'], required: false }] : [],
+    });
+    return res.json({ data: drafts, count: drafts.length });
+  } catch (err) {
+    console.error('[FeedComments] Pending error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

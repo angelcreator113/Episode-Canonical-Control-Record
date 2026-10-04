@@ -1,8 +1,10 @@
 /**
- * Social Media wears the studio theme from birth (2026-10-04; audit
- * VISUAL-01/02 rule: new chrome always in tokens): the page and its
- * stylesheet carry no hex literal; the active tab and chip are the primary;
- * the function tags read the family text tokens on the family backgrounds.
+ * Social Media wears the studio theme (audit VISUAL-01/02 rule: new chrome
+ * always in tokens; redesigned 2026-10-04 as the 2009 wall with a purple
+ * banner): no hex literal in the page or the stylesheet; the banner is
+ * --lala-lavender under --text-inverse; links and names read
+ * --lala-lavender-text on white and on the lavender wash; the avatar fill
+ * is never text; the draft badge reads the warning text on the warning bg.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -20,14 +22,19 @@ describe('Social Media: studio tokens', () => {
     expect(css).not.toMatch(HEX);
     expect(jsx).not.toMatch(HEX);
   });
-  test('the active tab and chip are the primary; the family tags read their text tokens', () => {
-    expect(css).toMatch(/\.sm-tab\.active \{[^}]*border-bottom-color: var\(--primary\)/);
-    expect(css).toMatch(/\.sm-chip\.active \{[^}]*background: var\(--primary\);[^}]*color: var\(--text-inverse\)/);
-    expect(contrast(t('--text-inverse'), t('--primary'))).toBeGreaterThanOrEqual(4.5);
-    for (const fam of ['danger', 'success', 'warning', 'info']) {
-      expect(css).toMatch(new RegExp(`background: var\\(--${fam}-bg\\); color: var\\(--${fam}-text\\)`));
-      expect(contrast(t(`--${fam}-text`), t(`--${fam}-bg`))).toBeGreaterThanOrEqual(4.5);
-    }
-    expect(contrast(t('--primary-text'), t('--primary-subtle'))).toBeGreaterThanOrEqual(4.5);
+  test('the banner is lavender under inverse text; the active nav is the dark lavender', () => {
+    expect(css).toMatch(/\.sm-banner \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\)/);
+    expect(css).toMatch(/\.sm-nav button\.active, \.sm-nav a\.active \{ background: var\(--lala-lavender-dark\); \}/);
+    expect(contrast(t('--text-inverse'), t('--lala-lavender'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--text-inverse'), t('--lala-lavender-dark'))).toBeGreaterThanOrEqual(4.5);
+  });
+  test('links and names read lavender text on white and on the wash; buttons are lavender under inverse', () => {
+    expect(css).toMatch(/\.sm-page a \{ color: var\(--lala-lavender-text\)/);
+    expect(css).toMatch(/\.sm-name \{ color: var\(--lala-lavender-text\); \}/);
+    expect(css).toMatch(/\.sm-btn \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\)/);
+    expect(contrast(t('--lala-lavender-text'), t('--surface-card'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--lala-lavender-text'), t('--lala-lavender-soft'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--text-primary'), t('--lala-lavender-light'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--warning-text'), t('--warning-bg'))).toBeGreaterThanOrEqual(4.5);
   });
 });
