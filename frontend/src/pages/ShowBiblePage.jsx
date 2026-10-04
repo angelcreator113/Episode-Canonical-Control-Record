@@ -55,6 +55,7 @@ export default function ShowBiblePage({ embedded = false }) {
   const [form, setForm] = useState({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false });
   const [saving, setSaving] = useState(false);
   const [guardText, setGuardText] = useState('');
+  const [guardCharacters, setGuardCharacters] = useState('');
   const [guardResult, setGuardResult] = useState(null);
   const [guarding, setGuarding] = useState(false);
   const [ingestText, setIngestText] = useState('');
@@ -109,7 +110,21 @@ export default function ShowBiblePage({ embedded = false }) {
   };
 
   const handleSeed = async () => { try { const r = await api.post('/api/v1/franchise-brain/seed'); showToast(r.data?.message || 'Seeded'); loadEntries(); } catch { showToast('Seed failed', 'error'); } };
-  const handleGuard = async () => { setGuarding(true); setGuardResult(null); try { const r = await api.post('/api/v1/franchise-brain/guard', { scene_text: guardText }); setGuardResult(r.data); } catch { showToast('Guard failed', 'error'); } finally { setGuarding(false); } };
+  // The guard contract (routes/franchiseBrainRoutes.js): the route reads
+  // scene_brief (the page sent scene_text and was refused with 400) and
+  // answers { status, passed, warnings, rules_checked, message } with status
+  // 'passed' | 'issues' | 'check_failed'; a check that could not run is never
+  // shown as a pass (2026-10-04).
+  const handleGuard = async () => {
+    setGuarding(true); setGuardResult(null);
+    const characters_in_scene = guardCharacters.split(',').map((s) => s.trim()).filter(Boolean);
+    try {
+      const r = await api.post('/api/v1/franchise-brain/guard', { scene_brief: guardText, characters_in_scene });
+      setGuardResult(r.data);
+    } catch (err) {
+      setGuardResult({ status: 'check_failed', passed: false, warnings: [], message: err.response?.data?.error || 'The check could not run' });
+    } finally { setGuarding(false); }
+  };
   // The ingest contract (routes/franchiseBrainRoutes.js): the route reads
   // document_text and source_name and answers { entries_created, entries };
   // the page used to send { text, source } and was refused with 400 every
@@ -422,26 +437,33 @@ export default function ShowBiblePage({ embedded = false }) {
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>🛡️ Franchise Guard</h3>
               <span style={{ fontSize: 11, color: '#94a3b8' }}>Checking against {activeCount} active rules</span>
             </div>
-            <p style={{ margin: '0 0 10px', fontSize: 12, color: '#94a3b8' }}>Paste a scene or script. AI checks for violations against all active franchise rules.</p>
-            <textarea value={guardText} onChange={e => setGuardText(e.target.value)} placeholder="Paste scene text to validate..." rows={8} style={{ ...S.input, resize: 'vertical', lineHeight: 1.6 }} />
+            <p style={{ margin: '0 0 10px', fontSize: 12, color: '#94a3b8' }}>Paste a scene brief or script. AI checks it against the critical and always-inject rules before generation.</p>
+            <input value={guardCharacters} onChange={e => setGuardCharacters(e.target.value)} placeholder="Characters in the scene, comma-separated (optional)" aria-label="Characters in scene" style={{ ...S.input, marginBottom: 8 }} />
+            <textarea value={guardText} onChange={e => setGuardText(e.target.value)} placeholder="Paste the scene brief or script to check..." rows={8} aria-label="Scene brief" style={{ ...S.input, resize: 'vertical', lineHeight: 1.6 }} />
             <button onClick={handleGuard} disabled={guarding || !guardText.trim()} style={{ marginTop: 8, padding: '8px 20px', borderRadius: 8, border: 'none', background: guardText.trim() ? '#6366f1' : '#e2e8f0', color: guardText.trim() ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: guardText.trim() ? 'pointer' : 'default' }}>
               {guarding ? '⏳ Checking...' : '🛡️ Check Scene'}
             </button>
           </div>
-          {guardResult && (
-            <div style={{ marginTop: 12, background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', borderLeft: `4px solid ${guardResult.violations?.length > 0 ? '#dc2626' : '#16a34a'}`, padding: '16px 18px' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: guardResult.violations?.length > 0 ? '#dc2626' : '#16a34a', marginBottom: 8 }}>
-                {guardResult.violations?.length > 0 ? `⚠️ ${guardResult.violations.length} violation(s)` : '✅ Scene passes all franchise rules'}
+          {guardResult && (() => {
+            const status = guardResult.status || (guardResult.warnings?.length ? 'issues' : guardResult.passed ? 'passed' : 'check_failed');
+            const tone = status === 'passed' ? { edge: 'var(--success)', text: 'var(--success-text)', title: `✅ Passed: ${guardResult.message || 'no franchise risk found'}` }
+              : status === 'issues' ? { edge: 'var(--danger)', text: 'var(--danger-text)', title: `⚠️ ${guardResult.warnings?.length || 0} ${guardResult.warnings?.length === 1 ? 'risk' : 'risks'} found` }
+              : { edge: 'var(--warning)', text: 'var(--warning-text)', title: `⚠️ Check failed: ${guardResult.message || 'the check could not run'}` };
+            return (
+              <div data-testid={`guard-result-${status}`} style={{ marginTop: 12, background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', borderLeft: `4px solid ${tone.edge}`, padding: '16px 18px' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: tone.text, marginBottom: 8 }}>{tone.title}</div>
+                {status === 'check_failed' && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Nothing was checked. This is not a pass.</div>}
+                {status === 'issues' && (guardResult.warnings || []).map((w, i) => (
+                  <div key={i} style={{ padding: '8px 12px', background: 'var(--danger-bg)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: 'var(--danger-text)', lineHeight: 1.5 }}>
+                    <strong>{w.law}</strong>{w.risk && <>: {w.risk}</>}
+                    {w.suggestion && <div style={{ color: 'var(--success-text)', marginTop: 4 }}>💡 {w.suggestion}</div>}
+                  </div>
+                ))}
+                {status === 'issues' && guardResult.message && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>{guardResult.message}</div>}
+                {guardResult.rules_checked != null && <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8 }}>Checked against {guardResult.rules_checked} rules</div>}
               </div>
-              {guardResult.violations?.map((v, i) => (
-                <div key={i} style={{ padding: '8px 12px', background: '#fef2f2', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#dc2626', lineHeight: 1.5 }}>
-                  <strong>{v.rule}:</strong> {v.explanation}
-                </div>
-              ))}
-              {guardResult.notes && <div style={{ fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>{guardResult.notes}</div>}
-              {guardResult.rules_checked && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>Checked against {guardResult.rules_checked} rules</div>}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
