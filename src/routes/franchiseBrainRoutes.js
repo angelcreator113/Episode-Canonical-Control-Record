@@ -489,7 +489,16 @@ router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GUARD — pre-generation franchise check
+//
+// One result format (2026-10-04): { status, passed, warnings, rules_checked,
+// message }, status one of 'passed' | 'issues' | 'check_failed'. A check
+// that could not run (the AI's verdict unreadable) is 'check_failed' with
+// passed false; it used to answer passed: true, so a screen showed a green
+// pass for a check that never happened. warnings are { law, risk, suggestion }.
 // ─────────────────────────────────────────────────────────────────────────────
+const guardResult = (status, warnings, rules_checked, message) =>
+  ({ status, passed: status === 'passed', warnings, rules_checked, message });
+
 router.post('/franchise-brain/guard', requireAuth, async (req, res) => {
   const { scene_brief, characters_in_scene, scene_type, tone } = req.body;
 
@@ -509,7 +518,7 @@ router.post('/franchise-brain/guard', requireAuth, async (req, res) => {
     });
 
     if (laws.length === 0) {
-      return res.json({ passed: true, warnings: [], message: 'No active laws to check against' });
+      return res.json(guardResult('passed', [], 0, 'No active laws to check against'));
     }
 
     const guardPrompt = `You are the Pre-Generation Franchise Guard for Prime Studios.
@@ -545,11 +554,19 @@ Respond ONLY in valid JSON:
       const braceStart = raw.indexOf('{');
       const braceEnd = raw.lastIndexOf('}');
       parsed = JSON.parse(raw.substring(braceStart, braceEnd + 1));
-    } catch {
-      return res.json({ passed: true, warnings: [], message: 'Guard parse failed — allowing through' });
+    } catch (parseErr) {
+      console.error('Franchise guard: could not parse the verdict:', parseErr.message, raw.slice(0, 200));
+      return res.json(guardResult('check_failed', [], laws.length, 'The guard could not read its own verdict. Check again.'));
     }
 
-    return res.json(parsed);
+    const warnings = Array.isArray(parsed.warnings)
+      ? parsed.warnings.filter((w) => w && typeof w === 'object').map((w) => ({ law: String(w.law || 'Unnamed law'), risk: String(w.risk || ''), suggestion: String(w.suggestion || '') }))
+      : [];
+    const status = warnings.length > 0 || parsed.passed === false ? 'issues' : 'passed';
+    const message = status === 'passed'
+      ? `No franchise risk found against ${laws.length} ${laws.length === 1 ? 'rule' : 'rules'}`
+      : warnings.length > 0 ? `${warnings.length} ${warnings.length === 1 ? 'risk' : 'risks'} found against ${laws.length} rules` : 'The guard flagged the brief without naming a rule';
+    return res.json(guardResult(status, warnings, laws.length, message));
   } catch (err) {
     console.error('Franchise guard error:', err);
     return res.status(500).json({ error: err.message });

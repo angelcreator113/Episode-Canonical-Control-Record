@@ -88,7 +88,14 @@ Found by reading, not yet run:
   `source_name`, opens the Decisions queue on Pending once entries are in, and shows the
   route's own refusal; `ShowBiblePage.documents.test.jsx` and
   `tests/unit/routes/franchise-brain-ingest-contract.test.js` pin both ends. The Show
-  Bible's Guard still sends `{ scene_text }` but `/guard` requires `scene_brief` (400).
+  Bible's Guard sent `{ scene_text }` but `/guard` requires `scene_brief` (400), and
+  `/guard` answered `passed: true` when it could not parse the AI's verdict, so a screen
+  could show a green pass for a check that never ran. **Fixed 2026-10-04:** the Guard tab
+  sends `scene_brief` and `characters_in_scene`; the route answers one format,
+  `{ status: 'passed' | 'issues' | 'check_failed', passed, warnings, rules_checked, message }`,
+  with `check_failed` never a pass; both Guard screens render the three states;
+  `ShowBiblePage.guard.test.jsx` and `tests/unit/routes/franchise-brain-guard-contract.test.js`
+  pin both ends.
 - **Four sources have two editors with different defaults.** Each pair saves to one
   `page_content` record, but each page carries its own defaults, and they disagree.
   Measured in step 2 by comparing each page's defaults:

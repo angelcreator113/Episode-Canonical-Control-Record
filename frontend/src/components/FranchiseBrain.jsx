@@ -899,9 +899,9 @@ export default function FranchiseBrain() {
               </div>
             </div>
             {guardResult && (
-              <div style={{ ...S.card, marginTop: 16, borderColor: guardResult.warnings?.length ? C.red : C.green }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: guardResult.warnings?.length ? C.red : C.green }}>
-                  {guardResult.warnings?.length ? `⚠ ${guardResult.warnings.length} warning(s) found` : '✓ No violations detected'}
+              <div style={{ ...S.card, marginTop: 16, borderColor: guardResult.status === 'check_failed' ? C.gold : guardResult.warnings?.length ? C.red : C.green }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: guardResult.status === 'check_failed' ? C.gold : guardResult.warnings?.length ? C.red : C.green }}>
+                  {guardResult.status === 'check_failed' ? '⚠ Check failed — nothing was checked' : guardResult.warnings?.length ? `⚠ ${guardResult.warnings.length} warning(s) found` : '✓ No violations detected'}
                 </div>
                 {guardResult.warnings?.map((v, i) => (
                   <div key={i} style={{ fontSize: 13, color: C.textDim, padding: '6px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
