@@ -1,29 +1,41 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
-import TabOrientation from '../components/TabOrientation';
 import './SocialMediaPage.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 /**
- * Social Media (2026-10-04, the Feed project, step 1): the sidebar's
- * social page. Posts is the default view and shows the stored posts
- * (feed_posts: what the characters said, with likes and comments) for
- * the active show; People embeds the profile generator unchanged (the
- * old /feed page). The Episode's own Lala's Phone tab is untouched.
+ * Social Media (the Feed project; redesigned 2026-10-04 to Evoni's mock:
+ * a 2009 profile-and-wall, "lalaverse" on a purple banner). Posts is
+ * Lala's wall: her profile on the left, the wall in the middle (status,
+ * "What's on your mind?", the live posts with their comments), requests,
+ * upcoming events and people she may know on the right. People embeds
+ * the profile generator unchanged (the old /feed page). The Episode's
+ * own Lala's Phone tab is untouched.
  *
  * Deep links: ?tab=posts|people; the old ?layer= and ?profile= links
  * (with no ?tab=) open People, as they always did.
  */
 export const TABS = [
-  { key: 'posts', label: 'Posts', desc: 'What the characters said' },
-  { key: 'people', label: 'People', desc: 'Who exists in her social world' },
+  { key: 'posts', label: 'Home' },
+  { key: 'people', label: 'Friends' },
 ];
-
-export const FUNCTIONS = ['reaction', 'bts', 'flex', 'shade', 'support', 'comparison', 'gossip', 'brand_content', 'callback'];
+/** "[Day], [time]" for the 2009 sidebar: "Mon, Oct 6, 2:33am". */
+export function eventWhen(ts) {
+  if (!ts) return '[Day], [time]';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '[Day], [time]';
+  return `${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '')}`;
+}
+const WALL_TABS = [
+  { key: 'wall', label: 'Wall' },
+  { key: 'drafts', label: 'Drafts' },
+  { key: 'events', label: 'Events' },
+];
 const PAGE = 50;
+const CITY_NAMES = { nova_prime: 'Nova Prime', velour_city: 'Velour City', the_drift: 'The Drift', solenne: 'Solenne', cascade_row: 'Cascade Row', dazzle_district: 'Dazzle District', radiance_row: 'Radiance Row', echo_park: 'Echo Park', ascent_tower: 'Ascent Tower', maverick_harbor: 'Maverick Harbor' };
 
 export function tabFromParams(params) {
   const tab = params.get('tab');
@@ -41,13 +53,34 @@ export const posterOf = (post) => {
   };
 };
 
+/** "Just now", "Today at 4:10pm", "Yesterday at 11:42pm", "Tuesday at 9:02am", else the date. */
+export function whenLabel(ts, now = new Date()) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const mins = Math.round((now - d) / 60000);
+  if (mins >= 0 && mins < 2) return 'Just now';
+  if (mins >= 0 && mins < 60) return `${mins} minutes ago`;
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(now) - day(d)) / 86400000);
+  if (days === 0) return `Today at ${time}`;
+  if (days === 1) return `Yesterday at ${time}`;
+  if (days > 1 && days < 7) return `${d.toLocaleDateString([], { weekday: 'long' })} at ${time}`;
+  return d.toLocaleDateString();
+}
+
+const initial = (name) => ((name || '').match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
+const Tile = ({ name, size = 'sm', tone = 'c' }) => <span className={`sm-tile sm-tile-${size} sm-tone-${tone}`} aria-hidden="true">{initial(name)}</span>;
+const toneOf = (handle) => ['c', 'd', 'e', 'f'][(handle || '').length % 4];
+
 /**
  * Reactions (the Feed project, step 4): the post's comments as records.
  * Live ones are the feed; drafts wait for approval. "Draft reactions" asks
  * the drafter for comments from the characters connected to the poster
  * (pre-ticked; untick to pick who reacts), in their own voices.
  */
-export function Reactions({ post }) {
+export function Reactions({ post, onChange }) {
   const [comments, setComments] = useState(null);
   const [reactors, setReactors] = useState([]);
   const [picked, setPicked] = useState(null);
@@ -74,42 +107,41 @@ export function Reactions({ post }) {
 
   const act = async (fn, okNote) => {
     setBusy(true); setNote(null);
-    try { await fn(); if (okNote) setNote(okNote); await load(); }
+    try { await fn(); if (okNote) setNote(okNote); await load(); onChange?.(); }
     catch (err) { setNote(err.response?.data?.error || err.message); }
     finally { setBusy(false); }
   };
   const draft = () => act(async () => {
     const ids = [...(picked || [])];
-    const r = await api.post(`/api/v1/feed-posts/${post.id}/comments/draft`, ids.length ? { reactor_ids: ids } : {});
-    return r;
+    return api.post(`/api/v1/feed-posts/${post.id}/comments/draft`, ids.length ? { reactor_ids: ids } : {});
   }, 'Reactions drafted. Approve the ones that are canon.');
   const approve = (c) => act(() => api.patch(`/api/v1/feed-posts/comments/${c.id}`, { status: 'live' }));
   const remove = (c) => act(() => api.delete(`/api/v1/feed-posts/comments/${c.id}`));
   const toggle = (id) => setPicked((prev) => { const next = new Set(prev || []); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
-  if (comments === null) return <p className="sm-reactions-note">Loading reactions…</p>;
+  if (comments === null) return <p className="sm-note">Loading reactions…</p>;
   const live = comments.filter((c) => c.status === 'live');
   const drafts = comments.filter((c) => c.status === 'draft');
   return (
     <div className="sm-reactions" data-testid="sm-reactions">
       {live.length > 0 && (
         <ul className="sm-comments" data-testid="sm-live-comments">
-          {live.map((c) => <li key={c.id}><b>@{c.handle}</b> {c.text} <button type="button" className="sm-mini" onClick={() => remove(c)} disabled={busy} title="Live comments are never edited, only deleted">delete</button></li>)}
+          {live.map((c) => <li key={c.id}><Tile name={c.handle} tone={toneOf(c.handle)} /><span><b>{c.display_name || c.handle}</b> {c.text}</span> <button type="button" className="sm-mini" onClick={() => remove(c)} disabled={busy} title="Live comments are never edited, only deleted">delete</button></li>)}
         </ul>
       )}
       {drafts.length > 0 && (
         <ul className="sm-comments sm-drafts" data-testid="sm-draft-comments">
           {drafts.map((c) => (
             <li key={c.id}>
-              <span className="sm-tag sm-draft">draft</span> <b>@{c.handle}</b> {c.text}
-              {c.voice_note && <em className="sm-voice"> · {c.voice_note}</em>}
+              <Tile name={c.handle} tone={toneOf(c.handle)} />
+              <span><span className="sm-badge">draft</span> <b>@{c.handle}</b> {c.text}{c.voice_note && <em className="sm-voice"> · {c.voice_note}</em>}</span>
               <button type="button" className="sm-mini sm-approve" onClick={() => approve(c)} disabled={busy}>approve</button>
               <button type="button" className="sm-mini" onClick={() => remove(c)} disabled={busy}>delete</button>
             </li>
           ))}
         </ul>
       )}
-      {live.length === 0 && drafts.length === 0 && <p className="sm-reactions-note">No reactions yet.</p>}
+      {live.length === 0 && drafts.length === 0 && <p className="sm-note">No comments yet.</p>}
       <div className="sm-reactors">
         {reactors.length > 0 && (
           <span className="sm-reactors-pick" role="group" aria-label="Who reacts">
@@ -118,78 +150,89 @@ export function Reactions({ post }) {
             ))}
           </span>
         )}
-        <button type="button" className="sm-draft-btn" onClick={draft} disabled={busy}>
-          {busy ? 'Working…' : 'Draft reactions'}
-        </button>
+        <button type="button" className="sm-btn" onClick={draft} disabled={busy}>{busy ? 'Working…' : 'Draft reactions'}</button>
       </div>
-      {note && <p className="sm-reactions-note" role="status">{note}</p>}
+      {note && <p className="sm-note" role="status">{note}</p>}
     </div>
   );
 }
 
-export function PostCard({ post }) {
+/** One wall item: "Name did a thing." with its comments under it. */
+export function PostCard({ post, onChange }) {
   const who = posterOf(post);
-  const comments = Array.isArray(post.sample_comments) ? post.sample_comments : [];
-  const when = post.posted_at ? new Date(post.posted_at).toLocaleString() : null;
   const [open, setOpen] = useState(false);
+  const records = Array.isArray(post.comments) ? post.comments : [];
+  const legacy = records.length === 0 && Array.isArray(post.sample_comments) ? post.sample_comments : [];
+  const likes = post.likes ?? 0;
+  const commentsN = post.comments_count ?? records.length;
   return (
-    <article className="sm-post" data-testid="sm-post">
-      <header className="sm-post-head">
-        <div className="sm-post-avatar" aria-hidden="true">{who.name.slice(0, 1).toUpperCase()}</div>
-        <div className="sm-post-who">
-          <strong>{who.name}</strong>
-          <span className="sm-post-meta">
-            {who.handle && `@${who.handle}`}{who.platform && ` · ${who.platform}`}{post.post_type && post.post_type !== 'post' && ` · ${post.post_type}`}
-          </span>
-        </div>
-        {post.status === 'draft' && <span className="sm-tag sm-draft" title="Goes live when its episode is published">draft</span>}
-        {post.narrative_function && <span className={`sm-tag sm-tag-${post.narrative_function}`}>{post.narrative_function.replace(/_/g, ' ')}</span>}
-      </header>
-      {post.content_text && <p className="sm-post-text">{post.content_text}</p>}
-      {post.image_url
-        ? <img className="sm-post-image" src={post.image_url} alt={post.image_description || ''} />
-        : post.image_description && <p className="sm-post-image-desc">🖼 {post.image_description}</p>}
-      <footer className="sm-post-foot">
-        <span>♥ {post.likes ?? 0}</span>
-        <span>💬 {post.comments_count ?? comments.length}</span>
-        {post.shares > 0 && <span>↗ {post.shares}</span>}
-        {post.is_viral && <span className="sm-viral">viral</span>}
-        {when && <time dateTime={post.posted_at}>{when}</time>}
-        {post.episode_id && <Link to={`/episodes/${post.episode_id}`} className="sm-post-episode">Episode →</Link>}
-        <button type="button" className="sm-mini sm-reactions-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          {open ? 'Hide reactions' : 'Reactions'}
-        </button>
-      </footer>
-      {!open && comments.length > 0 && (
-        <ul className="sm-comments">
-          {comments.slice(0, 4).map((c, i) => (
-            <li key={i}>{typeof c === 'string' ? c : (c.text || c.comment || JSON.stringify(c))}</li>
-          ))}
-        </ul>
-      )}
-      {open && <Reactions post={post} />}
+    <article className="sm-item" data-testid="sm-post">
+      <Tile name={who.name} size="md" tone={who.handle === 'lala' ? 'l' : toneOf(who.handle)} />
+      <div className="sm-item-body">
+        <p className="sm-item-text">
+          <b className="sm-name">{who.name}</b>{' '}
+          {post.content_text}
+          {post.image_description && !post.image_url && <span className="sm-album"> [photo: {post.image_description}]</span>}
+        </p>
+        {post.image_url && <img className="sm-item-image" src={post.image_url} alt={post.image_description || ''} />}
+        <p className="sm-item-meta">
+          {post.status === 'draft' && <><span className="sm-badge">draft</span> · </>}
+          <span>{whenLabel(post.posted_at) || 'undated'}</span>
+          {' · '}<button type="button" className="sm-link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
+          {post.narrative_function && <> · <span className="sm-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
+          {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
+        </p>
+        {(likes > 0 || commentsN > 0) && (
+          <p className="sm-item-likes">
+            {likes > 0 && <span>[{likes}] like this.</span>}{likes > 0 && commentsN > 0 && ' '}
+            {commentsN > 0 && <span>{commentsN} comment{commentsN === 1 ? '' : 's'}</span>}
+          </p>
+        )}
+        {!open && records.length > 0 && (
+          <ul className="sm-comments">
+            {records.slice(0, 3).map((c) => <li key={c.id}><Tile name={c.handle} tone={toneOf(c.handle)} /><span><b>{c.display_name || c.handle}</b> {c.text}{c.posted_at && <small> {whenLabel(c.posted_at)}</small>}</span></li>)}
+          </ul>
+        )}
+        {!open && legacy.length > 0 && (
+          <ul className="sm-comments sm-legacy">
+            {legacy.slice(0, 3).map((c, i) => <li key={i}><Tile name="?" /><span>{typeof c === 'string' ? c : (c.text || c.comment || '')}</span></li>)}
+          </ul>
+        )}
+        {open && <Reactions post={post} onChange={onChange} />}
+      </div>
     </article>
   );
 }
 
-function PostsView({ show, showLoaded }) {
+function Box({ title, action, children, testId }) {
+  return (
+    <section className="sm-box" data-testid={testId}>
+      <h3 className="sm-box-title">{title}{action && <span className="sm-box-action">{action}</span>}</h3>
+      {children}
+    </section>
+  );
+}
+
+function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
+  const [owner, setOwner] = useState(null);
+  const [friends, setFriends] = useState({ list: [], total: 0 });
+  const [events, setEvents] = useState([]);
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [fn, setFn] = useState('all');
-  // Live posts are the feed; drafts wait for their episode to be published.
-  const [status, setStatus] = useState('live');
-  const [search, setSearch] = useState('');
+  const [draftsTotal, setDraftsTotal] = useState(0);
+  const [pending, setPending] = useState([]);
+  const [wallTab, setWallTab] = useState('wall');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [draftText, setDraftText] = useState('');
+  const [sharing, setSharing] = useState(false);
 
-  const load = useCallback(async (offset = 0) => {
+  const loadPosts = useCallback(async (offset = 0, status = wallTab === 'drafts' ? 'draft' : 'live') => {
     if (!show?.id) return;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const qs = new URLSearchParams({ show_id: show.id, status, limit: String(PAGE), offset: String(offset) });
-      if (fn !== 'all') qs.set('narrative_function', fn);
+      const qs = new URLSearchParams({ show_id: show.id, status, with: 'comments', limit: String(PAGE), offset: String(offset) });
       const r = await api.get(`/api/v1/feed-posts?${qs}`);
       const page = r.data?.data || [];
       setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
@@ -197,54 +240,153 @@ function PostsView({ show, showLoaded }) {
       setHasMore(Boolean(r.data?.hasMore));
     } catch (err) {
       console.error('[SocialMedia] posts load failed:', err.response?.status || err.message);
-      setError(err.response?.data?.error || 'The posts could not be loaded.');
-    } finally {
-      setLoading(false);
-    }
-  }, [show?.id, fn, status]);
+      setError(err.response?.data?.error || 'The wall could not be loaded.');
+    } finally { setLoading(false); }
+  }, [show?.id, wallTab]);
 
-  useEffect(() => { load(0); }, [load]);
+  const loadSides = useCallback(async () => {
+    if (!show?.id) return;
+    const safe = async (p, fallback) => { try { return await p; } catch (err) { console.error('[SocialMedia] side load failed:', err.response?.status || err.message); return fallback; } };
+    const [who, ppl, ev, drafts, pend] = await Promise.all([
+      safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&search=lala&limit=5'), null),
+      safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=12'), null),
+      safe(api.get(`/api/v1/calendar/events?series_id=${show.id}`), null),
+      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&limit=1`), null),
+      safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${show.id}`), null),
+    ]);
+    const candidates = who?.data?.profiles || [];
+    setOwner(candidates.find((p) => /^lala$/i.test(p.handle || '') || /^lala\b/i.test(p.display_name || '')) || candidates[0] || null);
+    const list = (ppl?.data?.profiles || []).filter((p) => !p.is_justawoman_record);
+    setFriends({ list, total: ppl?.data?.pagination?.total ?? ppl?.data?.total ?? list.length });
+    const all = Array.isArray(ev?.data?.events) ? ev.data.events : [];
+    const now = Date.now();
+    const upcoming = all.filter((e) => !e.start_datetime || new Date(e.start_datetime).getTime() >= now - 86400000);
+    setEvents((upcoming.length ? upcoming : all).slice(0, 3));
+    setDraftsTotal(drafts?.data?.total ?? 0);
+    setPending(pend?.data?.data || []);
+  }, [show?.id]);
 
-  if (showLoaded && !show) {
-    return <p className="sm-empty" data-testid="sm-no-show">Pick a show first. Posts belong to a show.</p>;
-  }
+  useEffect(() => { loadPosts(0); }, [loadPosts]);
+  useEffect(() => { loadSides(); }, [loadSides]);
+  useEffect(() => { if (tabRequest?.tab) setWallTab(tabRequest.tab); }, [tabRequest]);
+  useEffect(() => { onInbox?.(draftsTotal + pending.length); }, [draftsTotal, pending.length, onInbox]);
+
+  const ownerName = owner?.display_name || owner?.creator_name || 'Lala';
+  const ownerHandle = owner?.handle || 'lala';
+  const status = useMemo(() => posts.find((p) => wallTab === 'wall' && (p.poster_handle || p.socialProfile?.handle) === ownerHandle) || null, [posts, ownerHandle, wallTab]);
+
+  const share = async () => {
+    if (!draftText.trim() || !show?.id) return;
+    setSharing(true); setError(null);
+    try {
+      await api.post('/api/v1/feed-posts', {
+        show_id: show.id, content_text: draftText.trim(), poster_handle: ownerHandle,
+        poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse', status: 'live',
+      });
+      setDraftText('');
+      if (wallTab !== 'wall') setWallTab('wall'); else await loadPosts(0, 'live');
+    } catch (err) { setError(err.response?.data?.error || 'The post could not be shared.'); }
+    finally { setSharing(false); }
+  };
+
+  if (showLoaded && !show) return <p className="sm-empty" data-testid="sm-no-show">Pick a show first. The wall belongs to a show.</p>;
 
   const q = search.trim().toLowerCase();
-  const visible = q
-    ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
-    : posts;
+  const visible = q ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q)) : posts;
+  const friendTiles = friends.list.filter((p) => p.handle !== ownerHandle).slice(0, 6);
+  const mayKnow = friends.list.filter((p) => p.handle !== ownerHandle).slice(6, 8);
+  const peopleLink = (p) => `/feed?tab=people&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
 
   return (
-    <div className="sm-posts">
-      <div className="sm-toolbar">
-        <div className="sm-chips" role="group" aria-label="Live or drafts">
-          <button type="button" className={`sm-chip ${status === 'live' ? 'active' : ''}`} onClick={() => setStatus('live')}>Live</button>
-          <button type="button" className={`sm-chip ${status === 'draft' ? 'active' : ''}`} onClick={() => setStatus('draft')}>Drafts</button>
-        </div>
-        <div className="sm-chips" role="group" aria-label="Filter by what the post does">
-          {['all', ...FUNCTIONS].map((k) => (
-            <button key={k} type="button" className={`sm-chip ${fn === k ? 'active' : ''}`} onClick={() => setFn(k)}>
-              {k === 'all' ? 'All' : k.replace(/_/g, ' ')}
+    <div className="sm-wall">
+      <aside className="sm-left">
+        <Tile name={ownerName} size="xl" tone="l" />
+        <Link className="sm-small-link" to={peopleLink(owner)}>Edit My Profile</Link>
+        <Box title="Information" testId="sm-info">
+          <dl className="sm-dl">
+            <dt>Current City</dt><dd>{owner?.city ? CITY_NAMES[owner.city] || owner.city : (owner?.geographic_base || '[City]')}</dd>
+            <dt>Relationship Status</dt><dd>{owner?.relationship_status || '[Status]'}</dd>
+            <dt>Works at</dt><dd>{owner?.content_category ? owner.content_category.replace(/_/g, ' ') : 'Styling, everywhere'}</dd>
+            {owner?.follower_count_approx && <><dt>Followers</dt><dd>{owner.follower_count_approx}</dd></>}
+          </dl>
+        </Box>
+        <Box title="Friends" action={<Link to="/feed?tab=people&layer=lalaverse">See all</Link>} testId="sm-friends">
+          <p className="sm-muted">[{friends.total}] friends</p>
+          <div className="sm-friend-grid">
+            {friendTiles.map((p) => (
+              <Link key={p.id} to={peopleLink(p)} className="sm-friend"><Tile name={p.display_name || p.handle} size="lg" tone={toneOf(p.handle)} /><span>{p.display_name || p.handle}</span></Link>
+            ))}
+            {friendTiles.length === 0 && <p className="sm-muted">No friends yet. Generate profiles under Friends.</p>}
+          </div>
+        </Box>
+      </aside>
+
+      <main className="sm-center">
+        <h1 className="sm-owner">{ownerName}</h1>
+        <p className="sm-status" data-testid="sm-status">
+          {status ? <>{status.content_text} <small>{whenLabel(status.posted_at)}</small></> : <em>has not posted yet.</em>}
+        </p>
+        <nav className="sm-wall-tabs" role="tablist" aria-label="Wall sections">
+          {WALL_TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={wallTab === t.key} className={wallTab === t.key ? 'active' : ''} onClick={() => setWallTab(t.key)}>
+              {t.label}{t.key === 'drafts' && draftsTotal > 0 ? ` (${draftsTotal})` : ''}
             </button>
           ))}
-        </div>
-        <input className="sm-search" type="search" aria-label="Search posts" placeholder="Search posts…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        {show?.id && <Link className="sm-link" to={`/shows/${show.id}/feed-timeline`}>Timeline &amp; generation →</Link>}
-      </div>
-      <p className="sm-count" data-testid="sm-count">
-        {loading && posts.length === 0 ? 'Loading posts…' : `${total} post${total === 1 ? '' : 's'}${show?.name ? ` · ${show.name}` : ''}`}
-      </p>
-      {error && <p className="sm-error" role="alert">{error}</p>}
-      {!loading && !error && posts.length === 0 && (
-        <div className="sm-empty" data-testid="sm-empty">
-          <p>{status === 'draft' ? 'No drafts. A draft is a post written inside an episode that is not published yet.' : 'No posts yet for this show.'}</p>
-          <p>Posts are generated from an episode (its Feed tab, or the timeline page) and from the Feed scheduler. Each one is what a character said, once, with its likes and comments.</p>
-        </div>
-      )}
-      {visible.map((p) => <PostCard key={p.id} post={p} />)}
-      {hasMore && !loading && (
-        <button type="button" className="sm-more" onClick={() => load(posts.length)}>Load more</button>
-      )}
+        </nav>
+
+        {wallTab !== 'events' && (
+          <form className="sm-composer" onSubmit={(e) => { e.preventDefault(); share(); }}>
+            <label htmlFor="sm-composer-text" className="sm-composer-label">What&apos;s on your mind?</label>
+            <textarea id="sm-composer-text" rows={2} value={draftText} onChange={(e) => setDraftText(e.target.value)} />
+            <div className="sm-composer-row">
+              <span className="sm-muted">Posts as {ownerName}, live on the feed.</span>
+              <button type="submit" className="sm-btn" disabled={sharing || !draftText.trim()}>{sharing ? 'Sharing…' : 'Share'}</button>
+            </div>
+          </form>
+        )}
+
+        {error && <p className="sm-error" role="alert">{error}</p>}
+        <p className="sm-count" data-testid="sm-count">
+          {loading && posts.length === 0 ? 'Loading the wall…' : wallTab === 'events' ? `${events.length} upcoming event${events.length === 1 ? '' : 's'}` : `${total} ${wallTab === 'drafts' ? 'draft' : 'post'}${total === 1 ? '' : 's'}${show?.name ? ` · ${show.name}` : ''}`}
+        </p>
+
+        {wallTab === 'events' ? (
+          <ul className="sm-events" data-testid="sm-events">
+            {events.map((e) => <li key={e.id}><b>{e.title}</b><br /><span className="sm-muted">{[e.location_name || e.lalaverse_district, eventWhen(e.start_datetime)].filter(Boolean).join(' · ')}</span></li>)}
+            {events.length === 0 && <li className="sm-muted">No upcoming events. Plan one under LalaVerse › Culture.</li>}
+          </ul>
+        ) : (
+          <>
+            {!loading && !error && posts.length === 0 && (
+              <div className="sm-empty" data-testid="sm-empty">
+                {wallTab === 'drafts'
+                  ? <p>No drafts. A draft is a post written inside an episode that is not published yet.</p>
+                  : <><p>Nothing on the wall yet.</p><p>Share something above, or generate posts from an episode. Each one is what a character said, once, with its likes and comments.</p></>}
+              </div>
+            )}
+            {visible.map((p) => <PostCard key={p.id} post={p} onChange={() => { loadPosts(0); loadSides(); }} />)}
+            {hasMore && !loading && <button type="button" className="sm-btn sm-more" onClick={() => loadPosts(posts.length)}>Older posts</button>}
+          </>
+        )}
+      </main>
+
+      <aside className="sm-right">
+        <Box title="Requests" testId="sm-requests">
+          <ul className="sm-plain">
+            <li><button type="button" className="sm-link-btn" onClick={() => setWallTab('drafts')}>{draftsTotal} draft post{draftsTotal === 1 ? '' : 's'}</button></li>
+            <li>{pending.length} reaction{pending.length === 1 ? '' : 's'} to approve</li>
+          </ul>
+          {pending.slice(0, 3).map((c) => <p key={c.id} className="sm-muted sm-pending">@{c.handle}: “{c.text}”{c.post?.poster_handle ? ` on @${c.post.poster_handle}'s post` : ''}</p>)}
+        </Box>
+        <Box title="Upcoming Events" testId="sm-upcoming">
+          {events.slice(0, 2).map((e) => <p key={e.id} className="sm-event"><b>{e.title}</b><br /><span className="sm-muted">{e.location_name || e.lalaverse_district || ''}</span><br /><span className="sm-muted">{eventWhen(e.start_datetime)}</span></p>)}
+          {events.length === 0 && <p className="sm-muted">None planned.</p>}
+        </Box>
+        <Box title="People You May Know" testId="sm-may-know">
+          {mayKnow.map((p) => <p key={p.id} className="sm-person"><Tile name={p.display_name || p.handle} tone={toneOf(p.handle)} /><span><b>{p.display_name || p.handle}</b><br /><Link to={peopleLink(p)}>Add as friend</Link></span></p>)}
+          {mayKnow.length === 0 && <p className="sm-muted">Everyone here already knows Lala.</p>}
+        </Box>
+      </aside>
     </div>
   );
 }
@@ -254,44 +396,35 @@ export default function SocialMediaPage() {
   const tab = tabFromParams(params);
   const { show, loaded } = useActiveShow();
   const layer = params.get('layer');
+  const [search, setSearch] = useState('');
+  const [inbox, setInbox] = useState(0);
+  const [tabRequest, setTabRequest] = useState(null);
 
-  const switchTab = (key) => setParams((prev) => {
-    const next = new URLSearchParams(prev);
-    next.set('tab', key);
-    return next;
-  });
+  const switchTab = (key) => setParams((prev) => { const next = new URLSearchParams(prev); next.set('tab', key); return next; });
+  const openInbox = () => { if (tab !== 'posts') switchTab('posts'); setTabRequest({ tab: 'drafts', at: Date.now() }); };
 
   return (
     <div className="sm-page">
-      <header className="sm-header">
-        <h1>Social Media</h1>
-        <p className="sm-sub">Lala&apos;s social world: what was said, and who said it.</p>
+      <header className="sm-banner">
+        <span className="sm-wordmark">lalaverse</span>
+        <nav className="sm-nav" role="tablist" aria-label="Social Media sections">
+          <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => switchTab('posts')}>Home</button>
+          <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => { switchTab('posts'); setTabRequest({ tab: 'wall', at: Date.now() }); }}>Profile</button>
+          <button type="button" role="tab" aria-selected={tab === 'people'} className={tab === 'people' ? 'active' : ''} onClick={() => switchTab('people')}>Friends</button>
+          <button type="button" className="sm-inbox" onClick={openInbox} title="Draft posts and reactions waiting for approval">Inbox{inbox > 0 ? ` (${inbox})` : ''}</button>
+        </nav>
+        {tab === 'posts' && <input className="sm-search" type="search" aria-label="Search posts" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />}
+        <span className="sm-banner-right">Social Media</span>
       </header>
-      <nav className="sm-tabs" role="tablist" aria-label="Social Media sections">
-        {TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`sm-tab ${tab === t.key ? 'active' : ''}`} onClick={() => switchTab(t.key)}>
-            <span>{t.label}</span>
-            <small>{t.desc}</small>
-          </button>
-        ))}
-      </nav>
-      {tab === 'posts' && (
-        <>
-          <TabOrientation
-            id="social-media-posts"
-            title="Posts"
-            what="Every stored post, newest first: what a character said, once, with its likes and comments."
-            reads="The phone's Feed Posts zone draws these live; the episode script writer reads the ones tied to its episode."
-            doHere="Read the feed as the audience would. Generate posts from an episode on its timeline page."
-          />
-          <PostsView show={show} showLoaded={loaded} />
-        </>
-      )}
+      {tab === 'posts' && <Wall show={show} showLoaded={loaded} search={search} tabRequest={tabRequest} onInbox={setInbox} />}
       {tab === 'people' && (
         <Suspense fallback={<p className="sm-empty">Loading people…</p>}>
           <SocialProfileGenerator embedded defaultFeedLayer={layer === 'lalaverse' ? 'lalaverse' : undefined} />
         </Suspense>
       )}
+      <footer className="sm-footer">
+        lalaverse · one post, one place · <Link to="/feed?tab=people&layer=lalaverse">People</Link>{show?.id && <> · <Link to={`/shows/${show.id}/feed-timeline`}>Timeline &amp; generation</Link></>}
+      </footer>
     </div>
   );
 }

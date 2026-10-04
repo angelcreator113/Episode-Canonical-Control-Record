@@ -7,9 +7,13 @@
 1. **A post lives in one place.** `feed_posts` is the record of what a character said,
    with its likes and comments. Every screen draws the record; nothing copies it. The
    phone's Feed Posts zone (`ScreenContentRenderer`, zone `feed_posts`) reads the
-   episode's posts or the show timeline live; the Social Media page (`SocialMediaPage`,
-   Posts tab) reads the show's live posts; the per-show timeline page
-   (`FeedTimelinePage`) reads an episode's posts with their status.
+   episode's posts or the show timeline live; the Social Media page (`SocialMediaPage`:
+   since 2026-10-04 a 2009 profile-and-wall to Evoni's mock, "lalaverse" on a purple
+   banner) reads the show's live posts with their comments (`GET /feed-posts?with=comments`)
+   as Lala's wall, with her profile, friends, requests (draft posts and reactions to
+   approve, `GET /feed-posts/comments/pending`), upcoming events and people she may know;
+   "What's on your mind?" posts as Lala, live (`POST /feed-posts`). The per-show timeline
+   page (`FeedTimelinePage`) reads an episode's posts with their status.
 2. **Draft, then live.** `feed_posts.status` (`services/feedPostStatus.js`, migration
    `20261004150000`) is `draft` or `live`. A post created inside an episode starts as a
    draft: the episode's Feed generation (`feedPostGeneratorService`), a ripple reply to

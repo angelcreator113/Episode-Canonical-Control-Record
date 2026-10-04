@@ -15,9 +15,10 @@ four pages keep their files and their owner rows below; only their doorway moved
 former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedirects.js`,
 rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
 Bible (a deep link to the Bible tab) and Social Media (`/feed`, `pages/SocialMediaPage.jsx`,
-2026-10-04: Posts, the stored `feed_posts` for the active show, by default; People, the
-profile generator unchanged, as a tab that the old `?layer=` links still open; the Episode's
-Lala's Phone tab is untouched).
+2026-10-04: Home, Lala's 2009-style wall of the active show's stored `feed_posts`, by default,
+under a purple "lalaverse" banner; Friends, the profile generator unchanged, as a tab that the
+old `?layer=` links still open; `docs/FEED_POSTS.md`; the Episode's Lala's Phone tab is
+untouched).
 
 The Overview's setup progress (`components/WorldSetupProgress`, 2026-10-04) reads the seven
 endpoints' real shapes: `GET /page-content/:name` answers the content object itself (the checks
