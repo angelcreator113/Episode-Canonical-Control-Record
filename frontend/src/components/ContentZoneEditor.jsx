@@ -613,7 +613,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
           )}
 
           {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe grids) */}
-          {['feed_posts', 'dm_thread', 'notifications', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
+          {['feed_posts', 'dm_thread', 'notifications', 'feed_notifications', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>MAX ITEMS</label>
               <input
