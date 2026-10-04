@@ -34,9 +34,12 @@ const SEVERITY = {
 const CATEGORIES = ['franchise_law', 'character', 'narrative', 'locked_decision', 'technical', 'brand', 'world'];
 const EXTRACTED_BY_LABELS = { document_ingestion: '📄 Ingested', conversation_extraction: '💬 Extracted', direct_entry: '✏️ Manual', system: '⚙️ System' };
 
-export default function ShowBiblePage() {
+export default function ShowBiblePage({ embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'knowledge');
+  // Inside the LalaVerse hub (2026-10-04) `?tab=` is the hub's; this page's
+  // own tab is `?sub=`, read and written without touching the hub's.
+  const param = embedded ? 'sub' : 'tab';
+  const [activeTab, setActiveTab] = useState(searchParams.get(param) || 'knowledge');
   const [entries, setEntries] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +61,7 @@ export default function ShowBiblePage() {
   const [ingesting, setIngesting] = useState(false);
 
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
-  const switchTab = (tab) => { setActiveTab(tab); setSearchParams({ tab }); };
+  const switchTab = (tab) => { setActiveTab(tab); setSearchParams((prev) => { const next = new URLSearchParams(prev); next.set(param, tab); return next; }); };
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -134,14 +137,14 @@ export default function ShowBiblePage() {
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '16px 24px' }}>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast.msg}</div>}
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      {/* Header; inside the hub the tab is the heading and the counts stay */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Show Bible</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+          {!embedded && <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Show Bible</h1>}
+          <p style={{ margin: embedded ? 0 : '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
             {activeCount} active · {pendingCount} pending · {alwaysInjectCount} always-inject · {totalInjections.toLocaleString()} total injections
           </p>
         </div>

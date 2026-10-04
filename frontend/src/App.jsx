@@ -165,7 +165,6 @@ const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
-const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
 const StoriesPage = lazy(() => import('./pages/StoriesPage'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
 // WorldView merged into CharacterRegistryPage
@@ -346,10 +345,10 @@ function AppContent() {
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
           <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
-          <Route path="/show-bible" element={<ShowBiblePage />} />
-          <Route path="/universe/knowledge" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
-          <Route path="/intelligence/franchise-brain" element={<Navigate to="/show-bible?tab=decisions" replace />} />
-          <Route path="/intelligence/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
+          {/* The Show Bible is the LalaVerse hub's Bible tab (2026-10-04); /show-bible redirects there via HUB_TABS below. */}
+          <Route path="/universe/knowledge" element={<Navigate to="/universe?tab=bible&sub=knowledge" replace />} />
+          <Route path="/intelligence/franchise-brain" element={<Navigate to="/universe?tab=bible&sub=decisions" replace />} />
+          <Route path="/intelligence/show-brain" element={<Navigate to="/universe?tab=bible&sub=knowledge" replace />} />
           <Route path="/universe/writing-rhythm" element={<WritingRhythmPage />} />
 
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
@@ -481,7 +480,7 @@ function AppContent() {
           {Object.entries(HUB_TABS).map(([path, tab]) => <Route key={path} path={path} element={<WorldHubRedirect tab={tab} />} />)}
 
           {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
-          <Route path="/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
+          <Route path="/show-brain" element={<Navigate to="/universe?tab=bible&sub=knowledge" replace />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
@@ -524,7 +523,7 @@ function AppContent() {
           <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />
 
           {/* Franchise Brain — redirects to Show Bible decisions */}
-          <Route path="/franchise-brain" element={<Navigate to="/show-bible?tab=decisions" replace />} />
+          <Route path="/franchise-brain" element={<Navigate to="/universe?tab=bible&sub=decisions" replace />} />
           
           {/* PNOS Novel Assembler */}
           <Route path="/assembler" element={<NovelAssembler />} />

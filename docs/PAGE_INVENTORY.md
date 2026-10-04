@@ -54,7 +54,7 @@ not via any page's UI.
 |---|---|---|---|
 | `/` | `pages/Home.jsx` (App.jsx:323) | live | Sidebar (Home `NavLink`, `components/layout/Sidebar.jsx:201-210`) |
 | `/start` | `pages/SessionStart.jsx` (App.jsx:324) | live | Sidebar (brand-mark click, `Sidebar.jsx:172`) |
-| `/universe` | `pages/UniversePage.jsx` (App.jsx:327) — the LalaVerse hub (2026-10-04): Overview, World, Society, Culture, State tabs (`HUB_TABS`), `?tab=` and `?sub=` | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:22`) |
+| `/universe` | `pages/UniversePage.jsx` (App.jsx:327) — the LalaVerse hub (2026-10-04): Overview, Show Bible, World, Society, Culture, State tabs (`HUB_TABS`), `?tab=` and `?sub=` | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:22`) |
 | `/universe/social-import` | `pages/UniverseSocialImportPage.jsx` (App.jsx:328) | live | URL only — no in-app caller found; also the redirect target of `/social-import` (App.jsx:517) |
 | `/universe/series` | `pages/SeriesPage.jsx` (App.jsx:329) | live | URL only |
 | `/universe/production` | `pages/UniverseProductionPage.jsx` | redirect (audit IA-01, 2026-10-03): opens the active show's Producer Mode, Episodes → Production; `ProductionTab` is gone | URL only |
@@ -62,10 +62,10 @@ not via any page's UI.
 | `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` (App.jsx:332) | live | URL only |
 | `/universe/tensions` | `pages/UniverseTensionsPage.jsx` (App.jsx:333) | live | URL only |
 | `/universe/story-dashboard` | `pages/StoryDashboardPage.jsx` (App.jsx:334) | live | URL only |
-| `/show-bible` | `pages/ShowBiblePage.jsx` (App.jsx:335) | live | Sidebar (`Sidebar.jsx:23`) + in-app link (`pages/UniversePage.jsx:112,176`) + redirect target of 3 routes below |
-| `/universe/knowledge` | redirect → `/show-bible?tab=knowledge` (App.jsx:336) | redirect | — |
-| `/intelligence/franchise-brain` | redirect → `/show-bible?tab=decisions` (App.jsx:337) | redirect | — |
-| `/intelligence/show-brain` | redirect → `/show-bible?tab=knowledge` (App.jsx:338) | redirect | — |
+| `/show-bible` | redirect → `/universe?tab=bible` (2026-10-04; `ShowBiblePage` is the LalaVerse hub's Bible tab, `utils/worldRedirects.js` `HUB_TABS`; a `?tab=` becomes `&sub=`) | redirect | Sidebar's Show Bible row deep-links to the tab |
+| `/universe/knowledge` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
+| `/intelligence/franchise-brain` | redirect → `/universe?tab=bible&sub=decisions` | redirect | — |
+| `/intelligence/show-brain` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
 | `/universe/writing-rhythm` | `pages/WritingRhythmPage.jsx` (App.jsx:339) | live | URL only |
 
 ### Pre-production (App.jsx:341-376)
@@ -176,7 +176,7 @@ not via any page's UI.
 | `/world-foundation` | redirect → `/universe?tab=world` (2026-10-04; `WorldFoundation` is the hub's World tab; a `?tab=` becomes `&sub=`) | redirect | — |
 | `/social-systems` | redirect → `/universe?tab=society` (2026-10-04; `SocialSystems` is the hub's Society tab) | redirect | — |
 | `/culture-events` | redirect → `/universe?tab=culture` (2026-10-04; `CultureEvents` is the hub's Culture tab; a `?tab=` becomes `&sub=`) | redirect | — |
-| `/show-brain` | redirect → `/show-bible?tab=knowledge` (App.jsx:477) | redirect | — |
+| `/show-brain` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
 | `/narrative-control` | `pages/NarrativeControlCenter.jsx` (App.jsx:480) | live | URL only |
 | `/story-engine` | redirect → `/stories` (App.jsx:483) | redirect | Sidebar (WRITE > Stories > "Structure" child, `Sidebar.jsx:44`) + Command Palette (`story` result, `CommandPalette.jsx:17`) — both entry points land on a route that immediately redirects |
 | `/texture-review/:storyNumber` | `pages/TextureReviewPage.jsx` (App.jsx:486) | live | URL only (`components/Breadcrumbs.jsx:37` is a breadcrumb label lookup for the current path, not a link to it) |
@@ -196,7 +196,7 @@ not via any page's UI.
 | `/pressure` | `pages/NarrativePressureDashboard.jsx` (App.jsx:513) | live | URL only |
 | `/feed-relationships` | `pages/FeedRelationshipMap.jsx` (App.jsx:514) | live | URL only |
 | `/social-import` | redirect → `/universe/social-import` (App.jsx:517) | redirect | — |
-| `/franchise-brain` | redirect → `/show-bible?tab=decisions` (App.jsx:520) | redirect | — |
+| `/franchise-brain` | redirect → `/universe?tab=bible&sub=decisions` | redirect | — |
 | `/assembler` | `pages/NovelAssembler.jsx` (App.jsx:523) | live | URL only (only a self-referential header comment, `pages/NovelAssembler.jsx:7`) |
 | `/press` | `pages/PressPublisher.jsx` (App.jsx:526) | live | URL only |
 | `/search` | `pages/SearchResults.jsx` (App.jsx:529) | live | Sidebar (SYSTEM zone, `Sidebar.jsx:71`) |

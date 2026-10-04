@@ -26,8 +26,8 @@ function buildNav(shows, activeId) {
       items: [
         // The world pages (map and locations, society, culture, setup and
         // state) are the LalaVerse hub's tabs (2026-10-04), not rows here.
-        { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'World, society, culture, state' },
-        { icon: '📖', label: 'Show Bible', route: '/show-bible' },
+        { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
+        { icon: '📖', label: 'Show Bible', route: '/universe?tab=bible', hint: 'The canon, one click' },
         { icon: '🎭', label: "Lala's Feed", route: '/feed?layer=lalaverse', hint: 'Who exists in her social world' },
       ],
     },
@@ -143,6 +143,14 @@ function Sidebar({ isOpen, onClose }) {
   // Active-match helper
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + '/');
+  // A row whose route carries a query (Show Bible → /universe?tab=bible) is
+  // active on that exact URL; a plain row on its path, unless a sibling row
+  // with a query matches exactly (LalaVerse yields to Show Bible).
+  const here = location.pathname + location.search;
+  const rowActive = (item, siblings, routerActive) => {
+    if (item.route.includes('?')) return here === item.route;
+    return routerActive && !siblings.some((s) => s !== item && s.route.includes('?') && here === s.route);
+  };
 
   return (
     <>
@@ -372,7 +380,7 @@ function Sidebar({ isOpen, onClose }) {
                     key={item.route}
                     to={item.route}
                     end={item.route === '/episodes'}
-                    className={({ isActive: a }) => `ps-nav-item ${a ? 'ps-nav-item-active' : ''}`}
+                    className={({ isActive: a }) => `ps-nav-item ${rowActive(item, items, a) ? 'ps-nav-item-active' : ''}`}
                     onClick={() => { if (onClose) onClose(); }}
                     title={collapsed ? item.label : undefined}
                   >

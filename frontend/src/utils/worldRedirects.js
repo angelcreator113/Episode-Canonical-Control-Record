@@ -20,11 +20,12 @@ export const WORLD_REDIRECTS = {
 };
 
 /**
- * The LalaVerse hub (`/universe`, `UniversePage`) holds the world pages as
- * tabs (2026-10-04): each former Sidebar route opens its tab, and the
- * `?tab=` it used to carry becomes the tab's `?sub=`.
+ * The LalaVerse hub (`/universe`, `UniversePage`) holds the Show Bible and
+ * the world pages as tabs (2026-10-04): each former Sidebar route opens its
+ * tab, and the `?tab=` it used to carry becomes the tab's `?sub=`.
  */
 export const HUB_TABS = {
+  '/show-bible': 'bible',
   '/world-dashboard': 'state',
   '/world-foundation': 'world',
   '/social-systems': 'society',

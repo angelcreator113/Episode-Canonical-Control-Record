@@ -27,14 +27,14 @@ describe('WORLD_REDIRECTS', () => {
 
   test('every target is a hub tab with a sub-tab', () => {
     for (const to of Object.values(WORLD_REDIRECTS)) {
-      expect(to).toMatch(/^\/universe\?tab=(world|society|culture|state)&sub=\w+$/);
+      expect(to).toMatch(/^\/universe\?tab=(bible|world|society|culture|state)&sub=\w+$/);
     }
   });
 });
 
 describe('HUB_TABS and hubTarget', () => {
-  test('the four former world pages map to the four hub tabs', () => {
-    expect(HUB_TABS).toEqual({ '/world-dashboard': 'state', '/world-foundation': 'world', '/social-systems': 'society', '/culture-events': 'culture' });
+  test('the Show Bible and the four former world pages map to the hub tabs', () => {
+    expect(HUB_TABS).toEqual({ '/show-bible': 'bible', '/world-dashboard': 'state', '/world-foundation': 'world', '/social-systems': 'society', '/culture-events': 'culture' });
   });
   test('a legacy ?tab= becomes the hub tab\'s &sub=', () => {
     expect(hubTarget('world', '')).toBe('/universe?tab=world');

@@ -2,11 +2,13 @@
  * UniversePage.jsx — the LalaVerse hub
  *
  * The world in one place (2026-10-04): an Overview of the active show's
- * world at a glance, then the world pages as tabs — World (the DREAM map
- * and locations), Society (archetypes, legends, rules, trends), Culture
- * (the calendar, awards and media, history) and State (setup progress,
+ * world at a glance, then the world pages as tabs — Show Bible (the canon:
+ * knowledge, decisions, documents, guard), World (the DREAM map and
+ * locations), Society (archetypes, legends, rules, trends), Culture (the
+ * calendar, awards and media, history) and State (setup progress,
  * snapshots, tensions). Each tab mounts its page in embedded mode; `?tab=`
  * names the tab and `?sub=` the page's own tab (utils/worldRedirects.js).
+ * The Sidebar's Show Bible row deep-links to the Bible tab.
  *
  * No hardcoded universe ID: it loads the active show (useActiveShow,
  * audit CTX-01) and asks which show when several exist and none is active.
@@ -17,6 +19,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
+import ShowBiblePage from './ShowBiblePage';
 import WorldFoundation from './WorldFoundation';
 import SocialSystems from './SocialSystems';
 import CultureEvents from './CultureEvents';
@@ -24,6 +27,7 @@ import WorldDashboard from './WorldDashboard';
 
 export const HUB_TABS = [
   { key: 'overview', label: 'Overview', desc: 'The world at a glance' },
+  { key: 'bible', label: 'Show Bible', desc: 'Canon, decisions, guard' },
   { key: 'world', label: 'World', desc: 'Map, locations' },
   { key: 'society', label: 'Society', desc: 'Archetypes, legends, trends' },
   { key: 'culture', label: 'Culture', desc: 'Calendar, awards, history' },
@@ -60,6 +64,7 @@ export default function UniversePage() {
       </div>
       <div role="tabpanel" aria-labelledby={`lalaverse-tab-${tab}`}>
         {tab === 'overview' && <Overview />}
+        {tab === 'bible' && <ShowBiblePage embedded />}
         {tab === 'world' && <WorldFoundation embedded />}
         {tab === 'society' && <SocialSystems embedded />}
         {tab === 'culture' && <CultureEvents embedded />}

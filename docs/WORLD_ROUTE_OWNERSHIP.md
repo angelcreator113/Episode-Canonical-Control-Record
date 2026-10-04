@@ -6,13 +6,14 @@ scopes and purposes. Removing links alone does not define ownership." This is th
 one canonical editor per domain, what it stores, and where the older routes go.
 
 **2026-10-04: the world pages are the LalaVerse hub's tabs.** `UniversePage` (`/universe`)
-holds `WorldFoundation` (tab `world`), `SocialSystems` (`society`), `CultureEvents`
-(`culture`) and `WorldDashboard` (`state`) in embedded mode; the hub's `?tab=` names the
+holds `ShowBiblePage` (tab `bible`, the canon), `WorldFoundation` (tab `world`),
+`SocialSystems` (`society`), `CultureEvents` (`culture`) and `WorldDashboard` (`state`) in
+embedded mode; the hub's `?tab=` names the
 tab and `?sub=` the page's own tab (`tabFromSearch(tabs, fallback, search, 'sub')`). The
 four pages keep their files and their owner rows below; only their doorway moved. Their
 former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedirects.js`,
 rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
-Bible and Lala's Feed.
+Bible (a deep link to the Bible tab) and Lala's Feed.
 
 ## 1. Owners
 
@@ -41,7 +42,8 @@ is deleted (`utils/worldRedirects.js` `WORLD_REDIRECTS`, rendered by `App`).
 | `/world-locations` | `/universe?tab=world&sub=locations` |
 | `/cultural-calendar` | `/universe?tab=culture&sub=events` |
 | `/cultural-memory` | `/universe?tab=culture&sub=history` |
-| `/world-foundation`, `/social-systems`, `/culture-events`, `/world-dashboard` (2026-10-04) | the hub tab (`world`, `society`, `culture`, `state`), carrying the route's old `?tab=` as `&sub=` |
+| `/show-bible`, `/world-foundation`, `/social-systems`, `/culture-events`, `/world-dashboard` (2026-10-04) | the hub tab (`bible`, `world`, `society`, `culture`, `state`), carrying the route's old `?tab=` as `&sub=` |
+| `/universe/knowledge`, `/intelligence/show-brain`, `/show-brain` · `/intelligence/franchise-brain`, `/franchise-brain` | `/universe?tab=bible&sub=knowledge` · `/universe?tab=bible&sub=decisions` |
 | `/world` | `/universe?tab=state` |
 
 ## 3. Three calendars, named distinctly
