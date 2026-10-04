@@ -50,6 +50,21 @@ describe('Use in a beat', () => {
     expect((await screen.findByTestId('sm-beats-used')).textContent).toBe('Shown at: Ep 2 · beat 5 Reveal');
   });
 
+  test('a refusal from the story clock is shown as it is', async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { error: 'This post happens After Ep 2; a beat of Ep 1 is earlier in story time. Lala cannot see a post that has not been written yet.' } } });
+    open({ id: 'p1', poster_handle: 'lala', content_text: 'x', status: 'live', story_order: 27 });
+    await screen.findByRole('option', { name: 'Ep 1 · Gala Night' });
+    fireEvent.change(screen.getByLabelText('Episode'), { target: { value: 'ep-1' } });
+    fireEvent.change(screen.getByLabelText('Beat'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Show at this beat' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/After Ep 2; a beat of Ep 1 is earlier in story time/);
+  });
+
+  test('the wall item shows the post\'s story time', () => {
+    render(<MemoryRouter><PostCard post={{ id: 'p9', poster_handle: 'lala', content_text: 'x', status: 'live', story_order: 27 }} showId="s-1" /></MemoryRouter>);
+    expect(screen.getByText('After Ep 2')).toBeTruthy();
+  });
+
   test('a draft offers only its own episode, preselected and fixed', async () => {
     open({ id: 'p1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-1' });
     await screen.findByRole('option', { name: 'Ep 1 · Gala Night' });

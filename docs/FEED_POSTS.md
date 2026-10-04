@@ -83,9 +83,20 @@
    only in its own episode). `GET /feed-posts/post/:id` answers `beats`, where the post is
    shown, and the picker lists them.
 
+9. **The story clock.** Lala's world has no calendar the feed can share (episodes carry
+   a number and a real air date; an event's date is free text), so story time is the
+   episode order (`services/storyClock.js`, mirrored for screens by
+   `frontend/src/lib/storyClock.js`): order = episode number × 10 + phase (before 1,
+   during 5, after 7, next day 8, week later 9). A post's story time is its episode's
+   number and its `timeline_position`; a post written on the wall with no episode is
+   stamped `feed_posts.story_order` (migration `20261004180000`) after the show's latest
+   published episode, or as backstory before episode 1. A beat happens during its
+   episode, so linking or putting a post at a beat is refused (409) when the post is later
+   in story time, an episode's own "after the episode" post included; an older wall post
+   with no stamp passes as unknown. The wall shows each post's story time ("After Ep 2").
+
 ## Still to come
 
-- A story clock on posts and episodes, so "a post must exist by this point in story
-  time" can be checked rather than trusted. (Done since this list began: comments as
-  records and reaction drafting, rule 6; the Comments zone on the records; the wall's
-  beat picker, rule 5.)
+- Nothing on the Feed project's list. (Done since this list began: comments as records
+  and reaction drafting, rule 6; the Comments zone on the records; the wall's beat
+  picker, rule 5; the story clock, rule 9.)

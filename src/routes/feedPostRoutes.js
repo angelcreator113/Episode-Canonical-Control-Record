@@ -23,7 +23,7 @@ const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKE
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat } = req.query;
-    const { FeedPost, SocialProfile, FeedComment } = require('../models');
+    const { FeedPost, SocialProfile, FeedComment, Episode } = require('../models');
 
     if (!show_id && !episode_id) {
       return res.status(400).json({ error: 'show_id or episode_id is required' });
@@ -56,6 +56,8 @@ router.get('/', optionalAuth, async (req, res) => {
             'follower_tier', 'aesthetic_dna'],
           required: false,
         }] : []),
+        // The post's episode number, for its story time (services/storyClock.js).
+        ...(withWhat === 'comments' && Episode ? [{ model: Episode, as: 'episode', attributes: ['id', 'episode_number'], required: false }] : []),
         // ?with=comments: each post's live comments, as records (the wall).
         ...(withWhat === 'comments' && FeedComment ? [{
           model: FeedComment, as: 'comments', where: { status: 'live' }, required: false,
@@ -100,6 +102,8 @@ router.post('/', requireAuth, async (req, res) => {
       likes: 0, comments_count: 0, shares: 0, sample_comments: [],
       posted_at: scoped.status === 'live' ? new Date() : null,
       timeline_position: episode_id ? 'during_episode' : null,
+      // A wall post's story time: after the latest published episode (services/storyClock.js).
+      story_order: episode_id ? null : await require('../services/storyClock').presentOrder(require('../models'), show_id),
       narrative_function: null,
       ai_generated: false,
       status: scoped.status,

@@ -53,3 +53,13 @@ describe('put a post at a beat (2026-10-04)', () => {
     expect(posts).toMatch(/beats: beats\.map\(\(b\) => \(\{ moment_id: b\.id, episode_id: b\.episode_id, beat_number: b\.beat_number/);
   });
 });
+
+describe('the story clock (docs/FEED_POSTS.md rule 9)', () => {
+  test('a wall post is stamped with the present; the wall list carries the episode number', () => {
+    expect(posts).toMatch(/story_order: episode_id \? null : await require\('\.\.\/services\/storyClock'\)\.presentOrder\(require\('\.\.\/models'\), show_id\)/);
+    expect(posts).toMatch(/withWhat === 'comments' && Episode \? \[\{ model: Episode, as: 'episode', attributes: \['id', 'episode_number'\], required: false \}\]/);
+  });
+  test('putting a post at a beat answers the story check', () => {
+    expect(enhanced).toMatch(/story_check: story,/);
+  });
+});
