@@ -111,13 +111,22 @@ const TONE_OPTIONS = [
   { id: 'detached', label: 'Detached' },
   { id: 'raw', label: 'Raw' },
 ];
-const TYPE_COLORS = {
-  pressure: '#B85C38',
-  mirror:   '#9B7FD4',
-  support:  '#4A9B6F',
-  shadow:   '#E08C3A',
-  special:  '#B8962E',
+// Each character type is a token family (docs/VISUAL_SYSTEM.md, theme batch 6):
+// line = the selected border, bg = the selected or busy surface, text = the
+// type as text (4.5:1 on white and on bg), fill = a button under --text-inverse.
+// A hex-alpha tint of the accent cannot be a token, so the surface is its own token.
+export const TYPE_TONES = {
+  pressure: { line: 'var(--danger)',        bg: 'var(--danger-bg)',          text: 'var(--danger-text)',        fill: 'var(--danger)' },
+  mirror:   { line: 'var(--lala-lavender)', bg: 'var(--lala-lavender-soft)', text: 'var(--lala-lavender-text)', fill: 'var(--lala-lavender)' },
+  support:  { line: 'var(--success)',       bg: 'var(--success-bg)',         text: 'var(--success-text)',       fill: 'var(--success-text)' },
+  shadow:   { line: 'var(--warning)',       bg: 'var(--warning-bg)',         text: 'var(--warning-text)',       fill: 'var(--warning-text)' },
+  special:  { line: 'var(--lala-gold)',     bg: 'var(--lala-gold-soft)',     text: 'var(--lala-gold-text)',     fill: 'var(--lala-gold-text)' },
 };
+// Lala's own action keeps her lilac, as the lavender family.
+const LALA_TONE = { line: 'var(--lala-lavender-light)', bg: 'var(--lala-lavender-soft)' };
+// The resting pill: a parchment wash with a parchment border.
+const REST_BG   = 'var(--lala-parchment-2)';
+const REST_LINE = 'var(--lala-parchment-3)';
 
 const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
   chapterId,
@@ -203,7 +212,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
     return () => window.removeEventListener('keydown', handleKey);
   }, [selectedCharacter, loading]);
 
-  const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
+  const tone     = TYPE_TONES[selectedCharacter?.type] || TYPE_TONES.special;
   const charName = selectedCharacter?.selected_name || selectedCharacter?.name;
 
   // Clear result when character changes so old output doesn't bleed across characters
@@ -475,7 +484,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
               >
                 <span style={s.charOptionIcon}>{c.icon || '👤'}</span>
                 <span style={s.charOptionName}>{c.display_name || c.selected_name || c.name}</span>
-                {c.type && <span style={{ ...s.charOptionType, color: TYPE_COLORS[c.type] || '#B8962E' }}>{c.type}</span>}
+                {c.type && <span style={{ ...s.charOptionType, color: (TYPE_TONES[c.type] || TYPE_TONES.special).text }}>{c.type}</span>}
               </button>
             ))}
           </div>
@@ -493,7 +502,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       <div style={s.charHeader}>
         <div style={s.charHeaderTop}>
           <div>
-            <div style={{ ...s.charType, color: accent }}>
+            <div style={{ ...s.charType, color: tone.text }}>
               {selectedCharacter.type}
             </div>
             <div style={s.charName}>{charName}</div>
@@ -536,9 +545,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
                 style={{
                   ...s.toolPill,
                   background:  activeAction === action.id && loading
-                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                               ? tone.bg : REST_BG,
                   borderColor: activeAction === action.id
-                               ? accent : 'rgba(28,24,20,0.10)',
+                               ? tone.line : REST_LINE,
                   opacity:     loading && activeAction !== action.id ? 0.5 : 1,
                 }}
                 onClick={() => runAction(action)}
@@ -570,9 +579,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
                 style={{
                   ...s.toolPill,
                   background:  activeAction === action.id && loading
-                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                               ? tone.bg : REST_BG,
                   borderColor: activeAction === action.id
-                               ? accent : 'rgba(28,24,20,0.10)',
+                               ? tone.line : REST_LINE,
                   opacity:     loading && activeAction !== action.id ? 0.5 : 1,
                 }}
                 onClick={() => runAction(action)}
@@ -594,9 +603,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
               style={{
                 ...s.toolPill,
                 background:  activeAction === 'rewrite' && loading
-                             ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                             ? tone.bg : REST_BG,
                 borderColor: activeAction === 'rewrite'
-                             ? accent : 'rgba(28,24,20,0.10)',
+                             ? tone.line : REST_LINE,
                 opacity:     loading && activeAction !== 'rewrite' ? 0.5 : 1,
               }}
               onClick={runRewrite}
@@ -627,9 +636,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
                 style={{
                   ...s.toolPill,
                   background:  activeAction === action.id && loading
-                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                               ? tone.bg : REST_BG,
                   borderColor: activeAction === action.id
-                               ? accent : 'rgba(28,24,20,0.10)',
+                               ? tone.line : REST_LINE,
                   opacity:     loading && activeAction !== action.id ? 0.5 : 1,
                 }}
                 onClick={() => runAction(action)}
@@ -653,9 +662,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
                 style={{
                   ...s.toolPill,
                   background:  activeAction === action.id && loading
-                               ? '#C8A2C818' : 'rgba(28,24,20,0.04)',
+                               ? LALA_TONE.bg : REST_BG,
                   borderColor: activeAction === action.id
-                               ? '#C8A2C8' : 'rgba(28,24,20,0.10)',
+                               ? LALA_TONE.line : REST_LINE,
                   opacity:     loading && activeAction !== action.id ? 0.5 : 1,
                 }}
                 onClick={() => runAction(action)}
@@ -680,8 +689,8 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             <button
               style={{
                 ...s.toolPill,
-                background: 'rgba(28,24,20,0.04)',
-                borderColor: 'rgba(28,24,20,0.10)',
+                background: REST_BG,
+                borderColor: REST_LINE,
                 opacity: loading ? 0.5 : 1,
                 flex: 1,
                 justifyContent: 'center',
@@ -696,8 +705,8 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             <button
               style={{
                 ...s.toolPill,
-                background: activeAction === 'critique' && loading ? `${accent}18` : 'rgba(28,24,20,0.04)',
-                borderColor: activeAction === 'critique' ? accent : 'rgba(28,24,20,0.10)',
+                background: activeAction === 'critique' && loading ? tone.bg : REST_BG,
+                borderColor: activeAction === 'critique' ? tone.line : REST_LINE,
                 opacity: loading && activeAction !== 'critique' ? 0.5 : 1,
                 flex: 1,
                 justifyContent: 'center',
@@ -723,9 +732,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
                 key={t.id}
                 style={{
                   ...s.lengthPill,
-                  background: toneMode === t.id ? `${accent}14` : 'transparent',
-                  color: toneMode === t.id ? accent : INK_MID,
-                  borderColor: toneMode === t.id ? accent : 'rgba(28,24,20,0.10)',
+                  background: toneMode === t.id ? tone.bg : 'transparent',
+                  color: toneMode === t.id ? tone.text : MUTED,
+                  borderColor: toneMode === t.id ? tone.line : REST_LINE,
                 }}
                 onClick={() => setToneMode(t.id)}
                 aria-pressed={toneMode === t.id}
@@ -741,9 +750,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             <button
               style={{
                 ...s.lengthPill,
-                background: lengthMode === 'full' ? `${accent}14` : 'transparent',
-                color: lengthMode === 'full' ? accent : INK_MID,
-                borderColor: lengthMode === 'full' ? accent : 'rgba(28,24,20,0.10)',
+                background: lengthMode === 'full' ? tone.bg : 'transparent',
+                color: lengthMode === 'full' ? tone.text : MUTED,
+                borderColor: lengthMode === 'full' ? tone.line : REST_LINE,
               }}
               onClick={() => setLengthMode('full')}
               aria-pressed={lengthMode === 'full'}
@@ -754,9 +763,9 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             <button
               style={{
                 ...s.lengthPill,
-                background: lengthMode === 'paragraph' ? `${accent}14` : 'transparent',
-                color: lengthMode === 'paragraph' ? accent : INK_MID,
-                borderColor: lengthMode === 'paragraph' ? accent : 'rgba(28,24,20,0.10)',
+                background: lengthMode === 'paragraph' ? tone.bg : 'transparent',
+                color: lengthMode === 'paragraph' ? tone.text : MUTED,
+                borderColor: lengthMode === 'paragraph' ? tone.line : REST_LINE,
               }}
               onClick={() => setLengthMode('paragraph')}
               aria-pressed={lengthMode === 'paragraph'}
@@ -777,7 +786,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       {rewriteOptions && (
         <div style={s.rewritePanel} role="region" aria-label="Rewrite options">
           <div style={s.resultHeader}>
-            <div style={{ ...s.resultAction, color: accent }}>Pick a rewrite</div>
+            <div style={{ ...s.resultAction, color: tone.text }}>Pick a rewrite</div>
             <button style={s.discardBtn} onClick={handleDiscard} aria-label="Dismiss rewrite options">{'✕'}</button>
           </div>
           {rewriteOptions.map((opt, i) => (
@@ -786,7 +795,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
               style={s.rewriteOption}
               onClick={() => handlePickRewrite(opt)}
             >
-              <div style={{ ...s.rewriteType, color: accent }}>
+              <div style={{ ...s.rewriteType, color: tone.text }}>
                 {opt.type}
               </div>
               <div style={s.rewriteText}>{opt.text}</div>
@@ -799,7 +808,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       {result && (
         <div style={s.resultPanel} role="region" aria-label="Generated content" aria-live="polite">
           <div style={s.resultHeader}>
-            <div style={{ ...s.resultAction, color: accent }}>
+            <div style={{ ...s.resultAction, color: tone.text }}>
               {activeAction === 'rewrite' ? 'Rewrite' : (ACTIONS.find(a => a.id === activeAction)?.label || 'Generated')}
             </div>
             <button style={s.discardBtn} onClick={handleDiscard} aria-label="Discard generated content">{'✕'}</button>
@@ -839,7 +848,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
 
           <div style={s.resultActions}>
             <button
-              style={{ ...s.insertBtn, background: accent, opacity: loading ? 0.5 : 1 }}
+              style={{ ...s.insertBtn, background: tone.fill, opacity: loading ? 0.5 : 1 }}
               onClick={handleInsert}
               disabled={loading}
             >
@@ -873,10 +882,10 @@ export default WriteModeAIWriter;
 
 // ── STYLES ────────────────────────────────────────────────────────────
 
-const INK       = '#1C1814';
-const INK_MID   = 'rgba(28,24,20,0.5)';
-const INK_LIGHT = 'rgba(28,24,20,0.25)';
-const PARCHMENT = '#FAF7F0';
+// Ink is --text-primary; every lighter ink (it was ink at 0.25 and 0.5 alpha,
+// 1.7-3.3:1 on parchment) is --text-secondary.
+const INK   = 'var(--text-primary)';
+const MUTED = 'var(--text-secondary)';
 
 const s = {
   root: {
@@ -901,20 +910,20 @@ const s = {
   },
   emptyIcon: {
     fontSize: 22,
-    color:    INK_LIGHT,
+    color:    MUTED,
   },
   emptyText: {
     fontFamily: "'Lora', Georgia, serif",
     fontStyle:  'italic',
     fontSize:   12,
-    color:      INK_MID,
+    color:      MUTED,
     lineHeight: 1.6,
     maxWidth:   200,
   },
   emptyHint: {
     fontFamily: "'DM Mono', monospace",
     fontSize:   9,
-    color:      INK_LIGHT,
+    color:      MUTED,
     letterSpacing: '0.06em',
   },
 
@@ -935,7 +944,7 @@ const s = {
     gap:          8,
     padding:      '8px 12px',
     background:   'transparent',
-    border:       '1px solid rgba(28,24,20,0.1)',
+    border:       '1px solid var(--lala-parchment-3)',
     borderRadius: 6,
     cursor:       'pointer',
     textAlign:    'left',
@@ -962,7 +971,7 @@ const s = {
   // Character header
   charHeader: {
     padding:      '10px 14px',
-    borderBottom: '1px solid rgba(28,24,20,0.08)',
+    borderBottom: '1px solid var(--lala-parchment-3)',
   },
   charHeaderTop: {
     display:        'flex',
@@ -972,11 +981,11 @@ const s = {
   },
   changeCharBtn: {
     background:    'none',
-    border:        '1px solid rgba(28,24,20,0.12)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  4,
     padding:       '3px 8px',
     fontSize:      9,
-    color:         INK_MID,
+    color:         MUTED,
     cursor:        'pointer',
     fontFamily:    "'DM Mono', monospace",
     letterSpacing: '0.04em',
@@ -1002,21 +1011,21 @@ const s = {
     fontFamily: "'Lora', Georgia, serif",
     fontStyle:  'italic',
     fontSize:   10,
-    color:      INK_MID,
+    color:      MUTED,
     lineHeight: 1.5,
   },
 
   // Cursor context — shows where insertion will happen
   cursorContext: {
     padding:      '8px 14px',
-    borderBottom: '1px solid rgba(28,24,20,0.06)',
-    background:   'rgba(28,24,20,0.02)',
+    borderBottom: '1px solid var(--lala-parchment-3)',
+    background:   'var(--lala-parchment-2)',
   },
   cursorContextLabel: {
     fontFamily: "'DM Sans', sans-serif",
     fontSize:   10,
     fontWeight:  600,
-    color:       INK_MID,
+    color:       MUTED,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     marginBottom: 4,
@@ -1102,7 +1111,7 @@ const s = {
     fontFamily:    "'Lora', Georgia, serif",
     fontStyle:     'italic',
     fontSize:      11,
-    color:         INK_LIGHT,
+    color:         MUTED,
     textAlign:     'center',
     padding:       '6px 0',
   },
@@ -1132,7 +1141,7 @@ const s = {
   discardBtn: {
     background: 'none',
     border:     'none',
-    color:      INK_LIGHT,
+    color:      MUTED,
     fontSize:   12,
     cursor:     'pointer',
     padding:    '2px 4px',
@@ -1145,9 +1154,9 @@ const s = {
     lineHeight:   1.8,
     flex:         1,
     padding:      '10px 12px',
-    background:   'rgba(28,24,20,0.03)',
+    background:   'var(--lala-parchment-2)',
     borderRadius: 3,
-    border:       '1px solid rgba(28,24,20,0.08)',
+    border:       '1px solid var(--lala-parchment-3)',
     resize:       'vertical',
     minHeight:    80,
     outline:      'none',
@@ -1157,7 +1166,7 @@ const s = {
   retryLoading: {
     fontFamily:    "'DM Mono', monospace",
     fontSize:      9,
-    color:         INK_MID,
+    color:         MUTED,
     letterSpacing: '0.06em',
     fontStyle:     'italic',
     padding:       '2px 0',
@@ -1171,7 +1180,7 @@ const s = {
     border:        'none',
     borderRadius:  3,
     padding:       '10px',
-    color:         PARCHMENT,
+    color:         'var(--text-inverse)',
     fontSize:      9,
     letterSpacing: '0.1em',
     cursor:        'pointer',
@@ -1179,10 +1188,10 @@ const s = {
   },
   tryAgainBtn: {
     background:    'none',
-    border:        '1px solid rgba(28,24,20,0.1)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  3,
     padding:       '8px',
-    color:         INK_MID,
+    color:         MUTED,
     fontSize:      9,
     letterSpacing: '0.08em',
     cursor:        'pointer',
@@ -1195,10 +1204,10 @@ const s = {
   },
   copyBtn: {
     background:    'none',
-    border:        '1px solid rgba(28,24,20,0.1)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  3,
     padding:       '8px 10px',
-    color:         INK_MID,
+    color:         MUTED,
     fontSize:      9,
     letterSpacing: '0.08em',
     cursor:        'pointer',
@@ -1210,7 +1219,7 @@ const s = {
   error: {
     padding:    '10px 14px',
     fontSize:   10,
-    color:      '#B85C38',
+    color:      'var(--danger-text)',
     fontStyle:  'italic',
     fontFamily: "'Lora', Georgia, serif",
   },
@@ -1222,8 +1231,8 @@ const s = {
     gap:          6,
     padding:      '8px 10px',
     fontSize:     9,
-    color:        '#B85C38',
-    background:   'rgba(184,92,56,0.06)',
+    color:        'var(--danger-text)',
+    background:   'var(--danger-bg)',
     borderRadius: 3,
     fontFamily:   "'DM Mono', monospace",
     letterSpacing:'0.04em',
@@ -1236,10 +1245,10 @@ const s = {
   },
   driftRetryBtn: {
     marginLeft:   'auto',
-    background:   'rgba(184,92,56,0.10)',
-    border:       '1px solid rgba(184,92,56,0.25)',
+    background:   'var(--danger-bg)',
+    border:       '1px solid var(--danger-border)',
     borderRadius: 3,
-    color:        '#B85C38',
+    color:        'var(--danger-text)',
     fontSize:     9,
     fontFamily:   "'DM Mono', monospace",
     padding:      '2px 8px',
@@ -1262,8 +1271,8 @@ const s = {
     flexDirection: 'column',
     gap:          4,
     padding:      '10px 12px',
-    background:   'rgba(28,24,20,0.03)',
-    border:       '1px solid rgba(28,24,20,0.08)',
+    background:   'var(--lala-parchment-2)',
+    border:       '1px solid var(--lala-parchment-3)',
     borderRadius: 6,
     cursor:       'pointer',
     textAlign:    'left',
