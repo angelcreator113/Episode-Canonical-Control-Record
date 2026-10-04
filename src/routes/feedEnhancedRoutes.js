@@ -150,11 +150,11 @@ router.put('/:showId/moments/:momentId/post', requireAuth, async (req, res) => {
 router.post('/:showId/moments/:episodeId/beat', requireAuth, async (req, res) => {
   try {
     const { createMomentForPost } = require('../services/feedMomentLink');
-    const { moment, post, created } = await createMomentForPost(require('../models'), {
+    const { moment, post, created, story } = await createMomentForPost(require('../models'), {
       showId: req.params.showId, episodeId: req.params.episodeId,
       beatNumber: req.body?.beat_number, feedPostId: req.body?.feed_post_id,
     });
-    return res.status(created ? 201 : 200).json({ success: true, created, data: { ...moment.toJSON(), post: post.toJSON() } });
+    return res.status(created ? 201 : 200).json({ success: true, created, story_check: story, data: { ...moment.toJSON(), post: post.toJSON() } });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[FeedEnhanced] Put post at beat error:', err);

@@ -4,6 +4,7 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { BEATS, beatName } from '../lib/canonicalBeats';
+import { postOrder, storyLabel } from '../lib/storyClock';
 import './SocialMediaPage.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -252,6 +253,7 @@ export function PostCard({ post, onChange, showId }) {
         <p className="sm-item-meta">
           {post.status === 'draft' && <><span className="sm-badge">draft</span> · </>}
           <span>{whenLabel(post.posted_at) || 'undated'}</span>
+          {storyLabel(postOrder(post)) && <> · <span className="sm-story" title="Story time: when this happens in Lala's world">{storyLabel(postOrder(post))}</span></>}
           {' · '}<button type="button" className="sm-link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
           {showId && <>{' · '}<button type="button" className="sm-link-btn" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button></>}
           {post.narrative_function && <> · <span className="sm-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}

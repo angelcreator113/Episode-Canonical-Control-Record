@@ -83,6 +83,7 @@
 .sm-link-btn { background: none; border: none; padding: 0; font: inherit; font-size: inherit; cursor: pointer; }
 .sm-link-btn:hover { text-decoration: underline; }
 .sm-fn { color: var(--text-secondary); }
+.sm-story { color: var(--lala-lavender-text); font-weight: 600; }
 .sm-item-likes { margin: 3px 0 0; padding: 2px 6px; background: var(--lala-parchment-2); color: var(--text-secondary); font-size: 10px; }
 .sm-comments { margin: 4px 0 0; padding: 0; list-style: none; }
 .sm-comments li { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; margin-top: 2px; background: var(--lala-lavender-soft); border-radius: 2px; font-size: 11px; }

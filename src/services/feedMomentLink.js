@@ -18,7 +18,28 @@ class LinkError extends Error {
 /** The attributes a screen needs from a linked post. */
 const POST_ATTRIBUTES = ['id', 'status', 'poster_handle', 'poster_display_name', 'poster_platform',
   'post_type', 'content_text', 'image_url', 'image_description', 'likes', 'comments_count',
-  'shares', 'sample_comments', 'posted_at', 'episode_id', 'narrative_function'];
+  'shares', 'sample_comments', 'posted_at', 'episode_id', 'narrative_function',
+  'story_order', 'timeline_position'];
+
+/**
+ * The story clock (services/storyClock.js, docs/FEED_POSTS.md rule 9): a
+ * post can be shown at a beat only when it exists by then in story time.
+ * Without the Episode model, or with an episode or post whose number is
+ * unknown, the check passes as 'unknown'.
+ */
+async function storyCheck(models, post, targetEpisodeId) {
+  const { Episode } = models;
+  const { postOrder, checkAtBeat } = require('./storyClock');
+  if (!Episode) return { ok: true, check: 'unknown' };
+  const target = await Episode.findOne({ where: { id: targetEpisodeId }, attributes: ['id', 'episode_number'] });
+  let ownNumber = null;
+  if (post.episode_id) {
+    const own = String(post.episode_id) === String(targetEpisodeId) ? target
+      : await Episode.findOne({ where: { id: post.episode_id }, attributes: ['id', 'episode_number'] });
+    ownNumber = own?.episode_number ?? null;
+  }
+  return checkAtBeat(postOrder(post, ownNumber), target?.episode_number ?? null);
+}
 
 async function linkMomentToPost(models, { showId, momentId, feedPostId }) {
   const { FeedMoment, FeedPost } = models;
@@ -38,9 +59,11 @@ async function linkMomentToPost(models, { showId, momentId, feedPostId }) {
   if (post.status === 'draft' && String(post.episode_id) !== String(moment.episode_id)) {
     throw new LinkError(400, 'A draft post can only be shown by a beat of its own episode');
   }
+  const story = await storyCheck(models, post, moment.episode_id);
+  if (!story.ok) throw new LinkError(409, story.message);
 
   await moment.update({ feed_post_id: post.id });
-  return { moment, post };
+  return { moment, post, story: story.check };
 }
 
 /**
@@ -63,15 +86,17 @@ async function createMomentForPost(models, { showId, episodeId, beatNumber, feed
   if (post.status === 'draft' && String(post.episode_id) !== String(episodeId)) {
     throw new LinkError(400, 'A draft post can only be shown by a beat of its own episode');
   }
+  const story = await storyCheck(models, post, episodeId);
+  if (!story.ok) throw new LinkError(409, story.message);
   const existing = await FeedMoment.findOne({ where: { episode_id: episodeId, beat_number: beat, feed_post_id: post.id } });
-  if (existing) return { moment: existing, post, created: false };
+  if (existing) return { moment: existing, post, created: false, story: story.check };
   const sortOrder = await FeedMoment.count({ where: { episode_id: episodeId, beat_number: beat } });
   const moment = await FeedMoment.create({
     show_id: showId, episode_id: episodeId, beat_number: beat,
     phone_screen_type: 'post', trigger_handle: post.poster_handle || null,
     feed_post_id: post.id, sort_order: sortOrder,
   });
-  return { moment, post, created: true };
+  return { moment, post, created: true, story: story.check };
 }
 
-module.exports = { linkMomentToPost, createMomentForPost, LinkError, POST_ATTRIBUTES };
+module.exports = { linkMomentToPost, createMomentForPost, storyCheck, LinkError, POST_ATTRIBUTES };

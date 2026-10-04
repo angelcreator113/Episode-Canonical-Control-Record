@@ -78,6 +78,10 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(16), allowNull: false, defaultValue: 'live',
       validate: { isIn: [['draft', 'live']] },
     },
+
+    // The story time a wall post (no episode) was stamped with: episode
+    // number * 10 + phase (migration 20261004180000, services/storyClock.js).
+    story_order: { type: DataTypes.INTEGER, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
