@@ -1,8 +1,8 @@
 /**
- * The Sidebar's WORLD zone after the LalaVerse hub (2026-10-04): three rows
- * (LalaVerse, Show Bible, Social Media); the Show Bible row deep-links to the
- * hub's Bible tab and is the active row there, while the LalaVerse row is
- * active on the hub's other tabs and yields to Show Bible on its own.
+ * The Sidebar's WORLD zone after the LalaVerse hub (2026-10-04): two rows
+ * (LalaVerse, Social Media). The Show Bible row is gone (Evoni, 2026-10-04):
+ * the Bible is the hub's Bible tab, and LalaVerse is the active row on every
+ * hub tab, the Bible tab included.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -22,25 +22,23 @@ const row = (label) => screen.getByText(label).closest('a');
 beforeEach(() => { window.localStorage.clear(); });
 
 describe('Sidebar: the WORLD zone', () => {
-  test('three rows; Show Bible deep-links to the hub tab', () => {
+  test('two rows: LalaVerse and Social Media; no Show Bible row', () => {
     renderAt('/');
     expect(row('LalaVerse').getAttribute('href')).toBe('/universe');
-    expect(row('Show Bible').getAttribute('href')).toBe('/universe?tab=bible');
     expect(row('Social Media').getAttribute('href')).toBe('/feed');
-    for (const gone of ['World Dashboard', 'World Foundation', 'Social Systems', 'Culture & Events']) {
+    for (const gone of ['Show Bible', 'World Dashboard', 'World Foundation', 'Social Systems', 'Culture & Events']) {
       expect(screen.queryByText(gone)).toBeNull();
     }
+    expect(document.querySelector('a[href="/universe?tab=bible"]')).toBeNull();
   });
 
-  test('on the Bible tab the Show Bible row is active and LalaVerse is not', () => {
+  test('on the Bible tab LalaVerse is the active row', () => {
     renderAt('/universe?tab=bible');
-    expect(row('Show Bible').className).toContain('ps-nav-item-active');
-    expect(row('LalaVerse').className).not.toContain('ps-nav-item-active');
+    expect(row('LalaVerse').className).toContain('ps-nav-item-active');
   });
 
-  test('on another hub tab LalaVerse is active and Show Bible is not', () => {
+  test('on another hub tab LalaVerse is the active row', () => {
     renderAt('/universe?tab=world');
     expect(row('LalaVerse').className).toContain('ps-nav-item-active');
-    expect(row('Show Bible').className).not.toContain('ps-nav-item-active');
   });
 });

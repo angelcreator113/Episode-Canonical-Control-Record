@@ -24,10 +24,11 @@ function buildNav(shows, activeId) {
     {
       zone: 'WORLD',
       items: [
-        // The world pages (map and locations, society, culture, setup and
-        // state) are the LalaVerse hub's tabs (2026-10-04), not rows here.
+        // The world pages (the Show Bible, map and locations, society,
+        // culture, setup and state) are the LalaVerse hub's tabs
+        // (2026-10-04), not rows here. The Show Bible row is gone too
+        // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
-        { icon: '📖', label: 'Show Bible', route: '/universe?tab=bible', hint: 'The canon, one click' },
         { icon: '📱', label: 'Social Media', route: '/feed', hint: 'What was said, and who said it' },
       ],
     },
@@ -143,9 +144,9 @@ function Sidebar({ isOpen, onClose }) {
   // Active-match helper
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + '/');
-  // A row whose route carries a query (Show Bible → /universe?tab=bible) is
-  // active on that exact URL; a plain row on its path, unless a sibling row
-  // with a query matches exactly (LalaVerse yields to Show Bible).
+  // A row whose route carries a query (?tab=) is active on that exact URL;
+  // a plain row on its path, unless a sibling row with a query matches
+  // exactly (the plain row yields to it).
   const here = location.pathname + location.search;
   const rowActive = (item, siblings, routerActive) => {
     if (item.route.includes('?')) return here === item.route;

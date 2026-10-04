@@ -64,7 +64,7 @@ entries:
 | Zone | Entry → route |
 |---|---|
 | (fixed) | brand mark → `/start` (:173); Home → `/` (`NavLink`, :202); footer avatar → `/settings` (:418) |
-| FRANCHISE | LalaVerse `/universe` · Show Bible `/show-bible` · World Dashboard `/world-dashboard` · World Foundation `/world-foundation` · Social Systems `/social-systems` · Culture & Events `/culture-events` · Lala's Feed `/feed?layer=lalaverse` — **2026-10-04:** the four world rows are gone; they are the LalaVerse hub's tabs (World, Society, Culture, State; `UniversePage`), and the zone is LalaVerse, Show Bible, Lala's Feed; the Show Bible is the hub's Bible tab too, and its row deep-links there (`/universe?tab=bible`). |
+| FRANCHISE | LalaVerse `/universe` · Show Bible `/show-bible` · World Dashboard `/world-dashboard` · World Foundation `/world-foundation` · Social Systems `/social-systems` · Culture & Events `/culture-events` · Lala's Feed `/feed?layer=lalaverse` — **2026-10-04:** the four world rows are gone; they are the LalaVerse hub's tabs (World, Society, Culture, State; `UniversePage`), and the zone is LalaVerse, Show Bible, Lala's Feed; the Show Bible is the hub's Bible tab too, and its row deep-linked there (`/universe?tab=bible`). **2026-10-04, later:** the Show Bible row is gone (Evoni); the Bible is reached through LalaVerse, its Bible tab. |
 | PRODUCE | Producer Mode `/shows/:id/world?tab=overview` (only when a show exists) · Shows `/shows`, expandable to each `/shows/:id` and `+ New Show` `/shows/create` |
 | WRITE | Stories `/stories` (children: Structure `/story-engine`, Threads `/story-threads`, Calendar `/story-calendar`) · Characters `/character-registry?view=world` · Relationships `/relationships` |
 | STUDIO | Timeline Editor `/studio/timeline` · Compositions `/library` |
@@ -244,7 +244,6 @@ Search                            /search
 
 WORLD — what exists
   LalaVerse                       /universe   (tabs: Overview · Show Bible · World · Society · Culture · State, 2026-10-04)
-  Show Bible                      /universe?tab=bible   (the hub's Bible tab, one click)
   Lala's Feed                     /feed?layer=lalaverse
 
 PRODUCE — what am I making now

@@ -11,7 +11,8 @@
  * copy in lalaverseOrientation.js): what it holds, what reads it, what to
  * do here. Each tab mounts its page in embedded mode; `?tab=`
  * names the tab and `?sub=` the page's own tab (utils/worldRedirects.js).
- * The Sidebar's Show Bible row deep-links to the Bible tab.
+ * The Sidebar's LalaVerse row opens the hub; the Bible is its Bible tab
+ * (the Sidebar's own Show Bible row is gone, 2026-10-04).
  *
  * No hardcoded universe ID: it loads the active show (useActiveShow,
  * audit CTX-01) and asks which show when several exist and none is active.
