@@ -10,14 +10,13 @@ import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
-import { contrast, readToken } from '../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
 const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 // Task references ("Task #2361") are not colors.
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripTaskRefs = (s) => s.replace(/#\d{4}\b/g, '');
 
 const slice = (text, start, end) => {
   const a = text.indexOf(start);

@@ -10,7 +10,7 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const read = (rel) => readFileSync(resolve(__dirname, rel), 'utf8');
 const files = {
@@ -25,13 +25,12 @@ const files = {
 const tokens = read('../../styles/design-tokens.css');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 // Task references ("Task #2386") are not colors.
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 const tab = files['EpisodeOverviewTab.jsx'];
 const css = files['EpisodeOverviewTab.css'];
 
 describe('Episode Overview theme', () => {
   test.each(Object.keys(files))('%s carries no color literal', (name) => {
-    expect(stripRefs(files[name])).not.toMatch(HEX);
+    expect(stripTaskRefs(files[name])).not.toMatch(HEX);
   });
 
   test('the actions are the primary and gold is never under white nor text', () => {

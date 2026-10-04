@@ -11,16 +11,15 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'EpisodeTodoList.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Episode Todo list theme', () => {
   test('the component carries no color literal and no gradient; the only rgba is the modal scrim', () => {
-    expect(stripRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
     expect(jsx.match(/rgba\(/g)).toHaveLength(1);
     expect(jsx).toMatch(/background: 'rgba\(0,0,0,0\.7\)'/);

@@ -10,18 +10,17 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'EpisodeScriptTab.jsx'), 'utf8');
 const css = readFileSync(resolve(__dirname, 'EpisodeScriptTab.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Episode Script theme', () => {
   test('the tab and its stylesheet carry no color literal and no gradient', () => {
-    expect(stripRefs(jsx)).not.toMatch(HEX);
-    expect(stripRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
     expect(css).not.toMatch(/linear-gradient/);
   });

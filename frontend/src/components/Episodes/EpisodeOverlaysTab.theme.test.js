@@ -8,19 +8,18 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'EpisodeOverlaysTab.css'), 'utf8');
 const jsx = readFileSync(resolve(__dirname, 'EpisodeOverlaysTab.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Episode Overlays theme', () => {
   test('the stylesheet and the tab carry no color literal, not even as a var() fallback', () => {
-    expect(stripRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(css).not.toMatch(/var\(--[a-z0-9-]+,\s*#/i);
-    expect(stripRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
   });
 
   test('statuses, the cost and the checkerboard read the tokens', () => {

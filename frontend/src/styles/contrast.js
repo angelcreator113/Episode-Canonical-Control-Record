@@ -32,3 +32,15 @@ export function readToken(sources, name, seen = new Set()) {
   const alias = value.match(/^var\((--[a-z0-9-]+)\)$/i);
   return alias ? readToken(sources, alias[1], seen) : value;
 }
+
+/**
+ * Drops task and issue references ("Task #2292", "PRs #1590/#1593") from a
+ * source text before it is scanned for color literals, so the scan reads
+ * only colors. A color literal is quoted or follows a colon or "solid"; a
+ * reference never is ("Phase A, #2278" is prose, so a comma does not mark a
+ * color; a gradient's value list is caught by each guard's own gradient
+ * check). Stripping every "#" plus three or four digits hid the all-digit
+ * greys #333, #555, #666, #777, #888 and #999 when they were colors
+ * (docs/VISUAL_SYSTEM.md §5).
+ */
+export const stripTaskRefs = (s) => s.replace(/(?<!['":]\s?)(?<!solid\s)#\d{3,4}\b/g, '');

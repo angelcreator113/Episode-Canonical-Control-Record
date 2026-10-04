@@ -11,21 +11,20 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'EpisodeLalasPhoneTab.css'), 'utf8');
 const tab = readFileSync(resolve(__dirname, 'EpisodeLalasPhoneTab.jsx'), 'utf8');
 const missions = readFileSync(resolve(__dirname, 'EpisodePhoneMissionsTab.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Episode Phone theme', () => {
   test('the stylesheet, the tab and the missions section carry no color literal, not even as a var() fallback', () => {
-    expect(stripRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(css).not.toMatch(/var\(--[a-z0-9-]+,\s*#/i);
-    expect(stripRefs(tab)).not.toMatch(HEX);
-    expect(stripRefs(missions)).not.toMatch(HEX);
+    expect(stripTaskRefs(tab)).not.toMatch(HEX);
+    expect(stripTaskRefs(missions)).not.toMatch(HEX);
   });
 
   test('the buttons are the primary, the badge is ink on gold, gold is never text', () => {
