@@ -422,61 +422,60 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         }
         .scenes-panel-title {
           font-family: 'Playfair Display', 'Lora', Georgia, serif;
-          font-size: 20px; font-weight: 600; color: #1C1814; margin: 0 0 4px;
+          font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px;
         }
         .scenes-panel-count {
           font-family: 'DM Mono', monospace; font-size: 10px;
-          letter-spacing: 0.1em; color: rgba(28,24,20,0.4);
+          letter-spacing: 0.1em; color: var(--text-secondary);
         }
         .scenes-panel-empty {
           text-align: center; padding: 48px 24px;
           font-family: 'Lora', Georgia, serif; font-style: italic;
-          color: rgba(28,24,20,0.4); font-size: 14px;
+          color: var(--text-secondary); font-size: 14px;
         }
 
         /* ── Book-level AI button ── */
         .scenes-panel-ai-book-btn {
-          background: linear-gradient(135deg, rgba(198,168,94,0.08), rgba(198,168,94,0.15));
-          border: 1px solid rgba(198,168,94,0.25);
+          background: var(--lala-gold-soft);
+          border: 1px solid var(--lala-gold-line);
           border-radius: 6px; padding: 8px 16px;
           font-family: 'DM Mono', monospace; font-size: 10px;
-          letter-spacing: 0.08em; color: #B8962E;
+          letter-spacing: 0.08em; color: var(--lala-gold-text);
           cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
         }
         .scenes-panel-ai-book-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, rgba(198,168,94,0.15), rgba(198,168,94,0.25));
-          border-color: rgba(198,168,94,0.4);
+          border-color: var(--lala-gold);
         }
         .scenes-panel-ai-book-btn:disabled { opacity: 0.6; cursor: wait; }
 
         /* ── AI error ── */
         .scenes-panel-ai-error {
           display: flex; align-items: center; justify-content: space-between;
-          background: rgba(184,92,56,0.06); border: 1px solid rgba(184,92,56,0.15);
+          background: var(--danger-bg); border: 1px solid var(--danger-border);
           border-radius: 6px; padding: 10px 14px; margin-bottom: 16px;
-          font-family: 'DM Sans', sans-serif; font-size: 12px; color: #B85C38;
+          font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--danger-text);
         }
         .scenes-panel-ai-error button {
           background: none; border: none; font-size: 16px;
-          color: #B85C38; cursor: pointer;
+          color: var(--danger-text); cursor: pointer;
         }
 
         /* ── Book-wide AI results ── */
         .scenes-panel-ai-book-results {
-          background: rgba(198,168,94,0.03);
-          border: 1px solid rgba(198,168,94,0.12);
+          background: var(--lala-gold-soft);
+          border: 1px solid var(--lala-gold-line);
           border-radius: 8px; padding: 16px; margin-bottom: 24px;
         }
         .scenes-panel-ai-book-label {
           font-family: 'DM Mono', monospace; font-size: 10px;
-          letter-spacing: 0.12em; color: #B8962E; margin-bottom: 12px;
+          letter-spacing: 0.12em; color: var(--lala-gold-text); margin-bottom: 12px;
           text-transform: uppercase;
         }
 
         /* ── AI card (book-wide) ── */
         .scenes-panel-ai-card {
-          background: rgba(250,248,245,0.8);
-          border: 1px solid rgba(232,226,218,0.6);
+          background: var(--surface-card);
+          border: 1px solid var(--lala-parchment-3);
           border-radius: 6px; padding: 12px 14px; margin-bottom: 10px;
         }
         .scenes-panel-ai-card-head {
@@ -484,29 +483,29 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         }
         .scenes-panel-ai-card-title {
           font-family: 'Lora', Georgia, serif; font-size: 14px;
-          font-weight: 600; color: #1C1814;
+          font-weight: 600; color: var(--text-primary);
         }
         .scenes-panel-ai-card-ch {
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: rgba(28,24,20,0.35); letter-spacing: 0.05em;
+          color: var(--text-secondary); letter-spacing: 0.05em;
         }
         .scenes-panel-ai-card-desc {
           font-family: 'Lora', Georgia, serif; font-size: 12.5px;
-          color: rgba(28,24,20,0.7); line-height: 1.5; margin: 0 0 6px;
+          color: var(--text-secondary); line-height: 1.5; margin: 0 0 6px;
         }
         .scenes-panel-ai-card-reason {
           font-family: 'DM Sans', sans-serif; font-size: 11px;
-          color: rgba(28,24,20,0.45); margin: 0 0 6px; font-style: italic;
+          color: var(--text-secondary); margin: 0 0 6px; font-style: italic;
         }
         .scenes-panel-ai-card-reason-label {
-          font-weight: 600; font-style: normal; color: rgba(28,24,20,0.5);
+          font-weight: 600; font-style: normal; color: var(--text-secondary);
         }
         .scenes-panel-ai-card-chars {
           display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;
         }
         .scenes-panel-ai-char-tag {
           font-family: 'DM Mono', monospace; font-size: 9px;
-          background: rgba(198,168,94,0.1); color: #B8962E;
+          background: var(--lala-gold-soft); color: var(--lala-gold-text);
           border-radius: 3px; padding: 2px 6px;
         }
         .scenes-panel-ai-card-actions {
@@ -520,53 +519,52 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         .scenes-panel-ai-plan-btn {
           background: none; border: none;
           font-family: 'DM Mono', monospace; font-size: 9px;
-          letter-spacing: 0.08em; color: #B8962E;
+          letter-spacing: 0.08em; color: var(--lala-gold-text);
           cursor: pointer; padding: 8px 0; transition: all 0.12s ease;
-          opacity: 0.7;
         }
-        .scenes-panel-ai-plan-btn:hover:not(:disabled) { opacity: 1; }
+        .scenes-panel-ai-plan-btn:hover:not(:disabled) { text-decoration: underline; }
         .scenes-panel-ai-plan-btn:disabled { opacity: 0.5; cursor: wait; }
 
         /* ── AI suggestions per chapter ── */
         .scenes-panel-ai-suggestions {
-          background: rgba(198,168,94,0.03);
-          border: 1px solid rgba(198,168,94,0.1);
+          background: var(--lala-gold-soft);
+          border: 1px solid var(--lala-gold-line);
           border-radius: 6px; padding: 12px; margin-top: 8px;
         }
         .scenes-panel-ai-label {
           font-family: 'DM Mono', monospace; font-size: 9px;
-          letter-spacing: 0.12em; color: #B8962E; margin-bottom: 10px;
+          letter-spacing: 0.12em; color: var(--lala-gold-text); margin-bottom: 10px;
           text-transform: uppercase;
         }
         .scenes-panel-ai-sug-card {
-          background: rgba(250,248,245,0.8);
-          border: 1px solid rgba(232,226,218,0.5);
+          background: var(--surface-card);
+          border: 1px solid var(--lala-parchment-3);
           border-radius: 5px; padding: 10px 12px; margin-bottom: 8px;
         }
         .scenes-panel-ai-sug-head {
           display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px;
         }
         .scenes-panel-ai-sug-pos {
-          font-size: 8px; color: rgba(28,24,20,0.25);
+          font-size: 8px; color: var(--text-secondary);
         }
         .scenes-panel-ai-sug-title {
           font-family: 'Lora', Georgia, serif; font-size: 13px;
-          font-weight: 600; color: #1C1814;
+          font-weight: 600; color: var(--text-primary);
         }
         .scenes-panel-ai-sug-beat {
           font-family: 'DM Sans', sans-serif; font-size: 10px;
-          color: #B8962E; font-style: italic; margin-left: auto;
+          color: var(--lala-gold-text); font-style: italic; margin-left: auto;
         }
         .scenes-panel-ai-sug-desc {
           font-family: 'Lora', Georgia, serif; font-size: 12px;
-          color: rgba(28,24,20,0.65); line-height: 1.45; margin: 0 0 4px;
+          color: var(--text-secondary); line-height: 1.45; margin: 0 0 4px;
         }
         .scenes-panel-ai-sug-purpose {
           font-family: 'DM Sans', sans-serif; font-size: 10.5px;
-          color: rgba(28,24,20,0.4); margin: 0 0 6px; font-style: italic;
+          color: var(--text-secondary); margin: 0 0 6px; font-style: italic;
         }
         .scenes-panel-ai-sug-purpose-label {
-          font-weight: 600; font-style: normal; color: rgba(28,24,20,0.45);
+          font-weight: 600; font-style: normal; color: var(--text-secondary);
         }
         .scenes-panel-ai-sug-actions {
           display: flex; gap: 8px;
@@ -574,33 +572,33 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
 
         /* ── Shared AI action buttons ── */
         .scenes-panel-ai-accept {
-          background: rgba(74,155,111,0.08); border: 1px solid rgba(74,155,111,0.2);
+          background: var(--success-bg); border: 1px solid var(--success-border);
           border-radius: 4px; padding: 4px 10px;
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: #4A9B6F; cursor: pointer; transition: all 0.12s ease;
+          color: var(--success-text); cursor: pointer; transition: all 0.12s ease;
         }
         .scenes-panel-ai-accept:hover {
-          background: rgba(74,155,111,0.15); border-color: rgba(74,155,111,0.35);
+          border-color: var(--success);
         }
         .scenes-panel-ai-dismiss {
           background: none; border: none;
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: rgba(28,24,20,0.3); cursor: pointer;
+          color: var(--text-secondary); cursor: pointer;
         }
-        .scenes-panel-ai-dismiss:hover { color: rgba(28,24,20,0.5); }
+        .scenes-panel-ai-dismiss:hover { color: var(--text-primary); }
         .scenes-panel-ai-clear {
           background: none; border: none;
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: rgba(28,24,20,0.25); cursor: pointer;
+          color: var(--text-secondary); cursor: pointer;
           padding: 6px 0; margin-top: 4px;
         }
-        .scenes-panel-ai-clear:hover { color: rgba(28,24,20,0.4); }
+        .scenes-panel-ai-clear:hover { color: var(--text-primary); }
 
         /* ── Chapter type badge ── */
         .scenes-panel-ch-type {
           font-family: 'DM Mono', monospace; font-size: 8px;
           letter-spacing: 0.08em; text-transform: uppercase;
-          color: #B8962E; background: rgba(198,168,94,0.08);
+          color: var(--lala-gold-text); background: var(--lala-gold-soft);
           border-radius: 3px; padding: 1px 5px;
         }
 
@@ -608,31 +606,31 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         .scenes-panel-chapter { margin-bottom: 2px; }
         .scenes-panel-chapter-btn {
           display: flex; align-items: center; gap: 10px; width: 100%;
-          background: none; border: none; border-bottom: 1px solid rgba(28,24,20,0.06);
+          background: none; border: none; border-bottom: 1px solid var(--lala-parchment-2);
           padding: 12px 8px; cursor: pointer; text-align: left;
           transition: background 0.12s ease;
         }
-        .scenes-panel-chapter-btn:hover { background: rgba(28,24,20,0.02); }
+        .scenes-panel-chapter-btn:hover { background: var(--lala-parchment-2); }
         .scenes-panel-ch-num {
           font-family: 'DM Mono', monospace; font-size: 10px;
-          color: rgba(28,24,20,0.35); min-width: 40px;
+          color: var(--text-secondary); min-width: 40px;
         }
         .scenes-panel-ch-title {
-          flex: 1; font-family: 'Lora', Georgia, serif; font-size: 14px; color: #1C1814;
+          flex: 1; font-family: 'Lora', Georgia, serif; font-size: 14px; color: var(--text-primary);
         }
         .scenes-panel-ch-count {
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: rgba(28,24,20,0.3); letter-spacing: 0.05em;
+          color: var(--text-secondary); letter-spacing: 0.05em;
         }
         .scenes-panel-ch-arrow {
-          font-size: 10px; color: rgba(28,24,20,0.3); min-width: 14px; text-align: center;
+          font-size: 10px; color: var(--text-secondary); min-width: 14px; text-align: center;
         }
         .scenes-panel-scenes {
           padding: 4px 0 12px 52px;
         }
         .scenes-panel-no-scenes {
           font-family: 'Lora', Georgia, serif; font-style: italic;
-          font-size: 12px; color: rgba(28,24,20,0.3); padding: 8px 0;
+          font-size: 12px; color: var(--text-secondary); padding: 8px 0;
         }
         .scenes-panel-scene {
           display: flex; align-items: center; gap: 8px;
@@ -640,59 +638,59 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         }
         .scenes-panel-scene-num {
           font-family: 'DM Mono', monospace; font-size: 9px;
-          color: rgba(28,24,20,0.25); min-width: 16px;
+          color: var(--text-secondary); min-width: 16px;
         }
         .scenes-panel-scene-dinkus {
-          font-size: 8px; color: #B8962E; opacity: 0.6;
+          font-size: 8px; color: var(--lala-gold); opacity: 0.6;
         }
         .scenes-panel-scene-title {
-          color: #1C1814; cursor: default; flex: 1;
+          color: var(--text-primary); cursor: default; flex: 1;
         }
-        .scenes-panel-scene-title:hover { text-decoration: underline dotted rgba(28,24,20,0.2); }
+        .scenes-panel-scene-title:hover { text-decoration: underline dotted var(--text-secondary); }
         .scenes-panel-scene-edit {
-          flex: 1; border: none; border-bottom: 1px solid rgba(184,150,46,0.4);
+          flex: 1; border: none; border-bottom: 1px solid var(--lala-gold);
           background: none; font-family: 'Lora', Georgia, serif; font-size: 13px;
-          color: #1C1814; padding: 2px 0; outline: none;
+          color: var(--text-primary); padding: 2px 0; outline: none;
         }
         .scenes-panel-scene-del {
-          background: none; border: none; font-size: 14px; color: rgba(28,24,20,0.2);
+          background: none; border: none; font-size: 14px; color: var(--text-secondary);
           cursor: pointer; padding: 2px 4px; opacity: 0; transition: opacity 0.1s ease;
         }
         .scenes-panel-scene:hover .scenes-panel-scene-del { opacity: 1; }
-        .scenes-panel-scene-del:hover { color: #B85C38; }
+        .scenes-panel-scene-del:hover { color: var(--danger-text); }
         .scenes-panel-scene-gen {
-          background: none; border: 1px solid rgba(184,150,46,0.25);
+          background: none; border: 1px solid var(--lala-gold-line);
           border-radius: 3px; font-family: 'DM Mono', monospace;
-          font-size: 9px; letter-spacing: 0.04em; color: #B8962E;
+          font-size: 9px; letter-spacing: 0.04em; color: var(--lala-gold-text);
           cursor: pointer; padding: 2px 8px; opacity: 0;
           transition: opacity 0.1s ease, background 0.12s ease;
         }
         .scenes-panel-scene:hover .scenes-panel-scene-gen { opacity: 1; }
-        .scenes-panel-scene-gen:hover { background: rgba(184,150,46,0.08); }
+        .scenes-panel-scene-gen:hover { background: var(--lala-gold-soft); }
 
         /* Add scene */
         .scenes-panel-add-btn {
           background: none; border: none; font-family: 'DM Mono', monospace;
-          font-size: 9px; letter-spacing: 0.08em; color: rgba(28,24,20,0.35);
+          font-size: 9px; letter-spacing: 0.08em; color: var(--text-secondary);
           cursor: pointer; padding: 8px 0; transition: color 0.12s ease;
         }
-        .scenes-panel-add-btn:hover { color: #B8962E; }
+        .scenes-panel-add-btn:hover { color: var(--lala-gold-text); }
         .scenes-panel-add-row {
           display: flex; align-items: center; gap: 6px; padding: 6px 0;
         }
         .scenes-panel-add-input {
-          flex: 1; border: none; border-bottom: 1px solid rgba(28,24,20,0.12);
+          flex: 1; border: none; border-bottom: 1px solid var(--lala-parchment-3);
           background: none; font-family: 'Lora', Georgia, serif; font-size: 13px;
-          color: #1C1814; padding: 4px 0; outline: none;
+          color: var(--text-primary); padding: 4px 0; outline: none;
         }
-        .scenes-panel-add-input:focus { border-bottom-color: rgba(184,150,46,0.4); }
+        .scenes-panel-add-input:focus { border-bottom-color: var(--lala-gold); }
         .scenes-panel-add-confirm,
         .scenes-panel-add-cancel {
           background: none; border: none; font-size: 14px;
-          cursor: pointer; padding: 2px 4px; color: rgba(28,24,20,0.4);
+          cursor: pointer; padding: 2px 4px; color: var(--text-secondary);
         }
-        .scenes-panel-add-confirm:hover { color: #4A9B6F; }
-        .scenes-panel-add-cancel:hover { color: #B85C38; }
+        .scenes-panel-add-confirm:hover { color: var(--success-text); }
+        .scenes-panel-add-cancel:hover { color: var(--danger-text); }
 
         @media (max-width: 480px) {
           .scenes-panel { padding: 16px 12px; }
