@@ -23,6 +23,7 @@ const db = require('../models');
 const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
+const { factsOf } = require('../services/worldFacts');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -954,8 +955,8 @@ async function loadWorldStateContext(chapterId, bookId) {
       const parts = [`World State: "${snapshot.snapshot_label}"`];
       const threads = Array.isArray(snapshot.active_threads) ? snapshot.active_threads : [];
       if (threads.length) parts.push(`  Active threads: ${threads.slice(0, 6).map(t => typeof t === 'string' ? t : t.name || JSON.stringify(t)).join('; ')}`);
-      const facts = Array.isArray(snapshot.world_facts) ? snapshot.world_facts : [];
-      if (facts.length) parts.push(`  Established facts: ${facts.slice(0, 6).map(f => typeof f === 'string' ? f : f.fact || JSON.stringify(f)).join('; ')}`);
+      const facts = factsOf(snapshot);
+      if (facts.length) parts.push(`  Established facts: ${facts.slice(0, 6).join('; ')}`);
       sections.push(parts.join('\n'));
     }
 
