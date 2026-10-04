@@ -95,7 +95,16 @@ Found by reading, not yet run:
   `{ status: 'passed' | 'issues' | 'check_failed', passed, warnings, rules_checked, message }`,
   with `check_failed` never a pass; both Guard screens render the three states;
   `ShowBiblePage.guard.test.jsx` and `tests/unit/routes/franchise-brain-guard-contract.test.js`
-  pin both ends.
+  pin both ends. The Show Bible's Knowledge tab grouped entries by `content.section` on an
+  object the API never sends (content is text) and then by `applies_to[0]` (`show_brain`,
+  `story_engine`, …), which matched none of its ten sections, so a hundred active rules
+  showed as ten empty sections. **Fixed 2026-10-04:** `showBibleSections.js` (`sectionOf`)
+  puts every active entry in exactly one section: the Show Brain seeder's JSON `section`
+  (now all thirteen of them), else the LalaVerse page named by `source_document`
+  (`cultural-system` → Culture & Events, `influencer-systems` → Influencer Systems, …, the
+  nine other seeders and the Brain Update manifests), else Uncategorized (written in the
+  Show Bible, ingested, Amber, scene sets, episode completion). The section counts add
+  up to the active count; `ShowBiblePage.knowledge.test.jsx` pins it.
 - **Four sources have two editors with different defaults.** Each pair saves to one
   `page_content` record, but each page carries its own defaults, and they disagree.
   Measured in step 2 by comparing each page's defaults:

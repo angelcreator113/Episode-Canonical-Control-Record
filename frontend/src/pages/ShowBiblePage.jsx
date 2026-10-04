@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { SECTIONS, sectionOf, summaryOf, parseContent } from './showBibleSections';
 
 /**
  * ShowBiblePage — Unified knowledge base (enhanced)
@@ -12,18 +13,6 @@ import api from '../services/api';
  *   Guard — franchise guard scene validation with rule counts
  */
 
-const SECTIONS = [
-  { key: 'identity', label: 'Identity', icon: '🎯', desc: 'Show name, logline, design tokens' },
-  { key: 'character_bible', label: 'Characters', icon: '👤', desc: 'Character definitions and bible' },
-  { key: 'personality', label: 'Personality', icon: '💎', desc: 'Personality traits and voice' },
-  { key: 'world_rules', label: 'World Rules', icon: '🌍', desc: 'Mechanical and narrative rules' },
-  { key: 'economy', label: 'Economy', icon: '🪙', desc: 'Currency, reputation, access systems' },
-  { key: 'episode_beats', label: 'Episode Beats', icon: '🎬', desc: '14-beat structure, arc patterns' },
-  { key: 'visual_language', label: 'Visual Language', icon: '🎨', desc: 'Design language, color palette' },
-  { key: 'scene_rules', label: 'Scene Rules', icon: '📍', desc: 'Scene generation constraints' },
-  { key: 'canon_rules', label: 'Canon Rules', icon: '📜', desc: 'What cannot be changed' },
-  { key: 'season_1', label: 'Season 1', icon: '📺', desc: 'Season-specific rules' },
-];
 
 const SEVERITY = {
   critical: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: '🔴' },
@@ -144,8 +133,9 @@ export default function ShowBiblePage({ embedded = false }) {
   };
 
   // Helpers
-  const getSummary = (e) => { if (typeof e.content === 'string') return e.content.slice(0, 300); if (e.content?.summary) return e.content.summary; return JSON.stringify(e.content).slice(0, 300); };
-  const getSection = (e) => { if (typeof e.content === 'object' && e.content?.section) return e.content.section; const tags = Array.isArray(e.applies_to) ? e.applies_to : []; return tags[0] || e.category || 'other'; };
+  // Sections, summaries and JSON content: showBibleSections.js (2026-10-04).
+  const getSummary = summaryOf;
+  const getSection = sectionOf;
   const matchSearch = (e) => { if (!search) return true; const q = search.toLowerCase(); return (e.title || '').toLowerCase().includes(q) || getSummary(e).toLowerCase().includes(q); };
 
   // Scope helpers
@@ -271,7 +261,7 @@ export default function ShowBiblePage({ embedded = false }) {
                   <div style={{ display: 'flex', gap: 4 }}>
                     {critCount > 0 && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontWeight: 600 }}>🔴 {critCount}</span>}
                     {injectCount > 0 && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#eef2ff', color: '#6366f1', fontWeight: 600 }}>💉 {injectCount}</span>}
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: sectionEntries.length > 0 ? '#f0fdf4' : '#f1f5f9', color: sectionEntries.length > 0 ? '#16a34a' : '#94a3b8' }}>{sectionEntries.length}</span>
+                    <span data-testid={`bible-section-count-${section.key}`} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: sectionEntries.length > 0 ? '#f0fdf4' : '#f1f5f9', color: sectionEntries.length > 0 ? '#16a34a' : '#94a3b8' }}>{sectionEntries.length}</span>
                   </div>
                   <span style={{ fontSize: 12, color: '#cbd5e1', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
                 </div>
@@ -302,7 +292,7 @@ export default function ShowBiblePage({ embedded = false }) {
                           {isOpen && (
                             <div style={{ padding: '0 14px 12px', borderTop: '1px solid #f1f5f9' }}>
                               <div style={{ padding: '10px 0', fontSize: 12, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                                {typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content, null, 2)}
+                                {parseContent(entry) ? JSON.stringify(parseContent(entry), null, 2) : String(entry.content ?? '')}
                               </div>
                               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
                                 {entry.category && <span style={{ fontSize: 9, padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{entry.category.replace(/_/g, ' ')}</span>}
