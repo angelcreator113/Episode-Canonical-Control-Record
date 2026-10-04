@@ -153,9 +153,18 @@ strip scroll horizontally inside their own row at 375 (the page itself does not)
 
 | Where | What the shot shows | Source |
 |---|---|---|
-| Event detail modal → Wardrobe Shopping List and Social Tasks overlays | "Generate Wardrobe Shopping List" is gold under white (2.82:1); "Generate Social Tasks" and "Pick Outfit" are indigo (`#6366f1`) under white; the "From outfit picker" chip is indigo on `#eef2ff` | `components/OverlayApprovalPanel.jsx` (53 literals; `accentColor` picks `#B8962E` / `#6366f1`, `TIMING_COLORS`) |
+| Event detail modal → Wardrobe Shopping List and Social Tasks overlays | **done**: `components/OverlayApprovalPanel.jsx` reads the tokens; its list family is `accent` / `accentText` (gold / gold text for the wardrobe list, teal / teal text for social tasks); Generate, Done and the generate-first action are `--primary`, Approve is white on `--success-text`, Reject the danger family; the timing phases read `TIMING_COLORS` / `TIMING_TEXT` / `TIMING_BG` (warning, teal, success) instead of hex alpha tints; chips and the toast read their families. The all-digit greys (`#888`, `#999`, `#666`, `#333`) that the task-reference strip hid are migrated too (see the note under this table). | was 53 literals |
 | Event detail modal → Invitation Style + "Generate Invite" | "Generate Invite" is gold under white; the style fields' panel, chips and error read their own literals | `pages/InvitationGenerator.jsx` (42 literals; `InvitationButton`, `InvitationStyleFields`, also mounted on the Event Package page) |
 | The error page ("Oops! Something went wrong") | a blue (`#0d6efd`-style) Try Again button on a grey gradient, no token anywhere | `components/ErrorBoundary.css` (16 literals, one gradient) |
+
+**A gap the panel exposed.** The migration scripts and the guard tests strip `#` plus three
+or four digits as a task reference (`Task #2292`), which also hides the all-digit greys
+`#333`, `#555`, `#666`, `#777`, `#888`, `#999` when they are colors. The overlay approval
+panel's guard tells a color (quoted, or after a colon or `solid`) from a reference by its
+context; the sixteen earlier guards still strip blindly. An audit with the context-aware pattern
+over every migrated file and WorldAdmin's five migrated slices finds 17 leftover greys,
+all in `SceneSetsTab.jsx` (`#555`, `#666`, `#888`, `#999` as text), and nothing else. That
+is the next follow-up: migrate those and move every guard to the context-aware pattern.
 
 `WorldAdmin.jsx` still carries 638 literals outside the five migrated slices (Overview,
 Events queue, event editors, the detail modal's own chrome); the Episodes, Assets, Cast and
