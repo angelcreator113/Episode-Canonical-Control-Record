@@ -15,19 +15,23 @@ const router = express.Router();
 // timeline catalog reads (no req.user consumption); 3 handlers are Tier 1.
 const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, limit, offset } = req.query;
+    const { show_id, episode_id, profile_id, narrative_function, limit, offset, status } = req.query;
     const { FeedPost, SocialProfile } = require('../models');
 
     if (!show_id && !episode_id) {
       return res.status(400).json({ error: 'show_id or episode_id is required' });
     }
 
-    const where = { deleted_at: null };
+    // Live posts by default (?status=draft|live|all): services/feedPostStatus.js.
+    const scoped = statusWhere(status);
+    if (scoped.error) return res.status(400).json({ error: scoped.error });
+    const where = { deleted_at: null, ...scoped };
     if (show_id) where.show_id = show_id;
     if (episode_id) where.episode_id = episode_id;
     if (profile_id) where.social_profile_id = profile_id;
@@ -94,10 +98,12 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
 router.get('/:showId/timeline', optionalAuth, async (req, res) => {
   try {
     const { showId } = req.params;
-    const { episode_id, profile_id, narrative_function, limit, offset } = req.query;
+    const { episode_id, profile_id, narrative_function, limit, offset, status } = req.query;
     const { FeedPost, SocialProfile } = require('../models');
 
-    const where = { show_id: showId, deleted_at: null };
+    const scoped = statusWhere(status);
+    if (scoped.error) return res.status(400).json({ error: scoped.error });
+    const where = { show_id: showId, deleted_at: null, ...scoped };
     if (episode_id) where.episode_id = episode_id;
     if (profile_id) where.social_profile_id = profile_id;
     if (narrative_function) where.narrative_function = narrative_function;
@@ -134,8 +140,11 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
 router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
+    // The episode's own view: its drafts and its live posts alike, unless asked.
+    const scoped = statusWhere(req.query.status === undefined ? 'all' : req.query.status);
+    if (scoped.error) return res.status(400).json({ error: scoped.error });
     const posts = await FeedPost.findAll({
-      where: { episode_id: req.params.episodeId, deleted_at: null },
+      where: { episode_id: req.params.episodeId, deleted_at: null, ...scoped },
       order: [['sort_order', 'ASC']],
     });
 
@@ -172,7 +181,13 @@ router.put('/:postId', requireAuth, async (req, res) => {
     const post = await FeedPost.findByPk(req.params.postId);
     if (!post) return res.status(404).json({ error: 'Post not found' });
 
-    const updatable = ['content_text', 'image_description', 'image_url', 'likes',
+    // It is 2009: a live post has no edit button (services/feedPostStatus.js).
+    if (isLive(post)) return res.status(409).json({ error: LOCKED_MESSAGE, status: post.status });
+    if (req.body.status !== undefined && !['draft', 'live'].includes(req.body.status)) {
+      return res.status(400).json({ error: 'status must be draft or live' });
+    }
+
+    const updatable = ['status', 'content_text', 'image_description', 'image_url', 'likes',
                        'comments_count', 'shares', 'sample_comments', 'posted_at',
                        'timeline_position', 'narrative_function', 'lala_reaction',
                        'lala_internal_thought', 'emotional_impact', 'sort_order',

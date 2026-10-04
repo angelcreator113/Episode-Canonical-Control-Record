@@ -67,6 +67,25 @@ describe('Social Media page', () => {
     expect(screen.getByTestId('sm-count').textContent).toBe('2 posts · Styling Adventures with Lala');
     const url = api.get.mock.calls.find((c) => c[0].includes('/feed-posts'))[0];
     expect(url).toContain(`show_id=${SHOW.id}`);
+    expect(url).toContain('status=live');
+  });
+
+  test('Drafts asks the API for drafts and marks each one; live posts carry no mark', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('/shows')) return { data: { data: [SHOW] } };
+      const status = new URL(url, 'http://x').searchParams.get('status');
+      const data = status === 'draft'
+        ? [{ id: 'd1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2' }]
+        : POSTS.map((p) => ({ ...p, status: 'live' }));
+      return { data: { data, total: data.length, hasMore: false } };
+    });
+    renderAt('/feed');
+    const live = await screen.findAllByTestId('sm-post');
+    expect(live.some((c) => /draft/i.test(c.textContent))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Drafts' }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')).toHaveLength(1));
+    expect(screen.getByTestId('sm-post').textContent).toMatch(/draft/i);
+    expect(api.get.mock.calls.some((c) => c[0].includes('status=draft'))).toBe(true);
   });
 
   test('a function chip asks the API for that function; search narrows by text and poster', async () => {

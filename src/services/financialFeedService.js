@@ -76,15 +76,17 @@ async function writeFeedPost(sequelize, showId, post) {
         id, show_id, episode_id, event_id, social_profile_id, poster_handle,
         poster_display_name, poster_creator_name, post_type, content_text,
         narrative_function, emotional_impact, ai_generated, posted_at,
-        timeline_position, created_at, updated_at
+        timeline_position, status, created_at, updated_at
       ) VALUES (
         :id, :showId, :episodeId, :eventId, :profileId, :handle,
         :displayName, :creatorName, :postType, :contentText,
         :narrativeFunction, :emotionalImpact, true, NOW(),
-        :timelinePosition, NOW(), NOW()
+        :timelinePosition, :status, NOW(), NOW()
       )`,
       { replacements: {
         id: uuidv4(),
+        // Tied to an episode: a draft until it is published.
+        status: post.episode_id ? 'draft' : 'live',
         showId,
         episodeId: post.episode_id || null,
         eventId: post.event_id || null,

@@ -55,6 +55,7 @@ function FeedPostCard({ post, onDelete }) {
           </span>
           <span className="feed-post-platform">{post.poster_platform}</span>
         </div>
+        {post.status === 'draft' && <span className="feed-post-draft" title="Goes live when the episode is published">DRAFT</span>}
         {post.narrative_function && (
           <span
             className="feed-post-function"
