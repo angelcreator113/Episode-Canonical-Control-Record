@@ -7,12 +7,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: var(--surface-bg);
   padding: 20px;
 }
 
 .error-boundary-content {
-  background: white;
+  background: var(--surface-card);
   border-radius: 8px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
   padding: 40px;
@@ -21,15 +21,15 @@
 }
 
 .error-boundary h1 {
-  color: #1f2937;
+  color: var(--text-primary);
   margin: 0 0 16px 0;
   font-size: var(--text-4xl);
   font-weight: 600;
 }
 
 .error-details {
-  background-color: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background-color: var(--surface-bg);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 4px;
   padding: 12px;
   margin: 24px 0;
@@ -38,21 +38,21 @@
 
 .error-details summary {
   cursor: pointer;
-  color: #0066cc;
+  color: var(--primary-text);
   font-weight: 500;
   padding: 8px;
   user-select: none;
 }
 
 .error-details summary:hover {
-  color: #0052a3;
+  color: var(--primary-dark);
 }
 
 .error-details pre {
   margin: 12px 0 0 0;
   padding: 12px;
-  background-color: #1f2937;
-  color: #10b981;
+  background-color: var(--gray-800);
+  color: var(--success);
   border-radius: 4px;
   overflow-x: auto;
   font-size: var(--text-sm);
@@ -78,30 +78,30 @@
 }
 
 .error-actions .btn-primary {
-  background-color: #0066cc;
-  color: white;
+  background-color: var(--primary);
+  color: var(--text-inverse);
 }
 
 .error-actions .btn-primary:hover {
-  background-color: #0052a3;
+  background-color: var(--primary-dark);
 }
 
 .error-actions .btn-secondary {
-  background-color: #e5e7eb;
-  color: #1f2937;
+  background-color: var(--lala-parchment-2);
+  color: var(--text-primary);
 }
 
 .error-actions .btn-secondary:hover {
-  background-color: #d1d5db;
+  background-color: var(--lala-parchment-3);
 }
 
 .error-warning {
   margin-top: 24px;
   padding: 12px;
-  background-color: #fef3c7;
-  border: 1px solid #fcd34d;
+  background-color: var(--warning-bg);
+  border: 1px solid var(--warning-border);
   border-radius: 4px;
-  color: #92400e;
+  color: var(--warning-text);
   font-size: var(--text-base);
   line-height: 1.5;
 }
