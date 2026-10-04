@@ -211,6 +211,18 @@
   color: #aaa;
 }
 
+.feed-post-draft {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-right: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px dashed var(--warning-border);
+}
+
 .feed-post-function {
   font-family: 'DM Mono', monospace;
   font-size: var(--text-xs);

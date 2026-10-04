@@ -70,6 +70,14 @@ module.exports = (sequelize) => {
     audience_sentiment: { type: DataTypes.STRING(30), allowNull: true },
 
     sort_order: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+
+    // 'draft' (editable, not on the feed) or 'live' (on the feed, never
+    // edited again, only deleted): migration 20261004150000,
+    // services/feedPostStatus.js, docs/FEED_POSTS.md.
+    status: {
+      type: DataTypes.STRING(16), allowNull: false, defaultValue: 'live',
+      validate: { isIn: [['draft', 'live']] },
+    },
   }, {
     tableName: 'feed_posts',
     timestamps: true,

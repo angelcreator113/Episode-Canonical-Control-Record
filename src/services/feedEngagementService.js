@@ -235,6 +235,8 @@ async function generateRippleEffects(postId, models) {
         generation_model: 'ripple_engine',
         thread_id: threadId,
         parent_post_id: post.id,
+        // A ripple follows its parent: a draft's replies go live with it.
+        status: post.status === 'draft' ? 'draft' : 'live',
         audience_sentiment: SENTIMENT_RULES[narrativeFunction] || 'curious',
         sort_order: (post.sort_order || 0) + ripples.length + 1,
       });

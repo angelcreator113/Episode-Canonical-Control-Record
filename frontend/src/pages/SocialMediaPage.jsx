@@ -55,6 +55,7 @@ export function PostCard({ post }) {
             {who.handle && `@${who.handle}`}{who.platform && ` · ${who.platform}`}{post.post_type && post.post_type !== 'post' && ` · ${post.post_type}`}
           </span>
         </div>
+        {post.status === 'draft' && <span className="sm-tag sm-draft" title="Goes live when its episode is published">draft</span>}
         {post.narrative_function && <span className={`sm-tag sm-tag-${post.narrative_function}`}>{post.narrative_function.replace(/_/g, ' ')}</span>}
       </header>
       {post.content_text && <p className="sm-post-text">{post.content_text}</p>}
@@ -85,6 +86,8 @@ function PostsView({ show, showLoaded }) {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [fn, setFn] = useState('all');
+  // Live posts are the feed; drafts wait for their episode to be published.
+  const [status, setStatus] = useState('live');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -94,7 +97,7 @@ function PostsView({ show, showLoaded }) {
     setLoading(true);
     setError(null);
     try {
-      const qs = new URLSearchParams({ show_id: show.id, limit: String(PAGE), offset: String(offset) });
+      const qs = new URLSearchParams({ show_id: show.id, status, limit: String(PAGE), offset: String(offset) });
       if (fn !== 'all') qs.set('narrative_function', fn);
       const r = await api.get(`/api/v1/feed-posts?${qs}`);
       const page = r.data?.data || [];
@@ -107,7 +110,7 @@ function PostsView({ show, showLoaded }) {
     } finally {
       setLoading(false);
     }
-  }, [show?.id, fn]);
+  }, [show?.id, fn, status]);
 
   useEffect(() => { load(0); }, [load]);
 
@@ -123,6 +126,10 @@ function PostsView({ show, showLoaded }) {
   return (
     <div className="sm-posts">
       <div className="sm-toolbar">
+        <div className="sm-chips" role="group" aria-label="Live or drafts">
+          <button type="button" className={`sm-chip ${status === 'live' ? 'active' : ''}`} onClick={() => setStatus('live')}>Live</button>
+          <button type="button" className={`sm-chip ${status === 'draft' ? 'active' : ''}`} onClick={() => setStatus('draft')}>Drafts</button>
+        </div>
         <div className="sm-chips" role="group" aria-label="Filter by what the post does">
           {['all', ...FUNCTIONS].map((k) => (
             <button key={k} type="button" className={`sm-chip ${fn === k ? 'active' : ''}`} onClick={() => setFn(k)}>
@@ -139,7 +146,7 @@ function PostsView({ show, showLoaded }) {
       {error && <p className="sm-error" role="alert">{error}</p>}
       {!loading && !error && posts.length === 0 && (
         <div className="sm-empty" data-testid="sm-empty">
-          <p>No posts yet for this show.</p>
+          <p>{status === 'draft' ? 'No drafts. A draft is a post written inside an episode that is not published yet.' : 'No posts yet for this show.'}</p>
           <p>Posts are generated from an episode (its Feed tab, or the timeline page) and from the Feed scheduler. Each one is what a character said, once, with its likes and comments.</p>
         </div>
       )}

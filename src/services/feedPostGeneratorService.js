@@ -293,6 +293,8 @@ Return ONLY the JSON array.`;
         ai_generated: true,
         generation_model: CLAUDE_MODEL,
         sort_order: i,
+        // Created inside the episode: a draft until the episode is published.
+        status: 'draft',
         // New enhanced fields
         is_viral: isViral,
         viral_reach: isViral ? Math.floor(postLikes * (viralTier === 'mega' ? 10 : viralTier === 'mid' ? 5 : 2)) : 0,

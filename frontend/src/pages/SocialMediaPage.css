@@ -32,6 +32,7 @@
 .sm-tag-support, .sm-tag-reaction { background: var(--success-bg); color: var(--success-text); }
 .sm-tag-flex, .sm-tag-comparison { background: var(--warning-bg); color: var(--warning-text); }
 .sm-tag-brand_content, .sm-tag-bts, .sm-tag-callback { background: var(--info-bg); color: var(--info-text); }
+.sm-draft { background: var(--warning-bg); color: var(--warning-text); border: 1px dashed var(--warning-border); }
 .sm-post-text { margin: 10px 0 6px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
 .sm-post-image { width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
 .sm-post-image-desc { margin: 6px 0; font-size: 12px; color: var(--text-secondary); font-style: italic; }
