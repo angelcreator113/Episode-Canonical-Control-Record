@@ -3,7 +3,7 @@
  * holds, what reads it, and the thing to do here. Drafted from the code and
  * docs/BRAIN_OWNERSHIP.md: the AI reads the Show Bible (franchise_knowledge);
  * the World, Society and Culture page data (page_content) reaches the AI only
- * through Push to Brain, while locations, calendar events, snapshots and the
+ * through each tab's Brain Update button, while locations, calendar events, snapshots and the
  * timeline are read directly by the generators named below.
  */
 export const ORIENTATION = {
@@ -22,20 +22,20 @@ export const ORIENTATION = {
   world: {
     title: 'The map and the places scenes happen in',
     what: 'The DREAM map (cities, universities, corporations) and the locations: the venues, properties and scene-set homes that events and scenes are placed in.',
-    reads: 'Locations are read directly: the event generator picks venues from them, the scene planner and the memories engine place scenes in them. The map text reaches the AI only when you push it to the Brain.',
-    doHere: 'Add or fix a location under Locations: events need venues. Upload or describe the map under The Map, then Push to Brain so the AI knows the geography.',
+    reads: 'Locations are read directly: the event generator picks venues from them, the scene planner and the memories engine place scenes in them. The map text reaches the AI only when you press the Brain Update button here.',
+    doHere: 'Add or fix a location under Locations: events need venues. Upload or describe the map under The Map, then press Brain Update so the AI knows the geography.',
   },
   society: {
     title: 'How influence works, as reference',
     what: 'The fifteen influencer archetypes, the legends and society, the social rules and the trends. A reference document for who exists in the social world and how reputation moves.',
-    reads: 'The AI only through Push to Brain: the eight seeded society laws in the Show Bible are what it sees today. Editing here changes the page, not the canon, until you push.',
-    doHere: 'You rarely edit this. When you do, change the text and press Push to Brain so the Show Bible carries the new rule.',
+    reads: 'The AI only through the Brain Update button: the eight seeded society laws in the Show Bible are what it sees today. Editing here changes the page, not the canon, until you update the Brain.',
+    doHere: 'You rarely edit this. When you do, change the text and press Brain Update so the Show Bible carries the new rule.',
   },
   culture: {
     title: 'The year, who covers it, and what is remembered',
     what: 'The cultural calendar (the 42 events of story-year 8385), the award shows and gossip outlets, and the cultural memory: legends, feuds and archives.',
-    reads: 'Calendar events are read directly: "Create in show" spawns a Producer Mode event with a host and guests from a calendar date, and the seasonal and automation services draw on them. Awards, media and history reach the AI only when pushed to the Brain.',
-    doHere: 'Pick a calendar event and create it in the show when an episode needs one. Edit the awards, media or history text, then Push to Brain.',
+    reads: 'Calendar events are read directly: "Create in show" spawns a Producer Mode event with a host and guests from a calendar date, and the seasonal and automation services draw on them. Awards, media and history reach the AI only through the Brain Update button on their sub-tab.',
+    doHere: 'Pick a calendar event and create it in the show when an episode needs one (with several shows, choose which first). Edit the awards, media or history text, then press the Brain Update button on that sub-tab.',
   },
   state: {
     title: 'Where the world is right now',
