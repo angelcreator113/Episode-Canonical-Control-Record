@@ -181,3 +181,17 @@ drops a reference only when it is not quoted and does not follow a colon or `sol
 Events queue, event editors, the detail modal's own chrome); the Episodes, Assets, Cast and
 Release tabs were batch 5, which closes with the Release row above.
 
+## 7. Batch 6: *Before Lala* (WriteMode and the Story Engine)
+
+The memoir tier, in CLAUDE.md's order after Producer Mode. WriteMode (`/write/:bookId/:chapterId`)
+is a 5,200-line stylesheet with its own parchment, ink and gold palette and some 450 rgba tints of
+ink and gold, so it migrates in two parts like Scene Sets did; its panels and the Story Engine
+pages follow one screen per PR.
+
+| Screen | State |
+|---|---|
+| WriteMode stylesheet and page, part one (`WriteMode.css`, `WriteMode.jsx`): the hex | done: 206 hex rules, 5 hex gradients and 7 JSX literals gone; the page's `--wm-*` palette (`--wm-parchment`, `--wm-ink`, `--wm-gold`, `--wm-gold-text`, `--wm-muted`, `--wm-border`) aliases the tokens; Apply, Send, Leave, Save review, the mode toggle, Focus, History, the restore and paragraph actions, the review badge and Run are `--primary` under white (they were ink or gold under parchment: gold under parchment 2.7:1, the light-gold badge 2.3:1), their hovers `--primary-dark`; the paragraph delete is `--danger`; gold is a border, a fill under no text (goal bar, dots, compass needle) or `--wm-gold-text` (it was gold as text, 2.7:1, in 40 rules); the manuscript page is `--surface-card` (it was a three-stop cream gradient), the mic button `--lala-parchment-2`, its listening state ink; approved/pending, the mic error and the undo-AI action read success and danger text; the pacing pips and the goal ring read danger, warning, info, success and gold; the arc compass track is the one color gradient left, in tokens. The 21 rgba parchment-glass gradients (frosted bars over the desk) carry no color literal and stay. |
+| WriteMode stylesheet, part two: the rgba tints | after: 100 `color:` rules read ink or gold at 0.15–0.82 alpha (ink at 0.3 on parchment is about 2.4:1) and become `--wm-muted`, `--text-faint` or `--wm-gold-text`; the ink and gold washes behind surfaces, borders and shadows are reviewed rule by rule. |
+| WriteMode panels (`WriteModeAIWriter`, `ScenesPanel`, `BookStructurePanel`, `MemoryBankView` + `.css`, `LalaSceneDetection`, `ExportPanel`, `NarrativeIntelligence`, `ContinuityGuard`, `MemoryConfirmation`) | after |
+| Story Engine pages (`StoryEvaluationEngine.jsx`, `StoryHealthDashboard.jsx` + `StoryEngine.css`, `StoryProposer`, `StoryThreadTracker`, `StoryCalendar`, `StoryInspector`, `StoryNavigator`, `storyEngineConstants.js`, `StorytellerPage.css`) | after |
+
