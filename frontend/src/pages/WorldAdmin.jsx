@@ -126,7 +126,10 @@ const TEMPLATE_CATEGORY_MAP = {
   music: 'arts_entertainment',
   lifestyle: 'travel_destination',
 };
-const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
+const TIER_COLORS = { slay: 'var(--lala-gold)', pass: 'var(--success)', safe: 'var(--warning)', fail: 'var(--danger)' };
+const TIER_BG = { slay: 'var(--lala-gold-soft)', pass: 'var(--success-bg)', safe: 'var(--warning-bg)', fail: 'var(--danger-bg)' };
+const TIER_BORDER = { slay: 'var(--lala-gold-line)', pass: 'var(--success-border)', safe: 'var(--warning-border)', fail: 'var(--danger-border)' };
+const TIER_TEXT = { slay: 'var(--lala-gold-text)', pass: 'var(--success-text)', safe: 'var(--warning-text)', fail: 'var(--danger-text)' };
 const TIER_EMOJIS = { slay: '👑', pass: '✨', safe: '😐', fail: '💔' };
 const EVENT_TYPE_ICONS = { invite: '💌', upgrade: '⬆️', guest: '🌟', fail_test: '💔', deliverable: '📦', brand_deal: '🤝' };
 const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', 'brand_deal'];
@@ -1807,7 +1810,7 @@ The revised event should feel like a completely different experience from the si
               <h2 style={S.cardTitle}>🏆 Tier Distribution</h2>
               <div style={{ display: 'flex', gap: 12 }}>
                 {['slay', 'pass', 'safe', 'fail'].map(tier => (
-                  <div key={tier} style={{ flex: 1, padding: 14, borderRadius: 10, textAlign: 'center', background: TIER_COLORS[tier] + '12', border: `2px solid ${TIER_COLORS[tier]}30` }}>
+                  <div key={tier} style={{ flex: 1, padding: 14, borderRadius: 10, textAlign: 'center', background: TIER_BG[tier], border: `2px solid ${TIER_BORDER[tier]}` }}>
                     <div style={{ fontSize: 22 }}>{TIER_EMOJIS[tier]}</div>
                     <div style={{ fontSize: 26, fontWeight: 800 }}>{tierCounts[tier] || 0}</div>
                     <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1 }}>{tier.toUpperCase()}</div>
@@ -1819,7 +1822,7 @@ The revised event should feel like a completely different experience from the si
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
 
           {/* Financial Summary */}
@@ -1833,21 +1836,21 @@ The revised event should feel like a completely different experience from the si
             if (epsWithFinancials === 0) return null;
             return (
               <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>Total Income</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{totalIncome.toLocaleString()}</div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--success-text)', marginBottom: 4 }}>Total Income</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success-text)' }}>{totalIncome.toLocaleString()}</div>
                 </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626', marginBottom: 4 }}>Total Expenses</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#dc2626' }}>{totalExpenses.toLocaleString()}</div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--danger-text)', marginBottom: 4 }}>Total Expenses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--danger-text)' }}>{totalExpenses.toLocaleString()}</div>
                 </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}`, borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626', marginBottom: 4 }}>Net P&L</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: net >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${net >= 0 ? 'var(--success-border)' : 'var(--danger-border)'}`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)', marginBottom: 4 }}>Net P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
                 </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Episodes with P&L</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{epsWithFinancials} / {episodes.length}</div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 4 }}>Episodes with P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{epsWithFinancials} / {episodes.length}</div>
                 </div>
               </div>
             );
@@ -1869,18 +1872,18 @@ The revised event should feel like a completely different experience from the si
             const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id && String(ev.used_in_episode_id) === String(ep.id));
 
             return (
-              <div key={ep.id} style={{ background: '#fff', border: isExpanded ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12, marginBottom: 10, overflow: 'hidden', transition: 'border 0.2s' }}>
+              <div key={ep.id} style={{ background: 'var(--surface-card)', border: isExpanded ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)', borderRadius: 12, marginBottom: 10, overflow: 'hidden', transition: 'border 0.2s' }}>
                 {/* Row header — always visible */}
                 <div onClick={() => setExpandedEpisode(isExpanded ? null : ep.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: '#6366f1', flex: '0 0 36px' }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary-text)', flex: '0 0 36px' }}>
                     {ep.episode_number || i + 1}
                   </span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{ep.title || 'Untitled'}</div>
-                    {linkedEvent && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</div>}
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{ep.title || 'Untitled'}</div>
+                    {linkedEvent && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</div>}
                   </div>
                   {tier && <span style={S.tierPill(tier)}>{TIER_EMOJIS[tier]} {tier.toUpperCase()}</span>}
-                  {score && <span style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e', margin: '0 8px' }}>{score}</span>}
+                  {score && <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', margin: '0 8px' }}>{score}</span>}
                   <span style={S.statusPill(ep.evaluation_status)}>{ep.evaluation_status || 'draft'}</span>
                   {deltas && (
                     <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
@@ -1889,34 +1892,34 @@ The revised event should feel like a completely different experience from the si
                       ))}
                     </div>
                   )}
-                  <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>{isExpanded ? '▲' : '▼'}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{isExpanded ? '▲' : '▼'}</span>
                 </div>
 
                 {/* Expanded case file */}
                 {isExpanded && (
-                  <div style={{ padding: '0 16px 16px', borderTop: '1px solid #f1f5f9' }}>
+                  <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--lala-parchment-3)' }}>
 
                     {/* ── Stat Impact ── */}
                     {deltas && (
                       <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
                         <div className="wa-grid wa-grid-5col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
                           {Object.entries(deltas).map(([k, v]) => {
                             if (typeof v !== 'number') return null;
                             const afterVal = stateAfter ? stateAfter[k] : null;
                             const beforeVal = afterVal !== null ? afterVal - v : null;
                             return (
-                              <div key={k} style={{ padding: 10, background: v > 0 ? '#f0fdf4' : v < 0 ? '#fef2f2' : '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                              <div key={k} style={{ padding: 10, background: v > 0 ? 'var(--success-bg)' : v < 0 ? 'var(--danger-bg)' : 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
                                 <div style={{ fontSize: 14 }}>{STAT_ICONS[k]}</div>
-                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
                                 {beforeVal !== null ? (
                                   <div style={{ fontSize: 13, fontWeight: 700 }}>
-                                    <span style={{ color: '#94a3b8' }}>{beforeVal}</span>
-                                    <span style={{ color: '#64748b', margin: '0 3px' }}>→</span>
-                                    <span style={{ color: v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#1a1a2e' }}>{afterVal}</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>{beforeVal}</span>
+                                    <span style={{ color: 'var(--text-secondary)', margin: '0 3px' }}>→</span>
+                                    <span style={{ color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{afterVal}</span>
                                   </div>
                                 ) : (
-                                  <div style={{ fontSize: 14, fontWeight: 700, color: v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#94a3b8' }}>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
                                     {v > 0 ? '+' : ''}{v}
                                   </div>
                                 )}
@@ -1930,17 +1933,17 @@ The revised event should feel like a completely different experience from the si
                     {/* ── Event Reference ── */}
                     {linkedEvent && (
                       <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💌 Event</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💌 Event</div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
                           <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
                           {/* No 🪙 cost_coins tag (§8(ff) Q14): the Episode Ledger's money is the ledger's. A deal's difficulty is not money. */}
                           {linkedEvent.deal_type && <span style={S.eTag}>Difficulty {linkedEvent.cost_coins}</span>}
                           <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
-                          {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid</span>}
-                          {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>🎯 {linkedEvent.career_milestone}</span>}
+                          {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: 'var(--success-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--success-text)' }}>💰 Paid</span>}
+                          {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 10, color: 'var(--primary-text)' }}>🎯 {linkedEvent.career_milestone}</span>}
                         </div>
-                        {linkedEvent.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 4 }}>{linkedEvent.narrative_stakes}</div>}
+                        {linkedEvent.narrative_stakes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 4 }}>{linkedEvent.narrative_stakes}</div>}
                       </div>
                     )}
 
@@ -1949,12 +1952,12 @@ The revised event should feel like a completely different experience from the si
                       const ss = sceneSets.find(s => s.id === linkedEvent.scene_set_id);
                       return ss ? (
                         <div style={{ marginTop: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />}
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{ss.name}</div>
-                              <div style={{ fontSize: 10, color: '#94a3b8' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{ss.name}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
                             </div>
                           </div>
                         </div>
@@ -1966,10 +1969,10 @@ The revised event should feel like a completely different experience from the si
                       const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id);
                       return epWardrobe.length > 0 ? (
                         <div style={{ marginTop: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {epWardrobe.slice(0, 6).map(w => (
-                              <span key={w.id} style={{ padding: '3px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 10, color: '#7c3aed', fontWeight: 600 }}>
+                              <span key={w.id} style={{ padding: '3px 8px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-light)', borderRadius: 6, fontSize: 10, color: 'var(--accent-dark)', fontWeight: 600 }}>
                                 {w.name || w.category || 'Item'}
                               </span>
                             ))}
@@ -1982,7 +1985,7 @@ The revised event should feel like a completely different experience from the si
                     {linkedEvent && (
                       <div style={{ marginTop: 14 }}>
                         <button onClick={() => handleGenerateScriptFromEvent(linkedEvent.id, ep.id)} disabled={generating}
-                          style={{ padding: '6px 16px', background: generating ? '#e5e7eb' : 'linear-gradient(135deg, #16a34a, #22c55e)', color: generating ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
+                          style={{ padding: '6px 16px', background: generating ? 'var(--lala-parchment-2)' : 'var(--primary)', color: generating ? 'var(--text-secondary)' : 'var(--text-inverse)', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
                           {generating ? '⏳ Generating...' : '📝 Generate Script from Event'}
                         </button>
                       </div>
@@ -1991,31 +1994,31 @@ The revised event should feel like a completely different experience from the si
                     {/* ── Episode Financials ── */}
                     {(epIncome > 0 || epExpenses > 0) && (
                       <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
                         {/* Lala's money across the season has one home: Cast & Continuity → Lala's Finances. */}
                         <button type="button" onClick={() => goTo('finances')} data-testid={`ledger-finances-link-${ep.id}`}
-                          style={{ background: 'none', border: 'none', padding: 0, marginBottom: 8, color: '#8a6d1f', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>
+                          style={{ background: 'none', border: 'none', padding: 0, marginBottom: 8, color: 'var(--lala-gold-text)', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>
                           Lala's Finances →
                         </button>
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                          <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>{epIncome}</div>
+                          <div style={{ padding: '8px 14px', background: 'var(--success-bg)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: 'var(--success-text)' }}>Income</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }}>{epIncome}</div>
                           </div>
-                          <div style={{ padding: '8px 14px', background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: '#dc2626' }}>Expenses</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#dc2626' }}>{epExpenses}</div>
+                          <div style={{ padding: '8px 14px', background: 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>Expenses</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--danger-text)' }}>{epExpenses}</div>
                           </div>
-                          <div style={{ padding: '8px 14px', background: epIncome >= epExpenses ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: '#666' }}>Net</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: epIncome >= epExpenses ? '#16a34a' : '#dc2626' }}>
+                          <div style={{ padding: '8px 14px', background: epIncome >= epExpenses ? 'var(--success-bg)' : 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: epIncome >= epExpenses ? 'var(--success-text)' : 'var(--danger-text)' }}>
                               {(epIncome - epExpenses).toFixed(0)}
                             </div>
                           </div>
                           {ep.financial_score && (
-                            <div style={{ padding: '8px 14px', background: '#FAF7F0', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, color: '#B8962E' }}>Financial IQ</div>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: '#B8962E' }}>{ep.financial_score}/10</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 10, color: 'var(--lala-gold-text)' }}>Financial IQ</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--lala-gold-text)' }}>{ep.financial_score}/10</div>
                             </div>
                           )}
                         </div>
@@ -2026,47 +2029,47 @@ The revised event should feel like a completely different experience from the si
                     <EpisodeTasksPanel
                       episodeId={ep.id}
                       load={loadEpisodeTaskDetails}
-                      buttonStyle={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
+                      buttonStyle={{ ...S.smBtn, background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}
                     />
 
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🏆 Evaluation</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🏆 Evaluation</div>
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                           {ej.outfit_match !== undefined && (
-                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>Outfit Match</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Outfit Match</div>
                               <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.outfit_match}/25</div>
                             </div>
                           )}
                           {ej.accessory_match !== undefined && (
-                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>Accessory</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Accessory</div>
                               <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.accessory_match}/25</div>
                             </div>
                           )}
                           {ej.event_prestige_score !== undefined && (
-                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>Prestige</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Prestige</div>
                               <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.event_prestige_score}/30</div>
                             </div>
                           )}
                           {ej.timing_score !== undefined && (
-                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>Timing</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Timing</div>
                               <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.timing_score}/20</div>
                             </div>
                           )}
                           {(ej.overrides || []).length > 0 && (
-                            <div style={{ padding: '8px 14px', background: '#fef3c7', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 11, color: '#92400e' }}>Overrides</div>
+                            <div style={{ padding: '8px 14px', background: 'var(--warning-bg)', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--warning-text)' }}>Overrides</div>
                               <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.overrides.length} ⬆️</div>
                             </div>
                           )}
                         </div>
                         {ej.narrative_line && (
-                          <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 8, fontSize: 13, color: '#475569', fontStyle: 'italic', borderLeft: `3px solid ${TIER_COLORS[tier] || '#6366f1'}` }}>
+                          <div style={{ marginTop: 8, padding: 10, background: 'var(--surface-bg)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', borderLeft: `3px solid ${TIER_COLORS[tier] || 'var(--primary)'}` }}>
                             "{ej.narrative_line}"
                           </div>
                         )}
@@ -2076,10 +2079,10 @@ The revised event should feel like a completely different experience from the si
                     {/* ── Unlocks ── */}
                     {linkedEvent?.success_unlock && tier && (tier === 'slay' || tier === 'pass') && (
                       <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>✨ Unlocked</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>✨ Unlocked</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {linkedEvent.success_unlock.split(',').map((u, ui) => (
-                            <span key={ui} style={{ padding: '4px 10px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#92400e' }}>
+                            <span key={ui} style={{ padding: '4px 10px', background: 'var(--warning-bg)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var(--warning-text)' }}>
                               ✨ {u.trim()}
                             </span>
                           ))}
@@ -2088,11 +2091,11 @@ The revised event should feel like a completely different experience from the si
                     )}
 
                     {/* ── Actions ── */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
                       <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Edit Episode</Link>
-                      <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}>Todo List</Link>
-                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>Evaluate</Link>
-                      {ep.script_content && <span style={{ ...S.smBtn, color: '#16a34a' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
+                      <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}>Todo List</Link>
+                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>Evaluate</Link>
+                      {ep.script_content && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
                     </div>
                   </div>
                 )}
@@ -2101,10 +2104,10 @@ The revised event should feel like a completely different experience from the si
           })}
 
           {episodes.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+            <div style={{ textAlign: 'center', padding: 40, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 12 }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
               <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No episodes yet</div>
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>Create an episode from the Show page, then come back here.</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Create an episode from the Show page, then come back here.</div>
             </div>
           )}
         </div>
@@ -8295,7 +8298,7 @@ export const S = {
   tRow: { display: 'flex', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', alignItems: 'center', fontSize: 13, transition: 'background 0.1s' },
   tCol: { flex: 1, minWidth: 0 },
   empty: { padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 },
-  tierPill: (t) => ({ padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: TIER_COLORS[t] + '15', color: TIER_COLORS[t] }),
+  tierPill: (t) => ({ padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: TIER_BG[t], color: TIER_TEXT[t] }),
   statusPill: (s) => {
     const cfg = EVENT_STATUS_CONFIG[s] || EVENT_STATUS_CONFIG.draft;
     return { padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: cfg.bg, color: cfg.color };
