@@ -90,18 +90,18 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
   // The backdrop is a click-to-dismiss surface; the panel stops propagation. ──
   const S = {
     backdrop: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20, backdropFilter: 'blur(4px)' },
-    panel: { background: '#FAF7F0', borderRadius: 12, maxWidth: 720, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: 24, position: 'relative' },
-    closeBtn: { position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: 15, border: 'none', background: '#fff', color: '#64748b', fontSize: 16, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' },
-    title: { margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: '#1a1a2e', fontFamily: "'Lora', serif" },
-    subtitle: { margin: '0 0 18px', fontSize: 13, color: '#64748b' },
-    statsBar: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' },
+    panel: { background: 'var(--surface-bg)', borderRadius: 12, maxWidth: 720, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: 24, position: 'relative' },
+    closeBtn: { position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: 15, border: 'none', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 16, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' },
+    title: { margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'Lora', serif" },
+    subtitle: { margin: '0 0 18px', fontSize: 13, color: 'var(--text-secondary)' },
+    statsBar: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18, padding: 12, background: 'var(--surface-card)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' },
     statPill: { display: 'flex', flexDirection: 'column', minWidth: 60, padding: '4px 10px' },
-    statLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 },
-    statValue: { fontSize: 16, fontWeight: 700, color: '#1a1a2e' },
+    statLabel: { fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 },
+    statValue: { fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' },
     suggestion: (rank) => ({
-      background: '#fff',
+      background: 'var(--surface-card)',
       borderRadius: 8,
-      border: rank === 0 ? '2px solid #B8962E' : '1px solid #e2e8f0',
+      border: rank === 0 ? '2px solid var(--lala-gold)' : '1px solid var(--lala-parchment-3)',
       padding: 14,
       marginBottom: 10,
       position: 'relative',
@@ -112,8 +112,8 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
       left: 14,
       padding: '2px 8px',
       borderRadius: 4,
-      background: rank === 0 ? '#B8962E' : '#64748b',
-      color: '#fff',
+      background: rank === 0 ? 'var(--lala-gold)' : 'var(--text-secondary)',
+      color: rank === 0 ? 'var(--text-primary)' : 'var(--text-inverse)',
       fontSize: 9,
       fontWeight: 700,
       fontFamily: "'DM Mono', monospace",
@@ -122,19 +122,19 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
     scoreBadge: (score) => ({
       padding: '3px 8px',
       borderRadius: 4,
-      background: score > 0 ? '#f0fdf4' : '#fef2f2',
-      color: score > 0 ? '#16a34a' : '#dc2626',
+      background: score > 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
+      color: score > 0 ? 'var(--success-text)' : 'var(--danger-text)',
       fontSize: 11,
       fontWeight: 700,
       fontFamily: "'DM Mono', monospace",
     }),
     reasonRow: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11 },
-    boostIcon: { color: '#16a34a', fontWeight: 700 },
-    blockIcon: { color: '#dc2626', fontWeight: 700 },
-    warnIcon: { color: '#b45309', fontWeight: 700 },
-    primaryBtn: { padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
-    ghostBtn: { padding: '6px 12px', borderRadius: 6, background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
-    footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid #e2e8f0' },
+    boostIcon: { color: 'var(--success-text)', fontWeight: 700 },
+    blockIcon: { color: 'var(--danger-text)', fontWeight: 700 },
+    warnIcon: { color: 'var(--warning-text)', fontWeight: 700 },
+    primaryBtn: { padding: '6px 14px', borderRadius: 6, background: 'var(--primary)', border: 'none', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
+    ghostBtn: { padding: '6px 12px', borderRadius: 6, background: 'transparent', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' },
+    footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--lala-parchment-3)' },
   };
 
   const stress = data?.state?.stress || 0;
@@ -163,38 +163,38 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
           {isComplete
             ? `${episodeLabel} wraps. Suggestions ranked by Lala's current state.`
             : `Suggestions ranked by Lala's current state — ${episodeLabel} isn't wrapped yet.`}
-          {critical && <span style={{ color: '#dc2626', fontWeight: 600 }}> Lala is broke — paid events are boosted.</span>}
-          {pressured && <span style={{ color: '#B8962E', fontWeight: 600 }}> Lala is running low — paid events are favored.</span>}
+          {critical && <span style={{ color: 'var(--danger-text)', fontWeight: 600 }}> Lala is broke — paid events are boosted.</span>}
+          {pressured && <span style={{ color: 'var(--lala-gold-text)', fontWeight: 600 }}> Lala is running low — paid events are favored.</span>}
         </p>
 
         {/* Live state stats */}
         {data?.state && (
           <div style={S.statsBar}>
-            <div style={S.statPill}><span style={S.statLabel}>🪙 Coins</span><span style={{ ...S.statValue, color: critical ? '#dc2626' : pressured ? '#B8962E' : '#1a1a2e' }}>{coins}</span></div>
+            <div style={S.statPill}><span style={S.statLabel}>🪙 Coins</span><span style={{ ...S.statValue, color: critical ? 'var(--danger-text)' : pressured ? 'var(--lala-gold-text)' : 'var(--text-primary)' }}>{coins}</span></div>
             <div style={S.statPill}><span style={S.statLabel}>⭐ Rep</span><span style={S.statValue}>{data.state.reputation}</span></div>
             <div style={S.statPill}><span style={S.statLabel}>🤝 Brand</span><span style={S.statValue}>{data.state.brand_trust}</span></div>
             <div style={S.statPill}><span style={S.statLabel}>📣 Influence</span><span style={S.statValue}>{data.state.influence}</span></div>
-            <div style={S.statPill}><span style={S.statLabel}>😰 Stress</span><span style={{ ...S.statValue, color: stress >= 6 ? '#dc2626' : '#1a1a2e' }}>{stress}</span></div>
+            <div style={S.statPill}><span style={S.statLabel}>😰 Stress</span><span style={{ ...S.statValue, color: stress >= 6 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{stress}</span></div>
             <div style={S.statPill}><span style={S.statLabel}>💼 Tier</span><span style={S.statValue}>{data.state.career_tier}</span></div>
           </div>
         )}
 
         {/* The slot these suggestions are for (Season Arc §8(ff) A4) */}
         {data?.season?.next_slot && (
-          <div data-testid="suggestions-next-slot" style={{ margin: '0 0 12px', padding: '8px 12px', background: '#faf5ea', border: '1px solid rgba(184,150,46,0.3)', borderRadius: 8, fontSize: 12, color: '#334155' }}>
-            <strong style={{ color: '#B8962E' }}>For {data.season.next_slot.label}</strong>
+          <div data-testid="suggestions-next-slot" style={{ margin: '0 0 12px', padding: '8px 12px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)' }}>
+            <strong style={{ color: 'var(--lala-gold-text)' }}>For {data.season.next_slot.label}</strong>
             {data.season.next_slot.story_purpose ? `: ${data.season.next_slot.story_purpose}` : ' (no intention set yet)'}
-            {data.season.next_slot.desired_pressure && <span style={{ color: '#64748b' }}> · planned pressure {data.season.next_slot.desired_pressure}</span>}
+            {data.season.next_slot.desired_pressure && <span style={{ color: 'var(--text-secondary)' }}> · planned pressure {data.season.next_slot.desired_pressure}</span>}
           </div>
         )}
 
         {/* Suggestions */}
-        {loading && <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Reading state and ranking events…</div>}
-        {error && <div style={{ padding: 20, color: '#dc2626' }}>Error: {error}</div>}
+        {loading && <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)' }}>Reading state and ranking events…</div>}
+        {error && <div style={{ padding: 20, color: 'var(--danger-text)' }}>Error: {error}</div>}
         {!loading && !error && data && (
           <>
             {data.suggestions.length === 0 ? (
-              <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', background: '#fff', borderRadius: 8 }}>
+              <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--surface-card)', borderRadius: 8 }}>
                 No unused events available. Create new events in Producer Mode.
               </div>
             ) : (
@@ -203,23 +203,23 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
                   {rank === 0 && <div style={S.rankBadge(rank)}>TOP PICK</div>}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{s.event.name}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{s.event.name}</div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 10 }}>
-                        {s.event.event_type && <span style={{ padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>{s.event.event_type}</span>}
-                        {s.event.host && <span style={{ padding: '1px 6px', background: '#f1f5f9', color: '#64748b', borderRadius: 3 }}>{s.event.host}</span>}
+                        {s.event.event_type && <span style={{ padding: '1px 6px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 3, fontWeight: 600 }}>{s.event.event_type}</span>}
+                        {s.event.host && <span style={{ padding: '1px 6px', background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', borderRadius: 3 }}>{s.event.host}</span>}
                         {s.event.is_paid && s.event.payment_amount > 0 && (
-                          <span style={{ padding: '1px 6px', background: '#f0fdf4', color: '#16a34a', borderRadius: 3, fontWeight: 600 }}>+{s.event.payment_amount} 🪙</span>
+                          <span style={{ padding: '1px 6px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 3, fontWeight: 600 }}>+{s.event.payment_amount} 🪙</span>
                         )}
                         {s.event.cost_coins > 0 && (
                           s.event.deal_type ? (
                             // A deal event is never charged cost_coins: it is
                             // difficulty only (Law 0; Task #2365).
-                            <span style={{ padding: '1px 6px', background: '#f1f5f9', color: '#475569', borderRadius: 3, fontWeight: 600 }}>difficulty {s.event.cost_coins}</span>
+                            <span style={{ padding: '1px 6px', background: 'var(--lala-parchment-2)', color: 'var(--text-primary)', borderRadius: 3, fontWeight: 600 }}>difficulty {s.event.cost_coins}</span>
                           ) : (
-                            <span style={{ padding: '1px 6px', background: s.affordable ? '#fefce8' : '#fef2f2', color: s.affordable ? '#854d0e' : '#dc2626', borderRadius: 3, fontWeight: 600 }}>cost {s.event.cost_coins} 🪙</span>
+                            <span style={{ padding: '1px 6px', background: s.affordable ? 'var(--warning-bg)' : 'var(--danger-bg)', color: s.affordable ? 'var(--warning-text)' : 'var(--danger-text)', borderRadius: 3, fontWeight: 600 }}>cost {s.event.cost_coins} 🪙</span>
                           )
                         )}
-                        {s.event.prestige != null && <span style={{ padding: '1px 6px', background: '#faf5ea', color: '#B8962E', borderRadius: 3 }}>★ {s.event.prestige}</span>}
+                        {s.event.prestige != null && <span style={{ padding: '1px 6px', background: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', borderRadius: 3 }}>★ {s.event.prestige}</span>}
                       </div>
                     </div>
                     <div style={S.scoreBadge(s.score)}>{s.score >= 0 ? '+' : ''}{s.score}</div>
@@ -233,7 +233,7 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
                         <div key={i} style={S.reasonRow}>
                           {/* warn: a repeat (Season Arc Q8) — it warns, never blocks */}
                           <span style={r.kind === 'boost' ? S.boostIcon : r.kind === 'warn' ? S.warnIcon : S.blockIcon}>{r.kind === 'boost' ? '+' : r.kind === 'warn' ? '!' : '−'}</span>
-                          <span style={{ color: r.kind === 'boost' ? '#16a34a' : r.kind === 'warn' ? '#b45309' : '#dc2626' }}>{r.text}</span>
+                          <span style={{ color: r.kind === 'boost' ? 'var(--success-text)' : r.kind === 'warn' ? 'var(--warning-text)' : 'var(--danger-text)' }}>{r.text}</span>
                         </div>
                       ))}
                     </div>
