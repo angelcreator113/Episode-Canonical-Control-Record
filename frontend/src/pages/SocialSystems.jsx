@@ -1,6 +1,15 @@
 /**
- * SocialSystems — Archetypes + Legends/Society + Rules + Trends
+ * SocialSystems — Archetypes + Legends/Society + Rules + Trends (the
+ * LalaVerse hub's Society tab)
  * Merges: InfluencerSystems + Legends from Infrastructure + Society from Calendar
+ *
+ * 2026-10-04: each sub-tab says who reads its lists (READS, below) and
+ * carries the Brain Update button for the data it shows: the Social
+ * Systems button (influencer_systems) on Archetypes and Social Rules, the
+ * Calendar button (cultural_calendar: celebrity tiers, famous characters,
+ * gossip outlets, algorithm forces, drama mechanics) on Legends & Society,
+ * both on Trends. The Feed generator keeps its own built-in archetype
+ * list and reads nothing from this page (src/services/feedScheduler.js).
  */
 import { useState, Fragment } from 'react';
 import usePageData from '../hooks/usePageData';
@@ -90,6 +99,16 @@ const TABS = [
   { key: 'trends', label: 'Trends' },
 ];
 
+// Who reads each sub-tab's lists, from the code: the generators read the
+// Show Bible, which Brain Update writes these cards into; nothing reads the
+// page data itself except Amber's tools (docs/BRAIN_OWNERSHIP.md).
+const READS = {
+  archetypes: 'Nothing reads this list directly. Brain Update writes each archetype into the Show Bible as a Social Archetype card, which the script writers and Amber see. The Feed generator picks archetypes from its own built-in list, not from here.',
+  legends: 'The fifty legendary roles are fixed placeholders in code; their names come from the Character Registry. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
+  rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards; the script writers, the event generator and Amber read them from there, not from this page.',
+  trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. Nothing reads the page itself.',
+};
+
 const tb = (a) => ({ padding:'8px 16px', fontSize:12, fontWeight:600, fontFamily:"'DM Mono', monospace", background: a?'#2C2C2C':'transparent', color: a?'#fff':'#888', border:'none', borderRadius:'6px 6px 0 0', cursor:'pointer' });
 const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:14, marginBottom:8 };
 const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono', monospace", marginBottom:6 };
@@ -99,7 +118,7 @@ export default function SocialSystems({ embedded = false }) {
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
   const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
-  const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
+  const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
   const [openLegend, setOpenLegend] = useState('Fashion Icons');
   const [expandedArch, setExpandedArch] = useState(null);
 
@@ -114,15 +133,20 @@ export default function SocialSystems({ embedded = false }) {
           <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>Social Systems</h1>
           <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Archetypes, legends, relationships, economy, trends — the rules of the LalaVerse</p>
         </div>}
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          {saving && <span style={{ fontSize:11, color:'#B8962E' }}>Saving...</span>}
-          <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          {saving && <span style={{ fontSize:11, color:'var(--lala-gold-text)' }}>Saving...</span>}
+          {/* The Brain Update for the data the open sub-tab shows */}
+          {(tab === 'archetypes' || tab === 'rules' || tab === 'trends') && <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />}
+          {(tab === 'legends' || tab === 'trends') && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
         </div>
       </div>
 
-      <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'1px solid #e8e0d0' }}>
+      <div style={{ display:'flex', gap:4, marginBottom:12, borderBottom:'1px solid #e8e0d0' }}>
         {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={tb(tab===t.key)}>{t.label}</button>)}
       </div>
+      <p data-testid={`society-reads-${tab}`} style={{ fontSize:11, lineHeight:1.5, color:'var(--text-secondary)', background:'var(--surface-bg)', border:'1px solid var(--lala-parchment-3)', borderRadius:8, padding:'8px 12px', margin:'0 0 16px' }}>
+        <strong style={{ color:'var(--lala-gold-text)', fontFamily:"'DM Mono', monospace", fontSize:10, letterSpacing:'0.06em' }}>WHO READS THIS </strong>{READS[tab]}
+      </p>
 
       {/* ARCHETYPES */}
       {tab === 'archetypes' && (
