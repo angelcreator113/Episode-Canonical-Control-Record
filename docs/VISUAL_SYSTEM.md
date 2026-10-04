@@ -167,7 +167,15 @@ migrated slices found 17 leftover greys, all in `SceneSetsTab.jsx` (`#555`, `#66
 now strips through one shared `stripTaskRefs` in `frontend/src/styles/contrast.js`, which
 drops a reference only when it is not quoted and does not follow a colon or `solid` (its own test, `stripTaskRefs.test.js`, pins both sides).
 
-`WorldAdmin.jsx` still carries 638 literals outside the five migrated slices (Overview,
+## 6. Batch 5: the rest of Producer Mode
+
+| Screen | State |
+|---|---|
+| Episodes → Production and Results (`WorldAdmin.jsx` Results ledger slice, `components/Show/ShowEpisodesBoard.jsx`) | done: the ledger slice and the board set colors only through tokens; the tier palette is `TIER_COLORS` / `TIER_BG` / `TIER_BORDER` / `TIER_TEXT` (a fill, a surface, a border and a text twin per tier; it tinted fills with hex alpha suffixes, which a token cannot carry, and `S.tierPill` reads the surface and text); the board's tier glyphs read the text twins; Generate Script is `--primary` (it was a green gradient under white); the financial summary, stat impact, event, location, wardrobe (pink family, was purple), money, evaluation and unlock panels read the families; the Todo List and Evaluate links are gold text and teal text on their surfaces. |
+| Episodes → Season Plan (`WorldAdmin.jsx` Career Goals block and `SeasonTab`) | next |
+| Assets → Wardrobe; Cast & Continuity; Release | after |
+
+`WorldAdmin.jsx` carried 902 literals (context-aware count) outside the five batch-4 slices (Overview,
 Events queue, event editors, the detail modal's own chrome); the Episodes, Assets, Cast and
 Release tabs are the audit's next batch, not this one's.
 

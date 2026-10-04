@@ -11,7 +11,8 @@ import EpisodeCard from '../EpisodeCard';
 import EpisodeKanbanBoard from '../Episodes/EpisodeKanbanBoard';
 
 const STATUS_ICON = { draft: '✏️', scripted: '📜', in_build: '🎬', in_review: '👀', published: '✅', archived: '📦' };
-const TIERS = { slay: { e: '👑', c: '#FFD700' }, pass: { e: '✨', c: '#22c55e' }, safe: { e: '😐', c: '#eab308' }, fail: { e: '💔', c: '#dc2626' } };
+// The glyph is text: each tier's text twin (the fills were 1.4:1 to 4.5:1 short on white).
+const TIERS = { slay: { e: '👑', c: 'var(--lala-gold-text)' }, pass: { e: '✨', c: 'var(--success-text)' }, safe: { e: '😐', c: 'var(--warning-text)' }, fail: { e: '💔', c: 'var(--danger-text)' } };
 
 function evaluation(ep) {
   if (typeof ep.evaluation_json !== 'string') return ep.evaluation_json || null;
