@@ -81,13 +81,15 @@ function Overview() {
   // API returned; with several and none active, Evoni chooses.
   const { shows, show, loaded, failed, needsChoice, choose } = useActiveShow();
   const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
+  // Loading until the first stats arrive: the content never shows, then hides
+  // behind the loader, then shows again (which also remounted the setup section).
+  const [statsLoading, setStatsLoading] = useState(true);
   const [universe, setUniverse] = useState(null);
   const [series, setSeries] = useState([]);
   const [books, setBooks] = useState([]);
 
   const load = useCallback(async () => {
-    if (!show) { setStats(null); return; }
+    if (!show) { setStats(null); setStatsLoading(false); return; }
     setStatsLoading(true);
     try {
       // Load stats in parallel
