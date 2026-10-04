@@ -62,7 +62,7 @@ not via any page's UI.
 | `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` (App.jsx:332) | live | URL only |
 | `/universe/tensions` | `pages/UniverseTensionsPage.jsx` (App.jsx:333) | live | URL only |
 | `/universe/story-dashboard` | `pages/StoryDashboardPage.jsx` (App.jsx:334) | live | URL only |
-| `/show-bible` | redirect → `/universe?tab=bible` (2026-10-04; `ShowBiblePage` is the LalaVerse hub's Bible tab, `utils/worldRedirects.js` `HUB_TABS`; a `?tab=` becomes `&sub=`) | redirect | Sidebar's Show Bible row deep-links to the tab |
+| `/show-bible` | redirect → `/universe?tab=bible` (2026-10-04; `ShowBiblePage` is the LalaVerse hub's Bible tab, `utils/worldRedirects.js` `HUB_TABS`; a `?tab=` becomes `&sub=`) | redirect | the LalaVerse hub's Show Bible tab (the Sidebar's Show Bible row was removed 2026-10-04) |
 | `/universe/knowledge` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
 | `/intelligence/franchise-brain` | redirect → `/universe?tab=bible&sub=decisions` | redirect | — |
 | `/intelligence/show-brain` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
