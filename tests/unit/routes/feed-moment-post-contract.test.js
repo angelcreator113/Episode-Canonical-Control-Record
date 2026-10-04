@@ -41,3 +41,15 @@ describe('feed moment ↔ post contract', () => {
     expect(editor).toMatch(/handleConfigChange\('post_id'/);
   });
 });
+
+describe('put a post at a beat (2026-10-04)', () => {
+  test('POST /:showId/moments/:episodeId/beat creates through the service, requireAuth, 201 when new', () => {
+    expect(enhanced).toMatch(/router\.post\('\/:showId\/moments\/:episodeId\/beat',\s*requireAuth,\s*async/);
+    expect(enhanced).toMatch(/createMomentForPost\(require\('\.\.\/models'\), \{/);
+    expect(enhanced).toMatch(/res\.status\(created \? 201 : 200\)/);
+  });
+  test('the single-post read says which beats show the post', () => {
+    expect(posts).toMatch(/where: \{ feed_post_id: post\.id, deleted_at: null \}/);
+    expect(posts).toMatch(/beats: beats\.map\(\(b\) => \(\{ moment_id: b\.id, episode_id: b\.episode_id, beat_number: b\.beat_number/);
+  });
+});

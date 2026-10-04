@@ -218,7 +218,15 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
       order: FeedComment ? [[{ model: FeedComment, as: 'comments' }, 'sort_order', 'ASC']] : [],
     });
     if (!post) return res.status(404).json({ error: 'Post not found' });
-    return res.json({ data: post });
+    // Which beats show this post (feed_moments.feed_post_id), for the wall.
+    const { FeedMoment, Episode } = require('../models');
+    const beats = FeedMoment ? await FeedMoment.findAll({
+      where: { feed_post_id: post.id, deleted_at: null },
+      attributes: ['id', 'episode_id', 'beat_number'],
+      include: Episode ? [{ model: Episode, as: 'episode', attributes: ['id', 'episode_number', 'title'], required: false }] : [],
+      order: [['beat_number', 'ASC']],
+    }) : [];
+    return res.json({ data: { ...post.toJSON(), beats: beats.map((b) => ({ moment_id: b.id, episode_id: b.episode_id, beat_number: b.beat_number, episode_number: b.episode?.episode_number ?? null, episode_title: b.episode?.title ?? null })) } });
   } catch (err) {
     console.error('[FeedPosts] Get post error:', err);
     return res.status(500).json({ error: err.message });

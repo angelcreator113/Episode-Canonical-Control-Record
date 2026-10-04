@@ -145,6 +145,23 @@ router.put('/:showId/moments/:momentId/post', requireAuth, async (req, res) => {
   }
 });
 
+// ── PUT A POST AT A BEAT (picked from the Social Media wall) ────────────────
+// POST /api/v1/feed-enhanced/:showId/moments/:episodeId/beat  { beat_number, feed_post_id }
+router.post('/:showId/moments/:episodeId/beat', requireAuth, async (req, res) => {
+  try {
+    const { createMomentForPost } = require('../services/feedMomentLink');
+    const { moment, post, created } = await createMomentForPost(require('../models'), {
+      showId: req.params.showId, episodeId: req.params.episodeId,
+      beatNumber: req.body?.beat_number, feedPostId: req.body?.feed_post_id,
+    });
+    return res.status(created ? 201 : 200).json({ success: true, created, data: { ...moment.toJSON(), post: post.toJSON() } });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[FeedEnhanced] Put post at beat error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PERSIST MOMENTS AFTER GENERATION ────────────────────────────────────────
 // POST /api/v1/feed-enhanced/:showId/moments/:episodeId/persist
 router.post('/:showId/moments/:episodeId/persist', requireAuth, async (req, res) => {
