@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
+import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationship';
 import PhoneMapView from './phone/PhoneMapView';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
@@ -24,6 +25,7 @@ export const CONTENT_TYPES = [
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
+  { key: 'relationship_changes', label: 'Relationship Changes', icon: '💞', desc: '"changed her relationship status", "are now friends", from the feed', group: 'social' },
   { key: 'feed_notifications', label: 'Feed Notifications', icon: '🔔', desc: '"Marcus commented on your status", from the feed records', group: 'messages' },
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
   // Named wardrobe categories — surface the four creators actually think
@@ -122,6 +124,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
       return <NotificationsRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'feed_notifications':
       return <FeedNotificationsRenderer showId={showId} episodeId={episodeId} config={config} />;
+    case 'relationship_changes':
+      return <RelationshipChangesRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'story_ring':
       return <StoryRingRenderer showId={showId} config={config} />;
     case 'wardrobe_grid':
@@ -495,6 +499,46 @@ function FeedNotificationsRenderer({ showId, episodeId, config }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Relationship Changes (docs/FEED_POSTS.md rule 8, 2026-10-04) ──
+// The beat-5-style reveal: relationship posts drawn live, newest first.
+// A relationship change is a post (post_type 'relationship'), so this
+// zone, the wall and the One Post zone draw the same record.
+function RelationshipChangesRenderer({ showId, episodeId, config }) {
+  const max = config.max_items || 3;
+  const base = `post_type=${RELATIONSHIP_POST_TYPE}&with=comments&limit=${max}`;
+  const url = episodeId
+    ? `/api/v1/feed-posts?episode_id=${episodeId}&status=all&${base}`
+    : showId ? `/api/v1/feed-posts?show_id=${showId}&${base}` : null;
+  const { data, loading } = useContentData(url);
+
+  if (loading) return <ZoneLoader />;
+  const posts = (data?.data || []).filter((p) => parseRelationship(p));
+  if (!posts.length) return <ZoneEmpty label="No relationship news" />;
+
+  return (
+    <div data-testid="relationship-changes-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {posts.map((p) => {
+        const who = p.poster_display_name || p.socialProfile?.display_name || p.poster_handle || 'Someone';
+        const comments = p.comments_count ?? (Array.isArray(p.comments) ? p.comments.length : 0);
+        return (
+          <div key={p.id} style={{ padding: '4px 5px', background: config.bg || 'rgba(0,0,0,0.4)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.9)', lineHeight: 1.35 }}>
+              <span aria-hidden="true">💞 </span><b style={{ color: '#fff' }}>{who}</b> {p.content_text}
+              {p.status === 'draft' && <span style={{ marginLeft: 4, fontSize: 7, fontWeight: 700, padding: '0 3px', border: '1px dashed rgba(255,255,255,0.6)', borderRadius: 2 }}>DRAFT</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+              <Heart size={7} color="rgba(255,255,255,0.5)" />
+              <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{p.likes || 0}</span>
+              <MessageCircle size={7} color="rgba(255,255,255,0.5)" />
+              <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{comments}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

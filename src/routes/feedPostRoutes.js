@@ -22,7 +22,7 @@ const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKE
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, limit, offset, status, with: withWhat } = req.query;
+    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat } = req.query;
     const { FeedPost, SocialProfile, FeedComment } = require('../models');
 
     if (!show_id && !episode_id) {
@@ -37,6 +37,11 @@ router.get('/', optionalAuth, async (req, res) => {
     if (episode_id) where.episode_id = episode_id;
     if (profile_id) where.social_profile_id = profile_id;
     if (narrative_function) where.narrative_function = narrative_function;
+    // ?post_type= (e.g. 'relationship', docs/FEED_POSTS.md rule 8).
+    if (post_type) {
+      if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
+      where.post_type = post_type;
+    }
 
     const posts = await FeedPost.findAll({
       where,

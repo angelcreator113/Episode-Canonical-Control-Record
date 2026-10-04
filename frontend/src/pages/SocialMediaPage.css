@@ -58,7 +58,10 @@
 .sm-composer { border: 1px solid var(--lala-lavender-line); background: var(--lala-lavender-soft); padding: 6px 8px; margin-bottom: 10px; }
 .sm-composer-label { display: block; font-weight: 700; margin-bottom: 4px; }
 .sm-composer textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--lala-parchment-3); border-radius: 2px; resize: vertical; background: var(--surface-card); color: var(--text-primary); }
-.sm-composer-row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+.sm-composer-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; align-items: center; margin-top: 4px; }
+.sm-composer-kinds { display: flex; gap: 8px; color: var(--text-secondary); }
+.sm-composer-select { width: 100%; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--lala-parchment-3); border-radius: 2px; background: var(--surface-card); color: var(--text-primary); }
+.sm-status-pick { margin: 2px 4px 0 0; }
 .sm-btn { padding: 3px 10px; border-radius: 3px; border: 1px solid var(--lala-lavender-dark); background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .sm-btn:disabled { opacity: 0.6; cursor: default; }
 .sm-more { display: block; margin: 8px auto 0; }
