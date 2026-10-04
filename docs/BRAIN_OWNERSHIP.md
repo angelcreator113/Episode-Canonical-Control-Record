@@ -118,7 +118,19 @@ Found by reading, not yet run:
   id. The §4 readers still read every active entry regardless of show (next: the
   always-inject item). `tests/unit/migrations/franchise-knowledge-scope.test.js`,
   `tests/unit/routes/franchise-brain-scope-contract.test.js` and
-  `ShowBiblePage.scope.test.jsx` pin it.
+  `ShowBiblePage.scope.test.jsx` pin it. The episode script writer took the first 50
+  active always_inject rows in whatever order Postgres returned them (104 marked) and
+  recorded only their ids, so "Always inject" did not mean a rule reached the writer and
+  nothing said which did. **Fixed 2026-10-04:** `services/brainRules.js`
+  (`selectInjectedRules`) chooses deterministically (severity then id, the show's scope,
+  the first 50) and names the omitted rules; the script writer and the grounded
+  generator use it; the saved script's `context_snapshot.brain_rules` and the context
+  route carry `{ limit, eligible, used_count, omitted_count, used, omitted }`; the script
+  writer page shows "used of eligible" and lists both sets for the next generation and
+  for the script on screen. The rewrite line, the event generator and the Memories
+  engine keep their own limits (§4). `tests/unit/services/brainRules.test.js`,
+  `tests/unit/routes/episode-script-brain-rules-contract.test.js` and
+  `EpisodeScriptWriterPage.brainRules.test.jsx` pin it.
 - **Four sources have two editors with different defaults.** Each pair saves to one
   `page_content` record, but each page carries its own defaults, and they disagree.
   Measured in step 2 by comparing each page's defaults:
@@ -149,7 +161,8 @@ filter, never by what the entry is about:
 | Reader | Filter |
 |---|---|
 | Amber (`buildKnowledgeInjection`), franchise guard | active AND (critical OR always_inject), no limit |
-| Episode script writer (`loadScriptContext`), grounded script generator, rewrite line | active AND always_inject (limit 50 / 50 / 30) |
+| Episode script writer (`loadScriptContext`), grounded script generator | `selectInjectedRules` (`services/brainRules.js`, 2026-10-04): active AND always_inject, in the show's scope (franchise, the show's own, show entries not yet assigned), ordered severity then id, the first 50; the used and omitted rules are recorded on the script (`context_snapshot.brain_rules`) and shown on the script writer page |
+| Rewrite line | active AND always_inject, limit 30, unordered (not yet on the selector) |
 | Event generator (`buildEventPrompt`) | active AND always_inject, limit 10 |
 | Memories engine (`loadFranchiseKnowledge`) | any active, by severity, limit 15 (the critical laws fill it) |
 | Story evaluation (`loadFranchiseConstraints`) | active AND (critical OR always_inject), limit 20, then `applies_to` against the scene's characters. This is the only reader of `applies_to`. |

@@ -185,6 +185,8 @@ router.get('/:episodeId/context', requireAuth, async (req, res) => {
         wardrobe_items: context.wardrobe.length,
         feed_moments: context.feedMoments.length,
         franchise_laws: context.franchiseLaws.length,
+        // Which Brain rules this generation will use, and which it will not (2026-10-04).
+        brain_rules: context.brainRules,
         opportunities: context.opportunities.length,
         ready: context.scenePlan.length > 0 && !!context.brief,
       },
