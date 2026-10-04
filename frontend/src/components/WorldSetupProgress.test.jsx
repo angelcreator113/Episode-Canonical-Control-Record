@@ -44,9 +44,10 @@ describe('WorldSetupProgress', () => {
     renderIt('show-b');
     expect(SETUP_STEPS).toHaveLength(7);
     expect(SETUP_STEPS.every((s) => s.route)).toBe(true);
-    expect((await screen.findByTestId('world-setup-count')).textContent).toBe('3/7');
+    // The checks resolve asynchronously; wait for the first done step, not the placeholder count.
+    await screen.findByRole('button', { name: 'Step 1: World Foundation (done)' });
+    expect(screen.getByTestId('world-setup-count').textContent).toBe('3/7');
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
-    expect(screen.getByRole('button', { name: 'Step 1: World Foundation (done)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Step 5: Locations & Venues (done)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Step 7: Create World Events (done)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Step 2: Social Systems' })).toBeTruthy();
@@ -55,8 +56,7 @@ describe('WorldSetupProgress', () => {
 
   test('a step opens its hub tab', async () => {
     renderIt('show-b');
-    await screen.findByTestId('world-setup-count');
-    fireEvent.click(screen.getByRole('button', { name: 'Step 5: Locations & Venues (done)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Step 5: Locations & Venues (done)' }));
     expect(screen.getByTestId('where').textContent).toBe('/universe?tab=world&sub=locations');
   });
 

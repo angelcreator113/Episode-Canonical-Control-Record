@@ -42,8 +42,9 @@ describe('UniversePage: the LalaVerse hub', () => {
       expect(screen.queryByRole('button', { name: new RegExp(`^${label}$`) })).toBeNull();
     }
     // The world's setup progress is the Overview's (it was World Dashboard's first tab).
-    expect(await screen.findByTestId('world-setup-count')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /^Step \d: / })).toHaveLength(7);
+    // The Overview loads its stats after the show resolves; wait for the steps themselves.
+    expect(await screen.findAllByRole('button', { name: /^Step \d: / })).toHaveLength(7);
+    expect(screen.getByTestId('world-setup-count')).toBeTruthy();
   });
 
   test('the State tab holds World State and Tensions only; setup is gone from it', async () => {
