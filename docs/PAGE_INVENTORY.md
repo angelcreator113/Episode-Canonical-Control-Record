@@ -163,7 +163,7 @@ not via any page's UI.
 | `/relationships` | `pages/RelationshipEngine.jsx` (App.jsx:439) | live | Sidebar (WRITE zone, `Sidebar.jsx:50`) |
 | `/cultural-calendar` | — (`utils/worldRedirects.js`) | redirect → `/culture-events?tab=events` (audit IA-04, 2026-10-03; `docs/WORLD_ROUTE_OWNERSHIP.md`); `CulturalCalendar.jsx` deleted | in-app link (`pages/NewEpisodeStarter.jsx` now links the target) |
 | `/world-setup` | `pages/WorldSetupGuide.jsx` (App.jsx:443) | live | URL only |
-| `/property-manager` | `pages/PropertyManager.jsx` (App.jsx:444) | live | URL only |
+| `/property-manager` | `pages/PropertyManager.jsx` (App.jsx:444) | live | in-app link: the LalaVerse World tab's Locations sub-tab (`WorldFoundation`, 2026-10-04) |
 | `/influencer-systems` | — (`utils/worldRedirects.js`) | redirect → `/social-systems?tab=archetypes` (audit IA-04); `InfluencerSystems.jsx` deleted | URL only |
 | `/world-infrastructure` | — (`utils/worldRedirects.js`) | redirect → `/world-foundation?tab=map` (audit IA-04); `WorldInfrastructure.jsx` deleted | URL only |
 | `/social-timeline` | `pages/SocialTimeline.jsx` (App.jsx:453) | live | URL only — `components/FranchiseBrain.jsx:88-92` lists this route in a nav array, but `FranchiseBrain.jsx` is never imported/rendered anywhere in `frontend/src` (confirmed by grep; only its own test file references it) — dead code, doesn't count as reachable. Same Sidebar auto-expand-only note. |

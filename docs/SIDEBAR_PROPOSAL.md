@@ -107,7 +107,7 @@ entries are listed after the table; they need no sidebar decision.
 | `/social-personality` | `SocialPersonality` | C of Social Systems | link in `SocialSystems` | URL only | Posting-archetype reference not covered by the merge. **doorway needed.** |
 | `/character-life-simulation` | `CharacterLifeSimulation` | C of Characters | link in `CharacterRegistryPage` | URL only | Character life-path reference. **doorway needed.** |
 | `/character-depth-engine` | `CharacterDepthEngine` | C of Characters | link in `CharacterRegistryPage` | URL only | Character psychology reference. **doorway needed.** |
-| `/property-manager` | `PropertyManager` | C of World Foundation | Locations tab | URL only | Properties and rooms belong with locations. **doorway needed.** |
+| `/property-manager` | `PropertyManager` | C of World Foundation | Locations tab | URL only | Properties and rooms belong with locations. **doorway needed.** **2026-10-04: done** — a "Properties & rooms" link on the World tab's Locations sub-tab. |
 | `/pressure` | `NarrativePressureDashboard` | C of LalaVerse | link on `UniversePage` | URL only | "Where is the tension living right now": world state. **doorway needed.** |
 | `/feed-relationships` | `FeedRelationshipMap` | C of Lala's Feed | link in the Feed | URL only | A map of the same influencers the Feed lists. **doorway needed.** |
 | `/press` | `PressPublisher` | C of Culture & Events | Awards & Media tab | URL only | In-world journalists belong with media coverage. **doorway needed.** |

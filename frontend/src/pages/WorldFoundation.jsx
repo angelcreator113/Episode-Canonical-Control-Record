@@ -1,8 +1,11 @@
 /**
- * WorldFoundation — Map + Locations + Loop
- * Merges: WorldInfrastructure + WorldLocations
+ * WorldFoundation — Map + Locations (the LalaVerse hub's World tab)
+ * Merges: WorldInfrastructure + WorldLocations. The Loop (how the world's
+ * layers connect) is a fold-out intro above the map, not a tab (2026-10-04);
+ * the Locations tab is the doorway to the Property Manager.
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import BrainUpdate from '../components/BrainUpdate';
@@ -39,7 +42,6 @@ const DEFAULTS = { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS };
 const TABS = [
   { key: 'map', label: 'The Map' },
   { key: 'locations', label: 'Locations' },
-  { key: 'loop', label: 'The Loop' },
 ];
 
 const LOCATION_TYPES = [
@@ -190,6 +192,35 @@ export default function WorldFoundation({ embedded = false }) {
       {/* ── MAP TAB ── */}
       {tab === 'map' && (
         <div>
+          {/* The Loop: how the world's layers connect, folded above the map (it was a tab of explanatory text) */}
+          <details data-testid="world-loop" style={{ marginBottom: 12, border: '1px solid var(--lala-parchment-3)', borderRadius: 10, background: 'var(--surface-bg)' }}>
+            <summary style={{ cursor: 'pointer', padding: '10px 14px', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace", letterSpacing: '0.04em' }}>
+              How the world connects: the Loop
+            </summary>
+            <div style={{ padding: '0 14px 14px' }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', margin: '0 0 4px' }}>How the Entire World Connects</h2>
+              <p style={{ fontSize: 12, color: '#888', margin: '0 0 20px' }}>The infrastructure of LalaVerse operates as a single interconnected system.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {(data.WORLD_LAYERS || WORLD_LAYERS).map((l, i, arr) => (
+                  <Fragment key={l.layer}>
+                    <div style={{ ...cardStyle, borderTop: `3px solid ${l.color}`, minWidth: 160, flex: '1 1 160px' }}>
+                      <div style={{ fontSize: 20, marginBottom: 4 }}>{l.icon}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C' }}>{l.layer}</div>
+                      <p style={{ fontSize: 11, color: '#666', margin: '4px 0', lineHeight: 1.4 }}>{l.whatItDoes}</p>
+                      <div style={{ fontSize: 10, color: l.color, fontWeight: 600 }}>{l.feedsInto}</div>
+                    </div>
+                    {i < arr.length - 1 && <span style={{ fontSize: 20, color: '#ccc' }}>→</span>}
+                  </Fragment>
+                ))}
+              </div>
+              <div style={{ ...cardStyle, marginTop: 20, background: '#FAF7F0', border: '1px solid #e8e0d0', textAlign: 'center' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>THE LOOP</div>
+                <p style={{ fontSize: 12, color: '#555', margin: '6px 0 0', lineHeight: 1.5 }}>Creators influence cultural events. Cultural events get covered by media networks. Media networks are amplified by algorithms. Algorithms build communities. Communities create the demand that makes creators. <strong>The loop completes and accelerates.</strong></p>
+              </div>
+    
+            </div>
+          </details>
+
           <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl} />
 
           {/* Map image upload */}
@@ -292,7 +323,9 @@ export default function WorldFoundation({ embedded = false }) {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <input placeholder="Search locations..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 300 }} />
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Properties and rooms belong with locations (docs/SIDEBAR_PROPOSAL.md: the doorway the Property Manager lacked) */}
+              <Link to="/property-manager" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid var(--primary-light)', borderRadius: 6, color: 'var(--primary-text)', textDecoration: 'none' }}>Properties &amp; rooms →</Link>
               <button onClick={seedInfra} style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer', color: '#666' }}>Seed Infrastructure</button>
               <button onClick={() => { setShowForm(true); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>+ Add Location</button>
             </div>
@@ -365,31 +398,6 @@ export default function WorldFoundation({ embedded = false }) {
               ))}
             </>
           )}
-        </div>
-      )}
-
-      {/* ── LOOP TAB ── */}
-      {tab === 'loop' && (
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', margin: '0 0 4px' }}>How the Entire World Connects</h2>
-          <p style={{ fontSize: 12, color: '#888', margin: '0 0 20px' }}>The infrastructure of LalaVerse operates as a single interconnected system.</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {(data.WORLD_LAYERS || WORLD_LAYERS).map((l, i, arr) => (
-              <Fragment key={l.layer}>
-                <div style={{ ...cardStyle, borderTop: `3px solid ${l.color}`, minWidth: 160, flex: '1 1 160px' }}>
-                  <div style={{ fontSize: 20, marginBottom: 4 }}>{l.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C' }}>{l.layer}</div>
-                  <p style={{ fontSize: 11, color: '#666', margin: '4px 0', lineHeight: 1.4 }}>{l.whatItDoes}</p>
-                  <div style={{ fontSize: 10, color: l.color, fontWeight: 600 }}>{l.feedsInto}</div>
-                </div>
-                {i < arr.length - 1 && <span style={{ fontSize: 20, color: '#ccc' }}>→</span>}
-              </Fragment>
-            ))}
-          </div>
-          <div style={{ ...cardStyle, marginTop: 20, background: '#FAF7F0', border: '1px solid #e8e0d0', textAlign: 'center' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>THE LOOP</div>
-            <p style={{ fontSize: 12, color: '#555', margin: '6px 0 0', lineHeight: 1.5 }}>Creators influence cultural events. Cultural events get covered by media networks. Media networks are amplified by algorithms. Algorithms build communities. Communities create the demand that makes creators. <strong>The loop completes and accelerates.</strong></p>
-          </div>
         </div>
       )}
 
