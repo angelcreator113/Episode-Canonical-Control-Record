@@ -153,6 +153,31 @@
   border: 1px solid #fecaca;
 }
 
+.context-chip.partial {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
+}
+
+/* Which Brain rules a generation uses (2026-10-04) */
+.brain-rules {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--lala-gold-line);
+  border-radius: 8px;
+  background: var(--surface-card);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.brain-rules summary { cursor: pointer; font-weight: 600; color: var(--text-primary); }
+.brain-rules-omitted { color: var(--warning-text); font-weight: 600; }
+.brain-rules-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+.brain-rules-lists h4 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+.brain-rules-lists ul { margin: 0; padding-left: 16px; max-height: 220px; overflow: auto; }
+.brain-rules-lists li { margin: 2px 0; }
+.brain-rules-note { margin: 0 0 6px; font-size: 11px; color: var(--warning-text); }
+@media (max-width: 600px) { .brain-rules-lists { grid-template-columns: 1fr; } }
+
 /* ── Layout ── */
 .script-writer-layout {
   display: grid;

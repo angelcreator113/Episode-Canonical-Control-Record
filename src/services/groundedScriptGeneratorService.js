@@ -72,14 +72,14 @@ async function generateGroundedScript(episodeId, showId, models) {
     }],
   }).catch(() => []);
 
-  // 3. Load Show Brain rules (all categories with always_inject)
+  // 3. Show Brain rules: the same deterministic selection the episode
+  //    script writer records (services/brainRules.js, 2026-10-04).
   let franchiseLaws = [];
   if (FranchiseKnowledge) {
-    franchiseLaws = await FranchiseKnowledge.findAll({
-      where: { status: 'active', always_inject: true },
-      attributes: ['title', 'content', 'category'],
-      limit: 50,
-    }).catch(() => []);
+    const { selectInjectedRules } = require('./brainRules');
+    franchiseLaws = await selectInjectedRules(FranchiseKnowledge, { showId })
+      .then((s) => s.rules)
+      .catch((rulesErr) => { console.error('[GroundedScript] Brain rules selection failed:', rulesErr.message); return []; });
   }
 
   // 4. Load Event data

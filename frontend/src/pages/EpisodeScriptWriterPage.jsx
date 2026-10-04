@@ -12,8 +12,45 @@ const BEAT_NAMES = [
   'Deliverable Creation', 'Recap Panel', 'Cliffhanger',
 ];
 
+/**
+ * Which Brain rules a generation uses (2026-10-04). "Always inject" is a
+ * request, not a guarantee: the writer takes the first 50 eligible rules by
+ * severity then id, and this panel names the ones used and the ones left
+ * out, for the next generation (the context) and for the script on screen
+ * (its context_snapshot.brain_rules).
+ */
+export function BrainRulesPanel({ rules, heading }) {
+  if (!rules) return null;
+  const used = rules.used || [];
+  const omitted = rules.omitted || [];
+  const eligible = rules.eligible ?? used.length + omitted.length;
+  return (
+    <details className="brain-rules" data-testid="brain-rules">
+      <summary>
+        {heading}: {used.length} of {eligible} rules
+        {omitted.length > 0 && <span className="brain-rules-omitted"> · {omitted.length} left out (limit {rules.limit})</span>}
+      </summary>
+      <div className="brain-rules-lists">
+        <div>
+          <h4>Used ({used.length})</h4>
+          <ul data-testid="brain-rules-used">{used.map((r) => <li key={r.id}>{r.severity === 'critical' ? '🔴 ' : ''}{r.title}</li>)}</ul>
+        </div>
+        {omitted.length > 0 && (
+          <div>
+            <h4>Left out ({omitted.length})</h4>
+            <p className="brain-rules-note">Over the limit of {rules.limit}. Lower a rule&apos;s severity or turn off Always inject on the ones that matter less, in the Show Bible.</p>
+            <ul data-testid="brain-rules-omitted">{omitted.map((r) => <li key={r.id}>{r.title}</li>)}</ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function ContextPanel({ context }) {
   if (!context) return null;
+  const rules = context.brain_rules;
+  const omitted = rules?.omitted_count || 0;
   return (
     <div className="script-writer-context">
       <h3>Generation Context</h3>
@@ -40,8 +77,9 @@ function ContextPanel({ context }) {
         <div className={`context-chip ${context.feed_moments > 0 ? 'ready' : 'missing'}`}>
           <MessageCircle size={14} /> {context.feed_moments} feed moments
         </div>
-        <div className="context-chip ready">
-          <BarChart3 size={14} /> {context.franchise_laws} voice laws
+        <div className={`context-chip ${omitted > 0 ? 'partial' : 'ready'}`} data-testid="brain-rules-chip">
+          <BarChart3 size={14} />
+          {rules ? `${rules.used_count} of ${rules.eligible} Brain rules` : `${context.franchise_laws} Brain rules`}
         </div>
         {context.opportunities > 0 && (
           <div className="context-chip ready">
@@ -49,6 +87,7 @@ function ContextPanel({ context }) {
           </div>
         )}
       </div>
+      <BrainRulesPanel rules={rules} heading="Next generation" />
     </div>
   );
 }
@@ -284,6 +323,7 @@ export default function EpisodeScriptWriterPage() {
                   {activeScript.voice_score && <span>Voice: {activeScript.voice_score}/100</span>}
                 </div>
               </div>
+              <BrainRulesPanel rules={activeScript.context_snapshot?.brain_rules} heading="This script used" />
 
               {viewMode === 'structured' && activeScript.script_json ? (
                 <div className="script-writer-beats">

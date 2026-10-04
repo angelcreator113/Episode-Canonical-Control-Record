@@ -186,18 +186,22 @@ async function loadScriptContext(episodeId, showId, models) {
     }
   }
 
-  // 6. Show Brain franchise laws
+  // 6. Show Brain rules: a deterministic, recorded selection (services/
+  //    brainRules.js, 2026-10-04): severity then id, the show's scope,
+  //    the first 50, with the omitted rules named.
   context.franchiseLaws = [];
   context.franchiseLawIds = [];
+  context.brainRules = null;
   if (FranchiseKnowledge) {
     try {
-      context.franchiseLaws = await FranchiseKnowledge.findAll({
-        where: { status: 'active', always_inject: true },
-        attributes: ['id', 'title', 'content', 'category'],
-        limit: 50,
-      }).then(laws => laws.map(l => l.toJSON()));
-      context.franchiseLawIds = context.franchiseLaws.map(l => l.id);
-    } catch { /* non-blocking */ }
+      const { selectInjectedRules, brainRulesRecord } = require('./brainRules');
+      const selection = await selectInjectedRules(FranchiseKnowledge, { showId });
+      context.franchiseLaws = selection.rules;
+      context.franchiseLawIds = selection.used.map(l => l.id);
+      context.brainRules = brainRulesRecord(selection);
+    } catch (rulesErr) {
+      console.error('[ScriptWriter] Brain rules selection failed (non-blocking):', rulesErr.message);
+    }
   }
 
   // 7. Feed moments from scene plan
@@ -879,6 +883,7 @@ Return ONLY the JSON.` }],
         ...script.context_snapshot,
         franchise_laws_injected: context.franchiseLawIds,
         franchise_laws_count: context.franchiseLawIds?.length || 0,
+        brain_rules: context.brainRules,
         guard_result: guardResult,
         guard_passed: guardResult?.passed ?? null,
         guard_violations: guardResult?.violations?.length || 0,
