@@ -147,6 +147,7 @@ let GenerationJob; // Async job queue for scene generation
 let EpisodeScript; // Versioned AI-generated episode scripts
 let FeedPost; // Feed timeline posts after episodes
 let FeedMoment; // Persisted phone-screen moments from episodes
+let FeedComment; // A post's comments as records (the Feed project, step 4)
 let EventDeliverable; // What Lala owes an event (Task #1814)
 let DealRateAnchor; // Career Rate Anchors (deal build PR 1, Task #2319)
 let DealRatePremium; // Deal rate premiums (Task #2319)
@@ -415,6 +416,7 @@ try {
   EpisodeScript = require('./EpisodeScript')(sequelize);
   FeedPost = require('./FeedPost')(sequelize);
   FeedMoment = require('./FeedMoment')(sequelize);
+  FeedComment = require('./FeedComment')(sequelize);
   EventDeliverable = require('./EventDeliverable')(sequelize);
   DealRateAnchor = require('./DealRateAnchor')(sequelize);
   DealRatePremium = require('./DealRatePremium')(sequelize);
@@ -578,6 +580,7 @@ const requiredModels = {
   EpisodeScript,
   FeedPost,
   FeedMoment,
+  FeedComment,
   EventDeliverable,
   DealRateAnchor,
   DealRatePremium,
@@ -840,6 +843,9 @@ if (EpisodeScript && EpisodeScript.associate) {
 }
 if (FeedPost && FeedPost.associate) {
   FeedPost.associate(requiredModels);
+}
+if (FeedComment && FeedComment.associate) {
+  FeedComment.associate(requiredModels);
 }
 if (FeedMoment && FeedMoment.associate) {
   FeedMoment.associate(requiredModels);
@@ -2093,6 +2099,7 @@ module.exports.GenerationJob = GenerationJob;
 module.exports.EpisodeScript = EpisodeScript;
 module.exports.FeedPost = FeedPost;
 module.exports.FeedMoment = FeedMoment;
+module.exports.FeedComment = FeedComment;
 module.exports.EventDeliverable = EventDeliverable;
 module.exports.DealRateAnchor = DealRateAnchor;
 module.exports.DealRatePremium = DealRatePremium;
