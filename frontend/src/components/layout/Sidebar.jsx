@@ -24,12 +24,10 @@ function buildNav(shows, activeId) {
     {
       zone: 'WORLD',
       items: [
-        { icon: '◈', label: 'LalaVerse', route: '/universe' },
+        // The world pages (map and locations, society, culture, setup and
+        // state) are the LalaVerse hub's tabs (2026-10-04), not rows here.
+        { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'World, society, culture, state' },
         { icon: '📖', label: 'Show Bible', route: '/show-bible' },
-        { icon: '🌍', label: 'World Dashboard', route: '/world-dashboard', hint: 'Setup progress & state' },
-        { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
-        { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
-        { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
         { icon: '🎭', label: "Lala's Feed", route: '/feed?layer=lalaverse', hint: 'Who exists in her social world' },
       ],
     },
@@ -120,7 +118,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/intelligence') || ['/world-dashboard', '/world-foundation', '/social-systems', '/culture-events', '/social-timeline', '/social-personality', '/character-life-simulation', '/character-depth-engine', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/intelligence') || ['/social-timeline', '/social-personality', '/character-life-simulation', '/character-depth-engine', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);

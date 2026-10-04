@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
+import { tabFromSearch } from '../utils/worldRedirects';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -27,13 +28,13 @@ export const createTensionProposalApi = (payload) =>
   apiClient.post(`${API}/world/create-tension-proposal`, payload);
 
 const SETUP_STEPS = [
-  { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', route: '/world-foundation', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
-  { num: 2, key: 'influencer', icon: '⭐', title: 'Social Systems', route: '/social-systems', description: 'How influence works — archetypes, relationships, economy, trends.', feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'] },
-  { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', route: '/culture-events', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
-  { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', route: '/culture-events', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
-  { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', route: '/world-foundation?tab=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
+  { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', route: '/universe?tab=world', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
+  { num: 2, key: 'influencer', icon: '⭐', title: 'Social Systems', route: '/universe?tab=society', description: 'How influence works — archetypes, relationships, economy, trends.', feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'] },
+  { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', route: '/universe?tab=culture', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
+  { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', route: '/universe?tab=culture&sub=history', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
+  { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', route: '/universe?tab=world&sub=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
   { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', route: null, description: 'Create Lala\'s social world — influencers, rivals, friends.', feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
-  { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', route: '/culture-events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
+  { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', route: '/universe?tab=culture&sub=events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
 ];
 
 const TABS = [
@@ -46,9 +47,9 @@ const tb = (a) => ({ padding:'8px 16px', fontSize:12, fontWeight:600, fontFamily
 const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:14, marginBottom:8 };
 const inputStyle = { padding:'7px 10px', borderRadius:6, border:'1px solid #e0d9ce', fontSize:12, width:'100%', boxSizing:'border-box' };
 
-export default function WorldDashboard() {
+export default function WorldDashboard({ embedded = false }) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('setup');
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'setup', undefined, 'sub'));
   const [toast, setToast] = useState(null);
   const flash = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
 
@@ -124,12 +125,13 @@ export default function WorldDashboard() {
   const completedCount = Object.values(status).filter(Boolean).length;
 
   return (
-    <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 20px' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
-        <div>
+    <div style={{ maxWidth:1100, margin:'0 auto', padding: embedded ? 0 : '24px 20px' }}>
+      {/* Header; inside the LalaVerse hub the tab is the heading */}
+      <div style={{ display:'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems:'flex-start', marginBottom: embedded ? 8 : 20 }}>
+        {!embedded && <div>
           <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>World Dashboard</h1>
           <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Setup progress, current world state, and character tensions</p>
-        </div>
+        </div>}
         {!statusLoading && <div style={{ fontSize:28, fontWeight:700, color:completedCount===7?'#16a34a':'#B8962E' }}>{completedCount}/7</div>}
       </div>
 

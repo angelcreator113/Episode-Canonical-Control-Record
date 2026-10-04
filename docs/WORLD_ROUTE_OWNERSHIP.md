@@ -5,18 +5,27 @@ numbers optional). Audit IA-04 (2026-10-03): "Similar labels conceal different s
 scopes and purposes. Removing links alone does not define ownership." This is the map:
 one canonical editor per domain, what it stores, and where the older routes go.
 
+**2026-10-04: the world pages are the LalaVerse hub's tabs.** `UniversePage` (`/universe`)
+holds `WorldFoundation` (tab `world`), `SocialSystems` (`society`), `CultureEvents`
+(`culture`) and `WorldDashboard` (`state`) in embedded mode; the hub's `?tab=` names the
+tab and `?sub=` the page's own tab (`tabFromSearch(tabs, fallback, search, 'sub')`). The
+four pages keep their files and their owner rows below; only their doorway moved. Their
+former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedirects.js`,
+rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
+Bible and Lala's Feed.
+
 ## 1. Owners
 
 | Domain | Canonical editor (Sidebar) | Tab | Store | Brain sync |
 |---|---|---|---|---|
-| The map: DREAM cities, universities, corporations, the Loop | `WorldFoundation` (`/world-foundation`) | `map`, `loop` | page data `world_infrastructure` (`usePageData`, defaults `data/dreamCities.js`) | yes (`brainManifests/worldFoundation.js`) |
+| The map: DREAM cities, universities, corporations, the Loop | `WorldFoundation` (LalaVerse › World, `/universe?tab=world`) | `map`, `loop` | page data `world_infrastructure` (`usePageData`, defaults `data/dreamCities.js`) | yes (`brainManifests/worldFoundation.js`) |
 | Locations: the places scenes happen in | `WorldFoundation` | `locations` | `world_locations` table via `GET/POST/PUT/DELETE /api/v1/world/locations` (`listLocationsApi` … `deleteLocationApi`) | no (records, not knowledge) |
-| Archetypes, legends and society, social rules, trends | `SocialSystems` (`/social-systems`) | `archetypes`, `legends`, `rules`, `trends` | page data `influencer_systems` (defaults `data/influencerData.js`) and the society keys of `cultural_calendar` | yes (`brainManifests/socialSystems.js`) |
-| The cultural calendar: planned world events, spawned into a show | `CultureEvents` (`/culture-events`) | `events` | `calendar_events` via `/api/v1/calendar/events` (`listCalendarEventsApi`, `autoSpawnEventApi`, `deleteCalendarEventApi`) plus page data `cultural_calendar` | yes (`brainManifests/culturalCalendar.js`) |
+| Archetypes, legends and society, social rules, trends | `SocialSystems` (LalaVerse › Society, `/universe?tab=society`) | `archetypes`, `legends`, `rules`, `trends` | page data `influencer_systems` (defaults `data/influencerData.js`) and the society keys of `cultural_calendar` | yes (`brainManifests/socialSystems.js`) |
+| The cultural calendar: planned world events, spawned into a show | `CultureEvents` (LalaVerse › Culture, `/universe?tab=culture`) | `events` | `calendar_events` via `/api/v1/calendar/events` (`listCalendarEventsApi`, `autoSpawnEventApi`, `deleteCalendarEventApi`) plus page data `cultural_calendar` | yes (`brainManifests/culturalCalendar.js`) |
 | Awards and media: who covers and amplifies | `CultureEvents` | `awards` | page data `cultural_calendar` (`AWARD_SHOWS`, `GOSSIP_MEDIA`, hierarchies) | yes |
 | History: what the world remembers | `CultureEvents` | `history` | page data `cultural_memory` (defaults `data/memoryData.js`) | yes (`brainManifests/culturalMemory.js`) |
 
-A page opens on the tab its URL names (`?tab=`, `utils/worldRedirects.js` `tabFromSearch`).
+A page opens on the tab its URL names (`?sub=` inside the hub, `utils/worldRedirects.js` `tabFromSearch`).
 
 ## 2. Older routes, now redirects
 
@@ -27,11 +36,13 @@ is deleted (`utils/worldRedirects.js` `WORLD_REDIRECTS`, rendered by `App`).
 
 | Route | Opens |
 |---|---|
-| `/influencer-systems` | `/social-systems?tab=archetypes` |
-| `/world-infrastructure` | `/world-foundation?tab=map` |
-| `/world-locations` | `/world-foundation?tab=locations` |
-| `/cultural-calendar` | `/culture-events?tab=events` |
-| `/cultural-memory` | `/culture-events?tab=history` |
+| `/influencer-systems` | `/universe?tab=society&sub=archetypes` |
+| `/world-infrastructure` | `/universe?tab=world&sub=map` |
+| `/world-locations` | `/universe?tab=world&sub=locations` |
+| `/cultural-calendar` | `/universe?tab=culture&sub=events` |
+| `/cultural-memory` | `/universe?tab=culture&sub=history` |
+| `/world-foundation`, `/social-systems`, `/culture-events`, `/world-dashboard` (2026-10-04) | the hub tab (`world`, `society`, `culture`, `state`), carrying the route's old `?tab=` as `&sub=` |
+| `/world` | `/universe?tab=state` |
 
 ## 3. Three calendars, named distinctly
 

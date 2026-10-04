@@ -7,23 +7,42 @@
  * same work; the copies are deleted.
  */
 export const WORLD_REDIRECTS = {
-  // Legends, society and the calendar's social rules live in Social Systems.
-  '/influencer-systems': '/social-systems?tab=archetypes',
-  // Cities, universities, corporations: World Foundation's map; locations
-  // (the /world/locations records) its Locations tab.
-  '/world-infrastructure': '/world-foundation?tab=map',
-  '/world-locations': '/world-foundation?tab=locations',
-  // The cultural calendar is Culture & Events' Events tab; cultural memory
-  // its History tab.
-  '/cultural-calendar': '/culture-events?tab=events',
-  '/cultural-memory': '/culture-events?tab=history',
+  // Legends, society and the calendar's social rules live in Society.
+  '/influencer-systems': '/universe?tab=society&sub=archetypes',
+  // Cities, universities, corporations: the World tab's map; locations
+  // (the /world/locations records) its Locations sub-tab.
+  '/world-infrastructure': '/universe?tab=world&sub=map',
+  '/world-locations': '/universe?tab=world&sub=locations',
+  // The cultural calendar is Culture's Events sub-tab; cultural memory
+  // its History sub-tab.
+  '/cultural-calendar': '/universe?tab=culture&sub=events',
+  '/cultural-memory': '/universe?tab=culture&sub=history',
 };
 
 /**
- * A page's opening tab from ?tab=, when it names one of the page's tabs;
- * else the page's own first choice. Read once, at mount.
+ * The LalaVerse hub (`/universe`, `UniversePage`) holds the world pages as
+ * tabs (2026-10-04): each former Sidebar route opens its tab, and the
+ * `?tab=` it used to carry becomes the tab's `?sub=`.
  */
-export function tabFromSearch(tabs, fallback, search = typeof window !== 'undefined' ? window.location.search : '') {
-  const wanted = new URLSearchParams(search).get('tab');
+export const HUB_TABS = {
+  '/world-dashboard': 'state',
+  '/world-foundation': 'world',
+  '/social-systems': 'society',
+  '/culture-events': 'culture',
+};
+
+/** `/universe?tab=<tab>` plus `&sub=` for a legacy `?tab=` in `search`. */
+export function hubTarget(tab, search = '') {
+  const sub = new URLSearchParams(search).get('tab');
+  return `/universe?tab=${tab}${sub ? `&sub=${encodeURIComponent(sub)}` : ''}`;
+}
+
+/**
+ * A page's opening tab from ?tab= (or the query `param` named), when it
+ * names one of the page's tabs; else the page's own first choice. Read
+ * once, at mount. The hub's tabs read `sub`, since `tab` is the hub's.
+ */
+export function tabFromSearch(tabs, fallback, search = typeof window !== 'undefined' ? window.location.search : '', param = 'tab') {
+  const wanted = new URLSearchParams(search).get(param);
   return tabs.some((t) => t.key === wanted) ? wanted : fallback;
 }

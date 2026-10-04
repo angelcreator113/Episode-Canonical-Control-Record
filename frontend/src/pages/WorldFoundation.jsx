@@ -63,9 +63,9 @@ const cardStyle = { background: '#fff', border: '1px solid #eee', borderRadius: 
 const labelStyle = { fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 4 };
 const inputStyle = { padding: '7px 10px', borderRadius: 6, border: '1px solid #e0d9ce', fontSize: 12, width: '100%', boxSizing: 'border-box' };
 
-export default function WorldFoundation() {
+export default function WorldFoundation({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
-  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map'));
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
   const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 
@@ -169,13 +169,13 @@ export default function WorldFoundation() {
 
   return (
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
+      {/* Header; inside the LalaVerse hub the tab is the heading */}
+      <div style={{ display: 'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems: 'flex-start', marginBottom: embedded ? 8 : 20 }}>
+        {!embedded && <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#2C2C2C', margin: 0 }}>World Foundation</h1>
           <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>The DREAM map — cities, locations, venues, and how the world connects</p>
-        </div>
+        </div>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
           <BrainUpdate source="world_foundation" data={data} ready={loaded} />

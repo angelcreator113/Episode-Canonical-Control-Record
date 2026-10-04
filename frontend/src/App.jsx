@@ -57,7 +57,13 @@ const EditShow = lazy(() => import('./pages/EditShow'));
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
 import EpisodeComposerRedirect from './components/EpisodeComposerRedirect';
-import { WORLD_REDIRECTS } from './utils/worldRedirects';
+import { WORLD_REDIRECTS, HUB_TABS, hubTarget } from './utils/worldRedirects';
+
+/** A former world page's route opens its LalaVerse hub tab, carrying its old ?tab= as &sub=. */
+function WorldHubRedirect({ tab }) {
+  const { search } = useLocation();
+  return <Navigate to={hubTarget(tab, search)} replace />;
+}
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
@@ -159,10 +165,6 @@ const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
-const WorldFoundation = lazy(() => import('./pages/WorldFoundation'));
-const SocialSystemsPage = lazy(() => import('./pages/SocialSystems'));
-const CultureEvents = lazy(() => import('./pages/CultureEvents'));
-const WorldDashboard = lazy(() => import('./pages/WorldDashboard'));
 const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
 const StoriesPage = lazy(() => import('./pages/StoriesPage'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
@@ -474,11 +476,9 @@ function AppContent() {
           {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
           <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
 
-          {/* Consolidated World Building Pages (DREAM) */}
-          <Route path="/world-dashboard" element={<WorldDashboard />} />
-          <Route path="/world-foundation" element={<WorldFoundation />} />
-          <Route path="/social-systems" element={<SocialSystemsPage />} />
-          <Route path="/culture-events" element={<CultureEvents />} />
+          {/* The world pages are the LalaVerse hub's tabs (2026-10-04); each
+              former route opens its tab, carrying its old ?tab= as &sub=. */}
+          {Object.entries(HUB_TABS).map(([path, tab]) => <Route key={path} path={path} element={<WorldHubRedirect tab={tab} />} />)}
 
           {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
           <Route path="/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
@@ -558,8 +558,8 @@ function AppContent() {
           {/* Recycle Bin */}
           <Route path="/recycle-bin" element={<RecycleBin />} />
 
-          {/* World View — redirects to World Dashboard */}
-          <Route path="/world" element={<Navigate to="/world-dashboard" replace />} />
+          {/* World View — the LalaVerse hub's State tab */}
+          <Route path="/world" element={<Navigate to="/universe?tab=state" replace />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />

@@ -64,7 +64,7 @@ entries:
 | Zone | Entry → route |
 |---|---|
 | (fixed) | brand mark → `/start` (:173); Home → `/` (`NavLink`, :202); footer avatar → `/settings` (:418) |
-| FRANCHISE | LalaVerse `/universe` · Show Bible `/show-bible` · World Dashboard `/world-dashboard` · World Foundation `/world-foundation` · Social Systems `/social-systems` · Culture & Events `/culture-events` · Lala's Feed `/feed?layer=lalaverse` |
+| FRANCHISE | LalaVerse `/universe` · Show Bible `/show-bible` · World Dashboard `/world-dashboard` · World Foundation `/world-foundation` · Social Systems `/social-systems` · Culture & Events `/culture-events` · Lala's Feed `/feed?layer=lalaverse` — **2026-10-04:** the four world rows are gone; they are the LalaVerse hub's tabs (World, Society, Culture, State; `UniversePage`), and the zone is LalaVerse, Show Bible, Lala's Feed. |
 | PRODUCE | Producer Mode `/shows/:id/world?tab=overview` (only when a show exists) · Shows `/shows`, expandable to each `/shows/:id` and `+ New Show` `/shows/create` |
 | WRITE | Stories `/stories` (children: Structure `/story-engine`, Threads `/story-threads`, Calendar `/story-calendar`) · Characters `/character-registry?view=world` · Relationships `/relationships` |
 | STUDIO | Timeline Editor `/studio/timeline` · Compositions `/library` |
@@ -92,7 +92,7 @@ entries are listed after the table; they need no sidebar decision.
 |---|---|---|---|---|---|
 | `/universe` | `UniversePage` | E | World | Sidebar | The LalaVerse overview; the world's front door. |
 | `/show-bible` | `ShowBiblePage` | E | World | Sidebar | Canon reference for the show; answers "what exists". |
-| `/world-dashboard` | `WorldDashboard` | C of LalaVerse | link on `UniversePage` | Sidebar | Setup progress is a second world overview beside LalaVerse; one overview per question. **doorway needed** before the entry moves. |
+| `/world-dashboard` | `WorldDashboard` | C of LalaVerse | link on `UniversePage` | Sidebar | Setup progress is a second world overview beside LalaVerse; one overview per question. **doorway needed** before the entry moves. **2026-10-04: done** — it is the hub's State tab; the route redirects there. |
 | `/world-foundation` | `WorldFoundation` | E | World | Sidebar | DREAM map, cities, locations. |
 | `/social-systems` | `SocialSystems` | E | World | Sidebar | Archetypes, legends, rules, trends. |
 | `/culture-events` | `CultureEvents` | E | World | Sidebar | The calendar and cultural memory. |
@@ -243,11 +243,8 @@ Home                              /
 Search                            /search
 
 WORLD — what exists
-  LalaVerse                       /universe
+  LalaVerse                       /universe   (tabs: Overview · World · Society · Culture · State, 2026-10-04)
   Show Bible                      /show-bible
-  World Foundation                /world-foundation
-  Social Systems                  /social-systems
-  Culture & Events                /culture-events
   Lala's Feed                     /feed?layer=lalaverse
 
 PRODUCE — what am I making now
