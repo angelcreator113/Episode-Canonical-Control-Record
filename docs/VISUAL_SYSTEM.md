@@ -95,7 +95,7 @@ are listed for the record.
 | Next Event Suggestions overlay (`NextEventSuggestionsOverlay.jsx`, opened from the Episode page) | done: no color literal or gradient (the backdrop scrim and two shadows are the only rgba); the pick button is `--primary` (it was gold under white); the top rank is a gold border, a gold fill under ink and gold text, never gold as text (2.82:1); the score badge, the boost/warn/block reasons, the payment, cost and type chips read the success, warning, danger and teal families; the slate greys (`#1a1a2e`, `#64748b`, `#94a3b8`, `#e2e8f0`) are `--text-primary`, `--text-secondary` and `--lala-parchment-3`. |
 | Scene Sets stylesheets (`SceneSetsTab.css`, `components/SceneSets/DressedAngles.css`) | done, part one of two: no color literal or hex fallback in either stylesheet (387 and 9 literals); the local `--ss-*` palette aliases the tokens (`--ss-gold-text` added so the local gold is never text); the four color gradients are gone (skeleton shimmer is parchment tokens, the hero scrim stays rgba); Generate, the active filter pill, the active scope button and the promote hover are `--primary` (they were indigo gradients and gold under white); the franchise badge is ink on gold; the ready badge is white on `--success-text` (it was white on translucent green, under 4.5:1); the lightbox and prompt preview's light text is `--lala-parchment-3` / `-2` on their dark surfaces; placeholders read `--text-faint`; the indigo scene-set identity (`#5C3D8F`, `#2D1B69`, `#E0D5F0`, `#F5F0FF`…) is the teal family. |
 | Scene Sets page component (`SceneSetsTab.jsx`) | done, part two of two: no color literal or gradient in the 125 inline sites; the `StatusPill` map reads success, gold, ink and danger; the `TypeBadge` map reads one family per room type (Home Base teal, Closet pink, Event gold, Transition success, Other ink, replacing purple/blue/brown/green/grey); the quality score, the spec steps, the setup and spec-build alerts (pink family, ink text), the camera-contract chips and the object-category dots read the families; gold is gold text or a fill under no text; data-driven swatches keep their spec hex with a token fallback. |
-| The screenshot pass at 375/768/1024/1280/1440 | next: every migrated screen at five widths, before the audit's VISUAL-01/02 close-out |
+| The screenshot pass at 375/768/1024/1280/1440 | done (§5): 15 screens × 5 widths, 75 shots, no horizontal page scroll and no page error at any width; three follow-ups found (§5) |
 | Remaining screens | after |
 
 Rules for a migrated screen: no new hex literals in JSX for colors the tokens have;
@@ -113,3 +113,51 @@ before merge.
   `overflow: hidden`.
 - `touch-action: pan-y` on the mobile root blocks pinch-zoom on ordinary content; scope
   gesture limits to canvases and keep every gesture action as a visible button.
+
+## 5. The screenshot pass (2026-10-04)
+
+The close-out of batch 4's migrations: every migrated screen, shot in real Chromium at
+375, 768, 1024, 1280 and 1440 wide, and read against the theme rules in §1.
+
+**How it runs.** `frontend/e2e/themeScreens/run.cjs` (not part of CI) serves the production
+build with `vite preview`, answers every `/api` call inside the browser from
+`fixtures.cjs` (one show, three events in three states, three episodes, three scene sets in
+three statuses, a todo list, money, Lala's state; nothing leaves the machine), signs the
+session in through `localStorage`, grows the viewport to the content pane's scroll height
+(the app scrolls inside `.app-content`, not the document) and writes one full-page PNG per
+screen and width plus an `index.json` with each shot's page errors, unanswered API paths
+and whether the document scrolled horizontally. The build's service worker is blocked in
+the browser context; its fetches bypass page routing and had every call answered 500 on
+the first run. The container cannot reach Google Fonts, so the shots render Lora and DM
+Mono's system fallbacks; nothing else differs from production.
+
+```
+cd frontend && npx vite build
+OUT=/path/to/shots NODE_PATH=$(npm root -g) node frontend/e2e/themeScreens/run.cjs [screen-key ...]
+```
+
+**What was shot.** Producer Overview, the Events queue, the event detail modal, the Event
+Package page, Scene Sets, and the Episode page on its Overview, Script, Assets (with the
+Todo list), Scenes, Money, Phone, Overlays, Production Checklist and Distribution tabs,
+plus the Next Event Suggestions overlay opened from "What's next": 15 screens, 75 shots.
+
+**What the shots show.** No horizontal page scroll at any width (`hScroll: false` on all
+75). No page error on any migrated screen. The sidebar, the pink attention bar and teal
+primary actions, the gold-under-ink marks (status chips, the checklist's action chips,
+the wardrobe list's check squares, the franchise badge), the family-colored statuses
+(success / warning / danger / teal / pink) and the dark lightbox surfaces read as §1
+describes at every width; the Episode page's sub-tab strip and the Producer Mode tab
+strip scroll horizontally inside their own row at 375 (the page itself does not).
+
+**Follow-ups found (not yet migrated; each one PR).**
+
+| Where | What the shot shows | Source |
+|---|---|---|
+| Event detail modal → Wardrobe Shopping List and Social Tasks overlays | "Generate Wardrobe Shopping List" is gold under white (2.82:1); "Generate Social Tasks" and "Pick Outfit" are indigo (`#6366f1`) under white; the "From outfit picker" chip is indigo on `#eef2ff` | `components/OverlayApprovalPanel.jsx` (53 literals; `accentColor` picks `#B8962E` / `#6366f1`, `TIMING_COLORS`) |
+| Event detail modal → Invitation Style + "Generate Invite" | "Generate Invite" is gold under white; the style fields' panel, chips and error read their own literals | `pages/InvitationGenerator.jsx` (42 literals; `InvitationButton`, `InvitationStyleFields`, also mounted on the Event Package page) |
+| The error page ("Oops! Something went wrong") | a blue (`#0d6efd`-style) Try Again button on a grey gradient, no token anywhere | `components/ErrorBoundary.css` (16 literals, one gradient) |
+
+`WorldAdmin.jsx` still carries 638 literals outside the five migrated slices (Overview,
+Events queue, event editors, the detail modal's own chrome); the Episodes, Assets, Cast and
+Release tabs are the audit's next batch, not this one's.
+
