@@ -519,10 +519,10 @@ export const listEpisodesByShowApi = (showId) =>
 
 function StatusPill({ status }) {
   const config = {
-    complete:   { label: 'Ready',      bg: '#E8F5E9', color: '#1A7A40', dotColor: '#1A7A40' },
-    generating: { label: 'Generating', bg: '#FFF8E1', color: '#B8960C', dotColor: '#B8960C' },
-    pending:    { label: 'Pending',    bg: '#F5F5F5', color: '#888',    dotColor: '#CCC'    },
-    failed:     { label: 'Failed',     bg: '#FFEBEE', color: '#C62828', dotColor: '#C62828' },
+    complete:   { label: 'Ready',      bg: 'var(--success-bg)',      color: 'var(--success-text)',   dotColor: 'var(--success-text)' },
+    generating: { label: 'Generating', bg: 'var(--lala-gold-soft)',  color: 'var(--lala-gold-text)', dotColor: 'var(--lala-gold)' },
+    pending:    { label: 'Pending',    bg: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', dotColor: 'var(--lala-parchment-3)' },
+    failed:     { label: 'Failed',     bg: 'var(--danger-bg)',       color: 'var(--danger-text)',    dotColor: 'var(--danger)' },
   };
   const c = config[status] || config.pending;
   return (
@@ -540,11 +540,12 @@ function StatusPill({ status }) {
 
 function TypeBadge({ type }) {
   const config = {
-    HOME_BASE:      { label: 'Home Base',  color: '#5C3D8F', bg: '#EDE7F6' },
-    CLOSET:         { label: 'Closet',     color: '#1A5276', bg: '#D6EAF8' },
-    EVENT_LOCATION: { label: 'Event',      color: '#7B3F00', bg: '#FDEBD0' },
-    TRANSITION:     { label: 'Transition', color: '#145A32', bg: '#D5F5E3' },
-    OTHER:          { label: 'Other',      color: '#616161', bg: '#F5F5F5' },
+    // One family per room type: teal, pink, gold, success, ink.
+    HOME_BASE:      { label: 'Home Base',  color: 'var(--primary-text)',   bg: 'var(--primary-subtle)' },
+    CLOSET:         { label: 'Closet',     color: 'var(--accent-dark)',    bg: 'var(--accent-subtle)' },
+    EVENT_LOCATION: { label: 'Event',      color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)' },
+    TRANSITION:     { label: 'Transition', color: 'var(--success-text)',   bg: 'var(--success-bg)' },
+    OTHER:          { label: 'Other',      color: 'var(--text-secondary)', bg: 'var(--lala-parchment-2)' },
   };
   const c = config[type] || config.OTHER;
   return (
@@ -860,8 +861,8 @@ function GenerationProgress({ progress }) {
               {isDone ? <CheckCircle2 size={12} /> : isFailed ? <AlertCircle size={12} /> : isCurrent ? <Loader size={12} className="spin" /> : <span className="scene-sets-progress-dot" />}
               <span>{a.label}</span>
               {isCurrent && <span className="scene-sets-progress-step">generating...</span>}
-              {isDone && <span className="scene-sets-progress-step" style={{ color: '#16a34a' }}>done</span>}
-              {isFailed && <span className="scene-sets-progress-step" style={{ color: '#dc2626' }}>failed</span>}
+              {isDone && <span className="scene-sets-progress-step" style={{ color: 'var(--success-text)' }}>done</span>}
+              {isFailed && <span className="scene-sets-progress-step" style={{ color: 'var(--danger-text)' }}>failed</span>}
             </div>
           );
         })}
@@ -1307,7 +1308,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
           <div className="scene-sets-card-placeholder" onClick={(e) => { e.stopPropagation(); openWorkspace('angles'); }} style={{ cursor: 'pointer' }}>
             <ImageIcon size={28} strokeWidth={1.2} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>No background yet</span>
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>Open the set to upload or generate one</span>
+            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Open the set to upload or generate one</span>
           </div>
         )}
 
@@ -1587,7 +1588,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <label><Clock size={11} /> Environment</label>
                       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Time of Day</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Time of Day</span>
                           <select
                             value={localTimeOfDay}
                             onChange={async (e) => {
@@ -1609,7 +1610,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           </select>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
                           <select
                             value={localSeason}
                             onChange={async (e) => {
@@ -1677,7 +1678,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <label><Film size={11} /> Linked Episodes</label>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {set.episodes.map(ep => (
-                            <span key={ep.id} style={{ padding: '3px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#4338ca' }}>
+                            <span key={ep.id} style={{ padding: '3px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--primary-text)' }}>
                               {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} {ep.title}
                             </span>
                           ))}
@@ -1688,8 +1689,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     {/* AI Prompt (collapsed) */}
                     {set.base_runway_prompt && (
                       <details className="scene-sets-modal-field" style={{ marginTop: 8 }}>
-                        <summary style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none' }}>View AI Prompt</summary>
-                        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10, lineHeight: 1.5, maxHeight: 200, overflow: 'auto', background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 6, color: '#475569' }}>{set.base_runway_prompt}</pre>
+                        <summary style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>View AI Prompt</summary>
+                        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10, lineHeight: 1.5, maxHeight: 200, overflow: 'auto', background: 'var(--surface-bg)', padding: 10, borderRadius: 6, marginTop: 6, color: 'var(--text-secondary)' }}>{set.base_runway_prompt}</pre>
                       </details>
                     )}
 
@@ -1725,7 +1726,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             {Object.entries(set.visual_language.mood_variants.base).map(([mood, url]) => (
                               <div key={mood} style={{ flexShrink: 0, textAlign: 'center' }}>
                                 <img src={bustUrl(url)} alt={mood} style={{ width: 64, height: 42, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => window.open(url, '_blank')} />
-                                <div style={{ fontSize: 8, color: '#94a3b8', marginTop: 1, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
+                                <div style={{ fontSize: 8, color: 'var(--text-secondary)', marginTop: 1, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
                               </div>
                             ))}
                           </div>
@@ -1789,8 +1790,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
                     {/* ── Pipeline Progress Panel — shows during upload+spec+angles flow ── */}
                     {specStage && specStage !== 'done' && (
-                      <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
                         {[
                           { key: 'uploading', label: 'Uploading image', icon: Upload },
                           { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
@@ -1805,9 +1806,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           return (
                             <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: isDone ? 0.5 : isCurrent ? 1 : 0.3 }}>
                               <div style={{ width: 18, display: 'flex', justifyContent: 'center' }}>
-                                {isDone ? <CheckCircle2 size={12} style={{ color: '#16a34a' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: '#B8962E' }} /> : <Icon size={12} style={{ color: '#ccc' }} />}
+                                {isDone ? <CheckCircle2 size={12} style={{ color: 'var(--success-text)' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: 'var(--lala-gold-text)' }} /> : <Icon size={12} style={{ color: 'var(--text-faint)' }} />}
                               </div>
-                              <span style={{ fontSize: 11, color: isCurrent ? '#2C2C2C' : '#888', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
+                              <span style={{ fontSize: 11, color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
                             </div>
                           );
                         })}
@@ -1816,18 +1817,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
                     {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
                     {!specStage && hasBase && (
-                      <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
                         {hasSpec && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                            <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                            <CheckCircle2 size={12} style={{ color: 'var(--success-text)' }} />
+                            <span style={{ fontSize: 10, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace" }}>
                               Step 1 complete: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
                             </span>
                           </div>
                         )}
 
                         {!hasSpec && totalAngles > 0 && (
-                          <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                          <div style={{ fontSize: 10, color: 'var(--warning-text)', marginBottom: 8, padding: '6px 8px', background: 'var(--warning-bg)', borderRadius: 6, lineHeight: 1.4 }}>
                             Step 1 is not done yet for this location. Angles exist, but no Scene Spec is saved. Build Scene Spec to lock object/zones continuity.
                           </div>
                         )}
@@ -1836,8 +1837,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         {!hasSpec && totalAngles === 0 && (
                           <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 1: Build Scene Spec</span>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>Step 1: Build Scene Spec</span>
                             </div>
                             <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
                               Analyze your image to catalog every object, define zones, and create camera contracts for consistent angle generation.
@@ -1846,12 +1847,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing the image… {specBuild.elapsed}s</> : <><FileText size={12} /> Build Scene Spec</>}
                             </button>
                             {buildingSpec && (
-                              <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f1', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
+                              <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-bg)', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
                                 One request to Claude Vision: it reads the image, catalogs the objects, defines the zones and writes the camera contracts, and answers once. Usually 15–30 seconds, sometimes longer.
                               </div>
                             )}
                             {specBuild.status === 'error' && (
-                              <div role="alert" data-testid={`build-spec-error-${set.id}`} style={{ marginTop: 8, padding: '8px 10px', background: '#FBEFF3', border: '1px solid #C06E87', borderRadius: 6, fontSize: 10, color: '#2C2C2C', lineHeight: 1.5 }}>
+                              <div role="alert" data-testid={`build-spec-error-${set.id}`} style={{ marginTop: 8, padding: '8px 10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent)', borderRadius: 6, fontSize: 10, color: 'var(--text-primary)', lineHeight: 1.5 }}>
                                 The spec was not built: {specBuild.error}. The saved spec, if any, is unchanged.
                               </div>
                             )}
@@ -1862,19 +1863,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         {hasSpec && totalAngles === 0 && (
                           <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                              <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                              <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                              <CheckCircle2 size={12} style={{ color: 'var(--success-text)' }} />
+                              <span style={{ fontSize: 10, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace" }}>
                                 Spec: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
                               </span>
                             </div>
                             {cameraContractCount === 0 ? (
-                              <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                              <div style={{ fontSize: 10, color: 'var(--warning-text)', marginBottom: 8, padding: '6px 8px', background: 'var(--warning-bg)', borderRadius: 6, lineHeight: 1.4 }}>
                                 This spec was saved without any camera contracts, so angle creation cannot run yet. Rebuild the spec to generate valid camera angles.
                               </div>
                             ) : null}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>{cameraContractCount > 0 ? 'Step 2: Create Camera Angles' : 'Step 2: Rebuild Scene Spec'}</span>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>{cameraContractCount > 0 ? 'Step 2: Create Camera Angles' : 'Step 2: Rebuild Scene Spec'}</span>
                             </div>
                             <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
                               {cameraContractCount > 0
@@ -1913,14 +1914,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         {hasSpec && totalAngles > 0 && generableAngles.length > 0 && (
                           <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                              <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
-                              <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                              <CheckCircle2 size={12} style={{ color: 'var(--success-text)' }} />
+                              <span style={{ fontSize: 10, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace" }}>
                                 Spec: {sceneSpec?.objects?.length || 0} objects · {cameraContractCount} contracts
                               </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                              <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }} />
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
                             </div>
                             <button onClick={async () => {
                               if (failedAngles.length > 0) {
@@ -1938,8 +1939,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         {/* All done: spec + angles all generated */}
                         {hasSpec && totalAngles > 0 && generableAngles.length === 0 && readyAngles === totalAngles && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+                            <CheckCircle2 size={14} style={{ color: 'var(--success-text)' }} />
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success-text)' }}>
                               Complete — {readyAngles} angles generated with spec enforcement
                             </span>
                           </div>
@@ -2028,7 +2029,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               {isComplete && (() => {
                                 const sv = a.quality_review?.spec_validation;
                                 if (sv) {
-                                  const scoreColor = sv.score >= 80 ? '#16a34a' : sv.score >= 60 ? '#B8962E' : '#dc2626';
+                                  const scoreColor = sv.score >= 80 ? 'var(--success-text)' : sv.score >= 60 ? 'var(--lala-gold-text)' : 'var(--danger-text)';
                                   return (
                                     <span title={sv.missing_required?.length ? `Missing: ${sv.missing_required.join(', ')}` : `Spec score: ${sv.score}`}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, color: scoreColor, fontFamily: "'DM Mono', monospace" }}>
@@ -2097,10 +2098,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   <ImageIcon size={12} /> Make main background
                                 </button>
                               )}
-                              {isComplete && <CheckCircle2 size={14} style={{ color: '#16a34a' }} />}
+                              {isComplete && <CheckCircle2 size={14} style={{ color: 'var(--success-text)' }} />}
                               {isFailed && (
                                 <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry">
-                                  <AlertCircle size={14} style={{ color: '#dc2626' }} />
+                                  <AlertCircle size={14} style={{ color: 'var(--danger-text)' }} />
                                 </button>
                               )}
                               {!isComplete && !isFailed && !isGen && (
@@ -2120,7 +2121,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   <Upload size={12} />
                                 </button>
                               )}
-                              {isGen && <Loader size={14} className="spin" style={{ color: '#B8962E' }} />}
+                              {isGen && <Loader size={14} className="spin" style={{ color: 'var(--lala-gold-text)' }} />}
                             </div>
                           </div>
                         );
@@ -2128,7 +2129,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     </div>
 
                     {sortedAngles.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
+                      <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
                         <Camera size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
                         <div style={{ fontSize: 13 }}>No angles yet. Upload a base image first.</div>
                       </div>
@@ -2157,8 +2158,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   <div className="scene-sets-modal-section">
                     {!hasSpec && (
                       <div style={{ textAlign: 'center', padding: 32 }}>
-                        <FileText size={32} style={{ color: '#94a3b8', marginBottom: 12 }} />
-                        <div style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>
+                        <FileText size={32} style={{ color: 'var(--text-secondary)', marginBottom: 12 }} />
+                        <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
                           No scene spec yet. Build one from your base image to enforce object consistency across angles.
                         </div>
                         <button
@@ -2170,16 +2171,16 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing the image… {specBuild.elapsed}s</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
                         </button>
                         {buildingSpec && (
-                          <div style={{ marginTop: 12, padding: 12, background: '#f8f6f1', borderRadius: 8, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
-                            <div style={{ fontWeight: 600, color: '#2C2C2C', marginBottom: 6 }}>What's happening</div>
+                          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface-bg)', borderRadius: 8, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>What's happening</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Loader size={10} className="spin" style={{ color: '#B8962E' }} />
+                              <Loader size={10} className="spin" style={{ color: 'var(--lala-gold-text)' }} />
                               One request to Claude Vision, {specBuild.elapsed}s so far: it reads the image, catalogs the objects, defines the zones and writes the camera contracts, and answers once. Usually 15–30 seconds, sometimes longer.
                             </div>
                           </div>
                         )}
                         {specBuild.status === 'error' && (
-                          <div role="alert" data-testid={`build-spec-tab-error-${set.id}`} style={{ marginTop: 12, padding: 12, background: '#FBEFF3', border: '1px solid #C06E87', borderRadius: 8, fontSize: 11, color: '#2C2C2C', lineHeight: 1.5 }}>
+                          <div role="alert" data-testid={`build-spec-tab-error-${set.id}`} style={{ marginTop: 12, padding: 12, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', borderRadius: 8, fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.5 }}>
                             The spec was not built: {specBuild.error}. The saved spec, if any, is unchanged.
                           </div>
                         )}
@@ -2192,11 +2193,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <>
                           {/* Room summary */}
                           {spec.room && (
-                            <div style={{ marginBottom: 16, padding: 12, background: '#FAF7F0', borderRadius: 8, border: '1px solid #eee' }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 4 }}>Room</div>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C' }}>{spec.room.label || set.name}</div>
-                              {spec.room.narrative_role && <div style={{ fontSize: 12, color: '#2C2C2C', marginTop: 4 }}>{spec.room.narrative_role}</div>}
-                              {spec.room.atmosphere && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{spec.room.atmosphere}</div>}
+                            <div style={{ marginBottom: 16, padding: 12, background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 4 }}>Room</div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{spec.room.label || set.name}</div>
+                              {spec.room.narrative_role && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>{spec.room.narrative_role}</div>}
+                              {spec.room.atmosphere && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }}>{spec.room.atmosphere}</div>}
                               <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#666', fontFamily: "'DM Mono', monospace", flexWrap: 'wrap' }}>
                                 {spec.room.approx_sq_ft && <span>{spec.room.approx_sq_ft} sq ft</span>}
                                 {spec.room.ceiling_type && <span>{spec.room.ceiling_type} ceiling</span>}
@@ -2211,8 +2212,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                     const hex = c.startsWith('#') ? c.split(' ')[0] : c;
                                     const label = c.includes(' ') ? c.split(' ').slice(1).join(' ') : '';
                                     return (
-                                      <div key={i} title={c} style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#fff', border: '1px solid #eee', borderRadius: 4, padding: '2px 6px' }}>
-                                        <div style={{ width: 12, height: 12, borderRadius: 2, background: hex.startsWith('#') ? hex : '#888', border: '1px solid #ddd' }} />
+                                      <div key={i} title={c} style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 4, padding: '2px 6px' }}>
+                                        <div style={{ width: 12, height: 12, borderRadius: 2, background: hex.startsWith('#') ? hex : 'var(--text-secondary)', border: '1px solid var(--lala-parchment-3)' }} />
                                         {label && <span style={{ fontSize: 9, color: '#666' }}>{label}</span>}
                                       </div>
                                     );
@@ -2225,13 +2226,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* Walls */}
                           {spec.walls && Object.keys(spec.walls).length > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>
                                 Walls ({Object.keys(spec.walls).length})
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                                 {Object.entries(spec.walls).map(([dir, wall]) => (
-                                  <div key={dir} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
-                                    <div style={{ fontWeight: 600, color: '#2C2C2C', textTransform: 'capitalize' }}>{dir}: {wall.label}</div>
+                                  <div key={dir} style={{ background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{dir}: {wall.label}</div>
                                     <div style={{ fontSize: 10, color: '#666', marginTop: 2, lineHeight: 1.4 }}>{wall.description}</div>
                                   </div>
                                 ))}
@@ -2242,15 +2243,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* Zones */}
                           {spec.zones?.length > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <MapPin size={10} /> Zones ({spec.zones.length})
                               </div>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                 {spec.zones.map(z => (
-                                  <div key={z.id} style={{ background: '#f0f0f0', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
-                                    <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{z.label}</div>
+                                  <div key={z.id} style={{ background: 'var(--lala-parchment-2)', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{z.label}</div>
                                     {z.purpose && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{z.purpose}</div>}
-                                    <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{z.object_ids?.length || 0} objects</div>
+                                    <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{z.object_ids?.length || 0} objects</div>
                                   </div>
                                 ))}
                               </div>
@@ -2260,20 +2261,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* Objects */}
                           {spec.objects?.length > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Box size={10} /> Objects ({spec.objects.length})
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 6 }}>
                                 {spec.objects.map(obj => (
-                                  <div key={obj.id} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
+                                  <div key={obj.id} style={{ background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                       <span style={{
                                         width: 6, height: 6, borderRadius: '50%',
-                                        background: obj.category === 'signature' ? '#B8962E' : obj.category === 'anchor' ? '#2563eb' : obj.category === 'character' ? '#9333ea' : obj.category === 'lighting' ? '#f59e0b' : '#94a3b8',
+                                        background: obj.category === 'signature' ? 'var(--lala-gold)' : obj.category === 'anchor' ? 'var(--primary)' : obj.category === 'character' ? 'var(--accent)' : obj.category === 'lighting' ? 'var(--warning)' : 'var(--text-secondary)',
                                         flexShrink: 0,
                                       }} />
-                                      <span style={{ fontWeight: 600, color: '#2C2C2C' }}>{obj.label}</span>
-                                      <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{obj.category}</span>
+                                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{obj.label}</span>
+                                      <span style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{obj.category}</span>
                                     </div>
                                     <div style={{ fontSize: 10, color: '#666', marginTop: 3, lineHeight: 1.4 }}>{obj.description}</div>
                                     <div style={{ fontSize: 9, color: '#999', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
@@ -2281,11 +2282,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                       {obj.wall && <span> · wall: {obj.wall}</span>}
                                     </div>
                                     {obj.continuity && Object.keys(obj.continuity).filter(k => obj.continuity[k]).length > 0 && (
-                                      <div style={{ marginTop: 4, padding: '3px 6px', background: '#fef3c7', borderRadius: 4, fontSize: 9, fontFamily: "'DM Mono', monospace" }}>
-                                        {obj.continuity.locked_text && <div style={{ color: '#92400e' }}>text: &quot;{obj.continuity.locked_text}&quot;</div>}
-                                        {obj.continuity.locked_color && <div style={{ color: '#92400e', display: 'flex', alignItems: 'center', gap: 3 }}>color: <span style={{ width: 8, height: 8, borderRadius: 2, background: obj.continuity.locked_color, display: 'inline-block', border: '1px solid #ccc' }} /> {obj.continuity.locked_color}</div>}
-                                        {obj.continuity.locked_material && <div style={{ color: '#92400e' }}>material: {obj.continuity.locked_material}</div>}
-                                        {obj.continuity.locked_position && <div style={{ color: '#92400e' }}>position: {obj.continuity.locked_position}</div>}
+                                      <div style={{ marginTop: 4, padding: '3px 6px', background: 'var(--warning-bg)', borderRadius: 4, fontSize: 9, fontFamily: "'DM Mono', monospace" }}>
+                                        {obj.continuity.locked_text && <div style={{ color: 'var(--warning-text)' }}>text: &quot;{obj.continuity.locked_text}&quot;</div>}
+                                        {obj.continuity.locked_color && <div style={{ color: 'var(--warning-text)', display: 'flex', alignItems: 'center', gap: 3 }}>color: <span style={{ width: 8, height: 8, borderRadius: 2, background: obj.continuity.locked_color, display: 'inline-block', border: '1px solid var(--lala-parchment-3)' }} /> {obj.continuity.locked_color}</div>}
+                                        {obj.continuity.locked_material && <div style={{ color: 'var(--warning-text)' }}>material: {obj.continuity.locked_material}</div>}
+                                        {obj.continuity.locked_position && <div style={{ color: 'var(--warning-text)' }}>position: {obj.continuity.locked_position}</div>}
                                       </div>
                                     )}
                                   </div>
@@ -2297,28 +2298,28 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* Camera Contracts */}
                           {spec.camera_contracts?.length > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Camera size={10} /> Camera Contracts ({spec.camera_contracts.length})
                               </div>
                               {spec.camera_contracts.map((c, i) => (
-                                <div key={i} style={{ marginBottom: 8, padding: 10, background: '#fafafa', border: '1px solid #eee', borderRadius: 6 }}>
+                                <div key={i} style={{ marginBottom: 8, padding: 10, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 6 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <Camera size={12} style={{ color: '#B8962E' }} />
-                                    <span style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{c.angle}</span>
+                                    <Camera size={12} style={{ color: 'var(--lala-gold-text)' }} />
+                                    <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{c.angle}</span>
                                   </div>
                                   {c.description && <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>{c.description}</div>}
                                   <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {(c.required || []).map(id => {
                                       const obj = spec.objects?.find(o => o.id === id);
-                                      return <span key={id} title={obj?.description || id} style={{ background: '#dcfce7', color: '#166534', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✓ {obj?.label || id}</span>;
+                                      return <span key={id} title={obj?.description || id} style={{ background: 'var(--success-bg)', color: 'var(--success-text)', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✓ {obj?.label || id}</span>;
                                     })}
                                     {(c.expected || []).map(id => {
                                       const obj = spec.objects?.find(o => o.id === id);
-                                      return <span key={id} title={obj?.description || id} style={{ background: '#fef3c7', color: '#92400e', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>~ {obj?.label || id}</span>;
+                                      return <span key={id} title={obj?.description || id} style={{ background: 'var(--warning-bg)', color: 'var(--warning-text)', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>~ {obj?.label || id}</span>;
                                     })}
                                     {(c.out_of_frame || []).map(id => {
                                       const obj = spec.objects?.find(o => o.id === id);
-                                      return <span key={id} title={obj?.description || id} style={{ background: '#fecaca', color: '#991b1b', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✗ {obj?.label || id}</span>;
+                                      return <span key={id} title={obj?.description || id} style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✗ {obj?.label || id}</span>;
                                     })}
                                   </div>
                                   {c.validation && <div style={{ fontSize: 10, color: '#888', marginTop: 6, fontStyle: 'italic', lineHeight: 1.4 }}>{c.validation}</div>}
@@ -2330,13 +2331,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* Room States */}
                           {spec.states?.length > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>
                                 Room States ({spec.states.length})
                               </div>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                 {spec.states.map(s => (
-                                  <div key={s.id} style={{ background: '#f8f4ff', border: '1px solid #e9e5f5', borderRadius: 6, padding: '6px 10px', fontSize: 11, minWidth: 120 }}>
-                                    <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{s.label}</div>
+                                  <div key={s.id} style={{ background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 6, padding: '6px 10px', fontSize: 11, minWidth: 120 }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.label}</div>
                                     <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{s.time}</div>
                                     {s.ambient && <div style={{ fontSize: 10, color: '#666', marginTop: 4, fontStyle: 'italic', lineHeight: 1.3 }}>{typeof s.ambient === 'string' ? s.ambient.slice(0, 100) : ''}...</div>}
                                   </div>
@@ -2351,7 +2352,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               {buildingSpec ? <><Loader size={11} className="spin" /> Rebuilding… {specBuild.elapsed}s</> : <><RefreshCw size={11} /> Rebuild Spec</>}
                             </button>
                             {specBuild.status === 'error' && (
-                              <span role="alert" style={{ fontSize: 10, color: '#C06E87' }}>Not rebuilt: {specBuild.error}. The saved spec is unchanged.</span>
+                              <span role="alert" style={{ fontSize: 10, color: 'var(--accent-dark)' }}>Not rebuilt: {specBuild.error}. The saved spec is unchanged.</span>
                             )}
                           </div>
                         </>
@@ -2365,7 +2366,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   <div className="scene-sets-modal-section">
                     {/* Style section */}
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Style Consistency</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Style Consistency</div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
@@ -2373,9 +2374,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
-                        <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 8, fontSize: 11 }}>
+                        <div style={{ marginTop: 8, padding: 10, background: 'var(--surface-bg)', borderRadius: 8, fontSize: 11 }}>
                           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                            {set.visual_language.color_palette && <div><strong>Palette:</strong> {set.visual_language.color_palette.map((c, i) => <span key={i} style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 3, background: c, marginLeft: 3, border: '1px solid #e2e8f0', verticalAlign: -2 }} />)}</div>}
+                            {set.visual_language.color_palette && <div><strong>Palette:</strong> {set.visual_language.color_palette.map((c, i) => <span key={i} style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 3, background: c, marginLeft: 3, border: '1px solid var(--lala-parchment-3)', verticalAlign: -2 }} />)}</div>}
                             {set.visual_language.materials && <div><strong>Materials:</strong> {set.visual_language.materials.join(', ')}</div>}
                             {set.visual_language.lighting_type && <div><strong>Lighting:</strong> {set.visual_language.lighting_type}</div>}
                             {set.visual_language.design_style && <div><strong>Style:</strong> {set.visual_language.design_style}</div>}
@@ -2400,9 +2401,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
                         </button>
                       </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
                         Registers this location in the show's world — the brain will know about it when writing scenes, suggesting locations, and building the world.
-                        {set.world_location_id && <span style={{ color: '#16a34a', marginLeft: 6 }}> Linked to world map</span>}
+                        {set.world_location_id && <span style={{ color: 'var(--success-text)', marginLeft: 6 }}> Linked to world map</span>}
                       </div>
                     </div>
 
@@ -2410,7 +2411,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     {hasBase && (
                       <div style={{ marginBottom: 16 }}>
                         <div className="scene-sets-tools-label">Mood Variations</div>
-                        <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Same room, same furniture — only the lighting and atmosphere changes. No regeneration needed.</p>
+                        <p style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 8 }}>Same room, same furniture — only the lighting and atmosphere changes. No regeneration needed.</p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {[
                             { key: 'morning', label: '🌅 Morning', desc: 'Golden sunrise light' },
@@ -2452,7 +2453,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   style={{ width: 80, height: 52, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
                                   onClick={() => { window.open(url, '_blank'); }}
                                 />
-                                <div style={{ fontSize: 8, color: '#94a3b8', marginTop: 2, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
+                                <div style={{ fontSize: 8, color: 'var(--text-secondary)', marginTop: 2, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
                               </div>
                             ))}
                           </div>
@@ -2462,7 +2463,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
                     {/* Analysis section */}
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" onClick={async () => {
                           try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch {}
@@ -2683,19 +2684,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
             </div>
             <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
               {comparison.comparisons?.map(c => (
-                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
+                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: 'var(--surface-bg)', borderRadius: 8 }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
-                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 4 }}>ORIGINAL</div>
+                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)' }}>No base image</div>}
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '\u2605' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '\u2605' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
                     <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
                   </div>
                 </div>
               ))}
               {(!comparison.comparisons || comparison.comparisons.length === 0) && (
-                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
+                <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No generated angles to compare yet.</p>
               )}
             </div>
           </div>
@@ -3705,7 +3706,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               </button>
             </div>
           </div>
-          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>You'll add the description, base image, and settings after creating.</p>
+          <p style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>You'll add the description, base image, and settings after creating.</p>
         </div>
       )}
 
@@ -3861,22 +3862,22 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
             <div className="scene-sets-modal-body">
               {wardrobeMatch.event ? (
                 <>
-                  <div style={{ padding: '8px 12px', background: '#fef3c7', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
                     Event: <strong>{wardrobeMatch.event.name}</strong> — Dress code: <strong>{wardrobeMatch.event.dress_code || 'None'}</strong>
                     {wardrobeMatch.event.keywords?.length > 0 && <div style={{ marginTop: 4 }}>Keywords: {wardrobeMatch.event.keywords.join(', ')}</div>}
                   </div>
                   {wardrobeMatch.matches?.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                       {wardrobeMatch.matches.map(m => (
-                        <div key={m.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                        <div key={m.id} style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, overflow: 'hidden' }}>
                           {(m.thumbnail_url || m.image_url) && <img src={m.thumbnail_url || m.image_url} alt={m.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />}
                           <div style={{ padding: '4px 6px', fontSize: 10, fontWeight: 600 }}>{m.name}</div>
                         </div>
                       ))}
                     </div>
-                  ) : <p style={{ color: '#94a3b8', textAlign: 'center' }}>No wardrobe items match the dress code keywords.</p>}
+                  ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No wardrobe items match the dress code keywords.</p>}
                 </>
-              ) : <p style={{ color: '#94a3b8', textAlign: 'center', padding: 20 }}>No event linked to this scene set.</p>}
+              ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No event linked to this scene set.</p>}
             </div>
           </div>
         </div>, document.body
@@ -3892,19 +3893,19 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
             </div>
             <div className="scene-sets-modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
               {angleHistory.current && (
-                <div style={{ marginBottom: 12, padding: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>CURRENT (Attempt {angleHistory.current.attempt}) {angleHistory.current.favorited ? '★' : ''}</div>
+                <div style={{ marginBottom: 12, padding: 8, background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success-text)', marginBottom: 4 }}>CURRENT (Attempt {angleHistory.current.attempt}) {angleHistory.current.favorited ? '★' : ''}</div>
                   <img src={angleHistory.current.url} alt="Current" style={{ width: '100%', borderRadius: 6 }} />
                 </div>
               )}
               {angleHistory.history?.length > 0 ? angleHistory.history.map((h, i) => (
-                <div key={i} style={{ marginBottom: 12, padding: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, opacity: 0.7 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>
+                <div key={i} style={{ marginBottom: 12, padding: 8, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 8, opacity: 0.7 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--danger-text)', marginBottom: 4 }}>
                     Attempt {h.attempt || '?'} — {h.reason || 'Replaced'} — {h.rejected_at ? new Date(h.rejected_at).toLocaleDateString() : h.replaced_at ? new Date(h.replaced_at).toLocaleDateString() : ''}
                   </div>
                   <img src={h.url} alt={`Attempt ${h.attempt}`} style={{ width: '100%', borderRadius: 6 }} />
                 </div>
-              )) : <p style={{ color: '#94a3b8', textAlign: 'center' }}>No previous generations.</p>}
+              )) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No previous generations.</p>}
             </div>
           </div>
         </div>, document.body
