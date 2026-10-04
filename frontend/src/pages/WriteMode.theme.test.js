@@ -103,6 +103,20 @@ describe('WriteMode theme, part one', () => {
     expect(contrast(t('--text-faint'), t('--wm-parchment'))).toBeLessThan(4.5); // faint is for placeholders only
   });
 
+  test('part three: the washes that match a token are the token; the rest only shrink', () => {
+    // 2026-10-04: 94 plain background and border washes whose colour over the
+    // parchment is within 8 RGB steps of --lala-parchment-2, --lala-gold-soft
+    // or --lala-gold-line are those tokens; shadows, gradients, white glass
+    // and washes with no near token stay rgba. A ratchet: never more again.
+    // Real colours only: the header comment documents the palette as rgba(28,24,20,_).
+    const rgba = (css.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[0-9.]+\s*\)/g) || []).length;
+    expect(rgba).toBeLessThanOrEqual(260);
+    expect((css.match(/var\(--lala-parchment-2\)/g) || []).length).toBeGreaterThanOrEqual(78);
+    expect((css.match(/var\(--lala-gold-soft\)/g) || []).length).toBeGreaterThanOrEqual(13);
+    expect((css.match(/var\(--lala-gold-line\)/g) || []).length).toBeGreaterThanOrEqual(3);
+    expect(css).toMatch(/\.wm-focus-exit:hover \{[^}]*background: rgba\(28, 24, 20, 0\.6\)/); // a dark overlay stays glass
+  });
+
   test('every text pair the page uses reads at 4.5:1 or better', () => {
     const pairs = [
       ['--text-inverse', '--primary'], ['--text-inverse', '--primary-dark'], ['--text-inverse', '--danger'],
