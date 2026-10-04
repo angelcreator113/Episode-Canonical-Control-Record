@@ -55,7 +55,8 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
   const taskRequired = (t) => (isWardrobe ? Boolean(t.required) : isSocialTaskRequired(t));
   const requiredCount = (list) => list.filter(taskRequired).length;
   const title = isWardrobe ? 'Wardrobe Shopping List' : 'Social Tasks';
-  const accentColor = isWardrobe ? '#B8962E' : '#6366f1';
+  const accent = isWardrobe ? 'var(--lala-gold)' : 'var(--primary)';
+  const accentText = isWardrobe ? 'var(--lala-gold-text)' : 'var(--primary-text)';
   const displayUrl = imageUrl || existingUrl;
   const hasOverlay = !!existingAssetId || !!displayUrl;
   const isPending = !!pendingAssetId;
@@ -171,14 +172,16 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
     borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600,
     cursor: 'pointer', border: border || 'none', background: bg, color,
   });
-  const accentBtn = btn(accentColor, '#FFF');
-  const outlineBtn = btn('#FAF7F0', accentColor, `1px solid ${accentColor}`);
-  const greenBtn = btn('#16a34a', '#FFF');
-  const redBtn = btn('#FFF', '#DC2626', '1px solid #FECACA');
-  const grayBtn = btn('#F5F5F5', '#666', '1px solid #EEE');
+  const accentBtn = btn('var(--primary)', 'var(--text-inverse)');
+  const outlineBtn = btn('var(--surface-bg)', accentText, `1px solid ${accent}`);
+  const greenBtn = btn('var(--success-text)', 'var(--text-inverse)');
+  const redBtn = btn('var(--surface-card)', 'var(--danger-text)', '1px solid var(--danger-border)');
+  const grayBtn = btn('var(--lala-parchment-2)', 'var(--text-secondary)', '1px solid var(--lala-parchment-3)');
 
   // ─── Timing phase colors (social tasks) ────────────────────────────
-  const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' };
+  const TIMING_COLORS = { before: 'var(--warning)', during: 'var(--primary)', after: 'var(--success)' };
+  const TIMING_TEXT = { before: 'var(--warning-text)', during: 'var(--primary-text)', after: 'var(--success-text)' };
+  const TIMING_BG = { before: 'var(--warning-bg)', during: 'var(--primary-subtle)', after: 'var(--success-bg)' };
   const TIMING_LABELS = { before: 'Before', during: 'During', after: 'After' };
 
   return (
@@ -187,9 +190,9 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 10000,
-          background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9',
-          color: toast.type === 'error' ? '#C62828' : '#1A7A40',
-          border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`,
+          background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)',
+          color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)',
+          border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`,
           borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500,
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
         }}>
@@ -205,7 +208,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
           zIndex: 9999, padding: 20,
         }} onClick={() => setShowPreview(false)}>
           <div style={{
-            background: '#FAF7F0', borderRadius: 18, width: '100%', maxWidth: 540,
+            background: 'var(--surface-bg)', borderRadius: 18, width: '100%', maxWidth: 540,
             maxHeight: '90vh', display: 'flex', flexDirection: 'column',
             overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
           }} onClick={e => e.stopPropagation()}>
@@ -213,11 +216,11 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             {/* Header */}
             <div style={{ padding: '18px 22px 0', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1A1A1A' }}>{title}</h3>
-                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#999', cursor: 'pointer' }}>x</button>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{title}</h3>
+                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-secondary)', cursor: 'pointer' }}>x</button>
               </div>
               {isPending && (
-                <div style={{ padding: '4px 12px', background: '#FEF3C7', color: '#92400E', borderRadius: 8, fontSize: 11, fontWeight: 600, marginBottom: 10, display: 'inline-block' }}>
+                <div style={{ padding: '4px 12px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 8, fontSize: 11, fontWeight: 600, marginBottom: 10, display: 'inline-block' }}>
                   Pending your approval
                 </div>
               )}
@@ -229,10 +232,10 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                     if (tab.key === 'edit') loadTasks();
                   }} style={{
                     background: 'none', border: 'none',
-                    borderBottom: modalTab === tab.key ? `2px solid ${accentColor}` : '2px solid transparent',
+                    borderBottom: modalTab === tab.key ? `2px solid ${accent}` : '2px solid transparent',
                     padding: '6px 16px', fontSize: 13,
                     fontWeight: modalTab === tab.key ? 700 : 400,
-                    color: modalTab === tab.key ? accentColor : '#888',
+                    color: modalTab === tab.key ? accentText : 'var(--text-secondary)',
                     cursor: 'pointer',
                   }}>
                     {tab.label}
@@ -252,10 +255,10 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                     style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
                   />
                   {tasks.length > 0 && (
-                    <div style={{ marginTop: 14, fontSize: 11, color: '#888', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <span>{tasks.length} tasks{requiredCount(tasks) > 0 && ` · ${requiredCount(tasks)} required`}</span>
                       {isWardrobe && tasks.some(t => t.wardrobe_id) && (
-                        <span style={{ padding: '1px 8px', background: '#eef2ff', color: '#6366f1', borderRadius: 6, fontWeight: 600 }}>From outfit picker</span>
+                        <span style={{ padding: '1px 8px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 6, fontWeight: 600 }}>From outfit picker</span>
                       )}
                     </div>
                   )}
@@ -265,25 +268,27 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
               {/* ── Edit Tasks Tab ── */}
               {modalTab === 'edit' && (
                 <div>
-                  <p style={{ margin: '0 0 16px', fontSize: 12, color: '#888', lineHeight: 1.5 }}>
+                  <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     Edit task labels and descriptions, then re-render. No AI call — fast and free.
                   </p>
                   {editTasks.map((task, i) => {
-                    const timingColor = TIMING_COLORS[task.timing] || accentColor;
+                    const timingColor = TIMING_COLORS[task.timing] || accent;
+                    const timingText = TIMING_TEXT[task.timing] || accentText;
+                    const timingBg = TIMING_BG[task.timing] || (isWardrobe ? 'var(--lala-gold-soft)' : 'var(--primary-subtle)');
                     return (
                       <div key={i} style={{
-                        marginBottom: 12, padding: '10px 12px', background: '#fff',
-                        borderRadius: 8, border: `1px solid ${timingColor}30`,
+                        marginBottom: 12, padding: '10px 12px', background: 'var(--surface-card)',
+                        borderRadius: 8, border: '1px solid var(--lala-parchment-3)',
                         borderLeft: !isWardrobe ? `3px solid ${timingColor}` : undefined,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: timingColor, textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: timingText, textTransform: 'uppercase' }}>
                             {isWardrobe ? (task.slot || `Task ${i + 1}`) : (TIMING_LABELS[task.timing] || task.slot || `Task ${i + 1}`)}
                           </span>
                           {isWardrobe
-                            ? task.required && <span style={{ fontSize: 9, padding: '1px 6px', background: `${timingColor}20`, color: timingColor, borderRadius: 4, fontWeight: 700 }}>required</span>
+                            ? task.required && <span style={{ fontSize: 9, padding: '1px 6px', background: timingBg, color: timingText, borderRadius: 4, fontWeight: 700 }}>required</span>
                             : <SocialTaskBadge task={task} />}
-                          {!isWardrobe && task.platform && <span style={{ fontSize: 9, color: '#999' }}>{task.platform}</span>}
+                          {!isWardrobe && task.platform && <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{task.platform}</span>}
                         </div>
                         <input
                           value={task.label || ''}
@@ -291,8 +296,8 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                           placeholder="Task label..."
                           style={{
                             width: '100%', padding: '5px 8px', boxSizing: 'border-box',
-                            border: '1px solid #e0ddd5', borderRadius: 6, fontSize: 12,
-                            fontWeight: 600, outline: 'none', background: '#FAFAFA',
+                            border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12,
+                            fontWeight: 600, outline: 'none', background: 'var(--surface-bg)',
                           }}
                         />
                         {isWardrobe && (
@@ -302,8 +307,8 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                             placeholder="Description..."
                             style={{
                               width: '100%', padding: '4px 8px', boxSizing: 'border-box',
-                              border: '1px solid #e0ddd5', borderRadius: 6, fontSize: 11,
-                              outline: 'none', background: '#FAFAFA', marginTop: 4, color: '#666',
+                              border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11,
+                              outline: 'none', background: 'var(--surface-bg)', marginTop: 4, color: 'var(--text-secondary)',
                             }}
                           />
                         )}
@@ -311,7 +316,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                     );
                   })}
                   {error && (
-                    <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>
+                    <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>
                       {error}
                     </div>
                   )}
@@ -327,43 +332,43 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
               {/* ── History Tab ── */}
               {modalTab === 'history' && (
                 <div>
-                  {loadingVersions && <p style={{ fontSize: 12, color: '#888' }}>Loading versions...</p>}
-                  {!loadingVersions && versions.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>No versions found.</p>}
+                  {loadingVersions && <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Loading versions...</p>}
+                  {!loadingVersions && versions.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No versions found.</p>}
                   {versions.map((v, i) => {
                     const isCurrent = v.id === existingAssetId;
                     return (
                       <div key={v.id} style={{
                         display: 'flex', gap: 12, padding: '10px 0',
-                        borderBottom: i < versions.length - 1 ? '1px solid #F0EDE6' : 'none',
+                        borderBottom: i < versions.length - 1 ? '1px solid var(--lala-parchment-3)' : 'none',
                         opacity: isCurrent ? 1 : 0.85,
                       }}>
                         <img
                           src={v.image_url} alt={`v${v.version}`}
                           style={{
                             width: 60, height: 90, objectFit: 'cover', borderRadius: 6,
-                            border: isCurrent ? `2px solid ${accentColor}` : '1px solid #EEE',
+                            border: isCurrent ? `2px solid ${accent}` : '1px solid var(--lala-parchment-3)',
                             cursor: 'pointer',
                           }}
                           onClick={() => { setImageUrl(v.image_url); setModalTab('preview'); }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                             Version {v.version || i + 1}
                             {isCurrent && (
-                              <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#E8F5E9', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>CURRENT</span>
+                              <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 700 }}>CURRENT</span>
                             )}
                           </div>
-                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                             <span>{v.approval_status}</span>
                             {v.task_count && <span style={{ marginLeft: 8 }}>{v.task_count} tasks</span>}
                           </div>
-                          <div style={{ fontSize: 10, color: '#AAA', marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
                             {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
                           <a href={v.image_url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 10, color: accentColor, textDecoration: 'none', fontWeight: 600 }}>
+                            style={{ fontSize: 10, color: accentText, textDecoration: 'none', fontWeight: 600 }}>
                             Open
                           </a>
                         </div>
@@ -375,7 +380,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '12px 22px', borderTop: '1px solid rgba(0,0,0,0.08)', background: '#FAF7F0' }}>
+            <div style={{ padding: '12px 22px', borderTop: '1px solid rgba(0,0,0,0.08)', background: 'var(--surface-bg)' }}>
               {isPending ? (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={handleReject} style={{ ...redBtn, flex: 1 }}>Reject</button>
@@ -400,12 +405,12 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
       )}
 
       {/* ═══ Inline Section (when modal is closed) ═══ */}
-      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+      <div style={{ borderTop: '1px solid var(--lala-parchment-3)', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
             {title}
             {tasks.length > 0 && (
-              <span style={{ fontWeight: 400, color: '#888', marginLeft: 6 }}>
+              <span style={{ fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 6 }}>
                 ({tasks.length} tasks{requiredCount(tasks) > 0 && `, ${requiredCount(tasks)} required`})
               </span>
             )}
@@ -432,7 +437,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             <img
               src={displayUrl}
               alt={title}
-              style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 10, border: '1px solid #e8e0d0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 10, border: '1px solid var(--lala-parchment-3)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
             />
           </div>
         )}
@@ -449,17 +454,17 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             <div>
               {['before', 'during', 'after'].filter(p => grouped[p]).map(phase => (
                 <div key={phase} style={{ marginBottom: 6 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: TIMING_COLORS[phase], textTransform: 'uppercase', marginBottom: 3 }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: TIMING_TEXT[phase], textTransform: 'uppercase', marginBottom: 3 }}>
                     {TIMING_LABELS[phase]}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
                     {grouped[phase].map(t => (
                       <div key={t.slot} style={{
-                        padding: '3px 8px', background: '#f8f8f8', borderRadius: 5,
+                        padding: '3px 8px', background: 'var(--surface-bg)', borderRadius: 5,
                         borderLeft: `3px solid ${TIMING_COLORS[phase]}`, fontSize: 10,
                       }}>
-                        <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
-                        <span style={{ color: '#aaa', marginLeft: 4 }}>{t.platform}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
+                        <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>{t.platform}</span>
                         <SocialTaskBadge task={t} />
                       </div>
                     ))}
@@ -478,15 +483,15 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
             <div>
               {hasRealPieces && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 10 }}>
-                  <span style={{ padding: '2px 8px', background: '#f0fdf4', color: '#16a34a', borderRadius: 6, fontWeight: 600 }}>
+                  <span style={{ padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 6, fontWeight: 600 }}>
                     {ownedCount}/{tasks.length} owned
                   </span>
                   {totalCost > 0 && (
-                    <span style={{ padding: '2px 8px', background: '#fef3c7', color: '#92400e', borderRadius: 6, fontWeight: 600 }}>
+                    <span style={{ padding: '2px 8px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 6, fontWeight: 600 }}>
                       Total: {totalCost.toLocaleString()} coins
                     </span>
                   )}
-                  <span style={{ padding: '2px 8px', background: '#eef2ff', color: '#6366f1', borderRadius: 6, fontWeight: 600 }}>
+                  <span style={{ padding: '2px 8px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 6, fontWeight: 600 }}>
                     From outfit picker
                   </span>
                 </div>
@@ -494,13 +499,13 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
                 {tasks.map(t => (
                   <div key={t.slot || t.order} style={{
-                    padding: '4px 8px', background: t.completed ? '#f0fdf4' : '#f8f8f8', borderRadius: 5,
-                    borderLeft: `3px solid ${t.completed ? '#16a34a' : accentColor}`, fontSize: 10,
+                    padding: '4px 8px', background: t.completed ? 'var(--success-bg)' : 'var(--surface-bg)', borderRadius: 5,
+                    borderLeft: `3px solid ${t.completed ? 'var(--success)' : accent}`, fontSize: 10,
                   }}>
-                    <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
-                    {t.description && <span style={{ color: '#999', marginLeft: 4 }}>{t.description}</span>}
-                    {t.required && <span style={{ color: accentColor, marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
-                    {t.completed && <span style={{ color: '#16a34a', marginLeft: 4, fontSize: 8, fontWeight: 700 }}>owned</span>}
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
+                    {t.description && <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>{t.description}</span>}
+                    {t.required && <span style={{ color: accentText, marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+                    {t.completed && <span style={{ color: 'var(--success-text)', marginLeft: 4, fontSize: 8, fontWeight: 700 }}>owned</span>}
                   </div>
                 ))}
               </div>
@@ -509,7 +514,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
         })()}
 
         {tasks.length === 0 && !displayUrl && (
-          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
             {isWardrobe
               ? 'Pick wardrobe items via the outfit picker first, then generate the shopping list. Or generate with AI-written tasks.'
               : `No ${title.toLowerCase()} generated yet. Click "Generate ${title}" to create tasks and a visual overlay.`}
@@ -520,7 +525,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
       {/* Error display */}
       {error && !showPreview && (
         <div style={{
-          background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2',
+          background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)',
           borderRadius: 6, padding: '6px 10px', fontSize: 11, marginTop: 4,
         }}>
           {error}
