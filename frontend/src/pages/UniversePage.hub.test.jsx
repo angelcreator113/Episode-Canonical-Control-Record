@@ -95,7 +95,9 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByRole('tab', { name: /^World/ }).getAttribute('aria-current')).toBe('page');
     await screen.findByText('The Map');
     expect(screen.getByText('Locations')).toBeTruthy();
-    expect(screen.getByText('The Loop')).toBeTruthy();
+    // The Loop is a fold-out above the map, not a tab (per-tab fix, 2026-10-04).
+    expect(screen.queryByText('The Loop')).toBeNull();
+    expect(screen.getByTestId('world-loop').tagName).toBe('DETAILS');
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
   });
 
