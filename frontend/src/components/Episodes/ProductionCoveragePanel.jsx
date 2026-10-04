@@ -24,12 +24,15 @@ const INDICATORS = [
 const CONTINUE_TAB = { environment: 'scenes', interface: 'overlays' };
 const PERFORMER = { host: 'justawoman', character: 'lala' };
 const PERFORMER_NAME = { justawoman: 'JustAWoman', lala: 'Lala' };
-const TEAL = '#2F7F76';
-const PINK = '#C06E87';
+// Fills use the family color; text uses its text-safe twin (pink and teal
+// as text on white fail 4.5:1; docs/VISUAL_SYSTEM.md §3).
+const TEAL = 'var(--primary)';
+const TEAL_TEXT = 'var(--primary-text)';
+const PINK_TEXT = 'var(--accent-dark)';
 
 const isVideo = (a) => a && (a.media_type === 'video' || /^video\//.test(a.content_type || ''));
-const fieldStyle = { padding: '3px 6px', borderRadius: 6, border: '1px solid #F5D5DF', fontSize: 12, minWidth: 0, background: '#fff' };
-const buttonStyle = (bg) => ({ padding: '3px 10px', borderRadius: 6, border: 'none', background: bg, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' });
+const fieldStyle = { padding: '3px 6px', borderRadius: 6, border: '1px solid var(--accent-light)', fontSize: 12, minWidth: 0, background: 'var(--surface-card)' };
+const buttonStyle = (bg) => ({ padding: '3px 10px', borderRadius: 6, border: 'none', background: bg, color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' });
 
 /**
  * The attach form for one beat and performer. clip is the live clip there,
@@ -90,7 +93,7 @@ function ClipForm({ episodeId, target, clip, onDone, onCancel }) {
 
   const canSave = !busy && (assetId || videoUrl.trim());
   return (
-    <div data-testid="clip-form" style={{ marginTop: 8, padding: 8, borderRadius: 8, background: '#fff', border: '1px solid #CFE8E4' }}>
+    <div data-testid="clip-form" style={{ marginTop: 8, padding: 8, borderRadius: 8, background: 'var(--surface-card)', border: '1px solid var(--primary-light)' }}>
       <div style={{ fontWeight: 600, marginBottom: 6 }}>
         {PERFORMER_NAME[target.performer]} clip · Beat {target.beat_number} · {target.beat_name}
       </div>
@@ -120,24 +123,24 @@ function ClipForm({ episodeId, target, clip, onDone, onCancel }) {
           <span>Approved</span>
         </label>
       </div>
-      {error && <div data-testid="clip-error" style={{ marginTop: 6, color: PINK }}>{error}</div>}
+      {error && <div data-testid="clip-error" style={{ marginTop: 6, color: PINK_TEXT }}>{error}</div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
         <button type="button" data-testid="clip-save" disabled={!canSave} onClick={save} style={{ ...buttonStyle(TEAL), opacity: canSave ? 1 : 0.5 }}>
           {clip ? 'Save clip' : 'Attach clip'}
         </button>
-        {clip && <button type="button" data-testid="clip-remove" disabled={busy} onClick={remove} style={buttonStyle(PINK)}>Remove</button>}
-        <button type="button" data-testid="clip-cancel" disabled={busy} onClick={onCancel} style={{ ...buttonStyle('transparent'), color: '#7a6d62' }}>Cancel</button>
+        {clip && <button type="button" data-testid="clip-remove" disabled={busy} onClick={remove} style={buttonStyle('var(--danger)')}>Remove</button>}
+        <button type="button" data-testid="clip-cancel" disabled={busy} onClick={onCancel} style={{ ...buttonStyle('transparent'), color: 'var(--text-secondary)' }}>Cancel</button>
       </div>
     </div>
   );
 }
 
 function cell(ind) {
-  if (ind.requirement === 'not_required') return { mark: '—', title: 'Not required', color: '#b8b0a6' };
-  if (ind.requirement === 'per_episode' && ind.met !== true) return { mark: 'ep', title: 'Decided per episode', color: '#7a6d62' };
-  if (ind.met === true) return { mark: '✓', title: ind.text || 'Ready', color: TEAL };
-  if (ind.met === null) return { mark: '?', title: ind.text || 'Not tracked yet', color: '#7a6d62' };
-  return { mark: '○', title: ind.text || 'Missing', color: PINK };
+  if (ind.requirement === 'not_required') return { mark: '—', title: 'Not required', color: 'var(--text-faint)' };
+  if (ind.requirement === 'per_episode' && ind.met !== true) return { mark: 'ep', title: 'Decided per episode', color: 'var(--text-secondary)' };
+  if (ind.met === true) return { mark: '✓', title: ind.text || 'Ready', color: TEAL_TEXT };
+  if (ind.met === null) return { mark: '?', title: ind.text || 'Not tracked yet', color: 'var(--text-secondary)' };
+  return { mark: '○', title: ind.text || 'Missing', color: PINK_TEXT };
 }
 
 export default function ProductionCoveragePanel({ episodeId }) {
@@ -167,7 +170,7 @@ export default function ProductionCoveragePanel({ episodeId }) {
   const clipFor = (t) => (t ? clips.find((c) => Number(c.canonical_beat_number) === t.beat_number && c.performer === t.performer) || null : null);
   const openClip = (beatNumber, beatName, key) => setTarget({ beat_number: beatNumber, beat_name: beatName, performer: PERFORMER[key] });
 
-  if (failed) return <div data-testid="coverage-failed" style={{ fontSize: 12, color: PINK, marginBottom: 8 }}>Production coverage could not be loaded.</div>;
+  if (failed) return <div data-testid="coverage-failed" style={{ fontSize: 12, color: PINK_TEXT, marginBottom: 8 }}>Production coverage could not be loaded.</div>;
   if (!coverage) return null;
   const { required, met, untracked, covered, total, next, beats } = coverage;
   const tab = next ? CONTINUE_TAB[next.indicator] : null;
@@ -176,7 +179,7 @@ export default function ProductionCoveragePanel({ episodeId }) {
   return (
     <div data-testid="production-coverage" style={{
       marginBottom: 8, padding: '8px 10px', borderRadius: 8,
-      background: '#FBEFF3', border: '1px solid #F5D5DF', fontSize: 12, color: '#2C2C2C',
+      background: 'var(--accent-subtle)', border: '1px solid var(--accent-light)', fontSize: 12, color: 'var(--text-primary)',
     }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'baseline' }}>
         <strong>Production coverage</strong>
@@ -192,7 +195,7 @@ export default function ProductionCoveragePanel({ episodeId }) {
           {tab && (
             <a
               data-testid="coverage-continue" href={`/episodes/${episodeId}?tab=${tab}`}
-              style={{ padding: '3px 10px', borderRadius: 6, background: TEAL, color: '#fff', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}
+              style={{ padding: '3px 10px', borderRadius: 6, background: TEAL, color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}
             >
               Continue →
             </a>
@@ -207,11 +210,11 @@ export default function ProductionCoveragePanel({ episodeId }) {
           )}
         </div>
       ) : (
-        <div data-testid="coverage-next-none" style={{ marginTop: 6, color: TEAL }}>Everything that can be checked is ready.</div>
+        <div data-testid="coverage-next-none" style={{ marginTop: 6, color: TEAL_TEXT }}>Everything that can be checked is ready.</div>
       )}
       <button
         type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="coverage-toggle"
-        style={{ marginTop: 6, padding: 0, border: 'none', background: 'none', color: TEAL, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+        style={{ marginTop: 6, padding: 0, border: 'none', background: 'none', color: TEAL_TEXT, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
       >
         {open ? 'Hide beats' : 'Show beats'}
       </button>
