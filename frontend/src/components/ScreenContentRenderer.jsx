@@ -153,7 +153,7 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
     case 'wardrobe_brand':
       return <WardrobeBrandRenderer config={config} screenMeta={screenMeta} />;
     case 'comments_list':
-      return <CommentsRenderer showId={showId} config={config} />;
+      return <CommentsRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'event_invite':
       return <EventInviteRenderer showId={showId} config={config} />;
     case 'world_map':
@@ -948,29 +948,41 @@ function ClosetWishlistGridRenderer({ showId, config }) {
 }
 
 // ── Comments List ──
-function CommentsRenderer({ showId, config }) {
-  // Uses feed posts with sample_comments
-  const url = showId ? `/api/v1/feed-posts/${showId}/timeline` : null;
+// Comment records (docs/FEED_POSTS.md rule 6, 2026-10-04): one post's
+// comments when the zone names a post (config.post_id); otherwise the
+// comments under the episode's posts in an episode, or under the show's
+// live posts. A post with no records falls back to its sample strings.
+export function commentsFrom(posts, max) {
+  const comments = [];
+  for (const post of posts) {
+    const records = Array.isArray(post.comments) ? post.comments : [];
+    const list = records.length > 0 ? records : (Array.isArray(post.sample_comments) ? post.sample_comments : []);
+    for (const c of list.slice(0, 3)) {
+      comments.push(typeof c === 'string' ? { text: c } : { ...c, handle: c.display_name || c.handle || c.user });
+    }
+    if (comments.length >= max) break;
+  }
+  return comments.slice(0, max);
+}
+
+function CommentsRenderer({ showId, episodeId, config }) {
+  const max = config.max_items || 5;
+  const url = config.post_id
+    ? `/api/v1/feed-posts/post/${config.post_id}`
+    : episodeId
+      ? `/api/v1/feed-posts?episode_id=${episodeId}&status=all&with=comments&limit=20`
+      : showId ? `/api/v1/feed-posts?show_id=${showId}&with=comments&limit=20` : null;
   const { data, loading } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
-  const posts = data?.data || data?.posts || [];
-  // Collect comments from posts
-  const comments = [];
-  for (const post of posts) {
-    if (post.sample_comments?.length) {
-      for (const c of post.sample_comments.slice(0, 3)) {
-        comments.push(typeof c === 'string' ? { text: c } : c);
-      }
-    }
-    if (comments.length >= (config.max_items || 5)) break;
-  }
+  const posts = config.post_id ? (data?.data ? [data.data] : []) : (data?.data || data?.posts || []);
+  const comments = commentsFrom(posts, max);
   if (!comments.length) return <ZoneEmpty label="No comments" />;
 
   return (
     <div style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {comments.slice(0, config.max_items || 5).map((c, i) => (
-        <div key={i} style={{ display: 'flex', gap: 3, padding: '2px 4px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      {comments.map((c, i) => (
+        <div key={c.id || i} style={{ display: 'flex', gap: 3, padding: '2px 4px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 8, fontWeight: 700, color: '#fff', marginRight: 3 }}>{c.handle || c.user || 'user'}</span>

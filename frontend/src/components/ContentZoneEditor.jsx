@@ -534,8 +534,9 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
             </div>
           )}
 
-          {/* Post picker — for feed_post: one stored post, drawn live. */}
-          {zone.content_type === 'feed_post' && (
+          {/* Post picker — for feed_post (one stored post, drawn live) and
+              comments_list (that post's comments; leave empty for the feed's). */}
+          {['feed_post', 'comments_list'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>POST</label>
               {postsLoading ? (
@@ -549,7 +550,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   onChange={(e) => handleConfigChange('post_id', e.target.value || null)}
                   style={fieldStyle}
                 >
-                  <option value="">— Select post —</option>
+                  <option value="">{zone.content_type === 'comments_list' ? '— Comments under every post —' : '— Select post —'}</option>
                   {posts.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.status === 'draft' ? '[draft] ' : ''}@{p.poster_handle || p.socialProfile?.handle || '?'}: {(p.content_text || '').slice(0, 60)}
