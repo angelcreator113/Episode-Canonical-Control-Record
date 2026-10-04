@@ -6550,10 +6550,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           {/* Lala */}
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>👑</div>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>👑</div>
               <div style={{ flex: 1 }}>
                 <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Lala</h2>
-                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Main Character · AI Avatar</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Main Character · AI Avatar</p>
               </div>
               {!editingStats ? (
                 <button onClick={openStatEditor} disabled={!charState} style={S.secBtn}>✏️ Edit Stats</button>
@@ -6580,7 +6580,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   return (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
-                      <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      <span style={{ flex: '0 0 100px', fontSize: 13, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
                       {editingStats ? (
                         // Coins: no min/max — the backend stores any
                         // integer and downstream logic handles negative
@@ -6588,20 +6588,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         // to block legitimate late-show balances. Other
                         // stats stay 0–10 to match the backend clamp.
                         <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
-                          style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
+                          style={{ width: 80, padding: '4px 8px', border: '1px solid var(--primary)', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
                           {...(isCoin ? {} : { min: 0, max: 10 })} />
                       ) : (
                         <>
                           {barMax != null ? (
-                            <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / barMax) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? '#dc2626' : '#eab308') : isCoin ? (val < 0 ? '#dc2626' : '#6366f1') : '#6366f1', transition: 'width 0.3s' }} />
+                            <div style={{ flex: 1, height: 10, background: 'var(--lala-parchment-2)', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / barMax) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? 'var(--danger)' : 'var(--warning)') : isCoin ? (val < 0 ? 'var(--danger)' : 'var(--primary)') : 'var(--primary)', transition: 'width 0.3s' }} />
                             </div>
                           ) : (
-                            <div style={{ flex: 1, fontSize: 11, color: '#94a3b8', textAlign: 'right', paddingRight: 8 }}>
+                            <div style={{ flex: 1, fontSize: 11, color: 'var(--text-secondary)', textAlign: 'right', paddingRight: 8 }}>
                               {isCoin ? 'no active goal' : ''}
                             </div>
                           )}
-                          <span style={{ flex: '0 0 60px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (isCoin && val < 0) ? '#dc2626' : '#1a1a2e' }}>
+                          <span style={{ flex: '0 0 60px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (isCoin && val < 0) ? 'var(--danger-text)' : 'var(--text-primary)' }}>
                             {isCoin ? Number(val).toLocaleString() : val}
                           </span>
                         </>
@@ -6612,7 +6612,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             ) : <p style={S.muted}>No stats initialized. Evaluate an episode to auto-seed defaults.</p>}
 
-            <div style={{ padding: 14, background: '#f8fafc', borderRadius: 8 }}>
+            <div style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 8 }}>
               <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Character Rules</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {(() => {
@@ -6630,7 +6630,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     ['Default Stats', defaultStatsLine],
                     ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
                   ].map(([l, v]) => (
-                    <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
+                    <div key={l}><div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{v}</div></div>
                   ));
                 })()}
               </div>
@@ -6640,13 +6640,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           {/* Prime */}
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>💎</div>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>💎</div>
               <div>
                 <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>JustAWomanInHerPrime</h2>
-                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Creator Narrator</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Creator Narrator</p>
               </div>
             </div>
-            <div style={{ padding: 14, background: '#f8fafc', borderRadius: 8 }}>
+            <div style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 8 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {[
                   ['Role', 'Narrator + Gameplay driver'],
@@ -6654,7 +6654,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   ['Aliases', 'Prime:, Me:, You:'],
                   ['CTA Style', 'Confident, community-focused'],
                 ].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
+                  <div key={l}><div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{v}</div></div>
                 ))}
               </div>
             </div>
@@ -6681,7 +6681,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         <span key={k} style={S.deltaBadge(v)}>{STAT_ICONS[k]} {v > 0 ? '+' : ''}{v}</span>
                       ))}
                     </span>
-                    <span style={{ ...S.tCol, fontSize: 11, color: '#94a3b8' }}>{new Date(h.created_at).toLocaleDateString()}</span>
+                    <span style={{ ...S.tCol, fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(h.created_at).toLocaleDateString()}</span>
                   </div>
                 );
               })}
@@ -6779,14 +6779,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             }
                           }}
                           title="Create 4 finance apps (Wallet, Insights, Breakdowns, Goals) on Lala's phone. Closet Value content zones go on your existing Closet screen."
-                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >📱 Seed Finance Apps</button>
                       </div>
                     </div>
 
                     {/* Tab bar — switches between Overview (dashboard), Per-Episode
                         (the P&L table), and Goals (starting balance + ladder editor). */}
-                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--lala-parchment-3)', marginBottom: 16 }}>
                       {[
                         { key: 'overview',    label: 'Overview' },
                         { key: 'per_episode', label: 'Per Episode' },
@@ -6800,8 +6800,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             style={{
                               padding: '8px 16px', fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer',
                               background: 'transparent', border: 'none',
-                              borderBottom: active ? '2px solid #B8962E' : '2px solid transparent',
-                              color: active ? '#1a1a2e' : '#64748b',
+                              borderBottom: active ? '2px solid var(--lala-gold)' : '2px solid transparent',
+                              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
                               marginBottom: -1,
                             }}>{t.label}</button>
                         );
@@ -6814,7 +6814,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         /financial-summary so the numbers match the ledger. */}
                     {financeTab === 'overview' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {financeSummaryLoading && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
+                        {financeSummaryLoading && <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
                         {financeSummary && (() => {
                           const t = financeSummary.totals || {};
                           const balance = t.current_balance ?? 0;
@@ -6828,19 +6828,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           return (
                             <>
                               {/* Hero: balance + next goal */}
-                              <div style={{ padding: '14px 16px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
-                                <div style={{ fontSize: 11, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
-                                <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
-                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginLeft: 8 }}>coins</span>
+                              <div style={{ padding: '14px 16px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 10 }}>
+                                <div style={{ fontSize: 11, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
+                                <div style={{ fontSize: 32, fontWeight: 900, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace" }}>
+                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 8 }}>coins</span>
                                 </div>
                                 {nextGoal && (
                                   <div style={{ marginTop: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                                      <span style={{ color: '#854d0e', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: '#a16207', marginLeft: 4 }}>· ep-scoped</span>}</span>
-                                      <span style={{ color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
+                                      <span style={{ color: 'var(--warning-text)', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: 'var(--warning-text)', marginLeft: 4 }}>· ep-scoped</span>}</span>
+                                      <span style={{ color: 'var(--warning-text)', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
                                     </div>
                                     <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017', transition: 'width 0.3s' }} />
+                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? 'var(--success)' : 'var(--lala-gold)', transition: 'width 0.3s' }} />
                                     </div>
                                   </div>
                                 )}
@@ -6849,15 +6849,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               {/* KPI strip */}
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
                                 {[
-                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: '#16a34a' },
-                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: '#dc2626' },
-                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? '#16a34a' : '#dc2626' },
-                                  { label: 'Burn rate', value: `${(financeSummary.burn_rate_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
-                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
-                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: '#1a1a2e' },
+                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: 'var(--success-text)' },
+                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: 'var(--danger-text)' },
+                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? 'var(--success-text)' : 'var(--danger-text)' },
+                                  { label: 'Burn rate', value: `${(financeSummary.burn_rate_per_episode || 0).toLocaleString()}/ep`, color: 'var(--text-primary)' },
+                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: 'var(--text-primary)' },
+                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: 'var(--text-primary)' },
                                 ].map(kpi => (
-                                  <div key={kpi.label} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                                    <div style={{ fontSize: 9, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
+                                  <div key={kpi.label} style={{ padding: '10px 12px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
+                                    <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
                                     <div style={{ fontSize: 15, fontWeight: 700, color: kpi.color, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{kpi.value}</div>
                                   </div>
                                 ))}
@@ -6867,12 +6867,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                   inline SVG (no chart library) so it survives any CSP + is
                                   fast to paint. Each point is scaled into the 0-100 range */}
                               {recentTrend.length > 1 && (
-                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
+                                <div style={{ padding: '12px 14px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
                                   <svg viewBox={`0 0 100 40`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }}>
                                     {/* Zero line */}
                                     {minBal < 0 && (
-                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="#cbd5e1" strokeWidth="0.3" strokeDasharray="1,1" />
+                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="var(--lala-parchment-3)" strokeWidth="0.3" strokeDasharray="1,1" />
                                     )}
                                     <polyline
                                       points={recentTrend.map((p, i) => {
@@ -6881,17 +6881,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                         return `${x},${y}`;
                                       }).join(' ')}
                                       fill="none"
-                                      stroke="#B8962E"
+                                      stroke="var(--lala-gold)"
                                       strokeWidth="0.8"
                                       vectorEffect="non-scaling-stroke"
                                     />
                                     {recentTrend.map((p, i) => {
                                       const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
                                       const y = 40 - ((p.balance_after - minBal) / range) * 40;
-                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? '#16a34a' : '#dc2626'} vectorEffect="non-scaling-stroke" />;
+                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? 'var(--success)' : 'var(--danger)'} vectorEffect="non-scaling-stroke" />;
                                     })}
                                   </svg>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
                                     <span>Ep {recentTrend[0]?.episode_number || '?'}</span>
                                     <span>Ep {recentTrend[recentTrend.length - 1]?.episode_number || '?'}</span>
                                   </div>
@@ -6901,7 +6901,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           );
                         })()}
                         {!financeSummaryLoading && !financeSummary && (
-                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>
                             No summary yet. Finalize an episode to populate.
                           </div>
                         )}
@@ -6914,10 +6914,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {financeTab === 'per_episode' && (
                       <div>
                         {financeSummary && financeSummary.by_episode.length > 0 ? (
-                          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                          <div style={{ overflow: 'auto', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
                             <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                               <thead>
-                                <tr style={{ background: '#f8fafc', color: '#64748b', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
+                                <tr style={{ background: 'var(--surface-bg)', color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
                                   <th style={{ padding: '8px 10px', textAlign: 'left' }}>Ep</th>
                                   <th style={{ padding: '8px 10px', textAlign: 'left' }}>Title</th>
                                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Outfit</th>
@@ -6929,21 +6929,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               </thead>
                               <tbody>
                                 {financeSummary.by_episode.filter(e => e.tx_count > 0).map(e => (
-                                  <tr key={e.episode_id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{e.episode_number ?? '—'}</td>
+                                  <tr key={e.episode_id} style={{ borderTop: '1px solid var(--lala-parchment-3)' }}>
+                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: 'var(--text-secondary)' }}>{e.episode_number ?? '—'}</td>
                                     <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title || '(untitled)'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#16a34a' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? '#16a34a' : '#dc2626' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#1a1a2e' }}>{e.balance_after.toLocaleString()}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--danger-text)' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--danger-text)' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--success-text)' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--text-primary)' }}>{e.balance_after.toLocaleString()}</td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
                         ) : (
-                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 30 }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 30 }}>
                             No episode-level transactions yet. Finalize episodes to populate.
                           </div>
                         )}
@@ -6957,7 +6957,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         the visual ratio reflects actual spend shape. */}
                     {financeTab === 'breakdowns' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {!financeBreakdowns && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
+                        {!financeBreakdowns && <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
                         {financeBreakdowns && (() => {
                           const incomeMax = Math.max(1, ...(financeBreakdowns.income?.breakdown || []).map(r => r.total));
                           const expenseMax = Math.max(1, ...(financeBreakdowns.expenses?.breakdown || []).map(r => r.total));
@@ -6965,39 +6965,39 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                               {items.map(r => (
                                 <div key={r.category} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ width: 140, fontSize: 11, color: '#475569', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
+                                  <div style={{ width: 140, fontSize: 11, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
                                   <div style={{ flex: 1, height: 14, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
                                     <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
                                   </div>
                                   <div style={{ width: 80, fontSize: 11, textAlign: 'right', fontFamily: "'DM Mono', monospace", color, fontWeight: 700 }}>
                                     {r.total.toLocaleString()}
                                   </div>
-                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
+                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
                                 </div>
                               ))}
                             </div>
                           );
                           return (
                             <>
-                              <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                              <div style={{ padding: '12px 14px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
-                                  <span style={{ fontSize: 11, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
+                                  <span style={{ fontSize: 11, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
                                 </div>
                                 {(financeBreakdowns.income?.breakdown || []).length > 0
-                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, '#16a34a')
-                                  : <div style={{ fontSize: 11, color: '#16a34a80', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
+                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, 'var(--success-text)')
+                                  : <div style={{ fontSize: 11, color: 'var(--success-text)', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
                               </div>
-                              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                              <div style={{ padding: '12px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
-                                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
+                                  <span style={{ fontSize: 11, color: 'var(--danger-text)', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
                                 </div>
                                 {(financeBreakdowns.expenses?.breakdown || []).length > 0
-                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, '#dc2626')
-                                  : <div style={{ fontSize: 11, color: '#dc262680', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
+                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, 'var(--danger-text)')
+                                  : <div style={{ fontSize: 11, color: 'var(--danger-text)', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
                               </div>
-                              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
+                              <div style={{ fontSize: 10, color: 'var(--text-secondary)', textAlign: 'center' }}>
                                 Bar length = share of its side's total. "×N" = how many transactions rolled into that row.
                               </div>
                             </>
@@ -7013,40 +7013,40 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         creators see the concrete upgrade path. */}
                     {financeTab === 'closet' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
+                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
                         {financeBreakdowns?.closet && (() => {
                           const c = financeBreakdowns.closet;
                           return (
                             <>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                                <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#16a34a80', marginTop: 2 }}>{c.owned_count} pieces</div>
+                                <div style={{ padding: 12, background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--success-text)', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--success-text)', marginTop: 2 }}>{c.owned_count} pieces</div>
                                 </div>
-                                <div style={{ padding: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#4338ca80', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
+                                <div style={{ padding: 12, background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: 'var(--primary-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary-text)', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--primary-text)', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
                                 </div>
-                                <div style={{ padding: 12, background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 9, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
-                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
-                                  <div style={{ fontSize: 10, color: '#8a6d1f80', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
+                                <div style={{ padding: 12, background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--lala-gold-text)', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
                                 </div>
                               </div>
                               {c.wishlist && c.wishlist.length > 0 && (
-                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
+                                <div style={{ padding: '12px 14px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {c.wishlist.map(w => (
-                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: '#faf7f0', borderRadius: 6 }}>
+                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: 'var(--surface-bg)', borderRadius: 6 }}>
                                         {w.image_url && <img src={w.image_url} alt={w.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-                                          <div style={{ fontSize: 10, color: '#64748b' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+                                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
                                         </div>
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace" }}>
                                           💰 {w.coin_cost.toLocaleString()}
                                         </div>
                                       </div>
@@ -7069,28 +7069,28 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         and a "+ Add" button that appends it to the draft goals list.
                         Already-added suggestions are dimmed with an "Added" badge. */}
                     {Array.isArray(financeSuggestions) && financeSuggestions.length > 0 && (
-                      <div style={{ marginBottom: 16, padding: '12px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                      <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
-                          <span style={{ fontSize: 10, color: '#6366f1' }}>— derived from your balance + calendar + closet</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
+                          <span style={{ fontSize: 10, color: 'var(--primary-text)' }}>— derived from your balance + calendar + closet</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {financeSuggestions.map(sug => {
                             const already = sug.already_exists || d.goals.some(g => g.id === sug.id || Number(g.threshold) === Number(sug.threshold));
                             return (
-                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #e0e7ff', opacity: already ? 0.55 : 1 }}>
+                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: 'var(--surface-card)', borderRadius: 6, border: '1px solid var(--primary-light)', opacity: already ? 0.55 : 1 }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
                                     {sug.label}
-                                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6366f1', fontFamily: "'DM Mono', monospace" }}>
+                                    <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--primary-text)', fontFamily: "'DM Mono', monospace" }}>
                                       {Number(sug.threshold).toLocaleString()} coins · +{Number(sug.reward_coins).toLocaleString()} reward
                                     </span>
                                   </div>
-                                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{sug.description}</div>
-                                  <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sug.description}</div>
+                                  <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
                                 </div>
                                 {already ? (
-                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', padding: '4px 10px', background: '#f0fdf4', borderRadius: 5 }}>✓ Added</span>
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--success-text)', padding: '4px 10px', background: 'var(--success-bg)', borderRadius: 5 }}>✓ Added</span>
                                 ) : (
                                   <button
                                     onClick={() => {
@@ -7104,7 +7104,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                         episode_id: null,
                                       }] }));
                                     }}
-                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid #6366f1', borderRadius: 5, background: '#6366f1', color: '#fff', cursor: 'pointer' }}
+                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid var(--primary)', borderRadius: 5, background: 'var(--primary)', color: 'var(--text-inverse)', cursor: 'pointer' }}
                                   >+ Add</button>
                                 )}
                               </div>
@@ -7114,8 +7114,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     )}
                     {/* Starting balance */}
-                    <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
-                      <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
+                    <div style={{ padding: '12px 14px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 10, marginBottom: 14 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
                         <input
                           type="number"
@@ -7125,9 +7125,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           onChange={e => setDraft({ starting_balance: e.target.value })}
                           style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 700 }}
                         />
-                        <span style={{ fontSize: 11, color: '#8a6d1f' }}>coins</span>
+                        <span style={{ fontSize: 11, color: 'var(--lala-gold-text)' }}>coins</span>
                       </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6 }}>
                         Current balance: {(financeConfig?.current_balance ?? 0).toLocaleString()} coins. Saving will re-seed the starting balance — non-seed transactions stay intact.
                       </div>
                     </div>
@@ -7135,16 +7135,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* Goals ladder */}
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Milestone ladder ({d.goals.length})</label>
-                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9cc', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#334155' }}>+ Add goal</button>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>Milestone ladder ({d.goals.length})</label>
+                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid var(--lala-parchment-3)', borderRadius: 5, background: 'var(--surface-card)', cursor: 'pointer', color: 'var(--text-primary)' }}>+ Add goal</button>
                       </div>
                       {d.goals.length === 0 && (
-                        <div style={{ fontSize: 12, color: '#94a3b8', padding: 12, textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 12, textAlign: 'center', border: '1px dashed var(--lala-parchment-3)', borderRadius: 8 }}>
                           No milestones yet. Add one above.
                         </div>
                       )}
                       {d.goals.map((g, i) => (
-                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, background: g.triggered_at ? '#f0fdf4' : '#fff' }}>
+                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid var(--lala-parchment-3)', borderRadius: 8, background: g.triggered_at ? 'var(--success-bg)' : 'var(--surface-card)' }}>
                           <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                             <input
                               value={g.label}
@@ -7175,7 +7175,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             <button
                               onClick={() => removeGoal(i)}
                               title="Delete this goal"
-                              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 6, color: '#dc2626', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
+                              style={{ background: 'none', border: '1px solid var(--danger-border)', borderRadius: 6, color: 'var(--danger-text)', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
                             >×</button>
                           </div>
                           <input
@@ -7190,7 +7190,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               scoped goals only fire when that specific episode
                               finalizes and the threshold gets crossed. */}
                           <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <label style={{ fontSize: 10, color: '#8a7e65', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
+                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
                             <select
                               value={g.episode_id || ''}
                               onChange={e => updateGoal(i, { episode_id: e.target.value || null })}
@@ -7205,7 +7205,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             </select>
                           </div>
                           {g.triggered_at && (
-                            <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                            <div style={{ fontSize: 10, color: 'var(--success-text)', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
                               ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
                             </div>
                           )}
@@ -7213,7 +7213,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       ))}
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid var(--lala-parchment-3)' }}>
                       <button onClick={() => setFinanceEditorDraft(draftFromConfig(financeConfig))} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Discard changes</button>
                       <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
                         {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
@@ -7237,14 +7237,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               const ctx = typeof d.context_json === 'string' ? JSON.parse(d.context_json) : d.context_json;
               const dec = typeof d.decision_json === 'string' ? JSON.parse(d.decision_json) : d.decision_json;
               return (
-                <div key={i} style={{ padding: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 8 }}>
+                <div key={i} style={{ padding: 12, background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, marginTop: 8 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#4338ca', textTransform: 'capitalize' }}>{d.type?.replace(/_/g, ' ')}</span>
-                    {d.source && <span style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 11, color: '#64748b' }}>{d.source}</span>}
-                    <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>{new Date(d.created_at).toLocaleString()}</span>
+                    <span style={{ padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--primary-text)', textTransform: 'capitalize' }}>{d.type?.replace(/_/g, ' ')}</span>
+                    {d.source && <span style={{ padding: '2px 8px', background: 'var(--lala-parchment-2)', borderRadius: 4, fontSize: 11, color: 'var(--text-secondary)' }}>{d.source}</span>}
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(d.created_at).toLocaleString()}</span>
                   </div>
-                  {ctx && <div style={{ fontSize: 11, color: '#64748b', wordBreak: 'break-all' }}>Context: {JSON.stringify(ctx)}</div>}
-                  {dec && <div style={{ fontSize: 11, color: '#1a1a2e', fontWeight: 500, wordBreak: 'break-all' }}>Decision: {JSON.stringify(dec)}</div>}
+                  {ctx && <div style={{ fontSize: 11, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>Context: {JSON.stringify(ctx)}</div>}
+                  {dec && <div style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>Decision: {JSON.stringify(dec)}</div>}
                 </div>
               );
             }) : <p style={S.muted}>No decisions logged yet.</p>}
