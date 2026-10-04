@@ -1,10 +1,18 @@
 /**
- * CultureEvents — Events + Awards & Media + History
+ * CultureEvents — Events + Awards & Media + History (the LalaVerse hub's
+ * Culture tab)
  *
  * Three tabs with clear purpose:
- *   Events       — plan & spawn (DREAM city calendar)
- *   Awards/Media — who covers & amplifies (power structures)
- *   History      — what the world remembers (memory system)
+ *   Events       — plan & spawn (DREAM city calendar); the show the new
+ *                  event goes to is chosen here when there are several
+ *   Awards/Media — who covers & amplifies (power structures); its own
+ *                  Brain Update button (source cultural_calendar)
+ *   History      — what the world remembers (memory system); its own
+ *                  Brain Update button (source cultural_memory)
+ *
+ * 2026-10-04: the page-level "Push to Brain" button is gone. It clicked
+ * two hidden buttons that no longer existed, so it did nothing, and the
+ * show picker sat in the same hidden block.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
@@ -82,14 +90,6 @@ export default function CultureEvents({ embedded = false }) {
 
   const saving = ccSaving || cmSaving;
 
-  // Single push that sends both datasets
-  const handlePushAll = useCallback(async () => {
-    const btn = document.querySelector('[data-push-calendar]');
-    const btn2 = document.querySelector('[data-push-memory]');
-    if (btn) btn.click();
-    setTimeout(() => { if (btn2) btn2.click(); }, 500);
-  }, []);
-
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
       {/* Header; inside the LalaVerse hub the tab is the heading */}
@@ -98,18 +98,17 @@ export default function CultureEvents({ embedded = false }) {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#2C2C2C', margin: 0 }}>Culture & Events</h1>
           <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>What happens in the LalaVerse, who covers it, and what becomes legend</p>
         </div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
-          <div style={{ display: 'none' }}>
-            {shows.length > 1 && <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Create events in…" />}
-            <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />
-            <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />
-          </div>
-          <button onClick={handlePushAll} style={{
-            padding: '6px 14px', fontSize: 11, fontWeight: 600,
-            background: '#FAF7F0', border: '1px solid #e8e0d0',
-            borderRadius: 6, cursor: 'pointer', color: '#B8962E',
-          }}>Push to Brain</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {saving && <span style={{ fontSize: 11, color: 'var(--lala-gold-text)' }}>Saving...</span>}
+          {/* The action that belongs to the open sub-tab: the show for a new event, or that sub-tab's Brain Update */}
+          {tab === 'events' && shows.length > 1 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
+              New events go to
+              <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Choose a show…" />
+            </label>
+          )}
+          {tab === 'awards' && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
+          {tab === 'history' && <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />}
         </div>
       </div>
 
