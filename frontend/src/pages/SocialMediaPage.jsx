@@ -41,10 +41,97 @@ export const posterOf = (post) => {
   };
 };
 
+/**
+ * Reactions (the Feed project, step 4): the post's comments as records.
+ * Live ones are the feed; drafts wait for approval. "Draft reactions" asks
+ * the drafter for comments from the characters connected to the poster
+ * (pre-ticked; untick to pick who reacts), in their own voices.
+ */
+export function Reactions({ post }) {
+  const [comments, setComments] = useState(null);
+  const [reactors, setReactors] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [c, r] = await Promise.all([
+        api.get(`/api/v1/feed-posts/${post.id}/comments?status=all`),
+        api.get(`/api/v1/feed-posts/${post.id}/comments/reactors`).catch(() => ({ data: { data: [] } })),
+      ]);
+      setComments(c.data?.data || []);
+      const list = r.data?.data || [];
+      setReactors(list);
+      setPicked((prev) => prev ?? new Set(list.map((x) => x.id)));
+    } catch (err) {
+      console.error('[SocialMedia] reactions load failed:', err.response?.status || err.message);
+      setNote(err.response?.data?.error || 'The reactions could not be loaded.');
+    }
+  }, [post.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (fn, okNote) => {
+    setBusy(true); setNote(null);
+    try { await fn(); if (okNote) setNote(okNote); await load(); }
+    catch (err) { setNote(err.response?.data?.error || err.message); }
+    finally { setBusy(false); }
+  };
+  const draft = () => act(async () => {
+    const ids = [...(picked || [])];
+    const r = await api.post(`/api/v1/feed-posts/${post.id}/comments/draft`, ids.length ? { reactor_ids: ids } : {});
+    return r;
+  }, 'Reactions drafted. Approve the ones that are canon.');
+  const approve = (c) => act(() => api.patch(`/api/v1/feed-posts/comments/${c.id}`, { status: 'live' }));
+  const remove = (c) => act(() => api.delete(`/api/v1/feed-posts/comments/${c.id}`));
+  const toggle = (id) => setPicked((prev) => { const next = new Set(prev || []); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  if (comments === null) return <p className="sm-reactions-note">Loading reactions…</p>;
+  const live = comments.filter((c) => c.status === 'live');
+  const drafts = comments.filter((c) => c.status === 'draft');
+  return (
+    <div className="sm-reactions" data-testid="sm-reactions">
+      {live.length > 0 && (
+        <ul className="sm-comments" data-testid="sm-live-comments">
+          {live.map((c) => <li key={c.id}><b>@{c.handle}</b> {c.text} <button type="button" className="sm-mini" onClick={() => remove(c)} disabled={busy} title="Live comments are never edited, only deleted">delete</button></li>)}
+        </ul>
+      )}
+      {drafts.length > 0 && (
+        <ul className="sm-comments sm-drafts" data-testid="sm-draft-comments">
+          {drafts.map((c) => (
+            <li key={c.id}>
+              <span className="sm-tag sm-draft">draft</span> <b>@{c.handle}</b> {c.text}
+              {c.voice_note && <em className="sm-voice"> · {c.voice_note}</em>}
+              <button type="button" className="sm-mini sm-approve" onClick={() => approve(c)} disabled={busy}>approve</button>
+              <button type="button" className="sm-mini" onClick={() => remove(c)} disabled={busy}>delete</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {live.length === 0 && drafts.length === 0 && <p className="sm-reactions-note">No reactions yet.</p>}
+      <div className="sm-reactors">
+        {reactors.length > 0 && (
+          <span className="sm-reactors-pick" role="group" aria-label="Who reacts">
+            {reactors.map((r) => (
+              <label key={r.id}><input type="checkbox" checked={picked?.has(r.id) ?? true} onChange={() => toggle(r.id)} /> @{r.handle}{r.relationship ? ` (${r.relationship.replace(/_/g, ' ')})` : ''}</label>
+            ))}
+          </span>
+        )}
+        <button type="button" className="sm-draft-btn" onClick={draft} disabled={busy}>
+          {busy ? 'Working…' : 'Draft reactions'}
+        </button>
+      </div>
+      {note && <p className="sm-reactions-note" role="status">{note}</p>}
+    </div>
+  );
+}
+
 export function PostCard({ post }) {
   const who = posterOf(post);
   const comments = Array.isArray(post.sample_comments) ? post.sample_comments : [];
   const when = post.posted_at ? new Date(post.posted_at).toLocaleString() : null;
+  const [open, setOpen] = useState(false);
   return (
     <article className="sm-post" data-testid="sm-post">
       <header className="sm-post-head">
@@ -69,14 +156,18 @@ export function PostCard({ post }) {
         {post.is_viral && <span className="sm-viral">viral</span>}
         {when && <time dateTime={post.posted_at}>{when}</time>}
         {post.episode_id && <Link to={`/episodes/${post.episode_id}`} className="sm-post-episode">Episode →</Link>}
+        <button type="button" className="sm-mini sm-reactions-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? 'Hide reactions' : 'Reactions'}
+        </button>
       </footer>
-      {comments.length > 0 && (
+      {!open && comments.length > 0 && (
         <ul className="sm-comments">
           {comments.slice(0, 4).map((c, i) => (
             <li key={i}>{typeof c === 'string' ? c : (c.text || c.comment || JSON.stringify(c))}</li>
           ))}
         </ul>
       )}
+      {open && <Reactions post={post} />}
     </article>
   );
 }

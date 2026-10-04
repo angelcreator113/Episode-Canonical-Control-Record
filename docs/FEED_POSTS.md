@@ -34,10 +34,26 @@
    `GET /feed-posts/post/:postId`, a draft marked. Fix the post on the feed and every
    screen that points at it shows the fix.
 
+6. **Comments are records with a voice.** `feed_comments` (migration `20261004170000`,
+   model `FeedComment`) holds a post's comments: who said it (a social profile when one
+   matches, always a handle), the text, `draft` or `live` with the same rules as posts
+   (a draft is edited or approved; a live comment is only deleted). `comments_count` on
+   the post is its live comments (`recountComments`). **Reactions are drafted, never
+   posted.** `POST /feed-posts/:id/comments/draft` (`services/feedCommentDrafter.js`,
+   `aiRateLimiter`, one Claude message under the cost gate) asks for one comment from
+   each character who would react, in that character's own voice: the poster's
+   connections in `social_profile_relationships` first (by drama), then the profiles most
+   relevant to Lala, up to four; `GET /feed-posts/:id/comments/reactors` shows them and
+   the Social Media page lets Evoni untick who reacts. Every draft waits for approval
+   (`PATCH /feed-posts/comments/:id { status: 'live' }`) or deletion. The One Post phone
+   zone and `GET /feed-posts/post/:id` carry the live comment records; the old
+   `sample_comments` strings remain as a fallback where no records exist.
+
 ## Still to come
 
 - Notification and relationship-change phone zones that read a post or a profile
   change, and a way to pick a beat's post from the Social Media page.
+- The phone's Comments zone still reads `sample_comments`; moving it to the records.
 - Comments as records with a profile and a voice, and reaction drafting (step 4).
 - A story clock on posts and episodes, so "a post must exist by this point in story
   time" can be checked rather than trusted.

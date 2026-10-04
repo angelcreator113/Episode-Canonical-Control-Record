@@ -42,5 +42,17 @@
 .sm-viral { color: var(--accent-dark); font-weight: 700; }
 .sm-comments { margin: 8px 0 0; padding: 8px 0 0 14px; border-top: 1px solid var(--lala-parchment-2); font-size: 12px; color: var(--text-secondary); }
 .sm-comments li { margin: 2px 0; }
+.sm-reactions { margin-top: 8px; border-top: 1px solid var(--lala-parchment-2); padding-top: 8px; }
+.sm-reactions .sm-comments { border-top: none; padding-top: 0; margin-top: 0; }
+.sm-drafts li { background: var(--warning-bg); border-radius: 6px; padding: 4px 8px; margin: 4px 0; color: var(--text-primary); }
+.sm-voice { color: var(--text-faint); }
+.sm-mini { margin-left: 6px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.sm-approve { border-color: var(--primary); color: var(--primary-text); }
+.sm-reactions-toggle { margin-left: 0; }
+.sm-reactors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.sm-reactors-pick { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.sm-draft-btn { padding: 5px 12px; border-radius: 8px; border: none; background: var(--primary); color: var(--text-inverse); font-weight: 600; font-size: 12px; cursor: pointer; }
+.sm-draft-btn:disabled { opacity: 0.6; cursor: default; }
+.sm-reactions-note { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); }
 .sm-more { display: block; margin: 8px auto 0; padding: 8px 18px; border-radius: 8px; border: 1px solid var(--primary); background: var(--surface-card); color: var(--primary-text); font-weight: 600; cursor: pointer; }
 @media (max-width: 420px) { .sm-page { padding: 14px 16px 32px; } .sm-post-foot time { margin-left: 0; width: 100%; } }

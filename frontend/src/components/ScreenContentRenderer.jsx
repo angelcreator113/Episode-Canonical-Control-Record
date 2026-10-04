@@ -271,7 +271,9 @@ export function SinglePostRenderer({ config }) {
   if (!post) return <ZoneEmpty label="Post not found" />;
   const who = post.poster_display_name || post.socialProfile?.display_name || post.poster_handle || post.socialProfile?.handle || 'user';
   const handle = post.poster_handle || post.socialProfile?.handle;
-  const comments = Array.isArray(post.sample_comments) ? post.sample_comments.slice(0, config.max_items || 2) : [];
+  // Live comment records first (docs/FEED_POSTS.md rule 6); the old sample strings otherwise.
+  const records = Array.isArray(post.comments) && post.comments.length > 0 ? post.comments : null;
+  const comments = (records || (Array.isArray(post.sample_comments) ? post.sample_comments : [])).slice(0, config.max_items || 2);
 
   return (
     <div data-testid="feed-post-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', padding: '5px 6px', background: config.bg || 'rgba(0,0,0,0.45)', color: '#fff' }}>
@@ -294,7 +296,7 @@ export function SinglePostRenderer({ config }) {
       {comments.length > 0 && (
         <div style={{ marginTop: 3, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 2 }}>
           {comments.map((c, i) => (
-            <div key={i} style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3 }}>{typeof c === 'string' ? c : (c.text || c.comment || '')}</div>
+            <div key={c.id || i} style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3 }}>{typeof c === 'string' ? c : <><b style={{ color: '#fff' }}>{c.handle ? `@${c.handle} ` : ''}</b>{c.text || c.comment || ''}</>}</div>
           ))}
         </div>
       )}

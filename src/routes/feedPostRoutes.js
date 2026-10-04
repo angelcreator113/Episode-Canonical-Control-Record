@@ -16,6 +16,7 @@ const router = express.Router();
 const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
+const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
@@ -139,15 +140,132 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
 // GET /api/v1/feed-posts/post/:postId — the post a phone zone or a beat draws live.
 router.get('/post/:postId', optionalAuth, async (req, res) => {
   try {
-    const { FeedPost, SocialProfile } = require('../models');
+    const { FeedPost, SocialProfile, FeedComment } = require('../models');
     const post = await FeedPost.findOne({
       where: { id: req.params.postId, deleted_at: null },
-      include: SocialProfile ? [{ model: SocialProfile, as: 'socialProfile', attributes: ['id', 'handle', 'display_name', 'platform'], required: false }] : [],
+      include: [
+        ...(SocialProfile ? [{ model: SocialProfile, as: 'socialProfile', attributes: ['id', 'handle', 'display_name', 'platform'], required: false }] : []),
+        // The post's live comments, as records (docs/FEED_POSTS.md rule 6).
+        ...(FeedComment ? [{ model: FeedComment, as: 'comments', where: { status: 'live' }, required: false, attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id'] }] : []),
+      ],
+      order: FeedComment ? [[{ model: FeedComment, as: 'comments' }, 'sort_order', 'ASC']] : [],
     });
     if (!post) return res.status(404).json({ error: 'Post not found' });
     return res.json({ data: post });
   } catch (err) {
     console.error('[FeedPosts] Get post error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── COMMENTS (the Feed project, step 4; docs/FEED_POSTS.md rule 6) ──────────
+// GET /api/v1/feed-posts/:postId/comments?status=live|draft|all — live by default.
+router.get('/:postId/comments', optionalAuth, async (req, res) => {
+  try {
+    const { FeedComment } = require('../models');
+    const scoped = statusWhere(req.query.status);
+    if (scoped.error) return res.status(400).json({ error: scoped.error });
+    const comments = await FeedComment.findAll({
+      where: { feed_post_id: req.params.postId, deleted_at: null, ...scoped },
+      order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
+    });
+    return res.json({ data: comments, count: comments.length });
+  } catch (err) {
+    console.error('[FeedComments] List error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/v1/feed-posts/:postId/comments/reactors — who would react, and why.
+router.get('/:postId/comments/reactors', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const post = await models.FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null } });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    const reactors = await pickReactors(models, post, { limit: Math.min(parseInt(req.query.limit, 10) || 4, 8) });
+    return res.json({ data: reactors.map(({ profile, relationship }) => ({ id: profile.id, handle: profile.handle, display_name: profile.display_name, archetype: profile.archetype, relationship })) });
+  } catch (err) {
+    console.error('[FeedComments] Reactors error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/feed-posts/:postId/comments — write one by hand (a draft unless told live).
+router.post('/:postId/comments', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { FeedPost, FeedComment } = models;
+    const post = await FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null } });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    const { handle, display_name, social_profile_id, text, status } = req.body || {};
+    if (!handle?.trim() || !text?.trim()) return res.status(400).json({ error: 'handle and text are required' });
+    if (status !== undefined && !['draft', 'live'].includes(status)) return res.status(400).json({ error: 'status must be draft or live' });
+    const existing = await FeedComment.count({ where: { feed_post_id: post.id } });
+    const comment = await FeedComment.create({
+      feed_post_id: post.id, show_id: post.show_id, social_profile_id: social_profile_id || null,
+      handle: handle.trim().replace(/^@/, ''), display_name: display_name || null, text: text.trim(),
+      status: status || 'draft', posted_at: status === 'live' ? new Date() : null, sort_order: existing, ai_generated: false,
+    });
+    if (comment.status === 'live') await recountComments(models, post.id);
+    return res.json({ data: comment });
+  } catch (err) {
+    console.error('[FeedComments] Create error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/feed-posts/:postId/comments/draft { reactor_ids?, limit? } — draft reactions for approval.
+router.post('/:postId/comments/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { reactor_ids, limit } = req.body || {};
+    const { drafts, reactors } = await draftReactions(require('../models'), req.params.postId, {
+      reactorIds: Array.isArray(reactor_ids) ? reactor_ids : null,
+      limit: Math.min(parseInt(limit, 10) || 4, 8),
+    });
+    return res.json({ data: drafts, count: drafts.length, reactors: reactors.map((r) => r.profile.handle), message: `${drafts.length} reaction(s) drafted for approval` });
+  } catch (err) {
+    if (err instanceof DraftError) return res.status(err.status).json({ error: err.message });
+    console.error('[FeedComments] Draft error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/v1/feed-posts/comments/:commentId { text?, status? } — a draft only; approving sets it live.
+router.patch('/comments/:commentId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const comment = await models.FeedComment.findByPk(req.params.commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+    if (comment.status === 'live') return res.status(409).json({ error: COMMENT_LOCKED, status: 'live' });
+    const { text, status } = req.body || {};
+    if (status !== undefined && !['draft', 'live'].includes(status)) return res.status(400).json({ error: 'status must be draft or live' });
+    const updates = {};
+    if (text !== undefined) {
+      if (!String(text).trim()) return res.status(400).json({ error: 'text is required' });
+      updates.text = String(text).trim();
+    }
+    if (status === 'live') { updates.status = 'live'; updates.posted_at = comment.posted_at || new Date(); }
+    await comment.update(updates);
+    if (comment.status === 'live') await recountComments(models, comment.feed_post_id);
+    return res.json({ data: comment });
+  } catch (err) {
+    console.error('[FeedComments] Update error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/v1/feed-posts/comments/:commentId — a draft or a live comment; the one way a live comment goes.
+router.delete('/comments/:commentId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const comment = await models.FeedComment.findByPk(req.params.commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+    const wasLive = comment.status === 'live';
+    await comment.destroy();
+    if (wasLive) await recountComments(models, comment.feed_post_id);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[FeedComments] Delete error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
