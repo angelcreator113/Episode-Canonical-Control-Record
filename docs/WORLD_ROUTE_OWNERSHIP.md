@@ -16,6 +16,14 @@ former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedi
 rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
 Bible (a deep link to the Bible tab) and Lala's Feed.
 
+The Overview's setup progress (`components/WorldSetupProgress`, 2026-10-04) reads the seven
+endpoints' real shapes: `GET /page-content/:name` answers the content object itself (the checks
+read a `data` property that was never there, so World Foundation, Social Systems and Cultural
+Memory could never be done), and `GET /social-profiles` answers `{ profiles, pagination: { total } }`
+(the check read `count`). Each check measures usable records (a section holding something, an
+event, a location, a profile, a draft event) and shows the count on its step; an endpoint that
+did not answer is "could not check", neither done nor not done (`WorldSetupProgress.test.jsx`).
+
 The State tab's Tensions (2026-10-04) read the scanner's contract, `GET /world/tension-scanner`
 → `{ status: 'ok' | 'scan_failed', pairs, count, characters_scanned, error? }` with each pair's
 `char_a` / `char_b` as `{ id, name }`, and send the pair itself to
