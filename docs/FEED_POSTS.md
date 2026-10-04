@@ -57,7 +57,9 @@
 
 - Notification and relationship-change phone zones that read a post or a profile
   change, and a way to pick a beat's post from the Social Media page.
-- The phone's Comments zone still reads `sample_comments`; moving it to the records.
+- (done 2026-10-04) The phone's Comments zone reads the comment records: one post's when the
+  zone names a post, else the episode's posts' in an episode, else the show's live posts';
+  sample strings only where a post has no records.
 - Comments as records with a profile and a voice, and reaction drafting (step 4).
 - A story clock on posts and episodes, so "a post must exist by this point in story
   time" can be checked rather than trusted.
