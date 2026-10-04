@@ -52,7 +52,7 @@ beforeEach(() => {
     return { data: {} };
   });
   vi.mocked(api.post).mockImplementation(async (url, body) => {
-    const post = { id: 'p3', poster_handle: body.poster_handle, poster_display_name: body.poster_display_name, content_text: body.content_text, status: 'live', posted_at: new Date().toISOString(), comments: [] };
+    const post = { id: 'p3', post_type: body.post_type || 'post', poster_handle: body.poster_handle, poster_display_name: body.poster_display_name, content_text: body.content_text, status: 'live', posted_at: new Date().toISOString(), comments: [] };
     posts.unshift(post);
     return { data: { data: post } };
   });
@@ -130,6 +130,29 @@ describe('the wall', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ show_id: SHOW.id, content_text: 'is not doing this again.', poster_handle: 'lala', social_profile_id: 1, status: 'live' })));
     await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('is not doing this again.'));
+  });
+
+  test('Relationship shares a relationship post; the Info box reads the newest one', async () => {
+    renderAt('/feed');
+    await screen.findAllByTestId('sm-post');
+    expect(screen.getByTestId('sm-rel-status').textContent).toBe("it's complicated");
+    fireEvent.click(screen.getByLabelText('Relationship'));
+    fireEvent.click(screen.getByRole('button', { name: 'Single' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({
+      show_id: SHOW.id, post_type: 'relationship', content_text: 'changed her relationship status to "Single."', poster_handle: 'lala', status: 'live',
+    })));
+    await waitFor(() => expect(screen.getByTestId('sm-rel-status').textContent).toBe('Single'));
+  });
+
+  test('Friends shares "and X are now friends." with the picked friend', async () => {
+    renderAt('/feed');
+    await screen.findAllByTestId('sm-post');
+    fireEvent.click(screen.getByLabelText('Friends'));
+    expect(screen.getByRole('button', { name: 'Share' }).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Now friends with'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ post_type: 'relationship', content_text: 'and Marcus are now friends.' })));
   });
 
   test('an empty wall says what to do; no posts, no crash on missing sides', async () => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
+import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import './SocialMediaPage.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -226,6 +227,10 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [draftText, setDraftText] = useState('');
+  // What the composer shares: a status update, or a relationship change
+  // (a post too, docs/FEED_POSTS.md rule 8).
+  const [kind, setKind] = useState('update');
+  const [friendId, setFriendId] = useState('');
   const [sharing, setSharing] = useState(false);
 
   const loadPosts = useCallback(async (offset = 0, status = wallTab === 'drafts' ? 'draft' : 'live') => {
@@ -275,15 +280,20 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const ownerHandle = owner?.handle || 'lala';
   const status = useMemo(() => posts.find((p) => wallTab === 'wall' && (p.poster_handle || p.socialProfile?.handle) === ownerHandle) || null, [posts, ownerHandle, wallTab]);
 
+  const friendPicked = friends.list.find((p) => String(p.id) === String(friendId));
+  const composed = kind === 'update' ? draftText.trim()
+    : kind === 'status' ? relationshipText({ kind: 'status', status: draftText })
+      : relationshipText({ kind: 'friends', withName: friendPicked ? (friendPicked.display_name || friendPicked.handle) : '' });
   const share = async () => {
-    if (!draftText.trim() || !show?.id) return;
+    if (!composed || !show?.id) return;
     setSharing(true); setError(null);
     try {
       await api.post('/api/v1/feed-posts', {
-        show_id: show.id, content_text: draftText.trim(), poster_handle: ownerHandle,
+        show_id: show.id, content_text: composed, poster_handle: ownerHandle,
         poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse', status: 'live',
+        ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
       });
-      setDraftText('');
+      setDraftText(''); setFriendId(''); setKind('update');
       if (wallTab !== 'wall') setWallTab('wall'); else await loadPosts(0, 'live');
     } catch (err) { setError(err.response?.data?.error || 'The post could not be shared.'); }
     finally { setSharing(false); }
@@ -305,7 +315,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
         <Box title="Information" testId="sm-info">
           <dl className="sm-dl">
             <dt>Current City</dt><dd>{owner?.city ? CITY_NAMES[owner.city] || owner.city : (owner?.geographic_base || '[City]')}</dd>
-            <dt>Relationship Status</dt><dd>{owner?.relationship_status || '[Status]'}</dd>
+            <dt>Relationship Status</dt><dd data-testid="sm-rel-status">{latestStatus(posts, ownerHandle) || owner?.relationship_status || '[Status]'}</dd>
             <dt>Works at</dt><dd>{owner?.content_category ? owner.content_category.replace(/_/g, ' ') : 'Styling, everywhere'}</dd>
             {owner?.follower_count_approx && <><dt>Followers</dt><dd>{owner.follower_count_approx}</dd></>}
           </dl>
@@ -336,11 +346,28 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
 
         {wallTab !== 'events' && (
           <form className="sm-composer" onSubmit={(e) => { e.preventDefault(); share(); }}>
-            <label htmlFor="sm-composer-text" className="sm-composer-label">What&apos;s on your mind?</label>
-            <textarea id="sm-composer-text" rows={2} value={draftText} onChange={(e) => setDraftText(e.target.value)} />
+            <label htmlFor="sm-composer-text" className="sm-composer-label">
+              {kind === 'update' ? <>What&apos;s on your mind?</> : kind === 'status' ? 'Relationship status' : 'Now friends with'}
+            </label>
+            {kind === 'friends' ? (
+              <select id="sm-composer-text" className="sm-composer-select" value={friendId} onChange={(e) => setFriendId(e.target.value)}>
+                <option value="">Pick a friend…</option>
+                {friends.list.filter((p) => p.handle !== ownerHandle).map((p) => <option key={p.id} value={p.id}>{p.display_name || p.handle}</option>)}
+              </select>
+            ) : (
+              <>
+                <textarea id="sm-composer-text" rows={kind === 'status' ? 1 : 2} value={draftText} onChange={(e) => setDraftText(e.target.value)} placeholder={kind === 'status' ? "It's complicated" : ''} />
+                {kind === 'status' && <p className="sm-muted">{STATUSES.map((s) => <button key={s} type="button" className="sm-mini sm-status-pick" onClick={() => setDraftText(s)}>{s}</button>)}</p>}
+              </>
+            )}
             <div className="sm-composer-row">
+              <span className="sm-composer-kinds" role="group" aria-label="What to share">
+                <label><input type="radio" name="sm-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Status</label>
+                <label><input type="radio" name="sm-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
+                <label><input type="radio" name="sm-kind" checked={kind === 'friends'} onChange={() => setKind('friends')} /> Friends</label>
+              </span>
               <span className="sm-muted">Posts as {ownerName}, live on the feed.</span>
-              <button type="submit" className="sm-btn" disabled={sharing || !draftText.trim()}>{sharing ? 'Sharing…' : 'Share'}</button>
+              <button type="submit" className="sm-btn" disabled={sharing || !composed}>{sharing ? 'Sharing…' : 'Share'}</button>
             </div>
           </form>
         )}

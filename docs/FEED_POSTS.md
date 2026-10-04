@@ -61,10 +61,22 @@
    otherwise; `owner_handle` says whose phone it is (default `lala`). The older
    Notifications zone still reads the episode's phone moments.
 
+8. **A relationship change is a post.** Profiles keep only a current
+   `relationship_status`, and `social_profile_relationships` rows are written in bulk when
+   profiles are generated, so neither is a story event. A relationship change is a feed
+   post with `post_type` `relationship` (`frontend/src/lib/feedRelationship.js`:
+   `relationshipText` writes 'changed her relationship status to "It's complicated."' or
+   "and Marcus are now friends.", `parseRelationship` reads it back), so it has a story
+   time, draft or live, likes and comments, and the 2009 no-edit rule. The wall's composer
+   shares one (Status / Relationship / Friends); the wall's Relationship Status line is the
+   owner's newest live status post (`latestStatus`), the profile field only as the fallback;
+   the phone's **Relationship Changes** zone (`relationship_changes`) draws them, the
+   episode's posts in an episode, the show's live posts otherwise, through
+   `GET /feed-posts?post_type=relationship`. The profile row is not rewritten.
+
 ## Still to come
 
-- A relationship-change phone zone that reads a profile change, and a way to pick a
-  beat's post from the Social Media page.
+- A way to pick a beat's post from the Social Media page.
 - (done 2026-10-04) The phone's Comments zone reads the comment records: one post's when the
   zone names a post, else the episode's posts' in an episode, else the show's live posts';
   sample strings only where a post has no records.
