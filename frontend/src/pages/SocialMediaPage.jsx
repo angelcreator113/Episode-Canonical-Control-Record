@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
+import { BEATS, beatName } from '../lib/canonicalBeats';
 import './SocialMediaPage.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -158,10 +159,82 @@ export function Reactions({ post, onChange }) {
   );
 }
 
+/**
+ * Put this post at a beat (2026-10-04): the episode's phone moment at that
+ * beat points at the post, so the episode draws it live
+ * (docs/FEED_POSTS.md rule 5). A draft can only go in its own episode.
+ */
+export function BeatPicker({ post, showId }) {
+  const [episodes, setEpisodes] = useState(null);
+  const [beats, setBeats] = useState([]);
+  const [episodeId, setEpisodeId] = useState(post.episode_id || '');
+  const [beat, setBeat] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [e, p] = await Promise.all([
+        api.get(`/api/v1/episodes?show_id=${showId}&limit=100&sort=episode_number:ASC`),
+        api.get(`/api/v1/feed-posts/post/${post.id}`),
+      ]);
+      setEpisodes(e.data?.data || []);
+      setBeats(p.data?.data?.beats || []);
+    } catch (err) {
+      console.error('[SocialMedia] beat picker load failed:', err.response?.status || err.message);
+      setNote(err.response?.data?.error || 'The episodes could not be loaded.');
+      setEpisodes([]);
+    }
+  }, [post.id, showId]);
+  useEffect(() => { load(); }, [load]);
+
+  const put = async () => {
+    if (!episodeId || !beat) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await api.post(`/api/v1/feed-enhanced/${showId}/moments/${episodeId}/beat`, { beat_number: Number(beat), feed_post_id: post.id });
+      setNote(r.data?.created === false ? 'Already shown at that beat.' : `Shown at beat ${beat}, ${beatName(beat)}.`);
+      await load();
+    } catch (err) { setNote(err.response?.data?.error || err.message); }
+    finally { setBusy(false); }
+  };
+
+  const epLabel = (e) => `Ep ${e.episode_number ?? '?'}${e.title ? ` · ${e.title}` : ''}`;
+  const choices = (episodes || []).filter((e) => post.status !== 'draft' || String(e.id) === String(post.episode_id));
+  return (
+    <div className="sm-beat" data-testid="sm-beat-picker">
+      {beats.length > 0 && (
+        <p className="sm-note" data-testid="sm-beats-used">Shown at: {beats.map((b) => `Ep ${b.episode_number ?? '?'} · beat ${b.beat_number} ${beatName(b.beat_number)}`).join('; ')}</p>
+      )}
+      {episodes === null ? <p className="sm-note">Loading episodes…</p> : (
+        <div className="sm-reactors">
+          <select aria-label="Episode" value={episodeId} onChange={(e) => setEpisodeId(e.target.value)} disabled={post.status === 'draft'} className="sm-composer-select sm-beat-select">
+            <option value="">Episode…</option>
+            {choices.map((e) => <option key={e.id} value={e.id}>{epLabel(e)}</option>)}
+          </select>
+          <select aria-label="Beat" value={beat} onChange={(e) => setBeat(e.target.value)} className="sm-composer-select sm-beat-select">
+            <option value="">Beat…</option>
+            <optgroup label="On Lala's Phone">
+              {BEATS.filter((b) => b.phone).map((b) => <option key={b.number} value={b.number}>{b.number}. {b.name}</option>)}
+            </optgroup>
+            <optgroup label="Other beats">
+              {BEATS.filter((b) => !b.phone).map((b) => <option key={b.number} value={b.number}>{b.number}. {b.name}</option>)}
+            </optgroup>
+          </select>
+          <button type="button" className="sm-btn" onClick={put} disabled={busy || !episodeId || !beat}>{busy ? 'Working…' : 'Show at this beat'}</button>
+        </div>
+      )}
+      {post.status === 'draft' && <p className="sm-note">A draft can only be shown in its own episode.</p>}
+      {note && <p className="sm-note" role="status">{note}</p>}
+    </div>
+  );
+}
+
 /** One wall item: "Name did a thing." with its comments under it. */
-export function PostCard({ post, onChange }) {
+export function PostCard({ post, onChange, showId }) {
   const who = posterOf(post);
   const [open, setOpen] = useState(false);
+  const [beatOpen, setBeatOpen] = useState(false);
   const records = Array.isArray(post.comments) ? post.comments : [];
   const legacy = records.length === 0 && Array.isArray(post.sample_comments) ? post.sample_comments : [];
   const likes = post.likes ?? 0;
@@ -180,6 +253,7 @@ export function PostCard({ post, onChange }) {
           {post.status === 'draft' && <><span className="sm-badge">draft</span> · </>}
           <span>{whenLabel(post.posted_at) || 'undated'}</span>
           {' · '}<button type="button" className="sm-link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
+          {showId && <>{' · '}<button type="button" className="sm-link-btn" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button></>}
           {post.narrative_function && <> · <span className="sm-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
           {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
         </p>
@@ -200,6 +274,7 @@ export function PostCard({ post, onChange }) {
           </ul>
         )}
         {open && <Reactions post={post} onChange={onChange} />}
+        {beatOpen && showId && <BeatPicker post={post} showId={showId} />}
       </div>
     </article>
   );
@@ -391,7 +466,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
                   : <><p>Nothing on the wall yet.</p><p>Share something above, or generate posts from an episode. Each one is what a character said, once, with its likes and comments.</p></>}
               </div>
             )}
-            {visible.map((p) => <PostCard key={p.id} post={p} onChange={() => { loadPosts(0); loadSides(); }} />)}
+            {visible.map((p) => <PostCard key={p.id} post={p} showId={show?.id} onChange={() => { loadPosts(0); loadSides(); }} />)}
             {hasMore && !loading && <button type="button" className="sm-btn sm-more" onClick={() => loadPosts(posts.length)}>Older posts</button>}
           </>
         )}

@@ -74,12 +74,18 @@
    episode's posts in an episode, the show's live posts otherwise, through
    `GET /feed-posts?post_type=relationship`. The profile row is not rewritten.
 
+   **A beat's post, picked from the wall (rule 5, 2026-10-04).** Each wall post has "Use in a beat": pick an
+   episode and one of the 14 beats (the Lala's Phone beats first; `lib/canonicalBeats.js`,
+   pinned to `src/constants/canonicalBeats.js` by
+   `tests/unit/constants/frontend-canonical-beats.test.js`), and
+   `POST /feed-enhanced/:showId/moments/:episodeId/beat` (`createMomentForPost`) creates
+   that beat's phone moment pointing at the post (never twice for the same beat; a draft
+   only in its own episode). `GET /feed-posts/post/:id` answers `beats`, where the post is
+   shown, and the picker lists them.
+
 ## Still to come
 
-- A way to pick a beat's post from the Social Media page.
-- (done 2026-10-04) The phone's Comments zone reads the comment records: one post's when the
-  zone names a post, else the episode's posts' in an episode, else the show's live posts';
-  sample strings only where a post has no records.
-- Comments as records with a profile and a voice, and reaction drafting (step 4).
 - A story clock on posts and episodes, so "a post must exist by this point in story
-  time" can be checked rather than trusted.
+  time" can be checked rather than trusted. (Done since this list began: comments as
+  records and reaction drafting, rule 6; the Comments zone on the records; the wall's
+  beat picker, rule 5.)
