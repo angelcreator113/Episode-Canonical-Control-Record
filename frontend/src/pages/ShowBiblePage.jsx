@@ -58,6 +58,7 @@ export default function ShowBiblePage({ embedded = false }) {
   const [guardResult, setGuardResult] = useState(null);
   const [guarding, setGuarding] = useState(false);
   const [ingestText, setIngestText] = useState('');
+  const [ingestSource, setIngestSource] = useState('');
   const [ingesting, setIngesting] = useState(false);
 
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
@@ -109,7 +110,23 @@ export default function ShowBiblePage({ embedded = false }) {
 
   const handleSeed = async () => { try { const r = await api.post('/api/v1/franchise-brain/seed'); showToast(r.data?.message || 'Seeded'); loadEntries(); } catch { showToast('Seed failed', 'error'); } };
   const handleGuard = async () => { setGuarding(true); setGuardResult(null); try { const r = await api.post('/api/v1/franchise-brain/guard', { scene_text: guardText }); setGuardResult(r.data); } catch { showToast('Guard failed', 'error'); } finally { setGuarding(false); } };
-  const handleIngest = async () => { setIngesting(true); try { const r = await api.post('/api/v1/franchise-brain/ingest-document', { text: ingestText, source: 'manual_paste' }); showToast(`Extracted ${r.data?.entries_created || 0} entries`); setIngestText(''); loadEntries(); } catch { showToast('Ingest failed', 'error'); } finally { setIngesting(false); } };
+  // The ingest contract (routes/franchiseBrainRoutes.js): the route reads
+  // document_text and source_name and answers { entries_created, entries };
+  // the page used to send { text, source } and was refused with 400 every
+  // time (2026-10-04). The extracted entries land in the review queue, so
+  // the page opens Decisions on Pending once they are in.
+  const handleIngest = async () => {
+    setIngesting(true);
+    try {
+      const r = await api.post('/api/v1/franchise-brain/ingest-document', { document_text: ingestText, source_name: ingestSource.trim() || 'Pasted document' });
+      const n = r.data?.entries_created || 0;
+      showToast(n > 0 ? `Extracted ${n} ${n === 1 ? 'entry' : 'entries'}, now pending review` : 'No entries could be extracted from that text', n > 0 ? 'success' : 'error');
+      setIngestText(''); setIngestSource('');
+      await loadEntries();
+      if (n > 0) { setStatusFilter('pending_review'); switchTab('decisions'); }
+    } catch (err) { showToast(err.response?.data?.error || 'Ingest failed', 'error'); }
+    finally { setIngesting(false); }
+  };
 
   // Helpers
   const getSummary = (e) => { if (typeof e.content === 'string') return e.content.slice(0, 300); if (e.content?.summary) return e.content.summary; return JSON.stringify(e.content).slice(0, 300); };
@@ -372,9 +389,9 @@ export default function ShowBiblePage({ embedded = false }) {
                 {documents.map((doc, i) => (
                   <div key={doc.id || i} style={{ background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{doc.title || doc.source || `Document ${i + 1}`}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{doc.source_name || doc.title || `Document ${i + 1}`}</div>
                       <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                        {doc.entries_count && `${doc.entries_count} entries extracted`}
+                        {doc.entries_created != null && `${doc.entries_created} entries extracted`}
                         {doc.created_at && ` · ${new Date(doc.created_at).toLocaleDateString()}`}
                       </div>
                     </div>
@@ -388,7 +405,8 @@ export default function ShowBiblePage({ embedded = false }) {
           <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
             <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>📄 Ingest New Document</h3>
             <p style={{ margin: '0 0 10px', fontSize: 12, color: '#94a3b8' }}>Paste show bible, world rules, character bios. AI extracts knowledge entries automatically.</p>
-            <textarea value={ingestText} onChange={e => setIngestText(e.target.value)} placeholder="Paste your document here..." rows={10} style={{ ...S.input, resize: 'vertical', lineHeight: 1.6 }} />
+            <input value={ingestSource} onChange={e => setIngestSource(e.target.value)} placeholder="Source name (e.g. Show bible v3, Lala character bio)" aria-label="Source name" style={{ ...S.input, marginBottom: 8 }} />
+            <textarea value={ingestText} onChange={e => setIngestText(e.target.value)} placeholder="Paste your document here..." rows={10} aria-label="Document text" style={{ ...S.input, resize: 'vertical', lineHeight: 1.6 }} />
             <button onClick={handleIngest} disabled={ingesting || !ingestText.trim()} style={{ marginTop: 8, padding: '8px 20px', borderRadius: 8, border: 'none', background: ingestText.trim() ? '#B8962E' : '#e2e8f0', color: ingestText.trim() ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: ingestText.trim() ? 'pointer' : 'default' }}>
               {ingesting ? '⏳ Extracting...' : '✦ Extract Knowledge'}
             </button>

@@ -83,9 +83,12 @@ Found by reading, not yet run:
   `amber_worlddev`, and episode completion's `episode_completion_pipeline`. The schema says
   those inserts fail too. Episode completion's per-row fallback only logs a warning.
 - Amber's two inserts put `gen_random_uuid()` into `id`, which is an integer.
-- The Show Bible's Ingest sends `{ text, source }` but `ingest-document` requires
-  `document_text`. The Show Bible's Guard sends `{ scene_text }` but `/guard` requires
-  `scene_brief`. Both return 400.
+- The Show Bible's Ingest sent `{ text, source }` but `ingest-document` requires
+  `document_text`. **Fixed 2026-10-04:** the Documents tab sends `document_text` and
+  `source_name`, opens the Decisions queue on Pending once entries are in, and shows the
+  route's own refusal; `ShowBiblePage.documents.test.jsx` and
+  `tests/unit/routes/franchise-brain-ingest-contract.test.js` pin both ends. The Show
+  Bible's Guard still sends `{ scene_text }` but `/guard` requires `scene_brief` (400).
 - **Four sources have two editors with different defaults.** Each pair saves to one
   `page_content` record, but each page carries its own defaults, and they disagree.
   Measured in step 2 by comparing each page's defaults:
