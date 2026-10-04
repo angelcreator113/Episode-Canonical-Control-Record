@@ -36,7 +36,8 @@ describe('feed moment ↔ post contract', () => {
     const editor = read('frontend', 'src', 'components', 'ContentZoneEditor.jsx');
     expect(renderer).toMatch(/\{ key: 'feed_post', label: 'One Post'/);
     expect(renderer).toMatch(/case 'feed_post':\s*return <SinglePostRenderer config=\{config\} \/>/);
-    expect(editor).toMatch(/zone\.content_type === 'feed_post'/);
+    // The picker serves the One Post zone and, since the Comments zone read records, that zone too.
+    expect(editor).toMatch(/\['feed_post', 'comments_list'\]\.includes\(zone\.content_type\)/);
     expect(editor).toMatch(/handleConfigChange\('post_id'/);
   });
 });
