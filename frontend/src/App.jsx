@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import apiClient from './services/api';
 
@@ -111,11 +111,9 @@ const BookToWriteRedirect = () => {
 // here with ?layer=lalaverse so it opens on the LalaVerse feed with the
 // switcher still available (unlike New Episode's choose-host mode, which
 // locks it); any other route to /feed keeps today's default layer.
-const FeedEntry = () => {
-  const [searchParams] = useSearchParams();
-  const layer = searchParams.get('layer');
-  return <SocialProfileGenerator defaultFeedLayer={layer === 'lalaverse' ? 'lalaverse' : undefined} />;
-};
+// /feed is Social Media (2026-10-04): Posts by default, People (the
+// profile generator) as a tab; its old ?layer= links still open People.
+const SocialMediaPage = lazy(() => import('./pages/SocialMediaPage'));
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
@@ -146,7 +144,6 @@ const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
-const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 // New Episode (episode creation step 4): "What starts this episode?", each
 // way in leading to the Event Package. Its creator path is Lala's Feed in
 // choose-host mode (Task #1628).
@@ -513,7 +510,7 @@ function AppContent() {
           <Route path="/scene-studio" element={<SceneStudio />} />
 
           {/* The Feed — Parasocial Creator Profile Generator */}
-          <Route path="/feed" element={<FeedEntry />} />
+          <Route path="/feed" element={<SocialMediaPage />} />
 
           {/* Narrative Pressure Dashboard — Feed Nervous System */}
           <Route path="/pressure" element={<NarrativePressureDashboard />} />
@@ -612,7 +609,7 @@ function AppContent() {
             '/storyteller': 'Storyteller Book Editor',
             '/world-studio': 'World Studio',
             '/scene-studio': 'Book Scene Studio',
-            '/feed': 'Social Feed Profiles',
+            '/feed': 'Social Media',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',
             '/feed-relationships': 'Feed Relationship Map',

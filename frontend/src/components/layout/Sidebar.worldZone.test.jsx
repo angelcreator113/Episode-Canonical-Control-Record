@@ -1,6 +1,6 @@
 /**
  * The Sidebar's WORLD zone after the LalaVerse hub (2026-10-04): three rows
- * (LalaVerse, Show Bible, Lala's Feed); the Show Bible row deep-links to the
+ * (LalaVerse, Show Bible, Social Media); the Show Bible row deep-links to the
  * hub's Bible tab and is the active row there, while the LalaVerse row is
  * active on the hub's other tabs and yields to Show Bible on its own.
  */
@@ -26,7 +26,7 @@ describe('Sidebar: the WORLD zone', () => {
     renderAt('/');
     expect(row('LalaVerse').getAttribute('href')).toBe('/universe');
     expect(row('Show Bible').getAttribute('href')).toBe('/universe?tab=bible');
-    expect(row("Lala's Feed").getAttribute('href')).toBe('/feed?layer=lalaverse');
+    expect(row('Social Media').getAttribute('href')).toBe('/feed');
     for (const gone of ['World Dashboard', 'World Foundation', 'Social Systems', 'Culture & Events']) {
       expect(screen.queryByText(gone)).toBeNull();
     }
