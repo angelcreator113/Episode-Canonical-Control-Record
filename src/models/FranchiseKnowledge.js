@@ -32,6 +32,16 @@ module.exports = (sequelize, DataTypes) => {
       // (migration 20261003120000; docs/BRAIN_OWNERSHIP.md).
       source_key:       { type: DataTypes.STRING(200), allowNull: true },
       source_hash:      { type: DataTypes.STRING(64), allowNull: true },
+      // Which tier the entry belongs to (migration 20261004120000):
+      // 'franchise' is the LalaVerse, true for every show; 'show' is one
+      // show's canon, show_id naming it (NULL until assigned).
+      scope: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'franchise',
+        validate: { isIn: [['franchise', 'show']] },
+      },
+      show_id:          { type: DataTypes.INTEGER, allowNull: true },
       extracted_by: {
         type: DataTypes.ENUM(
           'document_ingestion', 'conversation_extraction', 'direct_entry', 'system'
