@@ -14,18 +14,18 @@ import api from '../../services/api';
  */
 
 const STAT_COLORS = {
-  coins: '#B8962E',
-  reputation: '#6366f1',
-  brand_trust: '#16a34a',
-  influence: '#0ea5e9',
-  stress: '#dc2626',
+  coins: 'var(--lala-gold-text)',
+  reputation: 'var(--primary-text)',
+  brand_trust: 'var(--success-text)',
+  influence: 'var(--info-text)',
+  stress: 'var(--danger-text)',
 };
 
 const TIER_CONFIG = {
-  slay: { color: '#FFD700', bg: '#FFFBEB', emoji: '👑', label: 'SLAY' },
-  pass: { color: '#22c55e', bg: '#f0fdf4', emoji: '✨', label: 'PASS' },
-  safe: { color: '#eab308', bg: '#fefce8', emoji: '😐', label: 'SAFE' },
-  fail: { color: '#dc2626', bg: '#fef2f2', emoji: '💔', label: 'FAIL' },
+  slay: { color: 'var(--lala-gold-text)', fill: 'var(--lala-gold)', bg: 'var(--lala-gold-soft)', emoji: '👑', label: 'SLAY' },
+  pass: { color: 'var(--success-text)', fill: 'var(--success)', bg: 'var(--success-bg)', emoji: '✨', label: 'PASS' },
+  safe: { color: 'var(--warning-text)', fill: 'var(--warning)', bg: 'var(--warning-bg)', emoji: '😐', label: 'SAFE' },
+  fail: { color: 'var(--danger-text)', fill: 'var(--danger)', bg: 'var(--danger-bg)', emoji: '💔', label: 'FAIL' },
 };
 
 function ShowInsightsTab({ show }) {
@@ -119,17 +119,17 @@ function ShowInsightsTab({ show }) {
     }
   };
 
-  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading insights...</div>;
-  if (!data) return <div style={{ padding: 24, color: '#94a3b8' }}>No data available.</div>;
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading insights...</div>;
+  if (!data) return <div style={{ padding: 24, color: 'var(--text-secondary)' }}>No data available.</div>;
 
   const S = {
-    card: { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 18px' },
-    sectionTitle: { fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 10 },
+    card: { background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 18px' },
+    sectionTitle: { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 },
   };
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Show Intelligence</h2>
+      <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Show Intelligence</h2>
 
       {/* Row 1: Character Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
@@ -141,8 +141,8 @@ function ShowInsightsTab({ show }) {
           { key: 'stress', label: 'Wardrobe', value: data.wardrobe, icon: '👗' },
         ].map(stat => (
           <div key={stat.key} style={S.card}>
-            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{stat.icon} {stat.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: STAT_COLORS[stat.key] || '#1a1a2e' }}>{stat.value}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>{stat.icon} {stat.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: STAT_COLORS[stat.key] || 'var(--text-primary)' }}>{stat.value}</div>
           </div>
         ))}
       </div>
@@ -154,31 +154,31 @@ function ShowInsightsTab({ show }) {
           <div style={S.sectionTitle}>💰 Financial Summary</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>INCOME</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a' }}>{data.totalIncome.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: 'var(--success-text)', fontWeight: 600 }}>INCOME</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--success-text)' }}>{data.totalIncome.toLocaleString()}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>EXPENSES</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626' }}>{data.totalExpenses.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: 'var(--danger-text)', fontWeight: 600 }}>EXPENSES</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger-text)' }}>{data.totalExpenses.toLocaleString()}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: data.netProfit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>NET P&L</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: data.netProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+              <div style={{ fontSize: 10, color: data.netProfit >= 0 ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}>NET P&L</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: data.netProfit >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>
                 {data.netProfit >= 0 ? '+' : ''}{data.netProfit.toLocaleString()}
               </div>
             </div>
           </div>
           {data.episodeSummary.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Per Episode</div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>Per Episode</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {data.episodeSummary.slice(0, 8).map((ep, i) => {
                   const net = (parseFloat(ep.total_income) || 0) - (parseFloat(ep.total_expenses) || 0);
                   return (
                     <div key={i} style={{
                       padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                      background: net >= 0 ? '#f0fdf4' : '#fef2f2',
-                      color: net >= 0 ? '#16a34a' : '#dc2626',
+                      background: net >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
+                      color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)',
                     }}>
                       Ep{ep.episode_number}: {net >= 0 ? '+' : ''}{net}
                     </div>
@@ -209,7 +209,7 @@ function ShowInsightsTab({ show }) {
                   {data.scores.map((s, i) => (
                     <div key={i} title={`Ep${s.episode}: ${s.score}/100 (${s.tier})`} style={{
                       flex: 1, height: `${s.score * 0.4}px`, minHeight: 4,
-                      background: TIER_CONFIG[s.tier]?.color || '#94a3b8',
+                      background: TIER_CONFIG[s.tier]?.fill || 'var(--text-secondary)',
                       borderRadius: '3px 3px 0 0', cursor: 'pointer',
                     }} />
                   ))}
@@ -217,7 +217,7 @@ function ShowInsightsTab({ show }) {
               )}
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+            <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
               Complete episodes to see tier distribution
             </div>
           )}
@@ -231,29 +231,29 @@ function ShowInsightsTab({ show }) {
           <div style={S.sectionTitle}>👗 Wardrobe Intelligence</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 10, color: '#94a3b8' }}>Total Items</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>{data.wardrobe}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Total Items</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>{data.wardrobe}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: '#94a3b8' }}>Total Value</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#B8962E' }}>${data.wardrobeValue.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Total Value</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--lala-gold-text)' }}>${data.wardrobeValue.toLocaleString()}</div>
             </div>
           </div>
 
           {/* Tier breakdown */}
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>By Tier</div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>By Tier</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
-                { tier: 'elite', color: '#ec4899', icon: '👑' },
-                { tier: 'luxury', color: '#eab308', icon: '💎' },
-                { tier: 'mid', color: '#6366f1', icon: '👠' },
-                { tier: 'basic', color: '#94a3b8', icon: '👟' },
+                { tier: 'elite', color: 'var(--accent-dark)', icon: '👑' },
+                { tier: 'luxury', color: 'var(--lala-gold-text)', icon: '💎' },
+                { tier: 'mid', color: 'var(--primary-text)', icon: '👠' },
+                { tier: 'basic', color: 'var(--text-secondary)', icon: '👟' },
               ].map(t => (
-                <div key={t.tier} style={{ flex: 1, textAlign: 'center', padding: '4px 0', borderRadius: 6, background: '#f8f8f8' }}>
+                <div key={t.tier} style={{ flex: 1, textAlign: 'center', padding: '4px 0', borderRadius: 6, background: 'var(--surface-bg)' }}>
                   <div style={{ fontSize: 12 }}>{t.icon}</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: t.color }}>{data.wardrobeTiers[t.tier] || 0}</div>
-                  <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase' }}>{t.tier}</div>
+                  <div style={{ fontSize: 8, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{t.tier}</div>
                 </div>
               ))}
             </div>
@@ -262,10 +262,10 @@ function ShowInsightsTab({ show }) {
           {/* Top brands */}
           {data.topBrands.length > 0 && (
             <div>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Top Brands</div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>Top Brands</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {data.topBrands.map(([brand, count]) => (
-                  <span key={brand} style={{ padding: '2px 8px', background: '#f0f0f0', borderRadius: 6, fontSize: 10, fontWeight: 600, color: '#333' }}>
+                  <span key={brand} style={{ padding: '2px 8px', background: 'var(--lala-parchment-2)', borderRadius: 6, fontSize: 10, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {brand} ({count})
                   </span>
                 ))}
@@ -278,20 +278,20 @@ function ShowInsightsTab({ show }) {
         <div style={S.card}>
           <div style={S.sectionTitle}>🎬 Production Progress</div>
           {[
-            { label: 'Events', value: data.events, sub: `${data.eventsReady} ready`, color: '#f59e0b' },
-            { label: "Lala's Phone", value: data.overlaysGenerated, sub: `of ${data.overlaysTotal}`, color: '#B8962E', pct: data.overlaysTotal > 0 ? Math.round((data.overlaysGenerated / data.overlaysTotal) * 100) : 0 },
-            { label: 'Episodes', value: data.episodes, sub: `${data.completed} completed`, color: '#6366f1' },
-            { label: 'Wardrobe Items', value: data.wardrobe, sub: `$${data.wardrobeValue.toLocaleString()} value`, color: '#ec4899' },
+            { label: 'Events', value: data.events, sub: `${data.eventsReady} ready`, color: 'var(--warning-text)' },
+            { label: "Lala's Phone", value: data.overlaysGenerated, sub: `of ${data.overlaysTotal}`, color: 'var(--lala-gold-text)', pct: data.overlaysTotal > 0 ? Math.round((data.overlaysGenerated / data.overlaysTotal) * 100) : 0 },
+            { label: 'Episodes', value: data.episodes, sub: `${data.completed} completed`, color: 'var(--primary-text)' },
+            { label: 'Wardrobe Items', value: data.wardrobe, sub: `$${data.wardrobeValue.toLocaleString()} value`, color: 'var(--accent-dark)' },
           ].map(item => (
             <div key={item.label} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{item.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>
-                  {item.value} <span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8' }}>{item.sub}</span>
+                  {item.value} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-secondary)' }}>{item.sub}</span>
                 </span>
               </div>
               {item.pct !== undefined && (
-                <div style={{ height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: 4, background: 'var(--lala-parchment-2)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${item.pct}%`, background: item.color, borderRadius: 2 }} />
                 </div>
               )}

@@ -23,9 +23,9 @@ const PLATFORMS = [
 ];
 
 const S = {
-  label: { fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 3, display: 'block' },
-  input: { width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, outline: 'none', background: '#fafafa', boxSizing: 'border-box', fontFamily: 'inherit' },
-  hint: { fontSize: 9, color: '#94a3b8', marginTop: 2, display: 'block' },
+  label: { fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 3, display: 'block' },
+  input: { width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, outline: 'none', background: 'var(--surface-bg)', boxSizing: 'border-box', fontFamily: 'inherit' },
+  hint: { fontSize: 9, color: 'var(--text-secondary)', marginTop: 2, display: 'block' },
 };
 
 function ShowDistributionTab({ show, onUpdate }) {
@@ -90,14 +90,14 @@ function ShowDistributionTab({ show, onUpdate }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Distribution</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Distribution</h2>
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>
             {enabledCount}/4 platforms configured · Defaults apply to all episodes
           </p>
         </div>
         <button onClick={handleSave} disabled={!hasChanges || saving} style={{
           padding: '6px 16px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: hasChanges ? 'pointer' : 'default',
-          background: hasChanges ? '#B8962E' : '#e2e8f0', color: hasChanges ? '#fff' : '#94a3b8',
+          background: hasChanges ? 'var(--primary)' : 'var(--lala-parchment-2)', color: hasChanges ? 'var(--text-inverse)' : 'var(--text-secondary)',
         }}>
           {saving ? 'Saving...' : hasChanges ? '💾 Save' : 'Saved'}
         </button>
@@ -113,8 +113,8 @@ function ShowDistributionTab({ show, onUpdate }) {
               onClick={() => setExpandedPlatform(isExpanded ? null : p.id)}
               style={{
                 padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                border: `2px solid ${isExpanded ? p.color : pd.enabled ? p.color + '40' : '#e2e8f0'}`,
-                background: pd.enabled ? `${p.color}08` : '#fafafa',
+                border: `2px solid ${isExpanded ? p.color : pd.enabled ? 'var(--primary-light)' : 'var(--lala-parchment-3)'}`,
+                background: pd.enabled ? 'var(--primary-subtle)' : 'var(--surface-bg)',
                 transition: 'all 0.15s',
               }}
             >
@@ -122,21 +122,21 @@ function ShowDistributionTab({ show, onUpdate }) {
                 <span style={{ fontSize: 16 }}>{p.icon}</span>
                 <div onClick={e => { e.stopPropagation(); togglePlatform(p.id); }} style={{
                   width: 28, height: 16, borderRadius: 8, cursor: 'pointer',
-                  background: pd.enabled ? p.color : '#d1d5db', position: 'relative', transition: 'background 0.15s',
+                  background: pd.enabled ? p.color : 'var(--lala-parchment-3)', position: 'relative', transition: 'background 0.15s',
                 }}>
                   <div style={{
-                    width: 12, height: 12, borderRadius: '50%', background: '#fff',
+                    width: 12, height: 12, borderRadius: '50%', background: 'var(--surface-card)',
                     position: 'absolute', top: 2, left: pd.enabled ? 14 : 2, transition: 'left 0.15s',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                   }} />
                 </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{p.name}</div>
-              <div style={{ fontSize: 10, color: pd.enabled ? p.color : '#94a3b8', marginTop: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{p.name}</div>
+              <div style={{ fontSize: 10, color: pd.enabled ? 'var(--primary-text)' : 'var(--text-secondary)', marginTop: 1 }}>
                 {pd.enabled ? (pd.account_name ? `@${pd.account_name}` : 'Configured') : 'Not set up'}
               </div>
               {pd.enabled && (pd.default_hashtags?.length > 0) && (
-                <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 3 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 3 }}>
                   {pd.default_hashtags.length} hashtags
                 </div>
               )}
@@ -153,23 +153,23 @@ function ShowDistributionTab({ show, onUpdate }) {
 
         return (
           <div style={{
-            border: `1px solid ${p.color}30`, borderRadius: 10, padding: 16, marginBottom: 16,
-            background: '#fff',
+            border: `1px solid ${p.color}`, borderRadius: 10, padding: 16, marginBottom: 16,
+            background: 'var(--surface-card)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 18 }}>{p.icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{p.name} Defaults</span>
-                <span style={{ fontSize: 9, padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b', fontWeight: 600 }}>{p.aspect}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.name} Defaults</span>
+                <span style={{ fontSize: 9, padding: '2px 6px', background: 'var(--lala-parchment-2)', borderRadius: 4, color: 'var(--text-secondary)', fontWeight: 600 }}>{p.aspect}</span>
               </div>
-              <button onClick={() => setExpandedPlatform(null)} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+              <button onClick={() => setExpandedPlatform(null)} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
             </div>
 
             {!pd.enabled ? (
               <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 10px' }}>Enable {p.name} to configure defaults</p>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 10px' }}>Enable {p.name} to configure defaults</p>
                 <button onClick={() => togglePlatform(expandedPlatform)} style={{
-                  padding: '6px 20px', borderRadius: 6, border: 'none', background: p.color, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  padding: '6px 20px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Enable {p.name}</button>
               </div>
             ) : (
@@ -202,9 +202,9 @@ function ShowDistributionTab({ show, onUpdate }) {
                   <label style={S.label}>Default Hashtags</label>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
                     {(pd.default_hashtags || []).map(tag => (
-                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', background: `${p.color}12`, color: p.color, borderRadius: 10, fontSize: 10, fontWeight: 600 }}>
+                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>
                         {tag}
-                        <button onClick={() => removeHashtag(expandedPlatform, tag)} style={{ background: 'none', border: 'none', color: p.color, cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
+                        <button onClick={() => removeHashtag(expandedPlatform, tag)} style={{ background: 'none', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
                       </span>
                     ))}
                   </div>
@@ -221,7 +221,7 @@ function ShowDistributionTab({ show, onUpdate }) {
                 {/* Auto-publish toggle */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" checked={pd.auto_publish || false} onChange={e => update(expandedPlatform, 'auto_publish', e.target.checked)} />
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Auto-publish when episode is marked "Published"</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Auto-publish when episode is marked "Published"</span>
                 </div>
               </div>
             )}
@@ -234,11 +234,11 @@ function ShowDistributionTab({ show, onUpdate }) {
         const allTags = [...new Set(PLATFORMS.flatMap(p => defaults[p.id]?.default_hashtags || []))];
         if (allTags.length === 0) return null;
         return (
-          <div style={{ padding: '10px 14px', background: '#f8f8f8', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Show Hashtags (across all platforms)</div>
+          <div style={{ padding: '10px 14px', background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Show Hashtags (across all platforms)</div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {allTags.map(tag => (
-                <span key={tag} style={{ padding: '2px 8px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 10, color: '#1a1a2e', fontWeight: 500 }}>{tag}</span>
+                <span key={tag} style={{ padding: '2px 8px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, fontSize: 10, color: 'var(--text-primary)', fontWeight: 500 }}>{tag}</span>
               ))}
             </div>
           </div>
