@@ -114,6 +114,19 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByRole('tab', { name: /^Overview/ }).getAttribute('aria-current')).toBeNull();
   });
 
+  test('every tab opens with its orientation strip, and a dismissal sticks to that tab', async () => {
+    renderAt('/universe?tab=society');
+    expect(screen.getByTestId('orientation-society').textContent).toContain('You rarely edit this');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss this guide' }));
+    expect(screen.queryByTestId('orientation-society')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: /^Culture/ }));
+    expect(await screen.findByTestId('orientation-culture')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /^Society/ }));
+    await screen.findByText('Archetypes');
+    expect(screen.queryByTestId('orientation-society')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Guide: / })).toBeTruthy();
+  });
+
   test('an unknown ?tab= falls back to Overview', async () => {
     renderAt('/universe?tab=nope');
     expect(screen.getByRole('tab', { name: /^Overview/ }).getAttribute('aria-current')).toBe('page');

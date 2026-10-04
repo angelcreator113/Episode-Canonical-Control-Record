@@ -16,6 +16,13 @@ former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedi
 rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
 Bible (a deep link to the Bible tab) and Lala's Feed.
 
+Every hub tab opens with a three-line orientation strip (`components/TabOrientation`, copy
+in `pages/lalaverseOrientation.js`): what the tab holds, what reads it, what to do here. The
+copy follows `docs/BRAIN_OWNERSHIP.md`: the generators read the Show Bible; the World,
+Society and Culture page data reaches the AI only through Push to Brain; locations, calendar
+events, snapshots and the timeline are read directly. A dismissal is remembered per tab in
+the browser and a "Guide" link brings the strip back.
+
 ## 1. Owners
 
 | Domain | Canonical editor (Sidebar) | Tab | Store | Brain sync |
