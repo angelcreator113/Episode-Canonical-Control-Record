@@ -8,7 +8,9 @@
  * (they were ink or gold under parchment: gold under parchment is 2.7:1);
  * gold is a border, a fill under no text, or gold text; the pacing pips
  * and the goal ring read success, warning, info, danger and gold; the
- * rgba warm-grey and gold-wash tints are part two.
+ * rgba warm-grey and gold-wash tints are part two (text, 2026-10-04:
+ * every color: is a token; see the test below) and part three (the washes
+ * behind surfaces, borders and shadows).
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -87,6 +89,18 @@ describe('WriteMode theme, part one', () => {
     expect(jsx).toMatch(/goalMet \? 'var\(--success\)' : pct > 50 \? 'var\(--lala-gold\)' : 'var\(--danger\)'/);
     expect(jsx).toMatch(/fill=\{p\.tone === 'action' \? 'var\(--danger\)' : p\.tone === 'interior' \? 'var\(--info\)' : p\.tone === 'calm' \? 'var\(--success\)' : 'var\(--lala-gold\)'\}/);
     expect(jsx.match(/listening \? 'var\(--surface-bg\)' : 'var\(--text-primary\)'/g)).toHaveLength(3);
+  });
+
+  test('part two: no text colour is a translucent ink or gold; text reads the tokens', () => {
+    // color: only (not background-color, border-color): the 102 ink and gold
+    // rgba text tints became --wm-ink, --wm-muted, --wm-gold-text or, on a
+    // placeholder or disabled control, --text-faint (2026-10-04).
+    expect(css).not.toMatch(/(^|[^-\w])color:\s*rgba\(/m);
+    expect(css).toMatch(/\.wm-review-stat\.total\s*\{ color: var\(--wm-muted\); \}/);
+    expect(css).toMatch(/\.wm-line-edit\s*\{ color: var\(--wm-muted\); \}/);
+    const faint = [...css.matchAll(/([^{}]+)\{[^{}]*color: var\(--text-faint\)[^{}]*\}/g)].map((m) => m[1].trim());
+    for (const sel of faint) expect(sel, sel).toMatch(/::placeholder|:disabled|\[disabled\]|\.disabled/);
+    expect(contrast(t('--text-faint'), t('--wm-parchment'))).toBeLessThan(4.5); // faint is for placeholders only
   });
 
   test('every text pair the page uses reads at 4.5:1 or better', () => {
