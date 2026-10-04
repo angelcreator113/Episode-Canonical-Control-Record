@@ -9,14 +9,13 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'EpisodeDetail.css'), 'utf8');
 const jsx = readFileSync(resolve(__dirname, 'EpisodeDetail.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 // Task and issue references ("Task #2361", "since #534") are not colors.
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 // Every declaration block for a selector (the shell repeats selectors
 // inside media queries), joined, so an assertion sees them all.
 const rule = (selector) => {
@@ -31,9 +30,9 @@ const rule = (selector) => {
 
 describe('Episode shell theme', () => {
   test('the stylesheet and the page carry no color literal, not even as a var() fallback or inside a gradient', () => {
-    expect(stripRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(css).not.toMatch(/var\(--[a-z0-9-]+,\s*#/i);
-    expect(stripRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
   });
 
   test('the page palette aliases the tokens', () => {

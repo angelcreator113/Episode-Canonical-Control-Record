@@ -13,14 +13,13 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'SceneSetsTab.css'), 'utf8');
 const dressed = readFileSync(resolve(__dirname, '../components/SceneSets/DressedAngles.css'), 'utf8');
 const jsx = readFileSync(resolve(__dirname, 'SceneSetsTab.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 // Every block a selector opens (media-query duplicates included), joined.
 const rule = (selector) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -34,8 +33,8 @@ const rule = (selector) => {
 
 describe('Scene Sets stylesheet theme', () => {
   test('the stylesheets carry no color literal, not even as a var() fallback, and no color gradient', () => {
-    expect(stripRefs(css)).not.toMatch(HEX);
-    expect(stripRefs(dressed)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(dressed)).not.toMatch(HEX);
     expect(css).not.toMatch(/var\(--[a-z0-9-]+,\s*#/i);
     expect(dressed).not.toMatch(/var\(--[a-z0-9-]+,\s*#/i);
     // The skeleton shimmer and the hero scrim are the two gradients left, both token or rgba.
@@ -107,7 +106,7 @@ describe('Scene Sets stylesheet theme', () => {
 
 describe('Scene Sets component theme', () => {
   test('the page component carries no color literal and no gradient', () => {
-    expect(stripRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
     // Data-driven swatches (a palette hex from the spec) keep their value; the fallback is a token.
     expect(jsx).toMatch(/background: hex\.startsWith\('#'\) \? hex : 'var\(--text-secondary\)'/);

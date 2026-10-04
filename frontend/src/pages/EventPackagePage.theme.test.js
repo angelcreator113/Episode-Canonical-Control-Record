@@ -8,15 +8,13 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'EventPackagePage.css'), 'utf8');
 const look = readFileSync(resolve(__dirname, '../components/EventPackage/EventLookImage.css'), 'utf8');
 const jsx = readFileSync(resolve(__dirname, 'EventPackagePage.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-// Task references ("Task #1642") are not colors.
-const stripTaskRefs = (s) => s.replace(/#\d{4}\b/g, '');
 const rule = (selector) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const m = new RegExp(`${escaped}\\s*\\{`).exec(css);

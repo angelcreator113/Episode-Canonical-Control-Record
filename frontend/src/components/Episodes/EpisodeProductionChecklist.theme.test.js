@@ -10,18 +10,17 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const checklist = readFileSync(resolve(__dirname, 'EpisodeProductionChecklist.jsx'), 'utf8');
 const coverage = readFileSync(resolve(__dirname, 'ProductionCoveragePanel.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Episode Production Checklist theme', () => {
   test('the checklist and the coverage panel carry no color literal and no gradient', () => {
-    expect(stripRefs(checklist)).not.toMatch(HEX);
-    expect(stripRefs(coverage)).not.toMatch(HEX);
+    expect(stripTaskRefs(checklist)).not.toMatch(HEX);
+    expect(stripTaskRefs(coverage)).not.toMatch(HEX);
     expect(checklist).not.toMatch(/linear-gradient/);
     expect(coverage).not.toMatch(/linear-gradient/);
   });

@@ -10,13 +10,12 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'EpisodeDistributionTab.jsx'), 'utf8');
 const css = readFileSync(resolve(__dirname, 'EpisodeDistributionTab.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 // The platforms' brand marks are the one allowed block of literals.
 const platforms = jsx.slice(jsx.indexOf('const PLATFORMS = {'), jsx.indexOf('const STATUS_OPTIONS'));
 const outsidePlatforms = jsx.replace(platforms, '');
@@ -24,8 +23,8 @@ const outsidePlatforms = jsx.replace(platforms, '');
 describe('Episode Distribution theme', () => {
   test('the tab carries no color literal outside the platform brand marks, and the stylesheet none at all', () => {
     expect(platforms).toMatch(/color: '#FF0000'/);
-    expect(stripRefs(outsidePlatforms)).not.toMatch(HEX);
-    expect(stripRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(outsidePlatforms)).not.toMatch(HEX);
+    expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(css).not.toMatch(/linear-gradient/);
     expect(css).not.toMatch(/rgba\((?:139, 92, 246|102, 126, 234|16, 185, 129),/);
   });

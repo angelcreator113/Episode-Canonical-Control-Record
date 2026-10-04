@@ -10,16 +10,15 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken } from '../../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'NextEventSuggestionsOverlay.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
-const stripRefs = (s) => s.replace(/#\d{3,4}\b/g, '');
 
 describe('Next Event Suggestions overlay theme', () => {
   test('the overlay carries no color literal and no gradient; rgba is the scrim and the shadows only', () => {
-    expect(stripRefs(jsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(jsx)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
     expect(jsx.match(/rgba\(/g)).toHaveLength(3);
     expect(jsx).toMatch(/background: 'rgba\(15, 23, 42, 0\.62\)'/);
