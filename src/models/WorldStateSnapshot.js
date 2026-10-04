@@ -39,6 +39,9 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: [],
     },
+    // A list of facts (strings, or { fact }), checked by migration
+    // 20261004140000; the world temperature is metadata.world_temperature
+    // (services/worldFacts.js).
     world_facts: {
       type: DataTypes.JSONB,
       allowNull: true,

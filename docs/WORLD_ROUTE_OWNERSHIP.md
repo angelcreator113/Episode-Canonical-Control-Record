@@ -33,6 +33,19 @@ slugs Story Evaluation reads. Before, the page read `char_a_name` (never returne
 scan failed, nothing to scan, nothing simmering (`WorldDashboard.tensions.test.jsx`,
 `tests/unit/routes/world-tension-contract.test.js`).
 
+The State tab's snapshots store `world_facts` as a list of facts (strings, or `{ fact }`;
+`services/worldFacts.js`, migration `20261004140000`, 2026-10-04). The temperature service
+used to write an object (`{ worldTemperature, temperatureUpdatedAt }`) into its own
+`temperature_update` snapshots, so whenever one of those was the latest snapshot the context
+summary, scene proposals and story evaluation saw no facts, and whenever a list snapshot was
+the latest the trajectory read a number off an array and stayed STABLE. The temperature now
+lives in `metadata.world_temperature` (`{ value, updated_at }`), a temperature snapshot
+carries the latest facts and threads forward, the migration moves the old objects into
+metadata and adds a check that `world_facts` is a JSON array, and `POST`/`PUT
+/world/state/snapshots` refuse a non-list with 400 (`tests/unit/services/worldFacts.test.js`,
+`worldTemperatureService.snapshot.test.js`, `tests/unit/migrations/world-state-snapshots-world-facts-list.test.js`,
+`tests/unit/routes/world-snapshots-facts-contract.test.js`).
+
 Every hub tab opens with a three-line orientation strip (`components/TabOrientation`, copy
 in `pages/lalaverseOrientation.js`): what the tab holds, what reads it, what to do here. The
 copy follows `docs/BRAIN_OWNERSHIP.md`: the generators read the Show Bible; the World,

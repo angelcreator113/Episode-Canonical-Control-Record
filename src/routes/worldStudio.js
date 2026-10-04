@@ -37,6 +37,7 @@ const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/
 
 // ── DB ─────────────────────────────────────────────────────────────────────
 const models = require('../models');
+const { factsOf, normalizeFacts } = require('../services/worldFacts');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
@@ -3383,9 +3384,12 @@ router.post('/world/state/snapshots', requireAuth, async (req, res) => {
   try {
     const { snapshot_label, book_id, chapter_id, active_threads, world_facts, character_states, relationship_states, timeline_position } = req.body;
     if (!snapshot_label) return res.status(400).json({ error: 'snapshot_label required' });
+    // world_facts is a list of facts (services/worldFacts.js, 2026-10-04).
+    const facts = normalizeFacts(world_facts);
+    if (facts.error) return res.status(400).json({ error: facts.error });
     const WSS = models.WorldStateSnapshot;
     if (!WSS) return res.status(500).json({ error: 'Model not available' });
-    const snap = await WSS.create({ snapshot_label, book_id, chapter_id, active_threads: active_threads || [], world_facts: world_facts || [], character_states: character_states || {}, relationship_states: relationship_states || {}, timeline_position: timeline_position || 0 });
+    const snap = await WSS.create({ snapshot_label, book_id, chapter_id, active_threads: active_threads || [], world_facts: facts.facts, character_states: character_states || {}, relationship_states: relationship_states || {}, timeline_position: timeline_position || 0 });
     res.json({ snapshot: snap });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3400,6 +3404,11 @@ router.put('/world/state/snapshots/:id', requireAuth, async (req, res) => {
     const allowed = ['snapshot_label', 'book_id', 'chapter_id', 'active_threads', 'world_facts', 'character_states', 'relationship_states', 'timeline_position'];
     const updates = {};
     for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+    if (updates.world_facts !== undefined) {
+      const facts = normalizeFacts(updates.world_facts);
+      if (facts.error) return res.status(400).json({ error: facts.error });
+      updates.world_facts = facts.facts;
+    }
     await snap.update(updates);
     res.json({ snapshot: snap });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3597,7 +3606,7 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
     if (WSS) {
       const snap = await WSS.findOne({ order: [['timeline_position', 'DESC'], ['created_at', 'DESC']] });
       if (snap) {
-        facts = Array.isArray(snap.world_facts) ? snap.world_facts.slice(0, 8) : [];
+        facts = factsOf(snap).slice(0, 8);
         threads = Array.isArray(snap.active_threads) ? snap.active_threads.slice(0, 6) : [];
         snapshotLabel = snap.snapshot_label;
       }

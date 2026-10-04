@@ -113,7 +113,7 @@ async function computeWorldTemperature(universeId, models, options = {}) {
   const latestSnapshot = await WorldStateSnapshot.findOne({
     where: { universe_id: universeId },
     order: [['created_at', 'DESC']],
-    attributes: ['world_facts', 'active_threads', 'relationship_states'],
+    attributes: ['world_facts', 'active_threads', 'relationship_states', 'metadata'],
   }).catch(() => null);
 
   // ── Compute domain temperatures ───────────────────────────────────────────
@@ -255,7 +255,10 @@ function getTemperatureLabel(temp) {
 
 function computeTrajectory(currentTemp, snapshot) {
   if (!snapshot) return 'STABLE';
-  const prevTemp = snapshot.world_facts?.worldTemperature;
+  // The last recorded temperature lives in metadata.world_temperature
+  // (services/worldFacts.js, 2026-10-04); world_facts is the list of facts.
+  const { temperatureOf } = require('./worldFacts');
+  const prevTemp = temperatureOf(snapshot)?.value;
   if (typeof prevTemp !== 'number') return 'STABLE';
 
   const delta = currentTemp - prevTemp;
@@ -346,16 +349,21 @@ async function snapshotTemperature(universeId, temperature, models) {
       order: [['created_at', 'DESC']],
     });
 
-    const worldFacts = {
-      ...(existing?.world_facts || {}),
-      worldTemperature: temperature,
-      temperatureUpdatedAt: new Date().toISOString(),
+    // world_facts stays the list of facts every reader expects (carried
+    // forward from the latest snapshot); the temperature is recorded in
+    // metadata.world_temperature (services/worldFacts.js, 2026-10-04).
+    const { factsOf } = require('./worldFacts');
+    const metadata = {
+      ...(existing?.metadata && typeof existing.metadata === 'object' ? existing.metadata : {}),
+      world_temperature: { value: temperature, updated_at: new Date().toISOString() },
     };
 
     // WorldStateSnapshot has no show_id — create new snapshot record
     await WorldStateSnapshot.create({
       universe_id: universeId,
-      world_facts: worldFacts,
+      world_facts: factsOf(existing),
+      active_threads: Array.isArray(existing?.active_threads) ? existing.active_threads : [],
+      metadata,
       snapshot_label: 'temperature_update',
     });
   } catch (err) {
@@ -366,6 +374,7 @@ async function snapshotTemperature(universeId, temperature, models) {
 module.exports = {
   computeWorldTemperature,
   snapshotTemperature,
+  computeTrajectory,
   getTemperatureLabel,
   TEMPERATURE_LABELS,
 };
