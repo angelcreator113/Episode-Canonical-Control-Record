@@ -31,16 +31,28 @@ beforeEach(() => {
 });
 
 describe('UniversePage: the LalaVerse hub', () => {
-  test('five tabs, Overview first, with the show at a glance and no jump buttons', async () => {
+  test('six tabs, Overview first, with the show at a glance and no jump buttons', async () => {
     renderAt('/universe');
-    expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'world', 'society', 'culture', 'state']);
+    expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'bible', 'world', 'society', 'culture', 'state']);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'WorldMap, locations', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSetup, snapshots, tensions']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, locations', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSetup, snapshots, tensions']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
     for (const label of ['Producer Mode', 'Show Dashboard', 'Show Bible', 'World Dashboard']) {
       expect(screen.queryByRole('button', { name: new RegExp(label) })).toBeNull();
     }
+  });
+
+  test('?tab=bible&sub=decisions opens the Show Bible on Decisions, no page heading; its tabs write ?sub= and keep the hub tab', async () => {
+    renderAt('/universe?tab=bible&sub=decisions');
+    expect(screen.getByRole('tab', { name: /^Show Bible/ }).getAttribute('aria-current')).toBe('page');
+    const decisions = await screen.findByRole('button', { name: /Decisions/ });
+    expect(decisions.style.fontWeight).toBe('700');
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Guard/ }));
+    expect(screen.getByRole('button', { name: /Guard/ }).style.fontWeight).toBe('700');
+    // The hub tab survives the page's own tab switch.
+    expect(screen.getByRole('tab', { name: /^Show Bible/ }).getAttribute('aria-current')).toBe('page');
   });
 
   test('?tab=world mounts the World page embedded: its sub-tabs, no page heading', async () => {
