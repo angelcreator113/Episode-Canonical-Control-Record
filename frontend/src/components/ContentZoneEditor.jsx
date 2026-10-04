@@ -46,6 +46,9 @@ export default function ContentZoneEditor({
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
+  // Stored posts for the One Post zone (drafts included, marked).
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const containerRef = useRef(null);
@@ -60,6 +63,16 @@ export default function ContentZoneEditor({
       .then(r => setProfiles(r.data?.data || r.data?.profiles || []))
       .catch(() => setProfiles([]))
       .finally(() => setProfilesLoading(false));
+  }, [showId]);
+
+  // Load the show's posts for the One Post picker (the Feed project, step 3).
+  useEffect(() => {
+    if (!showId) return;
+    setPostsLoading(true);
+    api.get(`/api/v1/feed-posts?show_id=${showId}&status=all&limit=100`)
+      .then(r => setPosts(r.data?.data || []))
+      .catch((err) => { console.error('[ContentZoneEditor] posts load failed:', err.response?.status || err.message); setPosts([]); })
+      .finally(() => setPostsLoading(false));
   }, [showId]);
 
   // Load calendar events for the event_invite picker. series_id is the same
@@ -515,6 +528,32 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   <option value="">— Select profile —</option>
                   {profiles.map(p => (
                     <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Post picker — for feed_post: one stored post, drawn live. */}
+          {zone.content_type === 'feed_post' && (
+            <div>
+              <label style={labelStyle}>POST</label>
+              {postsLoading ? (
+                <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading posts...</div>
+              ) : posts.length === 0 ? (
+                <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No posts for this show yet (Social Media › Posts)</div>
+              ) : (
+                <select
+                  aria-label="Post"
+                  value={config.post_id || ''}
+                  onChange={(e) => handleConfigChange('post_id', e.target.value || null)}
+                  style={fieldStyle}
+                >
+                  <option value="">— Select post —</option>
+                  {posts.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.status === 'draft' ? '[draft] ' : ''}@{p.poster_handle || p.socialProfile?.handle || '?'}: {(p.content_text || '').slice(0, 60)}
+                    </option>
                   ))}
                 </select>
               )}

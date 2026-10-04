@@ -19,6 +19,7 @@ import PhoneMapView from './phone/PhoneMapView';
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
   { key: 'feed_posts', label: 'Feed Posts', icon: '📰', desc: 'Social timeline posts', group: 'social' },
+  { key: 'feed_post', label: 'One Post', icon: '📌', desc: 'A single post, drawn live from the feed (the post lives in one place)', group: 'social' },
   { key: 'profile_header', label: 'Profile Header', icon: '👤', desc: 'Name, handle, avatar, bio', group: 'social' },
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
@@ -108,6 +109,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
   switch (zone.content_type) {
     case 'feed_posts':
       return <FeedPostsRenderer showId={showId} episodeId={episodeId} config={config} />;
+    case 'feed_post':
+      return <SinglePostRenderer config={config} />;
     case 'profile_header':
       return <ProfileHeaderRenderer showId={showId} config={config} />;
     case 'profile_stats':
@@ -249,6 +252,52 @@ function FeedPostsRenderer({ showId, episodeId, config }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── One Post (the Feed project, step 3, 2026-10-04) ──
+// Draws one stored post live by id: fix the post on the feed and every
+// screen that points at it shows the fix. A draft is marked, so a beat
+// that shows one is seen to wait on its episode's publish.
+export function SinglePostRenderer({ config }) {
+  const postId = config.post_id;
+  const url = postId ? `/api/v1/feed-posts/post/${postId}` : null;
+  const { data, loading } = useContentData(url);
+
+  if (!postId) return <ZoneEmpty label="Pick a post" />;
+  if (loading) return <ZoneLoader />;
+  const post = data?.data;
+  if (!post) return <ZoneEmpty label="Post not found" />;
+  const who = post.poster_display_name || post.socialProfile?.display_name || post.poster_handle || post.socialProfile?.handle || 'user';
+  const handle = post.poster_handle || post.socialProfile?.handle;
+  const comments = Array.isArray(post.sample_comments) ? post.sample_comments.slice(0, config.max_items || 2) : [];
+
+  return (
+    <div data-testid="feed-post-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', padding: '5px 6px', background: config.bg || 'rgba(0,0,0,0.45)', color: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+        <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, #e8a0b4, #b8a9d4)', flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who}</div>
+          {handle && <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.55)' }}>@{handle}</div>}
+        </div>
+        {post.status === 'draft' && <span style={{ marginLeft: 'auto', fontSize: 7, fontWeight: 700, padding: '1px 4px', borderRadius: 3, border: '1px dashed rgba(255,255,255,0.6)' }}>DRAFT</span>}
+      </div>
+      {post.content_text && <div style={{ fontSize: 8, lineHeight: 1.35, color: 'rgba(255,255,255,0.9)' }}>{post.content_text}</div>}
+      {post.image_url && <img src={post.image_url} alt="" style={{ width: '100%', borderRadius: 4, marginTop: 3, display: 'block' }} />}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
+        <Heart size={7} color="rgba(255,255,255,0.5)" />
+        <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{post.likes || 0}</span>
+        <MessageCircle size={7} color="rgba(255,255,255,0.5)" />
+        <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{post.comments_count || 0}</span>
+      </div>
+      {comments.length > 0 && (
+        <div style={{ marginTop: 3, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 2 }}>
+          {comments.map((c, i) => (
+            <div key={i} style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3 }}>{typeof c === 'string' ? c : (c.text || c.comment || '')}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

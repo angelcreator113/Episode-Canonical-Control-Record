@@ -50,6 +50,11 @@ module.exports = (sequelize) => {
     feeds_into_beat: { type: DataTypes.INTEGER, allowNull: true },
 
     sort_order: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+
+    // The post this moment shows (feed_posts.id), drawn live by the
+    // screens; screen_content is the fallback (migration 20261004160000,
+    // services/feedMomentLink.js, docs/FEED_POSTS.md).
+    feed_post_id: { type: DataTypes.UUID, allowNull: true },
   }, {
     tableName: 'feed_moments',
     timestamps: true,
@@ -62,6 +67,7 @@ module.exports = (sequelize) => {
 
   FeedMoment.associate = (models) => {
     if (models.Episode) FeedMoment.belongsTo(models.Episode, { foreignKey: 'episode_id', as: 'episode' });
+    if (models.FeedPost) FeedMoment.belongsTo(models.FeedPost, { foreignKey: 'feed_post_id', as: 'post' });
     if (models.Show) FeedMoment.belongsTo(models.Show, { foreignKey: 'show_id', as: 'show' });
     if (models.WorldEvent) FeedMoment.belongsTo(models.WorldEvent, { foreignKey: 'event_id', as: 'event' });
     if (models.SocialProfile) FeedMoment.belongsTo(models.SocialProfile, { foreignKey: 'trigger_profile_id', as: 'triggerProfile' });
