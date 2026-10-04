@@ -109,7 +109,7 @@ Found by reading, not yet run:
   `locked_decision` meant "show"), which says nothing about which show a rule belongs to.
   **Fixed 2026-10-04:** migration `20261004120000-franchise-knowledge-scope` stores
   `scope` (`franchise` | `show`, default `franchise`, check constraint) and `show_id`
-  (no foreign key; NULL until assigned); its one-time backfill marks the three show
+  (`shows.id`, a UUID; no foreign key; NULL until assigned); its one-time backfill marks the three show
   categories and the Show Brain seeder's entries (`show-brain-v1.0`, the canon of
   *Styling Adventures with Lala*) as `show` and gives them that show's id when it exists
   exactly as named. The list route takes `?scope=` and `?show_id=` (the franchise tier

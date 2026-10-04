@@ -7,9 +7,15 @@
  *
  *   scope    — 'franchise' (the LalaVerse: true for every show) or 'show'
  *              (one show's canon). NOT NULL, default 'franchise'.
- *   show_id  — the show a 'show' entry belongs to; NULL for franchise
- *              entries and for a show entry not yet assigned. No foreign
- *              key: the model is intentionally isolated.
+ *   show_id  — the show a 'show' entry belongs to (shows.id, a UUID); NULL
+ *              for franchise entries and for a show entry not yet assigned.
+ *              No foreign key: the model is intentionally isolated.
+ *
+ * Corrected 2026-10-04 before any production run: the first cut typed
+ * show_id INTEGER, and shows.id is a UUID, so the backfill would have
+ * aborted on the first database with the show in it. A database that
+ * already carries the integer column (it could never hold a value) gets
+ * it dropped and re-added as UUID, and the show backfill runs again.
  *
  * Backfill, run only when the column is first added so a re-run never
  * resets a scope set since: the categories the Show Bible treated as
@@ -29,12 +35,29 @@ const SHOW_BRAIN_DOCUMENT = 'show-brain-v1.0';
 const SHOW_SLUG = 'styling-adventures-with-lala';
 const SHOW_NAME = 'Styling Adventures with Lala';
 
-const columnExists = async (sequelize, column, transaction) => {
+const columnType = async (sequelize, column, transaction) => {
   const [rows] = await sequelize.query(
-    `SELECT 1 FROM information_schema.columns
+    `SELECT data_type FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = :table AND column_name = :column`,
     { replacements: { table: TABLE, column }, transaction });
-  return rows.length > 0;
+  return rows.length > 0 ? rows[0].data_type : null;
+};
+const columnExists = async (sequelize, column, transaction) => (await columnType(sequelize, column, transaction)) !== null;
+
+const assignShow = async (sequelize, transaction) => {
+  const [tables] = await sequelize.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'shows'`,
+    { transaction });
+  if (tables.length === 0) return;
+  const [shows] = await sequelize.query(
+    `SELECT id FROM shows
+      WHERE deleted_at IS NULL AND (slug = :slug OR name ILIKE :name)
+      ORDER BY id LIMIT 2`,
+    { replacements: { slug: SHOW_SLUG, name: SHOW_NAME }, transaction });
+  if (shows.length !== 1) return;
+  await sequelize.query(
+    `UPDATE ${TABLE} SET show_id = :id WHERE scope = 'show' AND show_id IS NULL`,
+    { replacements: { id: shows[0].id }, transaction });
 };
 
 module.exports = {
@@ -49,8 +72,14 @@ module.exports = {
         await queryInterface.addColumn(TABLE, 'scope',
           { type: Sequelize.STRING(16), allowNull: false, defaultValue: 'franchise' }, { transaction });
       }
-      if (!(await columnExists(sequelize, 'show_id', transaction))) {
-        await queryInterface.addColumn(TABLE, 'show_id', { type: Sequelize.INTEGER, allowNull: true }, { transaction });
+      const showIdType = await columnType(sequelize, 'show_id', transaction);
+      const wrongType = showIdType !== null && showIdType !== 'uuid';
+      if (wrongType) {
+        await sequelize.query(`DROP INDEX IF EXISTS ${TABLE}_show_id`, { transaction });
+        await queryInterface.removeColumn(TABLE, 'show_id', { transaction });
+      }
+      if (showIdType === null || wrongType) {
+        await queryInterface.addColumn(TABLE, 'show_id', { type: Sequelize.UUID, allowNull: true }, { transaction });
       }
       await sequelize.query(
         `ALTER TABLE ${TABLE} DROP CONSTRAINT IF EXISTS ${TABLE}_scope_check`, { transaction });
@@ -61,27 +90,16 @@ module.exports = {
         `CREATE INDEX IF NOT EXISTS ${TABLE}_show_id ON ${TABLE} (show_id) WHERE show_id IS NOT NULL`,
         { transaction });
 
-      if (hadScope) return;
+      if (hadScope && !wrongType) return;
 
-      await sequelize.query(
-        `UPDATE ${TABLE} SET scope = 'show'
-          WHERE scope = 'franchise'
-            AND (category IN (:categories) OR source_document = :document)`,
-        { replacements: { categories: SHOW_CATEGORIES, document: SHOW_BRAIN_DOCUMENT }, transaction });
-
-      const [tables] = await sequelize.query(
-        `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'shows'`,
-        { transaction });
-      if (tables.length === 0) return;
-      const [shows] = await sequelize.query(
-        `SELECT id FROM shows
-          WHERE deleted_at IS NULL AND (slug = :slug OR name ILIKE :name)
-          ORDER BY id LIMIT 2`,
-        { replacements: { slug: SHOW_SLUG, name: SHOW_NAME }, transaction });
-      if (shows.length !== 1) return;
-      await sequelize.query(
-        `UPDATE ${TABLE} SET show_id = :id WHERE scope = 'show' AND show_id IS NULL`,
-        { replacements: { id: shows[0].id }, transaction });
+      if (!hadScope) {
+        await sequelize.query(
+          `UPDATE ${TABLE} SET scope = 'show'
+            WHERE scope = 'franchise'
+              AND (category IN (:categories) OR source_document = :document)`,
+          { replacements: { categories: SHOW_CATEGORIES, document: SHOW_BRAIN_DOCUMENT }, transaction });
+      }
+      await assignShow(sequelize, transaction);
     });
   },
 

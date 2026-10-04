@@ -32,13 +32,15 @@ const client = new Anthropic();
 // ?show_id=N lists what that show's generators should see, the franchise
 // tier plus that show's own entries.
 const SCOPES = ['franchise', 'show'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isShowId = (v) => typeof v === 'string' && UUID_RE.test(v);
 const scopeFields = ({ scope, show_id }) => {
   if (scope !== undefined && !SCOPES.includes(scope)) return { error: 'scope must be franchise or show' };
   const fields = {};
   if (scope !== undefined) fields.scope = scope;
   if (scope === 'franchise') fields.show_id = null;
-  else if (show_id !== undefined) fields.show_id = show_id === null || show_id === '' ? null : Number(show_id);
-  if (fields.show_id !== undefined && fields.show_id !== null && !Number.isInteger(fields.show_id)) return { error: 'show_id must be an integer' };
+  else if (show_id !== undefined) fields.show_id = show_id === null || show_id === '' ? null : show_id;
+  if (fields.show_id !== undefined && fields.show_id !== null && !isShowId(fields.show_id)) return { error: 'show_id must be a show id (UUID)' };
   return { fields };
 };
 
@@ -54,8 +56,8 @@ router.get('/franchise-brain/entries', optionalAuth, async (req, res) => {
       where.scope = scope;
     }
     if (show_id) {
-      if (!Number.isInteger(Number(show_id))) return res.status(400).json({ error: 'show_id must be an integer' });
-      where[Op.or] = [{ scope: 'franchise' }, { show_id: Number(show_id) }];
+      if (!isShowId(show_id)) return res.status(400).json({ error: 'show_id must be a show id (UUID)' });
+      where[Op.or] = [{ scope: 'franchise' }, { show_id }];
     }
 
     const entries = await db.FranchiseKnowledge.findAll({

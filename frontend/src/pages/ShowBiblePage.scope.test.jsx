@@ -18,9 +18,9 @@ import ShowBiblePage from './ShowBiblePage';
 
 const ENTRIES = [
   { id: 1, title: 'Gold is never text', status: 'active', severity: 'important', category: 'technical', scope: 'franchise', content: 'A franchise rule filed under a show category.' },
-  { id: 2, title: 'Lala never knows', status: 'active', severity: 'critical', category: 'franchise_law', scope: 'show', show_id: 7, content: 'A show rule filed under a franchise category.' },
+  { id: 2, title: 'Lala never knows', status: 'active', severity: 'critical', category: 'franchise_law', scope: 'show', show_id: '7b1d2c3e-4f50-4a61-8b72-93c4d5e6f708', content: 'A show rule filed under a franchise category.' },
 ];
-const SHOWS = [{ id: 7, name: 'Styling Adventures with Lala', slug: 'styling-adventures-with-lala' }];
+const SHOWS = [{ id: '7b1d2c3e-4f50-4a61-8b72-93c4d5e6f708', name: 'Styling Adventures with Lala', slug: 'styling-adventures-with-lala' }];
 const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><ShowBiblePage embedded /></MemoryRouter>);
 
 beforeEach(() => {
@@ -58,7 +58,7 @@ describe('Show Bible: stored scope', () => {
     fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'show' } });
     fireEvent.click(screen.getByRole('button', { name: /Create/ }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-    expect(api.post.mock.calls[0][1]).toMatchObject({ title: 'Season 2 opens in Paris', scope: 'show', show_id: 7 });
+    expect(api.post.mock.calls[0][1]).toMatchObject({ title: 'Season 2 opens in Paris', scope: 'show', show_id: '7b1d2c3e-4f50-4a61-8b72-93c4d5e6f708' });
 
     fireEvent.click(screen.getByRole('button', { name: /New Entry/ }));
     fireEvent.change(screen.getByPlaceholderText('Entry title...'), { target: { value: 'Fashion is strategy' } });
