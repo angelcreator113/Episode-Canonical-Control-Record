@@ -1,0 +1,45 @@
+/* Social Media (2026-10-04): studio tokens only (docs/VISUAL_SYSTEM.md). */
+.sm-page { padding: 20px 16px 40px; max-width: 760px; margin: 0 auto; color: var(--text-primary); }
+.sm-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+.sm-sub { margin: 4px 0 14px; color: var(--text-secondary); font-size: 13px; }
+
+.sm-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--lala-parchment-3); margin-bottom: 14px; overflow-x: auto; }
+.sm-tab { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; white-space: nowrap; }
+.sm-tab span { font-weight: 600; font-size: 14px; }
+.sm-tab small { font-size: 11px; color: var(--text-faint); }
+.sm-tab.active { color: var(--primary-text); border-bottom-color: var(--primary); }
+.sm-tab.active small { color: var(--text-secondary); }
+
+.sm-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.sm-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.sm-chip { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font-size: 11px; font-weight: 600; cursor: pointer; }
+.sm-chip.active { background: var(--primary); border-color: var(--primary); color: var(--text-inverse); }
+.sm-search { flex: 1 1 180px; min-width: 140px; padding: 6px 10px; border: 1px solid var(--lala-parchment-3); border-radius: 6px; font: inherit; font-size: 13px; background: var(--surface-card); color: var(--text-primary); }
+.sm-link { font-size: 12px; font-weight: 600; color: var(--primary-text); text-decoration: none; }
+.sm-count { margin: 0 0 10px; font-size: 12px; color: var(--text-secondary); }
+.sm-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+.sm-empty { padding: 20px; border: 1px dashed var(--lala-parchment-3); border-radius: 8px; color: var(--text-secondary); font-size: 13px; background: var(--surface-card); }
+.sm-empty p { margin: 0 0 6px; }
+
+.sm-post { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.sm-post-head { display: flex; align-items: center; gap: 10px; }
+.sm-post-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-subtle); color: var(--primary-text); display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.sm-post-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sm-post-who strong { font-size: 14px; }
+.sm-post-meta { font-size: 11px; color: var(--text-secondary); }
+.sm-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; background: var(--lala-parchment-2); color: var(--text-secondary); }
+.sm-tag-shade, .sm-tag-gossip { background: var(--danger-bg); color: var(--danger-text); }
+.sm-tag-support, .sm-tag-reaction { background: var(--success-bg); color: var(--success-text); }
+.sm-tag-flex, .sm-tag-comparison { background: var(--warning-bg); color: var(--warning-text); }
+.sm-tag-brand_content, .sm-tag-bts, .sm-tag-callback { background: var(--info-bg); color: var(--info-text); }
+.sm-post-text { margin: 10px 0 6px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.sm-post-image { width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+.sm-post-image-desc { margin: 6px 0; font-size: 12px; color: var(--text-secondary); font-style: italic; }
+.sm-post-foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+.sm-post-foot time { margin-left: auto; color: var(--text-faint); }
+.sm-post-episode { color: var(--primary-text); font-weight: 600; text-decoration: none; }
+.sm-viral { color: var(--accent-dark); font-weight: 700; }
+.sm-comments { margin: 8px 0 0; padding: 8px 0 0 14px; border-top: 1px solid var(--lala-parchment-2); font-size: 12px; color: var(--text-secondary); }
+.sm-comments li { margin: 2px 0; }
+.sm-more { display: block; margin: 8px auto 0; padding: 8px 18px; border-radius: 8px; border: 1px solid var(--primary); background: var(--surface-card); color: var(--primary-text); font-weight: 600; cursor: pointer; }
+@media (max-width: 420px) { .sm-page { padding: 14px 16px 32px; } .sm-post-foot time { margin-left: 0; width: 100%; } }

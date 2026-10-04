@@ -187,7 +187,7 @@ not via any page's UI.
 | `/story-health` | `pages/StoryHealthDashboard.jsx` (App.jsx:501) | live | URL only (`CommandPalette.jsx:12-13` exports a `searchStoryHealthApi` helper hitting a *backend* search endpoint — not a frontend link to this route) |
 | `/world-studio` | `pages/WorldStudio.jsx` (App.jsx:504) | live | in-app link (`components/CharacterProfile.jsx:625`, `pages/CharacterProfilePage.jsx:844`, `pages/SceneStudio.jsx:163`) + Command Palette (`location` result → `/world-studio?tab=locations`, `CommandPalette.jsx:18`). Sidebar has dead expand logic referencing this route (see note below) but no live nav item for it. |
 | `/scene-studio` | `pages/SceneStudio.jsx` (App.jsx:507) | live | URL only (same Sidebar auto-expand-only note) |
-| `/feed` | `pages/SocialProfileGenerator.jsx` via `FeedEntry` wrapper (App.jsx:510) | live | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) + Sidebar (FRANCHISE zone, `?layer=lalaverse`, `Sidebar.jsx`) — **no longer a duplicate of WorldAdmin's "Lala's Feed" sub-tab; that sub-tab is removed, see §4** |
+| `/feed` | `pages/SocialMediaPage.jsx` (Social Media, 2026-10-04: Posts tab = stored `feed_posts` for the active show; People tab = `pages/SocialProfileGenerator.jsx` embedded, opened by `?tab=people` and by the old `?layer=`/`?profile=` links) | live | in-app link (`components/Episodes/EpisodeOverviewTab.jsx`) + Sidebar (WORLD zone, "Social Media", `Sidebar.jsx`) + Setup Progress step 6 (`?tab=people&layer=lalaverse`) — **no longer a duplicate of WorldAdmin's "Lala's Feed" sub-tab; that sub-tab is removed, see §4** |
 
 ### Management — franchise systems & admin (App.jsx:513-561)
 
@@ -650,7 +650,7 @@ outside the flow entirely.
 
 | Stage | Page | Route | Component file | Reachable how |
 |---|---|---|---|---|
-| HOST | The Feed (standalone; no longer duplicated in Producer Mode, Task #1631) | `/feed` (`?layer=lalaverse` opens on the LalaVerse feed) | `pages/SocialProfileGenerator.jsx` via `FeedEntry` wrapper | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) + Sidebar → FRANCHISE → "Lala's Feed" (`Sidebar.jsx`) |
+| HOST | Social Media (standalone; no longer duplicated in Producer Mode, Task #1631; renamed and given a Posts tab 2026-10-04) | `/feed` (`?tab=people&layer=lalaverse` opens the LalaVerse profiles) | `pages/SocialMediaPage.jsx` (People tab embeds `pages/SocialProfileGenerator.jsx`) | in-app link (`components/Episodes/EpisodeOverviewTab.jsx`) + Sidebar → WORLD → "Social Media" (`Sidebar.jsx`) |
 | EVENT | Events (Producer Mode) — a queue of event packages as of Task #1648, not an editor; cards split by computed state (Needs Host/Needs Setup/Ready/Used/Archived), not the raw `status` column | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | Sidebar → Producer Mode |
 | VENUE | Event Package page (card's primary action), or the card's "⋯" → Edit details | `/shows/:showId/events/:eventId`, or `/shows/:id/world?tab=events&event=<id>` | `pages/EventPackagePage.jsx`; `pages/WorldAdmin.jsx`'s `eventDetailModal` | same as above |
 | GUESTS | Events tab card (read-only summary) | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | same as above |

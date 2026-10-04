@@ -28,7 +28,7 @@ function buildNav(shows, activeId) {
         // state) are the LalaVerse hub's tabs (2026-10-04), not rows here.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
         { icon: '📖', label: 'Show Bible', route: '/universe?tab=bible', hint: 'The canon, one click' },
-        { icon: '🎭', label: "Lala's Feed", route: '/feed?layer=lalaverse', hint: 'Who exists in her social world' },
+        { icon: '📱', label: 'Social Media', route: '/feed', hint: 'What was said, and who said it' },
       ],
     },
     {
