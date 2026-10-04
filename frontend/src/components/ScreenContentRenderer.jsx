@@ -24,6 +24,7 @@ export const CONTENT_TYPES = [
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
+  { key: 'feed_notifications', label: 'Feed Notifications', icon: '🔔', desc: '"Marcus commented on your status", from the feed records', group: 'messages' },
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
   // Named wardrobe categories — surface the four creators actually think
   // in ("I want a shoes screen") instead of the technical "grid + category
@@ -119,6 +120,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
       return <DMThreadRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'notifications':
       return <NotificationsRenderer showId={showId} episodeId={episodeId} config={config} />;
+    case 'feed_notifications':
+      return <FeedNotificationsRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'story_ring':
       return <StoryRingRenderer showId={showId} config={config} />;
     case 'wardrobe_grid':
@@ -435,6 +438,60 @@ function NotificationsRenderer({ showId, episodeId, config }) {
             <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {n.screen_content || n.trigger_action || 'notification'}
             </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Feed Notifications (docs/FEED_POSTS.md rule 7, 2026-10-04) ──
+// Derived from the feed records, never copied: a comment under one of
+// Lala's posts is "X commented on your status: '…'", a post by someone
+// else is "X posted: '…'" (or "X wrote on your wall" when it names her).
+// Newest first. owner_handle (default 'lala') says whose phone it is.
+export function notificationsFrom(posts, { ownerHandle = 'lala', max = 5 } = {}) {
+  const owner = String(ownerHandle || 'lala').toLowerCase();
+  const nameOf = (p) => p.poster_display_name || p.socialProfile?.display_name || p.poster_handle || p.socialProfile?.handle || 'Someone';
+  const handleOf = (p) => String(p.poster_handle || p.socialProfile?.handle || '').toLowerCase();
+  const clip = (t, n = 60) => (t || '').length > n ? `${t.slice(0, n - 1)}…` : (t || '');
+  const items = [];
+  for (const post of posts || []) {
+    const mine = handleOf(post) === owner;
+    const comments = Array.isArray(post.comments) ? post.comments : [];
+    for (const c of comments) {
+      if (String(c.handle || '').toLowerCase() === owner) continue;
+      items.push({
+        id: `c-${c.id}`, who: c.display_name || c.handle || 'Someone', at: c.posted_at || post.posted_at || null,
+        text: mine ? `commented on your status: “${clip(c.text)}”` : `commented on ${nameOf(post)}'s post: “${clip(c.text)}”`,
+      });
+    }
+    if (!mine) {
+      const names = new RegExp(`\\b(${owner}|lala)\\b`, 'i').test(post.content_text || '');
+      items.push({ id: `p-${post.id}`, who: nameOf(post), at: post.posted_at || null, text: names ? `wrote on your wall: “${clip(post.content_text)}”` : `posted: “${clip(post.content_text)}”` });
+    }
+  }
+  items.sort((a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0));
+  return items.slice(0, max);
+}
+
+function FeedNotificationsRenderer({ showId, episodeId, config }) {
+  const url = episodeId
+    ? `/api/v1/feed-posts?episode_id=${episodeId}&status=all&with=comments&limit=30`
+    : showId ? `/api/v1/feed-posts?show_id=${showId}&with=comments&limit=30` : null;
+  const { data, loading } = useContentData(url);
+
+  if (loading) return <ZoneLoader />;
+  const notifs = notificationsFrom(data?.data || [], { ownerHandle: config.owner_handle, max: config.max_items || 5 });
+  if (!notifs.length) return <ZoneEmpty label="No notifications" />;
+
+  return (
+    <div data-testid="feed-notifications-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {notifs.map((n) => (
+        <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 4px', background: config.bg || 'rgba(0,0,0,0.35)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(232,160,180,0.6)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>🔔</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 7, color: 'rgba(255,255,255,0.85)', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            <b style={{ color: '#fff', fontSize: 8 }}>{n.who}</b> {n.text}
           </div>
         </div>
       ))}

@@ -53,10 +53,18 @@
    zone and `GET /feed-posts/post/:id` carry the live comment records; the old
    `sample_comments` strings remain as a fallback where no records exist.
 
+7. **Notifications are derived, never copied.** The phone's Feed Notifications zone
+   (`ScreenContentRenderer`, zone `feed_notifications`, `notificationsFrom`) reads the
+   same records as the wall: a comment under one of Lala's posts is "X commented on your
+   status: '…'", a post by someone else "X posted: '…'" or "X wrote on your wall" when it
+   names her; newest first; the episode's posts in an episode, the show's live posts
+   otherwise; `owner_handle` says whose phone it is (default `lala`). The older
+   Notifications zone still reads the episode's phone moments.
+
 ## Still to come
 
-- Notification and relationship-change phone zones that read a post or a profile
-  change, and a way to pick a beat's post from the Social Media page.
+- A relationship-change phone zone that reads a profile change, and a way to pick a
+  beat's post from the Social Media page.
 - (done 2026-10-04) The phone's Comments zone reads the comment records: one post's when the
   zone names a post, else the episode's posts' in an episode, else the show's live posts';
   sample strings only where a post has no records.
