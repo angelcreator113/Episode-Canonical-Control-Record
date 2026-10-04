@@ -19,17 +19,18 @@ const update = slice("router.patch('/franchise-brain/entries/:id'", '// DELETE E
 const validator = slice('const SCOPES =', "router.get('/franchise-brain/entries'");
 
 describe('franchise-brain scope contract', () => {
-  test('one validator: scope is franchise or show, show_id an integer, a franchise entry drops its show_id', () => {
+  test('one validator: scope is franchise or show, show_id a UUID (shows.id), a franchise entry drops its show_id', () => {
     expect(validator).toMatch(/const SCOPES = \['franchise', 'show'\]/);
     expect(validator).toMatch(/'scope must be franchise or show'/);
     expect(validator).toMatch(/if \(scope === 'franchise'\) fields\.show_id = null/);
-    expect(validator).toMatch(/'show_id must be an integer'/);
+    expect(validator).toMatch(/'show_id must be a show id \(UUID\)'/);
+    expect(validator).not.toMatch(/Number\(show_id\)/);
   });
 
   test('the list filters by scope and by show_id (franchise plus that show)', () => {
     expect(list).toMatch(/const \{ category, status, severity, scope, show_id \} = req\.query/);
     expect(list).toMatch(/where\.scope = scope/);
-    expect(list).toMatch(/where\[Op\.or\] = \[\{ scope: 'franchise' \}, \{ show_id: Number\(show_id\) \}\]/);
+    expect(list).toMatch(/where\[Op\.or\] = \[\{ scope: 'franchise' \}, \{ show_id \}\]/);
   });
 
   test('create stores scope (default franchise) and show_id', () => {
@@ -48,6 +49,6 @@ describe('franchise-brain scope contract', () => {
   test('the model declares both columns', () => {
     const model = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'models', 'FranchiseKnowledge.js'), 'utf8');
     expect(model).toMatch(/scope: \{[\s\S]*?defaultValue: 'franchise'[\s\S]*?isIn: \[\['franchise', 'show'\]\]/);
-    expect(model).toMatch(/show_id:\s*\{ type: DataTypes\.INTEGER, allowNull: true \}/);
+    expect(model).toMatch(/show_id:\s*\{ type: DataTypes\.UUID, allowNull: true \}/);
   });
 });
