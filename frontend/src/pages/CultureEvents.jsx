@@ -41,9 +41,9 @@ const TABS = [
   { key: 'history', label: 'History', desc: 'What\'s remembered' },
 ];
 
-export default function CultureEvents() {
+export default function CultureEvents({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
-  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'events'));
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'events', undefined, 'sub'));
   const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
   const { data: cmData, saving: cmSaving, loaded: cmLoaded } = usePageData('cultural_memory', MEMORY_DEFAULTS);
 
@@ -91,13 +91,13 @@ export default function CultureEvents() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
+      {/* Header; inside the LalaVerse hub the tab is the heading */}
+      <div style={{ display: 'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems: 'flex-start', marginBottom: embedded ? 8 : 20 }}>
+        {!embedded && <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#2C2C2C', margin: 0 }}>Culture & Events</h1>
           <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>What happens in the LalaVerse, who covers it, and what becomes legend</p>
-        </div>
+        </div>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {saving && <span style={{ fontSize: 11, color: '#B8962E' }}>Saving...</span>}
           <div style={{ display: 'none' }}>

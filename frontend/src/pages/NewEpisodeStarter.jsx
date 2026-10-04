@@ -166,7 +166,7 @@ function WorldStart({ showId, onCreated }) {
       {events === null && <p className="nes-note">Loading the calendar…</p>}
       {events && events.length === 0 && (
         <p className="nes-note" data-testid="world-empty">
-          The calendar has no events for this show yet. Add one in <Link to="/culture-events?tab=events">Culture &amp; Events</Link>.
+          The calendar has no events for this show yet. Add one in <Link to="/universe?tab=culture&sub=events">Culture &amp; Events</Link>.
         </p>
       )}
       {events && events.length > 0 && (

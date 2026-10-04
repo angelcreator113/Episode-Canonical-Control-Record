@@ -54,7 +54,7 @@ not via any page's UI.
 |---|---|---|---|
 | `/` | `pages/Home.jsx` (App.jsx:323) | live | Sidebar (Home `NavLink`, `components/layout/Sidebar.jsx:201-210`) |
 | `/start` | `pages/SessionStart.jsx` (App.jsx:324) | live | Sidebar (brand-mark click, `Sidebar.jsx:172`) |
-| `/universe` | `pages/UniversePage.jsx` (App.jsx:327) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:22`) |
+| `/universe` | `pages/UniversePage.jsx` (App.jsx:327) — the LalaVerse hub (2026-10-04): Overview, World, Society, Culture, State tabs (`HUB_TABS`), `?tab=` and `?sub=` | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:22`) |
 | `/universe/social-import` | `pages/UniverseSocialImportPage.jsx` (App.jsx:328) | live | URL only — no in-app caller found; also the redirect target of `/social-import` (App.jsx:517) |
 | `/universe/series` | `pages/SeriesPage.jsx` (App.jsx:329) | live | URL only |
 | `/universe/production` | `pages/UniverseProductionPage.jsx` | redirect (audit IA-01, 2026-10-03): opens the active show's Producer Mode, Episodes → Production; `ProductionTab` is gone | URL only |
@@ -172,10 +172,10 @@ not via any page's UI.
 | `/cultural-memory` | — (`utils/worldRedirects.js`) | redirect → `/culture-events?tab=history` (audit IA-04); `CulturalMemory.jsx` deleted | URL only |
 | `/character-depth-engine` | `pages/CharacterDepthEngine.jsx` (App.jsx:465) | live | URL only (same `FranchiseBrain.jsx` dead-code note; same Sidebar note) |
 | `/world-locations` | — (`utils/worldRedirects.js`) | redirect → `/world-foundation?tab=locations` (audit IA-04); `WorldLocations.jsx` deleted (its CSS stays: `WorldSetupGuide` imports it) | URL only |
-| `/world-dashboard` | `pages/WorldDashboard.jsx` (App.jsx:471) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:24`) |
-| `/world-foundation` | `pages/WorldFoundation.jsx` (App.jsx:472) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:25`) |
-| `/social-systems` | `pages/SocialSystems.jsx` (App.jsx:473) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:26`) |
-| `/culture-events` | `pages/CultureEvents.jsx` (App.jsx:474) | live | Sidebar (FRANCHISE zone, `Sidebar.jsx:27`) |
+| `/world-dashboard` | redirect → `/universe?tab=state` (2026-10-04; `WorldDashboard` is the LalaVerse hub's State tab, `utils/worldRedirects.js` `HUB_TABS`) | redirect | — |
+| `/world-foundation` | redirect → `/universe?tab=world` (2026-10-04; `WorldFoundation` is the hub's World tab; a `?tab=` becomes `&sub=`) | redirect | — |
+| `/social-systems` | redirect → `/universe?tab=society` (2026-10-04; `SocialSystems` is the hub's Society tab) | redirect | — |
+| `/culture-events` | redirect → `/universe?tab=culture` (2026-10-04; `CultureEvents` is the hub's Culture tab; a `?tab=` becomes `&sub=`) | redirect | — |
 | `/show-brain` | redirect → `/show-bible?tab=knowledge` (App.jsx:477) | redirect | — |
 | `/narrative-control` | `pages/NarrativeControlCenter.jsx` (App.jsx:480) | live | URL only |
 | `/story-engine` | redirect → `/stories` (App.jsx:483) | redirect | Sidebar (WRITE > Stories > "Structure" child, `Sidebar.jsx:44`) + Command Palette (`story` result, `CommandPalette.jsx:17`) — both entry points land on a route that immediately redirects |
@@ -211,7 +211,7 @@ not via any page's UI.
 | `/amber` | `pages/AmberCommandCenter.jsx` (App.jsx:546) | live | URL only (same Sidebar auto-expand-only note) |
 | `/settings` | `pages/SettingsPage.jsx` (App.jsx:549) | live | Sidebar (SYSTEM zone, `Sidebar.jsx:78`; also footer avatar click, `Sidebar.jsx:417`) |
 | `/recycle-bin` | `pages/RecycleBin.jsx` (App.jsx:552) | live | Sidebar (SYSTEM zone, `Sidebar.jsx:77`) |
-| `/world` | redirect → `/world-dashboard` (App.jsx:555) | redirect | — |
+| `/world` | redirect → `/universe?tab=state` (2026-10-04) | redirect | — |
 | `/login` | redirect → `/` (App.jsx:558) | redirect | authenticated user hitting the login page |
 | `*` | redirect → `/` (App.jsx:561) | redirect | catch-all, authenticated |
 

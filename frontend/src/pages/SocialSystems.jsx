@@ -94,9 +94,9 @@ const tb = (a) => ({ padding:'8px 16px', fontSize:12, fontWeight:600, fontFamily
 const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:14, marginBottom:8 };
 const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono', monospace", marginBottom:6 };
 
-export default function SocialSystems() {
+export default function SocialSystems({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
-  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes'));
+  const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
   const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
   const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
@@ -107,12 +107,13 @@ export default function SocialSystems() {
 
   return (
     <PageEditContext.Provider value={{ data: tab === 'legends' ? { ...isData, ...ccData, LEGENDARY_GROUPS } : isData, setEditItem, removeItem: isRemove }}>
-    <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 20px' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
-        <div>
+    <div style={{ maxWidth:1100, margin:'0 auto', padding: embedded ? 0 : '24px 20px' }}>
+      {/* Header; inside the LalaVerse hub the tab is the heading */}
+      <div style={{ display:'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems:'flex-start', marginBottom: embedded ? 8 : 20 }}>
+        {!embedded && <div>
           <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>Social Systems</h1>
           <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Archetypes, legends, relationships, economy, trends — the rules of the LalaVerse</p>
-        </div>
+        </div>}
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {saving && <span style={{ fontSize:11, color:'#B8962E' }}>Saving...</span>}
           <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />

@@ -1,13 +1,14 @@
 /**
- * The duplicate world editors' routes open their owner's page on the
- * matching tab (audit IA-04, 2026-10-03), and a page opens on the tab its
- * URL names.
+ * The duplicate world editors' routes open the LalaVerse hub on the matching
+ * tab and sub-tab (audit IA-04, 2026-10-03; the hub, 2026-10-04), the four
+ * former world pages' routes open their hub tab carrying their old ?tab= as
+ * &sub=, and a page opens on the tab its URL names.
  */
 import React from 'react';
 import { describe, test, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { WORLD_REDIRECTS, tabFromSearch } from './worldRedirects';
+import { WORLD_REDIRECTS, HUB_TABS, hubTarget, tabFromSearch } from './worldRedirects';
 
 const Where = () => { const l = useLocation(); return <div data-testid="where">{l.pathname}{l.search}</div>; };
 
@@ -17,20 +18,28 @@ describe('WORLD_REDIRECTS', () => {
       <MemoryRouter initialEntries={[from]}>
         <Routes>
           {Object.entries(WORLD_REDIRECTS).map(([path, target]) => <Route key={path} path={path} element={<Navigate to={target} replace />} />)}
-          <Route path="/social-systems" element={<Where />} />
-          <Route path="/world-foundation" element={<Where />} />
-          <Route path="/culture-events" element={<Where />} />
+          <Route path="/universe" element={<Where />} />
         </Routes>
       </MemoryRouter>,
     );
     expect(screen.getByTestId('where').textContent).toBe(to);
   });
 
-  test('every target is a Sidebar page with a tab', () => {
+  test('every target is a hub tab with a sub-tab', () => {
     for (const to of Object.values(WORLD_REDIRECTS)) {
-      expect(['/social-systems', '/world-foundation', '/culture-events']).toContain(to.split('?')[0]);
-      expect(to).toMatch(/\?tab=\w+$/);
+      expect(to).toMatch(/^\/universe\?tab=(world|society|culture|state)&sub=\w+$/);
     }
+  });
+});
+
+describe('HUB_TABS and hubTarget', () => {
+  test('the four former world pages map to the four hub tabs', () => {
+    expect(HUB_TABS).toEqual({ '/world-dashboard': 'state', '/world-foundation': 'world', '/social-systems': 'society', '/culture-events': 'culture' });
+  });
+  test('a legacy ?tab= becomes the hub tab\'s &sub=', () => {
+    expect(hubTarget('world', '')).toBe('/universe?tab=world');
+    expect(hubTarget('world', '?tab=locations')).toBe('/universe?tab=world&sub=locations');
+    expect(hubTarget('culture', '?show=1&tab=history')).toBe('/universe?tab=culture&sub=history');
   });
 });
 
@@ -41,5 +50,9 @@ describe('tabFromSearch', () => {
     expect(tabFromSearch(TABS, 'events', '?tab=nope')).toBe('events');
     expect(tabFromSearch(TABS, 'events', '')).toBe('events');
     expect(tabFromSearch(TABS, 'events', '?show=1&tab=awards')).toBe('awards');
+  });
+  test('a hub page reads its own tab from ?sub=, not the hub\'s ?tab=', () => {
+    expect(tabFromSearch(TABS, 'events', '?tab=culture&sub=history', 'sub')).toBe('history');
+    expect(tabFromSearch(TABS, 'events', '?tab=culture', 'sub')).toBe('events');
   });
 });

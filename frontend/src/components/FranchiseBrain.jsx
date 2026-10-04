@@ -82,13 +82,13 @@ const STATUS_LABELS = {
 };
 
 const SOURCE_DOCS = [
-  { key: 'cultural-system-v2.0',         route: '/culture-events',             label: 'Culture & Events',     icon: '📅', pageName: 'cultural_calendar' },
-  { key: 'influencer-systems-v1.0',      route: '/social-systems',             label: 'Social Systems',       icon: '⭐', pageName: 'influencer_systems' },
-  { key: 'world-infrastructure-v1.0',    route: '/world-foundation',           label: 'World Foundation',     icon: '🏛️', pageName: 'world_infrastructure' },
+  { key: 'cultural-system-v2.0',         route: '/universe?tab=culture',      label: 'Culture & Events',     icon: '📅', pageName: 'cultural_calendar' },
+  { key: 'influencer-systems-v1.0',      route: '/universe?tab=society',      label: 'Social Systems',       icon: '⭐', pageName: 'influencer_systems' },
+  { key: 'world-infrastructure-v1.0',    route: '/universe?tab=world',        label: 'World Foundation',     icon: '🏛️', pageName: 'world_infrastructure' },
   { key: 'social-timeline-v1.0',         route: '/social-timeline',            label: 'Social Timeline',      icon: '📰', pageName: 'social_timeline' },
   { key: 'social-personality-v1.0',      route: '/social-personality',         label: 'Social Personality',   icon: '🎭', pageName: 'social_personality' },
   { key: 'character-life-simulation-v1.0', route: '/character-life-simulation', label: 'Life Simulation',      icon: '🎲', pageName: 'character_life_simulation' },
-  { key: 'cultural-memory-v1.0',         route: '/culture-events',             label: 'Cultural Memory',      icon: '🧠', pageName: 'cultural_memory' },
+  { key: 'cultural-memory-v1.0',         route: '/universe?tab=culture&sub=history', label: 'Cultural Memory',      icon: '🧠', pageName: 'cultural_memory' },
   { key: 'character-depth-engine-v1.0',  route: '/character-depth-engine',     label: 'Character Depth',      icon: '💎', pageName: 'character_depth_engine' },
 ];
 
