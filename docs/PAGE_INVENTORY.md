@@ -172,7 +172,7 @@ not via any page's UI.
 | `/cultural-memory` | — (`utils/worldRedirects.js`) | redirect → `/culture-events?tab=history` (audit IA-04); `CulturalMemory.jsx` deleted | URL only |
 | `/character-depth-engine` | `pages/CharacterDepthEngine.jsx` (App.jsx:465) | live | URL only (same `FranchiseBrain.jsx` dead-code note; same Sidebar note) |
 | `/world-locations` | — (`utils/worldRedirects.js`) | redirect → `/world-foundation?tab=locations` (audit IA-04); `WorldLocations.jsx` deleted (its CSS stays: `WorldSetupGuide` imports it) | URL only |
-| `/world-dashboard` | redirect → `/universe?tab=state` (2026-10-04; `WorldDashboard` is the LalaVerse hub's State tab, `utils/worldRedirects.js` `HUB_TABS`) | redirect | — |
+| `/world-dashboard` | redirect → `/universe?tab=state` (2026-10-04; `WorldDashboard` is the LalaVerse hub's State tab, `utils/worldRedirects.js` `HUB_TABS`; its Setup Progress tab is now the Overview's `components/WorldSetupProgress`) | redirect | — |
 | `/world-foundation` | redirect → `/universe?tab=world` (2026-10-04; `WorldFoundation` is the hub's World tab; a `?tab=` becomes `&sub=`) | redirect | — |
 | `/social-systems` | redirect → `/universe?tab=society` (2026-10-04; `SocialSystems` is the hub's Society tab) | redirect | — |
 | `/culture-events` | redirect → `/universe?tab=culture` (2026-10-04; `CultureEvents` is the hub's Culture tab; a `?tab=` becomes `&sub=`) | redirect | — |

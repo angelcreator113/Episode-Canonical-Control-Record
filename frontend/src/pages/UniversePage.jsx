@@ -5,8 +5,8 @@
  * world at a glance, then the world pages as tabs — Show Bible (the canon:
  * knowledge, decisions, documents, guard), World (the DREAM map and
  * locations), Society (archetypes, legends, rules, trends), Culture (the
- * calendar, awards and media, history) and State (setup progress,
- * snapshots, tensions). Each tab mounts its page in embedded mode; `?tab=`
+ * calendar, awards and media, history) and State (snapshots, timeline,
+ * tensions). The Overview carries the world's setup progress. Each tab mounts its page in embedded mode; `?tab=`
  * names the tab and `?sub=` the page's own tab (utils/worldRedirects.js).
  * The Sidebar's Show Bible row deep-links to the Bible tab.
  *
@@ -24,6 +24,7 @@ import WorldFoundation from './WorldFoundation';
 import SocialSystems from './SocialSystems';
 import CultureEvents from './CultureEvents';
 import WorldDashboard from './WorldDashboard';
+import WorldSetupProgress from '../components/WorldSetupProgress';
 
 export const HUB_TABS = [
   { key: 'overview', label: 'Overview', desc: 'The world at a glance' },
@@ -31,7 +32,7 @@ export const HUB_TABS = [
   { key: 'world', label: 'World', desc: 'Map, locations' },
   { key: 'society', label: 'Society', desc: 'Archetypes, legends, trends' },
   { key: 'culture', label: 'Culture', desc: 'Calendar, awards, history' },
-  { key: 'state', label: 'State', desc: 'Setup, snapshots, tensions' },
+  { key: 'state', label: 'State', desc: 'Snapshots, timeline, tensions' },
 ];
 
 const tabStyle = (active) => ({
@@ -176,6 +177,9 @@ function Overview() {
           ))}
         </div>
       )}
+
+      {/* World setup: the seven steps and which are done (was World Dashboard's Setup Progress tab) */}
+      <WorldSetupProgress showId={show?.id} />
 
       {/* Two columns */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>

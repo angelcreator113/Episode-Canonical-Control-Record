@@ -35,12 +35,23 @@ describe('UniversePage: the LalaVerse hub', () => {
     renderAt('/universe');
     expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'bible', 'world', 'society', 'culture', 'state']);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, locations', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSetup, snapshots, tensions']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, locations', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSnapshots, timeline, tensions']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
     for (const label of ['Producer Mode', 'Show Dashboard', 'Show Bible', 'World Dashboard']) {
-      expect(screen.queryByRole('button', { name: new RegExp(label) })).toBeNull();
+      expect(screen.queryByRole('button', { name: new RegExp(`^${label}$`) })).toBeNull();
     }
+    // The world's setup progress is the Overview's (it was World Dashboard's first tab).
+    expect(await screen.findByTestId('world-setup-count')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /^Step \d: / })).toHaveLength(7);
+  });
+
+  test('the State tab holds World State and Tensions only; setup is gone from it', async () => {
+    renderAt('/universe?tab=state');
+    await screen.findByText('World State');
+    expect(screen.getByText('Tensions')).toBeTruthy();
+    expect(screen.queryByText('Setup Progress')).toBeNull();
+    expect(screen.queryByTestId('world-setup-count')).toBeNull();
   });
 
   test('?tab=bible&sub=decisions opens the Show Bible on Decisions, no page heading; its tabs write ?sub= and keep the hub tab', async () => {
