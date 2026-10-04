@@ -50,12 +50,22 @@ export default function WorldDashboard({ embedded = false }) {
 
   // Tensions
   const [tensionPairs, setTensionPairs] = useState([]);
+  // The scan's own verdict: { status: 'ok' | 'scan_failed', characters_scanned, error }
+  const [tensionScan, setTensionScan] = useState(null);
   const [tensionLoading, setTensionLoading] = useState(false);
 
   // Load state data
   const loadSnapshots = useCallback(async () => { setSnapLoading(true); try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots||[]); } catch(e){console.error(e);} finally{setSnapLoading(false);} }, []);
   const loadTimeline = useCallback(async () => { setTlLoading(true); try { const r = await listTimelineApi(); setTimelineEvents(r.data?.events||[]); } catch(e){console.error(e);} finally{setTlLoading(false);} }, []);
-  const loadTensions = useCallback(async () => { setTensionLoading(true); try { const r = await getTensionScannerApi(); setTensionPairs(r.data?.pairs||[]); } catch(e){console.error(e);} finally{setTensionLoading(false);} }, []);
+  // The scanner contract (routes/worldStudio.js): pairs carry char_a / char_b
+  // as { id, name } objects (the page read char_a_name, which never existed,
+  // so every pair rendered nameless), and the scan says whether it ran.
+  const loadTensions = useCallback(async () => {
+    setTensionLoading(true);
+    try { const r = await getTensionScannerApi(); setTensionPairs(r.data?.pairs || []); setTensionScan({ status: r.data?.status || 'ok', characters_scanned: r.data?.characters_scanned, error: r.data?.error }); }
+    catch (e) { console.error(e); setTensionPairs([]); setTensionScan({ status: 'scan_failed', error: e.response?.data?.error || e.message }); }
+    finally { setTensionLoading(false); }
+  }, []);
 
   useEffect(() => { if (tab==='state') { loadSnapshots(); loadTimeline(); } if (tab==='tensions') loadTensions(); }, [tab]);
 
@@ -71,8 +81,13 @@ export default function WorldDashboard({ embedded = false }) {
     try { await deleteTimelineEventApi(id); flash('Deleted'); loadTimeline(); } catch { flash('Failed','error'); }
   };
 
+  // The proposal contract: the body is the scanner's pair itself (it sent
+  // char_a_id / char_b_id, which the route never read, so it was refused 400).
   const proposeTensionScene = async (pair) => {
-    try { const r = await createTensionProposalApi({char_a_id:pair.char_a_id,char_b_id:pair.char_b_id}); if (r.data?.proposal) navigate('/story-evaluation', {state:{sceneProposal:r.data.proposal}}); else flash('Could not generate','error'); } catch { flash('Failed','error'); }
+    try {
+      const r = await createTensionProposalApi({ char_a: pair.char_a, char_b: pair.char_b, tension_state: pair.tension_state, relationship_type: pair.relationship_type, conflict_summary: pair.conflict_summary, romantic: pair.romantic });
+      if (r.data?.proposal) navigate('/story-evaluation', { state: { sceneProposal: r.data.proposal } }); else flash('Could not generate a proposal', 'error');
+    } catch (err) { flash(err.response?.data?.error || 'Could not generate a proposal', 'error'); }
   };
 
   return (
@@ -148,15 +163,18 @@ export default function WorldDashboard({ embedded = false }) {
               {tensionPairs.map((p,i) => (
                 <div key={i} style={card}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <span style={{fontWeight:700,fontSize:13}}>{p.char_a_name} <span style={{color:'#c44'}}>⚡</span> {p.char_b_name}</span>
+                    <span style={{fontWeight:700,fontSize:13}}>{p.char_a?.name || 'Unknown'} <span style={{color:'#c44'}}>⚡</span> {p.char_b?.name || 'Unknown'}</span>
                     <span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:10,background:p.tension_state==='Explosive'?'#fee':p.tension_state==='Simmering'?'#fff3e0':'#f5f5f5',color:p.tension_state==='Explosive'?'#c44':p.tension_state==='Simmering'?'#e65100':'#666'}}>{p.tension_state}</span>
                   </div>
-                  <div style={{fontSize:11,color:'#888',marginTop:4}}>{p.relationship_type}{p.is_romantic?' · 💕':''}</div>
+                  <div style={{fontSize:11,color:'#888',marginTop:4}}>{p.relationship_type}{p.romantic?' · 💕':''}</div>
                   {p.conflict_summary && <div style={{fontSize:11,color:'#666',marginTop:4,lineHeight:1.4}}>{p.conflict_summary}</div>}
                   <button onClick={()=>proposeTensionScene(p)} style={{marginTop:8,padding:'5px 12px',fontSize:10,fontWeight:600,background:'#2C2C2C',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>Propose Scene</button>
                 </div>
               ))}
-              {tensionPairs.length===0 && <div style={{color:'#999',gridColumn:'1/-1',textAlign:'center',padding:40}}>No high-tension pairs found.</div>}
+              {/* Three different empties: the scan failed, nothing to scan, nothing simmering */}
+              {tensionPairs.length===0 && tensionScan?.status === 'scan_failed' && <div data-testid="tensions-scan-failed" style={{gridColumn:'1/-1',padding:'12px 16px',borderRadius:8,background:'var(--warning-bg)',border:'1px solid var(--warning-border)',color:'var(--warning-text)',fontSize:12}}>The scan could not run{tensionScan.error ? `: ${tensionScan.error}` : ''}. This is not "no tension". Rescan, or check the server log.</div>}
+              {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned === 0 && <div data-testid="tensions-no-data" style={{color:'var(--text-secondary)',gridColumn:'1/-1',textAlign:'center',padding:40}}>No active characters with relationship data to scan. Add relationships in the Character Registry first.</div>}
+              {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned > 0 && <div data-testid="tensions-none" style={{color:'var(--text-secondary)',gridColumn:'1/-1',textAlign:'center',padding:40}}>No high-tension pairs among {tensionScan.characters_scanned} characters.</div>}
             </div>
           )}
         </div>

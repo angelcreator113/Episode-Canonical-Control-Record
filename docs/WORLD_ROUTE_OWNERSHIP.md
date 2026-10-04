@@ -16,6 +16,15 @@ former routes are redirects (§2, `HUB_TABS` and `hubTarget` in `utils/worldRedi
 rendered by `App`'s `WorldHubRedirect`), and the Sidebar's WORLD zone is LalaVerse, Show
 Bible (a deep link to the Bible tab) and Lala's Feed.
 
+The State tab's Tensions (2026-10-04) read the scanner's contract, `GET /world/tension-scanner`
+→ `{ status: 'ok' | 'scan_failed', pairs, count, characters_scanned, error? }` with each pair's
+`char_a` / `char_b` as `{ id, name }`, and send the pair itself to
+`POST /world/create-tension-proposal`, whose proposal keeps `character_ids` beside the name
+slugs Story Evaluation reads. Before, the page read `char_a_name` (never returned) and sent
+`char_a_id` (never read), and a failed scan was an empty list. Three empties are told apart:
+scan failed, nothing to scan, nothing simmering (`WorldDashboard.tensions.test.jsx`,
+`tests/unit/routes/world-tension-contract.test.js`).
+
 Every hub tab opens with a three-line orientation strip (`components/TabOrientation`, copy
 in `pages/lalaverseOrientation.js`): what the tab holds, what reads it, what to do here. The
 copy follows `docs/BRAIN_OWNERSHIP.md`: the generators read the Show Bible; the World,

@@ -3487,6 +3487,12 @@ router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/tension-scanner — character pairs with unresolved tension
+//
+// Contract (2026-10-04): { status: 'ok' | 'scan_failed', pairs, count,
+// characters_scanned, error? }. Each pair carries its characters as objects,
+// char_a: { id, name, world_tag } and char_b: { id, name }, so the ids survive
+// into the proposal. A failed scan says so (it used to answer an empty list,
+// indistinguishable from "no tension").
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
   try {
@@ -3516,8 +3522,11 @@ router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
         });
       }
     }
-    res.json({ pairs, count: pairs.length });
-  } catch (err) { res.json({ pairs: [], count: 0 }); }
+    res.json({ status: 'ok', pairs, count: pairs.length, characters_scanned: rows.length });
+  } catch (err) {
+    console.error('[world-studio] tension scan failed:', err?.message);
+    res.json({ status: 'scan_failed', pairs: [], count: 0, characters_scanned: 0, error: err?.message || 'scan failed' });
+  }
 });
 
 // POST /world/create-story-task — generate a story task from a world character
@@ -3549,16 +3558,25 @@ router.post('/world/create-story-task', requireAuth, async (req, res) => {
 });
 
 // POST /world/create-tension-proposal — generate story proposal from tension pair
+//
+// Contract (2026-10-04): the body is a scanner pair, { char_a: { id, name },
+// char_b: { id, name }, tension_state, relationship_type, conflict_summary,
+// romantic }; the older flat { char_a_name, char_b_name } is still read. The
+// proposal keeps the ids (character_ids) beside the name slugs (characters)
+// that Story Evaluation reads.
 router.post('/world/create-tension-proposal', requireAuth, async (req, res) => {
   try {
-    const { char_a_name, char_b_name, tension_state, relationship_type, conflict_summary, romantic } = req.body;
-    if (!char_a_name || !char_b_name) return res.status(400).json({ error: 'char_a_name and char_b_name required' });
+    const { char_a, char_b, tension_state, relationship_type, conflict_summary, romantic } = req.body;
+    const char_a_name = char_a?.name || req.body.char_a_name;
+    const char_b_name = char_b?.name || req.body.char_b_name;
+    if (!char_a_name || !char_b_name) return res.status(400).json({ error: 'char_a.name and char_b.name required' });
     const proposal = {
       scene_title: `${char_a_name} × ${char_b_name} — ${tension_state || 'Tension'} ${romantic ? '♡' : ''}`,
       situation: conflict_summary || `Unresolved ${tension_state || 'tension'} between ${char_a_name} and ${char_b_name}`,
       emotional_stakes: romantic ? 'Desire vs. safety, vulnerability' : 'Power, trust, or loyalty at stake',
       internal_conflict: `Both characters want different things from this ${relationship_type || 'relationship'}`,
       characters: [char_a_name.toLowerCase().replace(/\s+/g, ''), char_b_name.toLowerCase().replace(/\s+/g, '')],
+      character_ids: [char_a?.id, char_b?.id].filter((id) => id != null),
       tone: romantic ? 'intimate' : 'tense',
       scene_type: romantic ? 'intimate_encounter' : 'confrontation',
       source: 'tension_scanner',
