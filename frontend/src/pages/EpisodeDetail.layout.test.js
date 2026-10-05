@@ -23,9 +23,9 @@ describe('episode page layout at phone width', () => {
   });
 
   test('the Production sub-tabs keep one line each and scroll sideways', () => {
-    const row = page.slice(page.indexOf('data-testid="ed-subtabs"'), page.indexOf('{s.label}'));
-    expect(row).toMatch(/overflowX: 'auto'/);
-    expect(row).toMatch(/whiteSpace: 'nowrap', flexShrink: 0/);
+    expect(page).toMatch(/data-testid="ed-subtabs" className="ed-subpills"/);
+    expect(css).toMatch(/\.ed-subpills \{[^}]*overflow-x: auto;/);
+    expect(css).toMatch(/\.ed-subpill \{[^}]*flex-shrink: 0;\s*white-space: nowrap;/);
   });
 
   test('the slots column grows to the full width once it wraps', () => {

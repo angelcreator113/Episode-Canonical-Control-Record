@@ -5,7 +5,8 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
   test('a main tab opens its first sub-tab; a sub-tab opens under its main tab', () => {
     expect(resolveEpisodeTab('overview')).toEqual({ main: 'overview', sub: null, key: 'overview' });
     expect(resolveEpisodeTab('scripts')).toEqual({ main: 'scripts', sub: null, key: 'scripts' });
-    expect(resolveEpisodeTab('production')).toEqual({ main: 'production', sub: 'assets', key: 'production.assets' });
+    expect(resolveEpisodeTab('production')).toEqual({ main: 'production', sub: 'checklist', key: 'production.checklist' });
+    expect(resolveEpisodeTab('assets')).toEqual({ main: 'production', sub: 'assets', key: 'production.assets' });
     expect(resolveEpisodeTab('money')).toEqual({ main: 'production', sub: 'money', key: 'production.money' });
     expect(resolveEpisodeTab('wardrobe')).toEqual({ main: 'production', sub: 'wardrobe', key: 'production.wardrobe' });
     expect(resolveEpisodeTab('results')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });

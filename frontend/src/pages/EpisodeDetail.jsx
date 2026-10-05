@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
@@ -32,6 +32,7 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
+import { checklistLeft, coinsLabel } from '../lib/episodeShell';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -47,6 +48,9 @@ import './EpisodeDetail.css';
 // Helper-reuse density: 6 helpers cover 10 sites.
 // - listEpisodeLibraryScenesApi reused 4× (mount + 3 reload-after-mutation)
 // - reorderEpisodeLibrarySceneApi reused 2× (Promise.all pair on drag-reorder)
+// The main tabs' icons (Evoni's Episode mock, 2026-10-05).
+const TAB_ICONS = { overview: Sparkles, scripts: PenLine, production: CalendarDays, results: Crown };
+
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
 export const listWorldEventsApi = (showId) =>
@@ -150,6 +154,23 @@ const EpisodeDetail = () => {
   const [overlaysVersion, setOverlaysVersion] = useState(0);
   const bumpOverlays = useCallback(() => setOverlaysVersion((v) => v + 1), []);
   const openOverlaysTab = () => openTab('overlays');
+
+  // The Production tab's "N left" badge (Evoni's Episode mock): the open
+  // production checks, read the way the checklist reads them. The checklist
+  // reports again after each of its re-checks, so the badge follows it.
+  const [checksLeft, setChecksLeft] = useState(null);
+  const reportChecks = useCallback((checks, sections) => setChecksLeft(checklistLeft(checks, sections)), []);
+  const checksEpisodeId = episode?.id;
+  useEffect(() => {
+    if (!checksEpisodeId || !episode) return undefined;
+    let cancelled = false;
+    import('../components/Episodes/EpisodeProductionChecklist')
+      .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId)
+        .then(({ checks }) => { if (!cancelled) setChecksLeft(checklistLeft(checks, m.CHECKLIST_SECTIONS)); }))
+      .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checksEpisodeId]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [episodeEvents, setEpisodeEvents] = useState([]);
@@ -533,7 +554,6 @@ const EpisodeDetail = () => {
                   className="ed-show-link"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <span className="ed-show-icon">📺</span>
                   <span className="ed-show-name">{episode.show.name}</span>
                 </Link>
               )}
@@ -541,7 +561,7 @@ const EpisodeDetail = () => {
                 {episode.status || 'Draft'}
               </span>
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
-                ◆ Working Episode
+                Working Episode
               </span>
               {headerBalance !== null && (
                 <button
@@ -551,7 +571,7 @@ const EpisodeDetail = () => {
                   title="Lala's balance. Open this episode's money."
                   data-testid="ed-balance-chip"
                 >
-                  {Number(headerBalance).toLocaleString()} 🪙
+                  {coinsLabel(headerBalance)}
                 </button>
               )}
             </div>
@@ -656,16 +676,23 @@ const EpisodeDetail = () => {
 
         {/* Main Tabs */}
         <div className="ed-tabs-modern">
-          {EP_TABS.map(t => (
-            <button key={t.key}
-              className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
-              onClick={() => openTab(t.key)}
-              title={t.label}
-            >
-              <span className="ed-tab-icon">{t.icon}</span>
-              <span className="ed-tab-label">{t.label}</span>
-            </button>
-          ))}
+          {EP_TABS.map(t => {
+            const Icon = TAB_ICONS[t.key];
+            return (
+              <button key={t.key}
+                className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
+                onClick={() => openTab(t.key)}
+                title={t.label}
+                aria-current={activeTab === t.key ? 'page' : undefined}
+              >
+                {Icon && <Icon size={15} className="ed-tab-icon" aria-hidden="true" />}
+                <span className="ed-tab-label">{t.label}</span>
+                {t.key === 'production' && checksLeft > 0 && (
+                  <span className="ed-tab-badge" data-testid="ed-production-left">{checksLeft} left</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         {/* Sub-tabs */}
         {(() => {
@@ -675,15 +702,14 @@ const EpisodeDetail = () => {
             // One line per label; a row wider than the screen scrolls sideways
             // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
             // lines at phone width and threw the row out of line).
-            <div data-testid="ed-subtabs" style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
+            // Pills (Evoni's Episode mock): raspberry when chosen.
+            <div data-testid="ed-subtabs" className="ed-subpills">
               {currentTab.subs.map(s => (
-                <button key={s.key} onClick={() => openTab(s.key)} aria-current={epSubTab === s.key ? 'page' : undefined} style={{
-                  padding: '6px 14px', background: 'transparent', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-                  borderBottom: epSubTab === s.key ? '2px solid var(--primary)' : '2px solid transparent',
-                  color: epSubTab === s.key ? 'var(--primary-text)' : 'var(--text-secondary)',
-                  fontSize: 12, fontWeight: epSubTab === s.key ? 600 : 500,
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}>
+                <button
+                  key={s.key} type="button" onClick={() => openTab(s.key)}
+                  className={`ed-subpill${epSubTab === s.key ? ' is-active' : ''}`}
+                  aria-current={epSubTab === s.key ? 'page' : undefined}
+                >
                   {s.label}
                 </button>
               ))}
@@ -894,6 +920,7 @@ const EpisodeDetail = () => {
           <EpisodeProductionChecklist
             episode={episode}
             showId={episode?.show_id || episode?.showId}
+            onChecks={reportChecks}
           />
         )}
 

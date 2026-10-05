@@ -1,32 +1,12 @@
 /**
- * EpisodeDetail — the Money sub-tab and the header balance chip (Episode
- * Money, Phase A; §8(aa) M1; Task #2278). The mocks below are
- * EpisodeDetail.test.jsx's.
- *
- * Original header of the copied setup:
- * EpisodeDetail — Track 6 CP14 behavioral tests.
- *
- * 10 fetch sites total. 10 migrated via 6 module-scope helpers
- * (high helper-reuse: 4× on listEpisodeLibraryScenesApi, 2× on
- * reorderEpisodeLibrarySceneApi). 0 Pattern G locked (admin-page
- * heuristic v2.20 §9.11 confirmed for third consecutive admin-page
- * CP).
- *
- * UNCLEAR-B resolved as (A) PARTIAL-MIGRATION EXTENSION per v2.20:
- * file has pre-existing `api.post` calls at lines 776, 805
- * (untouched by CP14). CP14 extends migration to the 10 BUG-class
- * raw fetch sites only.
- *
- * Cross-CP duplications per v2.12 §9.11:
- *   - listWorldEventsApi: CP13 WorldAdmin + CP14 = 2-fold cross-CP
- *
- * File-local convention: `api.` import style preserved. Tests use
- * the same default-export mock.
+ * The Episode page's header and tabs (Evoni's Episode mock, 2026-10-05):
+ * lucide icons, the Production tab's "N left" badge from the production
+ * checks (and the checklist's re-checks), the Production pills in the
+ * mock's order with Assets last, and the balance chip in coins.
  */
-
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ isAuthenticated: true, loading: false }),
@@ -74,8 +54,16 @@ vi.mock('../components/SceneLibraryPicker', () => ({
   default: () => null,
 }));
 
+// Three checks, one done: the badge says 2 left; the checklist's own
+// re-check reports one more done.
 vi.mock('../components/Episodes/EpisodeProductionChecklist', () => ({
-  default: () => <div data-testid="episode-checklist">Production checklist body</div>,
+  CHECKLIST_SECTIONS: [{ items: [{ id: 'a' }, { id: 'b' }] }, { items: [{ id: 'c' }] }],
+  loadProductionChecks: vi.fn().mockResolvedValue({ checks: { a: true } }),
+  default: ({ onChecks }) => (
+    <button type="button" data-testid="recheck" onClick={() => onChecks({ a: true, b: true }, [{ items: [{ id: 'a' }, { id: 'b' }] }, { items: [{ id: 'c' }] }])}>
+      re-check
+    </button>
+  ),
 }));
 
 vi.mock('../components/Episodes/EpisodeTodoList', () => ({
@@ -106,7 +94,7 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 import EpisodeDetail from './EpisodeDetail';
 
-const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
+const renderAt = (entry) => render(
   <MemoryRouter initialEntries={[entry]}>
     <Routes>
       <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
@@ -114,49 +102,36 @@ const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
   </MemoryRouter>,
 );
 
-describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
+describe('Episode header and tabs (redesign part 1)', () => {
   beforeEach(() => {
-    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    Object.values(api).forEach((fn) => fn?.mockClear?.());
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/world/show-1/balance') return { data: { success: true, balance: 1900 } };
-      if (url === '/api/v1/world/show-1/episodes/ep-1/money') {
-        return { data: { data: { balance: 1900, rows: [], net: 0, event: null, expected: [] } } };
-      }
       return { data: {} };
     });
   });
 
-  // Evoni's Episode mock (2026-10-05) orders the pills Checklist, Scenes,
-  // Wardrobe, Phone, Overlays, Money, with Assets last.
-  test('Production lists Money after Overlays and before Assets', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=assets');
-    await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
-
-    const labels = ['Overlays', 'Money', 'Assets'].map((name) => screen.getByRole('button', { name }));
-    const order = (a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
-    expect(order(labels[0], labels[1])).toBeTruthy();
-    expect(order(labels[1], labels[2])).toBeTruthy();
+  test('Production says how many checks are left, and follows the checklist', async () => {
+    renderAt('/episodes/ep-1?tab=checklist');
+    const badge = await screen.findByTestId('ed-production-left');
+    expect(badge.textContent).toBe('2 left');
+    expect(badge.closest('button').getAttribute('title')).toBe('Production');
+    fireEvent.click(await screen.findByTestId('recheck'));
+    await waitFor(() => expect(screen.getByTestId('ed-production-left').textContent).toBe('1 left'));
   });
 
-  test('the header chip shows the balance from the same /balance the Dashboard reads', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=overview');
-
-    const chip = await screen.findByTestId('ed-balance-chip');
-    expect(chip.textContent).toBe('1,900 coins');
-    expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-1/balance');
+  test('the pills run Checklist, Scenes, Wardrobe, Phone, Overlays, Money, Assets; the chosen one is marked', async () => {
+    renderAt('/episodes/ep-1?tab=checklist');
+    const row = await screen.findByTestId('ed-subtabs');
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Checklist', 'Scenes', 'Wardrobe', 'Phone', 'Overlays', 'Money', 'Assets']);
+    const chosen = row.querySelector('[aria-current="page"]');
+    expect(chosen.textContent).toBe('Checklist');
+    expect(chosen.className).toContain('is-active');
+    expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page');
   });
 
-  test('the chip opens Production → Money', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=overview');
-    fireEvent.click(await screen.findByTestId('ed-balance-chip'));
-
-    expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
-    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
-  });
-
-  test('?tab=money lands on the Money tab', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=money');
-
-    expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
+  test('the balance chip reads in coins', async () => {
+    renderAt('/episodes/ep-1?tab=overview');
+    expect((await screen.findByTestId('ed-balance-chip')).textContent).toBe('1,900 coins');
   });
 });

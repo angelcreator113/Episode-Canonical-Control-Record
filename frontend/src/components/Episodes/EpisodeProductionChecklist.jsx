@@ -370,7 +370,7 @@ export async function loadProductionChecks(episode, showId) {
   return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent };
 }
 
-export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate }) {
+export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
   // Audit STATE-01: the server's beat coverage, and the setup repair.
@@ -397,6 +397,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     setChecks(results);
     setNotes(checkNotes);
     setLoading(false);
+    // The page's Production badge follows each re-check.
+    onChecks?.(results, CHECKLIST_SECTIONS);
   };
 
   const handleGenerateScript = async () => {
