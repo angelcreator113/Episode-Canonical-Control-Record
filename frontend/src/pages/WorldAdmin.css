@@ -759,3 +759,94 @@
   .wa-arc-part { padding: 12px; }
   .wa-arc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
+
+/* Cast & Continuity → Lala's State & Continuity (Evoni's redesign,
+   2026-10-05): Lala's stat bars beside the decision log, the story threads
+   as squares, the cast. Coins gold, reputation pink, trust and influence
+   lavender, stress grey (danger at 5 and up). */
+.wa-cc-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.wa-cc-card { padding: 20px 22px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); min-width: 0; }
+.wa-cc-card h2 { margin: 0; font-family: var(--font-prose); font-size: 21px; font-weight: 600; color: var(--text-primary); }
+.wa-cc-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 14px; }
+.wa-cc-sub { margin-left: 8px; font-family: var(--font-ui); font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.wa-cc-link { font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.wa-cc-link:hover { text-decoration: underline; }
+.wa-cc-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wa-cc-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--text-primary); }
+.wa-cc-avatar.lala { background: var(--accent-subtle); border: 2px solid var(--accent-light); }
+.wa-cc-avatar.prime { background: var(--lala-lavender-soft); border: 2px solid var(--lala-lavender-line); }
+
+.wa-cc-lala-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.wa-cc-lala-name { flex: 1; min-width: 140px; }
+.wa-cc-lala-name p { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); }
+.wa-cc-link-btn { padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
+.wa-cc-link-btn:disabled { color: var(--text-secondary); cursor: not-allowed; }
+.wa-cc-edit-actions { display: flex; gap: 8px; }
+.wa-cc-primary { padding: 8px 16px; border: none; border-radius: 10px; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.wa-cc-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); }
+.wa-cc-secondary { padding: 8px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+.wa-cc-stats { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.wa-cc-stat-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.wa-cc-stat-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.wa-cc-stat-value { display: inline-flex; align-items: baseline; gap: 8px; }
+.wa-cc-stat-value strong { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.wa-cc-stat.alarm .wa-cc-stat-value strong { color: var(--danger-text); }
+.wa-cc-stat-delta { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); }
+.wa-cc-stat-input { width: 96px; padding: 4px 8px; border: 1px solid var(--lala-lavender); border-radius: 6px; font: inherit; font-size: 14px; font-weight: 700; text-align: right; }
+.wa-cc-bar { height: 10px; border-radius: 999px; background: var(--accent-subtle); overflow: hidden; }
+.wa-cc-bar span { display: block; height: 100%; border-radius: inherit; background: var(--lala-lavender); transition: width 0.3s; }
+.stat-coins .wa-cc-bar span { background: var(--lala-gold); }
+.stat-reputation .wa-cc-bar span { background: var(--accent); }
+.stat-stress .wa-cc-bar span { background: var(--gray-500); }
+.wa-cc-stat.alarm .wa-cc-bar span { background: var(--danger); }
+.wa-cc-stat-note { margin: 5px 0 0; font-size: 11px; color: var(--text-secondary); }
+.wa-cc-rules { margin-top: 16px; font-size: 13px; color: var(--text-secondary); }
+.wa-cc-rules summary { cursor: pointer; font-weight: 600; color: var(--lala-lavender-text); }
+.wa-cc-rules dl { margin: 10px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; }
+.wa-cc-rules dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.wa-cc-rules dd { margin: 0; color: var(--text-primary); }
+
+.wa-cc-timeline { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 2px solid var(--accent-light); display: grid; gap: 18px; }
+.wa-cc-timeline > li { position: relative; display: grid; gap: 3px; }
+.wa-cc-timeline > li::before { content: ''; position: absolute; left: -25px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+.wa-cc-when { font-size: 12px; color: var(--text-secondary); }
+.wa-cc-what { font-size: 14px; font-weight: 700; color: var(--text-primary); text-decoration: none; overflow-wrap: anywhere; }
+.wa-cc-what:hover { text-decoration: underline; }
+.wa-cc-why { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wa-cc-chips { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-cc-chips li { padding: 2px 8px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent-dark); font-size: 11px; font-weight: 600; }
+
+.wa-cc-threads, .wa-cc-cast { margin-top: 16px; }
+.wa-cc-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.wa-cc-thread { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(150px, auto); align-items: center; gap: 12px 20px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--accent-light); background: var(--accent-subtle); }
+.wa-cc-thread.quiet { border-color: var(--lala-gold-line); background: var(--lala-gold-soft); }
+.wa-cc-thread.closed { border-color: var(--lala-parchment-3); background: var(--lala-parchment); }
+.wa-cc-thread-name { display: grid; gap: 2px; min-width: 0; }
+.wa-cc-thread-name strong { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-cc-thread-name span { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.wa-cc-squares { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 3px; }
+.wa-cc-squares li { width: 14px; height: 14px; border-radius: 3px; background: var(--surface-card); border: 1px solid var(--accent-light); }
+.wa-cc-squares li.on { background: var(--accent-dark); border-color: var(--accent-dark); }
+.wa-cc-squares li.ahead { opacity: 0.45; }
+.wa-cc-pulse { font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-align: right; }
+.wa-cc-thread.quiet .wa-cc-pulse { color: var(--lala-gold-text); }
+.wa-cc-thread.closed .wa-cc-pulse { color: var(--text-secondary); }
+.wa-cc-legend { margin: 12px 0 0; font-size: 12px; color: var(--text-secondary); }
+
+.wa-cc-people { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 220px)); gap: 12px; }
+.wa-cc-people > li { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border-radius: 14px; border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment); text-align: center; min-width: 0; }
+.wa-cc-people strong { margin-top: 6px; font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-cc-people span:not(.wa-cc-avatar) { font-size: 12px; color: var(--text-secondary); }
+.wa-cc-people em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+.wa-cc-people .wa-cc-rules { margin-top: 8px; text-align: left; align-self: stretch; }
+
+@media (max-width: 900px) {
+  .wa-cc-top { grid-template-columns: minmax(0, 1fr); }
+  .wa-cc-thread { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .wa-cc-pulse { text-align: left; }
+}
+@media (max-width: 640px) {
+  .wa-cc-card { padding: 16px; }
+  .wa-cc-people { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
