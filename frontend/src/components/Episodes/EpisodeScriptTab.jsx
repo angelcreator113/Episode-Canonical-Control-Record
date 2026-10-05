@@ -2,7 +2,12 @@
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
+import { PenLine } from 'lucide-react';
 import api from '../../services/api';
+import { episodePlanning } from '../../utils/episodePlanning';
+import { scriptInputs } from '../../lib/episodeScript';
+import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
 // has 5 pre-existing api.* sites (lines 152, 161, 177, 191, 194). Add
@@ -81,7 +86,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting }) {
     <div style={{ padding: '6px 0' }}>
       <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} style={{ width: '100%', padding: '8px 12px', border: '1.5px solid var(--primary)', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+        <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
         <button onClick={() => setEditing(false)} style={{ background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
@@ -125,7 +130,7 @@ function BeatSection({ beat, scenePlan, expanded, onToggle, onApprove, onEdit, o
           {scene?.emotional_intent && <div style={{ background: 'var(--lala-gold-soft)', borderRadius: 8, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: 'var(--lala-gold-text)' }}>✦ {scene.emotional_intent}</div>}
           <div>{beat.lines.map((line, i) => <ScriptLine key={i} line={line} beatId={beat.id} lineIndex={i} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} />)}</div>
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--primary)', color: beat.approved ? 'var(--lala-gold-text)' : 'var(--text-inverse)', border: beat.approved ? '1px solid var(--lala-gold)' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{beat.approved ? '🔒 Approved' : '✓ Approve Beat'}</button>
+            <button onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--lala-lavender)', color: beat.approved ? 'var(--lala-gold-text)' : 'var(--text-inverse)', border: beat.approved ? '1px solid var(--lala-gold)' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{beat.approved ? '🔒 Approved' : '✓ Approve Beat'}</button>
           </div>
         </div>
       )}
@@ -154,6 +159,10 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [showMap, setShowMap] = useState(false);
   const [mapLocations, setMapLocations] = useState([]);
   const [mapImageUrl, setMapImageUrl] = useState(null);
+  // What the script will use (Evoni's Episode mock): the brief and the
+  // brief's source event, as the Overview reads them.
+  const [brief, setBrief] = useState(null);
+  const [source, setSource] = useState(null);
 
   // Load map data when map is opened
   useEffect(() => {
@@ -167,6 +176,15 @@ export default function EpisodeScriptTab({ episode, show }) {
     const script = episode?.script_content || '';
     setScriptText(script); setDevScript(script);
     if (script) setBeats(parseScriptIntoBeats(script));
+    api.get(`/api/v1/episode-brief/${episodeId}`).then(({ data }) => {
+      const b = data?.data || null;
+      setBrief(b);
+      if (b?.event_id && showId) {
+        api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
+          .then((res) => setSource(res.data || null))
+          .catch((err) => console.error('[EpisodeScript] source event load failed:', err));
+      }
+    }).catch((err) => console.error('[EpisodeScript] brief load failed:', err));
     api.get(`/api/v1/episode-brief/${episodeId}/plan`).then(res => {
       setScenePlan((res.data?.data || []).map(p => ({ ...p, scene_set_name: p.sceneSet?.name || null, scene_context: p.scene_context || p.sceneSet?.script_context || null })));
     }).catch(() => {});
@@ -251,31 +269,48 @@ export default function EpisodeScriptTab({ episode, show }) {
   const approvedCount = beats.filter(b => b.approved).length;
   const allApproved = beats.length > 0 && approvedCount === beats.length;
   const hasScript = !!scriptText?.trim();
+  const plan = source?.event
+    ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
+    : null;
+  const inputs = scriptInputs({ brief, plan });
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 0' }}>
+    <div className="esp">
+    <div className="esp-main">
       <style>{`.script-line-hover:hover{background:var(--primary-subtle)}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)', color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)', border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
 
       {unsaved && (
         <div data-testid="script-unsaved" role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontSize: 13 }}>
           <span style={{ flex: '1 1 240px', minWidth: 0 }}><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
-          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
         </div>
       )}
-      {hasScript && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{episode?.title}</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>{beats.length} beats · {approvedCount} approved{allApproved && <span style={{ marginLeft: 8, color: 'var(--success-text)', fontWeight: 600 }}>✓ Complete</span>}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setDeveloperMode(d => !d)} style={{ background: developerMode ? 'var(--primary)' : 'var(--lala-parchment-2)', color: developerMode ? 'var(--text-inverse)' : 'var(--text-secondary)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 11, cursor: 'pointer', fontWeight: developerMode ? 600 : 400 }}>{developerMode ? '📖 Beat View' : '✎ Raw Editor'}</button>
-            <button onClick={() => { if (!window.confirm('Regenerate the entire script? Your current script will be replaced.')) return; handleGenerate(); }} disabled={generating} style={{ background: 'var(--primary-subtle)', color: 'var(--primary-text)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: generating ? 'not-allowed' : 'pointer', fontWeight: 600 }}>{generating ? '⏳ Generating...' : '✦ Regenerate'}</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: saved ? 'var(--success-bg)' : 'var(--primary)', color: saved ? 'var(--success-text)' : 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '⏳' : saved ? '✓ Saved' : '💾 Save'}</button>
-          </div>
+      {/* The script's card (Evoni's Episode mock): its state, and its actions. */}
+      <section className="esp-head" data-testid="script-head">
+        <div className="esp-head-text">
+          <h2 className="esp-title">Script</h2>
+          <p className="esp-sub">
+            {hasScript ? <>{beats.length} beats · {approvedCount} approved{allApproved && <span className="esp-complete"> · Complete</span>}</> : 'Not generated yet'}
+          </p>
         </div>
-      )}
+        {hasScript ? (
+          <div className="esp-actions">
+            <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>
+            <button type="button" className="esp-btn" onClick={() => { if (!window.confirm('Regenerate the entire script? Your current script will be replaced.')) return; handleGenerate(); }} disabled={generating}>{generating ? 'Generating…' : 'Regenerate'}</button>
+            <button type="button" onClick={handleSave} disabled={saving} style={{ background: saved ? 'var(--success-bg)' : 'var(--lala-lavender)', color: saved ? 'var(--success-text)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '9px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
+          </div>
+        ) : (
+          <button type="button" onClick={handleGenerate} disabled={generating} style={{
+            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-lavender)',
+            color: generating ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '11px 22px',
+            fontSize: 15, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', flexShrink: 0,
+          }}>
+            {generating ? 'Generating the 14 beats…' : 'Generate Script'}
+          </button>
+        )}
+      </section>
+      {genError && <div role="alert" style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
 
       {hasScript && developerMode && <textarea value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} style={{ width: '100%', padding: 16, fontFamily: 'monospace', fontSize: 13, border: '1px solid var(--lala-parchment-3)', borderRadius: 10, resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box', marginBottom: 24 }} />}
 
@@ -304,53 +339,42 @@ export default function EpisodeScriptTab({ episode, show }) {
           {allApproved && (
             <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
               <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--success-text)' }}>✦ All beats approved — script is ready</p>
-              <button onClick={handleSave} style={{ background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💾 Save Final Script</button>
+              <button onClick={handleSave} style={{ background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💾 Save Final Script</button>
             </div>
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: 500, margin: '0 auto', padding: '40px 20px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
-            <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>Generate Episode Script</h2>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              AI writes a 14-beat script using your event, outfit, and character data.
-            </p>
-          </div>
-
-          {/* What feeds the script */}
-          <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 8 }}>Script will use</div>
-            {[
-              { icon: '💌', label: 'Event + host + guests', ok: !!episode?.description },
-              { icon: '👗', label: 'Wardrobe + brand intelligence', ok: true },
-              { icon: '📍', label: 'Scene plan + locations', ok: scenePlan.length > 0 },
-              { icon: '🪙', label: 'Financial pressure + coin balance', ok: true },
-              { icon: '📱', label: 'Social tasks (content to create)', ok: true },
-              { icon: '👥', label: 'Character voices + archetypes', ok: true },
-              { icon: '📺', label: 'Previous episode continuity', ok: true },
-              { icon: '🎯', label: 'Designed intent (SLAY/PASS/FAIL)', ok: !!episode?.evaluation_json || true },
-              { icon: '📊', label: 'Season arc + emotional phase', ok: true },
-            ].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
-                <span style={{ color: item.ok ? 'var(--success-text)' : 'var(--warning-text)' }}>{item.ok ? '✓' : '○'}</span>
-                <span>{item.icon} {item.label}</span>
-              </div>
-            ))}
-          </div>
-
-          {genError && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
-
-          <button onClick={handleGenerate} disabled={generating} style={{
-            width: '100%', background: generating ? 'var(--lala-parchment-2)' : 'var(--primary)',
-            color: generating ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '12px 0',
-            fontSize: 15, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer',
-            boxShadow: generating ? 'none' : '0 2px 8px rgba(184,150,46,0.25)',
-          }}>
-            {generating ? '⏳ Generating 14-beat script...' : '✦ Generate Script'}
-          </button>
-        </div>
+        <section className="esp-empty" data-testid="script-empty">
+          <PenLine size={30} className="esp-empty-icon" aria-hidden="true" />
+          <h3 className="esp-empty-title">No script yet</h3>
+          <p className="esp-empty-text">
+            Generating writes every beat from the brief and the event. Each beat then shows what it needs from
+            Production, like a scene, Lala's look or a phone screen.
+          </p>
+        </section>
       ))}
+    </div>
+
+    {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
+    <aside className="esp-side">
+      <section className="esp-uses" data-testid="script-uses">
+        <h3 className="esp-side-title">What the script will use</h3>
+        <ul className="esp-uses-list">
+          {inputs.map((i) => (
+            <li key={i.key} className={i.ok ? 'is-ok' : 'is-gap'} data-testid={`script-uses-${i.key}`} data-ok={i.ok ? 'true' : 'false'}>
+              <span className="esp-dot" aria-hidden="true" />
+              <span><strong>{i.label}</strong> {i.detail}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="esp-uses-note">Amber items won't block generating; the script fills the gap and flags it.</p>
+      </section>
+      <section className="esp-voice" data-testid="script-voice">
+        <h3 className="esp-side-title">Voice</h3>
+        <p>Lala's voice signature and the cast's voices come from their profiles.</p>
+        <Link className="esp-link" to="/character-registry?view=world">Open Character Studio</Link>
+      </section>
+    </aside>
 
       {/* DREAM Map Modal */}
       {showMap && (

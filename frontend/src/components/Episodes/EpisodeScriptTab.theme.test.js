@@ -5,7 +5,9 @@
  * tokens; Save, Approve Beat, Generate and Save Final Script are the
  * primary (they were purple, gold and green gradients); the approved
  * badge is ink on gold; the toast, guard and generate error read text
- * tokens on their surfaces.
+ * tokens on their surfaces. Evoni's Episode mock (2026-10-05) makes the
+ * page's actions lavender and adds the script's card and the side panel
+ * (EpisodeScriptPage.css).
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -14,6 +16,7 @@ import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'EpisodeScriptTab.jsx'), 'utf8');
 const css = readFileSync(resolve(__dirname, 'EpisodeScriptTab.css'), 'utf8');
+const page = readFileSync(resolve(__dirname, 'EpisodeScriptPage.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
@@ -34,12 +37,14 @@ describe('Episode Script theme', () => {
     expect(jsx).toMatch(/const sc = \{ Prime: 'var\(--primary-text\)', Lala: 'var\(--accent-dark\)', Kelli: 'var\(--info-text\)', Guest: 'var\(--success-text\)' \};/);
   });
 
-  test('every action is the primary and gold is never under white nor text', () => {
-    expect(jsx).toMatch(/background: 'var\(--primary\)', color: 'var\(--text-inverse\)'[^}]*\}\}>Save</);
-    expect(jsx).toMatch(/background: beat\.approved \? 'var\(--lala-gold-soft\)' : 'var\(--primary\)', color: beat\.approved \? 'var\(--lala-gold-text\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: saved \? 'var\(--success-bg\)' : 'var\(--primary\)', color: saved \? 'var\(--success-text\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--primary\)'/);
-    expect(jsx).toMatch(/background: 'var\(--primary\)', color: 'var\(--text-inverse\)'[^}]*\}\}>💾 Save Final Script/);
+  test('every action is lavender (the mock) and gold is never under white nor text', () => {
+    expect(stripTaskRefs(page)).not.toMatch(HEX);
+    expect(jsx).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>Save</);
+    expect(jsx).toMatch(/background: beat\.approved \? 'var\(--lala-gold-soft\)' : 'var\(--lala-lavender\)', color: beat\.approved \? 'var\(--lala-gold-text\)' : 'var\(--text-inverse\)'/);
+    expect(jsx).toMatch(/background: saved \? 'var\(--success-bg\)' : 'var\(--lala-lavender\)', color: saved \? 'var\(--success-text\)' : 'var\(--text-inverse\)'/);
+    expect(jsx).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--lala-lavender\)'/);
+    expect(jsx).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>💾 Save Final Script/);
+    expect(page).toMatch(/\.esp-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
     expect(jsx).toMatch(/background: 'var\(--lala-gold\)', color: 'var\(--text-primary\)'[^}]*\}\}>✓ APPROVED/);
     expect(jsx).not.toMatch(/(?<![-\w])color: 'var\(--lala-gold-text\)'[^}]*background: 'var\(--gray-900\)'/);
     expect(css).toMatch(/\.btn-save\s*\{[^}]*background: var\(--primary\);/);
@@ -72,6 +77,13 @@ describe('Episode Script theme', () => {
       ['--lala-gold', '--gray-900'],
       ['--lala-parchment-3', '--gray-900'],
       ['--text-inverse', '--gray-900'],
+      // The mock's actions, card and side panel.
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--lala-ink', '--accent-subtle'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
