@@ -21,6 +21,8 @@ import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
+import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
+import { matchesDressCode, dressCodeKeywords } from '../lib/lookBuilder';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
@@ -1633,6 +1635,16 @@ The revised event should feel like a completely different experience from the si
     const tier = ep.evaluation_json?.tier_final; if (tier) acc[tier] = (acc[tier] || 0) + 1; return acc;
   }, {});
   const overrideCount = acceptedEpisodes.filter(ep => (ep.evaluation_json?.overrides || []).length > 0).length;
+
+  // The look builder beside the closet (Evoni's redesign, 2026-10-05): the
+  // look for the episode in production, against Lala's coins and reputation.
+  const lalaState = charState?.state || null;
+  const lookCharacter = React.useMemo(() => lalaState || {}, [lalaState]);
+  const lookEpisode = episodesInProduction(episodes)[0] || null;
+  // Loaded only on the closet, so the other tabs do not fetch the outfit, the event and its forecast.
+  const onCloset = activeTab === 'wardrobe' && subTab === 'wardrobe-items';
+  const look = useLookDraft({ episode: onCloset ? lookEpisode : null, showId, characterState: lookCharacter, onSaved: () => loadData() });
+  const lookKeywords = dressCodeKeywords(look.event);
 
   if (loading) return (
     <div style={S.page}>
@@ -4820,6 +4832,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           if (wardrobeTopTab === 'staging' && isItemUsed(item)) return false;
           if (wardrobeTopTab === 'owned' && !isOwnedPiece(item)) return false;
           if (wardrobeTopTab === 'to_buy' && isOwnedPiece(item)) return false;
+          if (wardrobeTopTab === 'dress_code' && !matchesDressCode(item, lookKeywords)) return false;
           const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
           // Category pill filters by SLOT now — e.g. clicking "Outfit" matches
           // dress, top, bottom, outerwear. Falls back to raw category match if
@@ -5290,6 +5303,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 { key: 'owned', label: 'Lala owns', count: ownedCount },
                 { key: 'to_buy', label: 'To buy', count: wardrobeItems.length - ownedCount },
                 { key: 'staging', label: 'Never used', count: stagingCount },
+                // Matches the dress code of the episode's event, when it has one.
+                ...(lookKeywords.length ? [{ key: 'dress_code', label: 'Matches dress code', count: wardrobeItems.filter(i => matchesDressCode(i, lookKeywords)).length }] : []),
               ].map(opt => {
                 const on = wardrobeTopTab === opt.key;
                 return (
@@ -5667,6 +5682,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             )}
 
+            {/* The closet beside the look builder when an episode is in production. */}
+            <div className={look.episode ? 'wa-wd-body with-look' : 'wa-wd-body'}>
+            <div className="wa-wd-main">
             {/* Item Grid — visual cards with thumbnails. List mode swaps the grid
                 template for a vertical stack of wide rows. Both modes share the
                 same card internals below so there's a single source of truth. */}
@@ -5692,7 +5710,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 const brand = item.brand || item.vendor;
                 return (
                   <div key={item.id} onClick={() => openEditItem(item)} data-testid={`wardrobe-card-${item.id}`}
-                    className={`wa-wd-card${isListMode ? ' list' : ''}${isBulkSelected ? ' selected' : ''}${isEditing ? ' editing' : ''}`}
+                    className={`wa-wd-card${isListMode ? ' list' : ''}${isBulkSelected ? ' selected' : ''}${isEditing ? ' editing' : ''}${look.ids.has(item.id) ? ' in-look' : ''}`}
                   >
                     {/* Selection checkbox */}
                     <div 
@@ -5771,8 +5789,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: 'var(--text-secondary)' }}>
                         {CAT_ICONS[itemType] || '👗'}
                       </div>
-                      {/* Expand icon on hover */}
-                      {imgUrl && processingState !== PROCESSING_STATES.PROCESSING && processingState !== PROCESSING_STATES.STALLED && (
+                      {/* In the look being built, or a way to add it (the image
+                          itself opens the lightbox). Without an episode in
+                          production, the expand hint. */}
+                      {look.episode && !isListMode ? (() => {
+                        const inLook = look.ids.has(item.id);
+                        const reach = look.reach(item);
+                        return (
+                          <button type="button" data-testid={`wardrobe-look-${item.id}`}
+                            className={`wa-wd-look${inLook ? ' in' : ''}`} aria-pressed={inLook}
+                            disabled={!inLook && !reach.ok} title={!inLook && !reach.ok ? reach.why : inLook ? 'Take it out of the look' : 'Add it to the look'}
+                            onClick={e => { e.stopPropagation(); look.toggle(item); }}>
+                            {inLook ? 'In look' : '+ Look'}
+                          </button>
+                        );
+                      })() : imgUrl && processingState !== PROCESSING_STATES.PROCESSING && processingState !== PROCESSING_STATES.STALLED && (
                         <div style={{ position: 'absolute', bottom: 6, right: 6, padding: '3px 6px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, fontSize: 10, color: 'var(--text-inverse)', opacity: 0.7 }}>
                           🔍
                         </div>
@@ -5909,6 +5940,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 )}
               </div>
             )}
+
+            </div>
+            {look.episode && (
+              <aside className="wa-wd-side">
+                <LookBuilderPanel look={look} coinsNow={financeConfig?.current_balance ?? lookCharacter.coins} />
+                <RecentlyWorn showId={showId} />
+              </aside>
+            )}
+            </div>
 
             {/* ── Upload Modal ── */}
             {showWardrobeUpload && (
