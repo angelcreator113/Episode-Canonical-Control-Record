@@ -15,10 +15,10 @@ import { activeShowId } from '../../utils/activeShow';
 import './Sidebar.css';
 
 /* ─── Navigation map ────────────────────────────────────────── */
-// activeId: the show Producer Mode opens (utils/activeShow). With several
-// shows and none active, Producer Mode opens the shows list to choose one.
-function buildNav(shows, activeId) {
-  const active = shows.find((s) => String(s.id) === String(activeId)) || null;
+// The Producer Mode row is gone (Evoni, 2026-10-05): opening a show is
+// Producer Mode (/shows/:id redirects there), so Shows is the one way in;
+// its list puts the active show (utils/activeShow) first.
+function buildNav() {
 
   return [
     {
@@ -35,11 +35,6 @@ function buildNav(shows, activeId) {
     {
       zone: 'PRODUCE',
       items: [
-        ...(active ? [
-          { icon: '📅', label: 'Producer Mode', route: `/shows/${active.id}/world?tab=overview`, hint: active.name },
-        ] : shows.length > 1 ? [
-          { icon: '📅', label: 'Producer Mode', route: '/shows', hint: 'Choose a show' },
-        ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
         { icon: '📦', label: 'Compositions', route: '/library' },
@@ -105,6 +100,10 @@ function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const shows = useShows();
   const [showsOpen, setShowsOpen] = useState(false);
+  // The active show heads the Shows list, so it stays one tap away.
+  const currentShowId = activeShowId({ pathname: location.pathname, shows });
+  const showsActiveFirst = currentShowId == null ? shows
+    : [...shows].sort((a, b) => (String(b.id) === String(currentShowId)) - (String(a.id) === String(currentShowId)));
   const [universeOpen, setUniverseOpen] = useState(false);
   const [worldOpen, setWorldOpen] = useState(false);
   const [storiesOpen, setStoriesOpen] = useState(false);
@@ -203,7 +202,7 @@ function Sidebar({ isOpen, onClose }) {
           </NavLink>
 
           {/* Zones */}
-          {buildNav(shows, activeShowId({ pathname: location.pathname, shows })).map(({ zone, items }) => {
+          {buildNav().map(({ zone, items }) => {
             const zoneCollapsed = collapsedZones[zone];
             return (
             <div className="ps-zone" key={zone}>
@@ -349,7 +348,7 @@ function Sidebar({ isOpen, onClose }) {
                           {shows.length === 0 ? (
                             <div className="ps-subnav-empty">No shows yet</div>
                           ) : (
-                            shows.map(show => (
+                            showsActiveFirst.map(show => (
                               <NavLink
                                 key={show.id}
                                 to={`/shows/${show.id}`}
