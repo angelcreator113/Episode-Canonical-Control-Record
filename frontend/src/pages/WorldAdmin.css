@@ -346,8 +346,16 @@
 /* Producer Mode's context bar: which show, which section. */
 .wa-context-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-  margin: 0 0 12px; padding: 8px 12px; border: 1px solid rgba(184, 150, 46, 0.25); border-radius: 8px;
-  background: var(--surface-bg); font-size: 13px; color: var(--text-primary);
+  margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent-light); border-left: 4px solid var(--accent-light); border-radius: 8px;
+  background: var(--surface-card); font-size: 13px; color: var(--text-primary);
+}
+
+/* Soft pink accents, as on the episode page (Evoni, 2026-10-05): the
+   header carries the episode header's teal-to-pink line. */
+.wa-header { position: relative; padding-top: 10px; }
+.wa-header::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent)); opacity: 0.6; border-radius: 2px;
 }
 .wa-context-show { font: inherit; font-weight: 600; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 6px; background: var(--surface-card); max-width: 100%; }
 .wa-context-show-name { font-weight: 600; overflow-wrap: anywhere; }
@@ -392,7 +400,7 @@
 .sov-lala-label { font-family: var(--font-ui); font-size: 11px; text-transform: uppercase; color: var(--accent-dark); margin-right: 4px; }
 .sov-chip { padding: 2px 8px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); text-transform: capitalize; }
 .sov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.sov-card { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.sov-card { background: var(--surface-card); border: 1px solid var(--accent-subtle); border-top: 2px solid var(--accent-light); border-radius: 10px; padding: 14px 16px; min-width: 0; }
 .sov-card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .sov-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 8px; }
 .sov-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
