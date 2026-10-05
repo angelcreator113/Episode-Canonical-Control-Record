@@ -144,7 +144,7 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
   test('a sub-tab click is in the URL, and a tab change keeps the other parameters', async () => {
     renderAt('/episodes/ep-1?tab=assets&from=%2Fshows%2Fshow-1%2Fworld');
     expect(await screen.findByTestId('episode-assets')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Production Checklist' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
     expect(where()).toBe('/episodes/ep-1?tab=checklist&from=%2Fshows%2Fshow-1%2Fworld');
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
   });

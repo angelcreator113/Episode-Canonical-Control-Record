@@ -1,10 +1,10 @@
 /**
  * The Episode shell wears the studio theme (audit VISUAL-01/02, batch 4,
  * seventh screen): EpisodeDetail's stylesheet and page set colors only
- * through tokens, its --ed-* palette aliases the tokens (it was Tailwind
- * blue), the active tab and every primary action are teal (they were
- * pink, purple and blue gradients), and the sub-tab bar marks the active
- * tab with aria-current.
+ * through tokens, and its --ed-* palette aliases the tokens. Evoni's
+ * Episode mock (2026-10-05) restyles the header and tabs: a pink tab band
+ * with a raspberry active tab and "N left" badge, raspberry Production
+ * pills (marked with aria-current), a lavender show chip.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -47,21 +47,26 @@ describe('Episode shell theme', () => {
     expect(page).toMatch(/--ed-success: var\(--success\);/);
   });
 
-  test('the active tab and the primary actions are teal', () => {
-    expect(css).toMatch(/\.ed-tab\.ed-tab-active\s*\{\s*color: var\(--primary-text\) !important;\s*background: var\(--primary-subtle\) !important;/);
-    expect(css).not.toMatch(/\.ed-tab\.ed-tab-active[^{]*\{[^}]*(?<![-\w])color: var\(--accent[a-z-]*\)/);
-    expect(rule('.ed-tab.is-active')).toMatch(/background: var\(--primary\);\s*color: var\(--text-inverse\);/);
+  // Evoni's Episode mock (2026-10-05) supersedes the teal tabs: a pink tab
+  // band with a raspberry active tab and badge, raspberry Production pills,
+  // a lavender show chip (her ruling: follow the mock's colours).
+  const redesign = css.slice(css.indexOf('Episode redesign part 1'));
+
+  test('the main tabs: white pills on a pink band, the active one raspberry, Production counting what is left', () => {
+    expect(redesign).toMatch(/\.ed-page \.ed-tabs-modern \{[^}]*border: 1px solid var\(--accent-light\);[^}]*background: linear-gradient\(135deg, var\(--accent-subtle\)/);
+    expect(redesign).toMatch(/\.ed-page \.ed-tab\.ed-tab-active,\s*\.ed-page \.ed-tab\.ed-tab-active:hover \{\s*color: var\(--accent-dark\) !important;\s*background: var\(--accent-subtle\) !important;/);
+    expect(redesign).toMatch(/\.ed-tab-badge \{[^}]*background: var\(--accent-dark\);\s*color: var\(--text-inverse\);/);
+    expect(jsx).toMatch(/data-testid="ed-production-left">\{checksLeft\} left</);
+    expect(jsx).toMatch(/aria-current=\{activeTab === t\.key \? 'page' : undefined\}/);
+    expect(redesign).toMatch(/\.ed-page \.ed-show-link \{[^}]*background: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
     expect(rule('.ed-btn-primary-action')).toMatch(/background: var\(--primary\);\s*color: var\(--text-inverse\);/);
-    expect(rule('.ed-btn-thumbnail')).toMatch(/background: var\(--primary\);/);
-    expect(rule('.ed-show-link')).toMatch(/background: var\(--primary\);/);
-    expect(css).not.toMatch(/(?<![-\w])color: var\(--accent\)/);
-    expect(css).not.toMatch(/(?<![-\w])color: var\(--lala-gold\)/);
   });
 
-  test('the sub-tab bar is teal and marks the active sub-tab with aria-current', () => {
+  test('the Production pills are raspberry when chosen and mark it with aria-current', () => {
     expect(jsx).toMatch(/aria-current=\{epSubTab === s\.key \? 'page' : undefined\}/);
-    expect(jsx).toMatch(/borderBottom: epSubTab === s\.key \? '2px solid var\(--primary\)'/);
-    expect(jsx).toMatch(/color: epSubTab === s\.key \? 'var\(--primary-text\)' : 'var\(--text-secondary\)'/);
+    expect(jsx).toMatch(/className=\{`ed-subpill\$\{epSubTab === s\.key \? ' is-active' : ''\}`\}/);
+    expect(redesign).toMatch(/\.ed-subpill \{[^}]*border: 1px solid var\(--accent-light\);[^}]*color: var\(--accent-dark\);/);
+    expect(redesign).toMatch(/\.ed-subpill\.is-active \{ background: var\(--accent-dark\); border-color: var\(--accent-dark\); color: var\(--text-inverse\);/);
   });
 
   test('the evaluation verdicts read text tokens on their surfaces', () => {
@@ -89,6 +94,13 @@ describe('Episode shell theme', () => {
       ['--accent-dark', '--accent-subtle'],
       ['--primary-subtle', '--gray-900'],
       ['--lala-parchment-3', '--gray-800'],
+      // The redesign's header and tabs.
+      ['--text-inverse', '--accent-dark'],
+      ['--accent-dark', '--surface-card'],
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-ink', '--lala-parchment-2'],
+      ['--lala-ink', '--surface-card'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });

@@ -158,7 +158,7 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     renderEpisodeDetail('/episodes/ep-1?tab=assets');
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Production Checklist' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
 
     await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
     expect(screen.queryByTestId('episode-assets')).toBeNull();
@@ -168,11 +168,10 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
 
+    // Production opens on its Checklist (Evoni's Episode mock, 2026-10-05).
     fireEvent.click(screen.getByTitle('Production'));
-    await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Production Checklist' }));
-
     await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    expect(screen.queryByTestId('episode-assets')).toBeNull();
   });
 
   // ── Loaders ─────────────────────────────────────────────────────────────

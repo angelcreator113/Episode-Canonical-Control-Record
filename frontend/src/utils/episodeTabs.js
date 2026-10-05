@@ -11,16 +11,18 @@
 export const EP_TABS = [
   { key: 'overview', icon: '📋', label: 'Overview' },
   { key: 'scripts', icon: '📝', label: 'Script' },
+  // Evoni's Episode mock (2026-10-05): the checklist hub first, then the
+  // pieces it tracks in its order; Assets, which the mock leaves out, stays
+  // as the last pill (her ruling).
   { key: 'production', icon: '🎬', label: 'Production', subs: [
-    { key: 'assets', label: 'Assets' },
+    { key: 'checklist', label: 'Checklist' },
     { key: 'scenes', label: 'Scenes' },
     { key: 'wardrobe', label: 'Wardrobe' },
-    // §8(aa) M1: Money follows Wardrobe (Episode Money Phase A, #2278).
-    { key: 'money', label: 'Money' },
     { key: 'phone', label: 'Phone' },
     // P15: every on-screen piece of the episode.
     { key: 'overlays', label: 'Overlays' },
-    { key: 'checklist', label: 'Production Checklist' },
+    { key: 'money', label: 'Money' },
+    { key: 'assets', label: 'Assets' },
   ]},
   { key: 'results', icon: '👑', label: 'Results', subs: [
     { key: 'evaluation', label: 'Evaluation' },

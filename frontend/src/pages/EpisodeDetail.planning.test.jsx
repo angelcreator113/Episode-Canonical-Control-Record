@@ -143,7 +143,7 @@ describe('EpisodeDetail Planning card', () => {
     // Production -> Wardrobe (its body waits for the episode's events).
     await waitFor(() => expect(screen.getByTitle('Production').className).toContain('ed-tab-active'));
     expect(screen.getByRole('button', { name: 'Wardrobe' }).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('button', { name: 'Wardrobe' }).style.fontWeight).toBe('600');
+    expect(screen.getByRole('button', { name: 'Wardrobe' }).className).toContain('is-active');
     expect(screen.queryByTestId('episode-planning')).toBeNull();
   });
 
