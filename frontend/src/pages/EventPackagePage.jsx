@@ -77,6 +77,8 @@ import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
+import { dealLabelFor, describeCompensation } from '../utils/eventTerms';
+import { heroTiles, readinessTile, readinessHeadline, pageNav } from '../lib/eventPackageHero';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
@@ -216,27 +218,33 @@ export { sceneSetThumb, sceneSetPath };
 
 // Season Context (§8(ff) A4): read-only — "Season Arc provides intent; the
 // Event Package owns the event's facts." Season, phase, slot and purpose.
-function SeasonContextBlock({ context, showId }) {
-  if (!context) return null;
+// The header's title (Evoni's redesign, 2026-10-05): the season line from
+// the event's slot (S1 · E3 · Season 1 · Phase 1: Foundation), the name,
+// and the slot's story purpose under it. In no slot, the line says so and
+// points to the roadmap. Read-only.
+function HeroTitle({ context, showId, name }) {
+  const title = <h1 className="epp-title">{name}</h1>;
+  if (!context) return <div className="epp-hero-title">{title}</div>;
   const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Plan</Link>;
   if (!context.in_slot) {
     return (
-      <div className="epp-season" data-testid="season-context" role="note">
-        <span className="epp-season-label">Season {context.season_number}</span>
-        <span className="epp-season-text">
+      <div className="epp-hero-title" data-testid="season-context" role="group" aria-label="Season">
+        <p className="epp-hero-eyebrow">Season {context.season_number}</p>
+        {title}
+        <p className="epp-hero-summary">
           Not on the roadmap yet{context.next_open ? `; the next open slot is ${context.next_open.label}` : ''}. Pencil it in on {roadmapLink}.
-        </span>
+        </p>
       </div>
     );
   }
   return (
-    <div className="epp-season" data-testid="season-context" role="note">
-      <span className="epp-season-label">{context.label}</span>
-      <span className="epp-season-text">
-        Season {context.season_number}{context.phase?.title ? ` · Phase ${context.phase.number}: ${context.phase.title}` : ''}
-        {context.via === 'pencilled' ? ' · pencilled in' : ''}
-      </span>
-      <span className="epp-season-purpose">{context.story_purpose || 'No story purpose set for this slot yet.'}</span>
+    <div className="epp-hero-title" data-testid="season-context" role="group" aria-label="Season">
+      <p className="epp-hero-eyebrow">
+        <span>{context.label}</span>
+        <span> · Season {context.season_number}{context.phase?.title ? ` · Phase ${context.phase.number}: ${context.phase.title}` : ''}{context.via === 'pencilled' ? ' · pencilled in' : ''}</span>
+      </p>
+      {title}
+      <p className="epp-hero-summary">{context.story_purpose || 'No story purpose set for this slot yet.'}</p>
     </div>
   );
 }
@@ -1051,15 +1059,25 @@ export default function EventPackagePage() {
 
   return (
     <div className="epp-page">
-      <div className="epp-header">
-        <button className="epp-back" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
-          <ArrowLeft size={16} /> Events
-        </button>
-        <h1 className="epp-title">{event.name}</h1>
-        <span className={`epp-status-badge epp-status-${event.status || 'draft'}`}>{fmtLabel(event.status)}</span>
-      </div>
-
       {toast && <div className="epp-toast">{toast}</div>}
+
+      <header className="epp-hero" data-testid="package-hero">
+        <div className="epp-hero-top">
+          <button className="epp-back" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
+            <ArrowLeft size={16} /> Events
+          </button>
+          <span className={`epp-status-badge epp-status-${event.status || 'draft'}`}>{fmtLabel(event.status)}</span>
+        </div>
+        <HeroTitle context={seasonContext} showId={showId} name={event.name} />
+        <ul className="epp-hero-tiles" aria-label="At a glance">
+          {heroTiles({ event, venueDate, organizer, projection, dealLabel: dealLabelFor(event), compensation: describeCompensation(event) }).map((t) => (
+            <li key={t.key} className={`epp-hero-tile${t.empty ? ' empty' : ''}`} data-testid={`hero-${t.key}`}>
+              <span className="epp-hero-tile-label">{t.label}</span>
+              <strong>{t.value}</strong>
+              {t.sub && <span className="epp-hero-tile-sub">{t.sub}</span>}
+            </li>
+          ))}
+        </ul>
 
       {used && (
         <div className="epp-used-banner" data-testid="terms-locked-banner" role="note">
@@ -1082,8 +1100,29 @@ export default function EventPackagePage() {
         </div>
       )}
 
-      <SeasonContextBlock context={seasonContext} showId={showId} />
+      </header>
 
+      {/* Readiness at the top (the redesign): a tile per section, and while
+          the event is unused, the next step with Continue or Start Episode. */}
+      <section className="epp-strip" data-testid="readiness-strip" aria-label="Readiness">
+        <div className="epp-strip-head">
+          <span className="epp-strip-eyebrow">Readiness</span>
+          <strong className="epp-strip-headline">{used ? 'Locked at Start Episode' : readinessHeadline(readiness, moneyWarnings.length)}</strong>
+        </div>
+        <ul className="epp-strip-tiles">
+          {readiness.sections.map((sec) => {
+            const tile = readinessTile(sec);
+            const anchor = sec.key === 'organizer' ? 'people' : sec.key;
+            return (
+              <li key={sec.key}>
+                <a className={`epp-strip-tile is-${tile.kind}`} href={`#epp-sec-${anchor}`} data-testid={`strip-${sec.key}`} data-state={tile.kind}>
+                  <strong>{tile.label}</strong>
+                  <span>{tile.text}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       {!used && (
         <div className={`epp-next is-${nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
           <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
@@ -1112,6 +1151,21 @@ export default function EventPackagePage() {
           )}
         </div>
       )}
+      </section>
+
+      <div className="epp-body">
+      <nav className="epp-toc" aria-label="On this page" data-testid="package-toc">
+        <span className="epp-toc-eyebrow">On this page</span>
+        <ul>
+          {pageNav(readiness).map((s) => (
+            <li key={s.anchor}>
+              <a href={`#epp-sec-${s.anchor}`} className={`state-${s.state}`} data-testid={`toc-${s.anchor}`}>
+                <span className="epp-toc-dot" aria-hidden="true" />{s.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
       <div className="epp-sections">
         <section id="epp-sec-identity" className="epp-section">
@@ -1644,7 +1698,7 @@ export default function EventPackagePage() {
           )}
         </section>
 
-        <section className="epp-section">
+        <section id="epp-sec-review" className="epp-section">
           <h2 className="epp-section-title">Review</h2>
           <div className="epp-readiness" data-testid="readiness">
             <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
@@ -1709,6 +1763,7 @@ export default function EventPackagePage() {
             </div>
           )}
         </section>
+      </div>
       </div>
 
       {!used && !gatesMet && (
