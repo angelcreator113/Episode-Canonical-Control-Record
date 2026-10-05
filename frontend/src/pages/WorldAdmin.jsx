@@ -23,7 +23,8 @@ import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
-import { matchesDressCode, dressCodeKeywords } from '../lib/lookBuilder';
+import { matchesDressCode, dressCodeKeywords, setPiecesOf, setSlotClashes } from '../lib/lookBuilder';
+import { backdropFor, matchingSetsFrom } from '../lib/closetGrouping';
 import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
@@ -1645,7 +1646,7 @@ The revised event should feel like a completely different experience from the si
   const lookEpisode = episodesInProduction(episodes)[0] || null;
   // Loaded only on the closet, so the other tabs do not fetch the outfit, the event and its forecast.
   const onCloset = activeTab === 'wardrobe' && subTab === 'wardrobe-items';
-  const look = useLookDraft({ episode: onCloset ? lookEpisode : null, showId, characterState: lookCharacter, onSaved: () => loadData() });
+  const look = useLookDraft({ episode: onCloset ? lookEpisode : null, showId, characterState: lookCharacter, items: wardrobeItems, onSaved: () => loadData() });
   const lookKeywords = dressCodeKeywords(look.event);
 
   if (loading) return (
@@ -4826,7 +4827,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         // Owned or to buy, as the closet's Show row splits it (Evoni's redesign, 2026-10-05).
         const isOwnedPiece = (item) => item.is_owned === true || item.is_owned === 'true';
         const ownedCount = wardrobeItems.filter(isOwnedPiece).length;
-        const setCount = wardrobeItems.filter(i => i.outfit_set_id).length;
+        // The Sets pill counts sets, not their pieces: a set shows as one card (Evoni, 2026-10-05).
+        const setCount = matchingSetsFrom(wardrobeItems).length;
 
         const filteredItems = wardrobeItems.filter(item => {
           // Top-tab: staging means never used. Applied before everything else
@@ -4894,6 +4896,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         const currentPage = Math.min(wardrobePage, totalPages);
         const pageStart = (currentPage - 1) * WARDROBE_PAGE_SIZE;
         const visibleItems = filteredItems.slice(pageStart, pageStart + WARDROBE_PAGE_SIZE);
+        // Sets: one card per matching set among the filtered pieces, showing
+        // every piece of the set side by side (not paged; sets are few).
+        const setView = wardrobeCatFilter === 'sets';
+        const setCards = setView
+          ? matchingSetsFrom(filteredItems).map((set) => ({ ...set, pieces: setPiecesOf(set.pieces[0], wardrobeItems) }))
+          : [];
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
@@ -5696,7 +5704,53 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               gridTemplateColumns: wardrobeViewMode === 'list' ? undefined : 'repeat(auto-fill, minmax(200px, 1fr))',
               gap: wardrobeViewMode === 'list' ? 8 : 14,
             }}>
-              {visibleItems.map(item => {
+              {setCards.map((set) => {
+                const owned = set.pieces.filter(isOwnedPiece);
+                const toBuy = set.pieces.length - owned.length;
+                const coins = set.pieces.filter((p) => !isOwnedPiece(p)).reduce((sum, p) => sum + Number(p.coin_cost ?? p.price ?? 0), 0);
+                const clashes = setSlotClashes(set.pieces);
+                const lead = set.pieces[0];
+                const inLook = set.pieces.some((p) => look.ids.has(p.id));
+                const reach = look.reach(lead);
+                return (
+                  <div key={set.id} data-testid={`wardrobe-setcard-${set.id}`} className={`wa-wd-card wa-wd-set-card${inLook ? ' in-look' : ''}`}>
+                    <div className={`wa-wd-set-media n-${Math.min(set.pieces.length, 4)}`}>
+                      <span className={`wa-wd-own${toBuy ? ' to-buy' : ''}`}>{toBuy ? `${toBuy} to buy` : 'Owned'}</span>
+                      {set.pieces.slice(0, 4).map((piece) => {
+                        const url = resolveItemImageUrl(piece).url || piece.thumbnail_url;
+                        const pieceType = piece.clothing_category || piece.itemType || '';
+                        return (
+                          <button key={piece.id} type="button" data-testid={`wardrobe-setpiece-${piece.id}`}
+                            className={`wa-wd-set-piece wa-wd-backdrop bd-${backdropFor(piece)}`}
+                            title={`${piece.name}: open it`} onClick={() => openEditItem(piece)}>
+                            {url ? <img src={url} alt={piece.name} className="wa-wd-img" /> : <span className="wa-wd-set-icon" aria-hidden="true">{CAT_ICONS[pieceType] || '👗'}</span>}
+                          </button>
+                        );
+                      })}
+                      {look.episode && (
+                        <button type="button" data-testid={`wardrobe-setlook-${set.id}`}
+                          className={`wa-wd-look${inLook ? ' in' : ''}`} aria-pressed={inLook}
+                          disabled={!inLook && !reach.ok} title={!inLook && !reach.ok ? reach.why : inLook ? 'Take the set out of the look' : 'Add the whole set to the look'}
+                          onClick={() => look.toggle(lead)}>
+                          {inLook ? 'In look' : '+ Look'}
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ padding: '10px 12px', minWidth: 0 }}>
+                      <div className="wa-wd-card-name">🔗 {set.name}</div>
+                      <div className="wa-wd-card-sub">{set.pieces.length} pieces · {set.pieces.map((p) => p.name).join(' + ')}</div>
+                      {set.pieces.length > 4 && <div className="wa-wd-card-sub">+{set.pieces.length - 4} more not shown</div>}
+                      {clashes.length > 0 && (
+                        <div className="wa-wd-set-clash" data-testid={`wardrobe-setclash-${set.id}`}>
+                          {clashes.map((p) => p.name).join(' and ')} take the same place on Lala, so only one is worn. Check their categories.
+                        </div>
+                      )}
+                      <span className="wa-wd-card-cost">{toBuy ? `${coins.toLocaleString()} coins for ${toBuy}` : 'Owned'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {(setView ? [] : visibleItems).map(item => {
                 const imgUrl = resolveItemImageUrl(item).url || item.thumbnail_url;
                 const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
@@ -5773,11 +5827,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* Image - click for lightbox. List mode shrinks it to a fixed
                         square on the left so rows stay compact. */}
                     <div
+                      className={`wa-wd-backdrop bd-${backdropFor(item)}`}
                       style={{
                         width: isListMode ? 80 : '100%',
                         flexShrink: isListMode ? 0 : undefined,
                         aspectRatio: isListMode ? '1/1' : '3/4',
-                        background: 'var(--lala-parchment-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
                       }}
                       onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxVariant(null); setLightboxItem(item); } }}
                     >
@@ -5785,7 +5840,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         <span className={`wa-wd-own${owned ? '' : ' to-buy'}`} data-testid={`wardrobe-own-${item.id}`}>{owned ? 'Owned' : 'To buy'}</span>
                       )}
                       {imgUrl ? (
-                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--lala-parchment-2)' }}
+                        <img src={imgUrl} alt={item.name} className="wa-wd-img" style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
                       ) : null}
                       <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: 'var(--text-secondary)' }}>
@@ -5911,7 +5966,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {/* Pagination — shown only when more than one page of results. Buttons
                 clamp to 1..totalPages so clicking past the ends is a no-op. */}
-            {totalPages > 1 && (
+            {totalPages > 1 && !setView && (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '12px 0' }}>
                 <button onClick={() => setWardrobePage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
                   style={{ padding: '6px 14px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 12, fontWeight: 600 }}>← Prev</button>

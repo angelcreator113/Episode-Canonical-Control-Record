@@ -21,6 +21,9 @@ const DRESS = { id: 'w1', name: 'Lilac Slip Dress', clothing_category: 'dress', 
 const SHOES = { id: 'w2', name: 'Crimson Pump', clothing_category: 'shoes', is_owned: false, lock_type: 'coin', coin_cost: 200 };
 const PEARLS = { id: 'w3', name: 'Pearl Drops', clothing_category: 'jewelry', is_owned: false, lock_type: 'coin', coin_cost: 5000 };
 const GIFT = { id: 'w4', name: 'Black Satin Clutch', clothing_category: 'bag', color: 'black', is_owned: true };
+const SAFARI_TOP = { id: 'w5', name: 'Safari Shirt', clothing_category: 'top', is_owned: true, outfit_set_id: 's1', outfit_set_name: 'Safari set' };
+const SAFARI_PANTS = { id: 'w6', name: 'Safari Trousers', clothing_category: 'bottom', is_owned: true, outfit_set_id: 's1', outfit_set_name: 'Safari set' };
+const CLOSET = [DRESS, SHOES, PEARLS, GIFT, SAFARI_TOP, SAFARI_PANTS];
 
 const renderIt = () => render(
   <MemoryRouter initialEntries={['/shows/show-1/world?tab=wardrobe-items']}>
@@ -34,7 +37,7 @@ describe('Producer Mode look builder', () => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/shows/show-1') return { data: { success: true, data: { id: 'show-1', name: 'Show', metadata: {} } } };
-      if (url.startsWith('/api/v1/wardrobe?show_id=show-1')) return { data: { data: [DRESS, SHOES, PEARLS, GIFT], pagination: { total: 4 } } };
+      if (url.startsWith('/api/v1/wardrobe?show_id=show-1')) return { data: { data: CLOSET, pagination: { total: CLOSET.length } } };
       if (url.startsWith('/api/v1/episodes?show_id=show-1')) return { data: { data: [{ id: 'ep-1', episode_number: 1, status: 'draft', title: 'One' }] } };
       if (url.startsWith('/api/v1/characters/lala/state')) return { data: { state: { coins: 500, reputation: 3 } } };
       if (url === '/api/v1/wardrobe/outfit/ep-1') return { data: { items: [DRESS] } };
@@ -78,5 +81,41 @@ describe('Producer Mode look builder', () => {
     expect(pearls.getAttribute('title')).toBe('Lala needs 5000 coins for this piece');
     fireEvent.click(await screen.findByTestId('wardrobe-show-dress_code'));
     await waitFor(() => expect(screen.queryAllByTestId(/^wardrobe-card-/).map((el) => el.dataset.testid)).toEqual(['wardrobe-card-w4']));
+  });
+
+  test('+ Look on one piece of a set brings its partner; × in the panel takes out one piece', async () => {
+    renderIt();
+    const panel = await screen.findByTestId('look-builder');
+    await waitFor(() => expect(within(panel).getByTestId('look-row-body').textContent).toContain('Lilac Slip Dress'));
+
+    fireEvent.click(screen.getByTestId('wardrobe-look-w5'));
+    await waitFor(() => expect(within(panel).getByTestId('look-row-top').textContent).toContain('Safari Shirt'));
+    expect(within(panel).getByTestId('look-row-bottom').textContent).toContain('Safari Trousers');
+    expect(within(panel).queryByText('Lilac Slip Dress')).toBeNull(); // the set's top and bottom take the dress's place
+    expect(screen.getByTestId('wardrobe-look-w6').textContent).toBe('In look');
+
+    fireEvent.click(within(panel).getByLabelText('Take Safari Trousers out of the look'));
+    await waitFor(() => expect(screen.getByTestId('wardrobe-look-w6').textContent).toBe('+ Look'));
+    expect(screen.getByTestId('wardrobe-look-w5').textContent).toBe('In look');
+
+    fireEvent.click(screen.getByTestId('wardrobe-look-w5'));
+    await waitFor(() => expect(screen.getByTestId('wardrobe-look-w5').textContent).toBe('+ Look'));
+  });
+
+  test('the Sets pill shows a set as one card with every piece; its + Look adds the whole set', async () => {
+    renderIt();
+    const panel = await screen.findByTestId('look-builder');
+    fireEvent.click(await screen.findByTestId('wardrobe-cat-sets'));
+    const card = await screen.findByTestId('wardrobe-setcard-s1');
+    expect(within(card).getByTestId('wardrobe-setpiece-w5')).toBeTruthy();
+    expect(within(card).getByTestId('wardrobe-setpiece-w6')).toBeTruthy();
+    expect(card.textContent).toContain('2 pieces · Safari Shirt + Safari Trousers');
+    expect(card.textContent).toContain('Owned');
+    expect(screen.queryByTestId('wardrobe-setclash-s1')).toBeNull();
+
+    fireEvent.click(within(card).getByTestId('wardrobe-setlook-s1'));
+    await waitFor(() => expect(within(panel).getByTestId('look-row-top').textContent).toContain('Safari Shirt'));
+    expect(within(panel).getByTestId('look-row-bottom').textContent).toContain('Safari Trousers');
+    expect(within(card).getByTestId('wardrobe-setlook-s1').textContent).toBe('In look');
   });
 });

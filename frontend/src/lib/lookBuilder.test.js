@@ -2,7 +2,7 @@
  * The look builder's helpers (Evoni's Producer Mode redesign, 2026-10-05).
  */
 import { describe, test, expect } from 'vitest';
-import { restoreLook, lookIds, toggleInLook, pieceReach, lookRows, lookCosts, canSaveLook, matchesDressCode, dressCodeKeywords, sameLook } from './lookBuilder';
+import { restoreLook, lookIds, toggleInLook, pieceReach, lookRows, lookCosts, canSaveLook, matchesDressCode, dressCodeKeywords, sameLook, setPiecesOf, toggleSetInLook, setReach, setSlotClashes } from './lookBuilder';
 
 const dress = { id: 'd', name: 'Slip Dress', clothing_category: 'dress', is_owned: true };
 const top = { id: 't', name: 'Top', clothing_category: 'top', is_owned: true };
@@ -77,5 +77,40 @@ describe('lookBuilder', () => {
   test('sameLook compares the pieces, not their order', () => {
     expect(sameLook(restoreLook([dress, shoes]), restoreLook([shoes, dress]))).toBe(true);
     expect(sameLook(restoreLook([dress]), restoreLook([dress, shoes]))).toBe(false);
+  });
+});
+
+describe('matching sets in the look', () => {
+  const top = { id: 't', name: 'Safari Shirt', clothing_category: 'top', is_owned: true, outfit_set_id: 's1' };
+  const pants = { id: 'p', name: 'Safari Trousers', clothing_category: 'bottom', is_owned: true, outfit_set_id: 's1' };
+  const pricey = { id: 'b', name: 'Safari Belt', clothing_category: 'accessory', is_owned: false, lock_type: 'coin', coin_cost: 900, outfit_set_id: 's2' };
+  const shirt2 = { id: 't2', name: 'Safari Vest', clothing_category: 'top', is_owned: true, outfit_set_id: 's2' };
+  const solo = { id: 'x', name: 'Loafers', clothing_category: 'shoes', is_owned: true };
+  const closet = [top, pants, pricey, shirt2, solo];
+  const lala = { coins: 100, reputation: 1 };
+
+  test('a piece\'s set is itself first, then its partners; a piece in no set is alone', () => {
+    expect(setPiecesOf(pants, closet).map((p) => p.id)).toEqual(['p', 't']);
+    expect(setPiecesOf(solo, closet)).toEqual([solo]);
+  });
+
+  test('toggling a set piece brings its partners in, and takes them out', () => {
+    const on = toggleSetInLook({}, top, closet, lala);
+    expect([...lookIds(on)].sort()).toEqual(['p', 't']);
+    expect([...lookIds(toggleSetInLook(on, pants, closet, lala))]).toEqual([]);
+    expect([...lookIds(toggleSetInLook({}, solo, closet, lala))]).toEqual(['x']);
+  });
+
+  test('a set is out of reach when any partner is, naming that partner', () => {
+    expect(setReach(top, closet, lala, {})).toEqual({ ok: true });
+    expect(setReach(shirt2, closet, lala, {})).toEqual({ ok: false, why: 'Safari Belt: Lala needs 900 coins for this piece' });
+    expect(setReach(pricey, closet, lala, {}).why).toBe('Lala needs 900 coins for this piece');
+  });
+
+  test('pieces that take the same place on Lala clash', () => {
+    expect(setSlotClashes([top, pants])).toEqual([]);
+    expect(setSlotClashes([top, shirt2]).map((p) => p.id)).toEqual(['t', 't2']);
+    const dress = { id: 'd', clothing_category: 'dress' };
+    expect(setSlotClashes([dress, pants, pricey]).map((p) => p.id)).toEqual(['d', 'p']);
   });
 });

@@ -850,3 +850,31 @@
   .wa-cc-card { padding: 16px; }
   .wa-cc-people { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Closet card backdrops (Evoni, 2026-10-05: "so images are not just a png
+   file"): a pastel by the piece's slot under a soft studio glow, and a light
+   shadow under the piece, so a cut-out reads as a product photo. A photo
+   with its own background covers the glow. */
+.wa-wd-backdrop { --bd: var(--lala-parchment-2); background: radial-gradient(ellipse 70% 60% at 50% 45%, var(--surface-card) 0%, var(--bd) 72%); }
+.wa-wd-backdrop.bd-body { --bd: var(--lala-lavender-soft); }
+.wa-wd-backdrop.bd-top { --bd: var(--lala-parchment-2); }
+.wa-wd-backdrop.bd-bottom { --bd: var(--primary-subtle); }
+.wa-wd-backdrop.bd-shoes { --bd: var(--accent-subtle); }
+.wa-wd-backdrop.bd-accessories { --bd: var(--success-bg); }
+.wa-wd-backdrop.bd-jewelry { --bd: var(--warning-bg); }
+.wa-wd-backdrop.bd-perfume { --bd: var(--danger-bg); }
+.wa-wd-backdrop .wa-wd-img { padding: 8%; box-sizing: border-box; filter: drop-shadow(0 10px 12px rgba(44, 44, 44, 0.18)); }
+
+/* A matching set as one card: its pieces side by side (two across, a 2×2
+   grid for three or four), each on its own backdrop. */
+.wa-wd-set-media { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; aspect-ratio: 3 / 4; overflow: hidden; }
+.wa-wd-set-media.n-2 { grid-template-rows: 1fr; }
+.wa-wd-set-media.n-3, .wa-wd-set-media.n-4 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.wa-wd-set-media.n-3 .wa-wd-set-piece:first-of-type { grid-row: span 2; }
+.wa-wd-set-piece { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; padding: 0; border: none; cursor: pointer; overflow: hidden; }
+.wa-wd-set-piece .wa-wd-img { width: 100%; height: 100%; object-fit: contain; }
+.wa-wd-set-icon { font-size: 36px; }
+.wa-wd-set-media .wa-wd-own { z-index: 2; }
+.wa-wd-set-clash { margin: 4px 0; padding: 4px 8px; border-radius: 6px; background: var(--warning-bg); color: var(--warning-text); font-size: 11px; line-height: 1.4; }
+.wa-wd-set-card { cursor: default; }
+.wa-wd-set-card .wa-wd-card-sub { text-transform: none; }

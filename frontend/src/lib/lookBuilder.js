@@ -123,3 +123,62 @@ export function dressCodeKeywords(event) {
   if (list.length) return list.map((k) => String(k).toLowerCase());
   return String(event?.dress_code || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
 }
+
+// ─── Matching sets in the look (Evoni, 2026-10-05: "+ Look" on one piece
+// of a set left its partner out). A piece's set is the closet's pieces
+// sharing its outfit_set_id (lib/closetGrouping matchingSetsFrom). ───
+
+/** The pieces of item's matching set among the closet's items, item first; [item] when it is in no set. */
+export function setPiecesOf(item, items) {
+  const id = item?.outfit_set_id;
+  if (!id) return [item];
+  const others = (items || []).filter((p) => p && p.outfit_set_id === id && p.id !== item.id);
+  return [item, ...others];
+}
+
+/** Whether a piece and every partner in its set can go in the look, and why not (naming the piece when it is a partner). */
+export function setReach(item, items, characterState, filled) {
+  const pieces = setPiecesOf(item, items);
+  for (const piece of pieces) {
+    const r = pieceReach(piece, characterState, filled);
+    if (!r.ok) return pieces.length > 1 && piece.id !== item.id ? { ok: false, why: `${piece.name}: ${r.why}` } : r;
+  }
+  return { ok: true };
+}
+
+/**
+ * The look after the card's toggle: a piece in the look comes out with every
+ * partner of its set that is in the look; any other goes in with every
+ * partner, each into its own slot.
+ */
+export function toggleSetInLook(filled, item, items, characterState) {
+  const pieces = setPiecesOf(item, items);
+  const ids = lookIds(filled);
+  let next = filled;
+  if (ids.has(item.id)) {
+    for (const piece of pieces) if (lookIds(next).has(piece.id)) next = toggleInLook(next, piece, characterState);
+    return next;
+  }
+  for (const piece of pieces) if (!lookIds(next).has(piece.id)) next = toggleInLook(next, piece, characterState);
+  return next;
+}
+
+/**
+ * The set's pieces that cannot be worn together: two in one single slot
+ * (two tops, two pairs of shoes), or a dress with a top or bottom, since
+ * equipInto lets only one of them on. [] when every piece has its own place.
+ */
+export function setSlotClashes(pieces) {
+  const slots = (pieces || []).map((p) => ({ piece: p, slot: gameSlotFor(p?.clothing_category) }))
+    .filter(({ slot }) => slot && !MULTI_SLOTS.has(slot));
+  const clashing = new Set();
+  for (const a of slots) {
+    for (const b of slots) {
+      if (a === b) continue;
+      const same = a.slot === b.slot;
+      const dressWithPart = (a.slot === 'body' && (b.slot === 'top' || b.slot === 'bottom'));
+      if (same || dressWithPart) { clashing.add(a.piece); clashing.add(b.piece); }
+    }
+  }
+  return (pieces || []).filter((p) => clashing.has(p));
+}
