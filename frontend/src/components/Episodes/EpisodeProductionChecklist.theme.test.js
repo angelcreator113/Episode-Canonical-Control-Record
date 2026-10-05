@@ -3,9 +3,9 @@
  * VISUAL-01/02, batch 4, sixteenth screen): the checklist and the
  * coverage panel it renders set colors only through tokens; pink and
  * teal are family tokens for fills and borders and their text-safe twins
- * for text; Generate Episode, Resume setup, the fix buttons and the
- * coverage actions are the primary (they were gold and indigo gradients
- * under white); the statuses, toast and badge read the token families.
+ * for text; the statuses, toast and badge read the token families.
+ * Evoni's Episode mock (2026-10-05) makes it a hub: done lavender, the
+ * actions lavender, the Timeline Editor raspberry.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -25,31 +25,39 @@ describe('Episode Production Checklist theme', () => {
     expect(coverage).not.toMatch(/linear-gradient/);
   });
 
-  test('pink and teal are family tokens for fills and their text twins for text', () => {
-    expect(checklist).toMatch(/const PINK = 'var\(--accent\)';\s*const PINK_TEXT = 'var\(--accent-dark\)';\s*const TEAL = 'var\(--primary\)';\s*const TEAL_TEXT = 'var\(--primary-text\)';/);
+  // Evoni's Episode mock (2026-10-05): the checklist is a hub (ChecklistHub.jsx,
+  // ChecklistHub.css): done is lavender, required-and-missing pink, the
+  // Timeline Editor button raspberry, the actions lavender.
+  const hubJsx = readFileSync(resolve(__dirname, 'ChecklistHub.jsx'), 'utf8');
+  const hubCss = readFileSync(resolve(__dirname, 'ChecklistHub.css'), 'utf8');
+
+  test('the hub carries no color literal; pink text is its text-safe twin', () => {
+    expect(stripTaskRefs(hubJsx)).not.toMatch(HEX);
+    expect(stripTaskRefs(hubCss)).not.toMatch(HEX);
+    expect(checklist).toMatch(/const PINK_TEXT = 'var\(--accent-dark\)';\s*const LAV_TEXT = 'var\(--lala-lavender-text\)';/);
+    expect(checklist).not.toMatch(/color: [^,}]*'var\(--accent\)'/);
     expect(coverage).toMatch(/const TEAL = 'var\(--primary\)';\s*const TEAL_TEXT = 'var\(--primary-text\)';\s*const PINK_TEXT = 'var\(--accent-dark\)';/);
-    // No text is drawn in the fill color.
-    expect(checklist).not.toMatch(/color: (?:checked \? [^:]+ : item\.required \? )?PINK\b/);
-    expect(checklist).not.toMatch(/color: TEAL\b/);
     expect(coverage).not.toMatch(/color: TEAL\b/);
-    expect(coverage).not.toMatch(/\bPINK\b/);
   });
 
-  test('every action is the primary and the badge is ink on gold', () => {
-    expect(checklist).toMatch(/background: allRequired \? 'var\(--primary\)' : 'var\(--lala-parchment-3\)'/);
-    expect(checklist).toMatch(/border: 'none', background: 'var\(--primary\)', color: 'var\(--text-inverse\)', fontSize: 11/);
-    expect(checklist).toMatch(/border: 'none', background: 'var\(--primary\)', color: 'var\(--text-inverse\)',\s*fontSize: 11, fontWeight: 600, cursor: locking/);
-    expect(checklist).toMatch(/background: 'var\(--primary\)',\s*color: 'var\(--text-inverse\)', fontSize: 14, fontWeight: 700/);
+  test('done is lavender, the actions lavender, the Timeline Editor raspberry', () => {
+    expect(hubCss).toMatch(/\.ckh-box\.is-on \{ border: none; background: var\(--lala-lavender\); color: var\(--text-inverse\); \}/);
+    expect(hubCss).toMatch(/\.ckh-box\.is-required \{ border-color: var\(--accent\); \}/);
+    expect(hubCss).toMatch(/\.ckh-timeline-open \{[^}]*background: var\(--accent-dark\);\s*color: var\(--text-inverse\);/);
+    expect(hubCss).toMatch(/\.ckh-fix \{[^}]*color: var\(--lala-lavender-text\);/);
+    expect(hubCss).toMatch(/\.ckh-evaluate \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
+    expect(checklist).toMatch(/background: allRequired \? 'var\(--lala-lavender\)' : 'var\(--lala-parchment-3\)'/);
     expect(checklist).toMatch(/color: allRequired \? 'var\(--text-inverse\)' : 'var\(--text-secondary\)'/);
-    expect(checklist).not.toMatch(/color: 'var\(--surface-card\)'/);
-    expect(checklist).toMatch(/background: unavailable \? 'var\(--lala-parchment-3\)' : 'var\(--lala-gold\)',\s*color: unavailable \? 'var\(--text-secondary\)' : 'var\(--text-primary\)'/);
+    expect(checklist).toMatch(/border: 'none', background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)',\s*fontSize: 11, fontWeight: 600, cursor: locking/);
     expect(coverage).toMatch(/buttonStyle\(TEAL\)/);
     expect(coverage).toMatch(/buttonStyle\('var\(--danger\)'\)\}>Remove/);
   });
 
   test('statuses and the toast read the token families', () => {
-    expect(checklist).toMatch(/complete: \{ label: 'Complete', color: TEAL_TEXT, background: 'var\(--primary-subtle\)' \}/);
+    expect(checklist).toMatch(/complete: \{ label: 'Complete', color: LAV_TEXT, background: 'var\(--lala-lavender-soft\)' \}/);
     expect(checklist).toMatch(/in_progress: \{ label: 'In progress', color: 'var\(--warning-text\)', background: 'var\(--warning-bg\)' \}/);
+    expect(hubCss).toMatch(/\.ckh-chip\.is-complete \{ background: var\(--lala-lavender-soft\); color: var\(--lala-lavender-text\); \}/);
+    expect(hubCss).toMatch(/\.ckh-chip\.is-setup \{ background: var\(--warning-bg\); color: var\(--warning-text\); \}/);
     expect(checklist).toMatch(/background: toast\.type === 'error' \? 'var\(--danger-bg\)' : 'var\(--success-bg\)'/);
     expect(checklist).toMatch(/color: toast\.type === 'error' \? 'var\(--danger-text\)' : 'var\(--success-text\)'/);
     expect(checklist).toMatch(/background: 'var\(--accent-subtle\)', border: '1px solid var\(--accent\)', fontSize: 12, color: 'var\(--text-primary\)'/);
@@ -71,6 +79,13 @@ describe('Episode Production Checklist theme', () => {
       ['--text-primary', '--accent-subtle'],
       ['--text-secondary', '--surface-bg'],
       ['--text-secondary', '--lala-parchment-2'],
+      ['--text-inverse', '--lala-lavender'],
+      ['--text-inverse', '--accent-dark'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--lala-ink-muted', '--lala-parchment-2'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });

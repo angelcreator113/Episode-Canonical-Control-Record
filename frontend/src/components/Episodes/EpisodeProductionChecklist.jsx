@@ -5,6 +5,8 @@ import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
 import ProductionCoveragePanel from './ProductionCoveragePanel';
+import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
+import { SECTION_GUIDE, sectionCount } from '../../lib/checklistHub';
 
 /**
  * EpisodeProductionChecklist
@@ -130,17 +132,14 @@ export function computeSectionState(section, checks) {
   return { state: 'needs_setup', why: 'Nothing set up yet' };
 }
 
-// Soft pink for what is required and missing, teal for what is done
-// (Evoni: the site's colors are soft pink and teal).
-// Fills and borders use the family color; text uses its text-safe twin
-// (pink and teal as text on white fail 4.5:1; docs/VISUAL_SYSTEM.md §3).
-const PINK = 'var(--accent)';
+// Pink for what is required and missing, lavender for what is done
+// (Evoni's Episode mock, 2026-10-05; it was teal). Text uses the
+// text-safe twins (pink as text on white fails 4.5:1; docs/VISUAL_SYSTEM.md §3).
 const PINK_TEXT = 'var(--accent-dark)';
-const TEAL = 'var(--primary)';
-const TEAL_TEXT = 'var(--primary-text)';
+const LAV_TEXT = 'var(--lala-lavender-text)';
 
 const STATE_STYLES = {
-  complete: { label: 'Complete', color: TEAL_TEXT, background: 'var(--primary-subtle)' },
+  complete: { label: 'Complete', color: LAV_TEXT, background: 'var(--lala-lavender-soft)' },
   in_progress: { label: 'In progress', color: 'var(--warning-text)', background: 'var(--warning-bg)' },
   needs_setup: { label: 'Needs setup', color: 'var(--text-secondary)', background: 'var(--lala-parchment-2)' },
   unavailable: { label: 'System unavailable', color: 'var(--text-secondary)', background: 'var(--surface-bg)' },
@@ -185,42 +184,26 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
 
 function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable, note }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '5px 0',
-      opacity: loading ? 0.5 : 1,
-    }}>
-      <div style={{
-        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-        border: checked ? 'none' : `1.5px solid ${item.required ? PINK : 'var(--lala-parchment-3)'}`,
-        background: checked ? TEAL : 'transparent',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {checked && <span style={{ color: 'var(--text-inverse)', fontSize: 11, fontWeight: 700 }}>✓</span>}
-      </div>
+    <div className="ckh-item" style={{ opacity: loading ? 0.5 : 1 }}>
+      <CheckBox checked={checked} required={item.required} />
       <span style={{
-        fontSize: 13, flex: 1,
+        fontSize: 14, flex: 1, minWidth: 0,
         color: checked ? 'var(--text-primary)' : item.required ? PINK_TEXT : 'var(--text-secondary)',
         fontWeight: item.required && !checked ? 600 : 400,
         textDecoration: checked ? 'line-through' : 'none',
       }}>
         {item.label}
         {item.required && !checked && (
-          <span style={{ marginLeft: 6, fontSize: 9, color: PINK_TEXT, fontWeight: 700, textTransform: 'uppercase' }}>
+          <span style={{ marginLeft: 6, fontSize: 10, color: PINK_TEXT, fontWeight: 700, textTransform: 'uppercase' }}>
             required
           </span>
         )}
         {note && (
-          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 11, color: item.required ? PINK_TEXT : 'var(--warning-text)', textDecoration: 'none' }}>{note}</span>
+          <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 12, color: item.required ? PINK_TEXT : 'var(--warning-text)', textDecoration: 'none' }}>{note}</span>
         )}
       </span>
       {!checked && onAction && (
-        <button onClick={onAction} disabled={unavailable} style={{
-          padding: '2px 8px', borderRadius: 4, border: 'none',
-          background: unavailable ? 'var(--lala-parchment-3)' : 'var(--lala-gold)',
-          color: unavailable ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 9,
-          fontWeight: 600, cursor: unavailable ? 'not-allowed' : 'pointer', flexShrink: 0,
-        }}>{actionLabel || 'Fix'}</button>
+        <button type="button" className="ckh-fix" onClick={onAction} disabled={unavailable}>{actionLabel || 'Fix'}</button>
       )}
     </div>
   );
@@ -370,7 +353,7 @@ export async function loadProductionChecks(episode, showId) {
   return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent };
 }
 
-export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks }) {
+export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
   // Audit STATE-01: the server's beat coverage, and the setup repair.
@@ -383,6 +366,10 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // from the Scenes tab.
   const [sceneStep, setSceneStep] = useState(null);
   const [locking, setLocking] = useState(false);
+  // The source event (the event package card's link) and a counter that
+  // reloads the timeline with each re-check.
+  const [linkedEvent, setLinkedEvent] = useState(null);
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     if (!episode?.id) return;
@@ -391,7 +378,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   const checkReadiness = async () => {
     setLoading(true);
-    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step } = await loadProductionChecks(episode, showId);
+    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev } = await loadProductionChecks(episode, showId);
+    setLinkedEvent(ev || null);
+    setVersion((v) => v + 1);
     setCoverage(planCoverage);
     setSceneStep(step);
     setChecks(results);
@@ -495,7 +484,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   const completedCount = Object.values(checks).filter(Boolean).length;
   const totalCount = CHECKLIST_SECTIONS.flatMap(s => s.items).length;
-  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
     <div style={{ marginTop: 20 }}>
@@ -512,59 +500,31 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Production Checklist</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{completedCount}/{totalCount}</span>
-          <button onClick={checkReadiness} disabled={loading} style={{
-            background: 'none', border: '1px solid var(--lala-parchment-3)', borderRadius: 6,
-            padding: '3px 10px', fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer',
-          }}>↻</button>
-        </div>
-      </div>
+      <ProductionSummary done={completedCount} total={totalCount} loading={loading} onRefresh={checkReadiness} />
+      <EpisodeTimeline episodeId={episode.id} lookReady={!!checks.outfit_picked} version={version} />
 
-      <div style={{ height: 5, background: 'var(--lala-parchment-2)', borderRadius: 3, marginBottom: 16, overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', borderRadius: 3, width: `${pct}%`,
-          background: pct === 100 ? TEAL : pct >= 60 ? 'var(--lala-gold)' : PINK,
-          transition: 'width 0.4s ease',
-        }} />
-      </div>
-
+      <div className="ckh-cards">
       {CHECKLIST_SECTIONS.map(section => (
         (() => {
           const sectionStatus = computeSectionState(section, checks);
           const stateStyle = STATE_STYLES[sectionStatus.state];
+          const guide = SECTION_GUIDE[section.id];
+          // Each action is offered once: no card button where an open item already goes there.
+          const itemLabels = new Set(section.items.filter((i) => !checks[i.id]).map((i) => actions[i.id]?.label).filter(Boolean));
+          const open = guide?.open && !itemLabels.has(guide.open.label)
+            ? (guide.open.event
+              ? (linkedEvent && showId ? <Link className="ckh-open" to={`/shows/${showId}/events/${linkedEvent.id}`}>{guide.open.label}</Link> : null)
+              : <button type="button" className="ckh-open" onClick={() => onOpenTab?.(guide.open.tab)}>{guide.open.label}</button>)
+            : null;
 
           return (
-        <div key={section.id} style={{
-          background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)',
-          borderRadius: 10, padding: '12px 14px', marginBottom: 8,
-        }}>
-          <h4 style={{
-            margin: '0 0 6px', fontSize: 12, fontWeight: 600,
-            color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            {section.icon} {section.label}
-            <span style={{
-              marginLeft: 'auto', padding: '2px 7px', borderRadius: 999,
-              color: stateStyle.color, background: stateStyle.background,
-              fontSize: 10, fontWeight: 600,
-            }}>
-              {stateStyle.label}
-            </span>
-          </h4>
-          <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-secondary)' }}>{sectionStatus.why}</div>
+        <SectionCard key={section.id} section={section} state={sectionStatus} chip={stateStyle.label} count={sectionCount(section, checks)} guide={guide} open={open}>
           {section.id === 'scene' && sceneStep && (
-            <div data-testid="checklist-scene-next" style={{
-              display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8,
-              padding: '6px 10px', borderRadius: 8, background: 'var(--surface-bg)', border: '1px solid rgba(184,150,46,0.35)',
-              fontSize: 12, color: 'var(--text-primary)',
-            }}>
+            <div data-testid="checklist-scene-next" className="ckh-next">
               <span style={{ flex: '1 1 180px', minWidth: 0 }}><strong>Next:</strong> {sceneStep.text}</span>
               {sceneStepAction && (
                 <button type="button" data-testid="checklist-scene-next-action" onClick={sceneStepAction.onClick} disabled={locking} style={{
-                  padding: '3px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)',
+                  padding: '3px 10px', borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)',
                   fontSize: 11, fontWeight: 600, cursor: locking ? 'wait' : 'pointer',
                 }}>{sceneStepAction.label}</button>
               )}
@@ -579,76 +539,43 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
                 {setupStatus?.steps?.scene_plan?.failed?.length ? ` · ${setupStatus.steps.scene_plan.failed.map((f) => `beat ${f.beat}: ${f.reason}`).join('; ')}` : ''}
                 {setupStatus?.steps?.locations?.status === 'failed' ? ` · locations: ${setupStatus.steps.locations.reason}` : ''}
               </span>
-              <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+              <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                 {resuming ? 'Resuming…' : 'Resume setup'}
               </button>
             </div>
           )}
-          {section.id === 'scene' && <ProductionCoveragePanel episodeId={episode.id} />}
           {section.items.map(item => (
             <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
               unavailable={sectionStatus.state === 'unavailable'} />
           ))}
-        </div>
+          {/* The clips each beat needs (JustAWoman, Lala), attached here. */}
+          {section.id === 'scene' && <ProductionCoveragePanel episodeId={episode.id} />}
+        </SectionCard>
           );
         })()
       ))}
+      </div>
 
-      <div style={{ marginTop: 16 }}>
+      <div className="ckh-foot">
         {!allRequired && (
-          <p style={{ fontSize: 12, color: PINK_TEXT, marginBottom: 6 }}>
-            Complete all required items to unlock script generation.
-          </p>
+          <p className="ckh-foot-note">Complete all required items to unlock script generation.</p>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => window.location.href = `/episodes/${episode.id}/script-writer`} style={{
-            flex: 1,
-            background: allRequired ? 'var(--primary)' : 'var(--lala-parchment-3)',
+        <div className="ckh-foot-actions">
+          <button type="button" onClick={() => window.location.href = `/episodes/${episode.id}/script-writer`} disabled={!allRequired} style={{
+            background: allRequired ? 'var(--lala-lavender)' : 'var(--lala-parchment-3)',
             color: allRequired ? 'var(--text-inverse)' : 'var(--text-secondary)',
-            border: 'none', borderRadius: 10, padding: '12px 0',
+            border: 'none', borderRadius: 10, padding: '11px 20px',
             fontSize: 14, fontWeight: 600, cursor: allRequired ? 'pointer' : 'not-allowed',
-            boxShadow: allRequired ? '0 2px 8px rgba(184,150,46,0.25)' : 'none',
           }}>
-            ✦ Write Script
+            Write Script
           </button>
-          <button onClick={() => window.location.href = `/episodes/${episode.id}/plan`} style={{
-            padding: '12px 16px', border: '1px solid var(--lala-parchment-3)', borderRadius: 10,
-            background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
-          }}>
-            🎬 Scene Plan
-          </button>
+          <button type="button" className="ckh-open" onClick={() => window.location.href = `/episodes/${episode.id}/plan`}>Scene Plan</button>
+          {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo (issue #1605). */}
+          <Link className="ckh-open" to={`/episodes/${episode.id}/todo`}>Episode Run Sheet</Link>
+          {/* Final step — Evaluate Episode (issue #1601). */}
+          <Link className="ckh-evaluate" to={`/episodes/${episode.id}/evaluate`}>Evaluate Episode</Link>
         </div>
-      </div>
-
-      {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo
-          (issue #1605). Was duplicated beside the audience-facing To-Do
-          Overlays in Assets (issue #1602); lives here instead, alongside
-          the other producer-facing next-step link below. */}
-      <div style={{ marginTop: 12 }}>
-        <Link to={`/episodes/${episode.id}/todo`} style={{
-          display: 'block', textAlign: 'center', padding: '10px 0',
-          borderRadius: 10, textDecoration: 'none',
-          border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)',
-          color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
-        }}>
-          📋 Episode Run Sheet
-        </Link>
-      </div>
-
-      {/* Final step — Evaluate Episode, relocated from the Episode Detail
-          header (issue #1601). Same route and handler (a plain navigation
-          link) as before; it now closes out the checklist instead of
-          competing for header space. */}
-      <div style={{ marginTop: 12 }}>
-        <Link to={`/episodes/${episode.id}/evaluate`} style={{
-          display: 'block', textAlign: 'center', padding: '12px 0',
-          borderRadius: 10, textDecoration: 'none',
-          background: 'var(--primary)',
-          color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700,
-        }}>
-          👑 Evaluate Episode
-        </Link>
       </div>
     </div>
   );
