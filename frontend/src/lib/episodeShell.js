@@ -9,9 +9,15 @@
  * the checklist's CHECKLIST_SECTIONS. Null until the checks are read.
  */
 export function checklistLeft(checks, sections) {
+  return checklistProgress(checks, sections)?.left ?? null;
+}
+
+/** { done, total, left } over the checklist's items; null until read. */
+export function checklistProgress(checks, sections) {
   if (!checks || !sections) return null;
   const items = sections.flatMap((s) => s.items || []);
-  return items.filter((i) => !checks[i.id]).length;
+  const done = items.filter((i) => checks[i.id]).length;
+  return { done, total: items.length, left: items.length - done };
 }
 
 /** "1,900 coins", the header's balance chip. */

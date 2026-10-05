@@ -3229,108 +3229,6 @@
   .ed-header-new { top: var(--app-header-h, 0px); }
 }
 
-/* Planning (episode creation step 2): what Start Episode carried from the
-   event, and the next decision. Soft pink and teal, the site's colours
-   (values from Home.css). */
-.epl-card {
-  max-width: 900px;
-  margin: 0 auto 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--accent-light);
-  border-left: 4px solid var(--accent-light);
-  border-radius: 10px;
-  background: var(--surface-card);
-}
-.epl-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.epl-title {
-  margin: 0;
-  font-family: 'Lora', Georgia, serif;
-  font-size: 17px;
-  color: var(--text-primary);
-}
-.epl-count {
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-dark);
-}
-.epl-items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.epl-item {
-  display: grid;
-  grid-template-columns: 18px 80px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-  border-top: 1px solid var(--accent-subtle);
-  font-size: 13px;
-}
-.epl-item:first-child { border-top: none; }
-.epl-item.is-done .epl-icon { color: var(--primary-text); }
-.epl-item.is-open .epl-icon { color: var(--accent-dark); }
-.epl-label { font-weight: 600; color: var(--text-primary); }
-.epl-detail { color: var(--text-secondary); min-width: 0; overflow-wrap: anywhere; }
-.epl-item.is-open .epl-detail { color: var(--text-secondary); font-style: italic; }
-.epl-fix {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary-text);
-  text-decoration: underline;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.epl-next {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--accent-light);
-}
-.epl-next-label {
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-.epl-next-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid var(--primary);
-  border-radius: 8px;
-  background: var(--primary);
-  color: var(--text-inverse);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.epl-next-btn:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
-
-@media (max-width: 480px) {
-  .epl-item { grid-template-columns: 18px 1fr; }
-  .epl-detail, .epl-fix { grid-column: 2; }
-  .epl-next { justify-content: stretch; }
-  .epl-next-btn { width: 100%; justify-content: center; }
-}
-
 /* =========================================================
    Episode redesign part 1 (Evoni's Episode mock, 2026-10-05):
    the header card, the pink tab band and the Production pills.
@@ -3418,7 +3316,7 @@
   font-weight: 600;
 }
 .ed-page .ed-source-event-link { justify-content: center; gap: 6px; font-size: 14px; color: var(--lala-lavender-text); }
-.ed-page .ed-source-event-label { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-dark); }
+.ed-page .ed-source-event-label { font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-dark); }
 .ed-page .ed-source-event-name { font-weight: 600; color: var(--lala-lavender-text); }
 .ed-page .ed-header-actions { position: absolute; top: 18px; right: 18px; }
 .ed-page .ed-btn-more {

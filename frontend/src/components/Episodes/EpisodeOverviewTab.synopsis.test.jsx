@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -43,7 +43,7 @@ describe('EpisodeOverviewTab synopsis and teaser (P12, P13)', () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     render(<MemoryRouter><EpisodeOverviewTab episode={EPISODE} show={{ id: 'show-1' }} onUpdate={onUpdate} /></MemoryRouter>);
 
-    fireEvent.click(screen.getByText('✏️ Edit'));
+    fireEvent.click(within(screen.getByTestId('overview-story-brief')).getByRole('button', { name: 'Edit' }));
     expect(screen.getByText('Synopsis (internal)')).toBeTruthy();
     fireEvent.change(screen.getByDisplayValue('Lala arrives late and the coat splits.'), { target: { value: 'New synopsis.' } });
     fireEvent.click(screen.getByText('Save'));
