@@ -32,14 +32,28 @@ export const listContinuityIssuesApi = () => apiClient.get(`${API}/continuity/is
 export const listVoiceSignalsApi = () => apiClient.get(`${API}/voice-signals`);
 export const listVoiceRulesApi = () => apiClient.get(`${API}/voice-rules`);
 
-const C = {
-  bg: '#f7f4ef', surface: '#fff', surfaceAlt: '#faf8f4', border: '#e8e0d0',
-  text: '#2c2c2c', textDim: '#777', textFaint: '#aaa',
-  accent: '#c9a96e', green: '#6ec9a0', red: '#c96e6e', blue: '#6e9ec9',
-  purple: '#9e6ec9', orange: '#c9886e',
+// The studio tokens (docs/VISUAL_SYSTEM.md §7). Each family is a text twin
+// that reads 4.5:1 on white and on its own wash, a wash, a line and a fill.
+export const TONES = {
+  gold:     { text: 'var(--lala-gold-text)',     soft: 'var(--lala-gold-soft)',     line: 'var(--lala-gold-line)',     fill: 'var(--lala-gold)' },
+  warning:  { text: 'var(--warning-text)',       soft: 'var(--warning-bg)',         line: 'var(--warning-border)',     fill: 'var(--warning)' },
+  danger:   { text: 'var(--danger-text)',        soft: 'var(--danger-bg)',          line: 'var(--danger-border)',      fill: 'var(--danger)' },
+  success:  { text: 'var(--success-text)',       soft: 'var(--success-bg)',         line: 'var(--success-border)',     fill: 'var(--success-text)' },
+  info:     { text: 'var(--info-text)',          soft: 'var(--info-bg)',            line: 'var(--info-border)',        fill: 'var(--info-text)' },
+  lavender: { text: 'var(--lala-lavender-text)', soft: 'var(--lala-lavender-soft)', line: 'var(--lala-lavender-line)', fill: 'var(--lala-lavender)' },
+  neutral:  { text: 'var(--text-secondary)',     soft: 'var(--lala-parchment-2)',   line: 'var(--lala-parchment-3)',   fill: 'var(--text-secondary)' },
 };
 
-const STATUS_COLORS = { active: C.accent, resolved: C.green, dropped: C.red, dormant: C.textDim };
+const C = {
+  bg: 'var(--surface-bg)', surface: 'var(--surface-card)', surfaceAlt: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)',
+  text: 'var(--text-primary)', textDim: 'var(--text-secondary)', textFaint: 'var(--text-secondary)',
+  onFill: 'var(--text-inverse)',
+  accent: TONES.gold.text, green: TONES.success.text, red: TONES.danger.text, blue: TONES.info.text,
+  purple: TONES.lavender.text, orange: TONES.warning.text,
+};
+
+export const STATUS_TONES = { active: TONES.gold, resolved: TONES.success, dropped: TONES.danger, dormant: TONES.neutral };
+export const SEVERITY_TONES = { high: TONES.danger, medium: TONES.warning, low: TONES.neutral };
 const THREAD_TYPES = ['subplot', 'mystery', 'relationship', 'foreshadow', 'character_arc', 'theme'];
 const MEMORY_TYPES = ['goal', 'preference', 'relationship', 'belief', 'event', 'constraint', 'transformation', 'pain_point', 'dramatic_irony', 'open_mystery', 'foreshadow_seed'];
 
@@ -183,7 +197,7 @@ export default function StoryThreadTracker() {
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}`, paddingBottom: 0 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}`, paddingBottom: 0, overflowX: 'auto' }}>
           {[
             { key: 'threads', label: '⧖ Threads', count: threads.length },
             { key: 'memories', label: '◎ Memories', count: pendingMemories.length },
@@ -194,13 +208,14 @@ export default function StoryThreadTracker() {
               key={t.key}
               onClick={() => setTab(t.key)}
               style={{
-                padding: '10px 18px', fontSize: 13, fontWeight: tab === t.key ? 600 : 400,
-                cursor: 'pointer', border: 'none', borderBottom: `2px solid ${tab === t.key ? C.accent : 'transparent'}`,
+                padding: '10px 14px', fontSize: 13, fontWeight: tab === t.key ? 600 : 400,
+                whiteSpace: 'nowrap', flexShrink: 0,
+                cursor: 'pointer', border: 'none', borderBottom: `2px solid ${tab === t.key ? TONES.gold.fill : 'transparent'}`,
                 background: 'transparent', color: tab === t.key ? C.accent : C.textDim,
                 transition: 'all 0.2s',
               }}
             >
-              {t.label} {t.count > 0 && <span style={{ fontSize: 10, background: `${C.accent}20`, color: C.accent, padding: '1px 6px', borderRadius: 8, marginLeft: 4 }}>{t.count}</span>}
+              {t.label} {t.count > 0 && <span style={{ fontSize: 10, background: TONES.gold.soft, color: C.accent, padding: '1px 6px', borderRadius: 8, marginLeft: 4 }}>{t.count}</span>}
             </button>
           ))}
         </div>
@@ -217,8 +232,8 @@ export default function StoryThreadTracker() {
                     style={{
                       padding: '5px 12px', fontSize: 11, fontWeight: filter === f ? 600 : 400,
                       cursor: 'pointer', borderRadius: 12,
-                      border: `1px solid ${filter === f ? C.accent : C.border}`,
-                      background: filter === f ? `${C.accent}15` : 'transparent',
+                      border: `1px solid ${filter === f ? TONES.gold.line : C.border}`,
+                      background: filter === f ? TONES.gold.soft : 'transparent',
                       color: filter === f ? C.accent : C.textDim,
                     }}
                   >
@@ -228,7 +243,7 @@ export default function StoryThreadTracker() {
               </div>
               <button
                 onClick={() => setShowCreate(!showCreate)}
-                style={{ padding: '8px 16px', background: C.accent, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 16px', background: C.accent, color: C.onFill, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 + New Thread
               </button>
@@ -258,7 +273,7 @@ export default function StoryThreadTracker() {
                   >
                     {THREAD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  <button onClick={handleCreateThread} style={{ padding: '8px 18px', background: C.green, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  <button onClick={handleCreateThread} style={{ padding: '8px 18px', background: TONES.success.fill, color: C.onFill, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     Create
                   </button>
                   <button onClick={() => setShowCreate(false)} style={{ padding: '8px 12px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: 'pointer', color: C.textDim }}>
@@ -270,7 +285,7 @@ export default function StoryThreadTracker() {
 
             {/* Dangling warning */}
             {dangling.length > 0 && (
-              <div style={{ background: `${C.orange}12`, border: `1px solid ${C.orange}40`, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: C.orange }}>
+              <div style={{ background: TONES.warning.soft, border: `1px solid ${TONES.warning.line}`, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: C.orange }}>
                 ⚠ {dangling.length} thread{dangling.length > 1 ? 's' : ''} not referenced recently — may need attention
               </div>
             )}
@@ -284,21 +299,21 @@ export default function StoryThreadTracker() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {filteredThreads.map(t => (
                   <div key={t.id} style={{
-                    background: C.surface, border: `1px solid ${danglingIds.has(t.id) ? C.orange : C.border}`,
+                    background: C.surface, border: `1px solid ${danglingIds.has(t.id) ? TONES.warning.line : C.border}`,
                     borderRadius: 10, padding: 16, transition: 'all 0.2s',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t.thread_name}</span>
                           <span style={{
                             fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
-                            padding: '2px 8px', borderRadius: 8, color: STATUS_COLORS[t.status] || C.textDim,
-                            background: `${STATUS_COLORS[t.status] || C.textDim}15`,
+                            padding: '2px 8px', borderRadius: 8, color: (STATUS_TONES[t.status] || TONES.neutral).text,
+                            background: (STATUS_TONES[t.status] || TONES.neutral).soft,
                           }}>
                             {t.status}
                           </span>
-                          <span style={{ fontSize: 9, color: C.textFaint, background: `${C.accent}10`, padding: '2px 6px', borderRadius: 4 }}>
+                          <span style={{ fontSize: 9, color: C.textFaint, background: C.surfaceAlt, padding: '2px 6px', borderRadius: 4 }}>
                             {t.thread_type}
                           </span>
                         </div>
@@ -320,18 +335,18 @@ export default function StoryThreadTracker() {
                       <div style={{ display: 'flex', gap: 4 }}>
                         {t.status === 'active' && (
                           <button onClick={() => handleUpdateThread(t.id, { status: 'resolved' })}
-                            style={{ padding: '4px 10px', fontSize: 10, background: `${C.green}15`, color: C.green, border: `1px solid ${C.green}40`, borderRadius: 4, cursor: 'pointer' }}>
+                            style={{ padding: '4px 10px', fontSize: 10, background: TONES.success.soft, color: C.green, border: `1px solid ${TONES.success.line}`, borderRadius: 4, cursor: 'pointer' }}>
                             ✓ Resolve
                           </button>
                         )}
                         {t.status === 'resolved' && (
                           <button onClick={() => handleUpdateThread(t.id, { status: 'active' })}
-                            style={{ padding: '4px 10px', fontSize: 10, background: `${C.accent}15`, color: C.accent, border: `1px solid ${C.accent}40`, borderRadius: 4, cursor: 'pointer' }}>
+                            style={{ padding: '4px 10px', fontSize: 10, background: TONES.gold.soft, color: C.accent, border: `1px solid ${TONES.gold.line}`, borderRadius: 4, cursor: 'pointer' }}>
                             ↺ Reopen
                           </button>
                         )}
                         <button onClick={() => handleDeleteThread(t.id)}
-                          style={{ padding: '4px 10px', fontSize: 10, background: `${C.red}15`, color: C.red, border: `1px solid ${C.red}40`, borderRadius: 4, cursor: 'pointer' }}>
+                          style={{ padding: '4px 10px', fontSize: 10, background: TONES.danger.soft, color: C.red, border: `1px solid ${TONES.danger.line}`, borderRadius: 4, cursor: 'pointer' }}>
                           ✕
                         </button>
                       </div>
@@ -371,7 +386,7 @@ export default function StoryThreadTracker() {
                           <span style={{
                             fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
                             padding: '2px 8px', borderRadius: 8, color: C.purple,
-                            background: `${C.purple}15`,
+                            background: TONES.lavender.soft,
                           }}>
                             {m.type}
                           </span>
@@ -388,7 +403,7 @@ export default function StoryThreadTracker() {
                         {m.tags?.length > 0 && (
                           <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                             {m.tags.map((tag, i) => (
-                              <span key={i} style={{ fontSize: 9, padding: '1px 6px', background: `${C.accent}10`, borderRadius: 4, color: C.accent }}>
+                              <span key={i} style={{ fontSize: 9, padding: '1px 6px', background: TONES.gold.soft, borderRadius: 4, color: C.accent }}>
                                 {tag}
                               </span>
                             ))}
@@ -397,11 +412,11 @@ export default function StoryThreadTracker() {
                       </div>
                       <div style={{ display: 'flex', gap: 4, marginLeft: 10 }}>
                         <button onClick={() => handleConfirmMemory(m.id)}
-                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: C.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: TONES.success.fill, color: C.onFill, border: 'none', borderRadius: 6, cursor: 'pointer' }}>
                           ✓ Confirm
                         </button>
                         <button onClick={() => handleRejectMemory(m.id)}
-                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: 'transparent', color: C.red, border: `1px solid ${C.red}40`, borderRadius: 6, cursor: 'pointer' }}>
+                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: 'transparent', color: C.red, border: `1px solid ${TONES.danger.line}`, borderRadius: 6, cursor: 'pointer' }}>
                           ✕ Reject
                         </button>
                       </div>
@@ -429,17 +444,17 @@ export default function StoryThreadTracker() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {issues.map((issue, i) => {
-                  const colors = { high: C.red, medium: C.orange, low: C.textDim };
+                  const tone = SEVERITY_TONES[issue.severity] || TONES.neutral;
                   return (
                     <div key={i} style={{
-                      background: C.surface, border: `1px solid ${colors[issue.severity] || C.border}40`,
+                      background: C.surface, border: `1px solid ${tone.line}`,
                       borderRadius: 10, padding: 14,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{
                           fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
                           padding: '2px 8px', borderRadius: 8,
-                          color: colors[issue.severity], background: `${colors[issue.severity]}15`,
+                          color: tone.text, background: tone.soft,
                         }}>
                           {issue.severity}
                         </span>
@@ -478,14 +493,14 @@ export default function StoryThreadTracker() {
                             )}
                             <span style={{
                               fontSize: 9, padding: '2px 6px', borderRadius: 4,
-                              background: `${C.blue}15`, color: C.blue,
+                              background: TONES.info.soft, color: C.blue,
                             }}>
                               {r.rule_type?.replace(/_/g, ' ')}
                             </span>
                             <span style={{
                               fontSize: 9, padding: '2px 6px', borderRadius: 8,
                               color: r.status === 'active' ? C.green : C.textFaint,
-                              background: r.status === 'active' ? `${C.green}15` : `${C.textFaint}15`,
+                              background: r.status === 'active' ? TONES.success.soft : TONES.neutral.soft,
                             }}>
                               {r.status}
                             </span>
@@ -497,7 +512,7 @@ export default function StoryThreadTracker() {
                         </div>
                         <div style={{
                           width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: r.confirmed_by_author ? `${C.green}15` : `${C.textFaint}15`,
+                          background: r.confirmed_by_author ? TONES.success.soft : TONES.neutral.soft,
                           color: r.confirmed_by_author ? C.green : C.textFaint, fontSize: 14, fontWeight: 700,
                         }}>
                           {r.confirmed_by_author ? '✓' : '?'}
@@ -526,7 +541,7 @@ export default function StoryThreadTracker() {
                   }}>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' }}>
                       {s.pattern_tag && (
-                        <span style={{ fontSize: 9, padding: '2px 6px', background: `${C.purple}15`, color: C.purple, borderRadius: 4, fontWeight: 600 }}>
+                        <span style={{ fontSize: 9, padding: '2px 6px', background: TONES.lavender.soft, color: C.purple, borderRadius: 4, fontWeight: 600 }}>
                           {s.pattern_tag}
                         </span>
                       )}
@@ -535,7 +550,7 @@ export default function StoryThreadTracker() {
                       </span>
                       <span style={{
                         fontSize: 9, padding: '2px 6px', borderRadius: 8,
-                        background: `${C.textFaint}10`, color: C.textFaint,
+                        background: TONES.neutral.soft, color: C.textFaint,
                       }}>
                         {s.status}
                       </span>
