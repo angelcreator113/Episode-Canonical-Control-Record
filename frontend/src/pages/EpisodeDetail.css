@@ -3222,6 +3222,13 @@
 .ed-header-new.is-compact .ed-source-event-link,
 .ed-header-new.is-compact .ed-title-chip { display: none; }
 
+/* Below 1280px the app's top bar sticks too (Header.css); the episode
+   header sticks under it, not behind it (Evoni, 2026-10-05: only the title
+   chip showed beneath the bar). Header.jsx publishes --app-header-h. */
+@media (max-width: 1279px) {
+  .ed-header-new { top: var(--app-header-h, 0px); }
+}
+
 /* Planning (episode creation step 2): what Start Episode carried from the
    event, and the next decision. Soft pink and teal, the site's colours
    (values from Home.css). */
