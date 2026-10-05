@@ -117,7 +117,7 @@ describe('WorldAdmin events queue — cleanup and pagination (Task #2360)', () =
   test('search and sort each reset to page 1', async () => {
     renderQueue('?tab=events&evpage=5');
     await waitFor(() => expect(pageStatus()).toBe('Page 5 of 6'));
-    fireEvent.change(screen.getByPlaceholderText('Search events...'), { target: { value: 'Event' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'Event' } });
     await waitFor(() => expect(pageStatus()).toBe('Page 1 of 6'));
 
     fireEvent.click(screen.getByTestId('events-page-3'));

@@ -8,7 +8,7 @@
  * filter from the same sources the Event Package uses.
  */
 import { resolveEventOrganizer, resolveEventVenueAndDate } from './eventReadiness';
-import { DEAL_TYPES, DEAL_TYPE_LABELS, dealLabelFor } from './eventTerms';
+import { DEAL_TYPES, DEAL_TYPE_LABELS, dealLabelFor, describeCompensation } from './eventTerms';
 
 /** The filter value for an event with no deal type yet. */
 export const DEAL_TYPE_NOT_SET = 'not_set';
@@ -39,6 +39,28 @@ export function eventCardMetaParts(event) {
   if (eventDate) parts.push({ key: 'date', text: String(eventDate), missing: false });
   if (dealLabel) parts.push({ key: 'deal_type', text: dealLabel, missing: false });
   return parts;
+}
+
+/**
+ * What a card shows, to Evoni's Producer Mode redesign (2026-10-05): the
+ * category; the place line (venue · district · date, each only when set);
+ * the deal (its label, or null) and what it pays (the event's compensation
+ * summary); the organizer's name, or null.
+ */
+export function eventCardDetails(event) {
+  const ev = event || {};
+  const organizer = resolveEventOrganizer(ev);
+  const { venueName, eventDate } = resolveEventVenueAndDate(ev);
+  const organizerName = organizer.hasOrganizer
+    ? (organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName) || null
+    : null;
+  const district = ev.lalaverse_district || ev.canon_consequences?.automation?.lalaverse_district || null;
+  return {
+    category: ev.category ? String(ev.category).replace(/_/g, ' ') : null,
+    place: [venueName, district, eventDate ? String(eventDate) : null].filter(Boolean),
+    deal: { label: dealLabelFor(ev) || null, pays: describeCompensation(ev).summary },
+    organizer: organizerName,
+  };
 }
 
 /** The deal-type filter value an event falls under. */

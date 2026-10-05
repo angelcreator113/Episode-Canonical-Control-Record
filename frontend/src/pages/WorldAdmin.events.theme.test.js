@@ -36,12 +36,13 @@ describe('Events queue theme', () => {
     expect(stripTaskRefs(slice(jsx, start, end))).not.toMatch(HEX);
   });
 
-  test('the Auto-Fill and Generate actions are the primary, not gold or green', () => {
+  test('the Generate action is lavender, not gold or green; the state cards and New event follow the redesign', () => {
     const header = slice(jsx, QUEUE[0][0], QUEUE[0][1]);
     expect(header).toMatch(/🗓️ Auto-Fill This Month/);
     expect(header).not.toMatch(/background: '#B8962E'/);
-    expect(header).toMatch(/background: 'var\(--primary\)', color: 'var\(--text-inverse\)'[^}]*\}\}>\s*🎬 Generate from/);
-    expect(header).toMatch(/background: eventStatusFilter === f\.key \? 'var\(--primary\)'/);
+    expect(header).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>\s*🎬 Generate from/);
+    expect(header).toMatch(/className=\{`wa-ev-state\$\{on \? ' active' : ''\}`\}/);
+    expect(header).toMatch(/style=\{S\.primaryBtn\}>\s*<Plus[^>]*\/>New event/);
   });
 
   test('every queue state colors its chip, bar and button through tokens', () => {
