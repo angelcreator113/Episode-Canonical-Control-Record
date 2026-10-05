@@ -538,6 +538,16 @@ export default function EventPackagePage() {
     .map((guest, index) => ({ guest, index }))
     .filter(({ guest }) => guest.featured);
   const outfitPieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
+  // Lala's Look (the redesign): the dress code with the styling brief's formality, direction and footwear.
+  const stylingBrief = event.canon_consequences?.automation?.styling_brief || {};
+  const lookBrief = [
+    ['Dress code', event.dress_code],
+    ['Formality', stylingBrief.formality],
+    ['Style direction', stylingBrief.style_direction],
+    ['Footwear', stylingBrief.footwear_requirements],
+  ].filter(([label, value]) => label === 'Dress code' || (typeof value === 'string' && value.trim()));
+  // What going without featured attendees means, from the readiness rules.
+  const featuredConsequence = readiness.sections.find((sec) => sec.key === 'people')?.missing?.find((m) => m.key === 'featured')?.consequence || null;
 
   const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
 
@@ -1170,13 +1180,15 @@ export default function EventPackagePage() {
       <div className="epp-sections">
         <section id="epp-sec-identity" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title">Basics</h2>
+            <h2 className="epp-section-title"><span className="epp-section-num">1.</span> The Event <span className="epp-section-sub">What guests see</span></h2>
             {!used && !nameSuggestOpen && (
               <button className="epp-btn epp-btn-small" onClick={openNameSuggest}>
                 <Sparkles size={14} /> Suggest names
               </button>
             )}
           </div>
+          <div className="epp-split">
+          <div className="epp-split-main">
           <dl className="epp-fields">
             {/* Task #2135 (rule 14): a drafted name reads Auto-drafted · AI
                 draft, then Edited once changed; a name never drafted keeps
@@ -1245,18 +1257,46 @@ export default function EventPackagePage() {
               </div>
             </div>
           )}
+          </div>
+
+          {/* The invitation beside the event's fields (the redesign): what
+              guests receive, next to what they see. */}
+          <div id="epp-sec-invitation" className="epp-split-side epp-invite-col">
+            <h3 className="epp-col-title">Invitation</h3>
+            {/* The invitation names the organizer (Task #1790): with none set
+                it would read "A Special Host", so it waits for one. */}
+            {!organizer.hasOrganizer && !invitationAsset ? (
+              <div className="epp-empty" data-testid="invitation-needs-organizer">
+                Choose an organizer first — the invitation names them.
+              </div>
+            ) : (
+              <InvitationButton
+                mode="inline"
+                event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
+                showId={showId}
+                approvalInfo={invitationApprovalInfo}
+                regenerateSignal={invitationRegenSignal}
+                onGenerated={(_url, _assetId, approvalDetail) => {
+                  if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
+                  load();
+                }}
+              />
+            )}
+          </div>
+          </div>
         </section>
-        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} />
 
         <section id="epp-sec-people" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title">People</h2>
+            <h2 className="epp-section-title"><span className="epp-section-num">2.</span> People</h2>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openOrganizerPicker} data-testid="change-organizer">
                 <UserPlus size={14} /> Change Organizer
               </button>
             )}
           </div>
+          <div className="epp-split even">
+          <div className="epp-people-card">
           <div className="epp-organizer-line" data-testid="organizer-line" data-kind={organizer.kind || 'none'}>
             {organizer.hasOrganizer ? (
               <>
@@ -1322,7 +1362,8 @@ export default function EventPackagePage() {
             )}
           </div>
           )}
-          <div className="epp-guests">
+          </div>
+          <div className={`epp-guests${featuredGuests.length ? '' : ' none'}`} data-testid="featured-panel">
             <div className="epp-section-header">
               <div className="epp-fields-label">Featured Attendees ({featuredGuests.length}/{MAX_FEATURED_GUESTS})</div>
               {!used && (
@@ -1360,7 +1401,12 @@ export default function EventPackagePage() {
                   </li>
                 ))}
               </ul>
-            ) : <div className="epp-empty">No featured attendees yet</div>}
+            ) : (
+              <div className="epp-empty">
+                No featured attendees yet{guestList.length ? ` · ${guestList.length} invited` : ''}
+                {featuredConsequence && <span className="epp-guests-note" data-testid="featured-consequence"> {featuredConsequence}</span>}
+              </div>
+            )}
 
             {!used && featuredGuests.length < MAX_FEATURED_GUESTS && (
               <EventGuestRecommendations
@@ -1402,17 +1448,24 @@ export default function EventPackagePage() {
               ) : <div className="epp-empty">No guests yet</div>
             )}
           </div>
+          </div>
         </section>
 
         <section id="epp-sec-place" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title">Place</h2>
+            <h2 className="epp-section-title"><span className="epp-section-num">3.</span> Place</h2>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={() => setVenuePickerOpen(true)}>
                 <MapPin size={14} /> {venueDate.venueLocationId ? 'Change venue' : 'Choose venue'}
               </button>
             )}
           </div>
+          <div className="epp-split even epp-place">
+          <div className="epp-split-side epp-place-image">
+            {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
+            <EventLookImage showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          </div>
+          <div className="epp-split-main">
           <dl className="epp-fields">
             <div>
               <dt>Venue</dt>
@@ -1462,32 +1515,10 @@ export default function EventPackagePage() {
           {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
               lock (Q9): editable until the episode is accepted. */}
           <EventVenueLook showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
-          {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
-          <EventLookImage showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          </div>
+          </div>
         </section>
 
-        <section id="epp-sec-invitation" className="epp-section">
-          <h2 className="epp-section-title">Invitation</h2>
-          {/* The invitation names the organizer (Task #1790): with none set
-              it would read "A Special Host", so it waits for one. */}
-          {!organizer.hasOrganizer && !invitationAsset ? (
-            <div className="epp-empty" data-testid="invitation-needs-organizer">
-              Choose an organizer first — the invitation names them.
-            </div>
-          ) : (
-            <InvitationButton
-              mode="inline"
-              event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
-              showId={showId}
-              approvalInfo={invitationApprovalInfo}
-              regenerateSignal={invitationRegenSignal}
-              onGenerated={(_url, _assetId, approvalDetail) => {
-                if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
-                load();
-              }}
-            />
-          )}
-        </section>
 
         {/* Style (Task #1814): the requirements that sat here moved to the
             Terms area below as access requirements, one of the four kinds
@@ -1498,28 +1529,43 @@ export default function EventPackagePage() {
             /outfit, saved on world_events.outfit_pieces) as the Events
             card's ⋯ menu. Once used it stays read-only, as the rest of the
             package does. */}
-        <section id="epp-sec-look" className="epp-section" data-testid="style-section">
+        <section id="epp-sec-look" className={`epp-section epp-look-section${outfitPieces.length ? '' : ' no-outfit'}`} data-testid="style-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title">Style</h2>
-            {!used && (
-              <button className="epp-btn epp-btn-small" onClick={() => setOutfitPickerOpen(true)} data-testid="style-choose-outfit">
-                <Shirt size={14} /> {outfitPieces.length ? 'Change outfit' : 'Choose outfit'}
-              </button>
-            )}
+            <h2 className="epp-section-title"><span className="epp-section-num">4.</span> Lala&apos;s Look</h2>
+            <span className={`epp-chip${outfitPieces.length ? '' : ' warn'}`} data-testid="style-outfit-summary">
+              {outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}
+            </span>
           </div>
-          <dl className="epp-fields">
-            <div>
-              <dt>Outfit</dt>
-              <dd data-testid="style-outfit-summary">{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd>
-              {outfitPieces.length > 0 && (
-                <dd className="epp-outfit-pieces">
-                  {outfitPieces.map((piece, i) => (
-                    <span key={piece.id || i} className="epp-outfit-piece">{piece.name || 'Unnamed piece'}</span>
-                  ))}
-                </dd>
+          <div className="epp-split">
+            {/* What the event asks of her: the dress code and the creation
+                draft's styling brief (automation.styling_brief). */}
+            <dl className="epp-split-main epp-look-brief" data-testid="look-brief">
+              {lookBrief.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not set'}</dd></div>)}
+            </dl>
+            <div className={`epp-split-side epp-outfit-card${outfitPieces.length ? '' : ' empty'}`} data-testid="outfit-card">
+              {outfitPieces.length > 0 ? (
+                <>
+                  <span className="epp-col-title">Her outfit</span>
+                  <ul className="epp-outfit-pieces">
+                    {outfitPieces.map((piece, i) => (
+                      <li key={piece.id || i} className="epp-outfit-piece">{piece.name || 'Unnamed piece'}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <Shirt size={22} aria-hidden="true" />
+                  <strong>No outfit yet</strong>
+                  <span>Pick from the closet; the coin cost is charged at Finalize.</span>
+                </>
+              )}
+              {!used && (
+                <button className={`epp-btn ${outfitPieces.length ? '' : 'epp-btn-primary'}`} onClick={() => setOutfitPickerOpen(true)} data-testid="style-choose-outfit">
+                  <Shirt size={14} /> {outfitPieces.length ? 'Change outfit' : 'Choose outfit'}
+                </button>
               )}
             </div>
-          </dl>
+          </div>
           {/* Recommended looks (episode creation step 3): whole outfits from
               the closet while none is chosen. */}
           {!used && outfitPieces.length === 0 && (
@@ -1697,6 +1743,9 @@ export default function EventPackagePage() {
             </div>
           )}
         </section>
+
+        {/* The creation draft's planning notes; they become Behind the Scenes in the redesign's part 3. */}
+        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} />
 
         <section id="epp-sec-review" className="epp-section">
           <h2 className="epp-section-title">Review</h2>
