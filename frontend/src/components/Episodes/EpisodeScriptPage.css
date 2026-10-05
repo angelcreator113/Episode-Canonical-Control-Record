@@ -1,0 +1,77 @@
+/* The Script page (Evoni's Episode mock, 2026-10-05): the script's card
+   and its beats beside what generation reads and where the voices come
+   from. Colours through tokens only. */
+.esp { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 20px; align-items: start; padding: 4px 0 24px; }
+.esp-main, .esp-side { min-width: 0; }
+.esp-side { display: flex; flex-direction: column; gap: 16px; }
+
+.esp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 20px 22px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+.esp-head-text { min-width: 0; }
+.esp .esp-title { margin: 0; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); }
+.esp-sub { margin: 2px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
+.esp-complete { color: var(--lala-lavender-text); font-weight: 700; }
+.esp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.esp-btn {
+  padding: 9px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.esp-btn:hover, .esp-btn.is-on { background: var(--lala-lavender-soft); }
+.esp-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.esp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 24px;
+  border: 1px dashed var(--lala-gold-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+.esp-empty-icon { color: var(--lala-lavender-light); margin-bottom: 8px; }
+.esp .esp-empty-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--lala-ink); }
+.esp-empty-text { max-width: 460px; margin: 0; font-size: 15px; line-height: 1.55; color: var(--lala-ink-muted); }
+
+.esp-uses, .esp-voice { padding: 18px 20px; border-radius: 14px; }
+.esp-uses { border: 1px solid var(--lala-lavender-line); background: var(--surface-card); }
+.esp-voice { border: 1px solid var(--accent-light); background: var(--accent-subtle); }
+.esp .esp-side-title { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.esp .esp-voice .esp-side-title { color: var(--accent-dark); }
+.esp-voice p { margin: 0 0 8px; font-size: 14px; color: var(--lala-ink); }
+.esp-uses-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.esp-uses-list li { display: flex; align-items: baseline; gap: 10px; font-size: 14px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.esp-uses-list strong { color: var(--lala-ink); }
+.esp-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--lala-lavender); transform: translateY(1px); }
+.esp-uses-list .is-gap .esp-dot { background: var(--warning); }
+.esp-uses-note { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
+.esp-link { font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.esp-link:hover { text-decoration: underline; }
+
+@media (max-width: 900px) {
+  .esp { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .esp-head { flex-direction: column; align-items: stretch; }
+  .esp-head > button { width: 100%; }
+}
+/* responsive.css sizes every h3 on small screens with !important; the
+   panel's small caps and the empty card's title keep their size. */
+.esp .esp-side-title { font-size: 12px !important; }
+.esp .esp-empty-title { font-size: 17px !important; }
