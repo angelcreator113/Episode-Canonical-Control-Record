@@ -805,3 +805,35 @@ describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
     }
   });
 });
+
+// Evoni, 2026-10-05: a For This Event card named its matching set but
+// offered no way to wear it; only Full Closet's Sets group could.
+describe('EpisodeWardrobeGameplay — Wear the set from For This Event', () => {
+  const VEST = { ...base, id: 'vest', name: 'Glen Plaid Vest Dress', clothing_category: 'dress', match_score: 30, can_select: true, is_owned: true, outfit_set_id: 'set-safari', outfit_set_name: 'Safari business set' };
+  const BOOTS = { ...base, id: 'boots', name: 'Safari Boots', clothing_category: 'boots', is_owned: true, lock_type: 'none', outfit_set_id: 'set-safari', outfit_set_name: 'Safari business set' };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: [...POOL, VEST], pool_breakdown: {} } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: serverScore(55, 'Okay') });
+      return Promise.resolve({ data: { success: true } });
+    });
+    const get = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?')
+      ? Promise.resolve({ data: { data: [{ ...VEST }, BOOTS], pagination: { total: 2 } } })
+      : get(url)));
+  });
+
+  test('the card wears every piece of its set, loading the closet first', async () => {
+    await renderGame();
+    const btn = await screen.findByTestId('wear-set-vest');
+    expect(btn.textContent).toBe('Wear the set');
+    fireEvent.click(btn);
+    expect(await screen.findByText(/Wearing the Safari business set/)).toBeTruthy();
+    expect(api.get.mock.calls.some(([url]) => url.startsWith('/api/v1/wardrobe?'))).toBe(true);
+    expect(screen.getAllByText('Safari Boots').length).toBeGreaterThan(0);
+  });
+});

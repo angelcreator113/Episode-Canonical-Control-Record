@@ -275,15 +275,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       // oldest items once a closet passed 200).
       const { items, total } = await fetchClosetWithTotal(api, showId);
       setClosetTotal(total);
-      setClosetItems(Array.isArray(items) ? items.map(i => ({
+      const loaded = Array.isArray(items) ? items.map(i => ({
         ...i,
         aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
         event_types: typeof i.event_types === 'string' ? JSON.parse(i.event_types) : (i.event_types || []),
         match_score: 0,
-      })) : []);
+      })) : [];
+      setClosetItems(loaded);
+      return loaded;
     } catch (err) {
       console.error('Failed to load closet:', err);
       setClosetError(err?.response?.data?.error || err?.message || 'network error');
+      return null;
     }
     finally { setClosetLoading(false); }
   }, [showId]);
@@ -496,6 +499,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (locked): ${locked.map(p => p.name).join(', ')}`);
     if (noSlot.length) notes.push(`${noSlot.length} piece${noSlot.length === 1 ? '' : 's'} left out (no game slot): ${noSlot.map(p => p.name).join(', ')}`);
     setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
+  };
+
+  // Wear a piece's whole matching set from For This Event (Evoni, 2026-10-05:
+  // the set's name showed on the card but only Full Closet could wear it).
+  // The set's pieces are the closet's, loaded first when it is not yet.
+  const wearSetOf = async (item) => {
+    const closet = closetItems.length > 0 ? closetItems : await loadCloset();
+    if (!closet) { setError('Could not load the closet to wear the set'); return; }
+    const set = matchingSetsFrom(closet.map(i => withReach(i, { coins, reputation })))
+      .find(x => String(x.id) === String(item.outfit_set_id));
+    if (!set) { setError(`The ${item.outfit_set_name || 'matching set'} has no pieces in the closet`); return; }
+    wearSet(set);
   };
 
   // W2: in a multi slot, one piece comes off (itemId); the rest stay.
@@ -897,7 +912,16 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
                     {item.outfit_set_id && (
-                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2 }}>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</div>
+                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</span>
+                        {browseMode === 'pool' && (
+                          <button type="button" data-testid={`wear-set-${item.id}`}
+                            onClick={(e) => { e.stopPropagation(); wearSetOf(item); }}
+                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: '#7c3aed', color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                            Wear the set
+                          </button>
+                        )}
+                      </div>
                     )}
                     {browseMode !== 'pool' && (
                       <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>
