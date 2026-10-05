@@ -186,9 +186,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(purchases.filter((r) => r.source_id === ids.gown)).toEqual([
         expect.objectContaining({ amount: 200, flow: 'select' }),
       ]);
-      expect(purchases.filter((r) => r.source_id === ids.clutch)).toEqual([
-        expect.objectContaining({ amount: 50, flow: null }),
-      ]);
+      // The selected gown is the episode's outfit (an approved link), so the
+      // event's clutch, never worn, is not charged (Evoni, 2026-10-05).
+      expect(purchases.filter((r) => r.source_id === ids.clutch)).toEqual([]);
     });
 
     it('a piece bought by /purchase outside any episode is not charged again by finalize', async () => {

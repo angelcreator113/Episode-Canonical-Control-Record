@@ -253,9 +253,49 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     expect(lockCalls[0][1]).toEqual({ episode_id: 'ep-1', show_id: 'show-1', wardrobe_ids: expect.arrayContaining(['d-draft', 's1']) });
     expect(lockCalls[0][1].wardrobe_ids).toHaveLength(2);
     expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/select')).toHaveLength(0);
-    // Setting the returned balance reloads the pool (coins feed its reach
-    // flags), so wait for the header to render the new balance.
+    // The header shows the returned balance.
     expect(await screen.findByText('🪙 200')).toBeTruthy();
+  });
+
+  // Evoni, 2026-10-05: the page's coin chip kept the old balance after a
+  // purchase or a paid lock, and a purchase reloaded the pool twice.
+  test('a paid lock tells the page its balance changed, and does not reload the pool', async () => {
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });
+      if (url === '/api/v1/wardrobe/lock-outfit-atomic') {
+        return Promise.resolve({ data: { success: true, locked: [{ id: 'd-draft', coin_purchased: true }], coins_spent: 300, coins_after: 200 } });
+      }
+      if (isScoreUrl(url)) return Promise.resolve({ data: serverScore(55, 'Okay') });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const onCoinsChange = vi.fn();
+    await renderGame({ onCoinsChange });
+    const poolsBefore = api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool').length;
+    fireEvent.click(await screen.findByRole('button', { name: /Lock Outfit/ }));
+    await screen.findByText('Outfit Locked');
+    expect(await screen.findByText('🪙 200')).toBeTruthy();
+    expect(onCoinsChange).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool')).toHaveLength(poolsBefore);
+  });
+
+  test('a purchase reloads the pool once, quietly, and tells the page', async () => {
+    const BAG = { ...base, id: 'bag-1', name: 'Pearl Clutch', clothing_category: 'accessories', match_score: 10, can_select: false, can_purchase: true, is_owned: false, lock_type: 'coin', coin_cost: 50 };
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: [...POOL, BAG], pool_breakdown: {} } });
+      if (url === '/api/v1/wardrobe/purchase') return Promise.resolve({ data: { success: true, cost: 50, coins_after: 450 } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: serverScore(55, 'Okay') });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const onCoinsChange = vi.fn();
+    await renderGame({ onCoinsChange });
+    fireEvent.click(screen.getByRole('button', { name: /Accessories/ }));
+    const buy = await screen.findByText(/Buy for 50 coins/);
+    const poolsBefore = api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool').length;
+    fireEvent.click(buy);
+    expect(await screen.findByText(/Purchased "Pearl Clutch"/)).toBeTruthy();
+    expect(onCoinsChange).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool')).toHaveLength(poolsBefore + 1);
+    expect(screen.queryByText(/Opening the closet/)).toBeNull();
   });
 
   test('a refused lock leaves the outfit unlocked and shows why', async () => {
@@ -763,5 +803,37 @@ describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
     } finally {
       CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
     }
+  });
+});
+
+// Evoni, 2026-10-05: a For This Event card named its matching set but
+// offered no way to wear it; only Full Closet's Sets group could.
+describe('EpisodeWardrobeGameplay — Wear the set from For This Event', () => {
+  const VEST = { ...base, id: 'vest', name: 'Glen Plaid Vest Dress', clothing_category: 'dress', match_score: 30, can_select: true, is_owned: true, outfit_set_id: 'set-safari', outfit_set_name: 'Safari business set' };
+  const BOOTS = { ...base, id: 'boots', name: 'Safari Boots', clothing_category: 'boots', is_owned: true, lock_type: 'none', outfit_set_id: 'set-safari', outfit_set_name: 'Safari business set' };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: [...POOL, VEST], pool_breakdown: {} } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: serverScore(55, 'Okay') });
+      return Promise.resolve({ data: { success: true } });
+    });
+    const get = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?')
+      ? Promise.resolve({ data: { data: [{ ...VEST }, BOOTS], pagination: { total: 2 } } })
+      : get(url)));
+  });
+
+  test('the card wears every piece of its set, loading the closet first', async () => {
+    await renderGame();
+    const btn = await screen.findByTestId('wear-set-vest');
+    expect(btn.textContent).toBe('Wear the set');
+    fireEvent.click(btn);
+    expect(await screen.findByText(/Wearing the Safari business set/)).toBeTruthy();
+    expect(api.get.mock.calls.some(([url]) => url.startsWith('/api/v1/wardrobe?'))).toBe(true);
+    expect(screen.getAllByText('Safari Boots').length).toBeGreaterThan(0);
   });
 });

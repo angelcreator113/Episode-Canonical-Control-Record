@@ -3,6 +3,8 @@
  * payment or rewards (docs/EVENT_EPISODE_FLOW.md §8(x) D3; Task #2229).
  *
  * POST /wardrobe/lock-outfit-atomic books its purchases against the episode.
+ * Since 2026-10-05 the locked outfit, when there is one, is the outfit
+ * finalize charges; a piece finalize charges becomes Lala's (is_owned).
  * finalizeEpisodeFinancials counted ANY executed ledger row on the episode as
  * "already finalized", so after a lock it booked nothing at all.
  */
@@ -82,7 +84,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     }
   });
 
-  it('after locking one piece, finalize still books the entry cost and charges only the unlocked piece', async () => {
+  it('after locking one piece, finalize still books the entry cost and charges only the locked outfit', async () => {
     const ids = await seed();
 
     const lock = await request(app)
@@ -96,15 +98,39 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(result.already_finalized).toBeUndefined();
     const rows = await ledger(ids);
     expect(rows.filter((r) => r.category === 'event_entry').map((r) => r.amount)).toEqual([100]);
-    // The gown is charged once, by the lock; the clutch once, by finalize.
+    // The gown is charged once, by the lock. The locked outfit is what Lala
+    // wore, so the event's clutch, not in it, is not charged (Evoni,
+    // 2026-10-05: finalize charged the event's outfit, not the locked one).
     const purchases = rows.filter((r) => r.category === 'wardrobe_purchase');
-    expect(purchases).toHaveLength(2);
-    expect(purchases.filter((r) => r.source_id === ids.gown)).toEqual([
-      expect.objectContaining({ amount: 200, flow: 'lock_outfit' }),
-    ]);
-    expect(purchases.filter((r) => r.source_id === ids.clutch)).toEqual([
-      expect.objectContaining({ amount: 50, flow: null }),
-    ]);
+    expect(purchases).toEqual([expect.objectContaining({ source_id: ids.gown, amount: 200, flow: 'lock_outfit' })]);
+  });
+
+  it('with no outfit locked, finalize charges the event outfit and the pieces become Lala\'s', async () => {
+    const ids = await seed();
+
+    await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
+
+    const purchases = (await ledger(ids)).filter((r) => r.category === 'wardrobe_purchase');
+    expect(purchases.map((r) => [r.source_id, r.amount]).sort()).toEqual([[ids.clutch, 50], [ids.gown, 200]].sort());
+    // Owned now, so the styling game never offers them at their price again.
+    const owned = await q('SELECT id, is_owned FROM wardrobe WHERE id IN (:gown, :clutch)', ids);
+    expect(owned.every((r) => r.is_owned === true)).toBe(true);
+  });
+
+  it('a dry run charges nothing and marks nothing owned', async () => {
+    const ids = await seed();
+    await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize, { dryRun: true });
+    expect((await ledger(ids)).filter((r) => r.category === 'wardrobe_purchase')).toEqual([]);
+    const owned = await q('SELECT is_owned FROM wardrobe WHERE id IN (:gown, :clutch)', ids);
+    expect(owned.every((r) => r.is_owned === false)).toBe(true);
+  });
+
+  it('an event piece Lala owns now is not charged, whatever the snapshot says', async () => {
+    const ids = await seed();
+    await run('UPDATE wardrobe SET is_owned = true WHERE id = :clutch', ids);
+    await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
+    const purchases = (await ledger(ids)).filter((r) => r.category === 'wardrobe_purchase');
+    expect(purchases.map((r) => r.source_id)).toEqual([ids.gown]);
   });
 
   it('a second finalize is still recognised as already finalized', async () => {

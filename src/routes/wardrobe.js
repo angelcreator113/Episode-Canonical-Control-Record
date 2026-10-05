@@ -11,6 +11,7 @@ const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/c
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
 const { itemReach, toCharacter } = require('../services/wardrobeReach');
 const { DecisionLogger } = require('../utils/decisionLogger');
+const { CATEGORY_ALIASES: WARDROBE_CATEGORY_ALIASES } = require('../utils/wardrobeSlots');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -42,8 +43,30 @@ async function checkSpendEpisode(models, episodeId, showId) {
  * and a bottom) and shoes. Adds the best-matching reachable item for a slot
  * that has none; ranking and the other pool roles are left as they are.
  */
+// The body and shoes categories the styling game locks on, read the way the
+// game reads them (frontend/src/lib/closetGrouping.js canonicalCategory,
+// over the shared CATEGORY_ALIASES): "Heels", "ankle boots" and "Evening
+// Gown" count as shoes and dress. The pool's guarantee compared the raw
+// string, so a show whose shoes are all "Heels" was offered no wearable
+// shoes in For This Event (Evoni, 2026-10-05).
+const GAME_BODY_CATEGORIES = ['dress', 'top', 'bottom', 'shoes'];
+function gameCategory(raw) {
+  const n = String(raw || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (!n) return null;
+  const exact = (w) => (GAME_BODY_CATEGORIES.includes(w) ? w
+    : (GAME_BODY_CATEGORIES.includes(WARDROBE_CATEGORY_ALIASES[w]) ? WARDROBE_CATEGORY_ALIASES[w] : null));
+  const direct = exact(n);
+  if (direct) return direct;
+  const words = n.split(/[\s/_,&+-]+/).filter(Boolean);
+  for (let i = words.length - 1; i >= 0; i -= 1) {
+    const hit = exact(words[i]);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function ensureReachableRequiredSlots(pool, scored, addToPool) {
-  const catOf = (i) => String(i.clothing_category || '').toLowerCase();
+  const catOf = (i) => gameCategory(i.clothing_category);
   const reachableInPool = (cat) => pool.some((i) => i.can_select && catOf(i) === cat);
   const bestReachable = (cat) => scored
     .filter((i) => i.can_select && catOf(i) === cat)
@@ -307,6 +330,10 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
       JOIN wardrobe w ON w.id = ew.wardrobe_id
       WHERE ew.episode_id = :episode_id
         AND ew.deleted_at IS NULL
+        -- Only an approved link is the locked outfit; a pending one (a
+        -- library assign awaiting approval) made the game open "Locked"
+        -- (Evoni, 2026-10-05).
+        AND ew.approval_status = 'approved'
         AND (w.deleted_at IS NULL)
         AND w.parent_item_id IS NULL
       ORDER BY ew.created_at ASC
@@ -1497,10 +1524,10 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     // Ensure required categories have at least 3 items in pool
     const REQUIRED_CATEGORIES = ['shoes', 'dress'];
     for (const cat of REQUIRED_CATEGORIES) {
-      const alreadyHas = pool.filter(i => i.clothing_category === cat).length;
+      const alreadyHas = pool.filter(i => gameCategory(i.clothing_category) === cat).length;
       if (alreadyHas < 2) {
         const best = scored
-          .filter(i => i.clothing_category === cat && !addedIds.has(i.id))
+          .filter(i => gameCategory(i.clothing_category) === cat && !addedIds.has(i.id))
           .sort((a, b) => b.match_score - a.match_score)
           .slice(0, 3 - alreadyHas);
         best.forEach(item => addToPool(item, item.is_owned ? 'safe' : 'stretch'));
@@ -1699,10 +1726,13 @@ router.post('/select', requireAuth, async (req, res) => {
 // which also restores a soft-deleted link). Any failure rolls all of it
 // back: no coins spent, no rows written.
 //
-// Like /select, the links are added to the episode's existing ones; this
-// does not remove pieces locked earlier (the wardrobe-events lock-outfit
-// route is the one that replaces an outfit). Reputation is read from Lala's
-// character_state row, not taken from the request body.
+// The lock is the episode's outfit: it replaces the outfit locked before
+// (Evoni, 2026-10-05: Unlock, change a piece and lock again kept the old
+// pieces too, and the score and completion counted all of them). Approved
+// links not in this lock are soft-deleted in the same transaction; pending
+// links (a library assign awaiting approval) are left alone. Nothing bought
+// earlier is refunded: a purchased piece stays Lala's. Reputation is read
+// from Lala's character_state row, not taken from the request body.
 
 router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
   try {
@@ -1755,7 +1785,17 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
       console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: ${err.message}`);
       return res.status(400).json(insufficientCoinsBody(err));
     }
-    const outOfReach = pieces.filter((p) => !p.reach.needs_purchase && !p.reach.can_select);
+    // A piece already in this episode's locked outfit stays wearable on a
+    // re-lock (the game restores it as selectable); only a new piece must be
+    // within reach. Before, an unlocked-then-relocked outfit was refused for
+    // a piece the episode generator had put there.
+    const [linkedRows] = await models.sequelize.query(
+      `SELECT wardrobe_id FROM episode_wardrobe
+        WHERE episode_id = :episode_id AND deleted_at IS NULL AND approval_status = 'approved'`,
+      { replacements: { episode_id } }
+    );
+    const alreadyLocked = new Set((linkedRows || []).map((r) => String(r.wardrobe_id)));
+    const outOfReach = pieces.filter((p) => !p.reach.needs_purchase && !p.reach.can_select && !alreadyLocked.has(String(p.item.id)));
     if (outOfReach.length > 0) {
       const names = outOfReach.map((p) => p.item.name);
       console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: out of reach: ${names.join(', ')}`);
@@ -1818,6 +1858,13 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
             { replacements: { episode_id, wardrobe_id: id }, transaction: t }
           );
         }
+        // The rest of the previously locked outfit comes off the episode.
+        await models.sequelize.query(
+          `UPDATE episode_wardrobe SET deleted_at = NOW(), updated_at = NOW()
+            WHERE episode_id = :episode_id AND deleted_at IS NULL
+              AND approval_status = 'approved' AND wardrobe_id NOT IN (:ids)`,
+          { replacements: { episode_id, ids }, transaction: t }
+        );
         if (purchases.length > 0) {
           ({ balance: coinsAfter } = await syncCoinsFromLedger(models.sequelize, show_id, { transaction: t }));
         }
@@ -2483,3 +2530,5 @@ router.post('/:showId/auto-tag-event-types', requireAuth, aiRateLimiter, async (
 module.exports = router;
 module.exports.getOutfitScore = getOutfitScore;
 module.exports.CONFIDENCE_LEVELS = CONFIDENCE_LEVELS;
+module.exports.gameCategory = gameCategory;
+module.exports.ensureReachableRequiredSlots = ensureReachableRequiredSlots;

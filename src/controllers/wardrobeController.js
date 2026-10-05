@@ -249,7 +249,11 @@ module.exports = {
         outfit_match_weight: outfitMatchWeight != null && outfitMatchWeight !== '' ? parseInt(outfitMatchWeight, 10) : undefined,
         influence_required: influenceRequired != null && influenceRequired !== '' ? parseInt(influenceRequired, 10) : undefined,
         season_unlock_episode: seasonUnlockEpisode != null && seasonUnlockEpisode !== '' ? parseInt(seasonUnlockEpisode, 10) : undefined,
-        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : undefined,
+        // A piece with no lock is "always available" (the upload form's own
+        // words): with no ownership given it is Lala's. Saved unowned, the
+        // styling game showed it Locked with no way to wear or buy it
+        // (Evoni, 2026-10-05). A coin or reputation lock stays unowned.
+        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : ((!lockType || lockType === 'none') ? true : undefined),
         is_visible: isVisible != null ? (isVisible === 'true' || isVisible === true) : undefined,
         lala_reaction_own: lalaReactionOwn || undefined,
         lala_reaction_locked: lalaReactionLocked || undefined,

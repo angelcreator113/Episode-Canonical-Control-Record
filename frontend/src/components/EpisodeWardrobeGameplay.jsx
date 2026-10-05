@@ -105,7 +105,7 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
 
 // ─── MAIN COMPONENT ───
 
-export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete }) {
+export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete, onCoinsChange }) {
   const [pool, setPool] = useState([]);
   const [poolBreakdown, setPoolBreakdown] = useState({});
   const [loading, setLoading] = useState(false);
@@ -173,9 +173,16 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   }[score.status] || 'None of these pieces could be scored.';
 
   // ─── Load pool ───
-  const loadPool = useCallback(async () => {
+  // The pool is asked with the coins as they stand when it loads, read from a
+  // ref: with the coins in its deps, a purchase reloaded the pool twice (the
+  // coins changed, and purchaseItem reloads it), each time behind the
+  // full-screen spinner (Evoni, 2026-10-05). A quiet reload keeps the game on
+  // screen.
+  const coinsRef = useRef(localCoins ?? characterState.coins ?? 0);
+  coinsRef.current = localCoins ?? characterState.coins ?? 0;
+  const loadPool = useCallback(async ({ quiet = false } = {}) => {
     if (!showId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const res = await api.post('/api/v1/wardrobe/browse-pool', {
@@ -188,14 +195,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         prestige: event.prestige || 5,
         strictness: event.strictness || 5,
         host_brand: event.host_brand || '',
-        character_state: { ...characterState, coins: localCoins ?? characterState.coins ?? 0 },
+        character_state: { ...characterState, coins: coinsRef.current },
       });
       setPool(res.data.pool || []);
       setPoolBreakdown(res.data.pool_breakdown || {});
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load wardrobe');
     } finally { setLoading(false); }
-  }, [showId, episodeId, event, characterState, localCoins]);
+  }, [showId, episodeId, event, characterState]);
 
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
@@ -268,15 +275,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       // oldest items once a closet passed 200).
       const { items, total } = await fetchClosetWithTotal(api, showId);
       setClosetTotal(total);
-      setClosetItems(Array.isArray(items) ? items.map(i => ({
+      const loaded = Array.isArray(items) ? items.map(i => ({
         ...i,
         aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
         event_types: typeof i.event_types === 'string' ? JSON.parse(i.event_types) : (i.event_types || []),
         match_score: 0,
-      })) : []);
+      })) : [];
+      setClosetItems(loaded);
+      return loaded;
     } catch (err) {
       console.error('Failed to load closet:', err);
       setClosetError(err?.response?.data?.error || err?.message || 'network error');
+      return null;
     }
     finally { setClosetLoading(false); }
   }, [showId]);
@@ -491,6 +501,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
   };
 
+  // Wear a piece's whole matching set from For This Event (Evoni, 2026-10-05:
+  // the set's name showed on the card but only Full Closet could wear it).
+  // The set's pieces are the closet's, loaded first when it is not yet.
+  const wearSetOf = async (item) => {
+    const closet = closetItems.length > 0 ? closetItems : await loadCloset();
+    if (!closet) { setError('Could not load the closet to wear the set'); return; }
+    const set = matchingSetsFrom(closet.map(i => withReach(i, { coins, reputation })))
+      .find(x => String(x.id) === String(item.outfit_set_id));
+    if (!set) { setError(`The ${item.outfit_set_name || 'matching set'} has no pieces in the closet`); return; }
+    wearSet(set);
+  };
+
   // W2: in a multi slot, one piece comes off (itemId); the rest stay.
   const removeFromSlot = (slotKey, itemId) => {
     setFilledSlots(prev => {
@@ -521,9 +543,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`);
         }
 
-        // Refresh pool to get updated ownership flags
+        // Refresh pool to get updated ownership flags (once, quietly), and
+        // tell the page its balance changed.
         markOwnedInCloset([item.id]);
-        await loadPool();
+        onCoinsChange?.();
+        await loadPool({ quiet: true });
 
         // Auto-equip the purchased/owned item into the active slot
         const ownedItem = { ...item, is_owned: true, can_select: true, can_purchase: false };
@@ -549,6 +573,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       const bought = (res.data?.locked || []).filter(l => l.coin_purchased).map(l => l.id);
       if (bought.length > 0) markOwnedInCloset(bought);
       if (res.data?.coins_after != null) setLocalCoins(res.data.coins_after);
+      if ((res.data?.coins_spent || 0) > 0) onCoinsChange?.();
       // Task #1943: onOutfitComplete gets the server's score for the locked
       // outfit — the score effect reports it when the GET answers.
       lockCompleteRef.current = filledSlots;
@@ -887,7 +912,16 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
                     {item.outfit_set_id && (
-                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2 }}>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</div>
+                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</span>
+                        {browseMode === 'pool' && (
+                          <button type="button" data-testid={`wear-set-${item.id}`}
+                            onClick={(e) => { e.stopPropagation(); wearSetOf(item); }}
+                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: '#7c3aed', color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                            Wear the set
+                          </button>
+                        )}
+                      </div>
                     )}
                     {browseMode !== 'pool' && (
                       <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>

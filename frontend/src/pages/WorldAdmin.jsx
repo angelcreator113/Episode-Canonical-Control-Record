@@ -325,7 +325,7 @@ function WorldAdmin() {
   const [wardrobeEditBrandIsFictional, setWardrobeEditBrandIsFictional] = useState(false);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
   // Reset the auto-fill error whenever the modal is closed or the file is
   // swapped out — stale error text against a different image would be confusing.
   useEffect(() => {
@@ -5200,7 +5200,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                   </details>
                 </div>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -5896,7 +5896,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -6023,6 +6023,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice),
                             acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
                             lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
+                            // A lock the AI suggests is a piece Lala does not own yet.
+                            ...(prev.lockType === 'none' && ai.lock_type && ai.lock_type !== 'none' ? { isOwned: false } : {}),
                             eraAlignment: prev.eraAlignment || ai.era_alignment || '',
                             aestheticTags: prev.aestheticTags || (ai.aesthetic_tags || []).join(', '),
                             eventTypes: prev.eventTypes || (ai.event_types || []).join(', '),
@@ -6127,7 +6129,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                         <div>
                           <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>lock type</label>
-                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
+                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value, isOwned: e.target.value === 'none' }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
                             <option value="none">None (always available)</option>
                             <option value="coin">🪙 Coin (pay to unlock)</option>
                             <option value="reputation">⭐ Reputation gate</option>
@@ -6263,7 +6265,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.outfitMatchWeight) fd.append('outfitMatchWeight', wardrobeUploadForm.outfitMatchWeight);
                         if (wardrobeUploadForm.influenceRequired) fd.append('influenceRequired', wardrobeUploadForm.influenceRequired);
                         if (wardrobeUploadForm.seasonUnlockEpisode) fd.append('seasonUnlockEpisode', wardrobeUploadForm.seasonUnlockEpisode);
-                        if (wardrobeUploadForm.isOwned) fd.append('isOwned', 'true');
+                        fd.append('isOwned', wardrobeUploadForm.isOwned ? 'true' : 'false');
                         if (wardrobeUploadForm.isVisible === false) fd.append('isVisible', 'false');
                         if (wardrobeUploadForm.lalaReactionOwn) fd.append('lalaReactionOwn', wardrobeUploadForm.lalaReactionOwn);
                         if (wardrobeUploadForm.lalaReactionLocked) fd.append('lalaReactionLocked', wardrobeUploadForm.lalaReactionLocked);

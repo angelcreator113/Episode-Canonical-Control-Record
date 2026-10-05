@@ -131,6 +131,10 @@ const EpisodeDetail = () => {
   // The header's balance chip (§8(aa) M1): Lala's ledger balance, from the
   // same /balance the Dashboard reads. It opens Production → Money.
   const [headerBalance, setHeaderBalance] = useState(null);
+  // Bumped by the wardrobe game after a purchase or a paid lock, so the chip
+  // follows the balance (Evoni, 2026-10-05: it kept the old number).
+  const [balanceVersion, setBalanceVersion] = useState(0);
+  const bumpBalance = useCallback(() => setBalanceVersion((v) => v + 1), []);
   const chipShowId = episode?.show_id || episode?.showId;
   useEffect(() => {
     if (!chipShowId) return undefined;
@@ -139,7 +143,7 @@ const EpisodeDetail = () => {
       .then((balance) => { if (!cancelled) setHeaderBalance(balance); })
       .catch((err) => { console.error('[EpisodeDetail] balance load failed:', err); });
     return () => { cancelled = true; };
-  }, [chipShowId]);
+  }, [chipShowId, balanceVersion]);
   const openMoneyTab = () => openTab('money');
   // P15: the banner's title chip opens Production → Overlays; the tab bumps
   // overlaysVersion after an action so the chip reloads.
@@ -785,6 +789,7 @@ const EpisodeDetail = () => {
                     showId={episode?.show_id || episode?.showId}
                     event={selectedEvent}
                     characterState={characterState}
+                    onCoinsChange={bumpBalance}
                     onOutfitComplete={(result) => {
                       console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);
                     }}

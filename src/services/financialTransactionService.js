@@ -409,11 +409,47 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
-  // 3. Load outfit pieces (if saved on event)
+  // 3. The outfit. The one locked in the episode's styling game (its
+  //    approved episode_wardrobe links) when there is one; else the outfit
+  //    saved on the event. Finalize charged only the event's outfit, so a
+  //    dress chosen in the event's picker was charged although Lala wore
+  //    the one locked in the game (Evoni, 2026-10-05).
+  const tq = transaction ? { transaction } : {};
   let outfitPieces = [];
-  if (event?.outfit_pieces) {
+  let lockedOutfit = [];
+  try {
+    lockedOutfit = await sequelize.query(
+      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.tier, w.brand,
+              w.acquisition_type, w.rental_price
+         FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
+        WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
+          AND ew.approval_status = 'approved'
+          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, ...tq }
+    );
+  } catch (lockedErr) {
+    console.error('[FinancialTx] Could not read the locked outfit for episode', episodeId, lockedErr.message);
+  }
+  if (lockedOutfit.length > 0) {
+    outfitPieces = lockedOutfit;
+  } else if (event?.outfit_pieces) {
     outfitPieces = typeof event.outfit_pieces === 'string'
       ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+    // The snapshot's is_owned is from when it was saved; a piece Lala owns
+    // now is not charged.
+    const snapIds = outfitPieces.map((p) => String(p?.id ?? '')).filter((id) => UUID_RE.test(id));
+    if (snapIds.length > 0) {
+      try {
+        const ownedRows = await sequelize.query(
+          'SELECT id FROM wardrobe WHERE id IN (:snapIds) AND is_owned = true',
+          { replacements: { snapIds }, type: sequelize.QueryTypes.SELECT, ...tq }
+        );
+        const ownedNow = new Set((ownedRows || []).map((r) => String(r.id)));
+        outfitPieces = outfitPieces.map((p) => (ownedNow.has(String(p?.id)) ? { ...p, is_owned: true } : p));
+      } catch (ownedErr) {
+        console.error('[FinancialTx] Could not read current ownership for episode', episodeId, ownedErr.message);
+      }
+    }
   }
 
   // Pieces Lala has already paid for: any counted wardrobe_purchase row of
@@ -478,6 +514,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     }
 
     // 7. Wardrobe costs (expense — skip gifted/borrowed/owned)
+    const chargedPieceIds = [];
     for (const piece of outfitPieces) {
       const acq = piece.acquisition_type || 'purchased';
       if (acq === 'gifted' || acq === 'borrowed') continue;
@@ -503,8 +540,20 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
             source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
             metadata: { tier: piece.tier, brand: piece.brand },
           });
+          chargedPieceIds.push(String(piece.id));
         }
       }
+    }
+    // A piece finalize paid for is Lala's (§8(z) Law 4, "Purchased things
+    // cost money once"): the styling game decides by is_owned, so without
+    // this the next episode offered it at its price again and Lock charged
+    // a second time (Evoni, 2026-10-05).
+    const ownIds = chargedPieceIds.filter((id) => UUID_RE.test(id));
+    if (!dryRun && ownIds.length > 0) {
+      await sequelize.query(
+        'UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id IN (:ownIds)',
+        { replacements: { ownIds }, ...tq }
+      );
     }
 
     // 8. Extras. A legacy event pays them as one styling_extras row, by
