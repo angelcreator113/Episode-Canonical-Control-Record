@@ -417,26 +417,102 @@
 .seb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 
 /* Overview: four questions, each with a way to act (ShowOverview). */
-.sov { display: grid; gap: 12px; }
-/* The Overview (ShowOverview), in the studio theme (audit VISUAL-01, batch 4). */
-.sov-lala { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-subtle); font-size: 12px; color: var(--text-primary); }
-.sov-lala-label { font-family: var(--font-ui); font-size: 11px; text-transform: uppercase; color: var(--accent-dark); margin-right: 4px; }
-.sov-chip { padding: 2px 8px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); text-transform: capitalize; }
-.sov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.sov-card { background: var(--surface-card); border: 1px solid var(--accent-subtle); border-top: 2px solid var(--accent-light); border-radius: 10px; padding: 14px 16px; min-width: 0; }
-.sov-card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
-.sov-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 8px; }
+/* Producer Mode → Overview, to Evoni's redesign (2026-10-05): the next-step
+   banner, the episode in production with its checklist, and a side column
+   of Lala's stats, the episode's money and what comes next. Actions are
+   lavender; the side cards keep the pink top edge. */
+.sov { display: grid; gap: 16px; }
+.sov-next-step {
+  display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: 16px;
+  background: linear-gradient(110deg, var(--lala-lavender), var(--lala-lavender-dark)); color: var(--text-inverse);
+}
+.sov-next-step-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--lala-lavender-dark); border: 1px solid var(--lala-lavender-light); font-size: 18px;
+}
+.sov-next-step-text { display: grid; gap: 2px; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.sov-next-step-label { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.sov-next-step-text strong { font-size: 17px; }
+.sov-next-step-text span:last-child:not(.sov-next-step-label) { font-size: 13px; }
+.sov-next-step-btn {
+  flex: none; padding: 10px 20px; border-radius: 999px; border: none; background: var(--surface-card); color: var(--lala-lavender-text);
+  font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.sov-next-step-btn:hover { background: var(--lala-lavender-soft); }
+.sov-next-step-btn:focus-visible { outline: 2px solid var(--surface-card); outline-offset: 2px; }
+
+.sov-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.sov-col, .sov-side { display: grid; gap: 16px; min-width: 0; }
+.sov-card { background: var(--surface-card); border: 1px solid var(--accent-subtle); border-top: 2px solid var(--accent-light); border-radius: 14px; padding: 18px 20px; min-width: 0; }
+.sov-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.sov-eyebrow { display: block; margin-bottom: 8px; font-family: var(--font-ui); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
+
+.sov-now { border-top-color: var(--lala-lavender-light); padding: 22px 24px; }
+.sov-now-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sov-now-head .sov-eyebrow { margin: 0; }
+.sov-status { padding: 2px 10px; border-radius: 999px; background: var(--lala-parchment-2); font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.sov-now-where { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.sov-card .sov-now-title { margin: 12px 0 6px; font-family: var(--font-prose); font-size: 26px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
+.sov-now-logline { margin: 0 0 14px; font-size: 14px; color: var(--text-secondary); }
+.sov-checklist { margin: 14px 0 16px; }
+.sov-checklist-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.sov-bar { height: 8px; border-radius: 999px; background: var(--lala-lavender-soft); overflow: hidden; }
+.sov-bar-fill { height: 100%; border-radius: 999px; background: var(--lala-lavender); transition: width 0.4s; }
+.sov-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.sov-step { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
+.sov-step.complete { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
+.sov-step-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.sov-step-state { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.sov-step.complete .sov-step-state { color: var(--lala-lavender-text); }
+.sov-step.in_progress .sov-step-state { color: var(--warning-text); }
+.sov-note { margin: 10px 0 0; font-size: 12px; color: var(--text-secondary); }
+.sov-note a { color: var(--lala-lavender-text); }
+.sov-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.sov-also { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--lala-parchment-3); }
+
+.sov-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 10px; }
 .sov-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .sov-main { display: grid; gap: 2px; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .sov-sub { font-size: 12px; color: var(--text-secondary); }
-.sov-empty { margin: 0 0 6px; font-size: 13px; color: var(--text-muted); }
-.sov-btn { flex: none; padding: 5px 12px; border-radius: 6px; border: none; background: var(--primary); color: var(--text-inverse); font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
-.sov-btn:hover { background: var(--primary-dark); }
+.sov-empty { margin: 0 0 6px; font-size: 13px; color: var(--text-secondary); }
+.sov-btn { flex: none; padding: 6px 14px; border-radius: 8px; border: none; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.sov-btn:hover { background: var(--lala-lavender-dark); }
+.sov-btn-lg { padding: 11px 22px; font-size: 14px; border-radius: 10px; }
 .sov-btn:focus-visible, .sov-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.sov-btn-outline { background: var(--surface-card); color: var(--primary-text); border: 1px solid var(--primary); }
-.sov-btn-outline:hover { background: var(--primary-subtle); }
-.sov-link { background: none; border: none; padding: 0; color: var(--primary-text); font: inherit; font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.sov-btn-outline { background: var(--surface-card); color: var(--lala-lavender-text); border: 1px solid var(--lala-lavender); }
+.sov-btn-outline:hover { background: var(--lala-lavender-soft); }
+.sov-link { background: none; border: none; padding: 0; color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.sov-link:hover { text-decoration: underline; }
 .sov-activity li { align-items: baseline; }
+
+.sov-side-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sov-side-head .sov-eyebrow { color: var(--accent-dark); }
+.sov-lala { background: var(--accent-subtle); border-color: var(--accent-light); }
+.sov-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sov-stat { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-card); }
+.sov-stat-label { font-size: 12px; color: var(--text-secondary); }
+.sov-stat-value { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.sov-ledger { margin: 0 0 10px; display: grid; gap: 6px; font-size: 13px; }
+.sov-ledger div { display: flex; justify-content: space-between; gap: 8px; }
+.sov-ledger dt { color: var(--text-primary); }
+.sov-ledger dt span { font-size: 11px; color: var(--text-secondary); }
+.sov-ledger dd { margin: 0; font-weight: 700; color: var(--text-primary); }
+.sov-ledger dd.plus { color: var(--lala-lavender-text); }
+.sov-ledger-total { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--lala-parchment-3); font-weight: 700; }
+
 .sov-start ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
-.sov-start li.done { text-decoration: line-through; color: var(--text-muted); }
-.sov-start button { background: none; border: none; padding: 0; color: var(--primary-text); font: inherit; text-decoration: underline; cursor: pointer; }
+.sov-start li.done { text-decoration: line-through; color: var(--text-secondary); }
+.sov-start button { background: none; border: none; padding: 0; color: var(--lala-lavender-text); font: inherit; text-decoration: underline; cursor: pointer; }
+
+@media (max-width: 900px) {
+  .sov-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .sov-next-step { flex-wrap: wrap; padding: 14px 16px; }
+  .sov-next-step-icon { display: none; }
+  .sov-next-step-btn { width: 100%; text-align: center; }
+  .sov-now { padding: 16px; }
+  .sov-now-where { margin-left: 0; width: 100%; }
+  .sov-btn-lg { width: 100%; text-align: center; }
+  .sov-card { padding: 14px 16px; }
+}

@@ -73,13 +73,14 @@ describe('ShowOverview', () => {
     await waitFor(() => expect(slot.textContent).toContain('Next slot: S1 · E7'));
   });
 
-  test('a new show sees its first steps; Lala\'s state is one line linking to her history', async () => {
+  test('a new show sees its first steps and no next step; Lala\'s stats are tiles linking to her history', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { roadmap: null } });
     const goTo = renderIt({ charState: { state: { coins: 500, reputation: 3 } } });
     expect(screen.getByTestId('sov-first-steps')).toBeTruthy();
+    expect(screen.queryByTestId('sov-next-step')).toBeNull();
     const lala = screen.getByTestId('sov-lala');
-    expect(lala.textContent).toContain('coins 500');
-    fireEvent.click(within(lala).getByRole('button', { name: /Full state/ }));
+    expect([...lala.querySelectorAll('.sov-stat')].map((t) => t.textContent)).toEqual(['Coins500', 'Reputation3']);
+    fireEvent.click(within(lala).getByRole('button', { name: 'History' }));
     expect(goTo).toHaveBeenCalledWith('characters-list');
     await waitFor(() => expect(screen.getByTestId('sov-next-slot').textContent).toContain('No season planned yet.'));
   });

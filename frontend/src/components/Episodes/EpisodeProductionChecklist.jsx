@@ -14,7 +14,7 @@ import ProductionCoveragePanel from './ProductionCoveragePanel';
  * before the Generate Script button unlocks.
  */
 
-const CHECKLIST_SECTIONS = [
+export const CHECKLIST_SECTIONS = [
   {
     id: 'brief',
     icon: '📋',
@@ -226,6 +226,150 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
   );
 }
 
+/**
+ * The production checks for one episode: what the checklist shows, also read
+ * by Producer Mode's Overview (the redesign, 2026-10-05) so both show the
+ * same checklist. Resolves to { checks, notes, coverage, sceneStep,
+ * linkedEvent }; a check whose source cannot be read is false.
+ */
+export async function loadProductionChecks(episode, showId) {
+  let planCoverage = null;
+  let sceneStep = null;
+  let linkedEvent = null;
+  const results = {};
+  const checkNotes = {};
+
+  try {
+    // ── Check Episode Brief ──
+    try {
+      const { data } = await api.get(`/api/v1/episode-brief/${episode.id}`);
+      const brief = data.data;
+      results.arc_position      = !!(brief?.arc_number && brief?.position_in_arc);
+      results.archetype         = !!brief?.episode_archetype;
+      results.designed_intent   = !!brief?.designed_intent;
+      results.narrative_purpose = !!brief?.narrative_purpose;
+      results.forward_hook      = !!brief?.forward_hook;
+    } catch {
+      Object.assign(results, { arc_position: false, archetype: false, designed_intent: false, narrative_purpose: false, forward_hook: false });
+    }
+
+    // ── Check Event, Venue, Invitation, Outfit ──
+    try {
+      if (showId) {
+        // The episode's source event (Task #1906): anchor from the
+        // brief, never a scan of the show's event list.
+        linkedEvent = await getEpisodeAnchorEvent(episode.id);
+        results.event_linked = !!linkedEvent;
+        results.invitation_exists = !!linkedEvent?.invitation_asset_id;
+        const auto = linkedEvent?.canon_consequences?.automation || {};
+        results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
+        results.venue_image = await venueImageGenerated(linkedEvent);
+        const outfit = typeof linkedEvent?.outfit_pieces === 'string' ? JSON.parse(linkedEvent.outfit_pieces || '[]') : (linkedEvent?.outfit_pieces || []);
+        results.outfit_picked = outfit.length > 0;
+      } else {
+        results.event_linked = false;
+      }
+    } catch {
+      results.event_linked = false;
+    }
+
+    // ── Check Scene Sets assigned ──
+    try {
+      const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
+      const sets = data?.data || data?.sceneSets || [];
+      results.scene_sets = Array.isArray(sets) ? sets.length > 0 : false;
+    } catch {
+      results.scene_sets = false;
+    }
+
+    // ── Check Scene Plan ──
+    try {
+      const { data } = await api.get(`/api/v1/episode-brief/${episode.id}/plan`);
+      const plan = data?.data || [];
+      // Audit GATE-01 (2026-10-03): generated means the server's coverage
+      // says every canonical beat is planned once; never a row count.
+      const coverage = data?.coverage || null;
+      planCoverage = coverage;
+      results.scene_plan        = Boolean(coverage?.complete);
+      if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
+      else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
+      results.scene_plan_locked = Boolean(coverage?.complete) && plan.every(b => b.locked);
+      // L5, Q21: every planned beat has an angle with an image.
+      const readiness = data?.readiness;
+      results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
+      if (readiness && readiness.total > 0 && readiness.ready < readiness.total) {
+        // S9 (a, c): the Scenes tab's summary.
+        const n = readiness.not_ready.length;
+        const beats = readiness.not_ready.map((b) => b.beat_number).join(', ');
+        checkNotes.scene_images = `${readiness.ready} ready · ${n} ${n === 1 ? 'needs' : 'need'} attention: beat${n === 1 ? '' : 's'} ${beats}`;
+      }
+      sceneStep = nextStep(plan, readiness, coverage);
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
+      results.scene_plan = results.scene_plan_locked = results.scene_images = false;
+      sceneStep = null;
+    }
+
+    // ── Check Wardrobe (audit GATE-02, 2026-10-03): the show's required
+    // slots, each with a piece, not "any piece exists" ──
+    try {
+      const { data } = await api.get(`/api/v1/wardrobe/slot-coverage?show_id=${showId}`);
+      const slotCoverage = data?.data || null;
+      results.wardrobe_inventory = (slotCoverage?.inventory || 0) > 0;
+      results.wardrobe_ready = Boolean(slotCoverage?.covered);
+      if (slotCoverage && !slotCoverage.covered) checkNotes.wardrobe_ready = slotCoverage.text;
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] wardrobe slot coverage failed:', err.response?.status || err.message);
+      results.wardrobe_inventory = false;
+      results.wardrobe_ready = false;
+      checkNotes.wardrobe_ready = 'Wardrobe could not be read';
+    }
+
+    // ── Check Character state ──
+    try {
+      const { data } = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
+      results.character_state = !!(data?.state || data?.data);
+    } catch {
+      results.character_state = false;
+    }
+
+    // ── Check UI Overlays ──
+    try {
+      if (showId) {
+        const { data } = await api.get(`/api/v1/ui-overlays/${showId}`);
+        results.overlays_generated = (data?.generated_count || 0) >= 5;
+      }
+    } catch {
+      results.overlays_generated = false;
+    }
+
+    // ── Check Social Checklist ──
+    try {
+      results.social_checklist = false;
+      // Check if episode has a social checklist asset
+      const { data } = await api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`);
+      results.social_checklist = (data?.data?.length || 0) > 0;
+    } catch {
+      results.social_checklist = false;
+    }
+
+    // ── Check Episode Title (AI-generated vs default) ──
+    results.title_generated = !!(episode.title && !episode.title.startsWith('Episode ') && episode.title !== episode.description?.split(' — ')?.[0]);
+
+    // ── Check Show Brain ──
+    try {
+      const { data } = await api.get('/api/v1/franchise-brain/entries?category=franchise_law&status=active&limit=1');
+      const entries = data?.data || [];
+      results.show_brain = Array.isArray(entries) ? entries.length > 0 : false;
+    } catch {
+      results.show_brain = false;
+    }
+  } catch (err) {
+    console.error('[Checklist] Error:', err);
+  }
+  return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent };
+}
+
 export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
@@ -247,141 +391,12 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   const checkReadiness = async () => {
     setLoading(true);
-    const results = {};
-    const checkNotes = {};
-
-    try {
-      // ── Check Episode Brief ──
-      try {
-        const { data } = await api.get(`/api/v1/episode-brief/${episode.id}`);
-        const brief = data.data;
-        results.arc_position      = !!(brief?.arc_number && brief?.position_in_arc);
-        results.archetype         = !!brief?.episode_archetype;
-        results.designed_intent   = !!brief?.designed_intent;
-        results.narrative_purpose = !!brief?.narrative_purpose;
-        results.forward_hook      = !!brief?.forward_hook;
-      } catch {
-        Object.assign(results, { arc_position: false, archetype: false, designed_intent: false, narrative_purpose: false, forward_hook: false });
-      }
-
-      // ── Check Event, Venue, Invitation, Outfit ──
-      try {
-        if (showId) {
-          // The episode's source event (Task #1906): anchor from the
-          // brief, never a scan of the show's event list.
-          const linkedEvent = await getEpisodeAnchorEvent(episode.id);
-          results.event_linked = !!linkedEvent;
-          results.invitation_exists = !!linkedEvent?.invitation_asset_id;
-          const auto = linkedEvent?.canon_consequences?.automation || {};
-          results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
-          results.venue_image = await venueImageGenerated(linkedEvent);
-          const outfit = typeof linkedEvent?.outfit_pieces === 'string' ? JSON.parse(linkedEvent.outfit_pieces || '[]') : (linkedEvent?.outfit_pieces || []);
-          results.outfit_picked = outfit.length > 0;
-        } else {
-          results.event_linked = false;
-        }
-      } catch {
-        results.event_linked = false;
-      }
-
-      // ── Check Scene Sets assigned ──
-      try {
-        const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
-        const sets = data?.data || data?.sceneSets || [];
-        results.scene_sets = Array.isArray(sets) ? sets.length > 0 : false;
-      } catch {
-        results.scene_sets = false;
-      }
-
-      // ── Check Scene Plan ──
-      try {
-        const { data } = await api.get(`/api/v1/episode-brief/${episode.id}/plan`);
-        const plan = data?.data || [];
-        // Audit GATE-01 (2026-10-03): generated means the server's coverage
-        // says every canonical beat is planned once; never a row count.
-        const coverage = data?.coverage || null;
-        setCoverage(coverage);
-        results.scene_plan        = Boolean(coverage?.complete);
-        if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
-        else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
-        results.scene_plan_locked = Boolean(coverage?.complete) && plan.every(b => b.locked);
-        // L5, Q21: every planned beat has an angle with an image.
-        const readiness = data?.readiness;
-        results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
-        if (readiness && readiness.total > 0 && readiness.ready < readiness.total) {
-          // S9 (a, c): the Scenes tab's summary.
-          const n = readiness.not_ready.length;
-          const beats = readiness.not_ready.map((b) => b.beat_number).join(', ');
-          checkNotes.scene_images = `${readiness.ready} ready · ${n} ${n === 1 ? 'needs' : 'need'} attention: beat${n === 1 ? '' : 's'} ${beats}`;
-        }
-        setSceneStep(nextStep(plan, readiness, coverage));
-      } catch (err) {
-        console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
-        results.scene_plan = results.scene_plan_locked = results.scene_images = false;
-        setSceneStep(null);
-      }
-
-      // ── Check Wardrobe (audit GATE-02, 2026-10-03): the show's required
-      // slots, each with a piece, not "any piece exists" ──
-      try {
-        const { data } = await api.get(`/api/v1/wardrobe/slot-coverage?show_id=${showId}`);
-        const slotCoverage = data?.data || null;
-        results.wardrobe_inventory = (slotCoverage?.inventory || 0) > 0;
-        results.wardrobe_ready = Boolean(slotCoverage?.covered);
-        if (slotCoverage && !slotCoverage.covered) checkNotes.wardrobe_ready = slotCoverage.text;
-      } catch (err) {
-        console.error('[EpisodeProductionChecklist] wardrobe slot coverage failed:', err.response?.status || err.message);
-        results.wardrobe_inventory = false;
-        results.wardrobe_ready = false;
-        checkNotes.wardrobe_ready = 'Wardrobe could not be read';
-      }
-
-      // ── Check Character state ──
-      try {
-        const { data } = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
-        results.character_state = !!(data?.state || data?.data);
-      } catch {
-        results.character_state = false;
-      }
-
-      // ── Check UI Overlays ──
-      try {
-        if (showId) {
-          const { data } = await api.get(`/api/v1/ui-overlays/${showId}`);
-          results.overlays_generated = (data?.generated_count || 0) >= 5;
-        }
-      } catch {
-        results.overlays_generated = false;
-      }
-
-      // ── Check Social Checklist ──
-      try {
-        results.social_checklist = false;
-        // Check if episode has a social checklist asset
-        const { data } = await api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`);
-        results.social_checklist = (data?.data?.length || 0) > 0;
-      } catch {
-        results.social_checklist = false;
-      }
-
-      // ── Check Episode Title (AI-generated vs default) ──
-      results.title_generated = !!(episode.title && !episode.title.startsWith('Episode ') && episode.title !== episode.description?.split(' — ')?.[0]);
-
-      // ── Check Show Brain ──
-      try {
-        const { data } = await api.get('/api/v1/franchise-brain/entries?category=franchise_law&status=active&limit=1');
-        const entries = data?.data || [];
-        results.show_brain = Array.isArray(entries) ? entries.length > 0 : false;
-      } catch {
-        results.show_brain = false;
-      }
-    } catch (err) {
-      console.error('[Checklist] Error:', err);
-    } finally {
-      setChecks(results);
-      setNotes(checkNotes);
-      setLoading(false);
-    }
+    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step } = await loadProductionChecks(episode, showId);
+    setCoverage(planCoverage);
+    setSceneStep(step);
+    setChecks(results);
+    setNotes(checkNotes);
+    setLoading(false);
   };
 
   const handleGenerateScript = async () => {
