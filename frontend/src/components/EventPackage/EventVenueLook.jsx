@@ -21,6 +21,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pencil, Sparkles, X, ImagePlus, Lock } from 'lucide-react';
 import api from '../../services/api';
+import ShowMoreToggle from '../ShowMoreToggle';
+import { visibleSlice } from '../../lib/showMore';
 
 export const LOOK_PARTS = [
   { key: 'overall', label: 'Overall look' },
@@ -32,6 +34,8 @@ export const LOOK_PARTS = [
   { key: 'must_avoid', label: 'Must avoid' },
 ];
 const TICKED_MAX = 3;
+// Place shows the first two parts; the rest and the reference images fold (2026-10-05).
+export const PARTS_SHOWN = 2;
 
 const hasContent = (look) => Boolean(look) && (
   LOOK_PARTS.some(({ key }) => (key === 'areas' ? look.areas?.length : look[key]))
@@ -185,6 +189,7 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
   const [loaded, setLoaded] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -222,6 +227,13 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
     await onSaved?.();
   };
 
+  // The parts with something in them, then the reference images as one more.
+  const filled = hasContent(look) ? [
+    ...LOOK_PARTS.map(({ key, label }) => ({ key, label, value: key === 'areas' ? (look.areas || []).join(', ') : look[key] })).filter((p) => p.value),
+    ...(look.references?.length ? [{ key: 'references', label: 'Reference images' }] : []),
+  ] : [];
+  const parts = visibleSlice(filled, open, PARTS_SHOWN);
+
   return (
     <div className="evl" data-testid="venue-look">
       <div className="evl-head">
@@ -242,10 +254,22 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
       {!hasContent(look) ? (
         <p className="evl-empty">No venue look yet. Draft it from the event details, or write it.</p>
       ) : (
-        <dl className="evl-parts">
-          {LOOK_PARTS.map(({ key, label }) => {
-            const value = key === 'areas' ? (look.areas || []).join(', ') : look[key];
-            if (!value) return null;
+        <>
+        <dl className="evl-parts" id="evl-parts">
+          {parts.shown.map(({ key, label, value }) => {
+            if (key === 'references') return (
+              <div key={key}>
+                <dt>Reference images</dt>
+                <dd className="evl-refs">
+                  {look.references.map((r, i) => (
+                    <figure key={r.asset_id} className="evl-ref">
+                      {r.url ? <img src={r.url} alt={`Reference ${i + 1}`} /> : <div className="evl-ref-empty">No preview</div>}
+                      {r.use_as_reference && <figcaption>Used as reference</figcaption>}
+                    </figure>
+                  ))}
+                </dd>
+              </div>
+            );
             return (
               <div key={key} data-testid={`venue-look-part-${key}`}>
                 <dt>{label} <SourceLabel source={look.sources?.[key]} testId={`venue-look-source-${key}`} /></dt>
@@ -253,20 +277,9 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
               </div>
             );
           })}
-          {look.references?.length > 0 && (
-            <div>
-              <dt>Reference images</dt>
-              <dd className="evl-refs">
-                {look.references.map((r, i) => (
-                  <figure key={r.asset_id} className="evl-ref">
-                    {r.url ? <img src={r.url} alt={`Reference ${i + 1}`} /> : <div className="evl-ref-empty">No preview</div>}
-                    {r.use_as_reference && <figcaption>Used as reference</figcaption>}
-                  </figure>
-                ))}
-              </dd>
-            </div>
-          )}
         </dl>
+        <ShowMoreToggle open={open} hidden={parts.hidden} onToggle={() => setOpen((o) => !o)} noun={parts.hidden === 1 ? 'part' : 'parts'} testId="venue-look-more" controls="evl-parts" />
+        </>
       )}
       {editing && (
         <LookEditor showId={showId} eventId={eventId} look={look} onClose={() => setEditing(false)} onSaved={saved} onToast={onToast} />

@@ -1971,3 +1971,11 @@
   .epp-deal-tiles { grid-template-columns: minmax(0, 1fr); }
 }
 .epp-concept-fold .epp-section-title .epp-concept-subtitle { display: inline; margin: 0 0 0 8px; font-style: normal; }
+
+/* Show more / Show less under a folded list (lib/showMore.js; 2026-10-05). */
+.epp-show-more { display: inline-flex; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--lala-lavender-text); }
+.evl .epp-show-more { margin-top: 4px; }
+/* Place: the look image stays in view beside a long venue look. */
+@media (min-width: 900px) {
+  .epp-place .epp-place-image { position: sticky; top: 16px; align-self: start; }
+}

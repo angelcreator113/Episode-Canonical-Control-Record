@@ -5,7 +5,7 @@
  * Lala's Look with the dress code and styling brief beside the outfit.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -108,5 +108,20 @@ describe('Event Package part 3', () => {
     const stakes = screen.getByTestId('stakes-section');
     expect(within(stakes).getByRole('heading', { name: '6. Story Stakes' })).toBeTruthy();
     expect(within(stakes).queryByTestId('money-preview')).toBeNull();
+  });
+  test('the Full Guest List shows ten; Show more opens the rest, Show less folds them', async () => {
+    const guests = Array.from({ length: 13 }, (_, i) => ({ profile_id: `p${i}`, handle: `guest${i + 1}` }));
+    EVENT = { ...BASE, canon_consequences: { automation: { guest_profiles: guests } } };
+    renderPage();
+    fireEvent.click(await screen.findByText('Show Full Guest List (13)'));
+    const list = document.getElementById('epp-guest-list');
+    expect(list.querySelectorAll('li')).toHaveLength(10);
+    const more = screen.getByTestId('guest-list-more');
+    expect(more.textContent).toContain('Show 3 more guests');
+    fireEvent.click(more);
+    expect(list.querySelectorAll('li')).toHaveLength(13);
+    expect(list.textContent).toContain('guest13');
+    fireEvent.click(more);
+    expect(list.querySelectorAll('li')).toHaveLength(10);
   });
 });

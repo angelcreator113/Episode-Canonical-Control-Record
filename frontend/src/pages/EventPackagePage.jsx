@@ -96,6 +96,8 @@ import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
 import EventVenueLook from '../components/EventPackage/EventVenueLook';
+import ShowMoreToggle from '../components/ShowMoreToggle';
+import { visibleSlice } from '../lib/showMore';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import './EventPackagePage.css';
 
@@ -108,6 +110,8 @@ function fmtLabel(value) {
 // this fixed set; no role is forced onto a featured guest.
 const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic', 'mentor', 'rival'];
 const MAX_FEATURED_GUESTS = 5;
+// The Full Guest List shows ten at a time; the rest fold behind Show more (2026-10-05).
+const GUESTS_SHOWN = 10;
 
 // Basics fields (Task #1755): the dialog title, the PUT column each one
 // saves to, and the input it edits with. maxLength follows the column
@@ -339,6 +343,7 @@ export default function EventPackagePage() {
   // Featured attendees (Task #1689). guestFeedResults mirrors the Change
   // Host picker's debounced search exactly (same endpoint, same shape).
   const [fullGuestListOpen, setFullGuestListOpen] = useState(false);
+  const [allGuestsOpen, setAllGuestsOpen] = useState(false);
   const [guestSaving, setGuestSaving] = useState(false);
   const [guestFeedPickerOpen, setGuestFeedPickerOpen] = useState(false);
   const [guestFeedSearch, setGuestFeedSearch] = useState('');
@@ -534,6 +539,7 @@ export default function EventPackagePage() {
   const projection = stakes.difficulty;
 
   const guestList = event.canon_consequences?.automation?.guest_profiles || [];
+  const guestFold = visibleSlice(guestList, allGuestsOpen, GUESTS_SHOWN);
   const featuredGuests = guestList
     .map((guest, index) => ({ guest, index }))
     .filter(({ guest }) => guest.featured);
@@ -1494,8 +1500,9 @@ export default function EventPackagePage() {
             </button>
             {fullGuestListOpen && (
               guestList.length ? (
-                <ul className="epp-guest-list">
-                  {guestList.map((g, i) => (
+                <>
+                <ul className="epp-guest-list" id="epp-guest-list">
+                  {guestFold.shown.map((g, i) => (
                     <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
                       <span>{g.display_name || g.handle}</span>
                       {g.featured ? (
@@ -1512,6 +1519,12 @@ export default function EventPackagePage() {
                     </li>
                   ))}
                 </ul>
+                <ShowMoreToggle
+                  open={allGuestsOpen} hidden={guestFold.hidden}
+                  onToggle={() => setAllGuestsOpen((o) => !o)} noun={guestFold.hidden === 1 ? 'guest' : 'guests'}
+                  testId="guest-list-more" controls="epp-guest-list"
+                />
+                </>
               ) : <div className="epp-empty">No guests yet</div>
             )}
           </div>
