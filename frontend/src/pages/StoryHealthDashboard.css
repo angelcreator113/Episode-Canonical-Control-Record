@@ -1,0 +1,327 @@
+/* StoryHealthDashboard.css — the /story-health page (theme batch 6, the
+   Story Engine pages; docs/VISUAL_SYSTEM.md §7). Studio tokens only. The page
+   scrolls with the app: it used StoryEngine.css's .se-page, a viewport-tall box with
+   overflow hidden, which cut the dashboard off below the velocity chart. */
+
+.shd-page {
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  min-height: 100%;
+}
+
+.shd-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+.shd-loading,
+.shd-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.shd-loading {
+  text-align: center;
+  padding: 80px 0;
+}
+
+.shd-title {
+  font-family: var(--font-prose);
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 20px 0 8px;
+}
+
+.shd-lede {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0 0 24px;
+}
+
+/* ── Stat tiles ── */
+.shd-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.shd-card {
+  background: var(--surface-card);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+}
+
+.shd-stat {
+  padding: 16px 14px;
+}
+
+.shd-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.shd-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Sections ── */
+.shd-section {
+  margin-bottom: 24px;
+}
+
+.shd-section-title {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--lala-parchment-3);
+}
+
+/* ── Arc phases ── */
+.shd-phases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.shd-phase {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.shd-phase-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.shd-phase-name {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.shd-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.shd-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--lala-parchment-2);
+  overflow: hidden;
+}
+
+.shd-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s;
+}
+
+/* ── Velocity ── */
+.shd-velocity {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 0 8px;
+}
+
+.shd-week {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.shd-bars {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 100px;
+}
+
+.shd-bar {
+  width: 14px;
+  border-radius: 3px 3px 0 0;
+}
+
+.shd-bar.created { background: var(--lala-gold-line); }
+.shd-bar.approved { background: var(--success); }
+
+.shd-week-label {
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.shd-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.shd-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.shd-swatch.created { background: var(--lala-gold-line); }
+.shd-swatch.approved { background: var(--success); }
+
+/* ── Character arcs ── */
+.shd-arcs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shd-arc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shd-arc-name {
+  font-size: 12px;
+  font-weight: 500;
+  width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shd-arc .shd-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.shd-arc .shd-fill {
+  background: var(--lala-gold);
+  border-radius: 4px;
+}
+
+.shd-arc-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 96px;
+  text-align: right;
+}
+
+/* ── Thread resolution ── */
+.shd-threads {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.shd-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.shd-ring svg {
+  width: 80px;
+  height: 80px;
+  transform: rotate(-90deg);
+}
+
+.shd-ring-track { stroke: var(--lala-parchment-2); }
+.shd-ring-value { stroke: var(--success); }
+
+.shd-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shd-thread-lines {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.shd-thread-lines strong { color: var(--text-primary); }
+
+/* ── Recent activity ── */
+.shd-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-card);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.shd-row-title {
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shd-row-meta {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.shd-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.shd-dot.success { background: var(--success); }
+.shd-dot.warning { background: var(--warning); }
+.shd-dot.danger { background: var(--danger); }
+
+@media (max-width: 600px) {
+  .shd-inner { padding: 0 16px 32px; }
+  .shd-title { font-size: 24px; }
+  .shd-arc-name { width: 88px; }
+  .shd-row-meta.phase,
+  .shd-row-meta.date { display: none; }
+}
