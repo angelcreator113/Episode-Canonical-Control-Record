@@ -107,7 +107,7 @@ export function ContinuityGuard({ chapter, lines, book, triggerLine }) {
             <>
               <span style={{
                 ...cg.countBadge,
-                background: visibleIssues.length > 0 ? '#B85C38' : '#4A7C59',
+                background: visibleIssues.length > 0 ? 'var(--danger)' : 'var(--success-text)',
               }}>
                 {visibleIssues.length}
               </span>
@@ -139,9 +139,11 @@ export function ContinuityGuard({ chapter, lines, book, triggerLine }) {
 
 function IssueCard({ issue, onDismiss }) {
   const typeConfig = {
-    factual:     { label: 'FACTUAL CONTRADICTION', color: '#B85C38', icon: '⚠' },
-    emotional:   { label: 'EMOTIONAL JUMP',        color: '#7B5EA7', icon: '↕' },
-    narrative:   { label: 'NARRATIVE DISCONNECT',  color: '#4A6B8B', icon: '⟿' },
+    // Text twins (theme batch 6, 2026-10-05): the old hexes were 4.2-5.2:1 on
+    // parchment, the factual red under 4.5.
+    factual:     { label: 'FACTUAL CONTRADICTION', color: 'var(--danger-text)',        icon: '⚠' },
+    emotional:   { label: 'EMOTIONAL JUMP',        color: 'var(--lala-lavender-text)', icon: '↕' },
+    narrative:   { label: 'NARRATIVE DISCONNECT',  color: 'var(--info-text)',          icon: '⟿' },
   };
   const config = typeConfig[issue.type] || typeConfig.narrative;
 
@@ -227,17 +229,20 @@ export function RewriteOptions({ line, chapter, book, onAccept }) {
     tighter: {
       label: 'TIGHTER',
       hint:  'Same meaning, fewer words, sharper delivery',
-      color: '#4A6B8B',
+      color: 'var(--info-text)',     // the label, and Accept's fill under inverse text
+      fill:  'var(--info-text)',
     },
     emotional: {
       label: 'DEEPER EMOTION',
       hint:  'More feeling, more vulnerability, more honest',
-      color: '#7B5EA7',
+      color: 'var(--lala-lavender-text)',
+      fill:  'var(--lala-lavender)',
     },
     voice: {
       label: 'SHARPER VOICE',
       hint:  'More JustAWoman — direct, specific, real',
-      color: '#4A7C59',
+      color: 'var(--success-text)',
+      fill:  'var(--success-text)',
     },
   };
 
@@ -310,7 +315,7 @@ export function RewriteOptions({ line, chapter, book, onAccept }) {
                       <button
                         style={{
                           ...rw.acceptBtn,
-                          background: config.color,
+                          background: config.fill,
                           opacity: accepting && selected === opt.type ? 0.6 : 1,
                         }}
                         onClick={() => handleAccept(opt)}
@@ -335,9 +340,9 @@ export function RewriteOptions({ line, chapter, book, onAccept }) {
 
 const cg = {
   shell: {
-    border: '1px solid rgba(184,92,56,0.2)',
+    border: '1px solid var(--danger-border)',
     borderRadius: 3,
-    background: 'rgba(184,92,56,0.03)',
+    background: 'var(--danger-bg)',
     marginTop: 16,
     overflow: 'hidden',
   },
@@ -358,13 +363,13 @@ const cg = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
     letterSpacing: '0.1em',
-    color: 'rgba(30,25,20,0.5)',
+    color: 'var(--text-secondary)',
   },
   countBadge: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
     fontWeight: 700,
-    color: 'white',
+    color: 'var(--text-inverse)',
     borderRadius: 10,
     padding: '2px 7px',
     letterSpacing: '0.04em',
@@ -373,28 +378,28 @@ const cg = {
     width: 6,
     height: 6,
     borderRadius: '50%',
-    background: '#C9A84C',
+    background: 'var(--lala-gold)',
     display: 'inline-block',
     animation: 'pulse 1s ease-in-out infinite',
   },
   expandIcon: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
-    color: 'rgba(30,25,20,0.25)',
+    color: 'var(--text-secondary)',
   },
   issueList: {
-    borderTop: '1px solid rgba(184,92,56,0.1)',
+    borderTop: '1px solid var(--danger-border)',
     display: 'flex',
     flexDirection: 'column',
     gap: 1,
   },
   issueCard: {
     padding: '12px 14px',
-    borderBottom: '1px solid rgba(30,25,20,0.05)',
+    borderBottom: '1px solid var(--lala-parchment-2)',
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
-    background: 'rgba(255,255,255,0.5)',
+    background: 'var(--surface-card)',
   },
   issueHeader: {
     display: 'flex',
@@ -413,7 +418,7 @@ const cg = {
   dismissBtn: {
     background: 'none',
     border: 'none',
-    color: 'rgba(30,25,20,0.25)',
+    color: 'var(--text-secondary)',
     fontSize: 12,
     cursor: 'pointer',
     padding: '2px 4px',
@@ -421,23 +426,23 @@ const cg = {
   issueText: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
-    color: 'rgba(30,25,20,0.6)',
+    color: 'var(--text-primary)',
     lineHeight: 1.6,
     letterSpacing: '0.03em',
   },
   linesInvolved: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
-    color: 'rgba(30,25,20,0.3)',
+    color: 'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   issueSuggestion: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
-    color: '#4A7C59',
+    color: 'var(--success-text)',
     letterSpacing: '0.04em',
     lineHeight: 1.5,
-    borderLeft: '2px solid rgba(74,124,89,0.3)',
+    borderLeft: '2px solid var(--success-border)',
     paddingLeft: 8,
   },
 };
@@ -451,12 +456,12 @@ const rw = {
   },
   triggerBtn: {
     background: 'none',
-    border: '1px solid rgba(30,25,20,0.1)',
+    border: '1px solid var(--lala-parchment-3)',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
     letterSpacing: '0.08em',
-    color: 'rgba(30,25,20,0.35)',
+    color: 'var(--text-secondary)',
     padding: '3px 8px',
     cursor: 'pointer',
     transition: 'all 0.12s',
@@ -467,10 +472,10 @@ const rw = {
     top: '100%',
     marginTop: 6,
     width: 420,
-    background: '#faf9f7',
-    border: '1px solid rgba(201,168,76,0.2)',
+    background: 'var(--surface-bg)',
+    border: '1px solid var(--lala-gold-line)',
     borderRadius: 4,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+    boxShadow: 'var(--shadow-xl)',
     zIndex: 200,
     overflow: 'hidden',
   },
@@ -479,39 +484,39 @@ const rw = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 16px',
-    borderBottom: '1px solid rgba(201,168,76,0.12)',
+    borderBottom: '1px solid var(--lala-gold-line)',
   },
   panelTitle: {
     fontFamily: "'Lora', serif",
     fontSize: 15,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.85)',
+    color: 'var(--text-primary)',
   },
   closeBtn: {
     background: 'none',
     border: 'none',
-    color: 'rgba(30,25,20,0.3)',
+    color: 'var(--text-secondary)',
     fontSize: 12,
     cursor: 'pointer',
     padding: 4,
   },
   original: {
     padding: '10px 16px',
-    background: '#f5f0e8',
-    borderBottom: '1px solid rgba(30,25,20,0.06)',
+    background: 'var(--lala-parchment-2)',
+    borderBottom: '1px solid var(--lala-parchment-2)',
   },
   originalLabel: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
     letterSpacing: '0.16em',
-    color: 'rgba(30,25,20,0.3)',
+    color: 'var(--text-secondary)',
     marginBottom: 4,
   },
   originalText: {
     fontFamily: "'Lora', serif",
     fontSize: 13,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.6)',
+    color: 'var(--text-primary)',
     lineHeight: 1.5,
   },
   loadingRow: {
@@ -523,7 +528,7 @@ const rw = {
   loadingText: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
-    color: 'rgba(30,25,20,0.3)',
+    color: 'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   loadingDots: {
@@ -534,14 +539,14 @@ const rw = {
     width: 5,
     height: 5,
     borderRadius: '50%',
-    background: '#C9A84C',
+    background: 'var(--lala-gold)',
     display: 'inline-block',
     animation: 'pulse 1.2s ease-in-out infinite',
   },
   error: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
-    color: '#B85C38',
+    color: 'var(--danger-text)',
     padding: '8px 16px',
     letterSpacing: '0.04em',
   },
@@ -552,7 +557,7 @@ const rw = {
   },
   optionCard: {
     padding: '12px 16px',
-    borderBottom: '1px solid rgba(30,25,20,0.05)',
+    borderBottom: '1px solid var(--lala-parchment-2)',
     display: 'flex',
     flexDirection: 'column',
     gap: 8,
@@ -573,7 +578,7 @@ const rw = {
   optionHint: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
-    color: 'rgba(30,25,20,0.3)',
+    color: 'var(--text-secondary)',
     letterSpacing: '0.04em',
     display: 'block',
   },
@@ -581,7 +586,7 @@ const rw = {
     fontFamily: "'Lora', serif",
     fontSize: 14,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.8)',
+    color: 'var(--text-primary)',
     lineHeight: 1.6,
   },
   optionActions: {
@@ -590,12 +595,12 @@ const rw = {
   },
   copyBtn: {
     background: 'none',
-    border: '1px solid rgba(30,25,20,0.12)',
+    border: '1px solid var(--lala-parchment-3)',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
     letterSpacing: '0.08em',
-    color: 'rgba(30,25,20,0.4)',
+    color: 'var(--text-secondary)',
     padding: '4px 10px',
     cursor: 'pointer',
   },
@@ -605,7 +610,7 @@ const rw = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 11,
     letterSpacing: '0.08em',
-    color: 'white',
+    color: 'var(--text-inverse)',
     padding: '4px 12px',
     cursor: 'pointer',
     transition: 'opacity 0.12s',
