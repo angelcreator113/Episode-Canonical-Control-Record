@@ -100,7 +100,9 @@ describe('the wall', () => {
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 reaction to approve');
     expect(screen.getByTestId('sm-upcoming').textContent).toContain('Dazzle Gala');
     expect(screen.getByTestId('sm-may-know').textContent).toContain('P8');
-    expect(screen.getByRole('button', { name: 'Inbox (2)' })).toBeTruthy();
+    // The Inbox count reaches the page header through the wall's onInbox effect, one
+    // render after the wall itself; wait for it rather than read it at once.
+    expect(await screen.findByRole('button', { name: 'Inbox (2)' })).toBeTruthy();
     expect(screen.getByTestId('sm-count').textContent).toBe('2 posts · Styling Adventures with Lala');
     const url = api.get.mock.calls.find((c) => c[0].includes('/feed-posts?'))[0];
     expect(url).toContain(`show_id=${SHOW.id}`);
@@ -111,7 +113,7 @@ describe('the wall', () => {
   test('Drafts asks for drafts and marks them; Events lists the upcoming; search narrows the wall', async () => {
     renderAt('/feed');
     await screen.findAllByTestId('sm-post');
-    fireEvent.click(screen.getByRole('button', { name: 'Inbox (2)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inbox (2)' }));
     await waitFor(() => expect(screen.getAllByTestId('sm-post')).toHaveLength(1));
     expect(screen.getByTestId('sm-post').textContent).toMatch(/draft/i);
     expect(api.get.mock.calls.some((c) => c[0].includes('status=draft') && c[0].includes('with=comments'))).toBe(true);
