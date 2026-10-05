@@ -27,6 +27,7 @@ import { matchesDressCode, dressCodeKeywords, setPiecesOf, setSlotClashes } from
 import { backdropFor, matchingSetsFrom } from '../lib/closetGrouping';
 import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
+import ReleaseBoard from '../components/Show/ReleaseBoard';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
@@ -255,6 +256,8 @@ const TABS = [
     { key: 'decisions', label: 'Activity & Decisions' },
   ]},
   { key: 'release', Icon: Heart, label: 'Release', subs: [
+    // The next episode out the door (Evoni's redesign, 2026-10-05); the release tab opens on it.
+    { key: 'release-next', label: 'Next release' },
     { key: 'distribution', label: 'Distribution' },
     { key: 'insights', label: 'Insights' },
   ]},
@@ -411,7 +414,7 @@ function WorldAdmin() {
       'characters': ['characters', 'characters-list'],
       'decisions': ['characters', 'decisions'],
       'finances': ['characters', 'finances'],
-      'release': ['release', 'distribution'],
+      'release': ['release', 'release-next'],
       'distribution': ['release', 'distribution'],
       'insights': ['release', 'insights'],
     };
@@ -6699,6 +6702,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* ════════════════════════ RELEASE ════════════════════════ */}
       {activeTab === 'release' && show && (
         <div style={S.content}>
+          {subTab === 'release-next' && <ReleaseBoard showId={showId} episodes={episodes} history={stateHistory} />}
           {subTab === 'distribution' && (
             <ShowDistributionTab
               show={show}

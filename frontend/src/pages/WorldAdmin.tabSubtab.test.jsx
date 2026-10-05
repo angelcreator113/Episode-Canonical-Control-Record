@@ -88,6 +88,13 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Season Plan')).toBe(true);
   });
 
+  test('Release opens on Next release', async () => {
+    renderAt('release');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next release' })).toBeTruthy());
+    expect(isActive('Next release')).toBe(true);
+    expect(isActive('Distribution')).toBe(false);
+  });
+
   test('Distribution and Insights open in Release', async () => {
     renderAt('insights');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Insights' })).toBeTruthy());
