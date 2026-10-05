@@ -23,6 +23,7 @@ import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { matchesDressCode, dressCodeKeywords } from '../lib/lookBuilder';
+import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
@@ -1823,7 +1824,7 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} events={worldEvents} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -7583,12 +7584,12 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
 // have an event pencilled in, moved freely (Q5); an episode in no slot can
 // be placed in an open one (Q4). A started slot is locked (A7). When every
 // slot of the current phase is done, a summary asks before advancing (Q6).
-const SLOT_STATE_CONFIG = {
-  done:          { label: 'Done',            color: 'var(--success-text)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
-  in_production: { label: 'In production',   color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)', border: 'var(--lala-gold-line)' },
-  event_ready:   { label: 'Event ready',     color: 'var(--primary-text)', bg: 'var(--primary-subtle)', border: 'var(--primary-light)' },
-  needs_event:   { label: 'Needs an event',  color: 'var(--text-secondary)', bg: 'var(--surface-bg)', border: 'var(--lala-parchment-3)' },
-};
+// A slot's state (seasonSlotService.slotState), as its tile, the panel and
+// the key name it (Evoni's redesign, 2026-10-05); the colours are the
+// .wa-arc-slot.state-* rules in WorldAdmin.css.
+const SLOT_STATE_ORDER = ['done', 'in_production', 'event_ready', 'needs_event'];
+const SLOT_STATE_LABEL = { done: 'Done', in_production: 'In production', event_ready: 'Event pencilled', needs_event: 'Open' };
+const SLOT_STATE_KEY = { done: 'Done (episode accepted)', in_production: 'In production (slot locked)', event_ready: 'Event pencilled in', needs_event: 'Open' };
 
 const PRESSURE_OPTIONS = ['Low', 'Medium', 'High', 'Peak'];
 const OUTCOME_OPTIONS = ['fail', 'safe', 'pass', 'slay'];
@@ -7740,12 +7741,84 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
 
 const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-primary)', minWidth: 0 };
 
-function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, threads = [] }) {
+// The open slot, beside the season's grid: what it holds, its event and the
+// deal, the threads it moves, and its controls (pencil an event, the
+// intention, the episode).
+function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention }) {
+  const title = slotTitle(slot);
+  const logline = episode?.logline || episode?.description || null;
+  const deal = event ? eventCardDetails(event).deal : null;
+  const purposes = slot.intention?.story_purposes || [];
+  const primary = slot.intention?.story_purpose;
+  const threads = slotThreads(slot);
+  const state = SLOT_STATE_LABEL[slot.state] || SLOT_STATE_LABEL.needs_event;
+  return (
+    <section className={`wa-arc-panel state-${slot.state}`} data-testid="season-slot-panel" aria-label={`Slot ${slot.label}`}>
+      <span className="wa-arc-eyebrow">Slot {slot.label}</span>
+      <h3 className="wa-arc-panel-title">{title || 'Open slot'}</h3>
+      <span className="wa-arc-chip">{state}{slot.locked ? ' · locked' : ''}</span>
+      {logline && <p className="wa-arc-logline">{logline}</p>}
+      {primary && (
+        <p className="wa-arc-purpose" data-testid={`season-slot-purpose-${slot.slot_number}`}>
+          {primary}
+          {purposes.length > 1 && <span className="wa-arc-more"> +{purposes.length - 1} more</span>}
+          {slot.intention?.source === 'auto-drafted' && <span className="wa-arc-source"> · Auto-drafted</span>}
+        </p>
+      )}
+
+      <dl className="wa-arc-facts">
+        <div><dt>Event</dt><dd>{slot.event?.name || 'None pencilled'}</dd></div>
+        {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
+      </dl>
+
+      {threads.length > 0 && (
+        <div className="wa-arc-threads">
+          <span className="wa-arc-threads-label">Threads this episode moves</span>
+          <ul>{threads.map((t) => <li key={t.id}>{t.title}</li>)}</ul>
+        </div>
+      )}
+
+      {!slot.locked && (
+        <select
+          className="wa-arc-select"
+          aria-label={`Pencil an event into ${slot.label}`}
+          data-testid={`season-pencil-${slot.slot_number}`}
+          value=""
+          disabled={busy}
+          onChange={(e) => onPencil(e.target.value)}
+        >
+          <option value="">{slot.event ? 'Change event…' : 'Pencil an event…'}</option>
+          {available.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+          {slot.event && <option value="__clear__">Clear this slot</option>}
+        </select>
+      )}
+      {(slot.intention_editable ?? !slot.locked) && (
+        <button type="button" className="wa-arc-secondary" data-testid={`season-intention-${slot.slot_number}`} onClick={onIntention}>
+          {primary ? 'Edit intention' : 'Add intention'}
+        </button>
+      )}
+      {slot.episode ? (
+        <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
+          {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
+        </Link>
+      ) : slot.event ? (
+        <Link className="wa-arc-primary" to={`/shows/${showId}/events/${slot.event.id}`}>Open the event package</Link>
+      ) : null}
+    </section>
+  );
+}
+
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, threads = [], episodes = [], events = [] }) {
   const [busySlot, setBusySlot] = useState(null);
   const [editingSlotId, setEditingSlotId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const panelRef = useRef(null);
   if (!roadmap) return null;
-  const { phases = [], counts = {}, unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
-  const openSlots = phases.flatMap((p) => p.slots).filter((sl) => !sl.locked);
+  const { phases = [], unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
+  const allSlots = phases.flatMap((p) => p.slots);
+  const openSlots = allSlots.filter((sl) => !sl.locked);
+  const selected = allSlots.find((sl) => sl.id === selectedId) || allSlots.find((sl) => sl.id === defaultSlotId(roadmap)) || null;
+  const editing = allSlots.find((sl) => sl.id === editingSlotId) || null;
 
   const save = async (slotId, path, body, done) => {
     setBusySlot(slotId);
@@ -7769,13 +7842,21 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
     if (!window.confirm(`Place "${episode.title || 'this episode'}" in ${slot?.label}? The slot then locks to it.`)) return;
     save(slotId, 'episode', { episode_id: episode.id }, `Placed in ${slot?.label}`);
   };
+  // Opening a slot on a phone, where the panel sits above the parts, brings the panel into view.
+  const open = (slot) => {
+    setSelectedId(slot.id);
+    if (editingSlotId && editingSlotId !== slot.id) setEditingSlotId(null);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1099px)').matches) {
+      panelRef.current?.querySelector('.wa-arc-panel')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
-    <div style={S.card} data-testid="season-roadmap">
-      <h3 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Roadmap · Season {roadmap.season_number}</h3>
-      <p style={{ ...S.muted, margin: '0 0 12px', fontSize: 12 }}>
-        {roadmap.slot_count} episode slots · {Object.keys(SLOT_STATE_CONFIG).map((key) => `${counts[key] || 0} ${SLOT_STATE_CONFIG[key].label.toLowerCase()}`).join(' · ')}
-      </p>
+    <div className="wa-arc-card" data-testid="season-roadmap">
+      <div className="wa-arc-head">
+        <h3 className="wa-arc-title">Season {roadmap.season_number} arc</h3>
+        <p className="wa-arc-summary" data-testid="season-arc-summary">{arcSummary(roadmap)}</p>
+      </div>
 
       {roadmap.phase_boundary && (() => {
         const pb = roadmap.phase_boundary;
@@ -7813,86 +7894,69 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
         );
       })()}
 
-      {phases.map((phase) => (
-        <div key={phase.phase} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-            Phase {phase.phase} · {phase.title}
-            <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}> · E{phase.episode_start}–E{phase.episode_end}</span>
-          </div>
-          {/* auto-fit, not auto-fill: responsive.css §12 forces auto-fill grids to one
-              column under 400px, but two 130px slots fit a phone without overflow. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-            {phase.slots.map((slot) => {
-              const cfg = SLOT_STATE_CONFIG[slot.state] || SLOT_STATE_CONFIG.needs_event;
-              const what = slot.episode?.title || slot.event?.name || null;
-              return (
-                <div
-                  key={slot.id}
-                  data-testid={`season-slot-${slot.slot_number}`}
-                  style={{ border: `1px solid ${cfg.border}`, background: cfg.bg, borderRadius: 10, padding: '8px 10px', minWidth: 0 }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'DM Mono', monospace" }}>{slot.label}</span>
-                    {slot.locked && <span title="Started: locked to its episode" style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Locked</span>}
-                    {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)' }}>Next</span>}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: cfg.color, marginTop: 4 }}>{cfg.label}</div>
-                  {what && (
-                    <div style={{ fontSize: 11, color: 'var(--text-primary)', marginTop: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }} title={what}>
-                      {what}
-                    </div>
-                  )}
-                  {!slot.locked && (
-                    <select
-                      aria-label={`Pencil an event into ${slot.label}`}
-                      data-testid={`season-pencil-${slot.slot_number}`}
-                      value=""
-                      disabled={busySlot === slot.id}
-                      onChange={(e) => pencil(slot, e.target.value)}
-                      style={slotSelectStyle}
-                    >
-                      <option value="">{slot.event ? 'Change event…' : 'Pencil an event…'}</option>
-                      {available.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
-                      {slot.event && <option value="__clear__">Clear this slot</option>}
-                    </select>
-                  )}
-                  {slot.intention?.story_purpose && (
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }} data-testid={`season-slot-purpose-${slot.slot_number}`}>
-                      {slot.intention.story_purpose}
-                      {(slot.intention.story_purposes?.length || 0) > 1 && (
-                        <span style={{ fontStyle: 'normal', color: 'var(--lala-gold-text)', fontWeight: 600 }}> +{slot.intention.story_purposes.length - 1} more</span>
-                      )}
-                      {slot.intention.source === 'auto-drafted' && <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)' }}> · Auto-drafted</span>}
-                    </div>
-                  )}
-                  {slot.intention?.story_thread && (
-                    <div style={{ fontSize: 10, color: 'var(--primary-text)', marginTop: 4 }}>Thread: {slot.intention.story_thread.title}</div>
-                  )}
-                  {(slot.intention_editable ?? !slot.locked) && (
+      <div className="wa-arc">
+        <div className="wa-arc-parts">
+          {phases.map((phase) => (
+            <section key={phase.phase} className="wa-arc-part" aria-label={`Part ${phase.phase}: ${phase.title}`}>
+              <h4 className="wa-arc-part-title">
+                <span className="wa-arc-part-num">Part {phase.phase}</span> {phase.title}
+                <span className="wa-arc-part-range"> · E{phase.episode_start}–E{phase.episode_end}</span>
+              </h4>
+              <div className="wa-arc-grid">
+                {phase.slots.map((slot) => {
+                  const title = slotTitle(slot);
+                  return (
                     <button
-                      data-testid={`season-intention-${slot.slot_number}`}
-                      onClick={() => setEditingSlotId(editingSlotId === slot.id ? null : slot.id)}
-                      style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--lala-gold-text)', cursor: 'pointer' }}
+                      key={slot.id}
+                      type="button"
+                      data-testid={`season-slot-${slot.slot_number}`}
+                      className={`wa-arc-slot state-${slot.state}${selected?.id === slot.id ? ' selected' : ''}`}
+                      aria-pressed={selected?.id === slot.id}
+                      aria-label={`${slot.label}: ${title || 'Open slot'}, ${SLOT_STATE_LABEL[slot.state] || SLOT_STATE_LABEL.needs_event}`}
+                      onClick={() => open(slot)}
                     >
-                      {slot.intention?.story_purpose ? 'Intention' : 'Add intention'}
+                      <span className="wa-arc-slot-top">
+                        <span className="wa-arc-slot-num">{shortSlotLabel(slot)}</span>
+                        {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span className="wa-arc-next">Next</span>}
+                        <span className="wa-arc-dot" aria-hidden="true" />
+                      </span>
+                      <span className={`wa-arc-slot-title${title ? '' : ' empty'}`}>{title || 'No idea yet'}</span>
+                      <span className="wa-arc-slot-state">{SLOT_STATE_LABEL[slot.state] || SLOT_STATE_LABEL.needs_event}</span>
                     </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {(() => {
-            const editing = phase.slots.find((sl) => sl.id === editingSlotId);
-            return editing ? (
-              <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
-                onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
-            ) : null;
-          })()}
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+          {editing && (
+            <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
+              onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
+          )}
         </div>
-      ))}
+
+        <aside className="wa-arc-side" ref={panelRef}>
+          {selected && (
+            <SlotPanel
+              slot={selected} showId={showId} available={available} busy={busySlot === selected.id}
+              episode={episodes.find((e) => e.id === selected.episode?.id) || null}
+              event={events.find((e) => e.id === selected.event?.id) || null}
+              onPencil={(value) => pencil(selected, value)}
+              onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
+            />
+          )}
+          <section className="wa-arc-key" aria-label="Key">
+            <span className="wa-arc-eyebrow">Key</span>
+            <ul>
+              {SLOT_STATE_ORDER.map((state) => (
+                <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+      </div>
 
       {unslotted.length > 0 && (
-        <div data-testid="season-unslotted" style={{ marginTop: 4, padding: '10px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 10 }}>
+        <div data-testid="season-unslotted" style={{ marginTop: 16, padding: '10px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)', marginBottom: 6 }}>
             Not in a slot ({unslotted.length})
           </div>
@@ -7921,7 +7985,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   );
 }
 
-function SeasonTab({ showId, api, S, episodes, setToast }) {
+function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
@@ -8116,7 +8180,7 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       {/* Roadmap — the season's 24 slots */}
       <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
         advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)}
-        threads={threadData.threads} />
+        threads={threadData.threads} episodes={episodes} events={events} />
 
       {roadmap && (
         <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}

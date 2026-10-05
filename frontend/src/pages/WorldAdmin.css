@@ -678,3 +678,84 @@
   .sov-btn-lg { width: 100%; text-align: center; }
   .sov-card { padding: 14px 16px; }
 }
+
+/* Episodes → Season Arc (Evoni's redesign, 2026-10-05): the season's slots
+   by part, the open slot beside them. A slot's state is its colour: done
+   lavender, in production pink, an event pencilled amber, open dashed. */
+.wa-arc-card { padding: 20px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); margin-bottom: 16px; }
+.wa-arc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 16px; }
+.wa-arc-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.wa-arc-summary { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.wa-arc { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.wa-arc-parts { display: grid; gap: 16px; min-width: 0; }
+.wa-arc-part { padding: 16px; border-radius: 14px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
+.wa-arc-part-title { margin: 0 0 12px; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.wa-arc-part-num { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); margin-right: 4px; }
+.wa-arc-part-range { font-family: var(--font-ui); font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.wa-arc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.wa-arc-slot {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; min-height: 92px;
+  padding: 10px 12px; border-radius: 12px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--text-primary); background: var(--surface-card); border: 1px solid var(--lala-parchment-3);
+}
+.wa-arc-slot:hover { border-color: var(--lala-lavender-light); }
+.wa-arc-slot:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.wa-arc-slot.selected { box-shadow: 0 0 0 2px var(--lala-lavender); }
+.wa-arc-slot-top { display: flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; }
+.wa-arc-slot-num { margin-right: auto; }
+.wa-arc-next { font-size: 10px; font-weight: 700; color: var(--lala-gold-text); }
+.wa-arc-slot-title { font-size: 13px; font-weight: 600; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.wa-arc-slot-title.empty { font-weight: 400; color: var(--text-secondary); }
+.wa-arc-slot-state { margin-top: auto; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+.wa-arc-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: transparent; border: 1px dashed var(--text-secondary); }
+
+.state-done .wa-arc-dot { background: var(--lala-lavender); border: none; }
+.state-in_production .wa-arc-dot { background: var(--accent); border: none; }
+.state-event_ready .wa-arc-dot { background: var(--warning); border: none; }
+.wa-arc-slot.state-done { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
+.wa-arc-slot.state-done .wa-arc-slot-state { color: var(--lala-lavender-text); }
+.wa-arc-slot.state-in_production { background: var(--accent-subtle); border: 2px solid var(--accent); padding: 9px 11px; }
+.wa-arc-slot.state-in_production .wa-arc-slot-state { color: var(--accent-dark); }
+.wa-arc-slot.state-event_ready .wa-arc-slot-state { color: var(--warning-text); }
+.wa-arc-slot.state-needs_event { background: var(--lala-parchment); border: 1.5px dashed var(--lala-parchment-3); }
+
+.wa-arc-side { display: grid; gap: 16px; position: sticky; top: 16px; min-width: 0; }
+.wa-arc-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; scroll-margin-top: 130px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); }
+.wa-arc-eyebrow { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
+.wa-arc-panel-title { margin: 0; font-family: var(--font-prose); font-size: 21px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-arc-chip { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--lala-parchment); color: var(--text-secondary); }
+.wa-arc-panel.state-done .wa-arc-chip { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.wa-arc-panel.state-in_production .wa-arc-chip { background: var(--accent-subtle); color: var(--accent-dark); }
+.wa-arc-panel.state-event_ready .wa-arc-chip { background: var(--warning-bg); color: var(--warning-text); }
+.wa-arc-logline { margin: 0; font-family: var(--font-prose); font-size: 14px; line-height: 1.5; color: var(--text-primary); }
+.wa-arc-purpose { margin: 0; font-size: 12px; font-style: italic; color: var(--text-secondary); }
+.wa-arc-more { font-style: normal; font-weight: 600; color: var(--lala-gold-text); }
+.wa-arc-source { font-style: normal; }
+.wa-arc-facts { width: 100%; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--lala-parchment-3); display: grid; gap: 6px; font-size: 13px; }
+.wa-arc-facts div { display: flex; justify-content: space-between; gap: 12px; }
+.wa-arc-facts dt { color: var(--text-secondary); }
+.wa-arc-facts dd { margin: 0; text-align: right; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-arc-threads { width: 100%; font-size: 12px; color: var(--text-secondary); }
+.wa-arc-threads ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-arc-threads li { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--accent-subtle); color: var(--accent-dark); font-weight: 600; }
+.wa-arc-select { width: 100%; padding: 8px 10px; font: inherit; font-size: 13px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); color: var(--text-primary); }
+.wa-arc-secondary { padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--lala-lavender-text); cursor: pointer; }
+.wa-arc-secondary:hover { background: var(--lala-lavender-soft); }
+.wa-arc-primary { align-self: stretch; display: block; margin-top: 4px; padding: 12px 16px; border-radius: 12px; background: var(--lala-lavender); color: var(--text-inverse); text-align: center; font-size: 15px; font-weight: 700; text-decoration: none; }
+.wa-arc-primary:hover { background: var(--lala-lavender-dark); }
+.wa-arc-key { padding: 16px 18px; border-radius: 16px; background: var(--accent-subtle); border: 1px solid var(--accent-light); }
+.wa-arc-key ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; color: var(--text-primary); }
+.wa-arc-key li { display: flex; align-items: center; gap: 8px; }
+
+@media (max-width: 1099px) {
+  .wa-arc { grid-template-columns: minmax(0, 1fr); }
+  /* The open slot sits above the parts; the key goes below them. */
+  .wa-arc-side { display: contents; }
+  .wa-arc-panel { order: -1; }
+  .wa-arc-key { order: 1; }
+}
+@media (max-width: 640px) {
+  .wa-arc-card { padding: 14px; }
+  .wa-arc-part { padding: 12px; }
+  .wa-arc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+}

@@ -83,26 +83,49 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
   });
 
-  test('shows the 24 slots by phase, each with its S1 · E label and state', async () => {
+  test('shows the 24 slots by part, each with its number and state', async () => {
     renderAt('season');
 
     const roadmap = await screen.findByTestId('season-roadmap');
-    expect(within(roadmap).getByText('Roadmap · Season 1')).toBeTruthy();
-    expect(within(roadmap).getByText(/Phase 1 · Foundation/)).toBeTruthy();
-    expect(within(roadmap).getByText(/Phase 3 · Legacy/)).toBeTruthy();
-    expect(roadmap.querySelectorAll('[data-testid^="season-slot-"]')).toHaveLength(24);
+    expect(within(roadmap).getByText('Season 1 arc')).toBeTruthy();
+    expect(within(roadmap).getByTestId('season-arc-summary').textContent).toBe('1 in production · 1 pencilled · 24 slots');
+    expect(within(roadmap).getByRole('region', { name: 'Part 1: Foundation' })).toBeTruthy();
+    expect(within(roadmap).getByRole('region', { name: 'Part 3: Legacy' })).toBeTruthy();
+    expect(roadmap.querySelectorAll('[data-testid^="season-slot-"]:not([data-testid="season-slot-panel"])')).toHaveLength(24);
 
     const first = screen.getByTestId('season-slot-1');
-    expect(within(first).getByText('S1 · E1')).toBeTruthy();
+    expect(within(first).getByText('E1')).toBeTruthy();
     expect(within(first).getByText('In production')).toBeTruthy();
     expect(within(first).getByText('Gala Night')).toBeTruthy();
-    expect(within(first).getByText('Locked')).toBeTruthy();
 
     const second = screen.getByTestId('season-slot-2');
-    expect(within(second).getByText('Event ready')).toBeTruthy();
+    expect(within(second).getByText('Event pencilled')).toBeTruthy();
     expect(within(second).getByText('Rooftop Launch')).toBeTruthy();
 
-    expect(within(screen.getByTestId('season-slot-24')).getByText('Needs an event')).toBeTruthy();
+    expect(within(screen.getByTestId('season-slot-24')).getByText('Open')).toBeTruthy();
+  });
+
+  test('the slot in production opens first; a tile opens its slot in the panel, with its controls', async () => {
+    renderAt('season');
+
+    const panel = await screen.findByTestId('season-slot-panel');
+    expect(within(panel).getByText('Slot S1 · E1')).toBeTruthy();
+    expect(within(panel).getByText('In production · locked')).toBeTruthy();
+    expect(within(panel).getByText('Continue episode').getAttribute('href')).toBe('/episodes/ep-1');
+    expect(screen.getByTestId('season-slot-1').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('season-slot-2'));
+    const second = screen.getByTestId('season-slot-panel');
+    expect(within(second).getByText('Slot S1 · E2')).toBeTruthy();
+    expect(within(second).getByText('Rooftop Launch', { selector: 'dd' })).toBeTruthy();
+    expect(within(second).getByText('Open the event package').getAttribute('href')).toBe('/shows/show-1/events/ev-2');
+    expect(within(second).getByTestId('season-pencil-2')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('season-slot-9'));
+    const open = screen.getByTestId('season-slot-panel');
+    expect(within(open).getByText('Open slot')).toBeTruthy();
+    expect(within(open).getByText('None pencilled')).toBeTruthy();
+    expect(within(open).queryByRole('link')).toBeNull();
   });
 
   test('lists episodes that are in no slot', async () => {
@@ -128,10 +151,12 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
 
     expect(screen.queryByTestId('season-pencil-1')).toBeNull(); // E1 is locked to its episode
 
+    fireEvent.click(screen.getByTestId('season-slot-4'));
     fireEvent.change(screen.getByTestId('season-pencil-4'), { target: { value: 'ev-9' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith(
       '/api/v1/world/show-1/season/slots/slot-4/event', { event_id: 'ev-9' }));
 
+    fireEvent.click(screen.getByTestId('season-slot-2'));
     const second = screen.getByTestId('season-pencil-2');
     expect(within(second).getByText('Clear this slot')).toBeTruthy();
     fireEvent.change(second, { target: { value: '__clear__' } });
@@ -210,6 +235,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     await screen.findByTestId('season-roadmap');
     expect(screen.queryByTestId('season-intention-1')).toBeNull(); // E1 is locked
 
+    fireEvent.click(screen.getByTestId('season-slot-3'));
     fireEvent.click(screen.getByTestId('season-intention-3'));
     const editor = await screen.findByTestId('season-intention-editor');
     expect(within(editor).getByText('S1 · E3 intention')).toBeTruthy();
@@ -241,7 +267,9 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     });
     renderAt('season');
     await screen.findByTestId('season-roadmap');
+    fireEvent.click(screen.getByTestId('season-slot-2'));
     expect(screen.queryByTestId('season-intention-2')).toBeNull(); // accepted: locked for good
+    fireEvent.click(screen.getByTestId('season-slot-1'));
 
     fireEvent.click(screen.getByTestId('season-intention-1'));
     const editor = await screen.findByTestId('season-intention-editor');
@@ -295,7 +323,8 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     });
     renderAt('season');
 
-    expect((await screen.findByTestId('season-slot-purpose-3')).textContent).toBe('Lala bluffs her way in +1 more');
+    fireEvent.click(await screen.findByTestId('season-slot-3'));
+    expect(screen.getByTestId('season-slot-purpose-3').textContent).toBe('Lala bluffs her way in +1 more');
     fireEvent.click(screen.getByTestId('season-intention-3'));
     const editor = await screen.findByTestId('season-intention-editor');
     expect(within(editor).getByLabelText('Story purpose 2').value).toBe('The rival notices');
@@ -326,7 +355,8 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderAt('season');
 
-    fireEvent.click(await screen.findByTestId('season-intention-4'));
+    fireEvent.click(await screen.findByTestId('season-slot-4'));
+    fireEvent.click(screen.getByTestId('season-intention-4'));
     const editor = await screen.findByTestId('season-intention-editor');
     expect(within(editor).getByText('Edited')).toBeTruthy();
     fireEvent.click(within(editor).getByText('Draft with AI'));
@@ -404,7 +434,8 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
 
     test('a slot\'s intention can name the thread it continues; closed threads are not offered', async () => {
       renderAt('season');
-      fireEvent.click(await screen.findByTestId('season-intention-5'));
+      fireEvent.click(await screen.findByTestId('season-slot-5'));
+      fireEvent.click(screen.getByTestId('season-intention-5'));
       const editor = await screen.findByTestId('season-intention-editor');
       const select = within(editor).getByLabelText('Story thread 1');
       expect(within(select).queryByText('Old debt')).toBeNull();
