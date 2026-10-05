@@ -28,22 +28,36 @@ import apiClient from '../services/api';
 
 const API = '/api/v1/memories';
 
+// Token families (theme batch 6, 2026-10-05), as in MemoryBankView: fill a
+// dot under no text, bg a surface, color the family as text (4.5:1 on white
+// and on bg), line a border. A hex-alpha tint (`${color}33`) is not a token.
+export const TONES = {
+  gold:     { fill: 'var(--lala-gold)', bg: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', line: 'var(--lala-gold-line)' },
+  lavender: { fill: 'var(--lala-lavender)', bg: 'var(--lala-lavender-soft)', color: 'var(--lala-lavender-text)', line: 'var(--lala-lavender-line)' },
+  success:  { fill: 'var(--success)', bg: 'var(--success-bg)', color: 'var(--success-text)', line: 'var(--success-border)' },
+  teal:     { fill: 'var(--primary)', bg: 'var(--primary-subtle)', color: 'var(--primary-text)', line: 'var(--primary-light)' },
+  info:     { fill: 'var(--info)', bg: 'var(--info-bg)', color: 'var(--info-text)', line: 'var(--info-border)' },
+  warning:  { fill: 'var(--warning)', bg: 'var(--warning-bg)', color: 'var(--warning-text)', line: 'var(--warning-border)' },
+  danger:   { fill: 'var(--danger)', bg: 'var(--danger-bg)', color: 'var(--danger-text)', line: 'var(--danger-border)' },
+  neutral:  { fill: 'var(--lala-ink-faint)', bg: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', line: 'var(--lala-parchment-3)' },
+};
+
 const TYPE_META = {
-  goal:           { label: 'Goal',           color: '#4A7C59', bg: 'rgba(74,124,89,0.10)'   },
-  preference:     { label: 'Preference',     color: '#2563A8', bg: 'rgba(37,99,168,0.10)'   },
-  relationship:   { label: 'Relationship',   color: '#7B5EA7', bg: 'rgba(123,94,167,0.10)'  },
-  belief:         { label: 'Belief',         color: '#C9A84C', bg: 'rgba(201,168,76,0.10)'  },
-  event:          { label: 'Event',          color: '#5A6E3A', bg: 'rgba(90,110,58,0.10)'   },
-  constraint:     { label: 'Constraint',     color: '#B85C38', bg: 'rgba(184,92,56,0.10)'   },
-  transformation: { label: 'Transformation', color: '#2A7A6A', bg: 'rgba(42,122,106,0.10)'  },
+  goal:           { label: 'Goal',           ...TONES.success },
+  preference:     { label: 'Preference',     ...TONES.info },
+  relationship:   { label: 'Relationship',   ...TONES.lavender },
+  belief:         { label: 'Belief',         ...TONES.gold },
+  event:          { label: 'Event',          ...TONES.warning },
+  constraint:     { label: 'Constraint',     ...TONES.danger },
+  transformation: { label: 'Transformation', ...TONES.teal },
 };
 
 const CHARACTER_TYPE_COLORS = {
-  pressure: '#B85C38',
-  mirror:   '#7B5EA7',
-  support:  '#2A7A6A',
-  shadow:   '#C97A2A',
-  special:  '#C9A84C',
+  pressure: TONES.danger,
+  mirror:   TONES.lavender,
+  support:  TONES.teal,
+  shadow:   TONES.warning,
+  special:  TONES.gold,
 };
 
 // ── Shared fetch helpers ───────────────────────────────────────────────────
@@ -73,7 +87,7 @@ async function apiFetch(path, options = {}) {
 function ConfidenceLabel({ value }) {
   const pct = Math.round((value || 0) * 100);
   const label = pct >= 80 ? 'High' : pct >= 60 ? 'Medium' : 'Low';
-  const color = pct >= 80 ? '#5a9a5a' : pct >= 60 ? '#a08a5c' : '#b05040';
+  const color = pct >= 80 ? 'var(--success-text)' : pct >= 60 ? 'var(--lala-gold-text)' : 'var(--danger-text)';
   return (
     <span style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
@@ -87,7 +101,7 @@ function ConfidenceLabel({ value }) {
 // Keep ConfidenceBar for panel view
 function ConfidenceBar({ value }) {
   const pct = Math.round((value || 0) * 100);
-  const color = pct >= 80 ? '#5a9a5a' : pct >= 60 ? '#a08a5c' : '#b05040';
+  const color = pct >= 80 ? 'var(--success-text)' : pct >= 60 ? 'var(--lala-gold-text)' : 'var(--danger-text)';
   return (
     <span style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
@@ -101,13 +115,13 @@ function ConfidenceBar({ value }) {
 // ── Type badge ─────────────────────────────────────────────────────────────
 
 function TypeBadge({ type, size = 'sm' }) {
-  const meta = TYPE_META[type] || { label: type, color: '#888', bg: 'rgba(0,0,0,0.06)' };
+  const meta = TYPE_META[type] || { label: type, ...TONES.neutral };
   return (
     <span style={{
       display: 'inline-block',
       background: meta.bg,
       color: meta.color,
-      border: `1px solid ${meta.color}33`,
+      border: `1px solid ${meta.line}`,
       borderRadius: 2,
       fontFamily: 'DM Mono, monospace',
       fontSize: size === 'sm' ? 11 : 12,
@@ -249,12 +263,12 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
 
   if (error) {
     return (
-      <div style={{ ...styles.cardShell, borderLeftColor: '#B85C38' }}>
+      <div style={{ ...styles.cardShell, borderLeftColor: 'var(--danger)' }}>
         <div style={styles.cardHeader}>
-          <span style={{ ...styles.cardHeaderDot, background: '#B85C38' }} />
-          <span style={{ ...styles.cardHeaderLabel, color: '#B85C38' }}>Memory extraction error</span>
+          <span style={{ ...styles.cardHeaderDot, background: 'var(--danger)' }} />
+          <span style={{ ...styles.cardHeaderLabel, color: 'var(--danger-text)' }}>Memory extraction error</span>
         </div>
-        <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#B85C38', padding: '0 0 12px 0' }}>
+        <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--danger-text)', padding: '0 0 12px 0' }}>
           {error}
         </p>
         <button style={styles.btnGhost} onClick={handleExtract}>Retry extraction</button>
@@ -264,10 +278,10 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
 
   if (memories.length === 0) {
     return (
-      <div style={{ ...styles.cardShell, borderLeftColor: 'rgba(26,21,16,0.12)' }}>
+      <div style={{ ...styles.cardShell, borderLeftColor: 'var(--lala-parchment-3)' }}>
         <div style={styles.cardHeader}>
-          <span style={{ ...styles.cardHeaderDot, background: 'rgba(26,21,16,0.2)' }} />
-          <span style={{ ...styles.cardHeaderLabel, color: 'rgba(26,21,16,0.4)' }}>
+          <span style={{ ...styles.cardHeaderDot, background: 'var(--lala-ink-faint)' }} />
+          <span style={{ ...styles.cardHeaderLabel, color: 'var(--text-secondary)' }}>
             No memories extracted from this line
           </span>
         </div>
@@ -301,18 +315,18 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
               <div style={{
                 ...styles.memoryRow,
                 background: memory.confirmed
-                  ? 'rgba(74,124,89,0.04)'
-                  : cs.open ? 'rgba(201,168,76,0.06)' : 'transparent',
+                  ? 'var(--success-bg)'
+                  : cs.open ? 'var(--lala-gold-soft)' : 'transparent',
               }}>
                 {/* Left: type + statement */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                     <TypeBadge type={memory.type} />
                     {memory.confirmed && (
-                      <span style={{ fontSize: 12, color: '#5a9a5a' }}>✓</span>
+                      <span style={{ fontSize: 12, color: 'var(--success-text)' }}>✓</span>
                     )}
                     {memory.protected && (
-                      <span style={{ fontSize: 12, color: '#666' }}>🔒</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>🔒</span>
                     )}
                   </div>
                   <p style={styles.memoryStatement}>{memory.statement}</p>
@@ -342,7 +356,7 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
                 )}
                 {memory.confirmed && (
                   <div style={styles.memoryActions}>
-                    <span style={{ fontSize: 12, color: '#5a9a5a' }}>✓</span>
+                    <span style={{ fontSize: 12, color: 'var(--success-text)' }}>✓</span>
                   </div>
                 )}
               </div>
@@ -390,7 +404,7 @@ function ConfirmPanel({ memory, state, characters, onUpdate, onConfirm, onCancel
           rows={3}
         />
         {state.editedStatement !== memory.statement && (
-          <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#7B5EA7', margin: '4px 0 0', letterSpacing: '0.08em' }}>
+          <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--lala-lavender-text)', margin: '4px 0 0', letterSpacing: '0.08em' }}>
             🔒 Your edit will be protected — the system won't overwrite it
           </p>
         )}
@@ -403,7 +417,7 @@ function ConfirmPanel({ memory, state, characters, onUpdate, onConfirm, onCancel
 
         <div style={styles.charGrid}>
           {characters.map(char => {
-            const typeColor = CHARACTER_TYPE_COLORS[char.type] || '#888';
+            const charTone = CHARACTER_TYPE_COLORS[char.type] || TONES.neutral;
             const isSelected = state.selectedCharId === char.id;
             return (
               <button
@@ -411,14 +425,14 @@ function ConfirmPanel({ memory, state, characters, onUpdate, onConfirm, onCancel
                 onClick={() => onUpdate('selectedCharId', char.id)}
                 style={{
                   ...styles.charChip,
-                  borderColor: isSelected ? typeColor : 'rgba(26,21,16,0.12)',
-                  background: isSelected ? `${typeColor}14` : 'transparent',
-                  color: isSelected ? typeColor : 'rgba(26,21,16,0.55)',
+                  borderColor: isSelected ? charTone.line : TONES.neutral.line,
+                  background: isSelected ? charTone.bg : 'transparent',
+                  color: isSelected ? charTone.color : TONES.neutral.color,
                 }}
               >
                 <span style={{
                   width: 6, height: 6, borderRadius: '50%',
-                  background: typeColor, display: 'inline-block', flexShrink: 0,
+                  background: charTone.fill, display: 'inline-block', flexShrink: 0,
                 }} />
                 {char.name}
               </button>
@@ -490,9 +504,9 @@ export function MemoryBankPanel({ bookId }) {
       <div style={styles.panelHeader}>
         <div style={styles.panelTitle}>Memory Bank</div>
         <div style={styles.panelMeta}>
-          <span style={{ color: '#4A7C59' }}>{data.confirmed_count} confirmed</span>
-          <span style={{ color: 'rgba(245,240,232,0.3)' }}>·</span>
-          <span style={{ color: '#C9A84C' }}>{data.inferred_count} inferred</span>
+          <span style={{ color: 'var(--success-text)' }}>{data.confirmed_count} confirmed</span>
+          <span style={{ color: 'var(--text-secondary)' }}>·</span>
+          <span style={{ color: 'var(--lala-gold-text)' }}>{data.inferred_count} inferred</span>
         </div>
       </div>
 
@@ -504,8 +518,8 @@ export function MemoryBankPanel({ bookId }) {
             onClick={() => setFilter(f)}
             style={{
               ...styles.filterTab,
-              color: filter === f ? '#C9A84C' : 'rgba(245,240,232,0.3)',
-              borderBottom: filter === f ? '1px solid #C9A84C' : '1px solid transparent',
+              color: filter === f ? 'var(--lala-gold-text)' : 'var(--text-secondary)',
+              borderBottom: filter === f ? '1px solid var(--lala-gold)' : '1px solid transparent',
             }}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -544,7 +558,7 @@ function PanelMemoryItem({ memory }) {
         <TypeBadge type={memory.type} size="xs" />
         <span style={{
           fontFamily: 'DM Mono, monospace', fontSize: 11,
-          color: memory.confirmed ? '#4A7C59' : '#C9A84C',
+          color: memory.confirmed ? 'var(--success-text)' : 'var(--lala-gold-text)',
           letterSpacing: '0.1em', marginLeft: 'auto', flexShrink: 0,
         }}>
           {memory.confirmed ? '✓ CONFIRMED' : '◌ INFERRED'}
@@ -560,7 +574,7 @@ function PanelMemoryItem({ memory }) {
             {memory.tags?.map(t => <span key={t} style={styles.tagDark}>{t}</span>)}
           </div>
           {memory.chapter_title && (
-            <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'rgba(245,240,232,0.35)', marginTop: 5 }}>
+            <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--text-secondary)', marginTop: 5 }}>
               from: {memory.chapter_title}
             </p>
           )}
@@ -578,7 +592,7 @@ function PanelShell({ children }) {
 
 function PanelLoading() {
   return (
-    <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.1em' }}>
+    <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>
       Loading memories…
     </p>
   );
@@ -589,7 +603,7 @@ function LoadingDots() {
     <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center', marginLeft: 6 }}>
       {[0, 1, 2].map(i => (
         <span key={i} style={{
-          width: 4, height: 4, borderRadius: '50%', background: '#C9A84C',
+          width: 4, height: 4, borderRadius: '50%', background: 'var(--lala-gold)',
           display: 'inline-block',
           animation: 'pulse 1.2s ease-in-out infinite',
           animationDelay: `${i * 0.2}s`,
@@ -604,7 +618,7 @@ function LoadingDots() {
 const styles = {
   cardShell: {
     margin: '4px 0 8px 0',
-    borderLeft: '2px solid rgba(0,0,0,0.08)',
+    borderLeft: '2px solid var(--lala-parchment-3)',
     paddingLeft: 16,
     paddingTop: 10,
     paddingBottom: 10,
@@ -613,26 +627,26 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10,
   },
   cardHeaderDot: {
-    width: 5, height: 5, borderRadius: '50%', background: '#a08a5c', flexShrink: 0,
+    width: 5, height: 5, borderRadius: '50%', background: 'var(--lala-gold)', flexShrink: 0,
   },
   cardHeaderLabel: {
     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 11,
-    color: '#666', letterSpacing: '0.06em', textTransform: 'uppercase',
+    color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase',
   },
   cardHeaderBadge: {
-    marginLeft: 'auto', background: 'rgba(0,0,0,0.04)',
-    border: '1px solid rgba(0,0,0,0.08)', borderRadius: 2,
+    marginLeft: 'auto', background: 'var(--lala-parchment-2)',
+    border: '1px solid var(--lala-parchment-3)', borderRadius: 2,
     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 11,
-    color: '#666', padding: '2px 6px', letterSpacing: '0.04em',
+    color: 'var(--text-secondary)', padding: '2px 6px', letterSpacing: '0.04em',
   },
   memoryRow: {
     display: 'flex', gap: 12, padding: '10px 10px 10px 0',
-    borderBottom: '1px solid rgba(26,21,16,0.05)',
+    borderBottom: '1px solid var(--lala-parchment-2)',
     borderRadius: 2, transition: 'background 0.15s',
   },
   memoryStatement: {
     fontFamily: "'Playfair Display', serif", fontSize: 13,
-    color: '#1A1510', lineHeight: 1.6, margin: '0 0 6px',
+    color: 'var(--text-primary)', lineHeight: 1.6, margin: '0 0 6px',
   },
   memoryActions: {
     display: 'flex', flexDirection: 'column', gap: 4,
@@ -640,20 +654,20 @@ const styles = {
   },
   tag: {
     fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.06em',
-    background: 'rgba(26,21,16,0.06)', borderRadius: 2,
-    color: 'rgba(26,21,16,0.5)', padding: '1px 5px',
+    background: 'var(--lala-parchment-2)', borderRadius: 2,
+    color: 'var(--text-secondary)', padding: '1px 5px',
   },
   tagDark: {
     fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.06em',
-    background: 'rgba(245,240,232,0.08)', borderRadius: 2,
-    color: 'rgba(245,240,232,0.45)', padding: '1px 5px',
+    background: 'var(--lala-parchment-2)', borderRadius: 2,
+    color: 'var(--text-secondary)', padding: '1px 5px',
     display: 'inline-block', marginRight: 3,
   },
 
   // Confirm panel
   confirmPanel: {
-    background: 'rgba(201,168,76,0.04)',
-    border: '1px solid rgba(201,168,76,0.15)',
+    background: 'var(--lala-gold-soft)',
+    border: '1px solid var(--lala-gold-line)',
     borderRadius: '0 0 3px 3px',
     marginBottom: 2,
     overflow: 'hidden',
@@ -663,18 +677,18 @@ const styles = {
   confirmStep: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 },
   confirmStepNum: {
     fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.16em',
-    textTransform: 'uppercase', color: '#C9A84C',
-    background: 'rgba(201,168,76,0.12)', borderRadius: 2,
+    textTransform: 'uppercase', color: 'var(--lala-gold-text)',
+    background: 'var(--lala-gold-soft)', borderRadius: 2,
     padding: '2px 6px',
   },
   confirmStepLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'rgba(26,21,16,0.5)',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   statementEditor: {
     width: '100%', fontFamily: "'Playfair Display', serif", fontSize: 13,
-    color: '#1A1510', lineHeight: 1.65,
-    background: 'rgba(245,240,232,0.8)', border: '1px solid rgba(26,21,16,0.12)',
+    color: 'var(--text-primary)', lineHeight: 1.65,
+    background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)',
     borderRadius: 2, padding: '8px 10px', resize: 'vertical',
     outline: 'none', boxSizing: 'border-box',
   },
@@ -689,34 +703,34 @@ const styles = {
   confirmActions: { display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' },
   confirmNote: {
     fontFamily: 'DM Mono, monospace', fontSize: 11,
-    color: 'rgba(26,21,16,0.4)', lineHeight: 1.5, marginTop: 10,
+    color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 10,
     letterSpacing: '0.04em',
   },
 
   // Buttons
   btnConfirm: {
-    border: '1px solid rgba(201,168,76,0.3)', background: 'rgba(201,168,76,0.08)',
+    border: '1px solid var(--lala-gold-line)', background: 'var(--lala-gold-soft)',
     borderRadius: 2, fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.1em', textTransform: 'uppercase',
-    color: '#C9A84C', padding: '4px 10px', cursor: 'pointer',
+    color: 'var(--lala-gold-text)', padding: '4px 10px', cursor: 'pointer',
     whiteSpace: 'nowrap', transition: 'all 0.12s',
   },
   btnDismiss: {
     border: 'none', background: 'none',
     fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.08em',
-    color: 'rgba(26,21,16,0.4)', cursor: 'pointer', padding: '4px 6px',
+    color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px 6px',
     transition: 'color 0.12s',
   },
   btnPrimary: {
-    background: '#C9A84C', color: '#1A1510',
+    background: 'var(--lala-gold)', color: 'var(--text-primary)',
     border: 'none', borderRadius: 2,
     fontFamily: 'DM Mono, monospace', fontSize: 11,
     fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase',
     padding: '8px 16px', transition: 'opacity 0.15s',
   },
   btnGhost: {
-    background: 'rgba(26,21,16,0.06)', color: 'rgba(26,21,16,0.5)',
-    border: '1px solid rgba(26,21,16,0.1)', borderRadius: 2,
+    background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)',
+    border: '1px solid var(--lala-parchment-3)', borderRadius: 2,
     fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.08em', padding: '8px 14px', cursor: 'pointer',
   },
@@ -725,7 +739,7 @@ const styles = {
   panelHeader: { marginBottom: 10 },
   panelTitle: {
     fontFamily: "'Playfair Display', serif", fontSize: 15,
-    color: 'rgba(245,240,232,0.88)', fontStyle: 'italic', marginBottom: 4,
+    color: 'var(--text-primary)', fontStyle: 'italic', marginBottom: 4,
   },
   panelMeta: {
     display: 'flex', gap: 6, alignItems: 'center',
@@ -739,19 +753,19 @@ const styles = {
     cursor: 'pointer', transition: 'all 0.12s',
   },
   panelItem: {
-    padding: '10px 0', borderBottom: '1px solid rgba(245,240,232,0.06)',
+    padding: '10px 0', borderBottom: '1px solid var(--lala-parchment-2)',
     cursor: 'pointer', transition: 'background 0.12s',
   },
   panelItemStatement: {
     fontFamily: "'Playfair Display', serif", fontSize: 13,
-    color: 'rgba(245,240,232,0.78)', lineHeight: 1.5, margin: '3px 0 0',
+    color: 'var(--text-primary)', lineHeight: 1.5, margin: '3px 0 0',
   },
   panelEmpty: {
     fontFamily: 'DM Mono, monospace', fontSize: 11,
-    color: 'rgba(245,240,232,0.35)', letterSpacing: '0.06em', lineHeight: 1.6,
+    color: 'var(--text-secondary)', letterSpacing: '0.06em', lineHeight: 1.6,
   },
   panelError: {
-    fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#B85C38',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--danger-text)',
   },
 };
 
