@@ -2,8 +2,8 @@
  * Producer Mode names its show: GET /shows/:id answers { success, data },
  * and the show's name is `name` (it read `title` off the envelope, so the
  * header always said "Show", and the wardrobe's "Require all slots" never
- * saw the saved setting). A context bar names the show and the section, and
- * switches show keeping the section.
+ * saw the saved setting). The show card names the show and switches show
+ * keeping the section; the pill tabs and sub-tabs mark the section.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -43,11 +43,12 @@ describe('WorldAdmin: which show, which section', () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
-  test('the header and context bar name the show and the section; the show becomes the active show', async () => {
+  test('the show card names the show, the tabs mark the section; the show becomes the active show', async () => {
     renderAt('/shows/show-1/world?tab=scene-sets');
     await waitFor(() => expect(screen.getByTestId('wa-show-name').textContent).toBe('Styling Adventures'));
-    const bar = screen.getByTestId('wa-context-bar');
-    await waitFor(() => expect(bar.textContent).toContain('Assets / Scene Sets'));
+    await waitFor(() => expect(document.querySelector('.wa-tab[aria-current="page"] .wa-tab-label')?.textContent).toBe('Assets'));
+    expect(document.querySelector('.wa-subtab[aria-current="page"]')?.textContent).toBe('Scene Sets');
+    expect(screen.getByRole('link', { name: 'Edit show' }).getAttribute('href')).toBe('/shows/show-1/edit');
     expect(rememberedShowId()).toBe('show-1');
   });
 

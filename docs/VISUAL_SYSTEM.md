@@ -12,6 +12,9 @@ action, **soft pink** for accents, selection and attention, **gold** reserved fo
 own marks, and separate semantic colors (success, warning, danger, info) so an ordinary
 button never competes with a warning. Lora for prose, DM Mono for UI chrome.
 
+One exception, by Evoni's ruling (2026-10-05): **Producer Mode's** primary actions are
+**lavender** (`--lala-lavender` under `--text-inverse`), to her redesign mock (§8).
+
 ## 2. Where the tokens live
 
 `frontend/src/styles/design-tokens.css` is the **single source**. `frontend/src/index.css`
@@ -212,3 +215,21 @@ pages follow one screen per PR.
 | Story Engine pages, the Story Calendar (`StoryCalendar`, `/story-calendar`) | done (2026-10-05), the last live Story Engine page: 6 hex literals and 6 hex-alpha tints gone. The page palette `C` is tokens; the event types are families in `EVENT_TONES` (world info, story gold, character lavender, LalaVerse cultural warning), a text twin for the pills and filters, a wash, a line and a fill for the timeline dot and the card's left rule; private and underground read lavender and danger. The old pastels were 2.0–3.8:1 on white; every family now reads 4.5:1 on white, the parchment and its own wash. New Event is `--lala-gold-text` and Create `--success-text`, both under `--text-inverse` (they were the pastel gold and green under white, 2.2:1 and 2.0:1). At phone width the filter pills keep each label on one line and wrap as a row, and New Event drops below them (it ran past the screen edge). `StoryCalendar.theme.test.js` guards it. |
 | Story Engine, unused files (`StoryEngine.css`, `StoryInspector`, `StoryNavigator`, `ArcGenerationStatus`, `storyEngineConstants.js`, `StorytellerPage.css`) | deleted (2026-10-05), not migrated: nothing outside the set imported them and no route mounted them. `StoryEngine.css` (7,967 lines, the retired three-panel Story Engine) lost its last importer when Story Health got its own stylesheet; `StorytellerPage.css` (4,372 lines) had no importer. The Story Engine pages are done. |
 
+## 8. Producer Mode redesign (Evoni's mock, 2026-10-05)
+
+Evoni's mock (`Lalas_Social_Media_Page.html`, eight boards: Overview, Events, Wardrobe,
+Lala's Feed, Episodes, Cast & Continuity, Release, the phone) redesigns Producer Mode.
+Her rulings: primary actions **lavender** (the lavender token family, not the mock's
+brighter purple), **Lala's Feed returns** as a Producer Mode tab (the sidebar page stays),
+UI chrome stays **DM Mono** (the mock's Nunito Sans is not added). One screen per PR.
+
+| Screen | State |
+|---|---|
+| The shell (`WorldAdmin.jsx` header, `TABS`, sub-tabs, `S.primaryBtn`; `WorldAdmin.css` `.wa-hero`, `.wa-tab-bar`, `.wa-tab`, `.wa-subtabs`) | done (2026-10-05): the header and the context bar are one white show card with a lavender-to-pink top line: Back to Shows, "Producer Mode" in `--font-prose`, the show as a lavender chip under `--text-inverse` (with several shows the chip is the switcher), the season and "Producing Episode N" chips from the episodes in production (`episodesInProduction`), Edit show · Settings, Refresh as an icon button. The tabs are pills with lucide icons in a soft pink band; the active pill is `--accent-subtle` with an `--accent` border and `--accent-dark` text; a count in `--accent-dark` under inverse shows what is waiting (Episodes: in production; Events: setup incomplete, `eventsNeedingAttention`). The pills never shrink and the band scrolls on a phone. Sub-tabs are text underlined in `--accent-dark`. The shared primary action `S.primaryBtn` is lavender (it was teal); buttons styled per tab move with their tab's row. The tab bar is no longer sticky (the band is taller than the old strip). `WorldAdmin.accents.test.js` and `WorldAdmin.shell.test.jsx` guard it. |
+| Overview (next step, now producing, Lala now, episode money, up next) | after |
+| Events (status counts, event cards with deal, organizer and what is still needed) | after |
+| Assets → Wardrobe (the closet and the "building a look" panel) | after |
+| Episodes → Season Arc (the slot grid by part, the slot panel) | after |
+| Cast & Continuity (stat bars, decision log, story-thread squares, the cast) | after |
+| Release (next release checklist, feed posts, release calendar, results) | after |
+| Lala's Feed (the approval queue, Post as Lala, what Lala sees) | after |
