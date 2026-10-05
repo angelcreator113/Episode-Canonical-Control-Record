@@ -124,4 +124,21 @@ describe('Event Package part 3', () => {
     fireEvent.click(more);
     expect(list.querySelectorAll('li')).toHaveLength(10);
   });
+  test('a long description clamps to two lines with Show more; a short one has no toggle', async () => {
+    const long = 'Step into the studio for an evening of independent design. '.repeat(5);
+    EVENT = { ...BASE, description: long };
+    const { unmount } = renderPage();
+    const text = await screen.findByTestId('basics-description-text');
+    expect(text.className).toContain('is-clamped');
+    const more = screen.getByTestId('basics-description-more');
+    expect(more.textContent).toContain('Show more');
+    fireEvent.click(more);
+    expect(text.className).not.toContain('is-clamped');
+    expect(more.textContent).toContain('Show less');
+    unmount();
+    EVENT = { ...BASE, description: 'A short evening.' };
+    renderPage();
+    expect((await screen.findByTestId('basics-description-text')).className).not.toContain('is-clamped');
+    expect(screen.queryByTestId('basics-description-more')).toBeNull();
+  });
 });

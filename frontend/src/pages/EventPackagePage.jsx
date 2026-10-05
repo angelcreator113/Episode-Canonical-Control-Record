@@ -112,6 +112,8 @@ const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic',
 const MAX_FEATURED_GUESTS = 5;
 // The Full Guest List shows ten at a time; the rest fold behind Show more (2026-10-05).
 const GUESTS_SHOWN = 10;
+// The description clamps to two lines past this length, as in Evoni's mock (Show more / Show less).
+const DESCRIPTION_CLAMP_AT = 160;
 
 // Basics fields (Task #1755): the dialog title, the PUT column each one
 // saves to, and the input it edits with. maxLength follows the column
@@ -344,6 +346,7 @@ export default function EventPackagePage() {
   // Host picker's debounced search exactly (same endpoint, same shape).
   const [fullGuestListOpen, setFullGuestListOpen] = useState(false);
   const [allGuestsOpen, setAllGuestsOpen] = useState(false);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [guestSaving, setGuestSaving] = useState(false);
   const [guestFeedPickerOpen, setGuestFeedPickerOpen] = useState(false);
   const [guestFeedSearch, setGuestFeedSearch] = useState('');
@@ -602,6 +605,7 @@ export default function EventPackagePage() {
     const f = basics[key];
     const StateIcon = basicsStateIcon(f);
     const hasValue = hasValueState(f.state);
+    const clampDescription = key === 'description' && hasValue && String(f.value || '').length > DESCRIPTION_CLAMP_AT;
     return (
       <div key={key} className={`epp-basic is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
         <dt>
@@ -609,8 +613,23 @@ export default function EventPackagePage() {
           <span className="epp-basic-state" data-testid={`basics-${key}-state`}><StateIcon size={11} aria-hidden="true" /> {basicsStateLabel(f)}</span>
         </dt>
         <dd>
-          {hasValue ? (
-            <span className={key === 'description' ? 'epp-basic-value epp-basic-prose' : 'epp-basic-value'}>{fmtBasicsValue(key, f.value)}</span>
+          {hasValue && key === 'description' ? (
+            <>
+              <span
+                id="epp-description-text" data-testid="basics-description-text"
+                className={`epp-basic-value epp-basic-prose${clampDescription && !descriptionOpen ? ' is-clamped' : ''}`}
+              >
+                {fmtBasicsValue(key, f.value)}
+              </span>
+              {clampDescription && (
+                <ShowMoreToggle
+                  open={descriptionOpen} hidden={1} onToggle={() => setDescriptionOpen((o) => !o)}
+                  label={descriptionOpen ? 'Show less' : 'Show more'} testId="basics-description-more" controls="epp-description-text"
+                />
+              )}
+            </>
+          ) : hasValue ? (
+            <span className="epp-basic-value">{fmtBasicsValue(key, f.value)}</span>
           ) : (
             <span className="epp-basic-unset">Not set</span>
           )}

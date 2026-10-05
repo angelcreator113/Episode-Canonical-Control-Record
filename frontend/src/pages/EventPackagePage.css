@@ -1979,3 +1979,6 @@
 @media (min-width: 900px) {
   .epp-place .epp-place-image { position: sticky; top: 16px; align-self: start; }
 }
+/* The description clamps to two lines until Show more (Evoni's mock). */
+.epp-basic-prose.is-clamped { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.epp-basic .epp-show-more { margin: 4px 0 0; }
