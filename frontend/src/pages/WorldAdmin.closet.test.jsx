@@ -1,8 +1,8 @@
 /**
  * Assets → Wardrobe, the closet, to Evoni's redesign (2026-10-05): the Show
- * row splits what Lala owns from what she would buy, the Sets pill shows the
- * pieces in a matching set, the pills carry their counts, and a card says
- * Owned or what the piece costs in coins.
+ * row splits what Lala owns from what she would buy, the Sets pill shows
+ * each matching set as one card, the pills carry their counts, and a card
+ * says Owned or what the piece costs in coins.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -69,11 +69,12 @@ describe('Producer Mode closet', () => {
     await waitFor(() => expect(shown()).toHaveLength(4));
   });
 
-  test('Sets shows the pieces in a set; the chosen pill again clears it', async () => {
+  test('Sets shows each set as one card; the chosen pill again clears it', async () => {
     renderIt();
     await waitFor(() => expect(shown()).toHaveLength(4));
     fireEvent.click(screen.getByTestId('wardrobe-cat-sets'));
-    await waitFor(() => expect(shown()).toEqual(['w3']));
+    await waitFor(() => expect(screen.getByTestId('wardrobe-setcard-s1')).toBeTruthy());
+    expect(shown()).toEqual([]);
     expect(screen.getByTestId('wardrobe-cat-sets').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByTestId('wardrobe-cat-sets'));
     await waitFor(() => expect(shown()).toHaveLength(4));

@@ -14,14 +14,16 @@ import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { resolveWardrobeImageUrl } from '../../utils/wardrobeImage';
 import { outfitPieces } from '../../lib/closetGrouping';
-import { restoreLook, lookIds, toggleInLook, pieceReach, lookRows, lookCosts, canSaveLook, sameLook } from '../../lib/lookBuilder';
+import { restoreLook, lookIds, toggleInLook, toggleSetInLook, setReach, lookRows, lookCosts, canSaveLook, sameLook } from '../../lib/lookBuilder';
 
 /**
  * The look draft for one episode: its saved outfit, its anchor event and the
  * event's money forecast; toggle(item) adds or removes a piece; save() sends
- * the look. characterState is Lala's { coins, reputation }.
+ * the look. characterState is Lala's { coins, reputation }. items is the
+ * closet: toggle(item) brings a piece's matching-set partners in and out
+ * with it; remove(item) takes out that one piece.
  */
-export function useLookDraft({ episode, showId, characterState, onSaved }) {
+export function useLookDraft({ episode, showId, characterState, items = [], onSaved }) {
   const episodeId = episode?.id || null;
   const [saved, setSaved] = useState({});
   const [filled, setFilled] = useState({});
@@ -64,7 +66,14 @@ export function useLookDraft({ episode, showId, characterState, onSaved }) {
 
   const toggle = useCallback((item) => {
     setMessage(null);
-    setFilled((f) => (pieceReach(item, characterState, f).ok ? toggleInLook(f, item, characterState) : f));
+    setFilled((f) => {
+      if (lookIds(f).has(item.id)) return toggleSetInLook(f, item, items, characterState);
+      return setReach(item, items, characterState, f).ok ? toggleSetInLook(f, item, items, characterState) : f;
+    });
+  }, [characterState, items]);
+  const remove = useCallback((item) => {
+    setMessage(null);
+    setFilled((f) => (lookIds(f).has(item.id) ? toggleInLook(f, item, characterState) : f));
   }, [characterState]);
 
   const save = useCallback(async () => {
@@ -91,8 +100,8 @@ export function useLookDraft({ episode, showId, characterState, onSaved }) {
   const ids = useMemo(() => lookIds(filled), [filled]);
   return {
     episode, event, forecast, filled, ids, loading, saving, message,
-    dirty: !sameLook(filled, saved), toggle, save, reset: () => setFilled(saved),
-    reach: (item) => pieceReach(item, characterState, filled),
+    dirty: !sameLook(filled, saved), toggle, remove, save, reset: () => setFilled(saved),
+    reach: (item) => setReach(item, items, characterState, filled),
   };
 }
 
@@ -126,7 +135,7 @@ export function LookBuilderPanel({ look, coinsNow }) {
               {row.item && (
                 <span className="wa-look-row-end">
                   <span>{row.item.is_owned === true || row.item.in_saved_look ? 'Owned' : `${coins(row.item.coin_cost)} coins`}</span>
-                  <button type="button" className="wa-look-remove" aria-label={`Take ${row.item.name} out of the look`} onClick={() => look.toggle(row.item)}>×</button>
+                  <button type="button" className="wa-look-remove" aria-label={`Take ${row.item.name} out of the look`} onClick={() => look.remove(row.item)}>×</button>
                 </span>
               )}
             </li>

@@ -5,7 +5,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import {
   GAME_SLOT_DEFS, OTHER_GROUP, canonicalCategory, gameSlotFor, closetGroupFor,
-  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots } from './closetGrouping';
+  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots, backdropFor } from './closetGrouping';
 
 const ITEMS = [
   { id: 'dress', clothing_category: 'dress' },
@@ -137,5 +137,15 @@ describe('several accessories and jewellery (W2)', () => {
   test('normalizeSlots turns an older one-piece draft into the multi shape, and drops empties', () => {
     expect(normalizeSlots({ jewelry: a, accessories: [a, b], shoes: b, top: null, bottom: [d] }))
       .toEqual({ jewelry: [a], accessories: [a, b], shoes: b, bottom: d });
+  });
+});
+
+describe('closet card backdrops', () => {
+  test('a card\'s backdrop is its piece\'s slot, else other', () => {
+    expect(backdropFor({ clothing_category: 'dress' })).toBe('body');
+    expect(backdropFor({ clothing_category: 'Ankle Boots' })).toBe('shoes');
+    expect(backdropFor({ clothing_category: 'bag' })).toBe('accessories');
+    expect(backdropFor({ clothing_category: 'outerwear' })).toBe('other');
+    expect(backdropFor(null)).toBe('other');
   });
 });

@@ -224,3 +224,12 @@ export function wornLooks(filled) {
   }
   return [...byId.values()].filter((l) => l.worn >= 2);
 }
+
+/**
+ * A closet card's backdrop (Evoni, 2026-10-05: cut-out pieces sat on a flat
+ * box): the piece's game slot, else 'other'. WorldAdmin.css colours each
+ * .wa-wd-backdrop.bd-<key> with a pastel and a studio glow.
+ */
+export function backdropFor(item) {
+  return closetGroupFor(item?.clothing_category);
+}
