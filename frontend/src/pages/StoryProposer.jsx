@@ -27,47 +27,55 @@ export const dismissSceneProposalApi = (proposalId) =>
 export const reviewGrowthFlagApi = (flagId, payload) =>
   apiClient.post(`${API}/memories/character-growth/${flagId}/review`, payload);
 
+// The studio tokens (docs/VISUAL_SYSTEM.md §7). Each family is a text twin
+// that reads 4.5:1 on white and on its own wash, a wash, a line and a fill.
+export const TONES = {
+  gold:     { text: 'var(--lala-gold-text)',     soft: 'var(--lala-gold-soft)',     line: 'var(--lala-gold-line)',     fill: 'var(--lala-gold)' },
+  warning:  { text: 'var(--warning-text)',       soft: 'var(--warning-bg)',         line: 'var(--warning-border)',     fill: 'var(--warning)' },
+  danger:   { text: 'var(--danger-text)',        soft: 'var(--danger-bg)',          line: 'var(--danger-border)',      fill: 'var(--danger)' },
+  success:  { text: 'var(--success-text)',       soft: 'var(--success-bg)',         line: 'var(--success-border)',     fill: 'var(--success)' },
+  info:     { text: 'var(--info-text)',          soft: 'var(--info-bg)',            line: 'var(--info-border)',        fill: 'var(--info)' },
+  lavender: { text: 'var(--lala-lavender-text)', soft: 'var(--lala-lavender-soft)', line: 'var(--lala-lavender-line)', fill: 'var(--lala-lavender)' },
+  neutral:  { text: 'var(--text-secondary)',     soft: 'var(--lala-parchment-2)',   line: 'var(--lala-parchment-3)',   fill: 'var(--text-faint)' },
+};
+
 const C = {
-  bg: '#f7f4ef',
-  bgDeep: '#f0ece4',
-  surface: '#ffffff',
-  surfaceAlt: '#faf8f5',
-  border: '#e0d9ce',
-  borderDark: '#c8bfb0',
-  text: '#1a1714',
-  textDim: '#6b6259',
-  textFaint: '#a89f94',
-  accent: '#b8863e',
-  accentSoft: '#b8863e14',
-  accentMid: '#b8863e33',
-  red: '#b84040',
-  redSoft: '#b8404014',
-  green: '#3a8a60',
-  greenSoft: '#3a8a6014',
-  blue: '#3a6a8a',
-  blueSoft: '#3a6a8a14',
-  purple: '#6a3a8a',
-  purpleSoft: '#6a3a8a14',
-  gold: '#c9a96e',
+  bg:         'var(--surface-bg)',
+  bgDeep:     'var(--lala-parchment-2)',
+  surface:    'var(--surface-card)',
+  border:     'var(--lala-parchment-3)',
+  borderDark: 'var(--text-faint)',
+  text:       'var(--text-primary)',
+  textDim:    'var(--text-secondary)',
+  textFaint:  'var(--text-secondary)',
+  action:     'var(--primary)',
+  onAction:   'var(--text-inverse)',
+  accent:     TONES.gold.text,
+  accentSoft: TONES.gold.soft,
+  accentLine: TONES.gold.line,
+  red:        TONES.danger.text,
+  redSoft:    TONES.danger.soft,
+  redLine:    TONES.danger.line,
+  green:      TONES.success.text,
 };
 
-const SCENE_TYPE_CONFIG = {
-  production_breakdown: { label: 'Production Breakdown', color: C.red,    icon: '⧖', sub: 'The gap between vision and output' },
-  creator_study:        { label: 'Creator Study',        color: C.blue,   icon: '◎', sub: 'Watching the TikTok creator shift' },
-  interior_reckoning:   { label: 'Interior Reckoning',   color: C.purple, icon: '✦', sub: 'Alone at night — talking to God' },
-  david_mirror:         { label: 'David Mirror',         color: C.green,  icon: '⬡', sub: 'He sees her before she can name it' },
-  paying_man_pressure:  { label: 'Paying Man Pressure',  color: C.red,    icon: '◈', sub: 'The boundary being tested' },
-  bestie_moment:        { label: 'Bestie Moment',        color: C.accent, icon: '◇', sub: 'Processing publicly with her audience' },
-  lala_seed:            { label: 'Lala Seed',            color: C.gold,   icon: '✧', sub: 'The intrusive thought — the door left open' },
-  general:              { label: 'General',              color: C.textDim,icon: '○', sub: 'Character or relationship advancement' },
+export const SCENE_TYPE_CONFIG = {
+  production_breakdown: { label: 'Production Breakdown', tone: TONES.danger, icon: '⧖', sub: 'The gap between vision and output' },
+  creator_study:        { label: 'Creator Study',        tone: TONES.info, icon: '◎', sub: 'Watching the TikTok creator shift' },
+  interior_reckoning:   { label: 'Interior Reckoning',   tone: TONES.lavender, icon: '✦', sub: 'Alone at night — talking to God' },
+  david_mirror:         { label: 'David Mirror',         tone: TONES.success, icon: '⬡', sub: 'He sees her before she can name it' },
+  paying_man_pressure:  { label: 'Paying Man Pressure',  tone: TONES.danger, icon: '◈', sub: 'The boundary being tested' },
+  bestie_moment:        { label: 'Bestie Moment',        tone: TONES.warning, icon: '◇', sub: 'Processing publicly with her audience' },
+  lala_seed:            { label: 'Lala Seed',            tone: TONES.gold, icon: '✧', sub: 'The intrusive thought — the door left open' },
+  general:              { label: 'General',              tone: TONES.neutral, icon: '○', sub: 'Character or relationship advancement' },
 };
 
-const TONE_CONFIG = {
-  longing:   { label: 'Longing',   color: C.blue },
-  tension:   { label: 'Tension',   color: C.accent },
-  sensual:   { label: 'Sensual',   color: C.purple },
-  explicit:  { label: 'Explicit',  color: C.red },
-  aftermath: { label: 'Aftermath', color: C.green },
+export const TONE_CONFIG = {
+  longing:   { label: 'Longing',   tone: TONES.info },
+  tension:   { label: 'Tension',   tone: TONES.warning },
+  sensual:   { label: 'Sensual',   tone: TONES.lavender },
+  explicit:  { label: 'Explicit',  tone: TONES.danger },
+  aftermath: { label: 'Aftermath', tone: TONES.success },
 };
 
 const ARC_STAGES = ['establishment', 'pressure', 'crisis', 'integration'];
@@ -242,7 +250,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
         {/* Growth flags badge */}
         {growthFlags.length > 0 && (
-          <div style={{ padding: '6px 14px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', fontSize: '12px', color: C.red, fontFamily: 'system-ui', cursor: 'pointer' }}
+          <div style={{ padding: '6px 14px', background: C.redSoft, border: `1px solid ${C.redLine}`, borderRadius: '2px', fontSize: '12px', color: C.red, fontFamily: 'system-ui', cursor: 'pointer' }}
             onClick={() => document.getElementById('growth-flags')?.scrollIntoView({ behavior: 'smooth' })}>
             {growthFlags.length} character contradiction{growthFlags.length > 1 ? 's' : ''} need review
           </div>
@@ -257,7 +265,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
             <div style={{ fontSize: '10px', color: C.textFaint, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'system-ui', marginBottom: '10px' }}>
               Story Arc · Book 1
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
               {ARC_STAGES.map(stage => {
                 const count = arcState.scores[stage] || 0;
                 const isActive = arcState.stage === stage;
@@ -267,8 +275,8 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                 return (
                   <div key={stage} style={{
                     background: isActive ? C.accentSoft : C.surface,
-                    border: `1px solid ${isActive ? C.accent + '66' : C.border}`,
-                    borderTop: `2px solid ${isActive ? C.accent : C.border}`,
+                    border: `1px solid ${isActive ? C.accentLine : C.border}`,
+                    borderTop: `2px solid ${isActive ? TONES.gold.fill : C.border}`,
                     borderRadius: '2px', padding: '12px 14px',
                   }}>
                     <div style={{ fontSize: '10px', fontFamily: 'system-ui', color: isActive ? C.accent : C.textFaint, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '600', marginBottom: '6px' }}>
@@ -276,7 +284,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                     </div>
                     <div style={{ fontSize: '20px', fontWeight: '700', color: isActive ? C.text : C.textDim, marginBottom: '6px' }}>{count}</div>
                     <div style={{ height: '3px', background: C.bgDeep, borderRadius: '2px' }}>
-                      <div style={{ height: '100%', borderRadius: '2px', width: `${pct}%`, background: isActive ? C.accent : C.borderDark }} />
+                      <div style={{ height: '100%', borderRadius: '2px', width: `${pct}%`, background: isActive ? TONES.gold.fill : C.borderDark }} />
                     </div>
                     <div style={{ fontSize: '10px', color: C.textFaint, fontFamily: 'system-ui', marginTop: '4px' }}>{count}/{max} scenes</div>
                   </div>
@@ -330,8 +338,8 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
               onClick={handlePropose}
               style={{
                 padding: '14px 32px',
-                background: C.text, border: 'none', borderRadius: '2px',
-                color: C.bg, fontSize: '15px', fontFamily: 'Georgia, serif',
+                background: C.action, border: 'none', borderRadius: '2px',
+                color: C.onAction, fontSize: '15px', fontFamily: 'Georgia, serif',
                 fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em',
                 marginBottom: '12px',
               }}
@@ -359,10 +367,10 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                   {Object.entries(SCENE_TYPE_CONFIG).map(([key, conf]) => (
                     <button key={key} onClick={() => setForceType(forceType === key ? '' : key)} style={{
                       padding: '6px 12px',
-                      background: forceType === key ? `${conf.color}18` : 'transparent',
-                      border: `1px solid ${forceType === key ? conf.color + '66' : C.border}`,
+                      background: forceType === key ? conf.tone.soft : 'transparent',
+                      border: `1px solid ${forceType === key ? conf.tone.line : C.border}`,
                       borderRadius: '2px', fontSize: '11px',
-                      color: forceType === key ? conf.color : C.textDim,
+                      color: forceType === key ? conf.tone.text : C.textDim,
                       fontFamily: 'system-ui', cursor: 'pointer',
                     }}>
                       {conf.icon} {conf.label}
@@ -389,8 +397,8 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                 onClick={handlePropose}
                 style={{
                   padding: '13px 28px',
-                  background: C.text, border: 'none', borderRadius: '2px',
-                  color: C.bg, fontSize: '14px', fontFamily: 'Georgia, serif',
+                  background: C.action, border: 'none', borderRadius: '2px',
+                  color: C.onAction, fontSize: '14px', fontFamily: 'Georgia, serif',
                   fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em',
                 }}
               >
@@ -412,10 +420,10 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                   {Object.entries(SCENE_TYPE_CONFIG).map(([key, conf]) => (
                     <button key={key} onClick={() => setForceType(forceType === key ? '' : key)} style={{
                       padding: '6px 12px',
-                      background: forceType === key ? `${conf.color}18` : 'transparent',
-                      border: `1px solid ${forceType === key ? conf.color + '66' : C.border}`,
+                      background: forceType === key ? conf.tone.soft : 'transparent',
+                      border: `1px solid ${forceType === key ? conf.tone.line : C.border}`,
                       borderRadius: '2px', fontSize: '11px',
-                      color: forceType === key ? conf.color : C.textDim,
+                      color: forceType === key ? conf.tone.text : C.textDim,
                       fontFamily: 'system-ui', cursor: 'pointer',
                     }}>
                       {conf.icon} {conf.label}
@@ -435,7 +443,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
         )}
 
         {error && (
-          <div style={{ padding: '12px 14px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', fontSize: '13px', color: C.red, fontFamily: 'system-ui', marginBottom: '20px' }}>
+          <div style={{ padding: '12px 14px', background: C.redSoft, border: `1px solid ${C.redLine}`, borderRadius: '2px', fontSize: '13px', color: C.red, fontFamily: 'system-ui', marginBottom: '20px' }}>
             {error}
           </div>
         )}
@@ -459,25 +467,25 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
             {sceneConf && (
               <div style={{
                 padding: '18px 22px',
-                background: `${sceneConf.color}0c`,
-                border: `1px solid ${sceneConf.color}33`,
-                borderLeft: `4px solid ${sceneConf.color}`,
+                background: sceneConf.tone.soft,
+                border: `1px solid ${sceneConf.tone.line}`,
+                borderLeft: `4px solid ${sceneConf.tone.fill}`,
                 borderRadius: '2px',
                 marginBottom: '20px',
-                display: 'flex', alignItems: 'center', gap: '16px',
+                display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap',
               }}>
                 <div style={{ fontSize: '28px', lineHeight: 1 }}>{sceneConf.icon}</div>
                 <div>
-                  <div style={{ fontSize: '16px', fontWeight: '600', color: sceneConf.color }}>{sceneConf.label}</div>
+                  <div style={{ fontSize: '16px', fontWeight: '600', color: sceneConf.tone.text }}>{sceneConf.label}</div>
                   <div style={{ fontSize: '12px', color: C.textDim, fontFamily: 'system-ui', marginTop: '2px' }}>{sceneConf.sub}</div>
                 </div>
                 {proposal.proposal.lala_seed_potential && (
-                  <div style={{ marginLeft: 'auto', padding: '5px 12px', background: `${C.gold}22`, border: `1px solid ${C.gold}55`, borderRadius: '2px', fontSize: '11px', color: C.gold, fontFamily: 'system-ui', fontWeight: '600', letterSpacing: '0.08em' }}>
+                  <div style={{ marginLeft: 'auto', padding: '5px 12px', background: TONES.gold.soft, border: `1px solid ${TONES.gold.line}`, borderRadius: '2px', fontSize: '11px', color: TONES.gold.text, fontFamily: 'system-ui', fontWeight: '600', letterSpacing: '0.08em' }}>
                     LALA SEED POTENTIAL
                   </div>
                 )}
                 {proposal.proposal.interior_reckoning_moment && (
-                  <div style={{ marginLeft: proposal.proposal.lala_seed_potential ? '8px' : 'auto', padding: '5px 12px', background: `${C.purple}18`, border: `1px solid ${C.purple}44`, borderRadius: '2px', fontSize: '11px', color: C.purple, fontFamily: 'system-ui' }}>
+                  <div style={{ marginLeft: proposal.proposal.lala_seed_potential ? '8px' : 'auto', padding: '5px 12px', background: TONES.lavender.soft, border: `1px solid ${TONES.lavender.line}`, borderRadius: '2px', fontSize: '11px', color: TONES.lavender.text, fontFamily: 'system-ui' }}>
                     Interior Reckoning
                   </div>
                 )}
@@ -485,11 +493,11 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
             )}
 
             {/* Emotional stakes + arc function */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-              <InfoCard label="Emotional Stakes" color={C.accent}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <InfoCard label="Emotional Stakes" tone={TONES.gold}>
                 {proposal.proposal.emotional_stakes}
               </InfoCard>
-              <InfoCard label="Arc Function" color={C.blue}>
+              <InfoCard label="Arc Function" tone={TONES.info}>
                 {proposal.proposal.arc_function}
               </InfoCard>
             </div>
@@ -556,7 +564,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                   style={{ width: '100%', minHeight: '160px', padding: '16px', background: C.surface, border: `1px solid ${C.borderDark}`, borderRadius: '2px', fontSize: '14px', color: C.text, fontFamily: 'Georgia, serif', lineHeight: '1.8', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
                 />
               ) : (
-                <div style={{ padding: '20px 22px', background: C.surface, border: `1px solid ${C.borderDark}`, borderLeft: `3px solid ${sceneConf?.color || C.accent}`, borderRadius: '2px', fontSize: '14px', color: C.text, lineHeight: '1.9' }}>
+                <div style={{ padding: '20px 22px', background: C.surface, border: `1px solid ${C.borderDark}`, borderLeft: `3px solid ${sceneConf?.tone.fill || TONES.gold.fill}`, borderRadius: '2px', fontSize: '14px', color: C.text, lineHeight: '1.9' }}>
                   {editedBrief}
                 </div>
               )}
@@ -572,7 +580,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
             {/* What should NOT happen */}
             {proposal.proposal.what_should_not_happen && (
-              <div style={{ marginBottom: '20px', padding: '14px 16px', background: C.redSoft, border: `1px solid ${C.red}33`, borderRadius: '2px' }}>
+              <div style={{ marginBottom: '20px', padding: '14px 16px', background: C.redSoft, border: `1px solid ${C.redLine}`, borderRadius: '2px' }}>
                 <div style={{ fontSize: '10px', color: C.red, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Franchise guard — what to protect against</div>
                 <p style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.6', fontFamily: 'system-ui' }}>{proposal.proposal.what_should_not_happen}</p>
               </div>
@@ -585,10 +593,10 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                 {Object.entries(TONE_CONFIG).map(([key, conf]) => (
                   <button key={key} onClick={() => setSelectedTone(key)} style={{
                     padding: '8px 16px',
-                    background: selectedTone === key ? `${conf.color}18` : C.surface,
-                    border: `1px solid ${selectedTone === key ? conf.color + '66' : C.border}`,
+                    background: selectedTone === key ? conf.tone.soft : C.surface,
+                    border: `1px solid ${selectedTone === key ? conf.tone.line : C.border}`,
                     borderRadius: '2px', fontSize: '12px',
-                    color: selectedTone === key ? conf.color : C.textDim,
+                    color: selectedTone === key ? conf.tone.text : C.textDim,
                     fontFamily: 'system-ui', cursor: 'pointer',
                     fontWeight: selectedTone === key ? '600' : '400',
                   }}>
@@ -599,15 +607,15 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 onClick={handleAccept}
                 disabled={accepting}
                 style={{
-                  flex: 1, padding: '15px',
-                  background: accepting ? C.bgDeep : C.text,
+                  flex: '1 1 220px', padding: '15px',
+                  background: accepting ? C.bgDeep : C.action,
                   border: 'none', borderRadius: '2px',
-                  color: accepting ? C.textFaint : C.bg,
+                  color: accepting ? C.textFaint : C.onAction,
                   fontSize: '15px', fontFamily: 'Georgia, serif', fontWeight: '600',
                   cursor: accepting ? 'default' : 'pointer', letterSpacing: '0.02em',
                 }}
@@ -632,7 +640,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                     }
                   }});
                 }}
-                style={{ padding: '15px 20px', background: C.surface, border: `1px solid ${C.accent}66`, borderRadius: '2px', fontSize: '13px', color: C.accent, fontFamily: 'system-ui', cursor: 'pointer', fontWeight: 600 }}
+                style={{ padding: '15px 20px', background: C.surface, border: `1px solid ${C.accentLine}`, borderRadius: '2px', fontSize: '13px', color: C.accent, fontFamily: 'system-ui', cursor: 'pointer', fontWeight: 600 }}
               >
                 ◇ Send to Evaluation
               </button>
@@ -665,15 +673,15 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                 The story engine evolved your characters after recent scenes. These specific changes contradict what the registry says about them. You decide.
               </p>
               {growthFlags.map(flag => (
-                <div key={flag.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `2px solid ${C.red}`, borderRadius: '2px', padding: '18px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-                    <div style={{ flex: 1 }}>
+                <div key={flag.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `2px solid ${TONES.danger.fill}`, borderRadius: '2px', padding: '18px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 260px' }}>
                       <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                         <span style={{ fontSize: '14px', fontWeight: '600', color: C.text }}>{flag.character?.selected_name || flag.character?.name || 'Character'}</span>
                         <span style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui' }}>{'\u2192'}</span>
                         <span style={{ fontSize: '11px', color: C.red, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: '600' }}>{flag.field_updated}</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '10px' }}>
                         <div>
                           <div style={{ fontSize: '10px', color: C.textFaint, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Registry says</div>
                           <p style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.5', fontStyle: 'italic' }}>{flag.previous_value || 'Not documented'}</p>
@@ -685,9 +693,9 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
                       </div>
                       <p style={{ fontSize: '12px', color: C.textFaint, fontFamily: 'system-ui', borderTop: `1px solid ${C.border}`, paddingTop: '8px', lineHeight: '1.5' }}>{flag.growth_source}</p>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-                      <button onClick={() => reviewFlag(flag.id, 'accepted')} style={flagBtn(C.green)}>Update registry</button>
-                      <button onClick={() => reviewFlag(flag.id, 'reverted')} style={flagBtn(C.textFaint, true)}>Keep original</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '0 0 auto' }}>
+                      <button onClick={() => reviewFlag(flag.id, 'accepted')} style={flagBtn(TONES.success)}>Update registry</button>
+                      <button onClick={() => reviewFlag(flag.id, 'reverted')} style={flagBtn(TONES.neutral, true)}>Keep original</button>
                     </div>
                   </div>
                 </div>
@@ -703,17 +711,17 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 // ── Sub-components ─────────────────────────────────────────────────────────────
 function Label({ children }) {
   return (
-    <div style={{ fontSize: '10px', color: '#a89f94', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'system-ui', fontWeight: '600', marginBottom: '10px' }}>
+    <div style={{ fontSize: '10px', color: C.textFaint, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'system-ui', fontWeight: '600', marginBottom: '10px' }}>
       {children}
     </div>
   );
 }
 
-function InfoCard({ label, color, children }) {
+function InfoCard({ label, tone, children }) {
   return (
-    <div style={{ background: '#ffffff', border: '1px solid #e0d9ce', borderTop: `2px solid ${color}`, borderRadius: '2px', padding: '14px 16px' }}>
-      <div style={{ fontSize: '10px', color, fontFamily: 'system-ui', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>{label}</div>
-      <p style={{ fontSize: '13px', color: '#6b6259', lineHeight: '1.6', fontFamily: 'system-ui' }}>{children}</p>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `2px solid ${tone.fill}`, borderRadius: '2px', padding: '14px 16px' }}>
+      <div style={{ fontSize: '10px', color: tone.text, fontFamily: 'system-ui', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>{label}</div>
+      <p style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.6', fontFamily: 'system-ui' }}>{children}</p>
     </div>
   );
 }
@@ -721,18 +729,18 @@ function InfoCard({ label, color, children }) {
 function Spin() {
   return (
     <>
-      <div style={{ width: '20px', height: '20px', border: '2px solid #e0d9ce', borderTop: '2px solid #b8863e', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+      <div style={{ width: '20px', height: '20px', border: `2px solid ${C.border}`, borderTop: `2px solid ${TONES.gold.fill}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }
 
-function flagBtn(color, outline = false) {
+function flagBtn(tone, outline = false) {
   return {
     padding: '7px 14px',
-    background: outline ? 'transparent' : `${color}18`,
-    border: `1px solid ${color}55`,
-    borderRadius: '2px', color,
+    background: outline ? 'transparent' : tone.soft,
+    border: `1px solid ${tone.line}`,
+    borderRadius: '2px', color: tone.text,
     fontSize: '11px', fontFamily: 'system-ui',
     fontWeight: '600', cursor: 'pointer',
     letterSpacing: '0.04em',
