@@ -86,3 +86,27 @@ describe('Event Package sections 1 to 4', () => {
     expect([...screen.getByTestId('look-brief').querySelectorAll('dt')].map((d) => d.textContent)).toEqual(['Dress code']);
   });
 });
+
+describe('Event Package part 3', () => {
+  test('5. Deal & Money holds the money tiles, the Terms and the money preview; 6. Story Stakes follows', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/events/ev-1') {
+        return { data: { success: true, event: EVENT, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode: null } };
+      }
+      if (url === '/api/v1/world/show-1/events/ev-1/money-preview') {
+        return { data: { success: true, data: { balance: 1900, lines: [{ key: 'fee', label: 'Appearance fee', signed: 300 }], projection: { projected_balance: 2200, conditional: [] } } } };
+      }
+      return { data: { success: true, deliverables: [], locked: false } };
+    });
+    renderPage();
+    const deal = await screen.findByTestId('deal-section');
+    expect(within(deal).getByRole('heading', { name: /^5\. Deal & Money/ })).toBeTruthy();
+    expect(within(deal).getByTestId('terms-section')).toBeTruthy();
+    expect((await within(deal).findByTestId('deal-earns')).textContent).toContain('300 coins');
+    expect(within(deal).getByTestId('deal-bonus').textContent).toContain('None');
+    expect(within(deal).getByTestId('money-preview')).toBeTruthy();
+    const stakes = screen.getByTestId('stakes-section');
+    expect(within(stakes).getByRole('heading', { name: '6. Story Stakes' })).toBeTruthy();
+    expect(within(stakes).queryByTestId('money-preview')).toBeNull();
+  });
+});

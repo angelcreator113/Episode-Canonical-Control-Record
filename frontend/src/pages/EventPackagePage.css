@@ -1939,3 +1939,35 @@
   .epp-section-title { font-size: 20px; }
   .epp-look-brief > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Part 3 (the redesign): 5. Deal & Money holds three money tiles, the reopen
+   panel, the Terms (flattened into the card) and the money preview;
+   6. Story Stakes; 7. Behind the Scenes folded; the old Review folded into
+   the readiness strip. */
+.epp-deal-tiles { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.epp-deal-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--lala-parchment); border: 1px solid var(--lala-parchment-3); min-width: 0; }
+.epp-deal-tile.tile-earns { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
+.epp-deal-tile span { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.epp-deal-tile strong { font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); overflow-wrap: anywhere; }
+.epp-deal-tile small { font-size: 12px; color: var(--lala-ink-muted); }
+.epp-deal .epp-terms { margin: 0; padding: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
+.epp-deal .epp-terms .epp-section-title { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); margin-bottom: 6px; }
+.epp-deal .epp-reopen { margin: 0 0 12px; }
+.epp-deal-money { margin-top: 16px; }
+.epp-deal-money .epp-stake { padding: 14px 16px; border-radius: 12px; background: var(--lala-parchment); border: 1px solid var(--lala-parchment-3); }
+
+.epp-strip-details { margin-top: 12px; border-top: 1px solid var(--lala-parchment-3); padding-top: 10px; scroll-margin-top: 16px; }
+.epp-strip-details > summary { cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
+.epp-strip-details[open] > summary { margin-bottom: 10px; }
+
+.epp-concept-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.epp-concept-fold > summary::-webkit-details-marker { display: none; }
+.epp-concept-fold > summary .epp-section-title { margin: 0; }
+.epp-concept-toggle::after { content: 'Show'; font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
+.epp-concept-fold[open] .epp-concept-toggle::after { content: 'Hide'; }
+.epp-concept-fold[open] > summary { margin-bottom: 12px; }
+
+@media (max-width: 640px) {
+  .epp-deal-tiles { grid-template-columns: minmax(0, 1fr); }
+}
+.epp-concept-fold .epp-section-title .epp-concept-subtitle { display: inline; margin: 0 0 0 8px; font-style: normal; }

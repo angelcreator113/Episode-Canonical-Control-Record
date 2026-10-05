@@ -14,6 +14,9 @@
  * label when never drafted.
  *
  * Renders nothing when the event has no concept, activity or styling brief.
+ *
+ * On the Event Package (Evoni's redesign, part 3) it is "Behind the Scenes",
+ * numbered by the page (number), its items folded under Show.
  */
 import { Sparkles, Pencil } from 'lucide-react';
 import { draftStateOf } from '../utils/eventBasics';
@@ -61,12 +64,18 @@ function Row({ label, draft, testId, children }) {
   );
 }
 
-export default function EventConceptSection({ event, dressCodeEdited = false }) {
+/** Whether the event has a concept, an activity or a styling brief to show. */
+export function hasConcept(event) {
+  const auto = event?.canon_consequences?.automation || {};
+  return Boolean(text(auto.concept) || text(auto.activity) || (auto.styling_brief && typeof auto.styling_brief === 'object'));
+}
+
+export default function EventConceptSection({ event, dressCodeEdited = false, number = null }) {
   const auto = event?.canon_consequences?.automation || {};
   const concept = text(auto.concept);
   const activity = text(auto.activity);
   const brief = auto.styling_brief && typeof auto.styling_brief === 'object' ? auto.styling_brief : null;
-  if (!concept && !activity && !brief) return null;
+  if (!hasConcept(event)) return null;
 
   const keywords = list(keywordsOf(event));
   const keywordsDraft = keywords.length > 0 ? draftStateOf(event, 'dress_code_keywords', keywordsOf(event)) : null;
@@ -79,11 +88,15 @@ export default function EventConceptSection({ event, dressCodeEdited = false }) 
   const footwear = text(brief?.footwear_requirements);
 
   return (
-    <section className="epp-section epp-concept" data-testid="event-concept">
-      <div className="epp-section-header">
-        <h2 className="epp-section-title">Event concept</h2>
-      </div>
-      <p className="epp-concept-subtitle">For planning; not shown to guests</p>
+    <section id="epp-sec-concept" className="epp-section epp-concept" data-testid="event-concept">
+      <details className="epp-concept-fold">
+      <summary className="epp-section-header">
+        <h2 className="epp-section-title">
+          {number != null && <span className="epp-section-num">{number}.</span>} Behind the Scenes
+          <span className="epp-section-sub epp-concept-subtitle">For planning; not shown to guests</span>
+        </h2>
+        <span className="epp-concept-toggle" aria-hidden="true" />
+      </summary>
       <dl className="epp-fields">
         {concept && (
           <Row label="Concept" draft={DRAFTED} testId="concept-concept">
@@ -118,6 +131,7 @@ export default function EventConceptSection({ event, dressCodeEdited = false }) 
           </Row>
         )}
       </dl>
+      </details>
     </section>
   );
 }
