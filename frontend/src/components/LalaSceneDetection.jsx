@@ -12,10 +12,13 @@ import api from '../services/api';
 const LALA_API = '/api/v1/lala-scenes';
 
 const CANON_TIERS = [
-  { value: 'proto',   label: 'Proto',   desc: 'First glimpse — a thought, a voice',  color: '#C9A84C' },
-  { value: 'named',   label: 'Named',   desc: 'Lala gets a name',                    color: '#A78BFA' },
-  { value: 'speaks',  label: 'Speaks',  desc: 'Lala has a full line of dialogue',     color: '#60A5FA' },
-  { value: 'arrives', label: 'Arrives', desc: 'Lala becomes a character',             color: '#34D399' },
+  // Each tier is a token family (theme batch 6): line a border, bg the
+  // selected surface, text the label (4.5:1 on white and on bg). The old
+  // hex tints (`${color}10`) cannot be tokens.
+  { value: 'proto',   label: 'Proto',   desc: 'First glimpse — a thought, a voice',  tone: { line: 'var(--lala-gold)',     bg: 'var(--lala-gold-soft)',     text: 'var(--lala-gold-text)' } },
+  { value: 'named',   label: 'Named',   desc: 'Lala gets a name',                    tone: { line: 'var(--lala-lavender)', bg: 'var(--lala-lavender-soft)', text: 'var(--lala-lavender-text)' } },
+  { value: 'speaks',  label: 'Speaks',  desc: 'Lala has a full line of dialogue',     tone: { line: 'var(--info)',          bg: 'var(--info-bg)',            text: 'var(--info-text)' } },
+  { value: 'arrives', label: 'Arrives', desc: 'Lala becomes a character',             tone: { line: 'var(--success)',       bg: 'var(--success-bg)',         text: 'var(--success-text)' } },
 ];
 
 export default function LalaSceneDetection({ bookId }) {
@@ -168,9 +171,9 @@ export default function LalaSceneDetection({ bookId }) {
       {toast && (
         <div style={{
           ...s.toast,
-          background: toast.type === 'error' ? '#B85C38'
-                    : toast.type === 'info'  ? '#4A6B8B'
-                    : '#4A7C59',
+          background: toast.type === 'error' ? 'var(--danger)'
+                    : toast.type === 'info'  ? 'var(--info-text)'
+                    : 'var(--success-text)',
         }}>
           {toast.msg}
         </div>
@@ -200,13 +203,13 @@ function SceneCard({ scene, expanded, onExpand, onUpdate }) {
   return (
     <div style={{
       ...sc.card,
-      borderLeft: `3px solid ${scene.confirmed ? '#C9A84C' : 'rgba(201,168,76,0.25)'}`,
+      borderLeft: `3px solid ${scene.confirmed ? 'var(--lala-gold)' : 'var(--lala-gold-line)'}`,
     }}>
 
       {/* Card header */}
       <div style={sc.cardHeader} onClick={onExpand}>
         <div style={sc.cardHeaderLeft}>
-          <div style={{ ...sc.tierBadge, color: tierInfo.color, borderColor: `${tierInfo.color}30` }}>
+          <div style={{ ...sc.tierBadge, color: tierInfo.tone.text, background: tierInfo.tone.bg, borderColor: tierInfo.tone.line }}>
             {tierInfo.label}
           </div>
           {scene.franchise_anchor && (
@@ -230,9 +233,9 @@ function SceneCard({ scene, expanded, onExpand, onUpdate }) {
       <div style={sc.statusRow}>
         <span style={{
           ...sc.statusBadge,
-          background: scene.confirmed ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.04)',
-          color: scene.confirmed ? '#C9A84C' : 'rgba(245,240,232,0.3)',
-          borderColor: scene.confirmed ? 'rgba(201,168,76,0.25)' : 'rgba(245,240,232,0.1)',
+          background: scene.confirmed ? 'var(--lala-gold-soft)' : 'var(--lala-parchment-2)',
+          color: scene.confirmed ? 'var(--lala-gold-text)' : 'var(--text-secondary)',
+          borderColor: scene.confirmed ? 'var(--lala-gold-line)' : 'var(--lala-parchment-3)',
         }}>
           {scene.confirmed ? '✦ Confirmed' : '○ Pending'}
         </span>
@@ -263,9 +266,9 @@ function SceneCard({ scene, expanded, onExpand, onUpdate }) {
                 key={t.value}
                 style={{
                   ...sc.tierBtn,
-                  borderColor: tier === t.value ? t.color : 'rgba(245,240,232,0.1)',
-                  color:       tier === t.value ? t.color : 'rgba(245,240,232,0.35)',
-                  background:  tier === t.value ? `${t.color}10` : 'transparent',
+                  borderColor: tier === t.value ? t.tone.line : 'var(--lala-parchment-3)',
+                  color:       tier === t.value ? t.tone.text : 'var(--text-secondary)',
+                  background:  tier === t.value ? t.tone.bg : 'transparent',
                 }}
                 onClick={() => setTier(t.value)}
                 type='button'
@@ -330,7 +333,12 @@ function SceneCard({ scene, expanded, onExpand, onUpdate }) {
 
 // ── Styles ────────────────────────────────────────────────────────────────
 
-const GOLD  = '#C9A84C';
+// The panel sits on WriteMode's parchment. It was written for a dark
+// surface: cream text at 0.15-0.7 alpha, about 1:1 on parchment, so most of
+// it could not be read (theme batch 6, 2026-10-05). Gold as text is
+// --lala-gold-text; cream text is --text-secondary, or --text-primary at
+// 0.6 and above; cream and white washes are the parchment tokens.
+const GOLD  = 'var(--lala-gold-text)';
 
 const s = {
   shell: {
@@ -345,7 +353,7 @@ const s = {
     justifyContent: 'space-between',
     alignItems:     'flex-start',
     padding:        '16px 16px 12px',
-    borderBottom:   '1px solid rgba(201,168,76,0.1)',
+    borderBottom:   '1px solid var(--lala-gold-line)',
     marginBottom:   8,
   },
   headerLeft: {
@@ -362,11 +370,11 @@ const s = {
   headerSub: {
     fontFamily: 'DM Mono, monospace',
     fontSize:   9,
-    color:      'rgba(245,240,232,0.25)',
+    color:      'var(--text-secondary)',
   },
   backfillBtn: {
-    background:    'rgba(201,168,76,0.07)',
-    border:        '1px solid rgba(201,168,76,0.2)',
+    background:    'var(--lala-gold-soft)',
+    border:        '1px solid var(--lala-gold-line)',
     borderRadius:  3,
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
@@ -386,18 +394,18 @@ const s = {
   },
   emptyGlyph: {
     fontSize: 24,
-    color:    'rgba(201,168,76,0.3)',
+    color:    'var(--lala-gold-text)',
   },
   emptyText: {
     fontFamily:    "'Playfair Display', serif",
     fontSize:      14,
     fontStyle:     'italic',
-    color:         'rgba(245,240,232,0.4)',
+    color:         'var(--text-secondary)',
   },
   emptySub: {
     fontFamily:  'DM Mono, monospace',
     fontSize:    9,
-    color:       'rgba(245,240,232,0.2)',
+    color:       'var(--text-secondary)',
     lineHeight:  1.6,
     letterSpacing: '0.04em',
     maxWidth:    260,
@@ -412,7 +420,7 @@ const s = {
     width:        5,
     height:       5,
     borderRadius: '50%',
-    background:   'rgba(201,168,76,0.4)',
+    background:   'var(--lala-gold)',
   },
   group: {
     padding: '8px 0 0',
@@ -421,14 +429,14 @@ const s = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
     letterSpacing: '0.22em',
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     padding:       '4px 16px 8px',
   },
   toast: {
     position:  'fixed',
     bottom:    24,
     right:     24,
-    color:     '#fff',
+    color:     'var(--text-inverse)',
     fontSize:  11,
     fontFamily: 'DM Mono, monospace',
     letterSpacing: '0.06em',
@@ -443,8 +451,8 @@ const s = {
 const sc = {
   card: {
     margin:        '0 12px 8px',
-    background:    'rgba(255,255,255,0.02)',
-    border:        '1px solid rgba(245,240,232,0.06)',
+    background:    'var(--lala-parchment-2)',
+    border:        '1px solid var(--lala-parchment-2)',
     borderRadius:  4,
     overflow:      'hidden',
   },
@@ -472,8 +480,8 @@ const sc = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
     letterSpacing: '0.08em',
-    color:         'rgba(245,240,232,0.35)',
-    border:        '1px solid rgba(245,240,232,0.1)',
+    color:         'var(--text-secondary)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  2,
     padding:       '2px 7px',
   },
@@ -485,13 +493,13 @@ const sc = {
   chapterRef: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
-    color:         'rgba(245,240,232,0.25)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   expandBtn: {
     fontFamily: 'DM Mono, monospace',
     fontSize:   8,
-    color:      'rgba(245,240,232,0.2)',
+    color:      'var(--text-secondary)',
   },
   linePreview: {
     fontFamily:  "'Playfair Display', serif",
@@ -519,11 +527,11 @@ const sc = {
   detectionMethod: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
-    color:         'rgba(245,240,232,0.15)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   expandedBody: {
-    borderTop: '1px solid rgba(245,240,232,0.06)',
+    borderTop: '1px solid var(--lala-parchment-2)',
     padding:   '12px 12px 14px',
     display:   'flex',
     flexDirection: 'column',
@@ -533,7 +541,7 @@ const sc = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
     letterSpacing: '0.18em',
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
   },
   fullLine: {
     fontFamily:  "'Playfair Display', serif",
@@ -542,25 +550,25 @@ const sc = {
     color:       GOLD,
     lineHeight:  1.6,
     padding:     '6px 10px',
-    background:  'rgba(201,168,76,0.04)',
-    border:      '1px solid rgba(201,168,76,0.1)',
+    background:  'var(--lala-gold-soft)',
+    border:      '1px solid var(--lala-gold-line)',
     borderRadius: 3,
   },
   fieldLabel: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
     letterSpacing: '0.18em',
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     marginTop:     2,
   },
   textarea: {
-    background:  'rgba(255,255,255,0.04)',
-    border:      '1px solid rgba(245,240,232,0.1)',
+    background:  'var(--lala-parchment-2)',
+    border:      '1px solid var(--lala-parchment-3)',
     borderRadius: 3,
     fontFamily:  'DM Mono, monospace',
     fontSize:    9,
     letterSpacing: '0.03em',
-    color:       'rgba(245,240,232,0.7)',
+    color:       'var(--text-primary)',
     padding:     '8px 10px',
     lineHeight:  1.5,
     resize:      'vertical',
@@ -587,7 +595,7 @@ const sc = {
   tierDesc: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.04em',
     marginTop:     -4,
   },
@@ -597,23 +605,23 @@ const sc = {
     flexWrap:  'wrap',
     marginTop: 4,
     paddingTop: 8,
-    borderTop: '1px solid rgba(245,240,232,0.06)',
+    borderTop: '1px solid var(--lala-parchment-2)',
   },
   saveBtn: {
     background:    'none',
-    border:        '1px solid rgba(245,240,232,0.15)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  3,
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
     letterSpacing: '0.1em',
-    color:         'rgba(245,240,232,0.4)',
+    color:         'var(--text-secondary)',
     padding:       '6px 12px',
     cursor:        'pointer',
     transition:    'opacity 0.12s',
   },
   confirmBtn: {
-    background:    'rgba(201,168,76,0.1)',
-    border:        '1px solid rgba(201,168,76,0.3)',
+    background:    'var(--lala-gold-soft)',
+    border:        '1px solid var(--lala-gold-line)',
     borderRadius:  3,
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
@@ -623,13 +631,13 @@ const sc = {
     cursor:        'pointer',
   },
   anchorBtn: {
-    background:    'rgba(255,255,255,0.04)',
-    border:        '1px solid rgba(245,240,232,0.15)',
+    background:    'var(--lala-parchment-2)',
+    border:        '1px solid var(--lala-parchment-3)',
     borderRadius:  3,
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
     letterSpacing: '0.08em',
-    color:         'rgba(245,240,232,0.4)',
+    color:         'var(--text-secondary)',
     padding:       '6px 12px',
     cursor:        'pointer',
   },
@@ -637,7 +645,7 @@ const sc = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
     letterSpacing: '0.1em',
-    color:         'rgba(245,240,232,0.25)',
+    color:         'var(--text-secondary)',
     padding:       '6px 0',
     alignSelf:     'center',
   },
