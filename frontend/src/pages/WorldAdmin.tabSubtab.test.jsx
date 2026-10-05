@@ -88,6 +88,12 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Season Plan')).toBe(true);
   });
 
+  test("?tab=feed opens Lala's Feed here, not the standalone page", async () => {
+    renderAt('feed');
+    expect(await screen.findByTestId('lala-feed')).toBeTruthy();
+    expect(isActive("Lala's Feed")).toBe(true);
+  });
+
   test('Release opens on Next release', async () => {
     renderAt('release');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Next release' })).toBeTruthy());
@@ -102,7 +108,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Distribution')).toBe(false);
   });
 
-  test('the main tabs are Overview · Episodes · Events · Assets · Cast & Continuity · Release', async () => {
+  test('the main tabs are Overview · Episodes · Events · Assets · Cast & Continuity · Lala\'s Feed · Release', async () => {
     renderAt('overview');
     const bar = await waitFor(() => {
       const el = document.querySelector('.wa-tab-bar');
@@ -110,7 +116,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
       return el;
     });
     expect([...bar.querySelectorAll('button .wa-tab-label')].map((b) => b.textContent)).toEqual(
-      ['Overview', 'Episodes', 'Events', 'Assets', 'Cast & Continuity', 'Release'],
+      ['Overview', 'Episodes', 'Events', 'Assets', 'Cast & Continuity', "Lala's Feed", 'Release'],
     );
   });
 });

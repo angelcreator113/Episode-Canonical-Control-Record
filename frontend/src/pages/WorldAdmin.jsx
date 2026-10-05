@@ -28,6 +28,7 @@ import { backdropFor, matchingSetsFrom } from '../lib/closetGrouping';
 import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ReleaseBoard from '../components/Show/ReleaseBoard';
+import LalaFeedTab from '../components/Show/LalaFeedTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
@@ -45,7 +46,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
@@ -241,8 +242,6 @@ const TABS = [
     { key: 'season', label: 'Season Plan' },
     { key: 'episodes-ledger', label: 'Results' },
   ]},
-  // Lala's Feed moved out of Producer Mode into its own Sidebar destination
-  // (Task #1631) — this tab is Events only now, no sub-tabs.
   { key: 'events', Icon: Mail, label: 'Events' },
   { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
@@ -255,6 +254,9 @@ const TABS = [
     { key: 'finances', label: "Lala's Finances" },
     { key: 'decisions', label: 'Activity & Decisions' },
   ]},
+  // Lala's Feed is back in Producer Mode (Evoni's redesign, 2026-10-05: "bring
+  // the feed back"); the Sidebar's Social Media page stays.
+  { key: 'feed', Icon: MessageSquare, label: "Lala's Feed" },
   { key: 'release', Icon: Heart, label: 'Release', subs: [
     // The next episode out the door (Evoni's redesign, 2026-10-05); the release tab opens on it.
     { key: 'release-next', label: 'Next release' },
@@ -278,6 +280,8 @@ function WorldAdmin() {
   // id. The Episode Ledger reads this, not episodes.total_income/expenses.
   const [episodeMoney, setEpisodeMoney] = useState({});
   const [decisions, setDecisions] = useState([]);
+  // Lala's Feed drafts waiting on approval: the count on its tab.
+  const [feedWaiting, setFeedWaiting] = useState(null);
   const [worldEvents, setWorldEvents] = useState([]);
   const [sceneSets, setSceneSets] = useState([]);
   // True totals from the lists' pagination (the lists stop at 100 / 200).
@@ -398,11 +402,9 @@ function WorldAdmin() {
       'episodes-production': ['episodes', 'episodes-production'],
       'episodes-ledger': ['episodes', 'episodes-ledger'],
       // Feed Events and Events Library merged into one 'events' top-level tab —
-      // both old ?tab= values resolve to the same destination. 'feed' and
-      // 'feed-timeline' are NOT mapped here — Lala's Feed no longer lives in
-      // Producer Mode (Task #1631), so those two are redirected to the
-      // standalone Feed route by the mount effect below, before this
-      // function is even called.
+      // both old ?tab= values resolve to the same destination. 'feed' is a
+      // tab of its own again; 'feed-timeline' is redirected to the standalone
+      // Feed route by the mount effect below.
       'feed-events': ['events', null],
       'scene-sets': ['wardrobe', 'scene-sets'],
       'overlays': ['wardrobe', 'overlays-tab'],
@@ -421,12 +423,11 @@ function WorldAdmin() {
     return oldToNew[tab] || [tab, null];
   };
 
-  // On mount, resolve initial tab. ?tab=feed and ?tab=feed-timeline are old
-  // deep-links into Lala's Feed, which no longer lives in Producer Mode
-  // (Task #1631) — redirect to its standalone Sidebar destination instead of
-  // resolving a local tab.
+  // On mount, resolve initial tab. ?tab=feed opens Lala's Feed here again
+  // (2026-10-05); ?tab=feed-timeline, an old deep-link, still goes to the
+  // standalone feed page.
   useEffect(() => {
-    if (initialTab === 'feed' || initialTab === 'feed-timeline') {
+    if (initialTab === 'feed-timeline') {
       navigate('/feed?layer=lalaverse', { replace: true });
       return;
     }
@@ -792,6 +793,9 @@ function WorldAdmin() {
           setEpisodeMoney(byId);
         }).catch(miss('episode money', () => setEpisodeMoney({}))),
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(miss('decisions', () => setDecisions([]))),
+        api.get(`/api/v1/feed-posts?show_id=${encodeURIComponent(showId)}&status=draft&limit=100`)
+          .then(r => setFeedWaiting(Array.isArray(r.data?.data) ? r.data.data.filter((p) => !p.episode_id).length : null))
+          .catch(miss('feed drafts', () => setFeedWaiting(null))),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
         // This show's sets plus the shared ones (audit CTX-03: the list is
         // scoped on the server); the pickers offer those, the Overview counts
@@ -1772,7 +1776,7 @@ The revised event should feel like a completely different experience from the si
       {(() => {
         // The count on a tab is what is waiting there: episodes in
         // production, events whose setup is incomplete.
-        const counts = { episodes: episodesInProduction(episodes).length, events: eventsNeedingAttention(worldEvents).length };
+        const counts = { episodes: episodesInProduction(episodes).length, events: eventsNeedingAttention(worldEvents).length, feed: feedWaiting || 0 };
         return (
           <nav className="wa-tab-bar" aria-label="Producer Mode">
             {TABS.map(t => {
@@ -6700,6 +6704,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ DECISIONS ════════════════════════ */}
       {/* ════════════════════════ RELEASE ════════════════════════ */}
+      {activeTab === 'feed' && (
+        <div style={S.content}>
+          <LalaFeedTab showId={showId} episodes={episodes} onCountChanged={setFeedWaiting} />
+        </div>
+      )}
+
       {activeTab === 'release' && show && (
         <div style={S.content}>
           {subTab === 'release-next' && <ReleaseBoard showId={showId} episodes={episodes} history={stateHistory} />}
