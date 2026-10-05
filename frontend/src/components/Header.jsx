@@ -3,7 +3,7 @@
  * Top navigation bar
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Breadcrumbs from './Breadcrumbs';
@@ -12,6 +12,20 @@ import '../styles/Header.css';
 const Header = ({ navOpen, onNavToggle }) => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
+  // The header sticks to the top below 1280px (Header.css). Its height is
+  // published as --app-header-h so a page's own sticky bar can sit under it
+  // instead of behind it (the episode header, Evoni 2026-10-05).
+  const headerRef = useRef(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty('--app-header-h', `${Math.round(el.getBoundingClientRect().height)}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--app-header-h'); };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -26,7 +40,7 @@ const Header = ({ navOpen, onNavToggle }) => {
   };
 
   return (
-    <header className="header">
+    <header className="header" ref={headerRef}>
       <div className="header-content">
         <div className="header-left">
           {onNavToggle && (

@@ -1031,7 +1031,11 @@ const W = {
   unlockBtn: { marginLeft: 'auto', padding: '6px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#64748b' },
   // flexWrap: at 375px the browse panel drops under the slots (Task #2377).
   mainLayout: { display: 'flex', flexWrap: 'wrap', gap: 16, minHeight: 480 },
-  slotsPanel: { flex: '0 0 250px', display: 'flex', flexDirection: 'column', gap: 6 },
+  // The slots column is 250px beside the browse panel and the full width
+  // once it wraps onto its own row at phone width (Evoni, 2026-10-05: it
+  // stayed 250px and left half the screen empty). The browse panel's large
+  // grow weight keeps the slots at about 250px when the two share a row.
+  slotsPanel: { flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: 6 },
   confidenceCard: { padding: 12, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 2 },
   synergyBar: { height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
   synBadge: { padding: '1px 5px', background: '#eef2ff', borderRadius: 3, fontSize: 8, color: '#4338ca', fontWeight: 600 },
@@ -1039,7 +1043,7 @@ const W = {
   removeBtn: { width: 22, height: 22, borderRadius: '50%', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   miniTier: (tier) => ({ padding: '1px 5px', borderRadius: 3, fontSize: 8, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
   lockBtn: { padding: '11px 18px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
-  browsePanel: { flex: '1 1 280px', minWidth: 0 },
+  browsePanel: { flex: '999 1 280px', minWidth: 0 },
   browseHeader: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   slotSwitch: { width: 30, height: 30, borderRadius: 7, border: 'none', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   browseGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 },

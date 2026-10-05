@@ -668,10 +668,13 @@ const EpisodeDetail = () => {
           const currentTab = EP_TABS.find(t => t.key === activeTab);
           if (!currentTab?.subs) return null;
           return (
-            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8 }}>
+            // One line per label; a row wider than the screen scrolls sideways
+            // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
+            // lines at phone width and threw the row out of line).
+            <div data-testid="ed-subtabs" style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
               {currentTab.subs.map(s => (
                 <button key={s.key} onClick={() => openTab(s.key)} aria-current={epSubTab === s.key ? 'page' : undefined} style={{
-                  padding: '6px 14px', background: 'transparent', border: 'none',
+                  padding: '6px 14px', background: 'transparent', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
                   borderBottom: epSubTab === s.key ? '2px solid var(--primary)' : '2px solid transparent',
                   color: epSubTab === s.key ? 'var(--primary-text)' : 'var(--text-secondary)',
                   fontSize: 12, fontWeight: epSubTab === s.key ? 600 : 500,
