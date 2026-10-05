@@ -65,7 +65,7 @@ entries:
 |---|---|
 | (fixed) | brand mark → `/start` (:173); Home → `/` (`NavLink`, :202); footer avatar → `/settings` (:418) |
 | FRANCHISE | LalaVerse `/universe` · Show Bible `/show-bible` · World Dashboard `/world-dashboard` · World Foundation `/world-foundation` · Social Systems `/social-systems` · Culture & Events `/culture-events` · Lala's Feed `/feed?layer=lalaverse` — **2026-10-04:** the four world rows are gone; they are the LalaVerse hub's tabs (World, Society, Culture, State; `UniversePage`), and the zone is LalaVerse, Show Bible, Lala's Feed; the Show Bible is the hub's Bible tab too, and its row deep-linked there (`/universe?tab=bible`). **2026-10-04, later:** the Show Bible row is gone (Evoni); the Bible is reached through LalaVerse, its Bible tab. |
-| PRODUCE | Producer Mode `/shows/:id/world?tab=overview` (only when a show exists) · Shows `/shows`, expandable to each `/shows/:id` and `+ New Show` `/shows/create` |
+| PRODUCE | Producer Mode `/shows/:id/world?tab=overview` (only when a show exists) · Shows `/shows`, expandable to each `/shows/:id` and `+ New Show` `/shows/create` — **2026-10-05:** the Producer Mode row is gone (Evoni): opening a show is Producer Mode (`/shows/:id` redirects there), so Shows is the one way in, and its list puts the active show first (`Sidebar`, `showsActiveFirst`). |
 | WRITE | Stories `/stories` (children: Structure `/story-engine`, Threads `/story-threads`, Calendar `/story-calendar`) · Characters `/character-registry?view=world` · Relationships `/relationships` |
 | STUDIO | Timeline Editor `/studio/timeline` · Compositions `/library` |
 | SYSTEM | CFO Agent `/cfo` (children: Analytics `/analytics/decisions`, AI Costs `/ai-costs`) · Site Organizer · Design Agent · Search · Admin `/admin` (child: Diagnostics) · Recycle Bin · Settings |
@@ -247,7 +247,6 @@ WORLD — what exists
   Lala's Feed                     /feed?layer=lalaverse
 
 PRODUCE — what am I making now
-  Producer Mode                   /shows/:id/world?tab=overview   (when a show exists)
   Shows ▸                         /shows  (per-show links, + New Show)
   Timeline Editor                 /studio/timeline
   Compositions                    /library
