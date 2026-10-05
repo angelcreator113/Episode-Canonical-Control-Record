@@ -35,10 +35,11 @@ describe('Producer Mode theme', () => {
     expect(bar).not.toMatch(/style=\{\{/);
   });
 
-  test('the Overview stylesheet (.sov-*) and the shell use tokens only, and the Overview button is the primary', () => {
-    const sov = css.slice(css.indexOf('.sov-lala {'), css.indexOf('.sov-start button') + 200);
+  test('the Overview stylesheet (.sov-*) and the shell use tokens only, and the Overview button is the lavender primary', () => {
+    const sov = css.slice(css.indexOf('.sov { display'), css.indexOf('.sov-start button') + 200);
+    expect(sov.length).toBeGreaterThan(3000);
     expect(sov).not.toMatch(HEX);
-    expect(sov).toMatch(/\.sov-btn\s*{[^}]*background:\s*var\(--primary\)/);
+    expect(sov).toMatch(/\.sov-btn\s*{[^}]*background:\s*var\(--lala-lavender\)/);
     const shell = css.slice(css.indexOf('.wa-hero {'), css.indexOf('/* A section that failed to load'));
     expect(shell.length).toBeGreaterThan(1000);
     expect(shell).not.toMatch(HEX);

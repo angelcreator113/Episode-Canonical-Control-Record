@@ -59,6 +59,17 @@ describe('Producer Mode shell', () => {
     expect(S.primaryBtn.color).toBe('var(--text-inverse)');
   });
 
+  test('the Overview: the next-step banner is lavender under inverse, its button lavender text on white; every text pair reads', () => {
+    expect(rule('.sov-next-step')).toMatch(/linear-gradient\(110deg, var\(--lala-lavender\), var\(--lala-lavender-dark\)\); color: var\(--text-inverse\)/);
+    expect(rule('.sov-next-step-btn')).toMatch(/background: var\(--surface-card\); color: var\(--lala-lavender-text\)/);
+    expect(rule('.sov-btn')).toMatch(/background: var\(--lala-lavender\); color: var\(--text-inverse\)/);
+    for (const bg of ['--lala-lavender', '--lala-lavender-dark']) expect(contrast(t('--text-inverse'), t(bg))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--lala-lavender-text'), t('--lala-lavender-soft'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--warning-text'), t('--surface-card'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--accent-dark'), t('--accent-subtle'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t('--text-secondary'), t('--surface-card'))).toBeGreaterThanOrEqual(4.5);
+  });
+
   test('cards keep their pink top edge and border', () => {
     expect(jsx).toMatch(/card: \{[^}]*border: '1px solid var\(--accent-subtle\)', borderTop: '2px solid var\(--accent-light\)'/);
     expect(css).toMatch(/\.sov-card \{[^}]*border: 1px solid var\(--accent-subtle\); border-top: 2px solid var\(--accent-light\)/);
