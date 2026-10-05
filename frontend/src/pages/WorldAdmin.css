@@ -261,6 +261,76 @@
 
 }
 
+/* Assets → Wardrobe, the closet, to Evoni's redesign (2026-10-05): Full
+   Closet with the search and Add piece; category pills with counts (pink
+   when chosen); the Show row; piece cards with an Owned / To buy badge
+   and the cost in coins. */
+.wa-wd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 14px; }
+.wa-wd-head-title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.wa-wd-head-title h2 { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.wa-wd-head-title span { font-size: 14px; color: var(--text-secondary); }
+.wa-wd-search {
+  display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; flex: 0 1 260px; min-width: 200px;
+  border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); color: var(--text-secondary);
+}
+.wa-wd-search:focus-within { border-color: var(--lala-lavender); }
+.wa-wd-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 14px; color: var(--text-primary); }
+.wa-wd-add {
+  display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: 10px;
+  border: 1px solid var(--lala-lavender); background: var(--surface-card); color: var(--lala-lavender-text);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.wa-wd-add:hover { background: var(--lala-lavender-soft); }
+.wa-wd-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex-basis: 100%; }
+
+.wa-wd-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.wa-wd-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.wa-wd-pill:hover { border-color: var(--accent-light); }
+.wa-wd-pill.active { background: var(--accent-dark); border-color: var(--accent-dark); color: var(--text-inverse); }
+.wa-wd-pill-count { font-size: 11px; font-weight: 600; opacity: 0.85; }
+.wa-wd-unassigned { padding: 6px 12px; border-radius: 999px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 12px; font-weight: 600; }
+.wa-wd-show { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.wa-wd-show-label { font-size: 13px; color: var(--text-secondary); }
+.wa-wd-show-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; white-space: nowrap;
+  border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.wa-wd-show-btn.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 700; }
+.wa-wd-show-end { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.wa-wd-sort { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); }
+
+.wa-wd-card {
+  position: relative; overflow: hidden; cursor: pointer; border-radius: 14px;
+  background: var(--surface-card); border: 1px solid var(--lala-parchment-3); transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
+}
+.wa-wd-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+.wa-wd-card.list { display: flex; align-items: stretch; }
+.wa-wd-card.list:hover { transform: none; }
+.wa-wd-card.selected { border: 2px solid var(--lala-gold); }
+.wa-wd-card.editing { border: 2px solid var(--lala-lavender); }
+.wa-wd-own {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2; padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-card); color: var(--text-primary); font-size: 11px; font-weight: 700;
+}
+.wa-wd-own.to-buy { color: var(--accent-dark); }
+.wa-wd-card-name { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wa-wd-card-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: capitalize; overflow-wrap: anywhere; }
+.wa-wd-card-cost { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+
+@media (max-width: 600px) {
+  .wa-wd-head-title h2 { font-size: 24px; }
+  .wa-wd-search { flex: 1 1 100%; min-width: 0; }
+  .wa-wd-tools { justify-content: flex-start; }
+  .wa-wd-show-end { margin-left: 0; }
+  /* Two cards across on a phone (the grid's 200px minimum would leave one). */
+  .wa-wd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+}
+
 /* ── Wardrobe cards: upload processing state (Task #1769) ─────────────
    Overlay on the card image while background removal runs, and when it
    did not finish inside the give-up window (utils/wardrobeProcessingState). */
