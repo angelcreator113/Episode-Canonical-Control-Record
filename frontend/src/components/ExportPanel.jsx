@@ -132,7 +132,7 @@ export default function ExportPanel({ bookId, bookTitle }) {
               sublabel='.docx — for editors'
               loading={downloadingDoc}
               onClick={() => downloadFile('docx')}
-              color='#2563EB'
+              tone={TONES.word}
             />
 
             <DownloadButton
@@ -141,7 +141,7 @@ export default function ExportPanel({ bookId, bookTitle }) {
               sublabel='.pdf — for readers'
               loading={downloadingPdf}
               onClick={() => downloadFile('pdf')}
-              color={GOLD}
+              tone={TONES.pdf}
             />
           </div>
 
@@ -157,7 +157,7 @@ export default function ExportPanel({ bookId, bookTitle }) {
       {toast && (
         <div style={{
           ...s.toast,
-          background: toast.type === 'error' ? '#B85C38' : '#4A7C59',
+          background: toast.type === 'error' ? 'var(--danger)' : 'var(--success-text)',
         }}>
           {toast.msg}
         </div>
@@ -179,12 +179,12 @@ function StatBox({ icon, value, label }) {
   );
 }
 
-function DownloadButton({ icon, label, sublabel, loading, onClick, color }) {
+function DownloadButton({ icon, label, sublabel, loading, onClick, tone }) {
   return (
     <button
       style={{
         ...db.btn,
-        borderColor: `${color}30`,
+        borderColor: tone.line,
         opacity: loading ? 0.6 : 1,
         cursor: loading ? 'not-allowed' : 'pointer',
       }}
@@ -194,17 +194,28 @@ function DownloadButton({ icon, label, sublabel, loading, onClick, color }) {
     >
       <span style={db.icon}>{loading ? '…' : icon}</span>
       <div style={db.text}>
-        <div style={{ ...db.label, color }}>{loading ? 'Generating…' : label}</div>
+        <div style={{ ...db.label, color: tone.text }}>{loading ? 'Generating…' : label}</div>
         <div style={db.sublabel}>{sublabel}</div>
       </div>
-      {!loading && <span style={{ ...db.arrow, color }}>↓</span>}
+      {!loading && <span style={{ ...db.arrow, color: tone.text }}>↓</span>}
     </button>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────
 
-const GOLD = '#C9A84C';
+// The panel sits on WriteMode's parchment but was written for a dark
+// surface: cream text at 0.15-0.85 alpha, about 1:1 on parchment (theme
+// batch 6, 2026-10-05). Gold as text is --lala-gold-text; cream text is
+// --text-secondary, or --text-primary at 0.6 and above.
+const GOLD = 'var(--lala-gold-text)';
+// The download buttons: Word in the info family, PDF in gold; a line for
+// the border and a text twin for the label and arrow (4.5:1). The old
+// border was the hex colour with a 30 alpha suffix.
+const TONES = {
+  word: { line: 'var(--info-border)',    text: 'var(--info-text)' },
+  pdf:  { line: 'var(--lala-gold-line)', text: 'var(--lala-gold-text)' },
+};
 
 const s = {
   shell: {
@@ -216,7 +227,7 @@ const s = {
   },
   header: {
     padding:      '16px 16px 12px',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    borderBottom: '1px solid var(--lala-gold-line)',
     marginBottom: 8,
   },
   headerLabel: {
@@ -229,7 +240,7 @@ const s = {
   headerSub: {
     fontFamily: 'DM Mono, monospace',
     fontSize:   9,
-    color:      'rgba(245,240,232,0.25)',
+    color:      'var(--text-secondary)',
   },
   loadingRow: {
     display:        'flex',
@@ -242,13 +253,13 @@ const s = {
     width:        5,
     height:       5,
     borderRadius: '50%',
-    background:   'rgba(201,168,76,0.4)',
+    background:   'var(--lala-gold)',
   },
   errorBox: {
     margin:     '12px 16px',
     padding:    '12px 14px',
-    background: 'rgba(184,92,56,0.08)',
-    border:     '1px solid rgba(184,92,56,0.2)',
+    background: 'var(--danger-bg)',
+    border:     '1px solid var(--danger-border)',
     borderRadius: 4,
     display:    'flex',
     flexDirection: 'column',
@@ -257,16 +268,16 @@ const s = {
   errorText: {
     fontFamily: 'DM Mono, monospace',
     fontSize:   9,
-    color:      '#E07B5A',
+    color:      'var(--danger-text)',
   },
   retryBtn: {
     background:    'none',
-    border:        '1px solid rgba(184,92,56,0.3)',
+    border:        '1px solid var(--danger-border)',
     borderRadius:  3,
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
     letterSpacing: '0.1em',
-    color:         '#E07B5A',
+    color:         'var(--danger-text)',
     padding:       '5px 12px',
     cursor:        'pointer',
     alignSelf:     'flex-start',
@@ -276,14 +287,14 @@ const s = {
     gridTemplateColumns: '1fr 1fr 1fr 1fr',
     gap:                 1,
     margin:              '4px 16px 16px',
-    background:          'rgba(245,240,232,0.04)',
-    border:              '1px solid rgba(245,240,232,0.06)',
+    background:          'var(--lala-parchment-2)',
+    border:              '1px solid var(--lala-parchment-3)',
     borderRadius:        4,
     overflow:            'hidden',
   },
   chapterList: {
     margin:       '0 16px 16px',
-    border:       '1px solid rgba(245,240,232,0.06)',
+    border:       '1px solid var(--lala-parchment-3)',
     borderRadius: 4,
     overflow:     'hidden',
   },
@@ -291,16 +302,16 @@ const s = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
     letterSpacing: '0.2em',
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     padding:       '8px 12px 6px',
-    borderBottom:  '1px solid rgba(245,240,232,0.06)',
+    borderBottom:  '1px solid var(--lala-parchment-3)',
   },
   chapterRow: {
     display:      'flex',
     alignItems:   'center',
     gap:          8,
     padding:      '7px 12px',
-    borderBottom: '1px solid rgba(245,240,232,0.04)',
+    borderBottom: '1px solid var(--lala-parchment-3)',
   },
   chapterNum: {
     fontFamily:    'DM Mono, monospace',
@@ -313,13 +324,13 @@ const s = {
     fontFamily:    "'Playfair Display', serif",
     fontSize:      12,
     fontStyle:     'italic',
-    color:         'rgba(245,240,232,0.7)',
+    color:         'var(--text-primary)',
     flex:          1,
   },
   chapterWords: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.04em',
   },
   downloadSection: {
@@ -332,14 +343,14 @@ const s = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
     letterSpacing: '0.2em',
-    color:         'rgba(245,240,232,0.2)',
+    color:         'var(--text-secondary)',
     marginBottom:  2,
   },
   note: {
     margin:     '0 16px',
     fontFamily: 'DM Mono, monospace',
     fontSize:   8,
-    color:      'rgba(245,240,232,0.15)',
+    color:      'var(--text-secondary)',
     lineHeight: 1.6,
     letterSpacing: '0.03em',
   },
@@ -347,7 +358,7 @@ const s = {
     position:   'fixed',
     bottom:     24,
     right:      24,
-    color:      '#fff',
+    color:      'var(--text-inverse)',
     fontSize:   11,
     fontFamily: 'DM Mono, monospace',
     letterSpacing: '0.06em',
@@ -367,7 +378,7 @@ const sb = {
     alignItems:    'center',
     gap:           3,
     padding:       '14px 8px',
-    background:    'rgba(255,255,255,0.02)',
+    background:    'var(--lala-parchment-2)',
   },
   icon: {
     fontSize: 14,
@@ -376,13 +387,13 @@ const sb = {
     fontFamily:    'DM Mono, monospace',
     fontSize:      13,
     fontWeight:    600,
-    color:         'rgba(245,240,232,0.85)',
+    color:         'var(--text-primary)',
     letterSpacing: '0.02em',
   },
   label: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      7,
-    color:         'rgba(245,240,232,0.25)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.1em',
   },
 };
@@ -394,7 +405,7 @@ const db = {
     alignItems:  'center',
     gap:         12,
     width:       '100%',
-    background:  'rgba(255,255,255,0.02)',
+    background:  'var(--lala-parchment-2)',
     border:      '1px solid',
     borderRadius: 4,
     padding:     '12px 14px',
@@ -417,7 +428,7 @@ const db = {
   sublabel: {
     fontFamily:    'DM Mono, monospace',
     fontSize:      8,
-    color:         'rgba(245,240,232,0.25)',
+    color:         'var(--text-secondary)',
     letterSpacing: '0.06em',
   },
   arrow: {
