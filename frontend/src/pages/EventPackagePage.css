@@ -1,7 +1,7 @@
 /* EventPackagePage.css — /shows/:showId/events/:eventId (Task #1642) */
 
 .epp-page {
-  max-width: 880px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 20px 16px 96px;
   font-family: 'Lora', Georgia, serif;
@@ -84,7 +84,7 @@
   white-space: nowrap;
 }
 .epp-status-ready { background: var(--success-bg); color: var(--success-text); }
-.epp-status-used  { background: var(--primary-subtle); color: var(--primary-text); }
+.epp-status-used  { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .epp-status-draft { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
 
 .epp-toast {
@@ -102,20 +102,21 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  background: var(--primary-subtle);
-  color: var(--primary-text);
-  border-radius: 8px;
-  padding: 10px 14px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
+  padding: 12px 16px;
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin: 16px 0 0;
 }
 
 /* Task #2356: the lock note wraps at 375px; the episode link stays on its
    own line when it has to. */
 .epp-used-banner-text { flex: 1 1 200px; min-width: 0; font-weight: 500; }
 .epp-used-banner-link {
-  color: var(--primary-text);
+  color: var(--lala-lavender-text);
   font-weight: 700;
   white-space: nowrap;
   text-decoration: underline;
@@ -833,11 +834,11 @@
 .epp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .epp-btn-primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--lala-lavender);
+  border-color: var(--lala-lavender);
   color: var(--text-inverse);
 }
-.epp-btn-primary:not(:disabled):hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+.epp-btn-primary:not(:disabled):hover { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
 
 .epp-btn-secondary:hover { border-color: var(--primary); }
 
@@ -1691,7 +1692,7 @@
   --epp-pink-soft: var(--accent-subtle);
   --epp-teal: var(--primary-light);
   --epp-teal-soft: var(--primary-subtle);
-  --epp-teal-deep: var(--primary);
+  --epp-teal-deep: var(--lala-lavender);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1726,7 +1727,7 @@
   border-color: var(--epp-teal-deep);
   color: var(--text-inverse);
 }
-.epp-next-btn.epp-btn-primary:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
+.epp-next-btn.epp-btn-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
 .epp-section { scroll-margin-top: 16px; }
 .epp-stakes-field textarea { resize: vertical; font-size: 13px; }
 
@@ -1799,11 +1800,11 @@
 .epp-btn.epp-look-use {
   align-self: flex-start;
   margin-top: auto;
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--lala-lavender);
+  border-color: var(--lala-lavender);
   color: var(--text-inverse);
 }
-.epp-btn.epp-look-use:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
+.epp-btn.epp-look-use:hover:not(:disabled) { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
 .epp-looks-note { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
 
 /* Recommended featured attendees (episode creation step 5). */
@@ -1834,3 +1835,68 @@
 }
 .epp-guest-rec-why { font-size: 12px; color: var(--lala-ink-muted); }
 .epp-guest-rec .epp-look-use { margin-top: 4px; }
+
+/* The header, readiness strip and "On this page" menu (Evoni's redesign,
+   2026-10-05): the Producer Mode show card's look, lavender actions. */
+.epp-hero {
+  margin-bottom: 16px; padding: 18px 24px 22px; border-radius: 18px;
+  background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs);
+  border-top: 4px solid var(--lala-lavender-light);
+}
+.epp-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.epp-hero-top .epp-back { color: var(--lala-lavender-text); font-family: var(--font-ui); }
+.epp-hero-eyebrow { margin: 0 0 4px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+.epp-hero .epp-title { margin: 0; font-family: var(--font-prose); font-size: 32px; font-weight: 600; line-height: 1.2; color: var(--lala-ink); overflow-wrap: anywhere; }
+.epp-hero-summary { margin: 6px 0 0; font-size: 14px; color: var(--lala-ink-muted); }
+.epp-hero-summary .epp-season-link { color: var(--lala-lavender-text); }
+.epp-hero-tiles { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.epp-hero-tile { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); min-width: 0; }
+.epp-hero-tile.empty { background: var(--lala-parchment); border-style: dashed; border-color: var(--lala-parchment-3); }
+.epp-hero-tile-label { font-family: var(--font-ui); font-size: 11px; color: var(--lala-ink-muted); }
+.epp-hero-tile strong { font-size: 15px; color: var(--lala-ink); overflow-wrap: anywhere; }
+.epp-hero-tile.empty strong { font-weight: 500; color: var(--lala-ink-muted); }
+.epp-hero-tile-sub { font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+
+.epp-strip { margin-bottom: 16px; padding: 16px 20px; border-radius: 18px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
+.epp-strip-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
+.epp-strip-eyebrow { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.epp-strip-headline { font-size: 15px; color: var(--lala-ink); }
+.epp-strip-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.epp-strip-tile { display: grid; gap: 4px; height: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); border-top: 4px solid var(--lala-lavender); background: var(--lala-surface); text-decoration: none; }
+.epp-strip-tile strong { font-size: 13px; color: var(--lala-ink); }
+.epp-strip-tile span { font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); overflow-wrap: anywhere; }
+.epp-strip-tile.is-warning { background: var(--warning-bg); border-color: var(--warning-border); border-top-color: var(--warning); }
+.epp-strip-tile.is-warning span { color: var(--warning-text); }
+.epp-strip-tile.is-blocking { background: var(--danger-bg); border-color: var(--danger-border); border-top-color: var(--danger); }
+.epp-strip-tile.is-blocking span { color: var(--danger-text); }
+.epp-strip-tile:hover { box-shadow: var(--shadow-xs); }
+.epp-strip .epp-next { margin: 12px 0 0; }
+
+.epp-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; }
+.epp-toc { position: sticky; top: 16px; padding: 14px 16px; border-radius: 16px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
+.epp-toc-eyebrow { display: block; margin-bottom: 8px; font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.epp-toc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.epp-toc a { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-family: var(--font-ui); font-size: 13px; color: var(--lala-ink); text-decoration: none; }
+.epp-toc a:hover { background: var(--lala-lavender-soft); }
+.epp-toc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lala-lavender-light); }
+.epp-toc a.state-warning .epp-toc-dot { background: var(--warning); }
+.epp-toc a.state-blocking .epp-toc-dot { background: var(--danger); }
+.epp-toc a.state-none .epp-toc-dot { background: var(--lala-parchment-3); }
+
+@media (max-width: 1000px) {
+  .epp-hero-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .epp-body { grid-template-columns: minmax(0, 1fr); }
+  /* On a narrow screen the menu is a row of chips that scrolls sideways. */
+  .epp-toc { position: static; padding: 0; background: none; border: none; }
+  .epp-toc-eyebrow { display: none; }
+  .epp-toc ul { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .epp-toc li { flex: none; }
+  .epp-toc a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  .epp-hero { padding: 14px 16px 18px; }
+  .epp-hero .epp-title { font-size: 24px; }
+  .epp-hero-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .epp-strip { padding: 14px 16px; }
+  .epp-strip-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

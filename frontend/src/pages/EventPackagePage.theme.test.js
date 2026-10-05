@@ -30,10 +30,12 @@ describe('Event Package theme', () => {
     expect(jsx).not.toMatch(/color=["']#|color: ['"]#|background: ['"]#/);
   });
 
-  test('the primary action is teal, never gold under white', () => {
-    expect(rule('.epp-btn-primary')).toMatch(/background: var\(--primary\);\s*border-color: var\(--primary\);\s*color: var\(--text-inverse\);/);
+  // Lavender since the Producer Mode redesign (Evoni, 2026-10-05); it was teal.
+  test('the primary action is lavender, never gold under white', () => {
+    expect(rule('.epp-btn-primary')).toMatch(/background: var\(--lala-lavender\);\s*border-color: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
     expect(rule('.epp-next-btn.epp-btn-primary')).toMatch(/background: var\(--epp-teal-deep\)/);
-    expect(rule('.epp-btn.epp-look-use')).toMatch(/background: var\(--primary\)/);
+    expect(rule('.epp-next')).toMatch(/--epp-teal-deep: var\(--lala-lavender\)/);
+    expect(rule('.epp-btn.epp-look-use')).toMatch(/background: var\(--lala-lavender\)/);
     expect(css).not.toMatch(/background: var\(--lala-gold\);[^}]*color: var\(--(?:text-inverse|lala-surface|surface-card)\)/);
   });
 
@@ -50,13 +52,13 @@ describe('Event Package theme', () => {
     expect(next).toMatch(/--epp-pink-soft: var\(--accent-subtle\)/);
     expect(next).toMatch(/--epp-teal: var\(--primary-light\)/);
     expect(next).toMatch(/--epp-teal-soft: var\(--primary-subtle\)/);
-    expect(next).toMatch(/--epp-teal-deep: var\(--primary\)/);
+    expect(next).toMatch(/--epp-teal-deep: var\(--lala-lavender\)/);
   });
 
   test('the statuses read the token families', () => {
     expect(rule('.epp-status-ready')).toMatch(/background: var\(--success-bg\); color: var\(--success-text\)/);
-    expect(rule('.epp-status-used')).toMatch(/background: var\(--primary-subtle\); color: var\(--primary-text\)/);
-    expect(rule('.epp-used-banner')).toMatch(/background: var\(--primary-subtle\);\s*color: var\(--primary-text\)/);
+    expect(rule('.epp-status-used')).toMatch(/background: var\(--lala-lavender-soft\); color: var\(--lala-lavender-text\)/);
+    expect(rule('.epp-used-banner')).toMatch(/background: var\(--lala-lavender-soft\);\s*color: var\(--lala-lavender-text\)/);
     expect(rule('.epp-invitation-error')).toMatch(/background: var\(--danger-bg\);\s*color: var\(--danger-text\)/);
     expect(rule('.epp-money-warnings')).toMatch(/background: var\(--warning-bg\);\s*color: var\(--warning-text\)/);
   });
@@ -66,6 +68,16 @@ describe('Event Package theme', () => {
     const pairs = [
       ['--text-inverse', '--primary'],
       ['--text-inverse', '--primary-dark'],
+      // The redesign's lavender actions, header and readiness strip.
+      ['--text-inverse', '--lala-lavender'],
+      ['--text-inverse', '--lala-lavender-dark'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-lavender-text', '--lala-surface'],
+      ['--lala-ink', '--lala-lavender-soft'],
+      ['--lala-ink-muted', '--lala-lavender-soft'],
+      ['--lala-ink-muted', '--lala-parchment'],
+      ['--lala-ink', '--warning-bg'],
+      ['--lala-ink', '--danger-bg'],
       ['--lala-gold-text', '--lala-surface'],
       ['--lala-gold-text', '--lala-gold-soft'],
       ['--lala-ink', '--lala-parchment'],
