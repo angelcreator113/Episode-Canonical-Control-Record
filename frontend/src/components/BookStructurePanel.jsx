@@ -537,7 +537,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #FAF7F0;
+  background: var(--surface-bg);
 }
 .bsp-loading {
   display: flex;
@@ -546,7 +546,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   height: 300px;
   font-family: 'Lora', Georgia, serif;
   font-style: italic;
-  color: rgba(28, 24, 20, 0.4);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -554,9 +554,9 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
 .bsp-nav {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid rgba(28, 24, 20, 0.08);
+  border-bottom: 1px solid var(--lala-parchment-3);
   padding: 0 12px;
-  background: #FAF7F0;
+  background: var(--surface-bg);
   flex-shrink: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -572,15 +572,15 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'DM Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.08em;
-  color: rgba(28, 24, 20, 0.4);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
   white-space: nowrap;
 }
-.bsp-nav-btn:hover { color: rgba(28, 24, 20, 0.7); }
+.bsp-nav-btn:hover { color: var(--text-primary); }
 .bsp-nav-btn.active {
-  color: #1C1814;
-  border-bottom-color: #B8962E;
+  color: var(--text-primary);
+  border-bottom-color: var(--lala-gold);
 }
 .bsp-nav-icon { font-size: 12px; }
 
@@ -598,13 +598,13 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'Lora', Georgia, serif;
   font-size: 18px;
   font-weight: 500;
-  color: #1C1814;
+  color: var(--text-primary);
   margin: 0 0 6px;
 }
 .bsp-section-desc {
   font-family: 'Spectral', Georgia, serif;
   font-size: 13px;
-  color: rgba(28, 24, 20, 0.5);
+  color: var(--text-secondary);
   margin: 0;
   line-height: 1.6;
 }
@@ -616,13 +616,13 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-size: 24px;
   font-weight: 500;
   font-style: italic;
-  color: #1C1814;
+  color: var(--text-primary);
   margin: 0 0 4px;
 }
 .bsp-subtitle {
   font-family: 'Spectral', Georgia, serif;
   font-size: 14px;
-  color: rgba(28, 24, 20, 0.5);
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -638,21 +638,21 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   flex-direction: column;
   align-items: center;
   padding: 14px 8px;
-  border: 1px solid rgba(28, 24, 20, 0.06);
+  border: 1px solid var(--lala-parchment-2);
   border-radius: 4px;
-  background: #FFFDF9;
+  background: var(--surface-card);
 }
 .bsp-stat-num {
   font-family: 'DM Mono', monospace;
   font-size: 20px;
-  color: #1C1814;
+  color: var(--text-primary);
   font-weight: 500;
 }
 .bsp-stat-label {
   font-family: 'DM Mono', monospace;
   font-size: 8px;
   letter-spacing: 0.15em;
-  color: rgba(28, 24, 20, 0.35);
+  color: var(--text-secondary);
   text-transform: uppercase;
   margin-top: 4px;
 }
@@ -663,18 +663,18 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'DM Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.15em;
-  color: rgba(28, 24, 20, 0.3);
+  color: var(--text-secondary);
   text-transform: uppercase;
   margin: 0 0 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(28, 24, 20, 0.06);
+  border-bottom: 1px solid var(--lala-parchment-2);
 }
 .bsp-outline-group { margin-bottom: 16px; }
 .bsp-outline-group-label {
   font-family: 'DM Mono', monospace;
   font-size: 8px;
   letter-spacing: 0.12em;
-  color: rgba(28, 24, 20, 0.35);
+  color: var(--text-secondary);
   text-transform: uppercase;
   display: block;
   margin-bottom: 8px;
@@ -683,13 +683,13 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'Lora', Georgia, serif;
   font-size: 13px;
   font-weight: 600;
-  color: #B8962E;
+  color: var(--lala-gold-text);
   display: block;
   margin-bottom: 8px;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(184, 150, 46, 0.15);
+  border-bottom: 1px solid var(--lala-gold-line);
 }
-.bsp-outline-part-unassigned { color: rgba(28, 24, 20, 0.3); }
+.bsp-outline-part-unassigned { color: var(--text-secondary); }
 .bsp-outline-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 .bsp-pill {
   font-family: 'DM Mono', monospace;
@@ -697,31 +697,31 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   letter-spacing: 0.05em;
   padding: 4px 10px;
   border-radius: 3px;
-  border: 1px solid rgba(28, 24, 20, 0.08);
+  border: 1px solid var(--lala-parchment-3);
 }
-.bsp-pill.filled { background: rgba(184, 150, 46, 0.08); color: #8A7434; border-color: rgba(184, 150, 46, 0.2); }
-.bsp-pill.empty { color: rgba(28, 24, 20, 0.3); font-style: italic; }
+.bsp-pill.filled { background: var(--lala-gold-soft); color: var(--lala-gold-text); border-color: var(--lala-gold-line); }
+.bsp-pill.empty { color: var(--text-secondary); font-style: italic; }
 
 .bsp-outline-chapter {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 0 6px 8px;
-  border-bottom: 1px solid rgba(28, 24, 20, 0.04);
+  border-bottom: 1px solid var(--lala-parchment-2);
 }
-.bsp-outline-ch-icon { font-size: 11px; color: rgba(28, 24, 20, 0.3); width: 16px; text-align: center; }
+.bsp-outline-ch-icon { font-size: 11px; color: var(--text-secondary); width: 16px; text-align: center; }
 .bsp-outline-ch-type {
   font-family: 'DM Mono', monospace;
   font-size: 8px;
   letter-spacing: 0.08em;
-  color: rgba(28, 24, 20, 0.35);
+  color: var(--text-secondary);
   text-transform: uppercase;
   min-width: 60px;
 }
 .bsp-outline-ch-title {
   font-family: 'Spectral', Georgia, serif;
   font-size: 14px;
-  color: #1C1814;
+  color: var(--text-primary);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -731,7 +731,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
 .bsp-outline-ch-meta {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  color: rgba(28, 24, 20, 0.3);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -742,14 +742,14 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'DM Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: rgba(28, 24, 20, 0.5);
+  color: var(--text-secondary);
   text-transform: uppercase;
   margin-bottom: 6px;
 }
 .bsp-field-hint {
   font-family: 'Spectral', Georgia, serif;
   font-size: 12px;
-  color: rgba(28, 24, 20, 0.4);
+  color: var(--text-secondary);
   font-style: italic;
   margin: 0 0 8px;
   line-height: 1.5;
@@ -757,26 +757,26 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
 .bsp-input,
 .bsp-textarea {
   width: 100%;
-  border: 1px solid rgba(28, 24, 20, 0.1);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 3px;
   padding: 10px 14px;
   font-family: 'Spectral', Georgia, serif;
   font-size: 14px;
   line-height: 1.7;
-  color: #1C1814;
-  background: #FFFDF9;
+  color: var(--text-primary);
+  background: var(--surface-card);
   outline: none;
   transition: border-color 0.12s ease;
   box-sizing: border-box;
 }
 .bsp-input:focus,
 .bsp-textarea:focus {
-  border-color: rgba(184, 150, 46, 0.4);
+  border-color: var(--lala-gold);
 }
 .bsp-input--secondary {
   margin-top: 6px;
   font-style: italic;
-  color: rgba(28, 24, 20, 0.6);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 .bsp-textarea { resize: vertical; min-height: 60px; }
@@ -787,11 +787,11 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   justify-content: flex-end;
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 1px solid rgba(28, 24, 20, 0.06);
+  border-top: 1px solid var(--lala-parchment-2);
 }
 .bsp-save-btn {
-  background: #1C1814;
-  color: #FAF7F0;
+  background: var(--primary);
+  color: var(--text-inverse);
   border: none;
   border-radius: 3px;
   padding: 10px 28px;
@@ -801,7 +801,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   cursor: pointer;
   transition: opacity 0.12s ease;
 }
-.bsp-save-btn:hover { opacity: 0.85; }
+.bsp-save-btn:hover { background: var(--primary-dark); }
 .bsp-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Parts & Chapters ── */
@@ -810,7 +810,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   align-items: center;
   gap: 12px;
   padding: 14px 0 8px;
-  border-top: 2px solid rgba(184, 150, 46, 0.2);
+  border-top: 2px solid var(--lala-gold-line);
   margin-top: 16px;
 }
 .bsp-part-header:first-child { margin-top: 0; }
@@ -818,28 +818,28 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   font-family: 'Lora', Georgia, serif;
   font-size: 14px;
   font-weight: 600;
-  color: #B8962E;
+  color: var(--lala-gold-text);
   white-space: nowrap;
 }
 .bsp-part-title-input {
   flex: 1;
   background: none;
   border: none;
-  border-bottom: 1px solid rgba(28, 24, 20, 0.08);
+  border-bottom: 1px solid var(--lala-parchment-3);
   padding: 4px 0;
   font-family: 'Spectral', Georgia, serif;
   font-size: 14px;
-  color: #1C1814;
+  color: var(--text-primary);
   outline: none;
 }
-.bsp-part-title-input:focus { border-bottom-color: rgba(184, 150, 46, 0.4); }
+.bsp-part-title-input:focus { border-bottom-color: var(--lala-gold); }
 
 .bsp-chapter-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid rgba(28, 24, 20, 0.04);
+  border-bottom: 1px solid var(--lala-parchment-2);
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -853,7 +853,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
 .bsp-ch-num {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: rgba(28, 24, 20, 0.3);
+  color: var(--text-secondary);
   width: 24px;
   text-align: right;
   flex-shrink: 0;
@@ -861,7 +861,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
 .bsp-ch-title {
   font-family: 'Spectral', Georgia, serif;
   font-size: 14px;
-  color: #1C1814;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -873,24 +873,24 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   flex-shrink: 0;
 }
 .bsp-select {
-  background: #FFFDF9;
-  border: 1px solid rgba(28, 24, 20, 0.1);
+  background: var(--surface-card);
+  border: 1px solid var(--lala-parchment-3);
   border-radius: 3px;
   padding: 5px 8px;
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  color: #1C1814;
+  color: var(--text-primary);
   cursor: pointer;
   outline: none;
 }
-.bsp-select:focus { border-color: rgba(184, 150, 46, 0.4); }
+.bsp-select:focus { border-color: var(--lala-gold); }
 .bsp-select--part { min-width: 85px; }
 .bsp-scene-badge {
   font-family: 'DM Mono', monospace;
   font-size: 8px;
   letter-spacing: 0.08em;
-  color: rgba(28, 24, 20, 0.35);
-  background: rgba(28, 24, 20, 0.04);
+  color: var(--text-secondary);
+  background: var(--lala-parchment-2);
   padding: 3px 8px;
   border-radius: 10px;
   white-space: nowrap;
@@ -901,7 +901,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   padding: 32px 16px;
   font-family: 'Lora', Georgia, serif;
   font-style: italic;
-  color: rgba(28, 24, 20, 0.35);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
