@@ -2,10 +2,10 @@
  * Producer Mode -> Events: the card and the deal-type filter (Task #2361,
  * Evoni's Events page redesign of 2026-09-30, PR B).
  *
- * A card shows its name; organizer · date · deal type on one line; one
- * status chip; a readiness bar ("N of M ready") in place of the Missing /
- * Still-to-finish text; and one primary button (plus View Event Package
- * on a used event).
+ * Since Evoni's Producer Mode redesign (2026-10-05) a card shows its status
+ * and category; its name; the place; a Deal tile and an Organizer tile; the
+ * gate items still needed, as chips; and one primary button (plus View
+ * Event Package on a used event). The five queue states are count cards.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -17,8 +17,7 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import WorldAdmin from './WorldAdmin';
-import { computeEventPackageReadiness } from '../utils/eventReadinessSections';
-import { readinessCounts } from '../utils/eventCardSummary';
+import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -76,32 +75,47 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
-  test('a card: name, organizer · date · deal type on one line, one status chip, a readiness bar, one button', async () => {
+  test('a card, to the redesign: status and category, name, place, deal and organizer tiles, what is still needed, one button', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-brand');
 
     expect(within(card).getByRole('heading', { name: 'Atelier Launch' })).toBeTruthy();
-    expect(within(card).getByTestId('event-card-meta-ev-brand').textContent).toBe('Maison Belle · 2026-10-12 · Paid appearance');
     expect(within(card).queryAllByTestId(/^event-card-status-/)).toHaveLength(1);
+    expect(card.querySelector('.wa-ev-category').textContent).toBe('launch');
+    expect(within(card).getByTestId('event-card-place-ev-brand').textContent).toBe('2026-10-12');
+    const deal = within(card).getByTestId('event-card-deal-ev-brand');
+    expect(deal.textContent).toContain('Paid appearance');
+    expect(deal.textContent).toContain('Unpaid');
+    expect(within(card).getByTestId('event-card-organizer-ev-brand').textContent).toBe('OrganizerMaison Belle');
 
-    const { ready, total } = readinessCounts(computeEventPackageReadiness(BRAND_EVENT));
-    expect(within(card).getByTestId('event-card-readiness-ev-brand').textContent).toBe(`${ready} of ${total} ready`);
-    const bar = within(card).getByRole('progressbar');
-    expect(bar.getAttribute('aria-valuenow')).toBe(String(ready));
-    expect(bar.getAttribute('aria-valuemax')).toBe(String(total));
-
-    expect(within(card).queryByText(/Missing:/)).toBeNull();
-    expect(within(card).queryByText(/Still to finish:/)).toBeNull();
+    const { blocking } = computeEventPackageReadiness(BRAND_EVENT);
+    const needed = within(card).getByTestId('event-card-needed-ev-brand');
+    expect([...needed.querySelectorAll('.wa-ev-needed-chip')].map((c) => c.textContent)).toEqual(describeMissing(blocking));
     // One primary button besides the card's "More actions" menu.
     const buttons = within(card).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'More actions');
     expect(buttons).toHaveLength(1);
     expect(within(card).queryByTestId('event-card-view-package-ev-brand')).toBeNull();
   });
 
-  test('a card with no organizer, date or deal type says "No organizer" and leaves the rest out', async () => {
+  test('a card with no organizer, place or deal type says so', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-bare');
-    expect(within(card).getByTestId('event-card-meta-ev-bare').textContent).toBe('No organizer');
+    expect(within(card).getByTestId('event-card-organizer-ev-bare').textContent).toBe('OrganizerNot chosen');
+    expect(within(card).getByTestId('event-card-place-ev-bare').textContent).toBe('Venue and date not set');
+    expect(within(card).getByTestId('event-card-deal-ev-bare').textContent).toContain('No deal type');
+  });
+
+  test('the state cards count and filter; the chosen card again shows all', async () => {
+    renderQueue();
+    await screen.findByTestId('event-card-ev-brand');
+    const used = screen.getByTestId('events-filter-used');
+    expect(used.textContent).toBe('Used1');
+    fireEvent.click(used);
+    await waitFor(() => expect(cardIds()).toEqual(['ev-used']));
+    expect(used.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(used);
+    await waitFor(() => expect(cardIds().length).toBeGreaterThan(1));
+    expect(screen.queryByTestId('events-filter-all')).toBeNull();
   });
 
   test('a used card has View Event Package and Open Episode', async () => {
@@ -110,6 +124,7 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
     const buttons = within(card).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'More actions');
     expect(buttons.map((b) => b.textContent.trim())).toEqual(['View Event Package', 'Open Episode']);
 
+    expect(within(card).queryByTestId('event-card-needed-ev-used')).toBeNull();
     fireEvent.click(within(card).getByTestId('event-card-view-package-ev-used'));
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/shows/show-1/events/ev-used'));
   });

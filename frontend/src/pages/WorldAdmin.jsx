@@ -39,12 +39,12 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
-import { readinessCounts, eventCardMetaParts, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
+import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
 import './WorldAdmin.css';
 
@@ -2135,14 +2135,21 @@ The revised event should feel like a completely different experience from the si
               (computeEventState, ../utils/eventReadinessSections.js) — not the raw,
               inconsistently-written world_events.status column §4 of that
               doc already documents. */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>{worldEvents.length} events</span>
-              </div>
+          <div className="wa-ev-head">
+            <div className="wa-ev-head-title">
+              <h2>Events</h2>
+              <span>Invitations and opportunities that can become episodes · {worldEvents.length} events</span>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative' }}>
+            <div className="wa-ev-head-actions">
+              <label className="wa-ev-search">
+                <Search size={15} aria-hidden="true" />
+                <input type="text" value={eventSearch} onChange={e => { setEventSearch(e.target.value); setEventPage(1); }} placeholder="Search events" aria-label="Search events" />
+              </label>
+              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
+                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
+              </button>
+            </div>
+            <div className="wa-ev-head-tools">
               <button onClick={async () => {
                 setAutoFilling(true);
                 setToast('🗓️ Generating events for this month...');
@@ -2179,17 +2186,15 @@ The revised event should feel like a completely different experience from the si
                 }
                 setAutoFilling(false);
                 setTimeout(() => setToast(null), 6000);
-              }} disabled={autoFilling} style={S.primaryBtn}>
+              }} disabled={autoFilling} style={S.smBtn}>
                 {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
               </button>
-              {/* + New Event opens the choose-host flow (Task #1628), same
-                  entry point as New Episode — an event created here always
-                  starts with a host, unlike the system-created paths (Needs
-                  Host below). Manual/no-host creation is still reachable
-                  from the empty state's "+ Create Manually". */}
-              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
-                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New Event
-              </button>
+              {/* + New event (beside the search, above) opens the choose-host
+                  flow (Task #1628), same entry point as New Episode — an
+                  event created here always starts with a host, unlike the
+                  system-created paths (Needs Host below). Manual/no-host
+                  creation is still reachable from the empty state's
+                  "+ Create Manually". */}
               {/* Creation tools (Feed opportunities and event templates) open
                   in a drawer (Evoni, 2026-09-30). */}
               <button type="button" data-testid="events-ideas-button" aria-haspopup="dialog" aria-expanded={eventsIdeasOpen}
@@ -2233,8 +2238,8 @@ The revised event should feel like a completely different experience from the si
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
-            <div style={{ background: 'var(--primary-subtle)', border: '1px solid var(--primary-light)', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-text)' }}>{selectedEvents.size} selected</span>
+            <div style={{ background: 'var(--lala-lavender-soft)', border: '1px solid var(--lala-lavender-line)', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lala-lavender-text)' }}>{selectedEvents.size} selected</span>
               {selectedEvents.size === 2 && (
                 <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--accent-dark)', fontWeight: 600 }}>🔍 Compare</button>
               )}
@@ -2270,43 +2275,44 @@ The revised event should feel like a completely different experience from the si
                     setToast('Multi-event generate failed: ' + (err.response?.data?.error || err.message));
                   }
                   setTimeout(() => setToast(null), 6000);
-                }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', cursor: 'pointer' }}>
+                }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', cursor: 'pointer' }}>
                   🎬 Generate from {selectedEvents.size} event{selectedEvents.size === 1 ? '' : 's'}
                 </button>
               )}
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Link to:</span>
               {episodes.slice(0, 6).map(ep => (
-                <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: 'var(--surface-card)', border: '1px solid var(--primary-light)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600 }}>
+                <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600 }}>
                   {ep.episode_number}. {ep.title?.slice(0, 12) || 'Untitled'}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Search + filter + sort bar */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input type="text" value={eventSearch} onChange={e => { setEventSearch(e.target.value); setEventPage(1); }} placeholder="Search events..."
-              style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', gap: 3, background: 'var(--lala-parchment-2)', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
-              {[
-                /* Filter bar over the five computed queue states (Task
-                   #1648, docs/EVENT_EPISODE_FLOW.md §8(m)) — replaces the
-                   old raw world_events.status chips. computeEventState is
-                   the same function the cards below use, so a count here
-                   always matches what's actually shown. */
-                { key: 'all', label: 'All', count: worldEvents.length },
-                ...Object.entries(EVENT_QUEUE_STATES).map(([key, cfg]) => ({
-                  key, label: cfg.label, count: worldEvents.filter(e => computeEventState(e) === key).length,
-                })),
-              ].map(f => (
-                <button key={f.key} data-testid={`events-filter-${f.key}`} onClick={() => { setEventStatusFilter(f.key); setEventPage(1); }} style={{
-                  padding: '4px 10px', border: 'none', borderRadius: 6,
-                  background: eventStatusFilter === f.key ? 'var(--primary)' : 'transparent',
-                  color: eventStatusFilter === f.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
-                  fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                }}>{f.label} ({f.count})</button>
-              ))}
-            </div>
+          {/* The queue's five computed states as count cards (Task #1648,
+              docs/EVENT_EPISODE_FLOW.md §8(m); Evoni's redesign, 2026-10-05):
+              computeEventState is the same function the cards below use, so a
+              count here always matches what's shown. A card filters; clicking
+              the chosen card again shows all. */}
+          <div className="wa-ev-states" role="group" aria-label="Filter by state">
+            {Object.entries(EVENT_QUEUE_STATES).map(([key, cfg]) => {
+              const n = worldEvents.filter(e => computeEventState(e) === key).length;
+              const on = eventStatusFilter === key;
+              return (
+                <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on}
+                  className={`wa-ev-state${on ? ' active' : ''}`}
+                  onClick={() => { setEventStatusFilter(on ? 'all' : key); setEventPage(1); }}>
+                  <span className="wa-ev-state-label" style={{ color: cfg.color }}>{cfg.label}</span>
+                  <span className="wa-ev-state-count">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="wa-ev-refine">
+            {eventStatusFilter !== 'all' && (
+              <button type="button" className="wa-ev-show-all" data-testid="events-filter-all" onClick={() => { setEventStatusFilter('all'); setEventPage(1); }}>
+                Show all {worldEvents.length}
+              </button>
+            )}
             <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
               onChange={e => { setEventDealFilter(e.target.value); setEventPage(1); }}
               style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
@@ -2920,10 +2926,8 @@ The revised event should feel like a completely different experience from the si
               const readiness = computeEventPackageReadiness(ev);
               const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
-              const metaParts = eventCardMetaParts(ev);
-              const counts = readinessCounts(readiness);
+              const details = eventCardDetails(ev);
               const missing = describeMissing(readiness.blocking);
-              const toFinish = describeMissing(readiness.warnings, 'warning');
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
@@ -2934,14 +2938,17 @@ The revised event should feel like a completely different experience from the si
                 openPackage();
               };
               return (
-              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, minWidth: 0, cursor: 'pointer', border: isSelected ? '2px solid var(--primary)' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+              <div key={ev.id} data-testid={`event-card-${ev.id}`} className={`wa-ev-card${isSelected ? ' selected' : ''}${state === 'ready' ? ' ready' : ''}`} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
+                <div className="wa-ev-card-top">
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
-                      style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer', marginTop: 2 }} />
+                      style={{ width: 16, height: 16, accentColor: 'var(--lala-lavender)', cursor: 'pointer' }} />
                   )}
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{ev.name}</h3>
-                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                  <span data-testid={`event-card-status-${ev.id}`} className="wa-ev-status" style={{ color: stateCfg.color, background: stateCfg.bg }}>
+                    {stateCfg.label}
+                  </span>
+                  <span className="wa-ev-category">{details.category || 'No category'}</span>
+                  <div className="wa-ev-card-menu" onClick={e => e.stopPropagation()}>
                     <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-secondary)', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
                     </button>
@@ -2993,53 +3000,59 @@ The revised event should feel like a completely different experience from the si
                     )}
                   </div>
                 </div>
-                {/* Card (Task #2361, Evoni's redesign of 2026-09-30):
-                    organizer · date · deal type on one line, one status
-                    chip, a readiness bar, one primary button. */}
-                <div className="wa-ev-card-meta" data-testid={`event-card-meta-${ev.id}`} title={metaParts.map(p => p.text).join(' · ')}>
-                  {metaParts.map((p, i) => (
-                    <React.Fragment key={p.key}>
-                      {i > 0 && <span aria-hidden="true"> · </span>}
-                      <span className={p.missing ? 'wa-ev-card-meta-missing' : undefined}>{p.text}</span>
-                    </React.Fragment>
-                  ))}
+                <h3 className="wa-ev-card-name">{ev.name}</h3>
+                {/* Card to Evoni's redesign (2026-10-05; it replaces the
+                    2026-09-30 card's one meta line and readiness bar): the
+                    place, the deal and the organizer, what is still needed,
+                    one primary button. */}
+                <div className="wa-ev-card-place" data-testid={`event-card-place-${ev.id}`}>
+                  {details.place.length ? details.place.join(' · ') : 'Venue and date not set'}
                 </div>
-                <div className="wa-ev-card-chips">
-                  <span data-testid={`event-card-status-${ev.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, color: stateCfg.color, background: stateCfg.bg }}>
-                    {stateCfg.icon} {stateCfg.label}
-                  </span>
-                  {conflictsByEvent.has(ev.id) && (() => {
-                    const c = conflictsByEvent.get(ev.id);
-                    const detail = `Ep ${c.episode.episode_number} "${ev.name}" wants [${c.eventKeywords.join(', ')}] but the wardrobe has [${c.wardrobeKeywords.join(', ')}]`;
-                    return (
+                <div className="wa-ev-tiles">
+                  <div className="wa-ev-tile" data-testid={`event-card-deal-${ev.id}`}>
+                    <span className="wa-ev-tile-label">Deal</span>
+                    <strong>{details.deal.label || 'No deal type'}</strong>
+                    <span className="wa-ev-tile-sub">{details.deal.pays}</span>
+                  </div>
+                  <div className="wa-ev-tile" data-testid={`event-card-organizer-${ev.id}`}>
+                    <span className="wa-ev-tile-label">Organizer</span>
+                    <strong className={details.organizer ? undefined : 'missing'}>{details.organizer || 'Not chosen'}</strong>
+                  </div>
+                </div>
+                {/* A used or archived event is done: nothing is still needed. */}
+                {missing.length > 0 && state !== 'used' && state !== 'archived' && (
+                  <div className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
+                    <span className="wa-ev-tile-label">Still needed</span>
+                    <div className="wa-ev-needed-chips">
+                      {missing.map(m => <span key={m} className="wa-ev-needed-chip">{m}</span>)}
+                    </div>
+                  </div>
+                )}
+                {conflictsByEvent.has(ev.id) && (() => {
+                  const c = conflictsByEvent.get(ev.id);
+                  const detail = `Ep ${c.episode.episode_number} "${ev.name}" wants [${c.eventKeywords.join(', ')}] but the wardrobe has [${c.wardrobeKeywords.join(', ')}]`;
+                  return (
+                    <div className="wa-ev-card-chips">
                       <span className="wa-ev-conflict-chip" data-testid={`event-card-conflict-${ev.id}`} title={detail} aria-label={`Wardrobe conflict: ${detail}`}>
                         <AlertTriangle size={11} aria-hidden="true" /> Wardrobe conflict
                       </span>
-                    );
-                  })()}
-                </div>
-                <div className="wa-ev-readiness" data-testid={`event-card-readiness-${ev.id}`}
-                  title={[...missing.map(m => `Missing: ${m}`), ...toFinish.map(m => `Still to finish: ${m}`)].join('\n') || 'Every package item is ready'}>
-                  <div className="wa-ev-readiness-track" role="progressbar" aria-label="Event Package readiness"
-                    aria-valuemin={0} aria-valuemax={counts.total} aria-valuenow={counts.ready}>
-                    <div className="wa-ev-readiness-fill" style={{ width: `${counts.total ? Math.round((counts.ready / counts.total) * 100) : 0}%`, background: stateCfg.color }} />
-                  </div>
-                  <span className="wa-ev-readiness-label">{counts.ready} of {counts.total} ready</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    </div>
+                  );
+                })()}
+                <div className="wa-ev-card-actions">
                   {/* A used event links both ways (Task #2356): its Event
                       Package, now read-only, beside Open Episode. */}
                   {state === 'used' && (
                     <button type="button" data-testid={`event-card-view-package-${ev.id}`}
                       onClick={e => { e.stopPropagation(); openPackage(); }}
-                      style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, padding: '8px 12px', background: 'var(--surface-card)', borderColor: stateCfg.color, color: stateCfg.color }}>
+                      className="wa-ev-btn">
                       View Event Package
                     </button>
                   )}
                   <button type="button" data-testid={`event-card-primary-${ev.id}`}
                     title={state === 'used' && linkedEpisode ? `Episode ${linkedEpisode.episode_number}: ${linkedEpisode.title || 'Untitled'}` : undefined}
-                    onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
-                    {stateCfg.primaryAction} <ArrowRight size={13} />
+                    onClick={e => { e.stopPropagation(); primaryAction(); }} className={`wa-ev-btn${state === 'ready' ? ' filled' : ''}`}>
+                    {stateCfg.primaryAction} <ArrowRight size={13} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -8321,7 +8334,6 @@ export const S = {
   toastOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, pointerEvents: 'none' },
   toastBox: { padding: '20px 40px', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', background: 'var(--text-primary)', color: 'var(--surface-bg)', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(0,0,0,0.3)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
   toastBoxFailed: { background: 'var(--danger)', boxShadow: '0 12px 40px rgba(180,35,24,0.35)' },
-  evCard: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' },
   eTag: { padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 6, fontSize: 11, color: 'var(--primary-text)', fontWeight: 500 },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
   inp: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', boxSizing: 'border-box', transition: 'border-color 0.15s', outline: 'none' },
