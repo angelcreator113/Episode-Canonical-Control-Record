@@ -11,6 +11,7 @@ const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/c
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
 const { itemReach, toCharacter } = require('../services/wardrobeReach');
 const { DecisionLogger } = require('../utils/decisionLogger');
+const { CATEGORY_ALIASES: WARDROBE_CATEGORY_ALIASES } = require('../utils/wardrobeSlots');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -42,8 +43,30 @@ async function checkSpendEpisode(models, episodeId, showId) {
  * and a bottom) and shoes. Adds the best-matching reachable item for a slot
  * that has none; ranking and the other pool roles are left as they are.
  */
+// The body and shoes categories the styling game locks on, read the way the
+// game reads them (frontend/src/lib/closetGrouping.js canonicalCategory,
+// over the shared CATEGORY_ALIASES): "Heels", "ankle boots" and "Evening
+// Gown" count as shoes and dress. The pool's guarantee compared the raw
+// string, so a show whose shoes are all "Heels" was offered no wearable
+// shoes in For This Event (Evoni, 2026-10-05).
+const GAME_BODY_CATEGORIES = ['dress', 'top', 'bottom', 'shoes'];
+function gameCategory(raw) {
+  const n = String(raw || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (!n) return null;
+  const exact = (w) => (GAME_BODY_CATEGORIES.includes(w) ? w
+    : (GAME_BODY_CATEGORIES.includes(WARDROBE_CATEGORY_ALIASES[w]) ? WARDROBE_CATEGORY_ALIASES[w] : null));
+  const direct = exact(n);
+  if (direct) return direct;
+  const words = n.split(/[\s/_,&+-]+/).filter(Boolean);
+  for (let i = words.length - 1; i >= 0; i -= 1) {
+    const hit = exact(words[i]);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function ensureReachableRequiredSlots(pool, scored, addToPool) {
-  const catOf = (i) => String(i.clothing_category || '').toLowerCase();
+  const catOf = (i) => gameCategory(i.clothing_category);
   const reachableInPool = (cat) => pool.some((i) => i.can_select && catOf(i) === cat);
   const bestReachable = (cat) => scored
     .filter((i) => i.can_select && catOf(i) === cat)
@@ -1501,10 +1524,10 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     // Ensure required categories have at least 3 items in pool
     const REQUIRED_CATEGORIES = ['shoes', 'dress'];
     for (const cat of REQUIRED_CATEGORIES) {
-      const alreadyHas = pool.filter(i => i.clothing_category === cat).length;
+      const alreadyHas = pool.filter(i => gameCategory(i.clothing_category) === cat).length;
       if (alreadyHas < 2) {
         const best = scored
-          .filter(i => i.clothing_category === cat && !addedIds.has(i.id))
+          .filter(i => gameCategory(i.clothing_category) === cat && !addedIds.has(i.id))
           .sort((a, b) => b.match_score - a.match_score)
           .slice(0, 3 - alreadyHas);
         best.forEach(item => addToPool(item, item.is_owned ? 'safe' : 'stretch'));
@@ -2507,3 +2530,5 @@ router.post('/:showId/auto-tag-event-types', requireAuth, aiRateLimiter, async (
 module.exports = router;
 module.exports.getOutfitScore = getOutfitScore;
 module.exports.CONFIDENCE_LEVELS = CONFIDENCE_LEVELS;
+module.exports.gameCategory = gameCategory;
+module.exports.ensureReachableRequiredSlots = ensureReachableRequiredSlots;
