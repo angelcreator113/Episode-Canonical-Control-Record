@@ -55,9 +55,35 @@ describe('EventVenueLook (L1)', () => {
     expect((await screen.findByTestId('venue-look-part-overall')).textContent).toContain('A candlelit greenhouse gala.');
     expect(screen.getByTestId('venue-look-source-overall').textContent).toContain('Auto-drafted');
     expect(screen.getByTestId('venue-look-source-decor').textContent).toContain('Edited');
+    fireEvent.click(screen.getByTestId('venue-look-more'));
     expect(screen.getByTestId('venue-look-part-areas').textContent).toContain('Bar, Runway');
     expect(screen.queryByTestId('venue-look-part-lighting')).toBeNull();
     expect(screen.getByText('Used as reference')).toBeTruthy();
+  });
+
+  test('Place shows the first two parts; Show more opens the rest and the references, Show less folds them', async () => {
+    renderLook();
+    await screen.findByTestId('venue-look-part-overall');
+    expect(screen.getByTestId('venue-look-part-decor')).toBeTruthy();
+    expect(screen.queryByTestId('venue-look-part-areas')).toBeNull();
+    expect(screen.queryByText('Used as reference')).toBeNull();
+    const more = screen.getByTestId('venue-look-more');
+    // Areas, Must avoid and the reference images.
+    expect(more.textContent).toContain('Show 3 more parts');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    expect(screen.getByTestId('venue-look-part-must_avoid').textContent).toContain('Neon.');
+    expect(screen.getByText('Used as reference')).toBeTruthy();
+    expect(more.textContent).toContain('Show less');
+    fireEvent.click(more);
+    expect(screen.queryByTestId('venue-look-part-areas')).toBeNull();
+  });
+
+  test('a look of two parts or fewer has no Show more', async () => {
+    body = { venue_look: { overall: 'Just this.', decor: 'And this.', areas: [], references: [], sources: {} }, editable: true };
+    renderLook();
+    await screen.findByTestId('venue-look-part-decor');
+    expect(screen.queryByTestId('venue-look-more')).toBeNull();
   });
 
   test('with no look it says so and offers drafting and writing', async () => {

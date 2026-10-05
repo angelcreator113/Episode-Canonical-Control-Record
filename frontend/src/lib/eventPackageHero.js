@@ -82,18 +82,40 @@ export const PAGE_SECTIONS = [
   { anchor: 'people', label: 'People', covers: ['organizer', 'people'] },
   { anchor: 'place', label: 'Place', covers: ['place'] },
   { anchor: 'look', label: "Lala's Look", covers: ['look'] },
-  { anchor: 'stakes', label: 'Stakes & Money', covers: ['stakes'] },
-  { anchor: 'review', label: 'Review', covers: [] },
+  // Part 3: the terms and the money, the story stakes, the planning notes.
+  { anchor: 'deal', label: 'Deal & Money', covers: [] },
+  { anchor: 'stakes', label: 'Story Stakes', covers: ['stakes'] },
+  { anchor: 'concept', label: 'Behind the Scenes', covers: [], optional: true },
 ];
 
 const RANK = { complete: 0, warning: 1, blocking: 2 };
 
-/** The menu's entries with the worst state of the readiness sections each covers ('none' when it covers none). */
-export function pageNav(readiness) {
+/** The menu's entries with the worst state of the readiness sections each covers ('none' when it covers none); an optional section only when the page has it. */
+export function pageNav(readiness, { has = {} } = {}) {
   const byKey = new Map((readiness?.sections || []).map((s) => [s.key, s.complete ? 'complete' : s.kind]));
-  return PAGE_SECTIONS.map((s) => {
+  return PAGE_SECTIONS.filter((s) => !s.optional || has[s.anchor]).map((s) => {
     const states = s.covers.map((k) => byKey.get(k)).filter(Boolean);
     const state = states.length ? states.reduce((a, b) => (RANK[b] > RANK[a] ? b : a)) : 'none';
     return { ...s, state };
   });
+}
+
+/**
+ * Deal & Money's three tiles from the money preview (GET money-preview):
+ * what Lala earns (the planned income), what she pays (the planned costs not
+ * covered) and the performance bonus (the conditional payouts). Null without
+ * a preview (a used event has none).
+ */
+export function dealTiles(preview) {
+  if (!preview) return null;
+  const counted = (preview.lines || []).filter((l) => !l.covered && !l.conditional);
+  const earns = counted.filter((l) => l.signed > 0).reduce((n, l) => n + l.signed, 0);
+  const pays = counted.filter((l) => l.signed < 0).reduce((n, l) => n - l.signed, 0);
+  const covered = (preview.lines || []).filter((l) => l.covered).length;
+  const bonus = (preview.projection?.conditional || []).reduce((n, b) => n + (Number(b.amount) || 0), 0);
+  return [
+    { key: 'earns', label: 'Lala earns', value: `${earns.toLocaleString()} coins`, sub: earns ? 'planned income' : 'no planned income' },
+    { key: 'pays', label: 'Lala pays', value: `${pays.toLocaleString()} coins`, sub: covered ? `${covered} cost${covered === 1 ? '' : 's'} covered` : (pays ? 'planned costs' : 'no planned costs') },
+    { key: 'bonus', label: 'Performance bonus', value: bonus ? `up to ${bonus.toLocaleString()} coins` : 'None', sub: bonus ? 'if she earns it' : 'a strong result pays nothing extra' },
+  ];
 }

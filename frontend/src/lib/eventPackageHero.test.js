@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { shortDate, shortTime, heroTiles, seasonLine, readinessTile, readinessHeadline, pageNav } from './eventPackageHero';
+import { shortDate, shortTime, heroTiles, seasonLine, readinessTile, readinessHeadline, pageNav, dealTiles } from './eventPackageHero';
 
 describe('Event Package header helpers', () => {
   test('dates and times read short; anything else as stored', () => {
@@ -53,7 +53,24 @@ describe('Event Package header helpers', () => {
     expect(readinessHeadline({ gatesMet: false, warningItems: [], blockingItems: [{}] })).toBe('1 item needed to start');
     const nav = Object.fromEntries(pageNav(readiness).map((s) => [s.anchor, s.state]));
     // The Event covers the identity and the invitation: the worse of the two.
-    expect(nav).toMatchObject({ identity: 'warning', people: 'warning', look: 'blocking', review: 'none' });
+    expect(nav).toMatchObject({ identity: 'warning', people: 'warning', look: 'blocking', deal: 'none', stakes: 'none' });
     expect(nav.invitation).toBeUndefined();
+    expect(nav.concept).toBeUndefined(); // only when the page has a concept
+    expect(pageNav(readiness, { has: { concept: true } }).map((s) => s.label).at(-1)).toBe('Behind the Scenes');
+  });
+
+  test("Deal & Money's tiles: what she earns, pays and could earn on top", () => {
+    expect(dealTiles(null)).toBeNull();
+    const tiles = dealTiles({
+      lines: [
+        { key: 'fee', signed: 439 }, { key: 'entry', signed: -50, covered: true }, { key: 'taxi', signed: -30 },
+        { key: 'bonus', signed: 200, conditional: true },
+      ],
+      projection: { conditional: [{ tier: 'slay', label: 'a SLAY', amount: 150 }] },
+    });
+    expect(tiles.map((t) => [t.key, t.value, t.sub])).toEqual([
+      ['earns', '439 coins', 'planned income'], ['pays', '30 coins', '1 cost covered'], ['bonus', 'up to 150 coins', 'if she earns it'],
+    ]);
+    expect(dealTiles({ lines: [], projection: null }).map((t) => t.value)).toEqual(['0 coins', '0 coins', 'None']);
   });
 });

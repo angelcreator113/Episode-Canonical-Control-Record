@@ -72,13 +72,13 @@ import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing, nextPackageStep } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
-import EventConceptSection from '../components/EventConceptSection';
+import EventConceptSection, { hasConcept } from '../components/EventConceptSection';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import { dealLabelFor, describeCompensation } from '../utils/eventTerms';
-import { heroTiles, readinessTile, readinessHeadline, pageNav } from '../lib/eventPackageHero';
+import { heroTiles, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
@@ -96,6 +96,8 @@ import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
 import EventVenueLook from '../components/EventPackage/EventVenueLook';
+import ShowMoreToggle from '../components/ShowMoreToggle';
+import { visibleSlice } from '../lib/showMore';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import './EventPackagePage.css';
 
@@ -108,6 +110,8 @@ function fmtLabel(value) {
 // this fixed set; no role is forced onto a featured guest.
 const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic', 'mentor', 'rival'];
 const MAX_FEATURED_GUESTS = 5;
+// The Full Guest List shows ten at a time; the rest fold behind Show more (2026-10-05).
+const GUESTS_SHOWN = 10;
 
 // Basics fields (Task #1755): the dialog title, the PUT column each one
 // saves to, and the input it edits with. maxLength follows the column
@@ -339,6 +343,7 @@ export default function EventPackagePage() {
   // Featured attendees (Task #1689). guestFeedResults mirrors the Change
   // Host picker's debounced search exactly (same endpoint, same shape).
   const [fullGuestListOpen, setFullGuestListOpen] = useState(false);
+  const [allGuestsOpen, setAllGuestsOpen] = useState(false);
   const [guestSaving, setGuestSaving] = useState(false);
   const [guestFeedPickerOpen, setGuestFeedPickerOpen] = useState(false);
   const [guestFeedSearch, setGuestFeedSearch] = useState('');
@@ -534,6 +539,7 @@ export default function EventPackagePage() {
   const projection = stakes.difficulty;
 
   const guestList = event.canon_consequences?.automation?.guest_profiles || [];
+  const guestFold = visibleSlice(guestList, allGuestsOpen, GUESTS_SHOWN);
   const featuredGuests = guestList
     .map((guest, index) => ({ guest, index }))
     .filter(({ guest }) => guest.featured);
@@ -1133,6 +1139,73 @@ export default function EventPackagePage() {
             );
           })}
         </ul>
+      {/* What each section still needs, folded under the tiles (it was the
+          Review section at the foot of the page). */}
+      <details className="epp-strip-details" id="epp-sec-review" data-testid="readiness-details">
+        <summary>What each section needs</summary>
+          <div className="epp-readiness" data-testid="readiness">
+            <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
+            <span className="epp-readiness-summary">
+              {gatesMet
+                ? (readiness.warningItems.length ? `Start Episode is open. ${readiness.warningItems.length} warning${readiness.warningItems.length === 1 ? '' : 's'} to review.` : 'Every section is complete.')
+                : `${readiness.blockingItems.length} item${readiness.blockingItems.length === 1 ? '' : 's'} must be set before Start Episode.`}
+            </span>
+          </div>
+          <ul className="epp-rsections">
+            {readiness.sections.map((sec) => {
+              const Icon = READINESS_ICONS[sec.key] || PackagePlus;
+              const { kind } = sec;
+              return (
+                <li key={sec.key} className={`epp-rsection is-${kind}`} data-testid={`readiness-${sec.key}`} data-state={kind}>
+                  <div className="epp-rsection-head">
+                    <Icon size={14} aria-hidden="true" />
+                    <span className="epp-rsection-label">{sec.label}</span>
+                    <span className="epp-rsection-state">
+                      {kind === 'complete'
+                        ? <><CheckCircle2 size={12} aria-hidden="true" /> Complete</>
+                        : kind === 'blocking'
+                          ? <><Lock size={12} aria-hidden="true" /> Blocks Start Episode</>
+                          : <><AlertTriangle size={12} aria-hidden="true" /> Warning</>}
+                    </span>
+                  </div>
+                  {!sec.complete && (
+                    <ul className="epp-rsection-missing">
+                      {sec.missing.map((m) => (
+                        <li
+                          key={m.key} className={m.gate ? 'is-gate' : 'is-warn'}
+                          data-testid={`readiness-missing-${sec.key}-${m.key}`} data-item-state={m.state} data-gate={m.gate ? 'true' : 'false'}
+                        >
+                          <span className="epp-rsection-item">
+                            {m.gate ? <Lock size={11} aria-hidden="true" /> : <CircleDashed size={11} aria-hidden="true" />} {m.label}
+                            {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
+                          </span>
+                          {sec.key === 'organizer' && m.key === 'organizer' && startedFrom?.suggestOrganizer && (
+                            <button
+                              type="button" className="epp-inline-link" data-testid="readiness-organizer-accept"
+                              onClick={acceptStartedFromOrganizer} disabled={organizerSaving}
+                            >
+                              Use {startedFrom.name}
+                            </button>
+                          )}
+                          {!m.gate && m.consequence && <span className="epp-rsection-consequence">{m.consequence}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {!used && moneyWarnings.length > 0 && (
+            <div className="epp-money-warnings" role="note" data-testid="money-warnings">
+              <div className="epp-money-warnings-head"><AlertTriangle size={13} aria-hidden="true" /> Money</div>
+              <ul>
+                {moneyWarnings.map((w) => <li key={w.code} data-testid={`money-warning-${w.code}`}>{w.message}</li>)}
+              </ul>
+              <p className="epp-money-warnings-note">A warning only: Start Episode stays open.</p>
+            </div>
+          )}
+      </details>
       {!used && (
         <div className={`epp-next is-${nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
           <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
@@ -1167,7 +1240,7 @@ export default function EventPackagePage() {
       <nav className="epp-toc" aria-label="On this page" data-testid="package-toc">
         <span className="epp-toc-eyebrow">On this page</span>
         <ul>
-          {pageNav(readiness).map((s) => (
+          {pageNav(readiness, { has: { concept: hasConcept(event) } }).map((s) => (
             <li key={s.anchor}>
               <a href={`#epp-sec-${s.anchor}`} className={`state-${s.state}`} data-testid={`toc-${s.anchor}`}>
                 <span className="epp-toc-dot" aria-hidden="true" />{s.label}
@@ -1427,8 +1500,9 @@ export default function EventPackagePage() {
             </button>
             {fullGuestListOpen && (
               guestList.length ? (
-                <ul className="epp-guest-list">
-                  {guestList.map((g, i) => (
+                <>
+                <ul className="epp-guest-list" id="epp-guest-list">
+                  {guestFold.shown.map((g, i) => (
                     <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
                       <span>{g.display_name || g.handle}</span>
                       {g.featured ? (
@@ -1445,6 +1519,12 @@ export default function EventPackagePage() {
                     </li>
                   ))}
                 </ul>
+                <ShowMoreToggle
+                  open={allGuestsOpen} hidden={guestFold.hidden}
+                  onToggle={() => setAllGuestsOpen((o) => !o)} noun={guestFold.hidden === 1 ? 'guest' : 'guests'}
+                  testId="guest-list-more" controls="epp-guest-list"
+                />
+                </>
               ) : <div className="epp-empty">No guests yet</div>
             )}
           </div>
@@ -1586,6 +1666,27 @@ export default function EventPackagePage() {
           />
         )}
 
+        {/* 5. Deal & Money (the redesign's part 3): the three money tiles,
+            the reopen panel and the Terms, then the money preview. */}
+        <section id="epp-sec-deal" className="epp-section epp-deal" data-testid="deal-section">
+        <div className="epp-section-header">
+          <h2 className="epp-section-title">
+            <span className="epp-section-num">5.</span> Deal &amp; Money
+            {dealLabelFor(event) && <span className="epp-section-sub">{dealLabelFor(event)}</span>}
+          </h2>
+          {used && !termsReopen && <span className="epp-chip" data-testid="deal-locked"><Lock size={11} aria-hidden="true" /> Locked at Start Episode</span>}
+        </div>
+        {dealTiles(moneyPreview) && (
+          <ul className="epp-deal-tiles" data-testid="deal-tiles">
+            {dealTiles(moneyPreview).map((t) => (
+              <li key={t.key} className={`epp-deal-tile tile-${t.key}`} data-testid={`deal-${t.key}`}>
+                <span>{t.label}</span>
+                <strong>{t.value}</strong>
+                <small>{t.sub}</small>
+              </li>
+            ))}
+          </ul>
+        )}
         {/* Reopen terms (Task #2378) sits directly above the Terms it
             reopens, where the lock label is (Evoni, 2026-09-30: the line
             under the page banner was not found). */}
@@ -1611,10 +1712,48 @@ export default function EventPackagePage() {
           onSaved={load}
           onToast={setToast}
         />
+        <div className="epp-deal-money">
+            <div className="epp-stake">
+              <div className="epp-stake-head"><Coins size={14} aria-hidden="true" /> Money</div>
+              {stakes.money.summary
+                ? <p className="epp-stake-text">{stakes.money.summary}</p>
+                : <div className="epp-basic-unset">Not set</div>}
+              {!used && moneyPreview && (() => {
+                const counted = (moneyPreview.lines || []).filter((l) => !l.covered && !l.conditional);
+                const bonus = moneyPreview.projection?.conditional || [];
+                return (
+                  <div className="epp-money-preview" data-testid="money-preview">
+                    <p className="epp-stake-text" data-testid="money-preview-balance">Lala has {coins(moneyPreview.balance)} coins.</p>
+                    {counted.length ? (
+                      <ul className="epp-money-lines">
+                        {counted.map((l) => (
+                          <li key={l.key} data-testid={`money-preview-line-${l.key}`}>
+                            <span>{l.label}</span>
+                            <span className={l.signed < 0 ? 'is-neg' : 'is-pos'}>{signedCoins(l.signed)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="epp-stake-text">No planned income or costs.</p>
+                    )}
+                    {moneyPreview.projection && (
+                      <p className="epp-stake-text" data-testid="money-preview-after">
+                        After this episode: <strong>{coins(moneyPreview.projection.projected_balance)} coins</strong> projected.
+                      </p>
+                    )}
+                    {bonus.map((b) => (
+                      <p key={`${b.tier}-${b.label}`} className="epp-stake-note">Plus up to {coins(b.amount)} if she earns it ({b.label}).</p>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+        </div>
+        </section>
 
         <section id="epp-sec-stakes" className="epp-section epp-stakes" data-testid="stakes-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title">Stakes &amp; Money</h2>
+            <h2 className="epp-section-title"><span className="epp-section-num">6.</span> Story Stakes</h2>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openStakesEditor} data-testid="stakes-edit">
                 <Pencil size={14} /> Edit stakes
@@ -1660,41 +1799,6 @@ export default function EventPackagePage() {
                 </p>
               )}
               {stakes.challenge.pressure && <p className="epp-stake-text">{stakes.challenge.pressure}</p>}
-            </div>
-            <div className="epp-stake">
-              <div className="epp-stake-head"><Coins size={14} aria-hidden="true" /> Money</div>
-              {stakes.money.summary
-                ? <p className="epp-stake-text">{stakes.money.summary}</p>
-                : <div className="epp-basic-unset">Not set</div>}
-              {!used && moneyPreview && (() => {
-                const counted = (moneyPreview.lines || []).filter((l) => !l.covered && !l.conditional);
-                const bonus = moneyPreview.projection?.conditional || [];
-                return (
-                  <div className="epp-money-preview" data-testid="money-preview">
-                    <p className="epp-stake-text" data-testid="money-preview-balance">Lala has {coins(moneyPreview.balance)} coins.</p>
-                    {counted.length ? (
-                      <ul className="epp-money-lines">
-                        {counted.map((l) => (
-                          <li key={l.key} data-testid={`money-preview-line-${l.key}`}>
-                            <span>{l.label}</span>
-                            <span className={l.signed < 0 ? 'is-neg' : 'is-pos'}>{signedCoins(l.signed)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="epp-stake-text">No planned income or costs.</p>
-                    )}
-                    {moneyPreview.projection && (
-                      <p className="epp-stake-text" data-testid="money-preview-after">
-                        After this episode: <strong>{coins(moneyPreview.projection.projected_balance)} coins</strong> projected.
-                      </p>
-                    )}
-                    {bonus.map((b) => (
-                      <p key={`${b.tier}-${b.label}`} className="epp-stake-note">Plus up to {coins(b.amount)} if she earns it ({b.label}).</p>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
           </div>
 
@@ -1744,74 +1848,9 @@ export default function EventPackagePage() {
           )}
         </section>
 
-        {/* The creation draft's planning notes; they become Behind the Scenes in the redesign's part 3. */}
-        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} />
+        {/* 7. Behind the Scenes: the creation draft's planning notes, folded. */}
+        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} number={7} />
 
-        <section id="epp-sec-review" className="epp-section">
-          <h2 className="epp-section-title">Review</h2>
-          <div className="epp-readiness" data-testid="readiness">
-            <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
-            <span className="epp-readiness-summary">
-              {gatesMet
-                ? (readiness.warningItems.length ? `Start Episode is open. ${readiness.warningItems.length} warning${readiness.warningItems.length === 1 ? '' : 's'} to review.` : 'Every section is complete.')
-                : `${readiness.blockingItems.length} item${readiness.blockingItems.length === 1 ? '' : 's'} must be set before Start Episode.`}
-            </span>
-          </div>
-          <ul className="epp-rsections">
-            {readiness.sections.map((sec) => {
-              const Icon = READINESS_ICONS[sec.key] || PackagePlus;
-              const { kind } = sec;
-              return (
-                <li key={sec.key} className={`epp-rsection is-${kind}`} data-testid={`readiness-${sec.key}`} data-state={kind}>
-                  <div className="epp-rsection-head">
-                    <Icon size={14} aria-hidden="true" />
-                    <span className="epp-rsection-label">{sec.label}</span>
-                    <span className="epp-rsection-state">
-                      {kind === 'complete'
-                        ? <><CheckCircle2 size={12} aria-hidden="true" /> Complete</>
-                        : kind === 'blocking'
-                          ? <><Lock size={12} aria-hidden="true" /> Blocks Start Episode</>
-                          : <><AlertTriangle size={12} aria-hidden="true" /> Warning</>}
-                    </span>
-                  </div>
-                  {!sec.complete && (
-                    <ul className="epp-rsection-missing">
-                      {sec.missing.map((m) => (
-                        <li
-                          key={m.key} className={m.gate ? 'is-gate' : 'is-warn'}
-                          data-testid={`readiness-missing-${sec.key}-${m.key}`} data-item-state={m.state} data-gate={m.gate ? 'true' : 'false'}
-                        >
-                          <span className="epp-rsection-item">
-                            {m.gate ? <Lock size={11} aria-hidden="true" /> : <CircleDashed size={11} aria-hidden="true" />} {m.label}
-                            {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
-                          </span>
-                          {sec.key === 'organizer' && m.key === 'organizer' && startedFrom?.suggestOrganizer && (
-                            <button
-                              type="button" className="epp-inline-link" data-testid="readiness-organizer-accept"
-                              onClick={acceptStartedFromOrganizer} disabled={organizerSaving}
-                            >
-                              Use {startedFrom.name}
-                            </button>
-                          )}
-                          {!m.gate && m.consequence && <span className="epp-rsection-consequence">{m.consequence}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          {!used && moneyWarnings.length > 0 && (
-            <div className="epp-money-warnings" role="note" data-testid="money-warnings">
-              <div className="epp-money-warnings-head"><AlertTriangle size={13} aria-hidden="true" /> Money</div>
-              <ul>
-                {moneyWarnings.map((w) => <li key={w.code} data-testid={`money-warning-${w.code}`}>{w.message}</li>)}
-              </ul>
-              <p className="epp-money-warnings-note">A warning only: Start Episode stays open.</p>
-            </div>
-          )}
-        </section>
       </div>
       </div>
 

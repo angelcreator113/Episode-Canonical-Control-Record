@@ -90,7 +90,9 @@ describe('EventPackagePage — Event concept (Task #2132)', () => {
   test('a full draft shows every item, labelled, under a not-for-guests subtitle', async () => {
     renderPage();
     const section = await screen.findByTestId('event-concept');
-    expect(within(section).getByText('Event concept')).toBeTruthy();
+    // Behind the Scenes since the Event Package redesign (part 3): numbered, folded.
+    expect(within(section).getByRole('heading', { name: /^7\. Behind the Scenes/ })).toBeTruthy();
+    expect(section.querySelector('details').open).toBe(false);
     expect(within(section).getByText('For planning; not shown to guests')).toBeTruthy();
 
     expect(within(section).getByText('A sunset sculpt workout that ends in a recovery social.')).toBeTruthy();
@@ -145,7 +147,7 @@ describe('EventPackagePage — Event concept (Task #2132)', () => {
     renderPage();
     await screen.findByTestId('basics-category');
     expect(screen.queryByTestId('event-concept')).toBeNull();
-    expect(screen.queryByText('Event concept')).toBeNull();
+    expect(screen.queryByText('Behind the Scenes')).toBeNull();
   });
 
   test('keywords: Edited once they differ from the saved copy; unlabelled when never drafted', async () => {
