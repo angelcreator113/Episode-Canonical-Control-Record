@@ -7,19 +7,36 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/api';
-import './StoryEngine.css';
+import './StoryHealthDashboard.css';
 
 const API = '/api/v1/story-health';
 
 // ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
 export const getStoryHealthDashboardApi = () => apiClient.get(`${API}/dashboard`);
 
-const PHASE_COLORS = {
-  establishment: '#c9a84c',
-  pressure:      '#d46070',
-  crisis:        '#7b4ecf',
-  integration:   '#3a9e5c',
+// Each arc phase is a token family: the name reads 4.5:1 on white as the
+// text twin, the progress bar is the family fill.
+export const PHASE_TONES = {
+  establishment: { text: 'var(--lala-gold-text)',      fill: 'var(--lala-gold)' },
+  pressure:      { text: 'var(--danger-text)',         fill: 'var(--danger)' },
+  crisis:        { text: 'var(--lala-lavender-text)',  fill: 'var(--lala-lavender)' },
+  integration:   { text: 'var(--success-text)',        fill: 'var(--success)' },
 };
+const NEUTRAL_TONE = { text: 'var(--text-secondary)', fill: 'var(--text-secondary)' };
+
+// The stat tiles' numbers, each a text token that reads 4.5:1 on white.
+export const STAT_TONES = {
+  total:    'var(--lala-gold-text)',
+  approved: 'var(--success-text)',
+  drafts:   'var(--info-text)',
+  rejected: 'var(--danger-text)',
+  words:    'var(--lala-lavender-text)',
+  avgWords: 'var(--primary-text)',
+  evalAvg:  'var(--warning-text)',
+  threads:  'var(--accent-dark)',
+};
+
+const STATUS_DOT = { approved: 'success', rejected: 'danger' };
 
 export default function StoryHealthDashboard() {
   const [data, setData] = useState(null);
@@ -28,7 +45,7 @@ export default function StoryHealthDashboard() {
   useEffect(() => {
     getStoryHealthDashboardApi()
       .then(res => setData(res.data))
-      .catch(() => {})
+      .catch(err => console.error('Story health dashboard load failed:', err))
       .finally(() => setLoading(false));
   }, []);
 
@@ -39,8 +56,8 @@ export default function StoryHealthDashboard() {
 
   if (loading) {
     return (
-      <div className="se-page">
-        <div style={{ textAlign: 'center', padding: 80, color: '#999' }}>Loading dashboard…</div>
+      <div className="shd-page">
+        <div className="shd-loading">Loading dashboard…</div>
       </div>
     );
   }
@@ -50,62 +67,53 @@ export default function StoryHealthDashboard() {
   const evalData = data?.evaluation || {};
 
   return (
-    <div className="se-page">
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 40px' }}>
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 500, color: 'var(--se-text)', margin: '20px 0 8px' }}>
-          Story Health Dashboard
-        </h1>
-        <p style={{ color: 'var(--se-text-muted)', fontSize: 13, marginBottom: 24 }}>
+    <div className="shd-page">
+      <div className="shd-inner">
+        <h1 className="shd-title">Story Health Dashboard</h1>
+        <p className="shd-lede">
           Quality metrics, pacing curves, and content velocity across your narrative universe.
         </p>
 
         {/* ── Top Stats Grid ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 28 }}>
+        <div className="shd-stats">
           {[
-            { label: 'Total Stories', value: s.total_stories || 0, color: '#b0922e' },
-            { label: 'Approved', value: s.approved_stories || 0, color: '#10b981' },
-            { label: 'Drafts', value: s.draft_stories || 0, color: '#3b82f6' },
-            { label: 'Rejected', value: s.rejected_stories || 0, color: '#ef4444' },
-            { label: 'Total Words', value: (s.total_words || 0).toLocaleString(), color: '#8b5cf6' },
-            { label: 'Avg Words/Story', value: s.avg_words_per_story || 0, color: '#6366f1' },
-            { label: 'Avg Eval Score', value: evalData.avg_score || '—', color: '#f59e0b' },
-            { label: 'Threads Active', value: threads.active || 0, color: '#06b6d4' },
+            { label: 'Total Stories', value: s.total_stories || 0, color: STAT_TONES.total },
+            { label: 'Approved', value: s.approved_stories || 0, color: STAT_TONES.approved },
+            { label: 'Drafts', value: s.draft_stories || 0, color: STAT_TONES.drafts },
+            { label: 'Rejected', value: s.rejected_stories || 0, color: STAT_TONES.rejected },
+            { label: 'Total Words', value: (s.total_words || 0).toLocaleString(), color: STAT_TONES.words },
+            { label: 'Avg Words/Story', value: s.avg_words_per_story || 0, color: STAT_TONES.avgWords },
+            { label: 'Avg Eval Score', value: evalData.avg_score || '—', color: STAT_TONES.evalAvg },
+            { label: 'Threads Active', value: threads.active || 0, color: STAT_TONES.threads },
           ].map(stat => (
-            <div key={stat.label} style={{
-              background: '#fff', borderRadius: 12, padding: '16px 14px',
-              border: '1px solid #e8e5de', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            }}>
-              <div style={{ fontSize: 22, fontWeight: 600, color: stat.color, fontFamily: "'DM Sans',sans-serif" }}>
-                {stat.value}
-              </div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                {stat.label}
-              </div>
+            <div key={stat.label} className="shd-card shd-stat">
+              <div className="shd-stat-value" style={{ color: stat.color }}>{stat.value}</div>
+              <div className="shd-stat-label">{stat.label}</div>
             </div>
           ))}
         </div>
 
         {/* ── Phase Arc Progress ── */}
         <Section title="Arc Phase Progress">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          <div className="shd-phases">
             {(data?.phases || []).map(p => {
               const total = p.total || 1;
               const pct = Math.round((p.approved / total) * 100);
-              const color = PHASE_COLORS[p.phase] || '#999';
+              const tone = PHASE_TONES[p.phase] || NEUTRAL_TONE;
               return (
-                <div key={p.phase} style={{ background: '#fff', borderRadius: 10, padding: 14, border: '1px solid #e8e5de' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color, textTransform: 'capitalize' }}>{p.phase}</span>
-                    <span style={{ fontSize: 12, color: '#888' }}>{p.approved}/{total}</span>
+                <div key={p.phase} className="shd-card shd-phase">
+                  <div className="shd-phase-head">
+                    <span className="shd-phase-name" style={{ color: tone.text }}>{p.phase}</span>
+                    <span className="shd-count">{p.approved}/{total}</span>
                   </div>
-                  <div style={{ height: 6, borderRadius: 3, background: '#f0ede7' }}>
-                    <div style={{ height: 6, borderRadius: 3, background: color, width: `${pct}%`, transition: 'width 0.5s' }} />
+                  <div className="shd-track">
+                    <div className="shd-fill" style={{ background: tone.fill, width: `${pct}%` }} />
                   </div>
                 </div>
               );
             })}
             {(!data?.phases || data.phases.length === 0) && (
-              <div style={{ color: '#999', fontSize: 13 }}>No phase data yet. Generate and approve stories to see arc progress.</div>
+              <div className="shd-empty">No phase data yet. Generate and approve stories to see arc progress.</div>
             )}
           </div>
         </Section>
@@ -113,46 +121,44 @@ export default function StoryHealthDashboard() {
         {/* ── Content Velocity ── */}
         <Section title="Content Velocity (Last 8 Weeks)">
           {data?.velocity?.length > 0 ? (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, padding: '0 8px' }}>
+            <div className="shd-velocity">
               {data.velocity.map((v, i) => {
                 const h = Math.max(4, (v.stories_created / velocityMax) * 100);
                 const ah = Math.max(2, (v.stories_approved / velocityMax) * 100);
                 const weekLabel = new Date(v.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 return (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                    <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 100 }}>
-                      <div style={{ width: 14, height: h, background: '#b0922e', borderRadius: '3px 3px 0 0', opacity: 0.6 }} title={`${v.stories_created} created`} />
-                      <div style={{ width: 14, height: ah, background: '#10b981', borderRadius: '3px 3px 0 0' }} title={`${v.stories_approved} approved`} />
+                  <div key={i} className="shd-week">
+                    <div className="shd-bars">
+                      <div className="shd-bar created" style={{ height: h }} title={`${v.stories_created} created`} />
+                      <div className="shd-bar approved" style={{ height: ah }} title={`${v.stories_approved} approved`} />
                     </div>
-                    <span style={{ fontSize: 9, color: '#999' }}>{weekLabel}</span>
+                    <span className="shd-week-label">{weekLabel}</span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ color: '#999', fontSize: 13 }}>No velocity data yet.</div>
+            <div className="shd-empty">No velocity data yet.</div>
           )}
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 10, color: '#999' }}>
-            <span>■ Created</span>
-            <span style={{ color: '#10b981' }}>■ Approved</span>
+          <div className="shd-legend">
+            <span><span className="shd-swatch created" />Created</span>
+            <span><span className="shd-swatch approved" />Approved</span>
           </div>
         </Section>
 
         {/* ── Character Arc Completion ── */}
         <Section title="Character Arc Completion">
           {(data?.characterArcs || []).length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="shd-arcs">
               {data.characterArcs.slice(0, 10).map(c => {
                 const pct = Math.min(100, Math.round((c.approved / 50) * 100));
                 return (
-                  <div key={c.character_key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 12, fontWeight: 500, width: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.character_key}
-                    </span>
-                    <div style={{ flex: 1, height: 8, borderRadius: 4, background: '#f0ede7' }}>
-                      <div style={{ height: 8, borderRadius: 4, background: '#b0922e', width: `${pct}%`, transition: 'width 0.5s' }} />
+                  <div key={c.character_key} className="shd-arc">
+                    <span className="shd-arc-name">{c.character_key}</span>
+                    <div className="shd-track">
+                      <div className="shd-fill" style={{ width: `${pct}%` }} />
                     </div>
-                    <span style={{ fontSize: 11, color: '#888', width: 80, textAlign: 'right' }}>
+                    <span className="shd-arc-count">
                       {c.approved}/50 · {(c.words || 0).toLocaleString()}w
                     </span>
                   </div>
@@ -160,29 +166,29 @@ export default function StoryHealthDashboard() {
               })}
             </div>
           ) : (
-            <div style={{ color: '#999', fontSize: 13 }}>No character data yet.</div>
+            <div className="shd-empty">No character data yet.</div>
           )}
         </Section>
 
         {/* ── Thread Resolution ── */}
         <Section title="Thread Resolution">
-          <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-            <div style={{ position: 'relative', width: 80, height: 80 }}>
-              <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: 'rotate(-90deg)' }}>
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f0ede7" strokeWidth="3" />
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#10b981" strokeWidth="3"
+          <div className="shd-threads">
+            <div className="shd-ring">
+              <svg viewBox="0 0 36 36">
+                <circle className="shd-ring-track" cx="18" cy="18" r="15.9" fill="none" strokeWidth="3" />
+                <circle className="shd-ring-value" cx="18" cy="18" r="15.9" fill="none" strokeWidth="3"
                   strokeDasharray={`${threads.total > 0 ? (threads.resolved / threads.total) * 100 : 0} 100`}
                   strokeLinecap="round"
                 />
               </svg>
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, color: '#333' }}>
+              <div className="shd-ring-pct">
                 {threads.total > 0 ? Math.round((threads.resolved / threads.total) * 100) : 0}%
               </div>
             </div>
-            <div style={{ fontSize: 13, color: '#666', lineHeight: 1.8 }}>
+            <div className="shd-thread-lines">
               <div><strong>{threads.total || 0}</strong> total threads</div>
-              <div><span style={{ color: '#10b981' }}>●</span> {threads.resolved || 0} resolved</div>
-              <div><span style={{ color: '#f59e0b' }}>●</span> {threads.active || 0} active</div>
+              <div><span className="shd-dot success" /> {threads.resolved || 0} resolved</div>
+              <div><span className="shd-dot warning" /> {threads.active || 0} active</div>
             </div>
           </div>
         </Section>
@@ -190,31 +196,19 @@ export default function StoryHealthDashboard() {
         {/* ── Recent Activity ── */}
         <Section title="Recent Activity">
           {(data?.recentActivity || []).length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="shd-activity">
               {data.recentActivity.map(s => (
-                <div key={s.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                  background: '#fafaf8', borderRadius: 8, fontSize: 12,
-                }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: s.status === 'approved' ? '#10b981' : s.status === 'rejected' ? '#ef4444' : '#f59e0b',
-                  }} />
-                  <span style={{ fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.title}
-                  </span>
-                  <span style={{ color: '#999', fontSize: 11 }}>{s.character_key}</span>
-                  <span style={{ color: '#bbb', fontSize: 10 }}>
-                    {s.phase}
-                  </span>
-                  <span style={{ color: '#ccc', fontSize: 10 }}>
-                    {new Date(s.updated_at).toLocaleDateString()}
-                  </span>
+                <div key={s.id} className="shd-row">
+                  <span className={`shd-dot ${STATUS_DOT[s.status] || 'warning'}`} title={s.status} />
+                  <span className="shd-row-title">{s.title}</span>
+                  <span className="shd-row-meta">{s.character_key}</span>
+                  <span className="shd-row-meta phase">{s.phase}</span>
+                  <span className="shd-row-meta date">{new Date(s.updated_at).toLocaleDateString()}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ color: '#999', fontSize: 13 }}>No recent activity.</div>
+            <div className="shd-empty">No recent activity.</div>
           )}
         </Section>
       </div>
@@ -224,14 +218,8 @@ export default function StoryHealthDashboard() {
 
 function Section({ title, children }) {
   return (
-    <div style={{ marginBottom: 24 }}>
-      <h3 style={{
-        fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600,
-        color: 'var(--se-text)', textTransform: 'uppercase', letterSpacing: 0.8,
-        marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #e8e5de',
-      }}>
-        {title}
-      </h3>
+    <div className="shd-section">
+      <h3 className="shd-section-title">{title}</h3>
       {children}
     </div>
   );
