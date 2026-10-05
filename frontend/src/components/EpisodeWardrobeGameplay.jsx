@@ -105,7 +105,7 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
 
 // ─── MAIN COMPONENT ───
 
-export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete }) {
+export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete, onCoinsChange }) {
   const [pool, setPool] = useState([]);
   const [poolBreakdown, setPoolBreakdown] = useState({});
   const [loading, setLoading] = useState(false);
@@ -173,9 +173,16 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   }[score.status] || 'None of these pieces could be scored.';
 
   // ─── Load pool ───
-  const loadPool = useCallback(async () => {
+  // The pool is asked with the coins as they stand when it loads, read from a
+  // ref: with the coins in its deps, a purchase reloaded the pool twice (the
+  // coins changed, and purchaseItem reloads it), each time behind the
+  // full-screen spinner (Evoni, 2026-10-05). A quiet reload keeps the game on
+  // screen.
+  const coinsRef = useRef(localCoins ?? characterState.coins ?? 0);
+  coinsRef.current = localCoins ?? characterState.coins ?? 0;
+  const loadPool = useCallback(async ({ quiet = false } = {}) => {
     if (!showId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const res = await api.post('/api/v1/wardrobe/browse-pool', {
@@ -188,14 +195,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         prestige: event.prestige || 5,
         strictness: event.strictness || 5,
         host_brand: event.host_brand || '',
-        character_state: { ...characterState, coins: localCoins ?? characterState.coins ?? 0 },
+        character_state: { ...characterState, coins: coinsRef.current },
       });
       setPool(res.data.pool || []);
       setPoolBreakdown(res.data.pool_breakdown || {});
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load wardrobe');
     } finally { setLoading(false); }
-  }, [showId, episodeId, event, characterState, localCoins]);
+  }, [showId, episodeId, event, characterState]);
 
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
@@ -521,9 +528,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`);
         }
 
-        // Refresh pool to get updated ownership flags
+        // Refresh pool to get updated ownership flags (once, quietly), and
+        // tell the page its balance changed.
         markOwnedInCloset([item.id]);
-        await loadPool();
+        onCoinsChange?.();
+        await loadPool({ quiet: true });
 
         // Auto-equip the purchased/owned item into the active slot
         const ownedItem = { ...item, is_owned: true, can_select: true, can_purchase: false };
@@ -549,6 +558,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       const bought = (res.data?.locked || []).filter(l => l.coin_purchased).map(l => l.id);
       if (bought.length > 0) markOwnedInCloset(bought);
       if (res.data?.coins_after != null) setLocalCoins(res.data.coins_after);
+      if ((res.data?.coins_spent || 0) > 0) onCoinsChange?.();
       // Task #1943: onOutfitComplete gets the server's score for the locked
       // outfit — the score effect reports it when the GET answers.
       lockCompleteRef.current = filledSlots;
