@@ -18,6 +18,8 @@ import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
+const cast = readFileSync(resolve(__dirname, '../components/Show/CastContinuity.jsx'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
 const slice = (text, start, end) => {
@@ -37,8 +39,13 @@ describe('Cast & Continuity theme', () => {
   });
 
   test('the stat bars, the AI-suggest action and the goal bar read the fills', () => {
-    expect(state).toMatch(/background: key === 'stress' \? \(val >= 5 \? 'var\(--danger\)' : 'var\(--warning\)'\) : isCoin \? \(val < 0 \? 'var\(--danger\)' : 'var\(--primary\)'\) : 'var\(--primary\)'/);
-    expect(state).toMatch(/color: \(key === 'stress' && val >= 5\) \|\| \(isCoin && val < 0\) \? 'var\(--danger-text\)' : 'var\(--text-primary\)'/);
+    // The stat bars moved to components/Show/CastContinuity.jsx and WorldAdmin.css (the redesign).
+    expect(cast).toMatch(/const alarm = \(key === 'stress' && val >= 5\) \|\| \(isCoin && val < 0\);/);
+    expect(css).toMatch(/\.stat-coins \.wa-cc-bar span \{ background: var\(--lala-gold\); \}/);
+    expect(css).toMatch(/\.stat-reputation \.wa-cc-bar span \{ background: var\(--accent\); \}/);
+    expect(css).toMatch(/\.wa-cc-stat\.alarm \.wa-cc-bar span \{ background: var\(--danger\); \}/);
+    expect(css).toMatch(/\.wa-cc-stat\.alarm \.wa-cc-stat-value strong \{ color: var\(--danger-text\); \}/);
+    expect(stripTaskRefs(cast)).not.toMatch(HEX);
     expect(finances).toMatch(/border: 'none', borderRadius: 6, background: 'var\(--primary\)', color: 'var\(--text-inverse\)', cursor: 'pointer', whiteSpace: 'nowrap'/);
     expect(finances).toMatch(/background: balance >= Number\(nextGoal\.threshold\) \? 'var\(--success\)' : 'var\(--lala-gold\)'/);
     expect(finances).toMatch(/borderBottom: active \? '2px solid var\(--lala-gold\)' : '2px solid transparent'/);
@@ -79,6 +86,19 @@ describe('Cast & Continuity theme', () => {
       ['--warning-text', '--surface-bg'],
       ['--lala-gold-text', '--surface-bg'],
       ['--lala-gold-text', '--surface-card'],
+      // The redesigned State & Continuity cards.
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--accent-subtle'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--accent-dark', '--lala-parchment'],
+      ['--text-primary', '--accent-subtle'],
+      ['--text-secondary', '--accent-subtle'],
+      ['--text-primary', '--lala-gold-soft'],
+      ['--text-secondary', '--lala-gold-soft'],
+      ['--lala-gold-text', '--lala-gold-soft'],
+      ['--text-primary', '--lala-parchment'],
+      ['--text-secondary', '--lala-parchment'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });

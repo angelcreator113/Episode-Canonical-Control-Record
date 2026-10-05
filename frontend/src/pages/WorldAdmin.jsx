@@ -22,6 +22,7 @@ import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
+import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
 import { matchesDressCode, dressCodeKeywords } from '../lib/lookBuilder';
 import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
@@ -6597,122 +6598,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* ════════════════════════ CHARACTERS ════════════════════════ */}
       {activeTab === 'characters' && subTab === 'characters-list' && (
         <div style={S.content}>
-          {/* Lala */}
-          <div style={S.card}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>👑</div>
-              <div style={{ flex: 1 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Lala</h2>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Main Character · AI Avatar</p>
-              </div>
-              {!editingStats ? (
-                <button onClick={openStatEditor} disabled={!charState} style={S.secBtn}>✏️ Edit Stats</button>
-              ) : (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setEditingStats(false)} style={S.secBtn}>Cancel</button>
-                  <button onClick={saveStats} disabled={savingStats} style={S.primaryBtn}>{savingStats ? '⏳' : '💾 Save'}</button>
-                </div>
-              )}
-            </div>
-
-            {charState ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                {Object.entries(charState.state || {}).map(([key, val]) => {
-                  // Coin bar used to scale to a hardcoded 500 (the default
-                  // starting balance), so it pegged at 100% for any later
-                  // balance and was useless as a progress signal. Now it
-                  // tracks progress toward the next financial goal when one
-                  // exists; without a goal we render the value as text only
-                  // (no fake bar) so it doesn't lie about being "full".
-                  const isCoin = key === 'coins';
-                  const goalThreshold = financeConfig?.next_goal?.threshold;
-                  const barMax = isCoin ? (goalThreshold || null) : 10;
-                  return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
-                      <span style={{ flex: '0 0 100px', fontSize: 13, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
-                      {editingStats ? (
-                        // Coins: no min/max — the backend stores any
-                        // integer and downstream logic handles negative
-                        // balances. The arbitrary -9999/99999 caps used
-                        // to block legitimate late-show balances. Other
-                        // stats stay 0–10 to match the backend clamp.
-                        <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
-                          style={{ width: 80, padding: '4px 8px', border: '1px solid var(--primary)', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
-                          {...(isCoin ? {} : { min: 0, max: 10 })} />
-                      ) : (
-                        <>
-                          {barMax != null ? (
-                            <div style={{ flex: 1, height: 10, background: 'var(--lala-parchment-2)', borderRadius: 5, overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / barMax) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? 'var(--danger)' : 'var(--warning)') : isCoin ? (val < 0 ? 'var(--danger)' : 'var(--primary)') : 'var(--primary)', transition: 'width 0.3s' }} />
-                            </div>
-                          ) : (
-                            <div style={{ flex: 1, fontSize: 11, color: 'var(--text-secondary)', textAlign: 'right', paddingRight: 8 }}>
-                              {isCoin ? 'no active goal' : ''}
-                            </div>
-                          )}
-                          <span style={{ flex: '0 0 60px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (isCoin && val < 0) ? 'var(--danger-text)' : 'var(--text-primary)' }}>
-                            {isCoin ? Number(val).toLocaleString() : val}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : <p style={S.muted}>No stats initialized. Evaluate an episode to auto-seed defaults.</p>}
-
-            <div style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 8 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Character Rules</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {(() => {
-                  // Default Stats line is sourced from charState.defaults
-                  // (server returns DEFAULT_STATS from evaluationFormula.js)
-                  // so it stays accurate if the constants ever change. Falls
-                  // back to the historical literal if the API's older.
-                  const d = charState?.defaults;
-                  const defaultStatsLine = d
-                    ? `${(d.coins ?? 0).toLocaleString()} coins, ${d.reputation ?? 0} rep, ${d.brand_trust ?? 0} trust, ${d.influence ?? 0} inf, ${d.stress ?? 0} stress`
-                    : '500 coins, 1 rep, 1 trust, 1 inf, 0 stress';
-                  return [
-                    ['Voice Activation', 'Required ✅'],
-                    ['Idle Behaviors', 'Wave, mirror glance, inspect'],
-                    ['Default Stats', defaultStatsLine],
-                    ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
-                  ].map(([l, v]) => (
-                    <div key={l}><div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{v}</div></div>
-                  ));
-                })()}
-              </div>
-            </div>
+          {/* Lala's stats and the decision log side by side, then the threads and the cast (Evoni's redesign, 2026-10-05). */}
+          <div className="wa-cc-top">
+            <LalaStatsCard
+              charState={charState} history={stateHistory} episodes={episodes}
+              coinGoal={financeConfig?.next_goal?.threshold || null}
+              edit={{ editing: editingStats, form: statForm, setForm: setStatForm, open: openStatEditor, cancel: () => setEditingStats(false), save: saveStats, saving: savingStats }}
+            />
+            <DecisionLogCard history={stateHistory} episodes={episodes} />
           </div>
-
-          {/* Prime */}
-          <div style={S.card}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>💎</div>
-              <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>JustAWomanInHerPrime</h2>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Creator Narrator</p>
-              </div>
-            </div>
-            <div style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[
-                  ['Role', 'Narrator + Gameplay driver'],
-                  ['Voice', 'Warm, strategic, luxury aspirational'],
-                  ['Aliases', 'Prime:, Me:, You:'],
-                  ['CTA Style', 'Confident, community-focused'],
-                ].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{v}</div></div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <StoryThreadsStrip showId={showId} episodes={episodes} />
+          <CastRow />
 
           {/* Stat ledger */}
           {stateHistory.length > 0 && (
-            <div style={S.card}>
+            <div style={S.card} id="cc-ledger">
               <h2 style={S.cardTitle}>📜 Stat Change Ledger</h2>
               <div style={S.tHead}>
                 <span style={S.tCol}>Episode</span>
