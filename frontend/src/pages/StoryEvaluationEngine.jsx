@@ -47,25 +47,37 @@ export const getBookApi = (bookId) =>
 export const listAllChaptersApi = () =>
   apiClient.get('/api/v1/storyteller/chapters');
 
-// ── Light theme ───────────────────────────────────────────────────────────
+// ── Light theme: the studio tokens (docs/VISUAL_SYSTEM.md §7) ─────────────
+// Every text key reads 4.5:1 on bg, surface and surfaceAlt; the *Soft keys
+// are the washes behind them; accentFill carries onAccent text.
 const T_LIGHT = {
-  bg:          '#f5f5f5',
-  surface:     '#ffffff',
-  surfaceAlt:  '#f8f8f8',
-  border:      '#e0e0e0',
-  borderLight: '#d0d0d0',
-  text:        '#1a1a1a',
-  textDim:     '#666666',
-  textFaint:   '#999999',
-  accent:      '#c9a96e',
-  accentHover: '#b8944e',
-  red:         '#c96e6e',
-  green:       '#6ec9a0',
-  blue:        '#6e9ec9',
-  purple:      '#9e6ec9',
-  orange:      '#c9886e',
+  bg:          'var(--surface-bg)',
+  surface:     'var(--surface-card)',
+  surfaceAlt:  'var(--lala-parchment-2)',
+  border:      'var(--lala-parchment-3)',
+  borderLight: 'var(--lala-parchment-3)',
+  text:        'var(--text-primary)',
+  textDim:     'var(--text-secondary)',
+  textFaint:   'var(--text-secondary)',
+  faintSoft:   'var(--lala-parchment-2)',
+  accent:      'var(--lala-gold-text)',
+  accentSoft:  'var(--lala-gold-soft)',
+  accentLine:  'var(--lala-gold-line)',
+  accentFill:  'var(--lala-gold-text)',
+  onAccent:    'var(--text-inverse)',
+  red:         'var(--danger-text)',
+  redSoft:     'var(--danger-bg)',
+  green:       'var(--success-text)',
+  greenSoft:   'var(--success-bg)',
+  blue:        'var(--info-text)',
+  blueSoft:    'var(--info-bg)',
+  purple:      'var(--lala-lavender-text)',
+  purpleSoft:  'var(--lala-lavender-soft)',
+  purpleLine:  'var(--lala-lavender-line)',
+  orange:      'var(--warning-text)',
 };
 
+// The dark theme has no studio tokens yet, so it keeps its own literals.
 const T_DARK = {
   bg:          '#1a1a1e',
   surface:     '#25252b',
@@ -76,11 +88,20 @@ const T_DARK = {
   textDim:     '#a0a0aa',
   textFaint:   '#707078',
   accent:      '#d4b47a',
-  accentHover: '#c9a96e',
+  faintSoft:   '#70707810',
+  accentSoft:  '#d4b47a15',
+  accentLine:  '#d4b47a40',
+  accentFill:  '#d4b47a',
+  onAccent:    '#1a1a1e',
   red:         '#d48888',
+  redSoft:     '#d4888818',
   green:       '#88d4b0',
+  greenSoft:   '#88d4b018',
   blue:        '#88b0d4',
+  blueSoft:    '#88b0d415',
   purple:      '#b088d4',
+  purpleSoft:  '#b088d415',
+  purpleLine:  '#b088d440',
   orange:      '#d4a088',
 };
 
@@ -88,10 +109,18 @@ const T_DARK = {
 let T = { ...T_LIGHT };
 
 const VOICES = [
-  { id: 'voice_a', label: 'Voice A', tag: 'Depth · Interiority',   accent: '#6B4C82', bg: '#faf8fc', border: '#e8e0f0', emoji: '◆' },
-  { id: 'voice_b', label: 'Voice B', tag: 'Tension · Momentum',    accent: '#3D7A9B', bg: '#f6fafc', border: '#d8e8f0', emoji: '◈' },
-  { id: 'voice_c', label: 'Voice C', tag: 'Sensory · Desire',      accent: '#4A8A3D', bg: '#f6faf4', border: '#d8f0d0', emoji: '◉' },
+  { id: 'voice_a', label: 'Voice A', tag: 'Depth · Interiority',   accent: 'var(--lala-lavender-text)', bg: 'var(--lala-lavender-soft)', border: 'var(--lala-lavender-line)', emoji: '◆' },
+  { id: 'voice_b', label: 'Voice B', tag: 'Tension · Momentum',    accent: 'var(--info-text)',          bg: 'var(--info-bg)',           border: 'var(--info-border)',        emoji: '◈' },
+  { id: 'voice_c', label: 'Voice C', tag: 'Sensory · Desire',      accent: 'var(--success-text)',       bg: 'var(--success-bg)',        border: 'var(--success-border)',     emoji: '◉' },
 ];
+
+// The print export opens a new window with no stylesheet, so its voice
+// headings keep literal inks.
+const PRINT_VOICE_INK = {
+  voice_a: '#6B4C82',
+  voice_b: '#3D7A9B',
+  voice_c: '#4A8A3D',
+};
 
 const CRITERIA = ['interiority', 'desire_tension', 'specificity', 'stakes', 'voice', 'body_presence', 'originality', 'prose_efficiency', 'scene_fulfillment'];
 const CRITERIA_LABELS = {
@@ -149,12 +178,12 @@ function briefRichness(b) {
     const v = (b[k] || '').trim();
     if (v) { filledCount++; totalChars += v.length; }
   });
-  if (filledCount === 0) return { score: 0, label: 'Empty', color: T.red };
+  if (filledCount === 0) return { score: 0, label: 'Empty', color: T.red, bg: T.redSoft };
   const avgLen = totalChars / filledCount;
   const depthScore = Math.min(100, Math.round((filledCount / fields.length) * 50 + Math.min(avgLen / 3, 50)));
-  if (depthScore >= 75) return { score: depthScore, label: 'Rich', color: T.green };
-  if (depthScore >= 45) return { score: depthScore, label: 'Moderate', color: T.accent };
-  return { score: depthScore, label: 'Thin', color: T.red };
+  if (depthScore >= 75) return { score: depthScore, label: 'Rich', color: T.green, bg: T.greenSoft };
+  if (depthScore >= 45) return { score: depthScore, label: 'Moderate', color: T.accent, bg: T.accentSoft };
+  return { score: depthScore, label: 'Thin', color: T.red, bg: T.redSoft };
 }
 
 // ── Extract content info from a task/situation string ─────────────────
@@ -268,7 +297,7 @@ function Spinner({ color, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 14 }}>
       <div style={{
-        width: 28, height: 28, border: '2px solid #e0e0e0',
+        width: 28, height: 28, border: `2px solid ${T.border}`,
         borderTop: `2px solid ${color || T.accent}`, borderRadius: '50%',
         animation: 'see2-spin 0.9s linear infinite',
       }} />
@@ -284,7 +313,7 @@ function StoryReader({ text, accent, maxHeight }) {
     <div style={{ overflowY: 'auto', maxHeight: maxHeight || 420, paddingRight: 8 }}>
       {paras.map((p, i) => (
         <p key={i} style={{
-          color: i === 0 ? T.text : '#555',
+          color: i === 0 ? T.text : T.textDim,
           fontSize: 13.5, lineHeight: 1.95, marginBottom: 16,
           fontFamily: "'Palatino Linotype',Palatino,Georgia,serif",
         }}>
@@ -311,13 +340,14 @@ function ScoreBar({ value, max, color }) {
 }
 
 // ── Memory Proposal Card ──────────────────────────────────────────────────
-function MemoryCard({ item, selected, onToggle, accentColor }) {
+function MemoryCard({ item, selected, onToggle, tone }) {
+  const { text: accentColor, soft } = tone;
   return (
     <div
       onClick={onToggle}
       style={{
         padding: 12, borderRadius: 8, cursor: 'pointer',
-        background: selected ? `${accentColor}10` : T.surface,
+        background: selected ? soft : T.surface,
         border: `1px solid ${selected ? accentColor : T.border}`,
         transition: 'all 0.2s',
       }}
@@ -327,7 +357,7 @@ function MemoryCard({ item, selected, onToggle, accentColor }) {
           <span style={{
             fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
             color: accentColor, display: 'inline-block', padding: '2px 6px',
-            background: `${accentColor}15`, borderRadius: 3, marginBottom: 6,
+            background: soft, borderRadius: 3, marginBottom: 6,
           }}>{item.type}</span>
           <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5 }}>{item.content}</div>
           {item.reason && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4, fontStyle: 'italic' }}>{item.reason}</div>}
@@ -339,7 +369,7 @@ function MemoryCard({ item, selected, onToggle, accentColor }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.2s',
         }}>
-          {selected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+          {selected && <span style={{ color: T.onAccent, fontSize: 12, fontWeight: 700 }}>✓</span>}
         </div>
       </div>
     </div>
@@ -363,7 +393,7 @@ function CharTag({ name, onRemove }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 10px', background: `${T.accent}18`, border: `1px solid ${T.accent}40`,
+      padding: '3px 10px', background: T.accentSoft, border: `1px solid ${T.accentLine}`,
       borderRadius: 20, fontSize: 12, color: T.accent, fontWeight: 500,
     }}>
       {name}
@@ -1208,7 +1238,7 @@ export default function StoryEvaluationEngine() {
     if (stories) {
       VOICES.forEach(v => {
         const s = stories[v.id];
-        parts.push(`<h2 style="color:${v.accent};font-family:Georgia,serif">${v.label} — ${v.tag}</h2>`);
+        parts.push(`<h2 style="color:${PRINT_VOICE_INK[v.id]};font-family:Georgia,serif">${v.label} — ${v.tag}</h2>`);
         parts.push(`<p style="font-size:12px;color:#888">${s?.word_count || 0} words</p>`);
         parts.push(`<div style="white-space:pre-wrap;font-size:13px;line-height:1.7;margin-bottom:20px">${(s?.text || '(empty)').replace(/</g, '&lt;')}</div>`);
       });
@@ -1421,7 +1451,7 @@ export default function StoryEvaluationEngine() {
             onClick={() => setHistoryOpen(h => !h)}
             style={{
               padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-              background: historyOpen ? `${T.accent}15` : 'none',
+              background: historyOpen ? T.accentSoft : 'none',
               border: `1px solid ${historyOpen ? T.accent : T.border}`,
               color: historyOpen ? T.accent : T.textDim,
               cursor: 'pointer', whiteSpace: 'nowrap',
@@ -1461,7 +1491,7 @@ export default function StoryEvaluationEngine() {
                 return (
                 <div key={entry.id} style={{
                   padding: '10px 14px', borderRadius: 8,
-                  border: `1px solid ${isChecked ? T.accent : T.border}`, background: isChecked ? `${T.accent}08` : T.bg,
+                  border: `1px solid ${isChecked ? T.accent : T.border}`, background: isChecked ? T.accentSoft : T.bg,
                   cursor: 'default',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -1496,7 +1526,7 @@ export default function StoryEvaluationEngine() {
                       {Object.entries(entry.scores).map(([voice, sc]) => (
                         <span key={voice} style={{
                           fontSize: 9, padding: '1px 6px', borderRadius: 8,
-                          background: voice === entry.winner ? `${T.green}20` : `${T.border}`,
+                          background: voice === entry.winner ? T.greenSoft : T.border,
                           color: voice === entry.winner ? T.green : T.textDim,
                           fontWeight: 600,
                         }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}</span>
@@ -1522,7 +1552,7 @@ export default function StoryEvaluationEngine() {
             return (
               <div style={{ marginTop: 10 }}>
                 <button onClick={() => setDiffOpen(prev => !prev)}
-                  style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: `${T.accent}15`, border: `1px solid ${T.accent}`, color: T.accent, cursor: 'pointer' }}>
+                  style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: T.accentSoft, border: `1px solid ${T.accent}`, color: T.accent, cursor: 'pointer' }}>
                   {diffOpen ? '▾ Hide Comparison' : '◈ Compare Selected'}
                 </button>
                 {diffOpen && (
@@ -1582,7 +1612,7 @@ export default function StoryEvaluationEngine() {
       {error && (
         <div style={{
           margin: '12px 24px 0', padding: '10px 14px',
-          background: '#fdf2f2', border: `1px solid ${T.red}`,
+          background: T.redSoft, border: `1px solid ${T.red}`,
           borderRadius: 6, fontSize: 12, color: T.red,
         }}>
           {error}
@@ -1603,14 +1633,14 @@ export default function StoryEvaluationEngine() {
                 {(() => { const r = briefRichness(brief); return (
                   <span style={{
                     padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                    background: `${r.color}20`, color: r.color,
+                    background: r.bg, color: r.color,
                   }}>
                     {r.label} ({r.score}%)
                   </span>
                 ); })()}
                 <span style={{
                   padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                  background: briefCompleteness(brief) >= 60 ? `${T.green}20` : `${T.accent}20`,
+                  background: briefCompleteness(brief) >= 60 ? T.greenSoft : T.accentSoft,
                   color: briefCompleteness(brief) >= 60 ? T.green : T.accent,
                 }}>
                   {briefCompleteness(brief)}% complete
@@ -1721,34 +1751,34 @@ export default function StoryEvaluationEngine() {
                   {worldCtx && (
                     <div style={{ marginTop: 6 }}>
                       <button onClick={() => setWorldCtxOpen(!worldCtxOpen)}
-                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid #e0dcd4', background: worldCtxOpen ? '#f0eee8' : '#fff', color: '#666', cursor: 'pointer' }}>
+                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: worldCtxOpen ? T.surfaceAlt : T.surface, color: T.textDim, cursor: 'pointer' }}>
                         🌍 {worldCtxOpen ? 'Hide' : 'Import from World'}{worldCtx.locations?.length ? ` (${worldCtx.locations.length} locations)` : ''}
                       </button>
                       {worldCtxOpen && (
-                        <div style={{ marginTop: 8, padding: 10, background: '#f8f7f4', borderRadius: 8, border: '1px solid #e8e5de', fontSize: 12 }}>
+                        <div style={{ marginTop: 8, padding: 10, background: T.surfaceAlt, borderRadius: 8, border: `1px solid ${T.border}`, color: T.text, fontSize: 12 }}>
                           {worldCtx.locations?.length > 0 && (
                             <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Locations: </span>
-                              {worldCtx.locations.map((l, i) => <span key={i} style={{ background: '#e8edf5', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{l}</span>)}
+                              <span style={{ fontWeight: 600, fontSize: 11, color: T.textDim }}>Locations: </span>
+                              {worldCtx.locations.map((l, i) => <span key={i} style={{ background: T.blueSoft, color: T.blue, borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{l}</span>)}
                             </div>
                           )}
                           {worldCtx.facts?.length > 0 && (
                             <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Facts: </span>
-                              {worldCtx.facts.map((f, i) => <span key={i} style={{ background: '#f0eee8', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{f}</span>)}
+                              <span style={{ fontWeight: 600, fontSize: 11, color: T.textDim }}>Facts: </span>
+                              {worldCtx.facts.map((f, i) => <span key={i} style={{ background: T.surface, color: T.text, borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{f}</span>)}
                             </div>
                           )}
                           {worldCtx.threads?.length > 0 && (
                             <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Threads: </span>
-                              {worldCtx.threads.map((t, i) => <span key={i} style={{ background: '#e8f5e9', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{t}</span>)}
+                              <span style={{ fontWeight: 600, fontSize: 11, color: T.textDim }}>Threads: </span>
+                              {worldCtx.threads.map((t, i) => <span key={i} style={{ background: T.greenSoft, color: T.green, borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{t}</span>)}
                             </div>
                           )}
-                          <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
+                          <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>
                             {worldCtx.activeThreadCount || 0} active threads · {worldCtx.tensionCount || 0} tension pairs
                           </div>
                           <button onClick={applyWorldCtx}
-                            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, border: 'none', background: '#c9a96e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, border: 'none', background: T.accentFill, color: T.onAccent, cursor: 'pointer', fontWeight: 600 }}>
                             ✦ Apply to World Context
                           </button>
                         </div>
@@ -1778,12 +1808,12 @@ export default function StoryEvaluationEngine() {
                     const relCount = (ctx?.relationships || []).length;
                     const hasLC = ctx?.living_context && Object.values(ctx.living_context).some(Boolean);
                     const icon = status === 'loaded' ? '✓' : status === 'failed' ? '⚠' : status === 'loading' ? '⏳' : '·';
-                    const iconColor = status === 'loaded' ? T.green : status === 'failed' ? '#e74c3c' : T.textFaint;
+                    const iconColor = status === 'loaded' ? T.green : status === 'failed' ? T.red : T.textFaint;
                     return (
                       <div key={c} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
                         <span style={{ color: iconColor, fontSize: 13 }}>{icon}</span>
                         <span><strong>{ctx?.display_name || c}</strong>
-                          {status === 'failed' ? <span style={{ color: '#e74c3c' }}> — fetch failed</span> : ''}
+                          {status === 'failed' ? <span style={{ color: T.red }}> — fetch failed</span> : ''}
                           {hasLC ? ' — context loaded' : ''}
                           {relCount > 0 ? ` · ${relCount} relationship${relCount > 1 ? 's' : ''}` : ''}
                         </span>
@@ -1822,7 +1852,7 @@ export default function StoryEvaluationEngine() {
                     setCharInput('');
                   }}
                   style={{
-                    padding: '10px 16px', background: T.accent, color: '#fff',
+                    padding: '10px 16px', background: T.accentFill, color: T.onAccent,
                     border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600,
                     cursor: 'pointer', whiteSpace: 'nowrap',
                   }}
@@ -1864,7 +1894,7 @@ export default function StoryEvaluationEngine() {
                           onClick={() => { setChapterId(ch.id); setChapterSearch(ch.title || ch.id); }}
                           style={{
                             padding: '6px 12px', cursor: 'pointer', fontSize: 11,
-                            background: chapterId === ch.id ? `${T.accent}15` : 'transparent',
+                            background: chapterId === ch.id ? T.accentSoft : 'transparent',
                             borderBottom: `1px solid ${T.border}`, color: T.text,
                           }}
                         >
@@ -1912,7 +1942,7 @@ export default function StoryEvaluationEngine() {
                       style={{
                         padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                         border: `2px solid ${active ? T.accent : T.border}`,
-                        background: active ? `${T.accent}15` : T.surface,
+                        background: active ? T.accentSoft : T.surface,
                         textAlign: 'left', transition: 'all 0.2s',
                       }}
                     >
@@ -1962,7 +1992,7 @@ export default function StoryEvaluationEngine() {
                 onClick={handleGenerate}
                 disabled={loading || briefCompleteness(brief) < 60 || brief.characters.length === 0}
                 style={{
-                  padding: '12px 28px', background: T.accent, color: '#fff',
+                  padding: '12px 28px', background: T.accentFill, color: T.onAccent,
                   border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', letterSpacing: 0.3, transition: 'background 0.2s',
                   opacity: (loading || briefCompleteness(brief) < 60 || brief.characters.length === 0) ? 0.5 : 1,
@@ -1973,7 +2003,7 @@ export default function StoryEvaluationEngine() {
             </div>
             {/* Missing-fields hint */}
             {!loading && (briefCompleteness(brief) < 60 || brief.characters.length === 0) && (
-              <div style={{ textAlign: 'right', fontSize: 11, color: '#e74c3c', marginTop: 6 }}>
+              <div style={{ textAlign: 'right', fontSize: 11, color: T.red, marginTop: 6 }}>
                 {brief.characters.length === 0 ? 'Add at least one character. ' : ''}
                 {briefCompleteness(brief) < 60
                   ? `Brief ${briefCompleteness(brief)}% complete — fill in: ${
@@ -2091,9 +2121,9 @@ export default function StoryEvaluationEngine() {
                 ].map(([key, label]) => (
                   <span key={key} style={{
                     fontSize: 10, padding: '3px 8px', borderRadius: 10,
-                    background: enrichmentLoaded[key] ? `${T.green}18` : `${T.textFaint}10`,
+                    background: enrichmentLoaded[key] ? T.greenSoft : T.faintSoft,
                     color: enrichmentLoaded[key] ? T.green : T.textFaint,
-                    border: `1px solid ${enrichmentLoaded[key] ? T.green : T.textFaint}30`,
+                    border: `1px solid ${enrichmentLoaded[key] ? T.green : T.border}`,
                   }}>
                     {enrichmentLoaded[key] ? '✓' : '–'} {label}
                   </span>
@@ -2131,7 +2161,7 @@ export default function StoryEvaluationEngine() {
           <div>
             {/* Winner banner */}
             <div className="see-winner" style={{
-              background: `${T.green}12`, border: `1px solid ${T.green}`,
+              background: T.greenSoft, border: `1px solid ${T.green}`,
               borderRadius: 10, padding: 16, marginBottom: 20,
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -2243,7 +2273,7 @@ export default function StoryEvaluationEngine() {
               <SectionCard title="Franchise Violations">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {evaluation.franchise_violations.map((v, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#e74c3c' }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: T.red }}>
                       <span style={{ flexShrink: 0 }}>⚠</span>
                       <span>{v}</span>
                     </div>
@@ -2406,7 +2436,7 @@ export default function StoryEvaluationEngine() {
                         }}
                         style={{
                           width: '100%', padding: '8px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                          background: `${T.purple}12`, border: `1px solid ${T.purple}40`,
+                          background: T.purpleSoft, border: `1px solid ${T.purpleLine}`,
                           color: T.purple, cursor: 'pointer',
                         }}
                       >
@@ -2454,7 +2484,7 @@ export default function StoryEvaluationEngine() {
                       key={i} item={m}
                       selected={selectedPlot.has(i)}
                       onToggle={() => toggleSet(selectedPlot, setSelectedPlot, i)}
-                      accentColor={T.blue}
+                      tone={{ text: T.blue, soft: T.blueSoft }}
                     />
                   ))}
                 </div>
@@ -2473,7 +2503,7 @@ export default function StoryEvaluationEngine() {
                       key={i} item={m}
                       selected={selectedRev.has(i)}
                       onToggle={() => toggleSet(selectedRev, setSelectedRev, i)}
-                      accentColor={T.purple}
+                      tone={{ text: T.purple, soft: T.purpleSoft }}
                     />
                   ))}
                 </div>
@@ -2517,7 +2547,7 @@ export default function StoryEvaluationEngine() {
                       onClick={() => toggleSet(selectedReg, setSelectedReg, i)}
                       style={{
                         padding: 12, borderRadius: 8, cursor: 'pointer',
-                        background: selectedReg.has(i) ? `${T.accent}10` : T.surface,
+                        background: selectedReg.has(i) ? T.accentSoft : T.surface,
                         border: `1px solid ${selectedReg.has(i) ? T.accent : T.border}`,
                         transition: 'all 0.2s',
                       }}
@@ -2535,10 +2565,10 @@ export default function StoryEvaluationEngine() {
                         <div style={{
                           width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginLeft: 10,
                           border: `2px solid ${selectedReg.has(i) ? T.accent : T.border}`,
-                          background: selectedReg.has(i) ? T.accent : 'transparent',
+                          background: selectedReg.has(i) ? T.accentFill : 'transparent',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          {selectedReg.has(i) && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+                          {selectedReg.has(i) && <span style={{ color: T.onAccent, fontSize: 12, fontWeight: 700 }}>✓</span>}
                         </div>
                       </div>
                     </div>
@@ -2595,7 +2625,7 @@ export default function StoryEvaluationEngine() {
                           onClick={() => { setChapterId(ch.id); setChapterSearch(ch.title || ch.id); }}
                           style={{
                             padding: '8px 12px', cursor: 'pointer', fontSize: 12,
-                            background: chapterId === ch.id ? `${T.accent}15` : 'transparent',
+                            background: chapterId === ch.id ? T.accentSoft : 'transparent',
                             borderBottom: `1px solid ${T.border}`, color: T.text,
                           }}
                         >
@@ -2616,12 +2646,12 @@ export default function StoryEvaluationEngine() {
                     placeholder="Chapter UUID — the manuscript chapter to write into"
                     style={{
                       width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-                      border: `1px solid ${chapterId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId) ? '#e74c3c' : T.border}`,
+                      border: `1px solid ${chapterId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId) ? T.red : T.border}`,
                       borderRadius: 6, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box',
                     }}
                   />
                   {chapterId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId) && (
-                    <div style={{ fontSize: 10, color: '#e74c3c', marginTop: 4 }}>Not a valid UUID format</div>
+                    <div style={{ fontSize: 10, color: T.red, marginTop: 4 }}>Not a valid UUID format</div>
                   )}
                 </div>
               )}
@@ -2707,8 +2737,8 @@ function ghostBtn() {
 
 function primaryBtn(disabled) {
   return {
-    padding: '12px 24px', background: disabled ? T.border : T.accent,
-    color: '#fff', border: 'none', borderRadius: 8, fontSize: 13,
+    padding: '12px 24px', background: disabled ? T.border : T.accentFill,
+    color: disabled ? T.textDim : T.onAccent, border: 'none', borderRadius: 8, fontSize: 13,
     fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
     letterSpacing: 0.3, transition: 'background 0.2s',
     opacity: disabled ? 0.6 : 1,
