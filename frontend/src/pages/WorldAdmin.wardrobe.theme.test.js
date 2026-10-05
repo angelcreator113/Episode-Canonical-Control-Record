@@ -17,6 +17,7 @@ import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
 const slice = (text, start, end) => {
@@ -34,10 +35,11 @@ describe('Wardrobe theme', () => {
     expect(wardrobe).not.toMatch(/var\(--[a-z-]+\)[0-9a-f]{2}\b/);
   });
 
-  test('the selected pills and the filled actions are the primary; the bulk selection is ink on gold', () => {
-    expect(wardrobe).toMatch(/background: wardrobeViewMode === mode \? 'var\(--primary\)' : 'var\(--surface-card\)',\s*color: wardrobeViewMode === mode \? 'var\(--text-inverse\)' : 'var\(--text-secondary\)'/);
-    expect(wardrobe).toMatch(/background: wardrobeCatFilter === opt\.key \? 'var\(--primary\)' : 'var\(--surface-card\)'/);
-    expect(wardrobe).toMatch(/background: isActive \? 'var\(--primary-subtle\)' : 'var\(--surface-card\)',\s*border: isActive \? '2px solid var\(--primary\)' : '1px solid var\(--lala-parchment-3\)'/);
+  test('the closet to the redesign: the view toggle lavender, the pills pink when chosen, the bulk selection ink on gold', () => {
+    expect(wardrobe).toMatch(/background: wardrobeViewMode === mode \? 'var\(--lala-lavender\)' : 'var\(--surface-card\)',\s*color: wardrobeViewMode === mode \? 'var\(--text-inverse\)' : 'var\(--text-secondary\)'/);
+    expect(wardrobe).toMatch(/className=\{`wa-wd-pill\$\{on \? ' active' : ''\}`\}/);
+    expect(css).toMatch(/\.wa-wd-pill\.active \{ background: var\(--accent-dark\); border-color: var\(--accent-dark\); color: var\(--text-inverse\); \}/);
+    expect(css).toMatch(/\.wa-wd-add \{[^}]*border: 1px solid var\(--lala-lavender\); background: var\(--surface-card\); color: var\(--lala-lavender-text\)/);
     expect(wardrobe).toMatch(/background: isBulkSelected \? 'var\(--lala-gold\)' : 'rgba\(255,255,255,0\.9\)'/);
     expect(wardrobe).toMatch(/isBulkSelected && <span style=\{\{ color: 'var\(--text-primary\)'/);
     expect(wardrobe).toMatch(/background: 'var\(--danger\)', color: 'var\(--text-inverse\)', border: 'none', borderRadius: 4, fontSize: 10/);
@@ -50,11 +52,11 @@ describe('Wardrobe theme', () => {
 
   test('warnings, dangers, tags, prices and the gameplay panels read the families', () => {
     expect(wardrobe).toMatch(/background: 'var\(--warning-bg\)', borderRadius: 6, border: '1px solid var\(--warning-border\)'/);
-    expect(wardrobe).toMatch(/background: 'var\(--warning-bg\)', border: '1px solid var\(--warning-border\)' \}\}>/);
-    expect(wardrobe).toMatch(/color: 'var\(--warning-text\)' \}\}>\{typeGroups\.__unassigned\.length\}/);
+    expect(wardrobe).toMatch(/<span className="wa-wd-unassigned"/);
+    expect(css).toMatch(/\.wa-wd-unassigned \{[^}]*background: var\(--warning-bg\); border: 1px solid var\(--warning-border\); color: var\(--warning-text\)/);
     expect(wardrobe).toMatch(/background: 'var\(--danger-bg\)', border: '1px solid var\(--danger-border\)', borderRadius: 6, fontSize: 12, color: 'var\(--danger-text\)'/);
     expect(wardrobe).toMatch(/background: 'var\(--accent-subtle\)', borderRadius: 4, fontSize: 9, color: 'var\(--accent-dark\)'/);
-    expect(wardrobe).toMatch(/fontWeight: 700, color: 'var\(--success-text\)' \}\}>\$\{parseFloat\(item\.price\)/);
+    expect(wardrobe).toMatch(/\{owned \? 'Owned' : coinCost > 0 \? `\$\{coinCost\.toLocaleString\(\)\} coins` : 'Free'\}/);
     expect(wardrobe).toMatch(/background: 'var\(--surface-bg\)', border: '1px solid var\(--lala-gold-line\)', borderRadius: 8 \}\}>/);
     expect(wardrobe).toMatch(/borderTop: '1px dashed var\(--lala-gold-line\)'/);
     expect(wardrobe).toMatch(/color: 'var\(--lala-gold-text\)', fontFamily: "'DM Mono', monospace", letterSpacing: 0\.5, marginBottom: 10 \}\}>🎮 GAMEPLAY/);
@@ -66,6 +68,9 @@ describe('Wardrobe theme', () => {
       ['--text-inverse', '--primary'],
       ['--text-inverse', '--primary-dark'],
       ['--text-inverse', '--accent-dark'],
+      ['--accent-dark', '--surface-card'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--text-primary', '--lala-parchment-2'],
       ['--text-inverse', '--text-secondary'],
       ['--text-primary', '--lala-gold'],
       ['--text-primary', '--surface-card'],

@@ -350,7 +350,7 @@ function WorldAdmin() {
   // layers on top of the existing filters — a creator can still narrow staging
   // by category, season, etc. Implementing client-side so we don't need to
   // fetch from a second endpoint; the semantic matches usage_count === 0.
-  const [wardrobeTopTab, setWardrobeTopTab] = useState('all'); // all | staging
+  const [wardrobeTopTab, setWardrobeTopTab] = useState('all'); // the Show row: all | owned | to_buy | staging (never used)
   // Grid vs. list rendering. List view shows more metadata per row and is better
   // for scanning long libraries; grid is the default thumbnail wall.
   const [wardrobeViewMode, setWardrobeViewMode] = useState('grid'); // grid | list
@@ -4809,16 +4809,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         // and the per-item filter share the exact same definition of "used".
         const isItemUsed = (item) => Number(item.times_worn || item.totalUsageCount || item.total_usage_count || 0) > 0;
         const stagingCount = wardrobeItems.filter(i => !isItemUsed(i)).length;
+        // Owned or to buy, as the closet's Show row splits it (Evoni's redesign, 2026-10-05).
+        const isOwnedPiece = (item) => item.is_owned === true || item.is_owned === 'true';
+        const ownedCount = wardrobeItems.filter(isOwnedPiece).length;
+        const setCount = wardrobeItems.filter(i => i.outfit_set_id).length;
 
         const filteredItems = wardrobeItems.filter(item => {
           // Top-tab: staging means never used. Applied before everything else
           // so the count in the tab matches what the grid shows.
           if (wardrobeTopTab === 'staging' && isItemUsed(item)) return false;
+          if (wardrobeTopTab === 'owned' && !isOwnedPiece(item)) return false;
+          if (wardrobeTopTab === 'to_buy' && isOwnedPiece(item)) return false;
           const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
           // Category pill filters by SLOT now — e.g. clicking "Outfit" matches
           // dress, top, bottom, outerwear. Falls back to raw category match if
           // the filter value isn't a known slot key (for legacy call sites).
-          if (wardrobeCatFilter !== 'all') {
+          if (wardrobeCatFilter === 'sets') {
+            if (!item.outfit_set_id) return false;
+          } else if (wardrobeCatFilter !== 'all') {
             const itemSlot = getSlotForCategory(itemType);
             const filterIsSlot = SLOT_KEYS.includes(wardrobeCatFilter);
             if (filterIsSlot ? itemSlot !== wardrobeCatFilter : itemType !== wardrobeCatFilter) return false;
@@ -5111,19 +5119,36 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         return (
           <div style={S.content}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-              <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe Library</h2>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Header to Evoni's redesign (2026-10-05): Full Closet, the
+                search and Add piece; the closet's tools stay, under them. */}
+            <div className="wa-wd-head">
+              <div className="wa-wd-head-title">
+                <h2>Full Closet</h2>
+                <span data-testid="wardrobe-count">{wardrobeItems.length} pieces</span>
+              </div>
+              <label className="wa-wd-search">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  type="text"
+                  aria-label="Search the closet"
+                  placeholder="Search by name, brand, color"
+                  value={wardrobeFilter === 'all' ? '' : wardrobeFilter}
+                  onChange={e => setWardrobeFilter(e.target.value || 'all')}
+                />
+              </label>
+              <button type="button" className="wa-wd-add" onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }}>
+                <Plus size={14} aria-hidden="true" /> Add piece
+              </button>
+              <div className="wa-wd-tools">
                 {/* Bulk selection indicator */}
                 {selectedWardrobeIds.size > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--warning-bg)', borderRadius: 6, border: '1px solid var(--warning-border)' }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)' }}>{selectedWardrobeIds.size} selected</span>
                     <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: 'var(--warning-text)' }}>✕</button>
-                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
+                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
                     <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: 'var(--danger)', color: 'var(--text-inverse)', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
                 )}
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{wardrobeItems.length} items</span>
                 {/* Grid / list toggle — list mode trades thumbnail size for more
                     metadata per row, which is useful once libraries get large. */}
                 <div style={{ display: 'inline-flex', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, overflow: 'hidden' }}>
@@ -5131,7 +5156,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <button key={mode} onClick={() => setWardrobeViewMode(mode)} title={`${mode} view`}
                       style={{
                         padding: '4px 10px', fontSize: 12, cursor: 'pointer', border: 'none',
-                        background: wardrobeViewMode === mode ? 'var(--primary)' : 'var(--surface-card)',
+                        background: wardrobeViewMode === mode ? 'var(--lala-lavender)' : 'var(--surface-card)',
                         color: wardrobeViewMode === mode ? 'var(--text-inverse)' : 'var(--text-secondary)',
                       }}>{mode === 'grid' ? '▦' : '≣'}</button>
                   ))}
@@ -5226,121 +5251,83 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                   </details>
                 </div>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
-            {/* Top tabs: All vs. Staging (never-used). The staging count lives
-                in the tab itself so creators can see at a glance how much of the
-                library is unassigned — catches the "forgot to assign" case fast. */}
-            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--lala-parchment-3)', marginBottom: 14 }}>
+            {/* Category pills, with the counts the slot summary cards carried
+                (they filter by SLOT: dress, top, bottom and outerwear roll up
+                under Outfit, bag and accessory under Accessories); Sets is the
+                pieces in a matching set. Choosing the active pill again clears it. */}
+            <div className="wa-wd-pills" role="group" aria-label="Filter by category">
               {[
-                { key: 'all', label: 'All items', count: wardrobeItems.length },
-                { key: 'staging', label: 'Staging (never used)', count: stagingCount },
-              ].map(tab => {
-                const active = wardrobeTopTab === tab.key;
+                { key: 'all', label: 'All', count: wardrobeItems.length },
+                { key: 'sets', label: 'Sets', count: setCount },
+                ...SLOT_KEYS.map(k => ({ key: k, label: SLOT_DEFS[k].label, count: (typeGroups[k] || []).length, title: SLOT_DEFS[k].desc })),
+              ].map(opt => {
+                const on = wardrobeCatFilter === opt.key;
                 return (
-                  <button key={tab.key} onClick={() => { setWardrobeTopTab(tab.key); setWardrobePage(1); }}
-                    style={{
-                      padding: '10px 18px', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
-                      background: 'transparent', border: 'none',
-                      borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
-                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      marginBottom: -1,
-                    }}>
-                    {tab.label} <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>({tab.count})</span>
+                  <button key={opt.key} type="button" data-testid={`wardrobe-cat-${opt.key}`} aria-pressed={on} title={opt.title}
+                    className={`wa-wd-pill${on ? ' active' : ''}`}
+                    onClick={() => { setWardrobeCatFilter(on && opt.key !== 'all' ? 'all' : opt.key); setWardrobePage(1); }}>
+                    {opt.label} <span className="wa-wd-pill-count">{opt.count}</span>
                   </button>
                 );
               })}
-            </div>
-
-            {/* Slot summary cards — one per slot, in fixed order so the row
-                doesn't reshuffle as counts change. Each card is a shortcut to
-                filter the grid by that slot (clicking the active card clears
-                the filter). Unassigned items get a warning card only when
-                non-empty so creators can spot mis-categorised rows. */}
-            <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
-              {SLOT_KEYS.map(slotKey => {
-                const items = typeGroups[slotKey] || [];
-                const def = SLOT_DEFS[slotKey];
-                const isActive = wardrobeCatFilter === slotKey;
-                return (
-                  <div key={slotKey} onClick={() => setWardrobeCatFilter(isActive ? 'all' : slotKey)}
-                    title={def.desc}
-                    style={{
-                      padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
-                      background: isActive ? 'var(--primary-subtle)' : 'var(--surface-card)',
-                      border: isActive ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
-                      transition: 'all 0.2s',
-                    }}>
-                    <div style={{ fontSize: 20 }}>{def.icon}</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? 'var(--primary-text)' : 'var(--text-primary)' }}>{items.length}</div>
-                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>{def.label}</div>
-                  </div>
-                );
-              })}
               {(typeGroups.__unassigned?.length > 0) && (
-                <div title="These items have a clothing_category that doesn't map to any slot — edit to fix"
-                  style={{ padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'default', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
-                  <div style={{ fontSize: 20 }}>⚠️</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--warning-text)' }}>{typeGroups.__unassigned.length}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--warning-text)' }}>Unassigned</div>
-                </div>
+                <span className="wa-wd-unassigned" title="These items have a clothing_category that doesn't map to any slot — edit to fix">
+                  ⚠️ {typeGroups.__unassigned.length} unassigned
+                </span>
               )}
             </div>
 
-            {/* Search + Category Filter */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: 'var(--surface-bg)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)' }}>
-              <input
-                type="text"
-                placeholder="Search name, brand, color, tags..."
-                value={wardrobeFilter === 'all' ? '' : wardrobeFilter}
-                onChange={e => setWardrobeFilter(e.target.value || 'all')}
-                style={{ ...S.inp, flex: '1 1 200px', minWidth: 150, margin: 0 }}
-              />
-              <select
-                value={wardrobeSort}
-                onChange={e => setWardrobeSort(e.target.value)}
-                title="Sort wardrobe items"
-                style={{ ...S.sel, width: 'auto', minWidth: 140, margin: 0 }}
-              >
-                <option value="recent">Recently added</option>
-                <option value="name">Name (A–Z)</option>
-                <option value="price_asc">Price (low → high)</option>
-                <option value="price_desc">Price (high → low)</option>
-                <option value="most_used">Most used</option>
-                <option value="last_used">Last used</option>
-                <option value="favorites">Favorites first</option>
-              </select>
-              <div style={{ width: 1, height: 24, background: 'var(--lala-parchment-3)', alignSelf: 'center' }} />
-              {/* Category pills now filter by SLOT, not raw clothing_category.
-                  "all" clears the filter; each slot button routes dress/top/bottom
-                  under "Outfit", bag/accessory under "Accessories", etc. */}
-              {[{ key: 'all', label: 'all', icon: '🏷️' }, ...SLOT_KEYS.map(k => ({ key: k, label: SLOT_DEFS[k].label.toLowerCase(), icon: SLOT_DEFS[k].icon }))].map(opt => (
-                <button key={opt.key} onClick={() => setWardrobeCatFilter(opt.key)}
-                  style={{
-                    padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeCatFilter === opt.key ? 'var(--primary)' : 'var(--surface-card)',
-                    color: wardrobeCatFilter === opt.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
-                    border: wardrobeCatFilter === opt.key ? '1px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
-                  }}>
-                  {opt.icon} {opt.label}
-                </button>
-              ))}
-              {/* Filters toggle — keeps the advanced panel out of the way by default
-                  so the search row stays compact. Badge counts the non-default filters so
-                  users can see at a glance whether anything is narrowing the list. */}
-              {(() => {
-                const extraCount = [wardrobeSeasonFilter, wardrobeOccasionFilter, wardrobeColorFilter, wardrobeStatusFilter].filter(v => v !== 'all').length;
+            {/* The Show row: everything, what Lala owns, what she would have to
+                buy, and staging (never used). Sort and the advanced filters sit
+                at its end. */}
+            <div className="wa-wd-show">
+              <span className="wa-wd-show-label">Show:</span>
+              {[
+                { key: 'all', label: 'Everything', count: wardrobeItems.length },
+                { key: 'owned', label: 'Lala owns', count: ownedCount },
+                { key: 'to_buy', label: 'To buy', count: wardrobeItems.length - ownedCount },
+                { key: 'staging', label: 'Never used', count: stagingCount },
+              ].map(opt => {
+                const on = wardrobeTopTab === opt.key;
                 return (
-                  <button onClick={() => setWardrobeFiltersOpen(o => !o)} style={{
-                    padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeFiltersOpen || extraCount > 0 ? 'var(--primary)' : 'var(--surface-card)',
-                    color: wardrobeFiltersOpen || extraCount > 0 ? 'var(--text-inverse)' : 'var(--text-secondary)',
-                    border: `1px solid ${wardrobeFiltersOpen || extraCount > 0 ? 'var(--primary)' : 'var(--lala-parchment-3)'}`,
-                  }}>⚙ Filters{extraCount > 0 ? ` (${extraCount})` : ''}</button>
+                  <button key={opt.key} type="button" data-testid={`wardrobe-show-${opt.key}`} aria-pressed={on}
+                    className={`wa-wd-show-btn${on ? ' active' : ''}`}
+                    onClick={() => { setWardrobeTopTab(opt.key); setWardrobePage(1); }}>
+                    {opt.label} <span className="wa-wd-pill-count">{opt.count}</span>
+                  </button>
                 );
-              })()}
+              })}
+              <span className="wa-wd-show-end">
+                <select
+                  value={wardrobeSort}
+                  onChange={e => setWardrobeSort(e.target.value)}
+                  title="Sort wardrobe items"
+                  aria-label="Sort the closet"
+                  className="wa-wd-sort"
+                >
+                  <option value="recent">Recently added</option>
+                  <option value="name">Name (A–Z)</option>
+                  <option value="price_asc">Price (low → high)</option>
+                  <option value="price_desc">Price (high → low)</option>
+                  <option value="most_used">Most used</option>
+                  <option value="last_used">Last used</option>
+                  <option value="favorites">Favorites first</option>
+                </select>
+                {/* Filters toggle — keeps the advanced panel out of the way by default.
+                    Badge counts the non-default filters. */}
+                {(() => {
+                  const extraCount = [wardrobeSeasonFilter, wardrobeOccasionFilter, wardrobeColorFilter, wardrobeStatusFilter].filter(v => v !== 'all').length;
+                  return (
+                    <button type="button" onClick={() => setWardrobeFiltersOpen(o => !o)} aria-expanded={wardrobeFiltersOpen}
+                      className={`wa-wd-show-btn${wardrobeFiltersOpen || extraCount > 0 ? ' active' : ''}`}>
+                      ⚙ Filters{extraCount > 0 ? ` (${extraCount})` : ''}
+                    </button>
+                  );
+                })()}
+              </span>
             </div>
 
             {/* Advanced filter panel — status, season, occasion, color swatches */}
@@ -5683,7 +5670,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Item Grid — visual cards with thumbnails. List mode swaps the grid
                 template for a vertical stack of wide rows. Both modes share the
                 same card internals below so there's a single source of truth. */}
-            <div style={{
+            <div className={wardrobeViewMode === 'list' ? undefined : 'wa-wd-grid'} style={{
               display: wardrobeViewMode === 'list' ? 'flex' : 'grid',
               flexDirection: wardrobeViewMode === 'list' ? 'column' : undefined,
               gridTemplateColumns: wardrobeViewMode === 'list' ? undefined : 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -5700,20 +5687,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 const processingState = wardrobeProcessing.stateFor(item);
 
                 const isListMode = wardrobeViewMode === 'list';
+                const owned = isOwnedPiece(item);
+                const coinCost = Number(item.coin_cost ?? item.price ?? 0);
+                const brand = item.brand || item.vendor;
                 return (
-                  <div key={item.id} onClick={() => openEditItem(item)}
-                    style={{
-                      background: 'var(--surface-card)',
-                      border: isBulkSelected ? '2px solid var(--lala-gold)' : isEditing ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)',
-                      borderRadius: 12,
-                      overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
-                      boxShadow: isBulkSelected ? '0 4px 16px rgba(234,179,8,0.25)' : isEditing ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
-                      position: 'relative',
-                      display: isListMode ? 'flex' : undefined,
-                      alignItems: isListMode ? 'stretch' : undefined,
-                    }}
-                    onMouseEnter={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                    onMouseLeave={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+                  <div key={item.id} onClick={() => openEditItem(item)} data-testid={`wardrobe-card-${item.id}`}
+                    className={`wa-wd-card${isListMode ? ' list' : ''}${isBulkSelected ? ' selected' : ''}${isEditing ? ' editing' : ''}`}
                   >
                     {/* Selection checkbox */}
                     <div 
@@ -5778,12 +5757,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         width: isListMode ? 80 : '100%',
                         flexShrink: isListMode ? 0 : undefined,
                         aspectRatio: isListMode ? '1/1' : '3/4',
-                        background: 'var(--surface-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
+                        background: 'var(--lala-parchment-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
                       }}
                       onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxVariant(null); setLightboxItem(item); } }}
                     >
+                      {!isListMode && (
+                        <span className={`wa-wd-own${owned ? '' : ' to-buy'}`} data-testid={`wardrobe-own-${item.id}`}>{owned ? 'Owned' : 'To buy'}</span>
+                      )}
                       {imgUrl ? (
-                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--surface-bg)' }}
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--lala-parchment-2)' }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
                       ) : null}
                       <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: 'var(--text-secondary)' }}>
@@ -5838,14 +5820,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                           }} title={item.color} />
                         )}
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div className="wa-wd-card-name">
                           {item.name}
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                        {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
-                        {item.color && <span> · {item.color}</span>}
-                        {item.vendor && <span> · {item.vendor}</span>}
+                      <div className="wa-wd-card-sub">
+                        {[brand, itemType || 'item', item.color].filter(Boolean).join(' · ')}
                       </div>
                       {/* W1: a piece linked into a matching set says which. */}
                       {item.outfit_set_id && (
@@ -5882,9 +5862,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                       {/* Bottom row: price + usage */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                        {item.price ? (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)' }}>${parseFloat(item.price).toFixed(0)}</span>
-                        ) : <span />}
+                        {/* Owned, or what buying it costs Lala in coins (coin_cost, else the price). */}
+                        <span className="wa-wd-card-cost" data-testid={`wardrobe-cost-${item.id}`}>
+                          {owned ? 'Owned' : coinCost > 0 ? `${coinCost.toLocaleString()} coins` : 'Free'}
+                        </span>
                         {(item.totalUsageCount || item.total_usage_count) > 0 && (
                           <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>Used {item.totalUsageCount || item.total_usage_count}x</span>
                         )}
