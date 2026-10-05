@@ -24,6 +24,13 @@
 3. **It is 2009: no edit button.** `PUT /feed-posts/:id` refuses a live post with 409
    (`LOCKED_MESSAGE`). A live post can only be deleted (soft delete, `deleted_at`). A
    draft is edited freely, and can be set live by hand (`status: 'live'`), never back.
+   A deleted post is listed by `GET /feed-posts/deleted?show_id=` and comes back as it
+   was, draft or live, with `POST /feed-posts/:id/restore` (2026-10-05). A draft can
+   be redrafted in its poster's voice, `POST /feed-posts/:id/redraft { note? }`
+   (`services/feedPostRedrafter.js`: their social profile's voice, found by
+   `social_profile_id` or handle, one Claude message, rate-limited); the new text
+   replaces the draft's and the old text comes back for an undo. A live post is not
+   redrafted (409).
 4. **The audience sees live posts.** `GET /feed-posts` and
    `GET /feed-posts/:showId/timeline` answer live posts unless `?status=draft|all`.
    `GET /feed-posts/episode/:id` is the episode's own view and answers both, each marked.

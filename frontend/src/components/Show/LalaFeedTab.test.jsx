@@ -12,6 +12,7 @@ const DRAFTS = [
   { id: 'd2', poster_handle: 'stable', content_text: 'Our pump, her design.', status: 'draft', episode_id: 'e1', ai_generated: true, narrative_function: 'brand_moment' },
 ];
 const LIVE = [{ id: 'l1', poster_handle: 'mayaxo', content_text: 'Wait, she sewed that??', status: 'live', posted_at: new Date(Date.now() - 2 * 3600e3).toISOString() }];
+const DELETED = [{ id: 'x1', poster_handle: 'lala', poster_display_name: 'Lala', content_text: 'Never mind.', status: 'draft', deleted_at: new Date(Date.now() - 3 * 3600e3).toISOString() }];
 const episodes = [{ id: 'e1', episode_number: 1 }];
 const wrap = (props = {}) => render(<MemoryRouter><LalaFeedTab showId="show-1" episodes={episodes} {...props} /></MemoryRouter>);
 
@@ -21,6 +22,7 @@ describe("Lala's Feed tab", () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url.includes('status=draft')) return { data: { data: DRAFTS } };
       if (url.includes('status=live')) return { data: { data: LIVE } };
+      if (url.startsWith('/api/v1/feed-posts/deleted')) return { data: { data: DELETED } };
       return { data: {} };
     });
     vi.mocked(api.put).mockResolvedValue({ data: {} });
@@ -98,5 +100,36 @@ describe("Lala's Feed tab", () => {
     expect(within(card).queryByText('Edit')).toBeNull();
     expect(within(card).queryByTestId('feed-approve-l1')).toBeNull();
     expect(card.textContent).toContain('Posted 2 hours ago');
+  });
+
+  test('Deleted lists deleted posts with when; Restore brings one back', async () => {
+    wrap();
+    await screen.findByTestId('feed-post-d1');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/feed-posts/deleted?show_id=show-1&limit=50');
+    expect(screen.getByTestId('feed-view-deleted').textContent).toBe('Deleted1');
+    fireEvent.click(screen.getByTestId('feed-view-deleted'));
+    const card = screen.getByTestId('feed-post-x1');
+    expect(card.textContent).toContain('Deleted draft');
+    expect(card.textContent).toContain('Deleted 3 hours ago');
+    expect(within(card).queryByText('Edit')).toBeNull();
+    fireEvent.click(within(card).getByTestId('feed-restore-x1'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts/x1/restore'));
+    expect(await screen.findByText("Lala's post is back.")).toBeTruthy();
+  });
+
+  test('Redraft in their voice rewrites a draft, says whose voice, and can be undone', async () => {
+    vi.mocked(api.post).mockImplementation(async (url) => (url.endsWith('/redraft')
+      ? { data: { data: { id: 'd2' }, previous_text: 'Our pump, her design.', voice: 'stable' } }
+      : { data: {} }));
+    wrap();
+    await screen.findByTestId('feed-post-d1');
+    fireEvent.click(screen.getByTestId('feed-view-scheduled'));
+    fireEvent.click(screen.getByTestId('feed-redraft-d2'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts/d2/redraft', {}));
+    expect(await screen.findByText("Redrafted in @stable's voice.")).toBeTruthy();
+    fireEvent.click(screen.getByTestId('feed-redraft-undo'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/d2', { content_text: 'Our pump, her design.' }));
+    expect(await screen.findByText('The redraft is undone.')).toBeTruthy();
+    expect(screen.queryByTestId('feed-redraft-undo')).toBeNull();
   });
 });

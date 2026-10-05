@@ -2,9 +2,11 @@
  * Producer Mode → Lala's Feed (Evoni's redesign, 2026-10-05: "bring the
  * feed back"; the Sidebar's Social Media page stays). Queue: drafts waiting
  * on approval; Scheduled: drafts going out with an episode's release; Live:
- * what is posted. Approve posts a draft now; Edit and Delete work on drafts
- * only (a live post is locked, services/feedPostStatus.js). Post as Lala
- * writes a post by hand. Beside it, what Lala sees on her feed right now.
+ * what is posted; Deleted: what was deleted, to restore. Approve posts a
+ * draft now; Edit, Redraft in their voice (with an undo) and Delete work on
+ * drafts only (a live post is locked, services/feedPostStatus.js; a live
+ * post can still be deleted from the full page). Post as Lala writes a post
+ * by hand. Beside it, what Lala sees on her feed right now.
  * Props: showId, episodes, onCountChanged(drafts waiting) for the tab pill.
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -15,9 +17,11 @@ import { FEED_VIEWS, postsFor, posterName, postOrigin, goesLive, timeAgo } from 
 
 const initial = (name) => String(name || '?').replace(/^@/, '').charAt(0).toUpperCase();
 
-function PostCard({ post, episodes, busy, onApprove, onSave, onDelete }) {
+function PostCard({ post, episodes, busy, onApprove, onSave, onDelete, onRedraft, onRestore }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(post.content_text || '');
+  useEffect(() => { if (!editing) setText(post.content_text || ''); }, [post.content_text, editing]);
+  const deleted = Boolean(post.deleted_at);
   const draft = post.status !== 'live';
   const ep = episodes.find((e) => e.id === post.episode_id);
   const name = posterName(post);
@@ -26,7 +30,7 @@ function PostCard({ post, episodes, busy, onApprove, onSave, onDelete }) {
       <div className="wa-lf-post-head">
         <span className="wa-lf-avatar" aria-hidden="true">{initial(name)}</span>
         <span className="wa-lf-who"><strong>{name}</strong><span>{postOrigin(post)}</span></span>
-        <span className={`wa-lf-status ${draft ? 'draft' : 'live'}`}>{draft ? 'Draft' : 'Live'}</span>
+        <span className={`wa-lf-status ${deleted ? 'deleted' : draft ? 'draft' : 'live'}`}>{deleted ? `Deleted ${draft ? 'draft' : 'post'}` : draft ? 'Draft' : 'Live'}</span>
       </div>
       {editing ? (
         <textarea className="wa-lf-edit" aria-label={`Edit ${name}'s post`} value={text} onChange={(e) => setText(e.target.value)} rows={3} />
@@ -41,12 +45,18 @@ function PostCard({ post, episodes, busy, onApprove, onSave, onDelete }) {
         </ul>
       )}
       <div className="wa-lf-actions">
-        {draft && !editing && (
+        {deleted && (
+          <button type="button" className="wa-lf-secondary" disabled={busy} onClick={() => onRestore(post)} data-testid={`feed-restore-${post.id}`}>Restore</button>
+        )}
+        {!deleted && draft && !editing && (
           <>
             <button type="button" className="wa-lf-primary" disabled={busy} onClick={() => onApprove(post)} data-testid={`feed-approve-${post.id}`}>
               {post.episode_id ? 'Post now' : 'Approve'}
             </button>
             <button type="button" className="wa-lf-secondary" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
+            <button type="button" className="wa-lf-link-btn" disabled={busy} onClick={() => onRedraft(post)} data-testid={`feed-redraft-${post.id}`}>
+              {busy ? 'Redrafting…' : 'Redraft in their voice'}
+            </button>
             <button type="button" className="wa-lf-quiet" disabled={busy} onClick={() => onDelete(post)}>Delete</button>
           </>
         )}
@@ -56,7 +66,7 @@ function PostCard({ post, episodes, busy, onApprove, onSave, onDelete }) {
             <button type="button" className="wa-lf-secondary" disabled={busy} onClick={() => { setText(post.content_text || ''); setEditing(false); }}>Cancel</button>
           </>
         )}
-        <span className="wa-lf-when">{draft ? goesLive(post, episodes) : `Posted ${timeAgo(post.posted_at) || ''}`.trim()}</span>
+        <span className="wa-lf-when">{deleted ? `Deleted ${timeAgo(post.deleted_at) || ''}`.trim() : draft ? goesLive(post, episodes) : `Posted ${timeAgo(post.posted_at) || ''}`.trim()}</span>
       </div>
     </li>
   );
@@ -97,6 +107,9 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
   const [view, setView] = useState('queue');
   const [drafts, setDrafts] = useState(null);
   const [live, setLive] = useState(null);
+  const [deletedPosts, setDeletedPosts] = useState(null);
+  // The last redraft, so it can be undone: { post, previous }.
+  const [undo, setUndo] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [composing, setComposing] = useState(false);
   const [message, setMessage] = useState(null);
@@ -105,9 +118,15 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
     const get = (status, limit) => api.get(`/api/v1/feed-posts?show_id=${encodeURIComponent(showId)}&status=${status}&limit=${limit}`)
       .then((r) => r.data?.data || [])
       .catch((err) => { console.error(`[LalaFeedTab] ${status} posts load failed:`, err); return []; });
-    const [d, l] = await Promise.all([get('draft', 100), get('live', 30)]);
+    const [d, l, x] = await Promise.all([
+      get('draft', 100), get('live', 30),
+      api.get(`/api/v1/feed-posts/deleted?show_id=${encodeURIComponent(showId)}&limit=50`)
+        .then((r) => r.data?.data || [])
+        .catch((err) => { console.error('[LalaFeedTab] deleted posts load failed:', err); return []; }),
+    ]);
     setDrafts(d);
     setLive(l);
+    setDeletedPosts(x);
     onCountChanged?.(d.filter((p) => !p.episode_id).length);
   }, [showId, onCountChanged]);
   useEffect(() => { load(); }, [load]);
@@ -115,6 +134,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
   const act = async (post, fn, done) => {
     setBusyId(post.id);
     setMessage(null);
+    setUndo(null);
     try {
       await fn();
       setMessage({ ok: true, text: done });
@@ -130,14 +150,33 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
   };
   const approve = (post) => act(post, () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live', posted_at: new Date().toISOString() }), `${posterName(post)}'s post is live.`);
   const save = (post, text) => act(post, () => api.put(`/api/v1/feed-posts/${post.id}`, { content_text: text }), 'Draft saved.');
+  const restore = (post) => act(post, () => api.post(`/api/v1/feed-posts/${post.id}/restore`), `${posterName(post)}'s post is back.`);
+  // The redraft replaces the draft's text; Undo puts the old text back.
+  const redraft = async (post) => {
+    let previous = null;
+    let voice = null;
+    const ok = await act(post, async () => {
+      const r = await api.post(`/api/v1/feed-posts/${post.id}/redraft`, {});
+      previous = r.data?.previous_text ?? post.content_text;
+      voice = r.data?.voice;
+    }, 'Redrafted.');
+    if (ok) {
+      setMessage({ ok: true, text: `Redrafted in ${voice ? `@${voice}'s` : `${posterName(post)}'s`} voice.` });
+      setUndo({ post, previous });
+    }
+  };
+  const undoRedraft = async () => {
+    const { post, previous } = undo;
+    await act(post, () => api.put(`/api/v1/feed-posts/${post.id}`, { content_text: previous }), 'The redraft is undone.');
+  };
   const remove = (post) => {
     if (!window.confirm(`Delete ${posterName(post)}'s draft?`)) return false;
     return act(post, () => api.delete(`/api/v1/feed-posts/${post.id}`), 'Draft deleted.');
   };
 
-  const shown = postsFor(view, drafts, live);
-  const counts = { queue: postsFor('queue', drafts, live).length, scheduled: postsFor('scheduled', drafts, live).length, live: (live || []).length };
-  const heading = view === 'queue' ? 'Waiting for your approval' : view === 'scheduled' ? 'Going out with a release' : 'On her feed';
+  const shown = postsFor(view, drafts, live, deletedPosts);
+  const counts = { queue: postsFor('queue', drafts, live).length, scheduled: postsFor('scheduled', drafts, live).length, live: (live || []).length, deleted: (deletedPosts || []).length };
+  const heading = { queue: 'Waiting for your approval', scheduled: 'Going out with a release', live: 'On her feed', deleted: 'Deleted posts' }[view];
 
   return (
     <div className="wa-lf" data-testid="lala-feed">
@@ -160,16 +199,21 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
         <div className="wa-lf-main">
           {composing && <Composer showId={showId} onClose={() => setComposing(false)}
             onPosted={async (status) => { setComposing(false); setMessage({ ok: true, text: status === 'live' ? 'Posted to her feed.' : 'Saved to the queue.' }); await load(); }} />}
-          {message && <p className={`wa-lf-message${message.ok ? '' : ' bad'}`} role="status">{message.text}</p>}
-          <h3 className="wa-lf-section">{heading} {drafts != null && <span>{shown.length} {view === 'live' ? `post${shown.length === 1 ? '' : 's'}` : `draft${shown.length === 1 ? '' : 's'}`}</span>}</h3>
+          {message && (
+            <p className={`wa-lf-message${message.ok ? '' : ' bad'}`} role="status">
+              {message.text}
+              {undo && <button type="button" className="wa-lf-link-btn" onClick={undoRedraft} data-testid="feed-redraft-undo">Undo</button>}
+            </p>
+          )}
+          <h3 className="wa-lf-section">{heading} {drafts != null && <span>{shown.length} {view === 'live' || view === 'deleted' ? `post${shown.length === 1 ? '' : 's'}` : `draft${shown.length === 1 ? '' : 's'}`}</span>}</h3>
           {drafts == null ? <p className="wa-lf-empty">Loading the feed…</p> : shown.length === 0 ? (
             <p className="wa-lf-empty">
-              {view === 'queue' ? 'Nothing waiting for approval.' : view === 'scheduled' ? 'No drafts going out with an episode. An episode\'s feed posts are made on its feed timeline.' : 'Nothing posted yet.'}
+              {{ queue: 'Nothing waiting for approval.', scheduled: 'No drafts going out with an episode. An episode\'s feed posts are made on its feed timeline.', live: 'Nothing posted yet.', deleted: 'Nothing deleted.' }[view]}
             </p>
           ) : (
             <ul className="wa-lf-list">
               {shown.map((p) => (
-                <PostCard key={p.id} post={p} episodes={episodes} busy={busyId === p.id} onApprove={approve} onSave={save} onDelete={remove} />
+                <PostCard key={p.id} post={p} episodes={episodes} busy={busyId === p.id} onApprove={approve} onSave={save} onDelete={remove} onRedraft={redraft} onRestore={restore} />
               ))}
             </ul>
           )}

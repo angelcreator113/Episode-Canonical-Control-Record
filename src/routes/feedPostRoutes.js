@@ -433,4 +433,55 @@ router.delete('/:postId', requireAuth, async (req, res) => {
   }
 });
 
+// ── DELETED POSTS (Lala's Feed → Deleted, Evoni, 2026-10-05) ────────────────
+// GET /api/v1/feed-posts/deleted?show_id=&limit= — the show's soft-deleted
+// posts, newest deletion first; DELETE above only sets deleted_at.
+router.get('/deleted', requireAuth, async (req, res) => {
+  try {
+    const { FeedPost } = require('../models');
+    const { Op } = require('sequelize');
+    const { show_id, limit } = req.query;
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+    const posts = await FeedPost.findAll({
+      where: { show_id, deleted_at: { [Op.ne]: null } },
+      paranoid: false,
+      order: [['deleted_at', 'DESC']],
+      limit: Math.min(parseInt(limit, 10) || 50, 200),
+    });
+    return res.json({ data: posts, count: posts.length });
+  } catch (err) {
+    console.error('[FeedPosts] Deleted list error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/feed-posts/:postId/restore — bring a deleted post back as it was (draft or live).
+router.post('/:postId/restore', requireAuth, async (req, res) => {
+  try {
+    const { FeedPost } = require('../models');
+    const post = await FeedPost.findByPk(req.params.postId, { paranoid: false });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post.deleted_at) return res.status(409).json({ error: 'This post is not deleted' });
+    await post.restore();
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] Restore error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/feed-posts/:postId/redraft { note? } — rewrite a draft in its
+// poster's voice (services/feedPostRedrafter.js); returns the old text for undo.
+router.post('/:postId/redraft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { redraftPost } = require('../services/feedPostRedrafter');
+    const { post, previous_text, voice } = await redraftPost(require('../models'), req.params.postId, { note: req.body?.note ?? null });
+    return res.json({ data: post, previous_text, voice });
+  } catch (err) {
+    if (err instanceof DraftError) return res.status(err.status).json({ error: err.message });
+    console.error('[FeedPosts] Redraft error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

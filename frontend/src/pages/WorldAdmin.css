@@ -1021,3 +1021,8 @@
   .wa-lf-post-btn { margin-left: 0; }
   .wa-lf-when { margin-left: 0; flex-basis: 100%; }
 }
+.wa-lf-status.deleted { background: var(--lala-parchment-2); color: var(--text-secondary); }
+.wa-lf-link-btn { padding: 8px 6px; border: none; background: none; color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-lf-link-btn:hover:not(:disabled) { text-decoration: underline; }
+.wa-lf-link-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.wa-lf-message .wa-lf-link-btn { padding: 0 0 0 8px; }
