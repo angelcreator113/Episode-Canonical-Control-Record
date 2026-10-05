@@ -955,3 +955,69 @@
   .wa-rel-ready { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wa-rel-head h2 { font-size: 24px; }
 }
+
+/* Lala's Feed (Evoni's redesign, 2026-10-05: "bring the feed back"): the
+   queue, scheduled and live posts as cards with lavender actions, Post as
+   Lala, and what Lala sees as a small feed beside them. */
+.wa-lf-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 18px; }
+.wa-lf-head h2 { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.wa-lf-views { display: flex; flex-wrap: wrap; gap: 8px; }
+.wa-lf-view { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-lf-view.active { background: var(--accent-dark); border-color: var(--accent-dark); color: var(--text-inverse); }
+.wa-lf-count { font-size: 11px; font-weight: 700; opacity: 0.85; }
+.wa-lf-post-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border: none; border-radius: 12px; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.wa-lf-post-btn:hover { background: var(--lala-lavender-dark); }
+.wa-lf-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.wa-lf-main { min-width: 0; }
+.wa-lf-section { margin: 0 0 12px; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--text-primary); }
+.wa-lf-section span { margin-left: 6px; font-family: var(--font-ui); font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.wa-lf-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wa-lf-empty.pad { padding: 14px; }
+.wa-lf-message { margin: 0 0 12px; font-size: 13px; color: var(--success-text); }
+.wa-lf-message.bad, .wa-lf-error { color: var(--danger-text); }
+.wa-lf-error { margin: 6px 0 0; font-size: 13px; }
+
+.wa-lf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.wa-lf-post, .wa-lf-composer { padding: 16px 18px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); }
+.wa-lf-composer { margin-bottom: 16px; border-color: var(--lala-lavender-line); }
+.wa-lf-composer textarea, .wa-lf-edit { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--lala-parchment); color: var(--text-primary); font: inherit; font-size: 14px; resize: vertical; }
+.wa-lf-post-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.wa-lf-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--accent-subtle); border: 1px solid var(--accent-light); font-weight: 700; color: var(--text-primary); }
+.wa-lf-avatar.small { width: 30px; height: 30px; border-radius: 6px; font-size: 13px; background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
+.wa-lf-who { flex: 1; display: grid; min-width: 0; }
+.wa-lf-who strong { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-lf-who span { font-size: 12px; color: var(--text-secondary); }
+.wa-lf-status { flex: none; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.wa-lf-status.draft { background: var(--warning-bg); color: var(--warning-text); }
+.wa-lf-status.live { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.wa-lf-text { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--lala-parchment); font-size: 14px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; white-space: pre-wrap; }
+.wa-lf-chips { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-lf-chips li { padding: 2px 9px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-dark); font-size: 11px; font-weight: 600; text-transform: capitalize; }
+.wa-lf-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.wa-lf-primary { padding: 8px 16px; border: none; border-radius: 10px; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.wa-lf-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); }
+.wa-lf-primary:disabled, .wa-lf-secondary:disabled, .wa-lf-quiet:disabled { opacity: 0.55; cursor: not-allowed; }
+.wa-lf-secondary { padding: 8px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-lf-quiet { padding: 8px 6px; border: none; background: none; color: var(--danger-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-lf-when { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+
+.wa-lf-side { display: grid; gap: 10px; position: sticky; top: 12px; min-width: 0; }
+.wa-lf-eyebrow { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
+.wa-lf-phone { border-radius: 14px; overflow: hidden; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); }
+.wa-lf-phone-bar { padding: 10px 14px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.wa-lf-phone-post { display: flex; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--lala-parchment-3); font-size: 13px; color: var(--text-primary); }
+.wa-lf-phone-post:first-of-type { border-top: none; }
+.wa-lf-phone-post strong { color: var(--lala-lavender-text); }
+.wa-lf-phone-post small { display: block; margin-top: 2px; font-size: 11px; color: var(--text-secondary); }
+.wa-lf-link { font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.wa-lf-link:hover { text-decoration: underline; }
+
+@media (max-width: 1000px) {
+  .wa-lf-body { grid-template-columns: minmax(0, 1fr); }
+  .wa-lf-side { position: static; }
+}
+@media (max-width: 640px) {
+  .wa-lf-head h2 { font-size: 24px; }
+  .wa-lf-post-btn { margin-left: 0; }
+  .wa-lf-when { margin-left: 0; flex-basis: 100%; }
+}
