@@ -10,10 +10,12 @@ export const FEED_VIEWS = [
   { key: 'queue', label: 'Queue' },
   { key: 'scheduled', label: 'Scheduled' },
   { key: 'live', label: 'Live' },
+  { key: 'deleted', label: 'Deleted' },
 ];
 
-/** The posts a view lists: Queue the drafts waiting on approval, Scheduled the drafts going out with an episode, Live the posted ones. */
-export function postsFor(view, drafts, live) {
+/** The posts a view lists: Queue the drafts waiting on approval, Scheduled the drafts going out with an episode, Live the posted ones, Deleted the deleted ones. */
+export function postsFor(view, drafts, live, deleted) {
+  if (view === 'deleted') return deleted || [];
   if (view === 'live') return live || [];
   if (view === 'scheduled') return (drafts || []).filter((p) => p.episode_id);
   return (drafts || []).filter((p) => !p.episode_id);

@@ -13,6 +13,8 @@ describe("Lala's Feed helpers", () => {
     expect(postsFor('scheduled', drafts, live).map((p) => p.id)).toEqual(['d2']);
     expect(postsFor('live', drafts, live).map((p) => p.id)).toEqual(['l1']);
     expect(postsFor('queue', null, null)).toEqual([]);
+    expect(postsFor('deleted', drafts, live, [{ id: 'x' }]).map((p) => p.id)).toEqual(['x']);
+    expect(postsFor('deleted', drafts, live, null)).toEqual([]);
   });
 
   test('a poster is their display name, their profile name, or their handle', () => {
