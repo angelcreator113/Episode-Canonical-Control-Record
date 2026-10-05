@@ -20,7 +20,7 @@ import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
-import ShowOverview from '../components/Show/ShowOverview';
+import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
@@ -39,7 +39,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
@@ -229,27 +229,27 @@ const EVENT_STATUS_CONFIG = {
 // the Decision Log into Activity & Decisions. Keys stay as they were so
 // existing ?tab= links keep working.
 const TABS = [
-  { key: 'overview', icon: '📊', label: 'Overview' },
-  { key: 'episodes', icon: '📺', label: 'Episodes', subs: [
+  { key: 'overview', Icon: Sparkles, label: 'Overview' },
+  { key: 'episodes', Icon: CalendarDays, label: 'Episodes', subs: [
     { key: 'episodes-production', label: 'Production' },
     { key: 'season', label: 'Season Plan' },
     { key: 'episodes-ledger', label: 'Results' },
   ]},
   // Lala's Feed moved out of Producer Mode into its own Sidebar destination
   // (Task #1631) — this tab is Events only now, no sub-tabs.
-  { key: 'events', icon: '🎭', label: 'Events' },
-  { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
+  { key: 'events', Icon: Mail, label: 'Events' },
+  { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'overlays-tab', label: "Lala's Phone" },
     { key: 'production-overlays', label: 'Audience Overlays' },
   ]},
-  { key: 'characters', icon: '👑', label: 'Cast & Continuity', subs: [
+  { key: 'characters', Icon: Crown, label: 'Cast & Continuity', subs: [
     { key: 'characters-list', label: "Lala's State & Continuity" },
     { key: 'finances', label: "Lala's Finances" },
     { key: 'decisions', label: 'Activity & Decisions' },
   ]},
-  { key: 'release', icon: '🚀', label: 'Release', subs: [
+  { key: 'release', Icon: Heart, label: 'Release', subs: [
     { key: 'distribution', label: 'Distribution' },
     { key: 'insights', label: 'Insights' },
   ]},
@@ -1682,14 +1682,51 @@ The revised event should feel like a completely different experience from the si
           .wa-tab-bar::-webkit-scrollbar { display: none; }
         }
       `}</style>
-      {/* ─── HEADER ─── */}
-      <div className="wa-header" style={S.header}>
-        <div>
-          <h1 style={S.title}>🌍 Producer Mode</h1>
-          <p style={S.subtitle} data-testid="wa-show-name">{show?.name || 'Loading show…'}</p>
-        </div>
-        <button onClick={loadData} style={S.refreshBtn}>🔄 Refresh</button>
-      </div>
+      {/* ─── HEADER: the show card (Evoni's redesign, 2026-10-05) ─── */}
+      {(() => {
+        const producing = episodesInProduction(episodes)[0] || null;
+        const season = producing?.season_number
+          ?? (episodes.length ? Math.max(...episodes.map((e) => e.season_number || 0)) || null : null);
+        return (
+          <header className="wa-hero" data-testid="wa-hero">
+            <button type="button" className="wa-hero-refresh" onClick={loadData} aria-label="Refresh" title="Refresh">
+              <RotateCw size={16} aria-hidden="true" />
+            </button>
+            <Link className="wa-hero-back" to="/shows"><ArrowLeft size={14} aria-hidden="true" /> Back to Shows</Link>
+            <h1 className="wa-hero-title">Producer Mode</h1>
+            <div className="wa-hero-chips">
+              {/* With several shows the chip is the switcher: an invisible select over it. */}
+              <span className={`wa-chip wa-chip-show${allShows.length > 1 ? ' switchable' : ''}`}>
+                <span data-testid="wa-show-name">{show?.name || 'Loading show…'}</span>
+                {allShows.length > 1 && (
+                  <>
+                    <ChevronDown size={14} aria-hidden="true" />
+                    <select
+                      className="wa-chip-select"
+                      aria-label="Show"
+                      value={showId}
+                      onChange={(e) => navigate(`/shows/${e.target.value}/world?tab=${encodeURIComponent(searchParams.get('tab') || 'overview')}`)}
+                    >
+                      {allShows.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </>
+                )}
+              </span>
+              {season ? <span className="wa-chip wa-chip-season">Season {season}</span> : null}
+              {producing ? (
+                <Link className="wa-chip wa-chip-producing" to={`/episodes/${producing.id}`}>
+                  Producing Episode {producing.episode_number ?? ''}
+                </Link>
+              ) : null}
+            </div>
+            <div className="wa-hero-links">
+              {/* The show menu: the show's own settings live here, not on a separate show page. */}
+              <Link className="wa-hero-link" to={`/shows/${showId}/edit`}>Edit show</Link>
+              <Link className="wa-hero-link" to={`/shows/${showId}/settings`}>Settings</Link>
+            </div>
+          </header>
+        );
+      })()}
 
       {error && <div style={S.errorBanner}>{error}<button onClick={() => setError(null)} style={S.xBtn}>✕</button></div>}
       {loadFailures.length > 0 && (
@@ -1713,58 +1750,34 @@ The revised event should feel like a completely different experience from the si
         </div>
       )}
 
-      {/* ─── CONTEXT BAR: which show, which section ─── */}
+      {/* ─── TABS ─── */}
       {(() => {
-        const tab = TABS.find((t) => t.key === activeTab);
-        const sub = tab?.subs?.find((x) => x.key === subTab);
+        // The count on a tab is what is waiting there: episodes in
+        // production, events whose setup is incomplete.
+        const counts = { episodes: episodesInProduction(episodes).length, events: eventsNeedingAttention(worldEvents).length };
         return (
-          <div className="wa-context-bar" data-testid="wa-context-bar">
-            {allShows.length > 1 ? (
-              <select
-                className="wa-context-show"
-                aria-label="Show"
-                value={showId}
-                onChange={(e) => navigate(`/shows/${e.target.value}/world?tab=${encodeURIComponent(searchParams.get('tab') || 'overview')}`)}
-              >
-                {allShows.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            ) : (
-              <strong className="wa-context-show-name">{show?.name || '…'}</strong>
-            )}
-            <span className="wa-context-section">
-              {tab ? tab.label : ''}{sub ? ` / ${sub.label}` : ''}
-            </span>
-            {/* The show menu: the show's own settings live here, not on a separate show page. */}
-            <span className="wa-context-menu">
-              <Link className="wa-context-link" to={`/shows/${showId}/edit`}>Edit show</Link>
-              <Link className="wa-context-link" to={`/shows/${showId}/settings`}>Settings</Link>
-            </span>
-          </div>
+          <nav className="wa-tab-bar" aria-label="Producer Mode">
+            {TABS.map(t => {
+              const n = counts[t.key] || 0;
+              return (
+                <button key={t.key} type="button" onClick={() => switchTab(t.key)} className={`wa-tab${activeTab === t.key ? ' active' : ''}`} aria-current={activeTab === t.key ? 'page' : undefined}>
+                  <t.Icon size={15} aria-hidden="true" />
+                  <span className="wa-tab-label">{t.label}</span>
+                  {n > 0 && <span className="wa-tab-count" aria-label={`${n} waiting`}>{n}</span>}
+                </button>
+              );
+            })}
+          </nav>
         );
       })()}
-
-      {/* ─── TABS ─── */}
-      <div className="wa-tab-bar" style={S.tabBar}>
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => switchTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab} aria-current={activeTab === t.key ? 'page' : undefined}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
       {/* ─── SUB-TABS ─── */}
       {(() => {
         const currentTab = TABS.find(t => t.key === activeTab);
         if (!currentTab?.subs) return null;
         return (
-          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+          <div className="wa-subtabs">
             {currentTab.subs.map(s => (
-              <button key={s.key} onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} aria-current={subTab === s.key ? 'page' : undefined} style={{
-                padding: '6px 14px', background: 'transparent', border: 'none',
-                borderBottom: subTab === s.key ? '2px solid var(--primary)' : '2px solid transparent',
-                color: subTab === s.key ? 'var(--primary-text)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: subTab === s.key ? 600 : 500,
-                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
-              }}>
+              <button key={s.key} type="button" onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} aria-current={subTab === s.key ? 'page' : undefined} className={`wa-subtab${subTab === s.key ? ' active' : ''}`}>
                 {s.label}
               </button>
             ))}
@@ -8262,11 +8275,7 @@ export const S = {
   // batch 4): one token edit recolors every tab, card and button here.
   page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: 'var(--font-sans)' },
   center: { textAlign: 'center', padding: 60, color: 'var(--text-muted)' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
   backLink: { color: 'var(--primary-text)', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
-  title: { margin: '4px 0 4px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'Lora', serif" },
-  subtitle: { margin: 0, color: 'var(--text-muted)', fontSize: 13, fontWeight: 400 },
-  refreshBtn: { padding: '8px 16px', background: 'var(--surface-bg)', border: '1px solid var(--primary-subtle)', borderRadius: 10, color: 'var(--primary-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
   errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10, color: 'var(--danger)', fontSize: 13, marginBottom: 12 },
   successBanner: { padding: '10px 16px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10, color: 'var(--success)', fontSize: 13, marginBottom: 12, fontWeight: 600 },
   xBtn: { background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 14 },
@@ -8274,14 +8283,11 @@ export const S = {
   // row's rule, the cards' top edge and border, the header's teal-to-pink
   // line and the context bar (WorldAdmin.css). Actions and the active tab
   // stay teal; pink is never under text here.
-  tabBar: { display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--accent-subtle)', overflowX: 'auto', position: 'sticky', top: 0, background: 'var(--surface-bg)', zIndex: 50, paddingTop: 4, scrollbarWidth: 'none' },
-  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.15s' },
-  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid var(--primary)', color: 'var(--primary-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
   content: { display: 'flex', flexDirection: 'column', gap: 16, animation: 'waFadeIn 0.2s ease' },
   card: { background: 'var(--surface-card)', border: '1px solid var(--accent-subtle)', borderTop: '2px solid var(--accent-light)', borderRadius: 14, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   cardTitle: { fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' },
   muted: { color: 'var(--text-muted)', fontSize: 13 },
-  primaryBtn: { padding: '8px 18px', background: 'var(--primary)', border: 'none', borderRadius: 8, color: 'var(--surface-card)', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-primary)', transition: 'all 0.15s' },
+  primaryBtn: { padding: '8px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 8, color: 'var(--text-inverse)', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'all 0.15s' },
   secBtn: { padding: '8px 18px', background: 'var(--surface-bg)', border: '1px solid var(--primary-subtle)', borderRadius: 8, color: 'var(--primary-text)', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
   smBtn: { padding: '5px 12px', background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 500, transition: 'all 0.12s' },
   smBtnDanger: { padding: '5px 12px', background: 'rgba(220,53,53,0.05)', border: '1px solid rgba(220,53,53,0.12)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: 'var(--danger)', fontWeight: 500, transition: 'all 0.12s' },

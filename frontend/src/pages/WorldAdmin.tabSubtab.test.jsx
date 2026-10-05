@@ -102,7 +102,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
       if (!el) throw new Error('no tab bar');
       return el;
     });
-    expect([...bar.querySelectorAll('button')].map((b) => b.textContent.replace(/^\S+\s/, ''))).toEqual(
+    expect([...bar.querySelectorAll('button .wa-tab-label')].map((b) => b.textContent)).toEqual(
       ['Overview', 'Episodes', 'Events', 'Assets', 'Cast & Continuity', 'Release'],
     );
   });
