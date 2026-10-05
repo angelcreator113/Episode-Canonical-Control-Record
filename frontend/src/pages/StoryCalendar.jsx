@@ -20,18 +20,30 @@ export const listStoryCalendarMarkersApi = () =>
 export const createStoryCalendarEventApi = (payload) =>
   apiClient.post(`${API}/calendar/events`, payload).then((r) => r.data);
 
-const C = {
-  bg: '#f7f4ef', surface: '#fff', surfaceAlt: '#faf8f4', border: '#e8e0d0',
-  text: '#2c2c2c', textDim: '#777', textFaint: '#aaa',
-  accent: '#c9a96e', green: '#6ec9a0', red: '#c96e6e', blue: '#6e9ec9',
-  purple: '#9e6ec9', orange: '#c9886e',
+// The studio tokens (docs/VISUAL_SYSTEM.md §7). Each family is a text twin
+// that reads 4.5:1 on white and on its own wash, a wash, a line and a fill.
+export const TONES = {
+  gold:     { text: 'var(--lala-gold-text)',     soft: 'var(--lala-gold-soft)',     line: 'var(--lala-gold-line)',     fill: 'var(--lala-gold)' },
+  warning:  { text: 'var(--warning-text)',       soft: 'var(--warning-bg)',         line: 'var(--warning-border)',     fill: 'var(--warning)' },
+  danger:   { text: 'var(--danger-text)',        soft: 'var(--danger-bg)',          line: 'var(--danger-border)',      fill: 'var(--danger)' },
+  success:  { text: 'var(--success-text)',       soft: 'var(--success-bg)',         line: 'var(--success-border)',     fill: 'var(--success-text)' },
+  info:     { text: 'var(--info-text)',          soft: 'var(--info-bg)',            line: 'var(--info-border)',        fill: 'var(--info)' },
+  lavender: { text: 'var(--lala-lavender-text)', soft: 'var(--lala-lavender-soft)', line: 'var(--lala-lavender-line)', fill: 'var(--lala-lavender)' },
 };
 
-const EVENT_COLORS = {
-  world_event: C.blue,
-  story_event: C.accent,
-  character_event: C.purple,
-  lalaverse_cultural: C.orange,
+const C = {
+  bg: 'var(--surface-bg)', surface: 'var(--surface-card)', surfaceAlt: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)',
+  text: 'var(--text-primary)', textDim: 'var(--text-secondary)', textFaint: 'var(--text-secondary)',
+  onFill: 'var(--text-inverse)',
+  accent: TONES.gold.text, green: TONES.success.text, red: TONES.danger.text, blue: TONES.info.text,
+  purple: TONES.lavender.text, orange: TONES.warning.text,
+};
+
+export const EVENT_TONES = {
+  world_event: TONES.info,
+  story_event: TONES.gold,
+  character_event: TONES.lavender,
+  lalaverse_cultural: TONES.warning,
 };
 
 const EVENT_ICONS = {
@@ -128,14 +140,14 @@ export default function StoryCalendar() {
         </div>
 
         {/* Filters + Create */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               onClick={() => setTypeFilter('all')}
               style={{
-                padding: '5px 12px', fontSize: 11, cursor: 'pointer', borderRadius: 12,
-                border: `1px solid ${typeFilter === 'all' ? C.accent : C.border}`,
-                background: typeFilter === 'all' ? `${C.accent}15` : 'transparent',
+                padding: '5px 12px', fontSize: 11, cursor: 'pointer', borderRadius: 12, whiteSpace: 'nowrap',
+                border: `1px solid ${typeFilter === 'all' ? TONES.gold.line : C.border}`,
+                background: typeFilter === 'all' ? TONES.gold.soft : 'transparent',
                 color: typeFilter === 'all' ? C.accent : C.textDim, fontWeight: typeFilter === 'all' ? 600 : 400,
               }}
             >
@@ -146,10 +158,10 @@ export default function StoryCalendar() {
                 key={t}
                 onClick={() => setTypeFilter(t)}
                 style={{
-                  padding: '5px 12px', fontSize: 11, cursor: 'pointer', borderRadius: 12,
-                  border: `1px solid ${typeFilter === t ? EVENT_COLORS[t] : C.border}`,
-                  background: typeFilter === t ? `${EVENT_COLORS[t]}15` : 'transparent',
-                  color: typeFilter === t ? EVENT_COLORS[t] : C.textDim, fontWeight: typeFilter === t ? 600 : 400,
+                  padding: '5px 12px', fontSize: 11, cursor: 'pointer', borderRadius: 12, whiteSpace: 'nowrap',
+                  border: `1px solid ${typeFilter === t ? EVENT_TONES[t].line : C.border}`,
+                  background: typeFilter === t ? EVENT_TONES[t].soft : 'transparent',
+                  color: typeFilter === t ? EVENT_TONES[t].text : C.textDim, fontWeight: typeFilter === t ? 600 : 400,
                 }}
               >
                 {EVENT_ICONS[t]} {t.replace(/_/g, ' ')}
@@ -158,7 +170,7 @@ export default function StoryCalendar() {
           </div>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            style={{ padding: '8px 16px', background: C.accent, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 16px', background: C.accent, color: C.onFill, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             + New Event
           </button>
@@ -227,7 +239,7 @@ export default function StoryCalendar() {
               rows={2} style={{ ...inputStyle, marginBottom: 10, resize: 'vertical' }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleCreateEvent} style={{ padding: '8px 18px', background: C.green, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={handleCreateEvent} style={{ padding: '8px 18px', background: TONES.success.fill, color: C.onFill, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Create Event
               </button>
               <button onClick={() => setShowCreate(false)} style={{ padding: '8px 12px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: 'pointer', color: C.textDim }}>
@@ -244,7 +256,7 @@ export default function StoryCalendar() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {markers.map(m => (
                 <div key={m.id} style={{
-                  padding: '8px 14px', background: C.surface, border: `1px solid ${m.is_present ? C.accent : C.border}`,
+                  padding: '8px 14px', background: C.surface, border: `1px solid ${m.is_present ? TONES.gold.line : C.border}`,
                   borderRadius: 8, fontSize: 11,
                 }}>
                   <div style={{ fontWeight: 600, color: m.is_present ? C.accent : C.text }}>{m.name}</div>
@@ -285,18 +297,18 @@ export default function StoryCalendar() {
                     background: C.border, borderRadius: 1,
                   }} />
                   {monthEvents.map(ev => {
-                    const color = EVENT_COLORS[ev.event_type] || C.accent;
+                    const tone = EVENT_TONES[ev.event_type] || TONES.gold;
                     const d = new Date(ev.start_datetime);
                     return (
                       <div key={ev.id} style={{ position: 'relative', marginBottom: 14 }}>
                         {/* Timeline dot */}
                         <div style={{
                           position: 'absolute', left: -20, top: 14, width: 12, height: 12,
-                          borderRadius: '50%', background: color, border: `2px solid ${C.bg}`,
+                          borderRadius: '50%', background: tone.fill, border: `2px solid ${C.bg}`,
                         }} />
                         <div style={{
                           background: C.surface, border: `1px solid ${C.border}`,
-                          borderRadius: 10, padding: 14, borderLeft: `3px solid ${color}`,
+                          borderRadius: 10, padding: 14, borderLeft: `3px solid ${tone.fill}`,
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ flex: 1 }}>
@@ -305,14 +317,14 @@ export default function StoryCalendar() {
                                 <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{ev.title}</span>
                                 <span style={{
                                   fontSize: 9, padding: '2px 6px', borderRadius: 4,
-                                  background: `${color}15`, color,
+                                  background: tone.soft, color: tone.text,
                                 }}>
                                   {ev.event_type?.replace(/_/g, ' ')}
                                 </span>
                                 {ev.visibility !== 'public' && (
                                   <span style={{
                                     fontSize: 9, padding: '2px 6px', borderRadius: 4,
-                                    background: ev.visibility === 'underground' ? `${C.red}15` : `${C.purple}15`,
+                                    background: ev.visibility === 'underground' ? TONES.danger.soft : TONES.lavender.soft,
                                     color: ev.visibility === 'underground' ? C.red : C.purple,
                                   }}>
                                     {ev.visibility}
@@ -348,7 +360,7 @@ export default function StoryCalendar() {
           /* List view */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {events.map(ev => {
-              const color = EVENT_COLORS[ev.event_type] || C.accent;
+              const tone = EVENT_TONES[ev.event_type] || TONES.gold;
               const d = new Date(ev.start_datetime);
               return (
                 <div key={ev.id} style={{
@@ -364,7 +376,7 @@ export default function StoryCalendar() {
                       {ev.location_name && ` · ${ev.location_name}`}
                     </div>
                   </div>
-                  <span style={{ fontSize: 9, padding: '3px 8px', borderRadius: 8, background: `${color}15`, color }}>{ev.visibility}</span>
+                  <span style={{ fontSize: 9, padding: '3px 8px', borderRadius: 8, background: tone.soft, color: tone.text }}>{ev.visibility}</span>
                 </div>
               );
             })}
