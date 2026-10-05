@@ -307,6 +307,10 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
       JOIN wardrobe w ON w.id = ew.wardrobe_id
       WHERE ew.episode_id = :episode_id
         AND ew.deleted_at IS NULL
+        -- Only an approved link is the locked outfit; a pending one (a
+        -- library assign awaiting approval) made the game open "Locked"
+        -- (Evoni, 2026-10-05).
+        AND ew.approval_status = 'approved'
         AND (w.deleted_at IS NULL)
         AND w.parent_item_id IS NULL
       ORDER BY ew.created_at ASC
@@ -1699,10 +1703,13 @@ router.post('/select', requireAuth, async (req, res) => {
 // which also restores a soft-deleted link). Any failure rolls all of it
 // back: no coins spent, no rows written.
 //
-// Like /select, the links are added to the episode's existing ones; this
-// does not remove pieces locked earlier (the wardrobe-events lock-outfit
-// route is the one that replaces an outfit). Reputation is read from Lala's
-// character_state row, not taken from the request body.
+// The lock is the episode's outfit: it replaces the outfit locked before
+// (Evoni, 2026-10-05: Unlock, change a piece and lock again kept the old
+// pieces too, and the score and completion counted all of them). Approved
+// links not in this lock are soft-deleted in the same transaction; pending
+// links (a library assign awaiting approval) are left alone. Nothing bought
+// earlier is refunded: a purchased piece stays Lala's. Reputation is read
+// from Lala's character_state row, not taken from the request body.
 
 router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
   try {
@@ -1755,7 +1762,17 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
       console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: ${err.message}`);
       return res.status(400).json(insufficientCoinsBody(err));
     }
-    const outOfReach = pieces.filter((p) => !p.reach.needs_purchase && !p.reach.can_select);
+    // A piece already in this episode's locked outfit stays wearable on a
+    // re-lock (the game restores it as selectable); only a new piece must be
+    // within reach. Before, an unlocked-then-relocked outfit was refused for
+    // a piece the episode generator had put there.
+    const [linkedRows] = await models.sequelize.query(
+      `SELECT wardrobe_id FROM episode_wardrobe
+        WHERE episode_id = :episode_id AND deleted_at IS NULL AND approval_status = 'approved'`,
+      { replacements: { episode_id } }
+    );
+    const alreadyLocked = new Set((linkedRows || []).map((r) => String(r.wardrobe_id)));
+    const outOfReach = pieces.filter((p) => !p.reach.needs_purchase && !p.reach.can_select && !alreadyLocked.has(String(p.item.id)));
     if (outOfReach.length > 0) {
       const names = outOfReach.map((p) => p.item.name);
       console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: out of reach: ${names.join(', ')}`);
@@ -1818,6 +1835,13 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
             { replacements: { episode_id, wardrobe_id: id }, transaction: t }
           );
         }
+        // The rest of the previously locked outfit comes off the episode.
+        await models.sequelize.query(
+          `UPDATE episode_wardrobe SET deleted_at = NOW(), updated_at = NOW()
+            WHERE episode_id = :episode_id AND deleted_at IS NULL
+              AND approval_status = 'approved' AND wardrobe_id NOT IN (:ids)`,
+          { replacements: { episode_id, ids }, transaction: t }
+        );
         if (purchases.length > 0) {
           ({ balance: coinsAfter } = await syncCoinsFromLedger(models.sequelize, show_id, { transaction: t }));
         }
