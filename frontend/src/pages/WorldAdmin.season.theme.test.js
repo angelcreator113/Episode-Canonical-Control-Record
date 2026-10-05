@@ -20,6 +20,7 @@ import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
 const slice = (text, start, end, from = 0) => {
@@ -66,8 +67,12 @@ describe('Season Plan theme', () => {
     expect(season).toMatch(/broken: {6}\{ color: 'var\(--danger-text\)', bg: 'var\(--danger-bg\)', label: 'Broken' \}/);
     expect(season).toMatch(/active: \{ bg: 'var\(--success-bg\)', color: 'var\(--success-text\)', border: 'var\(--success-border\)' \}/);
     expect(season).toMatch(/upcoming: \{ bg: 'var\(--lala-gold-soft\)', color: 'var\(--lala-gold-text\)', border: 'var\(--lala-gold-line\)' \}/);
-    expect(season).toMatch(/in_production: \{ label: 'In production', {3}color: 'var\(--lala-gold-text\)', bg: 'var\(--lala-gold-soft\)', border: 'var\(--lala-gold-line\)' \}/);
-    expect(season).toMatch(/event_ready: {3}\{ label: 'Event ready', {5}color: 'var\(--primary-text\)', bg: 'var\(--primary-subtle\)', border: 'var\(--primary-light\)' \}/);
+    // The slot statuses are named in the JSX and coloured in WorldAdmin.css (the Season Arc redesign).
+    expect(jsx).toMatch(/const SLOT_STATE_LABEL = \{ done: 'Done', in_production: 'In production', event_ready: 'Event pencilled', needs_event: 'Open' \};/);
+    expect(css).toMatch(/\.wa-arc-slot\.state-done \.wa-arc-slot-state \{ color: var\(--lala-lavender-text\); \}/);
+    expect(css).toMatch(/\.wa-arc-slot\.state-in_production \.wa-arc-slot-state \{ color: var\(--accent-dark\); \}/);
+    expect(css).toMatch(/\.wa-arc-slot\.state-event_ready \.wa-arc-slot-state \{ color: var\(--warning-text\); \}/);
+    expect(css).toMatch(/\.wa-arc-primary \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
     expect(season).toMatch(/stat\('Income', coins\(money\.season\.income\), 'var\(--success-text\)'\)/);
     expect(season).toMatch(/stroke="var\(--lala-gold\)"/);
     expect(season.match(/\.\.\.S\.primaryBtn, background: 'var\(--warning-text\)'/g)).toHaveLength(2);
@@ -97,6 +102,16 @@ describe('Season Plan theme', () => {
       ['--primary-text', '--primary-subtle'],
       ['--lala-gold-text', '--lala-gold-soft'],
       ['--lala-gold-text', '--surface-card'],
+      // The Season Arc grid and panel.
+      ['--text-inverse', '--lala-lavender'],
+      ['--text-primary', '--lala-parchment'],
+      ['--text-secondary', '--lala-parchment'],
+      ['--lala-gold-text', '--lala-parchment'],
+      ['--text-primary', '--lala-lavender-soft'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--accent-dark', '--surface-card'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
