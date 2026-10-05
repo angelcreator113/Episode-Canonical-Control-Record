@@ -216,15 +216,16 @@
 
 .epp-sections {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
 }
 
 .epp-section {
   background: var(--lala-surface);
   border: 1px solid var(--lala-parchment-3);
-  border-radius: var(--lala-radius, 8px);
-  padding: 16px;
+  border-radius: 18px;
+  padding: 20px 24px;
   min-width: 0;
 }
 
@@ -237,14 +238,14 @@
 }
 
 .epp-section-title {
-  font-family: 'DM Mono', monospace;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--lala-gold-text);
-  margin: 0 0 10px;
+  font-family: var(--font-prose);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--lala-ink);
+  margin: 0 0 12px;
 }
+.epp-section-num { color: var(--lala-ink); }
+.epp-section-sub { margin-left: 6px; font-family: var(--font-ui); font-size: 12px; font-weight: 400; color: var(--lala-ink-muted); }
 
 /* Suggest names (Task #1670) */
 .epp-name-suggest {
@@ -1899,4 +1900,42 @@
   .epp-hero-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .epp-strip { padding: 14px 16px; }
   .epp-strip-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Sections 1 to 4 (the redesign's part 2): full-width cards, numbered, each
+   split in two where the mock pairs things: the event's fields with its
+   invitation, the organizer with the featured attendees, the venue image
+   with its details, the brief with the outfit. */
+.epp-split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.epp-split.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.epp-split-main, .epp-split-side { min-width: 0; }
+.epp-col-title, .epp-split h3.epp-col-title { display: block; margin: 0 0 8px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--lala-ink-muted); }
+.epp-invite-col { scroll-margin-top: 16px; }
+.epp-people-card { padding: 14px 16px; border-radius: 14px; background: var(--accent-subtle); border: 1px solid var(--accent-light); }
+.epp-people-card .epp-host { margin-bottom: 0; }
+.epp-guests { padding: 14px 16px; border-radius: 14px; border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); }
+.epp-guests.none { background: var(--warning-bg); border-color: var(--warning-border); }
+.epp-guests-note { display: block; margin-top: 4px; font-style: normal; color: var(--lala-ink); }
+.epp-place-image { order: -1; }
+.epp-chip { padding: 3px 10px; border-radius: 999px; font-family: var(--font-ui); font-size: 11px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.epp-chip.warn { background: var(--warning-bg); color: var(--warning-text); }
+.epp-look-section.no-outfit { border-color: var(--accent-light); }
+.epp-look-brief { margin: 0; display: grid; gap: 12px; }
+.epp-look-brief > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; }
+.epp-look-brief dt { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.epp-look-brief dd { margin: 0; font-size: 14px; color: var(--lala-ink); overflow-wrap: anywhere; }
+.epp-outfit-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border-radius: 14px; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); }
+.epp-outfit-card.empty { align-items: center; text-align: center; background: var(--accent-subtle); border: 1.5px dashed var(--accent-light); color: var(--accent-dark); }
+.epp-outfit-card.empty strong { font-size: 15px; color: var(--lala-ink); }
+.epp-outfit-card.empty span { font-size: 13px; color: var(--lala-ink-muted); }
+.epp-outfit-card.empty .epp-btn { align-self: stretch; justify-content: center; }
+.epp-outfit-card ul.epp-outfit-pieces { list-style: none; margin: 0; padding: 0; }
+
+@media (max-width: 900px) {
+  .epp-split, .epp-split.even { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .epp-section { padding: 16px; }
+  .epp-section-title { font-size: 20px; }
+  .epp-look-brief > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }

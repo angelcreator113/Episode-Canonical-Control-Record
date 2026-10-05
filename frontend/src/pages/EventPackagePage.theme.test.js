@@ -78,6 +78,11 @@ describe('Event Package theme', () => {
       ['--lala-ink-muted', '--lala-parchment'],
       ['--lala-ink', '--warning-bg'],
       ['--lala-ink', '--danger-bg'],
+      // Sections 1 to 4: the organizer and empty-outfit cards on pink, the no-featured panel on amber.
+      ['--lala-ink', '--accent-subtle'],
+      ['--lala-ink-muted', '--accent-subtle'],
+      ['--lala-ink-muted', '--warning-bg'],
+      ['--warning-text', '--warning-bg'],
       ['--lala-gold-text', '--lala-surface'],
       ['--lala-gold-text', '--lala-gold-soft'],
       ['--lala-ink', '--lala-parchment'],

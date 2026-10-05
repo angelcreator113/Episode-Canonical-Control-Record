@@ -44,7 +44,7 @@ describe('Event Package header helpers', () => {
       gatesMet: true, blockingItems: [], warningItems: [{}, {}],
       sections: [
         { key: 'organizer', complete: true }, { key: 'people', complete: false, kind: 'warning' },
-        { key: 'identity', complete: true }, { key: 'look', complete: false, kind: 'blocking' },
+        { key: 'identity', complete: true }, { key: 'invitation', complete: false, kind: 'warning' }, { key: 'look', complete: false, kind: 'blocking' },
       ],
     };
     expect(readinessHeadline(readiness)).toBe('Ready · 2 warnings to review');
@@ -52,6 +52,8 @@ describe('Event Package header helpers', () => {
     expect(readinessHeadline({ gatesMet: true, warningItems: [], blockingItems: [] })).toBe('Ready');
     expect(readinessHeadline({ gatesMet: false, warningItems: [], blockingItems: [{}] })).toBe('1 item needed to start');
     const nav = Object.fromEntries(pageNav(readiness).map((s) => [s.anchor, s.state]));
-    expect(nav).toMatchObject({ identity: 'complete', people: 'warning', look: 'blocking', review: 'none' });
+    // The Event covers the identity and the invitation: the worse of the two.
+    expect(nav).toMatchObject({ identity: 'warning', people: 'warning', look: 'blocking', review: 'none' });
+    expect(nav.invitation).toBeUndefined();
   });
 });

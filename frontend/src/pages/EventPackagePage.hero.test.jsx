@@ -63,7 +63,7 @@ describe('Event Package header', () => {
     expect(look.getAttribute('data-state')).not.toBe('complete'); // no outfit yet
 
     const toc = screen.getByTestId('package-toc');
-    expect([...toc.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Basics', 'People', 'Place', 'Invitation', 'Style', 'Stakes & Money', 'Review']);
+    expect([...toc.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Stakes & Money', 'Review']);
     expect(within(toc).getByTestId('toc-look').className).toMatch(/state-(warning|blocking)/);
     expect(within(toc).getByTestId('toc-review').className).toBe('state-none');
     expect(document.getElementById('epp-sec-review')).toBeTruthy();

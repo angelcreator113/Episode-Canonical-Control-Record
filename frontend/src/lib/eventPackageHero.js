@@ -77,11 +77,11 @@ export function readinessHeadline(readiness, extraWarnings = 0) {
 
 /** The page's sections, in order, as the "On this page" menu lists them; which readiness sections each covers. */
 export const PAGE_SECTIONS = [
-  { anchor: 'identity', label: 'Basics', covers: ['identity'] },
+  // The invitation sits beside The Event's fields (the redesign's part 2).
+  { anchor: 'identity', label: 'The Event', covers: ['identity', 'invitation'] },
   { anchor: 'people', label: 'People', covers: ['organizer', 'people'] },
   { anchor: 'place', label: 'Place', covers: ['place'] },
-  { anchor: 'invitation', label: 'Invitation', covers: ['invitation'] },
-  { anchor: 'look', label: 'Style', covers: ['look'] },
+  { anchor: 'look', label: "Lala's Look", covers: ['look'] },
   { anchor: 'stakes', label: 'Stakes & Money', covers: ['stakes'] },
   { anchor: 'review', label: 'Review', covers: [] },
 ];
