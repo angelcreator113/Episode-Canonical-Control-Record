@@ -33,31 +33,47 @@ export const listRegistriesApi = () =>
 
 const API = '/api/v1/memories';
 
-const TYPE_META = {
-  belief:         { label: 'Beliefs',         color: '#C9A84C', icon: '◇' },
-  relationship:   { label: 'Relationships',   color: '#7B5EA7', icon: '◈' },
-  goal:           { label: 'Goals',           color: '#4A7C59', icon: '▹' },
-  transformation: { label: 'Transformations', color: '#2A7A6A', icon: '⟳' },
-  preference:     { label: 'Preferences',     color: '#2563A8', icon: '·' },
-  event:          { label: 'Events',          color: '#5A6E3A', icon: '○' },
-  constraint:     { label: 'Constraints',     color: '#B85C38', icon: '▫' },
+// Each memory type, status and character type is a token family
+// (docs/VISUAL_SYSTEM.md, theme batch 6): fill = a dot or bar under no text,
+// bg = a surface, text = the family as text (4.5:1 on white and on bg),
+// line = a border. A hex-alpha tint (`${color}12`) cannot be a token.
+export const TONES = {
+  gold:     { fill: 'var(--lala-gold)', bg: 'var(--lala-gold-soft)', text: 'var(--lala-gold-text)', line: 'var(--lala-gold-line)' },
+  lavender: { fill: 'var(--lala-lavender)', bg: 'var(--lala-lavender-soft)', text: 'var(--lala-lavender-text)', line: 'var(--lala-lavender-line)' },
+  success:  { fill: 'var(--success)', bg: 'var(--success-bg)', text: 'var(--success-text)', line: 'var(--success-border)' },
+  teal:     { fill: 'var(--primary)', bg: 'var(--primary-subtle)', text: 'var(--primary-text)', line: 'var(--primary-light)' },
+  info:     { fill: 'var(--info)', bg: 'var(--info-bg)', text: 'var(--info-text)', line: 'var(--info-border)' },
+  warning:  { fill: 'var(--warning)', bg: 'var(--warning-bg)', text: 'var(--warning-text)', line: 'var(--warning-border)' },
+  danger:   { fill: 'var(--danger)', bg: 'var(--danger-bg)', text: 'var(--danger-text)', line: 'var(--danger-border)' },
+  neutral:  { fill: 'var(--lala-ink-faint)', bg: 'var(--lala-parchment-2)', text: 'var(--text-secondary)', line: 'var(--lala-parchment-3)' },
+};
+
+export const TYPE_META = {
+  belief:         { label: 'Beliefs',         tone: TONES.gold,     icon: '◇' },
+  relationship:   { label: 'Relationships',   tone: TONES.lavender, icon: '◈' },
+  goal:           { label: 'Goals',           tone: TONES.success,  icon: '▹' },
+  transformation: { label: 'Transformations', tone: TONES.teal,     icon: '⟳' },
+  preference:     { label: 'Preferences',     tone: TONES.info,     icon: '·' },
+  event:          { label: 'Events',          tone: TONES.warning,  icon: '○' },
+  constraint:     { label: 'Constraints',     tone: TONES.danger,   icon: '▫' },
 };
 
 const TYPE_ORDER = ['belief', 'relationship', 'goal', 'transformation', 'preference', 'event', 'constraint'];
 
+// A status's colour is text (the row's status icon): the family's text twin.
 const STATUS_META = {
-  canon:       { icon: '🔒', label: 'Canon',       color: '#4A7C59' },
-  confirmed:   { icon: '✓',  label: 'Confirmed',   color: '#2563A8' },
-  interpreted: { icon: '~',  label: 'Interpreted',  color: '#C9A84C' },
-  candidate:   { icon: '?',  label: 'Candidate',    color: '#888'    },
+  canon:       { icon: '🔒', label: 'Canon',       color: TONES.success.text },
+  confirmed:   { icon: '✓',  label: 'Confirmed',   color: TONES.info.text },
+  interpreted: { icon: '~',  label: 'Interpreted',  color: TONES.gold.text },
+  candidate:   { icon: '?',  label: 'Candidate',    color: TONES.neutral.text },
 };
 
-const CHARACTER_TYPE_COLORS = {
-  pressure: '#B85C38',
-  mirror:   '#7B5EA7',
-  support:  '#2A7A6A',
-  shadow:   '#C97A2A',
-  special:  '#C9A84C',
+export const CHARACTER_TONES = {
+  pressure: TONES.danger,
+  mirror:   TONES.lavender,
+  support:  TONES.teal,
+  shadow:   TONES.warning,
+  special:  TONES.gold,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -96,9 +112,9 @@ function confidenceLabel(value) {
 }
 
 function getCharColor(memory) {
-  if (!memory) return '#888';
+  if (!memory) return TONES.neutral.fill;
   const type = memory.character_type || memory.character?.role_type;
-  return CHARACTER_TYPE_COLORS[type] || '#888';
+  return (CHARACTER_TONES[type] || TONES.neutral).fill;
 }
 
 // ── Tension Detection ──────────────────────────────────────────────────────
@@ -533,7 +549,7 @@ export default function MemoryBankView({ bookId, showId }) {
                   className="mb-cluster-header"
                   onClick={() => toggleCluster(type)}
                 >
-                  <span className="mb-cluster-dot" style={{ background: meta.color }} />
+                  <span className="mb-cluster-dot" style={{ background: meta.tone.fill }} />
                   <span className="mb-cluster-name">{meta.label}</span>
                   <span className="mb-cluster-count">{items.length}</span>
                   <span className={`mb-cluster-arrow ${isOpen ? 'open' : ''}`}>▶</span>
@@ -683,7 +699,7 @@ function DetailPanel({
   registryCharacters, confirmCharId, setConfirmCharId,
 }) {
   const status = STATUS_META[memory._status];
-  const typeMeta = TYPE_META[memory.type] || { label: memory.type, color: '#888' };
+  const typeMeta = TYPE_META[memory.type] || { label: memory.type, tone: TONES.neutral };
   const conf = confidenceLabel(memory.confidence);
   const pct = Math.round((memory.confidence || 0) * 100);
 
@@ -696,7 +712,7 @@ function DetailPanel({
         </span>
         <span
           className="mb-detail-type-badge"
-          style={{ color: typeMeta.color, background: `${typeMeta.color}12`, border: `1px solid ${typeMeta.color}25` }}
+          style={{ color: typeMeta.tone.text, background: typeMeta.tone.bg, border: `1px solid ${typeMeta.tone.line}` }}
         >
           {typeMeta.label}
         </span>
@@ -734,7 +750,7 @@ function DetailPanel({
               className="mb-detail-confidence-fill"
               style={{
                 width: `${pct}%`,
-                background: conf.cls === 'high' ? '#5a9a5a' : conf.cls === 'medium' ? '#a08a5c' : '#b05040',
+                background: conf.cls === 'high' ? TONES.success.fill : conf.cls === 'medium' ? TONES.gold.fill : TONES.danger.fill,
               }}
             />
           </div>
@@ -796,22 +812,22 @@ function DetailPanel({
                       <div className="mb-detail-section-label" style={{ marginBottom: 6 }}>Assign to character</div>
                       <div className="mb-confirm-char-grid">
                         {registryCharacters.map(char => {
-                          const typeColor = CHARACTER_TYPE_COLORS[char.type] || '#888';
+                          const charTone = CHARACTER_TONES[char.type] || TONES.neutral;
                           const isSelected = confirmCharId === char.id;
                           return (
                             <button
                               key={char.id}
                               className={`mb-confirm-char-chip ${isSelected ? 'selected' : ''}`}
                               style={{
-                                borderColor: isSelected ? typeColor : 'rgba(26,21,16,0.12)',
-                                background: isSelected ? `${typeColor}14` : 'transparent',
-                                color: isSelected ? typeColor : 'rgba(26,21,16,0.55)',
+                                borderColor: isSelected ? charTone.line : TONES.neutral.line,
+                                background: isSelected ? charTone.bg : 'transparent',
+                                color: isSelected ? charTone.text : TONES.neutral.text,
                               }}
                               onClick={() => setConfirmCharId(char.id)}
                             >
                               <span style={{
                                 width: 6, height: 6, borderRadius: '50%',
-                                background: typeColor, display: 'inline-block', flexShrink: 0,
+                                background: charTone.fill, display: 'inline-block', flexShrink: 0,
                               }} />
                               {char.name}
                             </button>
@@ -860,7 +876,7 @@ function DetailPanel({
         <div style={{
           fontFamily: 'var(--st-mono, "DM Mono", monospace)',
           fontSize: 10,
-          color: '#4A7C59',
+          color: TONES.success.text,
           letterSpacing: '0.08em',
           marginTop: 6,
           display: 'flex',
