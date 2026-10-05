@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { checklistLeft, coinsLabel } from './episodeShell';
+import { checklistLeft, checklistProgress, coinsLabel } from './episodeShell';
 
 const SECTIONS = [{ items: [{ id: 'a' }, { id: 'b' }] }, { items: [{ id: 'c' }] }];
 
@@ -8,6 +8,7 @@ describe('episodeShell', () => {
     expect(checklistLeft({ a: true, b: false }, SECTIONS)).toBe(2);
     expect(checklistLeft({ a: true, b: true, c: true }, SECTIONS)).toBe(0);
     expect(checklistLeft(null, SECTIONS)).toBeNull();
+    expect(checklistProgress({ a: true }, SECTIONS)).toEqual({ done: 1, total: 3, left: 2 });
   });
   test('labels the balance', () => {
     expect(coinsLabel(1900)).toBe('1,900 coins');

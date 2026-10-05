@@ -1,0 +1,135 @@
+/* The top of the Episode Overview (Evoni's Episode mock, 2026-10-05):
+   the next step on lavender, four tiles, the story brief beside what the
+   episode carried from its event. Colours through tokens only. */
+
+.eos-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 12px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--lala-lavender), var(--lala-lavender-dark));
+  color: var(--text-inverse);
+}
+.eos-next-text { min-width: 0; }
+.eos-next-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-soft); }
+.eos-next-title { margin: 2px 0 4px; font-size: 18px; font-weight: 700; color: var(--text-inverse); }
+.eos-next-why { margin: 0; font-size: 13px; color: var(--lala-lavender-soft); overflow-wrap: anywhere; }
+.eos-next-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.eos-next-btn:hover { background: var(--lala-lavender-soft); }
+
+.eos-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.eos-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+.eos-tile-label { font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.eos-tile-value { font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); overflow-wrap: anywhere; }
+.eos-tile.is-warn .eos-tile-value { color: var(--warning-text); }
+.eos-tile-note { font-size: 11px; color: var(--lala-ink-muted); }
+
+.eos-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.eos-link:hover { text-decoration: underline; }
+
+.eos-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 16px; }
+.eos-card { min-width: 0; padding: 20px 22px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.eos-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.eos-card-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-ink); }
+.eos-chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.eos-chip.is-complete { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eos-chip.is-open { background: var(--warning-bg); color: var(--warning-text); }
+.eos-count { font-size: 13px; font-weight: 600; color: var(--accent-dark); }
+.eos-saving { font-size: 12px; color: var(--lala-ink-muted); }
+.eos-locked { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-text); font-size: 11px; font-weight: 700; }
+.eos-edit { margin-left: auto; align-self: center; }
+
+.eos-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; min-width: 0; }
+.eos-field-label { font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.eos-prose { margin: 0; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; color: var(--lala-ink); overflow-wrap: anywhere; }
+.eos-prose.is-empty { color: var(--lala-ink-muted); font-style: italic; }
+.eos-brief-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.eos-select, .eos-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.eos-select { font-weight: 600; }
+.eos-text { font-family: var(--font-prose); resize: vertical; }
+.eos-select:disabled, .eos-text:disabled { background: var(--lala-parchment-2); }
+.eos-intents { display: flex; gap: 6px; flex-wrap: wrap; }
+.eos-intent {
+  padding: 6px 14px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.eos-intent.is-active { border: 2px solid var(--lala-lavender); background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eos-intent:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.eos-from { border-left: 4px solid var(--accent-light); background: linear-gradient(180deg, var(--surface-card), var(--accent-subtle) 220%); }
+.eos-from-items { list-style: none; margin: 0 0 12px; padding: 0; }
+.eos-from-item { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--lala-parchment-3); }
+.eos-from-item:first-child { border-top: none; padding-top: 0; }
+.eos-from-icon { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; }
+.eos-from-item.is-done .eos-from-icon { background: var(--lala-lavender); color: var(--text-inverse); }
+.eos-from-item.is-open .eos-from-icon { color: var(--warning-text); }
+.eos-from-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.eos-from-text strong { font-size: 15px; color: var(--lala-ink); }
+.eos-from-open { margin-top: 2px; }
+
+@media (max-width: 900px) {
+  .eos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eos-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .eos-next { flex-direction: column; align-items: stretch; }
+  .eos-next-btn { justify-content: center; }
+  .eos-brief-row { grid-template-columns: minmax(0, 1fr); }
+  .eos-tile-value { font-size: 20px; }
+  .eos-card { padding: 16px; }
+}

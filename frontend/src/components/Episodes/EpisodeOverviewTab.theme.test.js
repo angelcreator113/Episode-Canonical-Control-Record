@@ -19,6 +19,8 @@ const files = {
   'EpisodeTeaserSection.jsx': read('EpisodeTeaserSection.jsx'),
   'EpisodeTeaserSection.css': read('EpisodeTeaserSection.css'),
   'EpisodeMoneyCard.jsx': read('EpisodeMoneyCard.jsx'),
+  'EpisodeOverviewSummary.jsx': read('EpisodeOverviewSummary.jsx'),
+  'EpisodeOverviewSummary.css': read('EpisodeOverviewSummary.css'),
   'SceneSuggestionReview.jsx': read('../episode/SceneSuggestionReview.jsx'),
   'TimelinePlacementsSection.jsx': read('../episode/TimelinePlacementsSection.jsx'),
 };
@@ -85,5 +87,24 @@ describe('Episode Overview theme', () => {
     }
     // The old SLAY verdict, kept below 4.5 so it is never reused as text.
     expect(contrast('#FFD700', '#FFFBEB')).toBeLessThan(4.5);
+  });
+
+  test("the Overview's top (Evoni's Episode mock): the next step on lavender, tiles and cards on white, pairs at 4.5:1", () => {
+    const top = files['EpisodeOverviewSummary.css'];
+    expect(top).toMatch(/\.eos-next \{[^}]*background: linear-gradient\(90deg, var\(--lala-lavender\), var\(--lala-lavender-dark\)\);\s*color: var\(--text-inverse\);/);
+    expect(top).toMatch(/\.eos-next-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
+    expect(top).toMatch(/\.eos-intent\.is-active \{[^}]*color: var\(--lala-lavender-text\);/);
+    for (const [fg, bg] of [
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-soft', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--warning-text', '--warning-bg'],
+      ['--accent-dark', '--surface-card'],
+    ]) {
+      expect({ fg, bg, ratio: contrast(readToken([tokens], fg), readToken([tokens], bg)) }).toMatchObject({ ratio: expect.any(Number) });
+      expect(contrast(readToken([tokens], fg), readToken([tokens], bg))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

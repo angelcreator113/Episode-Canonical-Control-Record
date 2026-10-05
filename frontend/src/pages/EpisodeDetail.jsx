@@ -11,7 +11,6 @@ import episodeService from '../services/episodeService';
 // NextEventSuggestionsOverlay (mounts only while showNextSuggestions is
 // true — the wrap transition or the header button, never on page load).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
-import EpisodePlanningCard from '../components/Episodes/EpisodePlanningCard';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
 import EpisodeTitleChip from '../components/Episodes/EpisodeTitleChip';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
@@ -32,7 +31,7 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
-import { checklistLeft, coinsLabel } from '../lib/episodeShell';
+import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -158,15 +157,17 @@ const EpisodeDetail = () => {
   // The Production tab's "N left" badge (Evoni's Episode mock): the open
   // production checks, read the way the checklist reads them. The checklist
   // reports again after each of its re-checks, so the badge follows it.
-  const [checksLeft, setChecksLeft] = useState(null);
-  const reportChecks = useCallback((checks, sections) => setChecksLeft(checklistLeft(checks, sections)), []);
+  // The Overview's Production checklist tile reads the same progress.
+  const [checksProgress, setChecksProgress] = useState(null);
+  const checksLeft = checksProgress?.left ?? null;
+  const reportChecks = useCallback((checks, sections) => setChecksProgress(checklistProgress(checks, sections)), []);
   const checksEpisodeId = episode?.id;
   useEffect(() => {
     if (!checksEpisodeId || !episode) return undefined;
     let cancelled = false;
     import('../components/Episodes/EpisodeProductionChecklist')
       .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId)
-        .then(({ checks }) => { if (!cancelled) setChecksLeft(checklistLeft(checks, m.CHECKLIST_SECTIONS)); }))
+        .then(({ checks }) => { if (!cancelled) setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS)); }))
       .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -723,14 +724,17 @@ const EpisodeDetail = () => {
         <div className="ed-content">
         <Suspense fallback={<div className="ed-loading"><div className="ed-spinner" /></div>}>
         {/* Overview Tab */}
-        {/* Planning (episode creation step 2): what Start Episode carried
-            from the event, and the next decision. */}
-        {tabKey === 'overview' && <EpisodePlanningCard episode={episode} onOpenTab={openTab} />}
+        {/* The Overview (Evoni's Episode mock): the next step, four tiles,
+            the story brief and what Start Episode carried from the event
+            (which was the Planning card, episode creation step 2). */}
         {tabKey === 'overview' && (
           <EpisodeOverviewTab
-            episode={episode} 
+            episode={episode}
             show={episode.show}
             onUpdate={handleUpdateEpisode}
+            onOpenTab={openTab}
+            checks={checksProgress}
+            balance={headerBalance}
           />
         )}
 

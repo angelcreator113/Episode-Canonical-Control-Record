@@ -7,6 +7,9 @@ import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
+import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
+import { episodePlanning } from '../../utils/episodePlanning';
+import { fromEventItems, nextStep, coinsAfter } from '../../lib/episodeOverview';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
 // the array on every render. Order = display order.
@@ -65,7 +68,7 @@ function SectionBand({ title, children }) {
   );
 }
 
-function EpisodeOverviewTab({ episode, show, onUpdate }) {
+function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
@@ -93,6 +96,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [draft, setDraft] = useState({});
   const [savingBrief, setSavingBrief] = useState(false);
   const [parentEvent, setParentEvent] = useState(null);
+  // The brief's source event as the Event Package reads it (with its
+  // organizer, scene set and venue): "From the event" and the next step.
+  const [source, setSource] = useState(null);
   // Feed origin for an event started from a Feed creator (Task #1790): the
   // brief's automation holds only started_from_profile_id, so the name and
   // handle are read from that profile.
@@ -174,6 +180,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         arc_number: b?.arc_number ?? '',
         position_in_arc: b?.position_in_arc ?? '',
       });
+      if (b?.event_id && showId) {
+        api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
+          .then((res) => setSource(res.data || null))
+          .catch((err) => { console.error('[Episode] source event load failed:', err); setSource(null); });
+      }
       // Resolve narrative_chain.parent_event_id → event name for the Source band.
       const parentId = b?.narrative_chain?.parent_event_id;
       if (parentId && showId) {
@@ -396,6 +407,23 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials || !!showId;
   const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
+  // The top of the Overview (Evoni's Episode mock): the next step, the
+  // tiles, the brief and what Start Episode carried from the event.
+  const plan = source?.event
+    ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
+    : null;
+  const fromEvent = fromEventItems(plan);
+  const hasScript = !!(typeof episode.script_content === 'string' && episode.script_content.trim()) || !!scriptInfo?.exists;
+  const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks });
+  const coins = coinsAfter({ balance, net, accepted: isAccepted });
+  const prestige = primaryEvent?.prestige;
+  const tiles = [
+    { key: 'checklist', label: 'Production checklist', value: checks ? `${checks.done} / ${checks.total}` : '—', link: { label: 'Open Production', tab: 'checklist' } },
+    { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
+    { key: 'coins', label: 'Coins after episode', value: coins == null ? '—' : coins.toLocaleString(), link: { label: 'Open Money', tab: 'money' }, note: netIsPrediction ? 'estimate' : null },
+    { key: 'look', label: "Lala's look", value: outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'}` : 'Not chosen', tone: outfitPieces.length ? null : 'warn', link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
+  ];
+
   const handleSave = async () => {
     try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
   };
@@ -438,7 +466,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 'none', margin: '0 auto' }}>
       {/* Tier Banner (if evaluated) */}
       {tier && (
         <div style={{ background: tier.bg, border: `2px solid ${tier.color}`, borderRadius: 10, padding: '12px 18px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -463,123 +491,25 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </div>
       )}
 
-      {/* Header + Edit */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{episode.title}</h1>
-          {formData.description && (
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }} data-testid="episode-synopsis">
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginRight: 6 }}>Synopsis (internal)</span>
-              {formData.description}
-            </p>
-          )}
-        </div>
-        <button onClick={() => setIsEditing(true)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>✏️ Edit</button>
+      <NextStepBanner step={step} onOpenTab={onOpenTab} />
+      <OverviewTiles tiles={tiles} onOpenTab={onOpenTab} />
+      <div className="eos-grid">
+        <StoryBriefCard
+          brief={brief} draft={draft} setDraft={setDraft} saveBriefField={saveBriefField}
+          saving={savingBrief} locked={isLocked} synopsis={formData.description}
+          onEdit={() => setIsEditing(true)} archetypes={ARCHETYPES} intents={INTENTS}
+        />
+        <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} onOpenTab={onOpenTab} />
       </div>
 
       {/* Viewer teaser (P12, Task #2386) */}
       <EpisodeTeaserSection episode={episode} onUpdate={onUpdate} />
 
-      {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>
-        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Status</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{episode.status || 'draft'}</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>#{episode.episode_number || '?'}</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--lala-gold-text)' }}>{primaryEvent?.prestige || '—'}/10</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-dark)' }}>{outfitPieces.length || '—'} pcs</div></div>
-        <div style={S.card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net P&L</span>
-            {/* EST pill: predictions from generator-time columns, not yet
-                committed to the ledger. Disappears once the episode is
-                completed and finalizeEpisodeFinancials writes real
-                transactions. Tooltip nudges creators toward Complete. */}
-            {netIsPrediction && (
-              <span title="Estimate from event metadata — values become real after Complete Episode runs the financial pipeline." style={{ padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' }}>EST</span>
-            )}
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? 'var(--success-text)' : net < 0 ? 'var(--danger-text)' : 'var(--text-secondary)' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div>
-        </div>
-      </div>
-
       {/* IDENTITY band — what is this episode? Creative intent + allowed
           outcomes (editable on the brief), then the events driving it +
           where it sits in the season. */}
       <SectionBand title="Identity">
-      {/* CREATIVE INTENT — editable creative fields on the brief. Hidden
-          while the brief loads (or fails to load) so the page doesn't show
-          empty inputs. */}
-      {brief && (
-        <div style={S.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={S.label}>🎯 Creative Intent</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {savingBrief && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Saving…</span>}
-              {isLocked && <span style={{ padding: '1px 6px', background: 'var(--danger-bg)', color: 'var(--danger-text)', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>🔒 LOCKED</span>}
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div>
-              <label style={{ ...S.label, marginBottom: 4 }}>Archetype</label>
-              <select
-                value={draft.episode_archetype || ''}
-                disabled={isLocked}
-                onChange={(e) => { setDraft(d => ({ ...d, episode_archetype: e.target.value })); saveBriefField('episode_archetype', e.target.value || null); }}
-                style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
-              >
-                <option value="">— none —</option>
-                {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ ...S.label, marginBottom: 4 }}>Designed Intent</label>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {INTENTS.map(i => {
-                  const cfg = TIER_CONFIG[i];
-                  const active = draft.designed_intent === i;
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      disabled={isLocked}
-                      onClick={() => {
-                        const next = active ? '' : i;
-                        setDraft(d => ({ ...d, designed_intent: next }));
-                        saveBriefField('designed_intent', next || null);
-                      }}
-                      style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : 'var(--lala-parchment-3)'}`, background: active ? cfg.bg : 'var(--surface-card)', color: active ? cfg.color : 'var(--text-secondary)', opacity: isLocked ? 0.6 : 1 }}
-                    >{cfg.emoji} {i}</button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ ...S.label, marginBottom: 4 }}>Narrative Purpose</label>
-            <textarea
-              value={draft.narrative_purpose}
-              disabled={isLocked}
-              onChange={(e) => setDraft(d => ({ ...d, narrative_purpose: e.target.value }))}
-              onBlur={() => brief.narrative_purpose !== draft.narrative_purpose && saveBriefField('narrative_purpose', draft.narrative_purpose)}
-              placeholder="Why does this episode exist? What story job is it doing?"
-              rows={2}
-              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
-            />
-          </div>
-          <div>
-            <label style={{ ...S.label, marginBottom: 4 }}>Forward Hook</label>
-            <textarea
-              value={draft.forward_hook}
-              disabled={isLocked}
-              onChange={(e) => setDraft(d => ({ ...d, forward_hook: e.target.value }))}
-              onBlur={() => brief.forward_hook !== draft.forward_hook && saveBriefField('forward_hook', draft.forward_hook)}
-              placeholder="What pulls the viewer into the next episode?"
-              rows={2}
-              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? 'var(--surface-bg)' : 'var(--surface-card)' }}
-            />
-          </div>
-        </div>
-      )}
-
+      {/* Creative intent moved up into the Story brief card (Evoni's Episode mock). */}
       {/* ALLOWED OUTCOMES — toggleable. Disabling tiers narrows what the
           script generator and evaluator are allowed to produce. */}
       {brief && (
