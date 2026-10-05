@@ -41,8 +41,13 @@ export const HUB_TABS = [
   { key: 'state', label: 'State', desc: 'Snapshots, timeline, tensions' },
 ];
 
+// The tabs never shrink: the strip scrolls sideways instead. On touch screens
+// styles/responsive.css gives every button min-width: 44px, which replaces
+// the flex default (min-width: auto) and let the tabs squeeze to 44px, so
+// their one-line descriptions ran into each other.
 const tabStyle = (active) => ({
-  padding: '10px 18px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Mono', monospace",
+  padding: '10px 16px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Mono', monospace",
+  flexShrink: 0, whiteSpace: 'nowrap',
   background: active ? 'var(--primary)' : 'transparent',
   color: active ? 'var(--text-inverse)' : 'var(--text-secondary)',
   border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
@@ -65,7 +70,7 @@ export default function UniversePage() {
           <button key={t.key} id={`lalaverse-tab-${t.key}`} role="tab" aria-selected={tab === t.key} aria-current={tab === t.key ? 'page' : undefined}
             onClick={() => switchTab(t.key)} style={tabStyle(tab === t.key)}>
             <span>{t.label}</span>
-            <span style={{ fontSize: 8, opacity: 0.7, fontWeight: 400, whiteSpace: 'nowrap' }}>{t.desc}</span>
+            <span style={{ fontSize: 10, fontWeight: 400, whiteSpace: 'nowrap' }}>{t.desc}</span>
           </button>
         ))}
       </div>
