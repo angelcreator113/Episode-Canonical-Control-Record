@@ -288,9 +288,23 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
     }
 
+    // Lala's look once the event has started an episode: it is chosen in
+    // the episode's styling game, not on the event (episodeLookCharges
+    // episodeLook, the rule Finalize charges by). null before Start Episode.
+    let episodeLook = null;
+    const lookEpisodeId = termsLockedBy?.id || event.used_in_episode_id || null;
+    if (lookEpisodeId) {
+      try {
+        episodeLook = await require('../services/episodeLookCharges').episodeLook(models.sequelize, { episodeId: lookEpisodeId, event });
+      } catch (lookErr) {
+        console.error('[WorldEvents] episode look lookup failed:', lookErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       event,
+      episodeLook,
       placeLocked,
       sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
       startedFromProfile: startedFromProfile ? startedFromProfile.toJSON() : null,

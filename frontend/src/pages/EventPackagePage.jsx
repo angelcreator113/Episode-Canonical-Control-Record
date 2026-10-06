@@ -548,7 +548,16 @@ export default function EventPackagePage() {
   const featuredGuests = guestList
     .map((guest, index) => ({ guest, index }))
     .filter(({ guest }) => guest.featured);
-  const outfitPieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
+  const eventOutfit = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
+  // Once the event has started an episode, Lala's look is chosen in the
+  // episode's styling game (data.episodeLook: locked, chosen but not locked
+  // yet, else the event's own); before, it is the event's outfit_pieces.
+  const episodeLook = used && data.episodeLook ? data.episodeLook : null;
+  const outfitPieces = episodeLook ? (episodeLook.pieces || []) : eventOutfit;
+  const lookEpisodeId = episodeLook?.episode_id || lockEpisode?.id || null;
+  const lookSummary = !outfitPieces.length ? 'Not chosen'
+    : episodeLook?.state === 'chosen' ? `${outfitPieces.length} chosen, not locked yet`
+    : `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} ${episodeLook?.state === 'locked' ? 'locked' : 'chosen'}`;
   // Lala's Look (the redesign): the dress code with the styling brief's formality, direction and footwear.
   const stylingBrief = event.canon_consequences?.automation?.styling_brief || {};
   const lookBrief = [
@@ -1654,8 +1663,8 @@ export default function EventPackagePage() {
         <section id="epp-sec-look" className={`epp-section epp-look-section${outfitPieces.length ? '' : ' no-outfit'}`} data-testid="style-section">
           <div className="epp-section-header">
             <h2 className="epp-section-title"><span className="epp-section-num">4.</span> Lala&apos;s Look</h2>
-            <span className={`epp-chip${outfitPieces.length ? '' : ' warn'}`} data-testid="style-outfit-summary">
-              {outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}
+            <span className={`epp-chip${outfitPieces.length && episodeLook?.state !== 'chosen' ? '' : ' warn'}`} data-testid="style-outfit-summary">
+              {lookSummary}
             </span>
           </div>
           <div className="epp-split">
@@ -1670,16 +1679,35 @@ export default function EventPackagePage() {
                   <span className="epp-col-title">Her outfit</span>
                   <ul className="epp-outfit-pieces">
                     {outfitPieces.map((piece, i) => (
-                      <li key={piece.id || i} className="epp-outfit-piece">{piece.name || 'Unnamed piece'}</li>
+                      <li key={piece.id || i} className="epp-outfit-piece">
+                        {piece.name || 'Unnamed piece'}
+                        {episodeLook && (
+                          <span className="epp-outfit-piece-cost" data-testid={`look-piece-cost-${piece.id || i}`}>
+                            {piece.is_owned ? 'owned' : piece.coin_cost != null ? `to buy · ${Number(piece.coin_cost).toLocaleString()} coins` : 'to buy'}
+                          </span>
+                        )}
+                      </li>
                     ))}
                   </ul>
+                  {episodeLook && (
+                    <span className="epp-look-from" data-testid="look-from">
+                      {episodeLook.state === 'locked' && "Locked in the episode's Wardrobe; charged at Finalize."}
+                      {episodeLook.state === 'chosen' && "Chosen in the episode's Wardrobe, not locked yet."}
+                      {episodeLook.state === 'event' && 'Picked here before Start Episode; the episode can change it in its Wardrobe.'}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
                   <Shirt size={22} aria-hidden="true" />
                   <strong>No outfit yet</strong>
-                  <span>Pick from the closet; the coin cost is charged at Finalize.</span>
+                  <span>{episodeLook ? "Choose it in the episode's Wardrobe; the coin cost is charged at Finalize." : 'Pick from the closet; the coin cost is charged at Finalize.'}</span>
                 </>
+              )}
+              {used && lookEpisodeId && (
+                <Link className="epp-btn" to={`/episodes/${lookEpisodeId}?tab=wardrobe`} data-testid="look-open-wardrobe">
+                  <Shirt size={14} /> Open Wardrobe
+                </Link>
               )}
               {!used && (
                 <button className={`epp-btn ${outfitPieces.length ? '' : 'epp-btn-primary'}`} onClick={() => setOutfitPickerOpen(true)} data-testid="style-choose-outfit">
