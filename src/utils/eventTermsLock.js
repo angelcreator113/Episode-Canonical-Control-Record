@@ -59,10 +59,13 @@ const LOCKED_EVENT_FIELDS = {
   used_in_episode_id: 'its episode link',
 };
 
-// canon_consequences keys only the reopen service writes.
+// canon_consequences keys only the server writes: the reopen service's,
+// and the in-world documents (eventDocumentsService, Evoni 2026-10-06),
+// so an Event Package save carrying an older copy cannot overwrite them.
 const TERMS_REOPEN_KEY = 'terms_reopen';
 const TERMS_HISTORY_KEY = 'terms_history';
-const SERVER_OWNED_CC_KEYS = [TERMS_REOPEN_KEY, TERMS_HISTORY_KEY];
+const DOCUMENTS_KEY = 'documents';
+const SERVER_OWNED_CC_KEYS = [TERMS_REOPEN_KEY, TERMS_HISTORY_KEY, DOCUMENTS_KEY];
 
 // The episode link is not a term Evoni reopens: the event stays with its
 // episode while its terms are open.

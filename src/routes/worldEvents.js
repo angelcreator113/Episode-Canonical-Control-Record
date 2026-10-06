@@ -1759,6 +1759,72 @@ router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, a
   }
 });
 
+// ── In-world documents beside the invitation (Evoni, 2026-10-06) ──
+// The event's wardrobe shopping list and career plan, each Draft / Edit /
+// Redraft / Approve like the invitation, stored in the event's
+// canon_consequences.documents (src/services/eventDocumentsService.js).
+// Episodes keep the lists they already have.
+const eventDocumentsError = (res, err, where) => {
+  console.error(`[EventDocuments] ${where} failed:`, err.message);
+  if (err.status) return res.status(err.status).json({ success: false, error: err.message });
+  return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
+};
+
+// GET /world/:showId/events/:eventId/documents — both documents (null until drafted)
+router.get('/world/:showId/events/:eventId/documents', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { getDocuments } = require('../services/eventDocumentsService');
+    const data = await getDocuments(models, { showId: req.params.showId, eventId: req.params.eventId });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'GET documents');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/:type/draft — draft or redraft (one AI call)
+router.post('/world/:showId/events/:eventId/documents/:type/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { draftDocument } = require('../services/eventDocumentsService');
+    const { showId, eventId, type } = req.params;
+    const data = await draftDocument(models, { showId, eventId, type });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'draft');
+  }
+});
+
+// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...] })
+router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { editDocument } = require('../services/eventDocumentsService');
+    const { showId, eventId, type } = req.params;
+    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'edit');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/:type/approve — approve the current version
+router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { approveDocument } = require('../services/eventDocumentsService');
+    const { showId, eventId, type } = req.params;
+    const data = await approveDocument(models, { showId, eventId, type });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'approve');
+  }
+});
+
 // GET /world/:showId/events/:eventId/invitation-text — Get editable invitation text
 router.get('/world/:showId/events/:eventId/invitation-text', requireAuth, async (req, res) => {
   try {
