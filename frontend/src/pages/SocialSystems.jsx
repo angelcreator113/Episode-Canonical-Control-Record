@@ -35,14 +35,17 @@ const TABS = [
   { key: 'trends', label: 'Trends' },
 ];
 
-// Who reads each sub-tab's lists, from the code: the generators read the
-// Show Bible, which Brain Update writes these cards into; nothing reads the
-// page data itself except Amber's tools (docs/BRAIN_OWNERSHIP.md).
+// Who reads each sub-tab's lists, from the code (the wiring map,
+// docs/reads/2026-10-06-lalaverse-wiring-map.md §1, §8): Brain Update
+// writes these cards into the Show Bible, but no generator reads them yet;
+// the shared loader (src/services/brainRules.js) takes only rules marked
+// for every prompt, and synced cards are not. The page's saved edits are
+// read only by Amber's read_world_page tool.
 const READS = {
-  archetypes: 'Nothing reads this list directly. Brain Update writes each archetype into the Show Bible as a Social Archetype card, which the script writers and Amber see. The Feed generator picks archetypes from its own built-in list, not from here.',
+  archetypes: 'Brain Update writes each archetype into the Show Bible as a Social Archetype card. No generator reads those cards yet: the generators read only Show Bible rules marked for every prompt. The Feed generator picks archetypes from its own built-in list, not from here.',
   legends: 'The fifty legendary roles are fixed placeholders in code; their names come from the Character Registry. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
-  rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards; the script writers, the event generator and Amber read them from there, not from this page.',
-  trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. Nothing reads the page itself.',
+  rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards. No generator reads those cards yet: the generators read only Show Bible rules marked for every prompt.',
+  trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. No generator reads the page or its cards yet.',
 };
 
 // A list item's own color (from the data files) as its accent only.
@@ -88,7 +91,7 @@ export default function SocialSystems({ embedded = false }) {
           <div>
             {!embedded && <h1 className="ss-h1">Social Systems</h1>}
             <h2 className="ss-title">{embedded ? 'The rules of society' : 'Archetypes, legends, relationships, economy, trends'}</h2>
-            <p className="ss-sub">The patterns the LalaVerse runs on. Edit them here; Brain Update sends them to the Show Bible.</p>
+            <p className="ss-sub">The patterns the LalaVerse runs on. Brain Update copies them into the Show Bible.</p>
           </div>
           <div className="ss-head-actions">
             {saving && <span className="ss-saving">Saving…</span>}
