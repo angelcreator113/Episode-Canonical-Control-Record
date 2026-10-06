@@ -19,6 +19,7 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { isForSale } = require('../services/wardrobeReach');
 
 const client = new Anthropic();
 
@@ -69,7 +70,9 @@ async function getWardrobePool(show_id, event) {
 
       // Ownership
       const isOwned = item.is_owned;
-      const canUnlock = !isOwned && item.lock_type === 'coin';
+      // Any unowned piece but a brand-exclusive or season-drop one is for
+      // sale (wardrobeReach.isForSale; Evoni's ruling, 2026-10-06).
+      const canUnlock = isForSale(item);
 
       let riskLevel;
       if (isOwned && score >= 30) riskLevel = 'safe';

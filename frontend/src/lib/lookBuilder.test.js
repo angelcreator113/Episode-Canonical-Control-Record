@@ -9,7 +9,7 @@ const top = { id: 't', name: 'Top', clothing_category: 'top', is_owned: true };
 const shoes = { id: 's', name: 'Pumps', clothing_category: 'shoes', is_owned: false, lock_type: 'coin', coin_cost: 200 };
 const earrings = { id: 'e', name: 'Pearls', clothing_category: 'jewelry', is_owned: false, lock_type: 'coin', coin_cost: 900 };
 const ring = { id: 'r', name: 'Ring', clothing_category: 'jewelry', is_owned: true };
-const notForSale = { id: 'n', name: 'Gift', clothing_category: 'bag', is_owned: false, lock_type: 'none' };
+const notForSale = { id: 'n', name: 'Gift', clothing_category: 'bag', is_owned: false, lock_type: 'brand_exclusive' };
 const lala = { coins: 500, reputation: 3 };
 
 describe('lookBuilder', () => {
