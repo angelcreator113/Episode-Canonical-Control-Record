@@ -55,11 +55,13 @@ describe('Episode Overview summary', () => {
   test('From the event lists Event, Place, Stakes, Cast, Look, with how many are ready', async () => {
     renderTab();
     const card = await screen.findByTestId('episode-planning');
-    expect(within(card).getByTestId('episode-planning-count').textContent).toBe('3 of 5 ready');
+    // The venue counts as carried without its scene set (Evoni, 2026-10-06).
+    expect(within(card).getByTestId('episode-planning-count').textContent).toBe('4 of 5 ready');
     expect([...card.querySelectorAll('.eos-from-text strong')].map((e) => e.textContent)).toEqual(['Event', 'Place', 'Stakes', 'Cast', 'Look']);
     expect(within(card).getByTestId('episode-planning-event').textContent).toMatch(/Velour Awards Night · organized by Velour/);
     expect(within(card).getByTestId('episode-planning-cast').textContent).toMatch(/1 featured: Maya Chen/);
-    expect(within(card).getByTestId('episode-planning-location').getAttribute('data-done')).toBe('false');
+    expect(within(card).getByTestId('episode-planning-location').getAttribute('data-done')).toBe('true');
+    expect(within(card).getByTestId('episode-planning-location').textContent).toMatch(/Club Noir · no scene set yet/);
     expect(within(card).getByTestId('episode-planning-package').getAttribute('href')).toBe('/shows/show-1/events/ev-1');
   });
 
