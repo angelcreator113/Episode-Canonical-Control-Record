@@ -112,12 +112,14 @@ describe('EpisodeLalasPhoneTab — embedded phone (Task #1994)', () => {
     expect(usePhonePlaybackSpy).not.toHaveBeenCalled();
   });
 
-  test('the header links to Phone Studio, the show\'s Phone Hub', async () => {
+  // Evoni's Episode mock (2026-10-06): + Add screen and Edit tap zones.
+  test('Add screen and Edit tap zones link to Phone Studio, the show\'s Phone Hub', async () => {
     mockGets();
     renderTab();
     await phonePane();
-    const link = screen.getByRole('link', { name: /Edit in Phone Studio/ });
-    expect(link.getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
+    for (const name of ['+ Add screen', 'Edit tap zones']) {
+      expect(screen.getByRole('link', { name }).getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
+    }
   });
 
   test('with no screens, the phone shows "Select a screen" and points to Phone Studio', async () => {

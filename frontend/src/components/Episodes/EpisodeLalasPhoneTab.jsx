@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/EpisodeLalasPhoneTab.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Smartphone, Play, MessageCircle, ListChecks, PenLine } from 'lucide-react';
+import { Play, MessageCircle, ListChecks } from 'lucide-react';
 import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import PhonePreviewMode from '../PhonePreviewMode';
@@ -26,8 +26,14 @@ import './EpisodeLalasPhoneTab.css';
  * phone Producer Mode draws, embedded and tappable (PhonePreviewMode
  * `embedded`), fed only from this tab's own read-only GETs and given
  * playthrough={null}, so tapping saves nothing; on the right, the content
- * above. Preview Phone stays the explicit, saving path. Editing happens in
- * Phone Studio, which the header links to.
+ * above. Preview Phone (Play through) stays the explicit, saving path.
+ * Editing happens in Phone Studio, which + Add screen and Edit tap zones
+ * link to.
+ *
+ * Evoni's Episode mock (2026-10-06): the right pane is "Lala's Phone in
+ * this episode", a row per screen with its state; a row picks the screen
+ * the phone shows ("Showing: …"). Screens carry no beat or approval, so the
+ * mock's beat and Approved / Draft are not shown.
  */
 
 // Same phone-family split the Phone Hub (UIOverlaysTab) uses: 'phone' is a
@@ -146,37 +152,14 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
   const playable = playablePhoneScreens(overlays);
   const firstScreen = playable.find(s => s.is_home) || playable[0] || null;
   const studioPath = showId ? `/shows/${showId}/world?tab=overlays-tab` : null;
+  // The screen the phone shows: a row picks it (Evoni's Episode mock,
+  // 2026-10-06: "Showing: Invitation · Beat 3"); the home screen first.
+  const [shownId, setShownId] = useState(null);
+  const shown = playable.find(s => (s.asset_id || s.id) === shownId) || firstScreen;
+  const shownKey = shown ? (shown.asset_id || shown.id) : 'none';
 
   return (
     <div className="lalas-phone-tab">
-      {/* ── Header + preview ── */}
-      <header className="lalas-phone-header">
-        <div className="lalas-phone-header-text">
-          <h2 className="lalas-phone-title">
-            <Smartphone size={18} aria-hidden="true" /> Lala&apos;s Phone
-          </h2>
-          <p className="lalas-phone-subtitle">
-            What&apos;s on Lala&apos;s phone for this episode, and what the episode needs from it.
-          </p>
-        </div>
-        <div className="lalas-phone-header-actions">
-          {studioPath && (
-            <Link to={studioPath} className="lalas-phone-studio-link">
-              <PenLine size={14} aria-hidden="true" /> Edit in Phone Studio
-            </Link>
-          )}
-          <button
-            type="button"
-            className="lalas-phone-preview-btn"
-            onClick={onPreview}
-            disabled={!onPreview || !showId}
-            title="Preview Phone"
-          >
-            <Play size={14} aria-hidden="true" /> Preview Phone
-          </button>
-        </div>
-      </header>
-
       <div className="lalas-phone-panes">
         {/* ── Left: the phone itself, embedded and non-saving ── */}
         <aside className="lalas-phone-device-pane" aria-label="Phone">
@@ -187,10 +170,10 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
           {!overlaysLoading && !overlaysError && (
             <>
               <PhonePreviewMode
-                key={playable.map(s => s.id).join('|')}
+                key={`${playable.map(s => s.id).join('|')}#${shownKey}`}
                 embedded
                 screens={playable}
-                initialScreen={firstScreen}
+                initialScreen={shown}
                 phoneSkin={frame.skin}
                 customFrameUrl={frame.frameUrl}
                 globalFit={frame.globalFit}
@@ -203,17 +186,29 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                   {studioPath ? <Link to={studioPath}>Phone Studio</Link> : 'Phone Studio'}.
                 </p>
               ) : (
-                <p className="lalas-phone-device-hint">Tap to try it. Nothing here is saved.</p>
+                <>
+                  <p className="lalas-phone-showing" data-testid="lalas-phone-showing">
+                    Showing: {shown?.name || 'the phone'}
+                  </p>
+                  <p className="lalas-phone-device-hint">Tap to try it. Nothing here is saved.</p>
+                </>
               )}
             </>
           )}
         </aside>
 
-        {/* ── Right: what the tab has always shown ── */}
         <div className="lalas-phone-content-pane">
-          {/* ── On the phone ── */}
-          <section className="lalas-phone-section" aria-labelledby="lalas-phone-on-phone">
-            <h3 id="lalas-phone-on-phone" className="lalas-phone-section-title">On the phone</h3>
+          {/* ── Lala's Phone in this episode: one row per screen ── */}
+          <section className="lalas-phone-card" aria-labelledby="lalas-phone-on-phone">
+            <div className="lalas-phone-card-head">
+              <h2 id="lalas-phone-on-phone" className="lalas-phone-title">Lala&apos;s Phone in this episode</h2>
+              {studioPath && (
+                <Link to={studioPath} className="lalas-phone-add">+ Add screen</Link>
+              )}
+            </div>
+            <p className="lalas-phone-subtitle">
+              One phone, scoped to this episode. Screens are built in Phone Studio; this episode can have its own version of any of them.
+            </p>
             {overlaysLoading && <div className="lalas-phone-muted">Loading phone screens…</div>}
             {overlaysError && <div className="lalas-phone-error">Error: {overlaysError}</div>}
             {!overlaysLoading && !overlaysError && (
@@ -235,41 +230,83 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                 ) : (
                   <ul className="lalas-phone-screens">
                     {screens.map(s => {
+                      const key = s.asset_id || s.id;
                       const taps = Array.isArray(s.screen_links) ? s.screen_links.length : 0;
                       const zones = Array.isArray(s.content_zones) ? s.content_zones.length : 0;
+                      const canShow = Boolean(s.url);
+                      const isShown = shown && (shown.asset_id || shown.id) === key;
                       return (
-                        <li key={s.asset_id || s.id} className="lalas-phone-screen">
-                          <div className="lalas-phone-thumb">
-                            {s.url ? <img src={s.url} alt="" loading="lazy" /> : null}
-                          </div>
-                          <div className="lalas-phone-screen-name">
-                            {s.name}
-                            {s.is_home && <span className="lalas-phone-badge">HOME</span>}
-                            {s.is_episode_override && (
-                              <span
-                                className="lalas-phone-badge lalas-phone-badge-override"
-                                title="This episode's own version of the screen, replacing the show default"
-                              >
-                                THIS EPISODE
+                        <li key={key} className={`lalas-phone-screen${isShown ? ' is-shown' : ''}`}>
+                          <button
+                            type="button"
+                            className="lalas-phone-screen-btn"
+                            onClick={() => setShownId(key)}
+                            disabled={!canShow}
+                            aria-pressed={Boolean(isShown)}
+                            title={canShow ? `Show ${s.name} on the phone` : 'No image yet'}
+                          >
+                            <span className="lalas-phone-thumb">
+                              {s.url ? <img src={s.url} alt="" loading="lazy" /> : null}
+                            </span>
+                            <span className="lalas-phone-screen-body">
+                              <span className="lalas-phone-screen-name">
+                                {s.name}
+                                {s.is_home && <span className="lalas-phone-badge">HOME</span>}
+                                {s.is_episode_override && (
+                                  <span
+                                    className="lalas-phone-badge lalas-phone-badge-override"
+                                    title="This episode's own version of the screen, replacing the show default"
+                                  >
+                                    THIS EPISODE
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </div>
-                          <div className="lalas-phone-screen-meta">
-                            {taps} tap {taps === 1 ? 'zone' : 'zones'} · {zones} content {zones === 1 ? 'zone' : 'zones'}
-                          </div>
+                              <span className="lalas-phone-screen-source">
+                                Screen · {s.is_episode_override ? 'this episode' : 'show default'}
+                              </span>
+                              <span className="lalas-phone-screen-meta">
+                                {taps} tap {taps === 1 ? 'zone' : 'zones'} · {zones} content {zones === 1 ? 'zone' : 'zones'}
+                              </span>
+                            </span>
+                            <span className="lalas-phone-state">Ready</span>
+                          </button>
                         </li>
                       );
                     })}
+                    {missingScreens.map(s => (
+                      <li key={s.id} className="lalas-phone-screen is-missing">
+                        <div className="lalas-phone-screen-btn" aria-disabled="true">
+                          <span className="lalas-phone-thumb" />
+                          <span className="lalas-phone-screen-body">
+                            <span className="lalas-phone-screen-name">{s.name}</span>
+                            <span className="lalas-phone-screen-source">Screen · not generated yet</span>
+                          </span>
+                          <span className="lalas-phone-state is-missing">To build</span>
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </>
             )}
+            <div className="lalas-phone-card-links">
+              {studioPath && <Link to={studioPath} className="lalas-phone-link">Edit tap zones</Link>}
+              <button
+                type="button"
+                className="lalas-phone-link"
+                onClick={onPreview}
+                disabled={!onPreview || !showId}
+                title="Play through every screen; taps are saved"
+              >
+                <Play size={13} aria-hidden="true" /> Play through
+              </button>
+            </div>
           </section>
 
           {/* ── Feed moments persisted for this episode ── */}
-          <section className="lalas-phone-section" aria-labelledby="lalas-phone-moments">
+          <section className="lalas-phone-card" aria-labelledby="lalas-phone-moments">
             <h3 id="lalas-phone-moments" className="lalas-phone-section-title">
-              <MessageCircle size={14} aria-hidden="true" /> Feed moments
+              <MessageCircle size={14} aria-hidden="true" /> Feed and messages
             </h3>
             {momentsLoading && <div className="lalas-phone-muted">Loading feed moments…</div>}
             {momentsError && <div className="lalas-phone-error">Error: {momentsError}</div>}
@@ -299,18 +336,18 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
           </section>
 
           {/* ── Requirements: deferred until beats exist ── */}
-          <section className="lalas-phone-section" aria-labelledby="lalas-phone-reqs">
+          <section className="lalas-phone-card" aria-labelledby="lalas-phone-reqs">
             <h3 id="lalas-phone-reqs" className="lalas-phone-section-title">
               <ListChecks size={14} aria-hidden="true" /> What this episode needs from the phone
             </h3>
             <div className="lalas-phone-deferred" role="note" data-testid="lalas-phone-deferred">
               Requirements appear once beats exist. Scripts don&apos;t instantiate the episode&apos;s
-              beats yet, so nothing is listed here.
+              beats yet, so nothing is listed here, and no screen is placed on a beat.
             </div>
           </section>
 
           {/* ── Missions: a section, not the whole tab ── */}
-          <section className="lalas-phone-section" aria-label="Missions">
+          <section className="lalas-phone-card" aria-label="Missions">
             <EpisodePhoneMissionsTab episode={episode} />
           </section>
         </div>

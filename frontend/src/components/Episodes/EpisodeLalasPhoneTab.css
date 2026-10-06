@@ -7,63 +7,6 @@
   color: var(--lala-ink);
 }
 
-.lalas-phone-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.lalas-phone-header-text {
-  flex: 1 1 240px;
-  min-width: 0;
-}
-
-.lalas-phone-title {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.lalas-phone-subtitle {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--lala-ink-muted);
-}
-
-/* Task #1994: header actions — Edit in Phone Studio + Preview Phone. */
-.lalas-phone-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.lalas-phone-studio-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--lala-h-control, 40px);
-  padding: 0 12px;
-  border: 1px solid var(--lala-gold);
-  border-radius: var(--lala-radius, 8px);
-  color: var(--lala-ink);
-  font-family: 'DM Mono', monospace;
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.lalas-phone-studio-link:hover {
-  background: var(--lala-gold-soft);
-}
-
 /* Task #1994: two panes — the phone on the left, the tab's content on the
    right. The frame's own width (PhoneFrame.css) sizes the left pane. */
 .lalas-phone-panes {
@@ -97,6 +40,84 @@
 
 .lalas-phone-content-pane {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The mock's cards: white on the page, lavender line, round corners. */
+.lalas-phone-card {
+  padding: 20px 22px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lala-ink-muted);
+}
+
+.lalas-phone-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* responsive.css sizes h2 with !important on small screens. */
+.lalas-phone-tab .lalas-phone-title {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: 24px !important;
+  font-weight: 600;
+  color: var(--lala-ink);
+}
+
+.lalas-phone-subtitle {
+  margin: 6px 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--lala-ink-muted);
+}
+
+.lalas-phone-add,
+.lalas-phone-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.lalas-phone-add:hover,
+.lalas-phone-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.lalas-phone-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lalas-phone-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.lalas-phone-showing {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--lala-ink-muted);
 }
 
 /* Below 768px the panes stack, phone first. */
@@ -110,43 +131,18 @@
   }
 }
 
-.lalas-phone-preview-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--lala-h-control, 40px);
-  padding: 0 14px;
-  border: none;
-  border-radius: var(--lala-radius, 8px);
-  background: var(--primary);
-  color: var(--text-inverse);
-  font-family: 'DM Mono', monospace;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-}
-
-.lalas-phone-preview-btn:hover:not(:disabled) {
-  background: var(--primary-dark);
-}
-
-.lalas-phone-preview-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .lalas-phone-section {
   margin-bottom: 20px;
 }
 
-.lalas-phone-section-title {
+/* responsive.css sizes h3 with !important on small screens. */
+.lalas-phone-tab .lalas-phone-section-title {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0 0 10px;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: 11px !important;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -213,28 +209,62 @@
   background: var(--lala-parchment);
 }
 
+/* Evoni's Episode mock (2026-10-06): one row per screen — thumb, name and
+   where it comes from, its zones, and a state chip; the row shown on the
+   phone is marked in the mock's raspberry. */
 .lalas-phone-screens {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
 .lalas-phone-screen {
   min-width: 0;
-  padding: 6px;
-  border-radius: var(--lala-radius, 8px);
-  border: 1px solid var(--lala-gold-line);
-  background: var(--lala-surface);
+}
+
+.lalas-phone-screen-btn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lalas-phone-screen-btn:hover:not(:disabled):not([aria-disabled]) {
+  border-color: var(--accent-light);
+}
+
+.lalas-phone-screen-btn:disabled {
+  cursor: default;
+}
+
+.lalas-phone-screen.is-shown .lalas-phone-screen-btn {
+  border-color: var(--accent-dark);
+  background: var(--accent-subtle);
+}
+
+.lalas-phone-screen.is-missing .lalas-phone-screen-btn {
+  border-style: dashed;
+  cursor: default;
 }
 
 .lalas-phone-thumb {
-  aspect-ratio: 9 / 19.5;
-  border-radius: 6px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--lala-parchment);
+  background: var(--lala-parchment-2);
 }
 
 .lalas-phone-thumb img {
@@ -244,22 +274,46 @@
   display: block;
 }
 
+.lalas-phone-screen-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .lalas-phone-screen-name {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
+.lalas-phone-screen-source {
+  font-size: 13px;
+  color: var(--lala-ink-muted);
+}
+
 .lalas-phone-screen-meta {
-  margin-top: 2px;
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: var(--lala-ink-faint);
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+
+.lalas-phone-state {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lalas-phone-state.is-missing {
+  background: var(--accent-subtle);
+  color: var(--accent-dark);
 }
 
 .lalas-phone-badge {
@@ -319,17 +373,12 @@
 }
 
 @media (max-width: 480px) {
-  .lalas-phone-header-actions {
-    width: 100%;
+  .lalas-phone-card {
+    padding: 16px;
   }
 
-  .lalas-phone-preview-btn,
-  .lalas-phone-studio-link {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .lalas-phone-screens {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .lalas-phone-screen-btn {
+    padding: 10px;
+    gap: 10px;
   }
 }
