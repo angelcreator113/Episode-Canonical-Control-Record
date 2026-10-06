@@ -9,7 +9,8 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
     expect(resolveEpisodeTab('assets')).toEqual({ main: 'production', sub: 'assets', key: 'production.assets' });
     expect(resolveEpisodeTab('money')).toEqual({ main: 'production', sub: 'money', key: 'production.money' });
     expect(resolveEpisodeTab('wardrobe')).toEqual({ main: 'production', sub: 'wardrobe', key: 'production.wardrobe' });
-    expect(resolveEpisodeTab('results')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
+    expect(resolveEpisodeTab('results')).toEqual({ main: 'results', sub: 'summary', key: 'results.summary' });
+    expect(resolveEpisodeTab('evaluation')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
     expect(resolveEpisodeTab('story')).toEqual({ main: 'results', sub: 'story', key: 'results.story' });
   });
 
