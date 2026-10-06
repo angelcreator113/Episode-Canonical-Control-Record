@@ -425,12 +425,17 @@ describe('SceneSetsTab — Track 6 CP2 module-scope helpers', () => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/shows');
     });
 
-    test('listEpisodesByShowApi GET with show_id query param + limit=100', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: { data: [] } });
-      await listEpisodesByShowApi('show-7');
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/episodes?show_id=show-7&limit=100',
-      );
+    test('listEpisodesByShowApi reads every page of the show\'s episodes, 100 at a time', async () => {
+      const ep = (n) => ({ id: `ep-${n}` });
+      vi.mocked(apiClient.get)
+        .mockResolvedValueOnce({ data: { data: Array.from({ length: 100 }, (_, i) => ep(i)), pagination: { total: 130 } } })
+        .mockResolvedValueOnce({ data: { data: Array.from({ length: 30 }, (_, i) => ep(100 + i)), pagination: { total: 130 } } });
+      const res = await listEpisodesByShowApi('show-7');
+      expect(apiClient.get.mock.calls.map((c) => c[0])).toEqual([
+        '/api/v1/episodes?show_id=show-7&limit=100&page=1',
+        '/api/v1/episodes?show_id=show-7&limit=100&page=2',
+      ]);
+      expect(res.data.data).toHaveLength(130);
     });
   });
 

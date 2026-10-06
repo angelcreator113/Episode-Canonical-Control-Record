@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
 import apiClient from '../services/api';
+import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
@@ -512,8 +513,14 @@ export function AngleKindFields({ value, angles, onChange }) {
 
 // External (shows / episodes for picker)
 export const listShowsApi = () => apiClient.get(`${API_BASE}/shows`);
-export const listEpisodesByShowApi = (showId) =>
-  apiClient.get(`${API_BASE}/episodes?show_id=${showId}&limit=100`);
+// Every episode of the show, not the first 100 (lib/fetchAllPages); the
+// answer keeps the { data: { data } } shape the picker reads.
+export const listEpisodesByShowApi = async (showId) => {
+  const { items } = await fetchAllPages(apiClient,
+    ({ page, limit }) => `${API_BASE}/episodes?show_id=${showId}&limit=${limit}&page=${page}`,
+    { pageSize: 100, label: 'episodes' });
+  return { data: { data: items } };
+};
 
 // ─── STATUS PILL ─────────────────────────────────────────────────────────────
 
