@@ -24,7 +24,7 @@ import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../c
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
 import { matchesDressCode, dressCodeKeywords, setPiecesOf, setSlotClashes } from '../lib/lookBuilder';
-import { backdropFor, matchingSetsFrom } from '../lib/closetGrouping';
+import { backdropFor, matchingSetsFrom, fetchClosetWithTotal } from '../lib/closetGrouping';
 import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../lib/seasonArc';
 import ShowDistributionTab from '../components/Show/ShowDistributionTab';
 import ReleaseBoard from '../components/Show/ReleaseBoard';
@@ -53,6 +53,7 @@ import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoF
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
+import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAllPages';
 import './WorldAdmin.css';
 import '../styles/wardrobe-backdrop.css';
 
@@ -290,6 +291,8 @@ function WorldAdmin() {
   const [wardrobeTotal, setWardrobeTotal] = useState(null);
   // The sections whose load failed this time, for the "Couldn't load" banner.
   const [loadFailures, setLoadFailures] = useState([]);
+  // Lists that loaded short of their total ("wardrobe: Showing 1,980 of 2,100").
+  const [partialLists, setPartialLists] = useState([]);
   // How the last load failed (audit TRUTH-01, 2026-10-03): 'initial' (nothing
   // to show for those sections), 'refresh' (what loaded before stays), 'all'
   // (nothing answered: a connection failure, not an empty show).
@@ -768,6 +771,8 @@ function WorldAdmin() {
     // A section whose request fails is named in the "Couldn't load" banner,
     // so an empty list there is never mistaken for "there are none".
     const failed = [];
+    const partials = [];
+    const partial = (label, list) => { const note = partialNote(list); if (note) partials.push(`${label}: ${note}`); };
     const refresh = loadedOnceRef.current;
     const miss = (label, reset) => (err) => {
       console.error(`[LoadData] ${label} load failed:`, err?.response?.status, err?.response?.data || err?.message);
@@ -780,12 +785,12 @@ function WorldAdmin() {
         // GET /shows/:id answers { success, data: show }; the show's name is `name`.
         api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || null)).catch(miss('the show', () => setShow(null))),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(miss("Lala's state")),
-        api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
-          const list = r.data?.episodes || r.data?.data || r.data || [];
-          const rows = Array.isArray(list) ? list : [];
-          setEpisodes(rows);
-          // The true count; the list itself stops at 100.
-          setEpisodesTotal(Number.isFinite(r.data?.pagination?.total) ? r.data.pagination.total : rows.length);
+        // Every page, not the first 100 (the audit's "Pagination and totals
+        // are inconsistent"); a list short of its total is named below.
+        fetchAllEpisodes(api, showId).then((list) => {
+          setEpisodes(list.items);
+          setEpisodesTotal(list.total ?? list.items.length);
+          partial('episodes', list);
         }).catch(miss('episodes', () => { setEpisodes([]); setEpisodesTotal(null); })),
         api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(miss('state history', () => setStateHistory([]))),
         api.get(`/api/v1/shows/${showId}/financial-summary`).then(r => {
@@ -801,20 +806,20 @@ function WorldAdmin() {
         // This show's sets plus the shared ones (audit CTX-03: the list is
         // scoped on the server); the pickers offer those, the Overview counts
         // this show's.
-        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`).then(r => setSceneSets(r.data?.data || [])).catch(miss('scene sets', () => setSceneSets([]))),
+        fetchAllSceneSets(api, showId).then((list) => { setSceneSets(list.items); partial('scene sets', list); }).catch(miss('scene sets', () => setSceneSets([]))),
         api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(miss('overlays', () => setOverlayData([]))),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(miss('career goals', () => setGoals([]))),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => {
-          const rows = r.data?.data || [];
-          setWardrobeItems(rows);
-          // The true count; the list itself stops at 200.
-          setWardrobeTotal(Number.isFinite(r.data?.pagination?.total) ? r.data.pagination.total : rows.length);
+        fetchClosetWithTotal(api, showId).then((list) => {
+          setWardrobeItems(list.items);
+          setWardrobeTotal(list.total ?? list.items.length);
+          partial('wardrobe', list);
         }).catch(miss('wardrobe', () => { setWardrobeItems([]); setWardrobeTotal(null); })),
         api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(miss('opportunities', () => setOpportunities([]))),
         api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(miss('world locations', () => setWorldLocations([]))),
       ];
       await Promise.allSettled(requests);
       setLoadFailures(failed);
+      setPartialLists(partials);
       setLoadFailureKind(failed.length === requests.length ? 'all' : (refresh ? 'refresh' : 'initial'));
       if (failed.length < requests.length) loadedOnceRef.current = true;
     } finally { setLoading(false); }
@@ -1759,6 +1764,12 @@ The revised event should feel like a completely different experience from the si
             : loadFailureKind === 'refresh'
               ? `Couldn't refresh ${loadFailures.join(', ')}; showing what loaded before.`
               : `Couldn't load ${loadFailures.join(', ')}. Those sections may look empty until they load.`}
+          <button type="button" onClick={loadData}>Retry</button>
+        </div>
+      )}
+      {partialLists.length > 0 && (
+        <div className="wa-load-failed wa-load-partial" role="status" data-testid="wa-load-partial">
+          Some lists did not load in full ({partialLists.join('; ')}). Counts and lists may be short; retry to load the rest.
           <button type="button" onClick={loadData}>Retry</button>
         </div>
       )}

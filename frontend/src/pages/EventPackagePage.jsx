@@ -69,6 +69,7 @@ import {
   Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus,
 } from 'lucide-react';
 import api from '../services/api';
+import { fetchAllSceneSets } from '../lib/fetchAllPages';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing, nextPackageStep } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
@@ -982,8 +983,8 @@ export default function EventPackagePage() {
         .catch((err) => { console.error('[EventPackage] locations load failed:', err); });
     }
     try {
-      const res = await api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`);
-      setPickerSets(res.data?.data || []);
+      // Every set, not the first 200 (lib/fetchAllPages).
+      setPickerSets((await fetchAllSceneSets(api, showId)).items);
     } catch (err) {
       console.error('[EventPackage] scene sets load failed:', err);
       setPickerSets([]);
