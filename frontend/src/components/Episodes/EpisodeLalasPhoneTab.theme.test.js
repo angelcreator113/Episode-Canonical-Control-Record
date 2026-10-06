@@ -27,9 +27,14 @@ describe('Episode Phone theme', () => {
     expect(stripTaskRefs(missions)).not.toMatch(HEX);
   });
 
-  test('the buttons are the primary, the badge is ink on gold, gold is never text', () => {
-    expect(css).toMatch(/\.lalas-phone-preview-btn\s*\{[^}]*background: var\(--primary\);\s*color: var\(--text-inverse\);/);
-    expect(css).toMatch(/\.lalas-phone-preview-btn:hover:not\(:disabled\)\s*\{\s*background: var\(--primary-dark\);/);
+  // Evoni's Episode mock (2026-10-06): the actions are lavender text links,
+  // the row on the phone is raspberry (the accent family), the states are
+  // lavender (ready) and raspberry (to build).
+  test('links are lavender, the shown row raspberry, the badge ink on gold, gold is never text', () => {
+    expect(css).toMatch(/\.lalas-phone-add,\s*\.lalas-phone-link\s*\{[^}]*color: var\(--lala-lavender-text\);/);
+    expect(css).toMatch(/\.lalas-phone-screen\.is-shown \.lalas-phone-screen-btn\s*\{\s*border-color: var\(--accent-dark\);\s*background: var\(--accent-subtle\);/);
+    expect(css).toMatch(/\.lalas-phone-state\s*\{[^}]*background: var\(--lala-lavender-soft\);\s*color: var\(--lala-lavender-text\);/);
+    expect(css).toMatch(/\.lalas-phone-state\.is-missing\s*\{\s*background: var\(--accent-subtle\);\s*color: var\(--accent-dark\);/);
     expect(css).toMatch(/\.lalas-phone-badge\s*\{[^}]*background: var\(--lala-gold\);\s*color: var\(--text-primary\);/);
     expect(css).not.toMatch(/(?<![-\w])color: var\(--lala-gold\)/);
     expect(css).not.toMatch(/background: var\(--lala-gold\);\s*color: var\(--text-inverse\)/);
@@ -48,6 +53,11 @@ describe('Episode Phone theme', () => {
     for (const [fg, bg] of [
       ['--text-inverse', '--primary'],
       ['--text-inverse', '--primary-dark'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--lala-ink', '--accent-subtle'],
+      ['--lala-ink-muted', '--surface-card'],
       ['--text-primary', '--lala-gold'],
       ['--lala-gold-text', '--lala-surface'],
       ['--primary-text', '--primary-subtle'],

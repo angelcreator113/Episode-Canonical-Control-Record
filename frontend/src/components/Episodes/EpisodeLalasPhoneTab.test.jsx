@@ -132,12 +132,14 @@ describe('EpisodeLalasPhoneTab — render', () => {
     expect(within(list).getAllByText('THIS EPISODE')).toHaveLength(1);
   });
 
-  test('leads with the Preview Phone action, which calls onPreview', async () => {
+  // Evoni's Episode mock (2026-10-06): "Lala's Phone in this episode", and
+  // Play through under the list.
+  test('Play through, under the list, calls onPreview', async () => {
     mockGets();
     const onPreview = vi.fn();
     render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={onPreview} />);
-    expect(screen.getByRole('heading', { level: 2, name: /Lala's Phone/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Preview Phone/ }));
+    expect(screen.getByRole('heading', { level: 2, name: "Lala's Phone in this episode" })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Play through/ }));
     expect(onPreview).toHaveBeenCalledTimes(1);
     await screen.findByText('Find the invite');
   });
@@ -242,5 +244,26 @@ describe('EpisodeLalasPhoneTab — missions section still works', () => {
     expect(screen.queryByTestId('mission-editor')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Manage missions/ }));
     expect(screen.getByTestId('mission-editor').textContent).toBe('editor s-1 ep-1');
+  });
+
+  // Evoni's Episode mock (2026-10-06): one row per screen; a row shows its
+  // screen on the phone ("Showing: …"), and a screen not built yet is listed.
+  test('a row per screen with its state; picking one shows it on the phone', async () => {
+    mockGets();
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const home = (await screen.findByText('Home', { selector: '.lalas-phone-screen-name' })).closest('li');
+    expect(within(home).getByText('Ready')).toBeTruthy();
+    expect(within(home).getByText('Screen · show default')).toBeTruthy();
+    expect(home.className).toContain('is-shown');
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home');
+    const camera = screen.getByText('Camera', { selector: '.lalas-phone-screen-name' }).closest('li');
+    expect(camera.className).toContain('is-missing');
+    expect(within(camera).getByText('To build')).toBeTruthy();
+    const dms = screen.getByText('DMs', { selector: '.lalas-phone-screen-name' }).closest('li');
+    fireEvent.click(within(dms).getByRole('button'));
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: DMs');
+    expect(dms.className).toContain('is-shown');
+    expect(within(dms).getByRole('button').getAttribute('aria-pressed')).toBe('true');
+    await screen.findByText('Find the invite');
   });
 });
