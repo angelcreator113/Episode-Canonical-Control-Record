@@ -32,7 +32,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
-import { withReach } from '../utils/wardrobeReach';
+import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
 
 // ─── CONSTANTS ───
@@ -484,6 +484,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const matchingSets = useMemo(() => matchingSetsFrom(closetWithReach), [closetWithReach]);
   const looks = useMemo(() => wornLooks(filledSlots), [filledSlots]);
   const wearSet = (set) => {
+    // Every piece Lala doesn't own is bought on Lock, unless it is not for
+    // sale (Evoni, 2026-10-06), so the set's price must fit her coins.
+    const { cost } = setCost(set.pieces);
+    if (cost > coins) {
+      setError(`The ${set.name} costs 🪙 ${cost.toLocaleString()} for the pieces Lala doesn't own; she has ${Number(coins).toLocaleString()}`);
+      return;
+    }
     const locked = set.pieces.filter(p => !p.can_select);
     const noSlot = set.pieces.filter(p => p.can_select && !gameSlotFor(p.clothing_category));
     const wearable = set.pieces.filter(p => p.can_select && gameSlotFor(p.clothing_category));
@@ -496,7 +503,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     });
     setFilledSlots(prev => wearable.reduce((acc, piece) => equipInto(acc, piece), prev));
     const notes = [];
-    if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (locked): ${locked.map(p => p.name).join(', ')}`);
+    if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (not for sale): ${locked.map(p => p.name).join(', ')}`);
     if (noSlot.length) notes.push(`${noSlot.length} piece${noSlot.length === 1 ? '' : 's'} left out (no game slot): ${noSlot.map(p => p.name).join(', ')}`);
     setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
   };
@@ -593,7 +600,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // Evoni's Episode mock: what the look costs, the pieces Lala does not own yet.
   const lookCost = useMemo(() => outfitPieces(filledSlots)
-    .filter(({ item: w }) => w && w.is_owned === false)
+    .filter(({ item: w }) => w && w.is_owned !== true)
     .reduce((n, { item: w }) => n + (Number(w.coin_cost) || 0), 0), [filledSlots]);
 
   // ─── RENDER ───
@@ -762,7 +769,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       {/* Owned, or still to buy (charged at Finalize), as in Evoni's Episode mock. */}
                       {piece && (
                         <span data-testid={`slot-cost-${piece.id}`} style={{ fontSize: 12, color: 'var(--lala-ink-muted)', whiteSpace: 'nowrap' }}>
-                          {piece.is_owned !== false ? 'owned' : `to buy · 🪙 ${Number(piece.coin_cost || 0).toLocaleString()}`}
+                          {piece.is_owned === true ? 'owned' : `to buy · 🪙 ${Number(piece.coin_cost || 0).toLocaleString()}`}
                         </span>
                       )}
                       {piece && (
@@ -880,22 +887,29 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               {browseMode !== 'pool' && activeSlot === SETS_GROUP.key && matchingSets.map(set => {
                 const wornIds = new Set(outfitPieces(filledSlots).map(({ item: w }) => w.id));
                 const wearing = set.pieces.every(p => wornIds.has(p.id));
+                const price = setCost(set.pieces);
+                const short = price.cost > coins;
                 return (
                   <div key={set.id} data-testid={`matching-set-${set.id}`} style={{ ...W.browseCard, gridColumn: '1/-1', border: '1px solid var(--lala-lavender-line)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lala-ink)' }}>{set.name}</div>
-                        <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>{`${set.pieces.length} pieces`}</div>
+                        <div data-testid={`matching-set-cost-${set.id}`} style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>
+                          {`${set.pieces.length} pieces · `}
+                          {price.cost > 0 ? `🪙 ${price.cost.toLocaleString()} to buy · Lala has ${Number(coins).toLocaleString()}` : 'all Lala\'s'}
+                          {price.notForSale.length > 0 && ` · ${price.notForSale.length} not for sale`}
+                        </div>
                       </div>
                       {wearing
                         ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)' }}>✓ Wearing</span>
-                        : <button type="button" onClick={() => wearSet(set)} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Wear the set</button>}
+                        : <button type="button" onClick={() => wearSet(set)} disabled={short} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: short ? 'var(--lala-parchment-3)' : 'var(--lala-lavender)', color: short ? 'var(--lala-ink-muted)' : 'var(--text-inverse)', fontSize: 11, fontWeight: 700, cursor: short ? 'not-allowed' : 'pointer' }}>{short ? `Need 🪙 ${price.cost.toLocaleString()}` : 'Wear the set'}</button>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {set.pieces.map(p => (
                         <div key={p.id} title={p.name} style={{ width: 56, textAlign: 'center', opacity: p.can_select ? 1 : 0.45 }}>
                           <GarmentImage item={p} fallback={CAT_ICONS[p.clothing_category] || '👕'} size={48} />
                           <div style={{ fontSize: 9, color: 'var(--lala-ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                          <div style={{ fontSize: 9, color: 'var(--lala-ink-muted)' }}>{p.is_owned === true ? 'owned' : price.toBuy.includes(p) ? `🪙 ${Number(p.coin_cost) || 0}` : 'not for sale'}</div>
                         </div>
                       ))}
                     </div>
@@ -975,11 +989,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                             🪙 Buy for {item.coin_cost} coins
                           </span>
                         )
-                        : item.lock_type === 'reputation' ? `🔒 Rep ${item.reputation_required}+`
-                        : item.lock_type === 'coin' ? `🪙 Need ${item.coin_cost} coins`
-                        : item.lock_type === 'brand_exclusive' ? '🏛️ Brand Exclusive'
-                        : item.lock_type === 'season_drop' ? `🕒 Drops Ep ${item.season_unlock_episode}`
-                        : '🔒 Locked'}
+                        : (() => { const why = lockReason(item, { coins }); return `${why.startsWith('Need') ? '🪙' : '🔒'} ${why}`; })()}
                     </div>
                   </div>
                 );
@@ -1060,10 +1070,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             )}
             {!inspecting.can_select && !inspecting.can_purchase && (
               <div style={{ padding: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, textAlign: 'center', color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 600 }}>
-                🔒 {inspecting.lock_type === 'reputation' ? `Rep ${inspecting.reputation_required}+` :
-                  inspecting.lock_type === 'brand_exclusive' ? 'Brand Exclusive' :
-                  inspecting.lock_type === 'season_drop' ? `Drops Ep ${inspecting.season_unlock_episode}` :
-                  inspecting.lock_type === 'coin' ? `Need ${inspecting.coin_cost} coins` : 'Locked'}
+                🔒 {lockReason(inspecting, { coins })}
               </div>
             )}
           </div>

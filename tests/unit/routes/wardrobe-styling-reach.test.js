@@ -16,6 +16,9 @@
  *    transaction, so a later failure left earlier pieces bought and linked.
  *    POST /wardrobe/lock-outfit-atomic checks everything first and writes
  *    all of it in one transaction, or nothing.
+ * 4. Evoni's ruling (2026-10-06): every unowned piece is for sale at its
+ *    coin_cost except brand-exclusive and season-drop ones; reputation no
+ *    longer unlocks a piece (this replaces 2's reputation case).
  *
  * The handlers run against a small in-memory character_state row, ledger,
  * episode_wardrobe and ownership log that interpret the statements these
@@ -254,20 +257,23 @@ describe('POST /wardrobe/browse-pool offers something wearable for each required
     expect(pool.filter((i) => i.can_select && ['dress', 'top', 'bottom', 'shoes'].includes(i.clothing_category))).toEqual([]);
   });
 
-  it('reputation 0 is 0, as in /select: a reputation-1 item is not reachable (Evoni, 2026-09-26)', async () => {
+  it('every unowned piece is for sale but brand-exclusive and season-drop ones (Evoni, 2026-10-06)', async () => {
     mockItems = [
-      item({ id: 'rep-dress', name: 'Invite-Only Gown', clothing_category: 'dress', lock_type: 'reputation', reputation_required: 1 }),
+      item({ id: 'rep-dress', name: 'Invite-Only Gown', clothing_category: 'dress', lock_type: 'reputation', reputation_required: 9, coin_cost: 200 }),
+      item({ id: 'free-shoes', name: 'Plain Flats', clothing_category: 'shoes', lock_type: 'none', coin_cost: 120 }),
+      item({ id: 'drop-dress', name: 'Spring Drop', clothing_category: 'dress', lock_type: 'season_drop', season_unlock_episode: 9, coin_cost: 1 }),
       OWNED_DRESS, OWNED_SHOES,
     ];
-    for (const character_state of [{ coins: 350, reputation: 0 }, { coins: 350 }]) {
-      const pool = (await run('/browse-pool', { ...POOL_BODY, character_state })).body.pool;
-      const rep = pool.find((i) => i.id === 'rep-dress');
-      expect(rep).toBeTruthy();
-      expect(rep.can_select).toBe(false);
-      expect(rep.risk_level).toBe('locked_tease');
-    }
-    const qualified = (await run('/browse-pool', { ...POOL_BODY, character_state: { coins: 350, reputation: 1 } })).body.pool;
-    expect(qualified.find((i) => i.id === 'rep-dress').can_select).toBe(true);
+    const pool = (await run('/browse-pool', { ...POOL_BODY, character_state: { coins: 350, reputation: 0 } })).body.pool;
+    const byId = Object.fromEntries(pool.map((i) => [i.id, i]));
+    // Reputation no longer gates: the piece is bought for its coins.
+    expect(byId['rep-dress']).toMatchObject({ can_select: true, can_purchase: true, risk_level: 'stretch' });
+    // An unowned piece with no lock was Locked with no way to buy it.
+    expect(byId['free-shoes']).toMatchObject({ can_select: true, can_purchase: true, risk_level: 'stretch' });
+    expect(byId['drop-dress']).toMatchObject({ can_select: false, can_purchase: false, risk_level: 'locked_tease' });
+
+    const short = (await run('/browse-pool', { ...POOL_BODY, character_state: { coins: 100 } })).body.pool;
+    expect(short.find((i) => i.id === 'rep-dress')).toMatchObject({ can_select: false, can_purchase: false });
   });
 });
 
