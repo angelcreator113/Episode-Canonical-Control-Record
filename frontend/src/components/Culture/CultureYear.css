@@ -1,0 +1,68 @@
+/* CultureYear: the Culture tab's front page (the mock, 2026-10-06), in the
+   hub's pink for Culture. Tokens only. Each kind of item has a tone:
+   cultural event pink, micro lavender, show event green, award gold;
+   every tone's text reads 4.5:1 on its wash (CultureYear.theme.test.js). */
+
+.cy { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+.cy-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cy-card { background: var(--surface-card); border: 1px solid var(--accent-light); border-radius: 16px; padding: 18px 20px; min-width: 0; }
+.cy-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.cy-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.cy-sub { font-size: 13px; color: var(--text-secondary); }
+.cy-note { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+.is-event   { --cy-soft: var(--accent-subtle);      --cy-text: var(--accent-dark);        --cy-dot: var(--accent); }
+.is-micro   { --cy-soft: var(--lala-lavender-soft); --cy-text: var(--lala-lavender-text); --cy-dot: var(--lala-lavender); }
+.is-library { --cy-soft: var(--success-bg);         --cy-text: var(--success-text);       --cy-dot: var(--success-text); }
+.is-award   { --cy-soft: var(--lala-gold-soft);     --cy-text: var(--lala-gold-text);     --cy-dot: var(--lala-gold); }
+
+/* ── The year ── */
+.cy-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; }
+.cy-month {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 56px; padding: 8px 4px;
+  border-radius: 12px; border: 1px solid var(--accent-light); background: var(--surface-card); cursor: pointer;
+  font: inherit; color: var(--text-primary);
+}
+.cy-month:hover { background: var(--accent-subtle); }
+.cy-month.is-active { background: var(--accent-subtle); border: 2px solid var(--accent-dark); }
+.cy-month-name { font-size: 14px; font-weight: 800; }
+.cy-dots { display: flex; gap: 3px; align-items: center; min-height: 8px; flex-wrap: wrap; justify-content: center; }
+.cy-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cy-dot); }
+.cy-more { font-size: 10px; font-weight: 700; color: var(--text-secondary); }
+.cy-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.cy-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── The month ── */
+.cy-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cy-item { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; background: var(--cy-soft); }
+.cy-badge {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 56px; padding: 6px 4px;
+  border-radius: 12px; background: var(--surface-card); color: var(--cy-text);
+}
+.cy-badge-kind { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.cy-badge-day { font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.cy-item-text { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cy-item-text strong { font-size: 15px; color: var(--text-primary); }
+.cy-action {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--cy-text); text-decoration: none; white-space: nowrap;
+}
+.cy-action:hover { text-decoration: underline; }
+
+/* ── Memory ── */
+.cy-memory { background: var(--accent-subtle); }
+.cy-memory .cy-title { color: var(--accent-dark); margin-bottom: 6px; }
+.cy-moments { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cy-moment { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--surface-card); font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.cy-remember { font-family: 'Lora', Georgia, serif; font-style: italic; color: var(--accent-dark); }
+.cy-moment-text { color: var(--text-secondary); line-height: 1.5; }
+.cy-moment-when { font-size: 11px; color: var(--text-secondary); }
+.cy-link { min-height: 44px; padding: 0; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--accent-dark); }
+
+@media (max-width: 1000px) { .cy-months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .cy-cols { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .cy-card { padding: 16px; }
+  .cy-months { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cy-item-text { flex-basis: 140px; }
+}
