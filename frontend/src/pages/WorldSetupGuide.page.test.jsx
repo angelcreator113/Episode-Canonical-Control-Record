@@ -46,6 +46,14 @@ describe('World Setup Guide', () => {
     expect(urls.some((u) => u.includes('/world/show-a/events?status=draft'))).toBe(true);
   });
 
+  test("the steps name the Brain Update button, not the retired Push to Brain", async () => {
+    render(<MemoryRouter initialEntries={['/world-setup']}><WorldSetupGuide /></MemoryRouter>);
+    await screen.findByText('5/7');
+    expect(screen.queryByText(/Push to Brain|Push each to Franchise Brain/)).toBeNull();
+    expect(screen.getAllByText(/→ Brain Update/)).toHaveLength(3);
+    expect(screen.getByText(/Brain Update \(Connect to Brain the first time\) copies the page into the Show Bible/)).toBeTruthy();
+  });
+
   test('a check the server does not answer says "could not check"', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(api.get).mockImplementation(async (url) => {
