@@ -38,6 +38,7 @@
 // The model file is required directly, not the models index: it exports the
 // taxonomy lists on its define function and needs no database.
 const { CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
 const { cleanEventName } = require('../utils/cleanEventName');
 
 const MODELS = ['claude-haiku-4-5-20251001'];
@@ -177,7 +178,7 @@ function buildDraftPrompt(profile, context = {}) {
 
 ${facts.length > 0 ? facts.join('\n') : 'No details beyond the event existing — keep it simple and do not invent specifics.'}
 
-${ctxBlock}Write these:
+${ctxBlock}${context.brainBlock ? `${context.brainBlock}\n` : ''}Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
@@ -376,7 +377,12 @@ async function draftEventConcept(profile, context = {}) {
       return null;
     }
 
-    const prompt = buildDraftPrompt(profile, context);
+    // The Show Bible's always-true rules (2026-10-06), when the caller
+    // passes models: the event is canon from its first draft.
+    const brain = context.models
+      ? await loadBrainContext(context.models, { showId: context.showId || null, limit: 15, label: 'eventConceptDraft' })
+      : { block: null, ids: [] };
+    const prompt = buildDraftPrompt(profile, { ...context, brainBlock: brain.block });
     const Anthropic = require('@anthropic-ai/sdk');
     // One attempt (Evoni, Task #2122 review): 10s timeout, no retry, SDK
     // retries off. Any error, overload included, falls to the catch below.
@@ -387,6 +393,7 @@ async function draftEventConcept(profile, context = {}) {
       messages: [{ role: 'user', content: prompt }],
     });
 
+    await recordRuleUse(context.models?.sequelize, brain.ids, 'eventConceptDraft');
     const draft = parseDraftReply(response.content?.[0]?.text, profile);
     if (!draft) console.error('[eventConceptDraft] unusable reply; creating without a draft');
     return draft;

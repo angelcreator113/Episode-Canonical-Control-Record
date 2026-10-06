@@ -15,6 +15,7 @@
  */
 
 const { Op } = require('sequelize');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
 
 const MODELS = ['claude-sonnet-4-6'];
 const DEFAULT_LIMIT = 4;
@@ -75,7 +76,7 @@ async function pickReactors(models, post, { limit = DEFAULT_LIMIT } = {}) {
   return picked;
 }
 
-function buildPrompt(post, reactors) {
+function buildPrompt(post, reactors, brainBlock = null) {
   const voices = reactors.map(({ profile: p, relationship }, i) => {
     const bits = [
       `${i + 1}. @${p.handle}${p.display_name ? ` (${p.display_name})` : ''}${p.archetype ? `, ${p.archetype.replace(/_/g, ' ')}` : ''}`,
@@ -96,6 +97,7 @@ ${post.narrative_function ? `What the post does: ${post.narrative_function.repla
 THE CHARACTERS WHO REACT
 ${voices}
 
+${brainBlock || ''}
 Return ONLY a JSON array, one object per character in order: [{ "handle": "...", "text": "..." }]`;
 }
 
@@ -115,16 +117,20 @@ async function draftReactions(models, postId, { reactorIds = null, limit = DEFAU
   }
   if (reactors.length === 0) throw new DraftError(409, 'No characters to react: generate social profiles first');
 
+  // The comments are canon too: the Show Bible's always-true rules (2026-10-06).
+  const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedComments' });
+  const prompt = buildPrompt(post, reactors, brain.block);
   let message;
   for (const model of MODELS) {
     try {
-      message = await getClient().messages.create({ model, max_tokens: 1200, messages: [{ role: 'user', content: buildPrompt(post, reactors) }] });
+      message = await getClient().messages.create({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] });
       break;
     } catch (modelErr) {
       console.warn(`[FeedComments] drafting with ${model} failed:`, modelErr.message);
       if (model === MODELS[MODELS.length - 1]) throw modelErr;
     }
   }
+  await recordRuleUse(models.sequelize, brain.ids, 'FeedComments');
   const raw = (message?.content?.[0]?.text || '').trim();
   let drafts;
   try {

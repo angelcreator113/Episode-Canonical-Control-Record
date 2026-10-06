@@ -662,7 +662,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     //     brief were written for the drafted dress code, not the calendar's.
     // Each drafted field is recorded in automation.auto_drafted ('ai_draft')
     // with its value in automation.drafted_values.
-    const draft = await draftEventConcept(host, { venueName, userId, context: calendarContext });
+    const draft = await draftEventConcept(host, { venueName, userId, context: calendarContext, models, showId });
     const styling = !calendarDressCode ? (draft?.styling || null) : null;
     const draftedTaxonomy = {};
     for (const field of ['category', 'format', 'event_time']) {

@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { draftEventConcept } = require('./eventConceptDraftService');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -186,6 +187,9 @@ async function generateUniqueVenue(eventName, eventType, host, prestige, showId)
 Emotional Temperature: ${arc.emotional_temperature}`;
       }
     } catch { /* skip */ }
+    // A venue is canon too: the Show Bible's top rules (2026-10-06).
+    const venueModels = require('../models');
+    const brain = await loadBrainContext(venueModels, { showId, limit: 10, label: 'FeedEventVenue' });
 
     const client = new Anthropic();
     const response = await client.messages.create({
@@ -196,7 +200,7 @@ Emotional Temperature: ${arc.emotional_temperature}`;
 Event: ${eventName}
 Type: ${eventType.replace(/_/g, ' ')}
 Host: ${host || 'unknown'}
-Prestige: ${prestige}/10${phaseContext}
+Prestige: ${prestige}/10${phaseContext}${brain.block || ''}
 
 The venue should feel SPECIFIC and CINEMATIC — not generic. Include sensory details (lighting, sounds, textures, what you see when you walk in). Make it feel like a place that exists in one specific moment.
 
@@ -205,6 +209,7 @@ ${prestige >= 8 ? 'This is HIGH PRESTIGE — exclusive, intimidating, the kind o
 Return ONLY the venue description, one sentence, no quotes.` }],
     });
 
+    await recordRuleUse(venueModels.sequelize, brain.ids, 'FeedEventVenue');
     const venue = response.content[0]?.text?.trim();
     return venue || pickVenue(eventType);
   } catch {
@@ -489,6 +494,8 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
     ? await draftEventConcept(creatorProfile, {
       venueName: typeof venueTheme === 'string' ? venueTheme.slice(0, DRAFT_VENUE_MAX) : null,
       userId,
+      models,
+      showId,
       creatorRole: opp.brand_or_company ? 'started_from' : 'host',
       context: {
         kind: 'opportunity',

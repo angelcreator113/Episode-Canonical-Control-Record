@@ -295,6 +295,7 @@ function checkRateLimit(req, res) {
 // every create/rename path (this file, bulk generate, /confirm-feed, the feed
 // scheduler, feed auto-generation) applies the same rule.
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
+const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 
 // PUT/PATCH /:id rename guard (Task #1893). When the body carries a handle,
 // refuse it with 400 unless it is a non-empty string, and with 409 when another
@@ -369,12 +370,19 @@ Career position relative to Lala: ${career_pressure || 'level'}.
 Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
     }
+    // A LalaVerse creator follows the Show Bible (2026-10-06); a real-world
+    // (JustAWoman's Feed) one does not.
+    const brain = layer === 'lalaverse'
+      ? await loadBrainContext(db, { showId: req.body.show_id || null, label: 'SocialProfiles' })
+      : { block: null, ids: [] };
+    if (brain.block) prompt += `\n${brain.block}`;
 
     const response = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 6000,
       messages:   [{ role: 'user', content: prompt }],
     });
+    await recordRuleUse(db.sequelize, brain.ids, 'SocialProfiles');
 
     const rawText = response?.content?.[0]?.text;
     if (!rawText) {
@@ -1873,12 +1881,17 @@ Generate a profile that feels native to that city's creator culture.
 Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }
+    const brain = layer === 'lalaverse'
+      ? await loadBrainContext(db, { showId: profile.show_id || null, label: 'SocialProfiles' })
+      : { block: null, ids: [] };
+    if (brain.block) prompt += `\n${brain.block}`;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       messages: [{ role: 'user', content: prompt }],
     });
+    await recordRuleUse(db.sequelize, brain.ids, 'SocialProfiles');
 
     const rawText = response?.content?.[0]?.text;
     if (!rawText) {

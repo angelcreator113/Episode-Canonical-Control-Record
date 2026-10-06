@@ -165,6 +165,9 @@ describe('the draft call', () => {
       userId: 'u1',
       creatorRole: 'started_from',
       context: { kind: 'opportunity', title: "Maya Moves's casting call", type: 'casting_call', brand: 'Velour' },
+      // The models and show, so the draft reads the show's Bible rules (2026-10-06).
+      models: expect.any(Object),
+      showId: expect.any(String),
     });
     expect(ctx.venueName.length).toBeGreaterThan(0);
     expect(ctx.venueName.length).toBeLessThanOrEqual(200);
