@@ -1,6 +1,8 @@
 // frontend/src/components/Show/ShowInsightsTab.jsx
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { fetchAllEpisodes } from '../../lib/fetchAllPages';
+import { fetchClosetWithTotal } from '../../lib/closetGrouping';
 
 /**
  * ShowInsightsTab — Real Show Intelligence Dashboard
@@ -43,8 +45,9 @@ function ShowInsightsTab({ show }) {
       const [charRes, ledgerRes, episodesRes, wardrobeRes, eventsRes, overlaysRes] = await Promise.allSettled([
         api.get(`/api/v1/world/${showId}/balance`).catch(() => ({ data: {} })),
         api.get(`/api/v1/world/${showId}/financial-ledger?limit=200`).catch(() => ({ data: { data: {} } })),
-        api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).catch(() => ({ data: [] })),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=500`).catch(() => ({ data: {} })),
+        // Every episode and piece, not the first 100 and 500 (lib/fetchAllPages).
+        fetchAllEpisodes(api, showId).catch(() => ({ items: [] })),
+        fetchClosetWithTotal(api, showId).catch(() => ({ items: [] })),
         api.get(`/api/v1/world/${showId}/events?limit=100`).catch(() => ({ data: {} })),
         api.get(`/api/v1/ui-overlays/${showId}`).catch(() => ({ data: {} })),
       ]);
@@ -57,10 +60,10 @@ function ShowInsightsTab({ show }) {
       const episodeSummary = ledger.episode_summary || [];
 
       // Episodes
-      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.items || []) : [];
 
       // Wardrobe
-      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.items || []) : [];
 
       // Events
       const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];

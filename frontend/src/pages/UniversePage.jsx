@@ -21,6 +21,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { fetchAllEpisodes } from '../lib/fetchAllPages';
+import { fetchClosetWithTotal } from '../lib/closetGrouping';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 import ShowBiblePage from './ShowBiblePage';
@@ -109,16 +111,17 @@ function Overview() {
       // Load stats in parallel
       const [eventsRes, wardrobeRes, episodesRes, overlaysRes, charsRes, booksRes] = await Promise.allSettled([
         api.get(`/api/v1/world/${show.id}/events?limit=100`),
-        api.get(`/api/v1/wardrobe?show_id=${show.id}&limit=500`),
-        api.get(`/api/v1/episodes?show_id=${show.id}&limit=100`),
+        // Every piece and episode, not the first 500 and 100 (lib/fetchAllPages).
+        fetchClosetWithTotal(api, show.id),
+        fetchAllEpisodes(api, show.id),
         api.get(`/api/v1/ui-overlays/${show.id}`),
         api.get('/api/v1/character-registry/registries?limit=50').catch(() => ({ data: {} })),
         api.get('/api/v1/storyteller/books').catch(() => ({ data: {} })),
       ]);
 
       const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
-      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
-      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.items || []) : [];
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.items || []) : [];
       const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
       const registries = charsRes.status === 'fulfilled' ? (charsRes.value.data?.registries || []) : [];
       const characters = registries.flatMap(r => r.characters || []);

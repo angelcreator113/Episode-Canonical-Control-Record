@@ -20,6 +20,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { fetchAllEpisodes } from '../lib/fetchAllPages';
+import { fetchClosetWithTotal } from '../lib/closetGrouping';
 
 const TABS = [
   { key: 'config',   icon: '⚙️',  label: 'Config'   },
@@ -136,19 +138,22 @@ export default function ShowSettings() {
     setExporting(true);
     try {
       const [epsRes, eventsRes, goalsRes, wardrobeRes] = await Promise.allSettled([
-        api.get(`/api/v1/episodes?show_id=${showId}&limit=200`),
+        // Every episode and piece, not the first 200 and 500 (lib/fetchAllPages).
+        fetchAllEpisodes(api, showId),
         api.get(`/api/v1/world/${showId}/events`),
         api.get(`/api/v1/world/${showId}/goals`),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=500`),
+        fetchClosetWithTotal(api, showId),
       ]);
 
       const payload = {
         show:     show,
         exported: new Date().toISOString(),
-        episodes: epsRes.status    === 'fulfilled' ? (epsRes.value.data?.episodes    || []) : [],
+        // The episodes API answers { data }, never { episodes }: the export
+        // used to carry no episodes at all.
+        episodes: epsRes.status    === 'fulfilled' ? (epsRes.value.items || []) : [],
         events:   eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events   || []) : [],
         goals:    goalsRes.status  === 'fulfilled' ? (goalsRes.value.data?.goals     || []) : [],
-        wardrobe: wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [],
+        wardrobe: wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.items || []) : [],
       };
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
