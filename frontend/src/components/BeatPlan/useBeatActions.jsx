@@ -13,6 +13,7 @@
  */
 import { useState } from 'react';
 import api from '../../services/api';
+import { fetchAllSceneSets } from '../../lib/fetchAllPages';
 
 export default function useBeatActions({ episodeId, showToast, reload, showId = null, loadShowId = null, linkedIds = new Set(), fromLabel = null }) {
   const [editingBeat, setEditingBeat] = useState(null);
@@ -27,8 +28,9 @@ export default function useBeatActions({ episodeId, showToast, reload, showId = 
     const show = showId || (loadShowId ? await loadShowId() : null);
     if (!show) { setLibrary([]); return; }
     try {
-      const res = await api.get(`/api/v1/scene-sets?show_id=${show}&limit=200`);
-      setLibrary((res.data?.data || []).filter((x) => x && x.id && (x.show_id === show || !x.show_id)));
+      // Every set, not the first 200 (lib/fetchAllPages).
+      const { items } = await fetchAllSceneSets(api, show);
+      setLibrary(items.filter((x) => x && x.id && (x.show_id === show || !x.show_id)));
     } catch (err) {
       console.error('[BeatPlan] scene sets load failed:', err);
       showToast(err.response?.data?.error || 'Could not load the scene sets', 'error');

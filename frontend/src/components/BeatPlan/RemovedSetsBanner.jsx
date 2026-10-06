@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { fetchAllSceneSets } from '../../lib/fetchAllPages';
 import './BeatPlanParts.css';
 
 export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
@@ -33,8 +34,9 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
 
   useEffect(() => {
     if (!removed.length || !showId) return;
-    api.get(`/api/v1/scene-sets?show_id=${showId}&limit=200`)
-      .then((res) => setLibrary(Array.isArray(res.data?.data) ? res.data.data : []))
+    // Every set, not the first 200 (lib/fetchAllPages).
+    fetchAllSceneSets(api, showId)
+      .then(({ items }) => setLibrary(items))
       .catch((err) => console.error('[RemovedSets] library load failed:', err));
   }, [removed.length, showId]);
 

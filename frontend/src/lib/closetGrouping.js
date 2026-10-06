@@ -14,6 +14,7 @@
  * resolves to the Other group, so the Full Closet shows every
  * item rather than dropping it.
  */
+import { fetchAllPages } from './fetchAllPages';
 import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from './wardrobeSlots';
 
 export const GAME_SLOT_DEFS = [
@@ -144,36 +145,14 @@ export async function fetchAllClosetItems(api, showId, options) {
 }
 
 /**
- * { items, total }: every closet item, and how many the server says the
- * closet holds (null when it does not say). A total above items.length means
- * some pieces did not load (W3).
+ * { items, total, complete }: every closet item, how many the server says
+ * the closet holds (null when it does not say), and whether every one
+ * loaded. A total above items.length means some pieces did not load (W3).
  */
 export async function fetchClosetWithTotal(api, showId, { pageSize = CLOSET_PAGE_SIZE, maxPages = CLOSET_MAX_PAGES } = {}) {
-  const all = [];
-  let serverTotal = null;
-  const seen = new Set();
-  for (let page = 1; page <= maxPages; page += 1) {
-    const res = await api.get(`/api/v1/wardrobe?show_id=${encodeURIComponent(showId)}&limit=${pageSize}&page=${page}`);
-    const body = res?.data;
-    const rows = body?.data || body?.items || (Array.isArray(body) ? body : []);
-    if (!Array.isArray(rows) || rows.length === 0) break;
-    let added = 0;
-    for (const row of rows) {
-      const key = row?.id ?? `__${all.length}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      all.push(row);
-      added += 1;
-    }
-    const total = Number(body?.pagination?.total);
-    if (Number.isFinite(total)) serverTotal = total;
-    if (Number.isFinite(total) && all.length >= total) break;
-    if (rows.length < pageSize || added === 0) break;
-    if (page === maxPages) {
-      console.warn(`[closet] stopped after ${maxPages} pages (${all.length} items); the closet may be incomplete`);
-    }
-  }
-  return { items: all, total: serverTotal };
+  // The shared reader (lib/fetchAllPages): { items, total, complete }.
+  return fetchAllPages(api, ({ page, limit }) => `/api/v1/wardrobe?show_id=${encodeURIComponent(showId)}&limit=${limit}&page=${page}`,
+    { pageSize, maxPages, label: 'closet' });
 }
 
 // ─── W1 (Evoni, 2026-10-01): matching sets ───

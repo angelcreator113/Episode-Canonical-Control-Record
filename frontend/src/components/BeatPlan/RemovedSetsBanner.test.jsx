@@ -26,7 +26,7 @@ describe('RemovedSetsBanner (D2)', () => {
     Object.values(api).forEach((fn) => fn.mockReset());
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/removed-sets') return { data: { data: REMOVED } };
-      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200') return { data: { data: LIBRARY } };
+      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200&offset=0') return { data: { data: LIBRARY } };
       return { data: {} };
     });
     vi.mocked(api.post).mockResolvedValue({ data: { success: true } });

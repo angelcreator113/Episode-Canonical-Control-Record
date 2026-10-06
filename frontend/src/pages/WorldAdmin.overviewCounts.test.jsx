@@ -2,7 +2,8 @@
  * Producer Mode's Overview answers four questions (ShowOverview): what is in
  * production, what needs attention, what comes next, what changed. Ready is
  * the Events queue's definition (computeEventState). Production counts the
- * show's episodes by the list's total (the list stops at 100). A section
+ * show's episodes by the list's total; every page of a list is read, and one
+ * that loads short of its total says so ("Showing X of Y"). A section
  * that fails to load says so, with Retry, instead of looking empty.
  */
 import React from 'react';
@@ -77,6 +78,19 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     );
     await waitFor(() => expect(screen.getByTestId('seb-count').textContent).toContain('137 episodes'));
     expect(screen.getByTestId('seb-count').textContent).toContain('showing the first 1');
+  });
+
+  test('a list that loads short of its total says so, instead of passing a partial list off as whole', async () => {
+    renderIt();
+    const note = await screen.findByTestId('wa-load-partial');
+    expect(note.textContent).toContain('episodes: Showing 1 of 137');
+    expect(note.textContent).toContain('wardrobe: Showing 1 of 412');
+    expect(note.textContent).not.toContain('scene sets'); // no total and a short page: complete
+    // Every page was asked for: the episodes from page 1 at 100 a page, the closet at 200.
+    const urls = vi.mocked(api.get).mock.calls.map((c) => c[0]);
+    expect(urls).toContain('/api/v1/episodes?show_id=show-1&limit=100&page=1');
+    expect(urls).toContain('/api/v1/wardrobe?show_id=show-1&limit=200&page=1');
+    expect(urls).toContain('/api/v1/scene-sets?show_id=show-1&limit=200&offset=0');
   });
 
   test('a failed load says what could not load, and Retry loads again', async () => {

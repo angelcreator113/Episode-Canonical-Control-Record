@@ -75,7 +75,7 @@ describe('Place: the scene set for the event (S7)', () => {
           termsLockedBy: stored.used_in_episode_id ? { id: stored.used_in_episode_id } : null,
         } };
       }
-      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200') return { data: { success: true, data: SETS } };
+      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200&offset=0') return { data: { success: true, data: SETS } };
       if (url === '/api/v1/world/show-1/events') return { data: { success: true, events: [EVENT] } };
       return { data: { success: true, deliverables: [], locked: false } };
     });
@@ -195,7 +195,7 @@ describe('Place: the scene-set picker shows thumbnails, search and angles (L2)',
           sceneSet: { id: 'set-venue-hall', name: 'Glasshouse Hall' }, venueLocation: null, invitationAsset: null, usedInEpisode: null,
         } };
       }
-      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200') return { data: { success: true, data: ANGLED } };
+      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200&offset=0') return { data: { success: true, data: ANGLED } };
       if (url === '/api/v1/world/locations') return { data: { success: true, locations: LOCATIONS } };
       return { data: { success: true, deliverables: [], locked: false } };
     });
