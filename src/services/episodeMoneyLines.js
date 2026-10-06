@@ -18,8 +18,10 @@
  * Answers (note §3, §4):
  *   Q1. The lines: deal components, each bonus tier, content fees, terms
  *       costs Lala pays, the entry cost, a legacy event's payment, content
- *       revenue and styling extras, and event spending. Wardrobe is Phase
- *       C; a posted row no line matches is "Posted, not planned".
+ *       revenue and styling extras, and event spending; a posted row no
+ *       line matches is "Posted, not planned". Wardrobe was Phase C; since
+ *       2026-10-06 Lala's look is planned too, a line per piece Finalize
+ *       charges (episodeLookCharges), triggered at Finalize.
  *   Q2. A line matches its row by ledger category and source id.
  *   Q3. Each bonus tier is its own line; no conditional bonus is counted
  *       in the projection: it is shown as "+ up to X if SLAY" beside it.
@@ -45,6 +47,8 @@ const STATES = Object.freeze({
 const TRIGGERS = Object.freeze({
   COMPLETE: 'at Complete',
   APPROVAL: 'on approval',
+  // Complete's Finalize step, which charges Lala's look.
+  FINALIZE: 'at Finalize',
 });
 
 const COMPONENT_LABELS = Object.freeze({
@@ -81,7 +85,7 @@ const LALA = Object.freeze({ who: 'lala', name: 'Lala' });
  * The plan: every line the accepted terms and the spending lines make,
  * before any is matched to the ledger.
  */
-function plannedLines({ event, costs = [], deliverables = [], spending = [], hadSpending = false }) {
+function plannedLines({ event, costs = [], deliverables = [], spending = [], hadSpending = false, look = [] }) {
   if (!event) return [];
   const { normalizePaidFreeFlags } = require('./financialTransactionService');
   const { completionPayouts, contentFeeFor, normalizeBonusTerms, BONUS_TIERS } = require('./dealPayoutService');
@@ -263,6 +267,25 @@ function plannedLines({ event, costs = [], deliverables = [], spending = [], had
     }
   }
 
+  // Lala's look (Evoni, 2026-10-06): each piece Finalize charges, from
+  // episodeLookCharges, so the estimate is what Finalize books; a piece
+  // already paid for in this episode is its posted row.
+  for (const { category, piece, amount } of look) {
+    const total = whole(amount);
+    if (total <= 0 || piece?.id == null) continue;
+    add({
+      key: rowKey(category, piece.id),
+      kind: 'expense',
+      category,
+      label: category === 'wardrobe_rental' ? `Rental: ${piece.name}` : piece.name,
+      amount: total,
+      trigger: TRIGGERS.FINALIZE,
+      payer: LALA,
+      source: { type: 'wardrobe', id: piece.id },
+      look: true,
+    });
+  }
+
   return lines;
 }
 
@@ -392,7 +415,7 @@ function moneyWarnings({ lines = [], projection, balance = 0 }) {
 // ─── MB6: the plan at Start Episode, and the reconciliation after Complete ───
 
 const PLAN_FIELDS = ['key', 'kind', 'category', 'label', 'amount', 'trigger', 'payer', 'conditional',
-  'covered', 'covered_amount', 'tier', 'state', 'source', 'quantity', 'unit_price', 'drafted'];
+  'covered', 'covered_amount', 'tier', 'state', 'source', 'quantity', 'unit_price', 'drafted', 'look'];
 
 /** The plan saved on the episode at Start Episode (Q7): its lines as they stand, nothing posted yet. */
 function planSnapshot({ lines = [], balance = 0, takenAt = new Date() }) {

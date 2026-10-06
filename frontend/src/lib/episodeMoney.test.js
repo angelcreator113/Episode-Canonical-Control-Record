@@ -39,4 +39,23 @@ describe('episodeMoney', () => {
     expect(termsNote({ event: null })).toBeNull();
     expect(termsNote({ event: { id: 'e' }, spending: { editable: false } })).toContain('The episode is complete');
   });
+
+  test("the look's pieces are one \"Lala's look\" row at Finalize, Planned until every piece has posted", () => {
+    const gown = { key: 'wardrobe_purchase|w1', category: 'wardrobe_purchase', label: 'Gold Gown', kind: 'expense', amount: 200, signed: -200, state: 'planned', trigger: 'at Finalize', look: true, source: { type: 'wardrobe', id: 'w1' }, payer: { who: 'lala' } };
+    const clutch = { ...gown, key: 'wardrobe_purchase|w2', label: 'Pearl Clutch', amount: 50, signed: -50, state: 'posted', posted: { signed: -50 }, source: { type: 'wardrobe', id: 'w2' } };
+    const money = deal([reel, entry, gown, clutch], { look: { pieces: 3 } });
+    const rows = estimateRows(money);
+    expect(rows.map((r) => r.label)).toEqual(['Instagram Reel fee', 'Entry / ticket', "Lala's look", 'Performance bonus']);
+    expect(rows[2]).toMatchObject({ source: 'Wardrobe · 1 to buy, 1 bought', when: 'At Finalize', amountText: '−250', chip: 'Planned', pieces: ['Gold Gown', 'Pearl Clutch'] });
+    expect(moneyTiles(money).spends).toEqual({ total: -250, note: "Lala's look; Entry / ticket is comped" });
+    expect(estimateRows(deal([{ ...clutch }], { look: { pieces: 1 } }))[0]).toMatchObject({ chip: 'Posted', source: 'Wardrobe · 1 bought' });
+  });
+
+  test('a look not chosen reads Not chosen; one whose pieces are all owned reads All owned; neither counts', () => {
+    const notChosen = estimateRows(deal([reel], { look: { pieces: 0 } })).find((r) => r.key === 'look');
+    expect(notChosen).toMatchObject({ amountText: '—', chip: 'Not chosen', counts: 0 });
+    const owned = estimateRows(deal([reel], { look: { pieces: 2 } })).find((r) => r.key === 'look');
+    expect(owned).toMatchObject({ amountText: '0', chip: 'All owned', source: 'Wardrobe · every piece owned' });
+    expect(estimateRows(deal([reel])).some((r) => r.key === 'look')).toBe(false); // an API without look: no row
+  });
 });

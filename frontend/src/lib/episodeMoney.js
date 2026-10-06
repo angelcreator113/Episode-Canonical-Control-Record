@@ -8,7 +8,13 @@
  * The rows add up to the projected net exactly: a posted line counts its
  * ledger row, a planned or pending line its amount; a conditional bonus, a
  * bonus not earned and a comped cost count 0 (Q3, Q8); a posted row no
- * line matches (a wardrobe purchase, say) counts as it posted.
+ * line matches counts as it posted.
+ *
+ * Lala's look (2026-10-06): the server plans a line per piece Finalize
+ * charges (src/services/episodeLookCharges.js); the page shows them as one
+ * "Lala's look" row, at Finalize, Planned until every piece has posted. A
+ * look not chosen yet reads "Not chosen"; one whose pieces are all owned
+ * reads "All owned".
  */
 
 const DEAL_CATEGORIES = new Set(['appearance_fee', 'partnership_base_fee', 'performance_fee', 'content_fee', 'deal_bonus', 'content_revenue']);
@@ -66,8 +72,34 @@ export function lineCounts(line) {
  * chipKind, counts }. A deal with no bonus tier gets a "None in deal" row,
  * as in the mock.
  */
+const isLookLine = (l) => l.look === true || l.source?.type === 'wardrobe';
+
+function lookRow(money, lookLines) {
+  if (lookLines.length) {
+    const counts = lookLines.reduce((s, l) => s + lineCounts(l), 0);
+    const open = lookLines.filter((l) => !l.posted).length;
+    const paid = lookLines.length - open;
+    const parts = [open ? `${open} to buy` : null, paid ? `${paid} bought` : null].filter(Boolean).join(', ');
+    return {
+      key: 'look', label: "Lala's look", source: `Wardrobe · ${parts}`, when: 'At Finalize',
+      amount: counts, amountText: signedCoins(counts), chip: open ? 'Planned' : 'Posted',
+      chipKind: open ? 'planned' : 'posted', counts,
+      pieces: lookLines.map((l) => l.label),
+    };
+  }
+  if (!money?.event || !money.look) return null;
+  const chosen = money.look.pieces > 0;
+  return {
+    key: 'look', label: "Lala's look", source: chosen ? 'Wardrobe · every piece owned' : 'Wardrobe · to-buy pieces',
+    when: 'At Finalize', amount: 0, amountText: chosen ? '0' : '—', chip: chosen ? 'All owned' : 'Not chosen',
+    chipKind: chosen ? 'none' : 'missing', counts: 0,
+  };
+}
+
 export function estimateRows(money) {
-  const lines = money?.lines || [];
+  const all = money?.lines || [];
+  const lookLines = all.filter(isLookLine);
+  const lines = all.filter((l) => !isLookLine(l));
   const rows = lines.map((l) => {
     const counts = lineCounts(l);
     let amountText = signedCoins(counts);
@@ -93,6 +125,8 @@ export function estimateRows(money) {
       counts,
     };
   });
+  const look = lookRow(money, lookLines);
+  if (look) rows.push(look);
   const isDeal = lines.some((l) => DEAL_CATEGORIES.has(l.category));
   if (isDeal && !lines.some((l) => l.category === 'deal_bonus')) {
     rows.push({

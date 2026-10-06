@@ -413,44 +413,11 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   //    approved episode_wardrobe links) when there is one; else the outfit
   //    saved on the event. Finalize charged only the event's outfit, so a
   //    dress chosen in the event's picker was charged although Lala wore
-  //    the one locked in the game (Evoni, 2026-10-05).
+  //    the one locked in the game (Evoni, 2026-10-05). The Money page's
+  //    estimate lists the same charges (episodeLookCharges).
   const tq = transaction ? { transaction } : {};
-  let outfitPieces = [];
-  let lockedOutfit = [];
-  try {
-    lockedOutfit = await sequelize.query(
-      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.tier, w.brand,
-              w.acquisition_type, w.rental_price
-         FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
-        WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
-          AND ew.approval_status = 'approved'
-          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL`,
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, ...tq }
-    );
-  } catch (lockedErr) {
-    console.error('[FinancialTx] Could not read the locked outfit for episode', episodeId, lockedErr.message);
-  }
-  if (lockedOutfit.length > 0) {
-    outfitPieces = lockedOutfit;
-  } else if (event?.outfit_pieces) {
-    outfitPieces = typeof event.outfit_pieces === 'string'
-      ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
-    // The snapshot's is_owned is from when it was saved; a piece Lala owns
-    // now is not charged.
-    const snapIds = outfitPieces.map((p) => String(p?.id ?? '')).filter((id) => UUID_RE.test(id));
-    if (snapIds.length > 0) {
-      try {
-        const ownedRows = await sequelize.query(
-          'SELECT id FROM wardrobe WHERE id IN (:snapIds) AND is_owned = true',
-          { replacements: { snapIds }, type: sequelize.QueryTypes.SELECT, ...tq }
-        );
-        const ownedNow = new Set((ownedRows || []).map((r) => String(r.id)));
-        outfitPieces = outfitPieces.map((p) => (ownedNow.has(String(p?.id)) ? { ...p, is_owned: true } : p));
-      } catch (ownedErr) {
-        console.error('[FinancialTx] Could not read current ownership for episode', episodeId, ownedErr.message);
-      }
-    }
-  }
+  const { loadLookPieces, boughtPieceIds: loadBoughtPieceIds, lookCharges } = require('./episodeLookCharges');
+  const outfitPieces = await loadLookPieces(sequelize, { episodeId, event, transaction });
 
   // Pieces Lala has already paid for: any counted wardrobe_purchase row of
   // the show for the piece, from any spend (select, lock-outfit, purchase)
@@ -458,23 +425,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   // is_owned: false for them, so without this finalize would charge a second
   // time (§8(z) Law 4, "Purchased things cost money once"; §8(x) D3;
   // Task #2248).
-  let boughtPieceIds = new Set();
-  // source_id is a uuid column: a non-uuid piece id would fail the query and,
-  // inside D2's transaction, abort it (#2252), so only uuids are asked about.
-  const pieceIds = outfitPieces.map((p) => String(p?.id ?? '')).filter((id) => UUID_RE.test(id));
-  if (pieceIds.length > 0) {
-    try {
-      const boughtRows = await sequelize.query(
-        `SELECT DISTINCT ft.source_id FROM financial_transactions ft
-          WHERE ft.show_id = :showId AND ft.category = 'wardrobe_purchase'
-            AND ft.source_id IN (:pieceIds) AND ${countedLedgerRows('ft')}`,
-        { replacements: { showId, pieceIds }, type: sequelize.QueryTypes.SELECT }
-      );
-      boughtPieceIds = new Set((boughtRows || []).map((r) => String(r.source_id)));
-    } catch (boughtErr) {
-      console.error('[FinancialTx] Could not read earlier purchases for episode', episodeId, boughtErr.message);
-    }
-  }
+  const boughtPieceIds = await loadBoughtPieceIds(sequelize, { showId, episodeId, pieces: outfitPieces });
 
   // 5. Get current balance
   let balance = await getCurrentBalance(sequelize, showId);
@@ -513,35 +464,28 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       });
     }
 
-    // 7. Wardrobe costs (expense — skip gifted/borrowed/owned)
+    // 7. Wardrobe costs (expense — skip gifted/borrowed/owned), one rule
+    //    with the Money page's estimate (episodeLookCharges.lookCharges).
     const chargedPieceIds = [];
-    for (const piece of outfitPieces) {
-      const acq = piece.acquisition_type || 'purchased';
-      if (acq === 'gifted' || acq === 'borrowed') continue;
-
-      if (acq === 'rented' && piece.rental_price > 0) {
+    for (const { category, piece, amount } of lookCharges(outfitPieces, boughtPieceIds)) {
+      if (category === 'wardrobe_rental') {
         await addTx({
-          type: 'expense', category: 'wardrobe_rental', amount: parseFloat(piece.rental_price),
+          type: 'expense', category: 'wardrobe_rental', amount,
           description: `Rental: ${piece.name}`,
           source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
           metadata: { tier: piece.tier, brand: piece.brand },
         });
-      } else if (!piece.is_owned && !boughtPieceIds.has(String(piece.id))) {
+      } else {
         // The story price, coin_cost, as select, purchase and lock charge
         // (Task #2346). A snapshot written before coin_cost was stored has
         // none and keeps the old fallback to price.
-        const cost = piece.coin_cost != null
-          ? (parseFloat(piece.coin_cost) || 0)
-          : (parseFloat(piece.price) || 0);
-        if (cost > 0) {
-          await addTx({
-            type: 'expense', category: 'wardrobe_purchase', amount: cost,
-            description: `Purchase: ${piece.name}`,
-            source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
-            metadata: { tier: piece.tier, brand: piece.brand },
-          });
-          chargedPieceIds.push(String(piece.id));
-        }
+        await addTx({
+          type: 'expense', category: 'wardrobe_purchase', amount,
+          description: `Purchase: ${piece.name}`,
+          source_type: 'wardrobe', source_id: piece.id, source_name: piece.name,
+          metadata: { tier: piece.tier, brand: piece.brand },
+        });
+        chargedPieceIds.push(String(piece.id));
       }
     }
     // A piece finalize paid for is Lala's (§8(z) Law 4, "Purchased things
