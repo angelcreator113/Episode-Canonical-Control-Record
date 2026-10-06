@@ -29,6 +29,7 @@ const {
   goalTaskScale, goalFields, composeGoalTasks, enforceGoalTaskBounds, remainingGoalRoom, capCombinedGoals,
 } = require('../utils/goalTasks');
 const { v4: uuidv4 } = require('uuid');
+const { CATEGORY_ALIASES } = require('../utils/wardrobeSlots');
 const path = require('path');
 const fs = require('fs');
 
@@ -45,12 +46,61 @@ function getAnthropic() {
 const SLOTS = [
   { slot: 'dress',       icon: '👗', label: 'Main Outfit',  required: true  },
   { slot: 'shoes',       icon: '👠', label: 'Shoes',        required: true  },
+  { slot: 'purse',       icon: '👛', label: 'Purse',        required: false },
   { slot: 'accessories', icon: '👜', label: 'Accessories',  required: false },
   { slot: 'jewelry',     icon: '💍', label: 'Jewelry',      required: false },
   { slot: 'perfume',     icon: '🌸', label: 'Perfume',      required: false },
   { slot: 'top',         icon: '👚', label: 'Top',          required: false },
   { slot: 'bottom',      icon: '👖', label: 'Bottom',       required: false },
 ];
+
+// ─── WHICH LIST LINES THE OUTFIT FILLS ─────────────────────────────────────────
+
+// A wardrobe clothing_category as the shopping list's line (Evoni,
+// 2026-10-06: a bag belongs on the list as a Purse, apart from the other
+// accessories). Categories resolve through the wardrobe's own names and
+// aliases (utils/wardrobeSlots: handbag, clutch, tote → bag; scarf, belt →
+// accessory; fragrance → perfume), so a piece ticks its line whatever it was
+// called. Before, a line ticked only on an exact match, and the wardrobe
+// never saves a bag as 'accessories', so the bag line never ticked.
+const CATEGORY_TO_LIST_SLOT = {
+  dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes',
+  bag: 'purse', accessory: 'accessories', jewelry: 'jewelry', perfume: 'perfume',
+};
+
+function listSlotOf(clothingCategory) {
+  if (!clothingCategory || typeof clothingCategory !== 'string') return null;
+  const raw = clothingCategory.toLowerCase().trim();
+  if (CATEGORY_TO_LIST_SLOT[raw]) return CATEGORY_TO_LIST_SLOT[raw];
+  const aliased = CATEGORY_ALIASES[raw];
+  if (aliased && CATEGORY_TO_LIST_SLOT[aliased]) return CATEGORY_TO_LIST_SLOT[aliased];
+  // Free text ("evening clutch", "silk scarf"): the first name it contains.
+  for (const [name, canonical] of Object.entries(CATEGORY_ALIASES)) {
+    if (raw.includes(name) && CATEGORY_TO_LIST_SLOT[canonical]) return CATEGORY_TO_LIST_SLOT[canonical];
+  }
+  for (const name of Object.keys(CATEGORY_TO_LIST_SLOT)) {
+    if (raw.includes(name)) return CATEGORY_TO_LIST_SLOT[name];
+  }
+  return null;
+}
+
+/** The list lines an outfit's clothing_categories fill. */
+function listSlotsFilled(categories = []) {
+  const filled = new Set(categories.map(listSlotOf).filter(Boolean));
+  // The main outfit is a dress, or a top and a bottom.
+  if (filled.has('dress') || (filled.has('top') && filled.has('bottom'))) filled.add('dress');
+  return filled;
+}
+
+/**
+ * Whether a list line is ticked. A list saved before the Purse line has one
+ * 'accessories' line for bags and the rest (its prompt said "bag, purse,
+ * clutch"), so there either a purse or an accessory ticks it.
+ */
+function taskFilled(slot, filled, { legacyAccessories = false } = {}) {
+  if (slot === 'accessories' && legacyAccessories) return filled.has('accessories') || filled.has('purse');
+  return filled.has(slot);
+}
 
 // ─── CLAUDE TASK GENERATOR ────────────────────────────────────────────────────
 
@@ -68,7 +118,8 @@ EXAMPLES of the tone we want:
 - Instead of "Find your dress" → "Find a showstopper that makes the room go quiet"
 - Instead of "Find shoes" → "Find heels that say 'I belong at the front row'"
 - Instead of "Find perfume" → "Find a floral scent that makes someone lean in close"
-- Instead of "Find accessories" → "Find a clutch that holds secrets and lipstick"
+- Instead of "Find a purse" → "Find a clutch that holds secrets and lipstick"
+- Instead of "Find accessories" → "Find a silk scarf that finishes the story"
 - Instead of "Find jewelry" → "Find gold that catches the chandelier light"
 
 EVENT:
@@ -89,11 +140,12 @@ Mark required: true for dress and shoes. Everything else required: false.
 Slots (in order):
 1. dress — the main outfit (dress, or top + bottom combination)
 2. shoes — footwear
-3. accessories — bag, purse, clutch
-4. jewelry — earrings, necklace, rings, bracelet
-5. perfume — fragrance, scent
-6. top — alternative to dress (top half only)
-7. bottom — alternative to dress (skirt, pants, bottom half)
+3. purse — bag, purse, clutch, handbag, tote
+4. accessories — belt, scarf, hat, sunglasses, hair piece (not a bag)
+5. jewelry — earrings, necklace, rings, bracelet
+6. perfume — fragrance, scent
+7. top — alternative to dress (top half only)
+8. bottom — alternative to dress (skirt, pants, bottom half)
 
 Respond ONLY with a JSON array. No preamble. No explanation.
 
@@ -106,7 +158,7 @@ Respond ONLY with a JSON array. No preamble. No explanation.
     "completed": false,
     "order": 1
   },
-  ...7 total
+  ...8 total
 ]`;
 
   const response = await getAnthropic().messages.create({
@@ -133,7 +185,8 @@ Respond ONLY with a JSON array. No preamble. No explanation.
     const VIBE_FALLBACKS = {
       dress:       { label: 'Find a look that says everything without a word',       desc: 'The outfit sets the tone for the whole night' },
       shoes:       { label: 'Find heels that make every step count',                 desc: 'Confidence starts from the ground up' },
-      accessories: { label: 'Find a clutch that holds secrets and lipstick',          desc: 'The finishing touch that ties it together' },
+      purse:       { label: 'Find a clutch that holds secrets and lipstick',          desc: 'The finishing touch that ties it together' },
+      accessories: { label: 'Find a silk scarf that finishes the story',              desc: 'The little extra that makes it hers' },
       jewelry:     { label: 'Find something gold that catches the light',             desc: 'A little sparkle goes a long way' },
       perfume:     { label: 'Find a scent that makes someone lean in close',          desc: 'The invisible accessory they remember most' },
       top:         { label: 'Find a top that turns heads on its own',                 desc: 'Sometimes the top half does all the talking' },
@@ -601,18 +654,14 @@ async function getTodoList(episodeId, models) {
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
 
-  const filledSlots = new Set(wardrobeItems.map(w => w.clothing_category));
+  const filledSlots = listSlotsFilled(wardrobeItems.map(w => w.clothing_category));
 
-  // Map dress/top/bottom to body slot
-  const bodyFilled = filledSlots.has('dress') || (filledSlots.has('top') && filledSlots.has('bottom'));
-  if (bodyFilled) filledSlots.add('dress');
-
-  const tasks = (typeof todoList.tasks === 'string'
-    ? JSON.parse(todoList.tasks)
-    : todoList.tasks
-  ).map(t => ({
+  const saved = typeof todoList.tasks === 'string' ? JSON.parse(todoList.tasks) : todoList.tasks;
+  // A list with no Purse line predates it; its Accessories line held bags.
+  const legacyAccessories = !(saved || []).some(t => t?.slot === 'purse');
+  const tasks = (saved || []).map(t => ({
     ...t,
-    completed: filledSlots.has(t.slot),
+    completed: taskFilled(t.slot, filledSlots, { legacyAccessories }),
   }));
 
   return {
@@ -873,4 +922,7 @@ module.exports = {
   generateTasks,
   generateCareerTasks,
   renderTodoAsset,
+  listSlotOf,
+  listSlotsFilled,
+  taskFilled,
 };
