@@ -158,3 +158,48 @@ describe('EpisodeTitleChip (P15)', () => {
     await waitFor(() => expect(screen.getByTestId('ed-title-chip').textContent).toBe('Title · Not made'));
   });
 });
+
+// Evoni's Episode mock (2026-10-06): a preview with Add an overlay, then
+// Overlays by beat.
+describe('EpisodeOverlaysTab — the mock\'s preview and Overlays by beat', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.get.mockImplementation(routeGet);
+  });
+
+  test('rows by beat with their kind and action; the rows still needed are counted and dashed', async () => {
+    renderTab();
+    const card = await screen.findByTestId('eot-bybeat');
+    const rows = [...card.querySelectorAll('li')].map((li) => li.getAttribute('data-testid'));
+    expect(rows.indexOf('eot-row-invitation')).toBeLessThan(rows.indexOf('eot-row-task_list'));
+    const task = screen.getByTestId('eot-row-task_list');
+    expect(task.className).toContain('is-needed');
+    expect(within(task).getByText('Beat 9 · not placed yet')).toBeTruthy();
+    expect(within(task).getByText('Document')).toBeTruthy();
+    expect(within(task).getByRole('button', { name: 'Add' })).toBeTruthy();
+    const invite = screen.getByTestId('eot-row-invitation');
+    expect(within(invite).getByText('Beat 5')).toBeTruthy();
+    expect(within(invite).getByRole('button', { name: 'Edit' })).toBeTruthy();
+    expect(within(screen.getByTestId('eot-row-framed_card')).getByRole('button', { name: 'Update' })).toBeTruthy();
+    expect(screen.getByTestId('eot-still-needed').textContent).toBe('2 still needed');
+  });
+
+  test('the preview shows a made piece with its beat; a row picks what it shows', async () => {
+    renderTab();
+    const preview = await screen.findByTestId('eot-stage-preview');
+    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Title overlay');
+    fireEvent.click(within(screen.getByTestId('eot-row-invitation')).getByRole('button', { name: 'Edit' }));
+    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Invitation');
+    expect(screen.getByTestId('eot-stage-tag').textContent).toBe('Preview · Beat 5');
+  });
+
+  test('Add an overlay: from a document, from Lala\'s Feed, a notification or stat pop', async () => {
+    renderTab();
+    await screen.findByTestId('eot-stage-preview');
+    expect(screen.getByRole('heading', { level: 2, name: 'Add an overlay' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /From a document/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /From Lala's Feed/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=feed');
+    expect(screen.getByRole('link', { name: /Notification or stat pop/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=overlays-tab');
+  });
+});
+

@@ -41,6 +41,19 @@ describe('Episode Overlays theme', () => {
       ['--danger-text', '--surface-card'],
       ['--lala-gold-text', '--surface-card'],
       ['--lala-ink', '--lala-parchment'],
+      // Evoni's Episode mock (2026-10-06): the preview tag, the add options,
+      // the kind chips and the rows still needed.
+      ['--lala-parchment', '--lala-ink'],
+      ['--lala-ink', '--lala-lavender-soft'],
+      ['--lala-ink', '--primary-subtle'],
+      ['--lala-ink', '--accent-subtle'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--accent-dark', '--accent-subtle'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--primary-text', '--primary-subtle'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-ink', '--warning-bg'],
+      ['--lala-lavender-text', '--warning-bg'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
