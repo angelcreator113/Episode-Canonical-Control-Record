@@ -44,8 +44,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     ids.dressA = (await mk('Dress A', 'dress')).id;
     ids.dressB = (await mk('Dress B', 'dress')).id;
     ids.shoes = (await mk('Shoes', 'shoes')).id;
-    // Put on the episode by another flow, never bought: unowned, no unlock.
-    ids.generated = (await mk('Generated Bag', 'accessories', { is_owned: false })).id;
+    // Put on the episode by another flow, never bought: unowned and not for
+    // sale (Evoni's ruling, 2026-10-06: every other unowned piece is for
+    // sale, so a no-lock piece would now be bought instead of refused).
+    ids.generated = (await mk('Generated Bag', 'accessories', { is_owned: false, lock_type: 'brand_exclusive' })).id;
     await models.CharacterState.create({ show_id: ids.show, character_key: 'lala', coins: 500, reputation: 5 });
     return ids;
   }

@@ -10,8 +10,8 @@
  * canonical map, shared with the backend twin src/utils/wardrobeSlots.js),
  * then to the game slot that lists it.
  *
- * A category the game has no slot for (outerwear, a free-text value, a
- * missing one) resolves to the Other group, so the Full Closet shows every
+ * A category the game has no slot for (a free-text value, a missing one)
+ * resolves to the Other group, so the Full Closet shows every
  * item rather than dropping it.
  */
 import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from './wardrobeSlots';
@@ -20,6 +20,10 @@ export const GAME_SLOT_DEFS = [
   { key: 'body', icon: '👗', label: 'Body', categories: ['dress'], required: true, desc: 'Dress or Top+Bottom' },
   { key: 'top', icon: '👚', label: 'Top', categories: ['top'], required: false, desc: 'With bottom' },
   { key: 'bottom', icon: '👖', label: 'Bottom', categories: ['bottom'], required: false, desc: 'With top' },
+  // Evoni, 2026-10-06: a jacket over a blouse. One layer (jacket, blazer,
+  // coat, cardigan) over a dress or a top and bottom; before, outerwear had
+  // no slot and sat in Other, browse-only.
+  { key: 'outerwear', icon: '🧥', label: 'Outerwear', categories: ['outerwear'], required: false, desc: 'Layers over the outfit' },
   { key: 'shoes', icon: '👠', label: 'Shoes', categories: ['shoes'], required: true, desc: 'Required' },
   { key: 'accessories', icon: '👜', label: 'Accessories', categories: ['accessory', 'bag'], required: false, desc: 'Optional' },
   { key: 'jewelry', icon: '💍', label: 'Jewelry', categories: ['jewelry'], required: false, desc: 'Optional' },
@@ -70,7 +74,7 @@ export function normalizeSlots(raw) {
 export const ALL_GROUP = { key: 'all', icon: '🗂️', label: 'All', categories: [], required: false, desc: 'Every piece in the closet' };
 // The Full Closet's catch-all for items no game slot accepts. Browse-only:
 // these pieces cannot be equipped into a game slot.
-export const OTHER_GROUP = { key: 'other', icon: '🧥', label: 'Other', categories: [], required: false, desc: 'Outerwear and uncategorized pieces' };
+export const OTHER_GROUP = { key: 'other', icon: '📦', label: 'Other', categories: [], required: false, desc: 'Uncategorized pieces' };
 
 const exactCanonical = (w) => (CATEGORY_TO_SLOT[w] ? w : CATEGORY_ALIASES[w] || null);
 

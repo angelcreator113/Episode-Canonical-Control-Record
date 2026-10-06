@@ -9,7 +9,7 @@ const top = { id: 't', name: 'Top', clothing_category: 'top', is_owned: true };
 const shoes = { id: 's', name: 'Pumps', clothing_category: 'shoes', is_owned: false, lock_type: 'coin', coin_cost: 200 };
 const earrings = { id: 'e', name: 'Pearls', clothing_category: 'jewelry', is_owned: false, lock_type: 'coin', coin_cost: 900 };
 const ring = { id: 'r', name: 'Ring', clothing_category: 'jewelry', is_owned: true };
-const notForSale = { id: 'n', name: 'Gift', clothing_category: 'bag', is_owned: false, lock_type: 'none' };
+const notForSale = { id: 'n', name: 'Gift', clothing_category: 'bag', is_owned: false, lock_type: 'brand_exclusive' };
 const lala = { coins: 500, reputation: 3 };
 
 describe('lookBuilder', () => {
@@ -43,7 +43,7 @@ describe('lookBuilder', () => {
   test('the rows: worn pieces, then the slots still worth picking', () => {
     const rows = lookRows(toggleInLook({}, dress, lala));
     expect(rows.map((r) => [r.slot, r.item?.id || null])).toEqual([
-      ['body', 'd'], ['shoes', null], ['accessories', null], ['jewelry', null], ['perfume', null],
+      ['body', 'd'], ['outerwear', null], ['shoes', null], ['accessories', null], ['jewelry', null], ['perfume', null],
     ]);
     const split = lookRows(toggleInLook({}, top, lala)).map((r) => [r.slot, r.item?.id || null]);
     expect(split.slice(0, 2)).toEqual([['top', 't'], ['bottom', null]]);

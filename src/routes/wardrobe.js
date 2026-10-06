@@ -9,7 +9,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
-const { itemReach, toCharacter } = require('../services/wardrobeReach');
+const { itemReach, isForSale, toCharacter } = require('../services/wardrobeReach');
 const { DecisionLogger } = require('../utils/decisionLogger');
 const { CATEGORY_ALIASES: WARDROBE_CATEGORY_ALIASES } = require('../utils/wardrobeSlots');
 
@@ -1423,31 +1423,21 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
       if (item.is_owned) {
         score += 5;
         reasons.push('Owned ✅');
+      } else if (item.lock_type === 'brand_exclusive') {
+        riskLevel = 'locked_tease';
+        reasons.push('Brand exclusive 🏛️');
+      } else if (item.lock_type === 'season_drop') {
+        riskLevel = 'locked_tease';
+        reasons.push(`Drops Ep ${item.season_unlock_episode} 🕒`);
       } else {
-        if (item.lock_type === 'brand_exclusive') {
-          riskLevel = 'locked_tease';
-          reasons.push('Brand exclusive 🏛️');
-        } else if (item.lock_type === 'season_drop') {
-          riskLevel = 'locked_tease';
-          reasons.push(`Drops Ep ${item.season_unlock_episode} 🕒`);
-        } else if (item.lock_type === 'reputation') {
-          if (reach.can_select) {
-            score += 3;
-            reasons.push('Reputation unlockable');
-            riskLevel = 'stretch';
-          } else {
-            riskLevel = 'locked_tease';
-            reasons.push(`Needs Rep ${item.reputation_required}`);
-          }
-        } else if (item.lock_type === 'coin') {
-          if (reach.can_purchase) {
-            score += 3;
-            reasons.push('Affordable');
-            riskLevel = 'stretch';
-          } else {
-            riskLevel = 'stretch';
-            reasons.push(`Needs ${item.coin_cost} coins`);
-          }
+        // Every other unowned piece is for sale at its coin_cost
+        // (wardrobeReach.isForSale; Evoni's ruling, 2026-10-06).
+        riskLevel = 'stretch';
+        if (reach.can_purchase) {
+          score += 3;
+          reasons.push(`To buy · 🪙 ${Number(item.coin_cost) || 0}`);
+        } else {
+          reasons.push(`Needs ${item.coin_cost} coins`);
         }
       }
 
@@ -1595,19 +1585,18 @@ router.post('/select', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Models not available' });
     }
 
-    // 1. Verify item exists and is selectable (owned, rep-unlockable, or coin-purchasable)
+    // 1. Verify item exists and is selectable (owned, or for sale and bought here)
     const item = await models.Wardrobe.findOne({
       attributes: ['id', 'name', 'is_owned', 'lock_type', 'coin_cost', 'reputation_required'],
       where: { id: wardrobe_id, deleted_at: null },
       raw: true,
     });
     if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
-    const repOk = item.lock_type === 'reputation' && (req.body.reputation || 0) >= (item.reputation_required || 0);
-
-    // Auto-purchase coin-locked items inline during select
+    // Auto-purchase an unowned piece for sale inline during select
+    // (wardrobeReach.isForSale; reputation no longer unlocks a piece).
     let coinPurchased = false;
     let coinsAfter;
-    if (!item.is_owned && !repOk && item.lock_type === 'coin' && show_id) {
+    if (isForSale(item) && show_id) {
       const cost = item.coin_cost || 0;
       // D1 (§8(x), §8(y); design §6.4; Task #2248): the ledger is Lala's
       // balance. This read is only a fast refusal; spendFromLedger decides
@@ -1657,7 +1646,7 @@ router.post('/select', requireAuth, async (req, res) => {
       console.log(`[SELECT] Auto-purchased "${item.name}" for ${cost} coins`);
     }
 
-    if (!item.is_owned && !repOk) {
+    if (!item.is_owned) {
       return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
     }
 
@@ -1731,8 +1720,9 @@ router.post('/select', requireAuth, async (req, res) => {
 // pieces too, and the score and completion counted all of them). Approved
 // links not in this lock are soft-deleted in the same transaction; pending
 // links (a library assign awaiting approval) are left alone. Nothing bought
-// earlier is refunded: a purchased piece stays Lala's. Reputation is read
-// from Lala's character_state row, not taken from the request body.
+// earlier is refunded: a purchased piece stays Lala's. Every unowned piece
+// for sale is bought here (wardrobeReach.isForSale; Evoni's ruling,
+// 2026-10-06); reputation no longer unlocks one.
 
 router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
   try {
@@ -1926,7 +1916,10 @@ router.post('/purchase', requireAuth, async (req, res) => {
     const item = items[0];
 
     if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0 });
-    if (item.lock_type !== 'coin') return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
+    // Every unowned piece is for sale except brand-exclusive and season-drop
+    // ones (wardrobeReach.isForSale; Evoni's ruling, 2026-10-06). This
+    // refused everything but coin-locked pieces.
+    if (!isForSale(item)) return res.status(400).json({ error: `Cannot purchase — ${item.lock_type === 'season_drop' ? 'a season drop' : 'brand exclusive'}, not for sale` });
 
     // 2. Lala's coins are the ledger balance (D1; Task #2248). This read is
     //    only a fast refusal; spendFromLedger decides under the show lock.

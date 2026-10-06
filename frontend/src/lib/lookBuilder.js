@@ -8,7 +8,7 @@
  * links the whole look in one transaction, or none.
  */
 import { GAME_SLOT_DEFS, MULTI_SLOTS, gameSlotFor, outfitPieces, slotPieces, equipInto } from './closetGrouping';
-import { withReach } from '../utils/wardrobeReach';
+import { withReach, isForSale } from '../utils/wardrobeReach';
 
 /** The slots of a saved outfit (GET /wardrobe/outfit/:episodeId items). A saved piece is selectable. */
 export function restoreLook(items) {
@@ -58,8 +58,9 @@ export function pieceReach(item, characterState, filled) {
   if (!gameSlotFor(item.clothing_category)) return { ok: false, why: 'This piece has no wardrobe slot' };
   const { can_select: canSelect } = withReach(item, characterState);
   if (canSelect) return { ok: true };
-  if (item.lock_type === 'coin') return { ok: false, why: `Lala needs ${Number(item.coin_cost) || 0} coins for this piece` };
-  if (item.lock_type === 'reputation') return { ok: false, why: `Lala needs reputation ${Number(item.reputation_required) || 0} for this piece` };
+  // Every unowned piece is for sale but brand-exclusive and season-drop
+  // ones (Evoni, 2026-10-06).
+  if (isForSale(item)) return { ok: false, why: `Lala needs ${Number(item.coin_cost) || 0} coins for this piece` };
   return { ok: false, why: 'Lala does not own this piece and it is not for sale' };
 }
 

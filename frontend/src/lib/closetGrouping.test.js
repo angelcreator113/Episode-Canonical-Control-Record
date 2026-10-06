@@ -5,7 +5,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import {
   GAME_SLOT_DEFS, OTHER_GROUP, canonicalCategory, gameSlotFor, closetGroupFor,
-  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots, backdropFor } from './closetGrouping';
+  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots, backdropFor, equipInto } from './closetGrouping';
 
 const ITEMS = [
   { id: 'dress', clothing_category: 'dress' },
@@ -27,9 +27,9 @@ const ITEMS = [
   { id: 'ankle-boots', clothing_category: 'ankle boots' },
   { id: 'evening-dress', clothing_category: 'Evening Dress' },
   { id: 'fragrance', clothing_category: 'Fragrance' },
-  // no game slot
   { id: 'outerwear', clothing_category: 'outerwear' },
   { id: 'coat', clothing_category: 'coat' },
+  // no game slot
   { id: 'unknown', clothing_category: 'costume piece' },
   { id: 'null', clothing_category: null },
   { id: 'empty', clothing_category: '' },
@@ -43,7 +43,8 @@ const EXPECTED = {
   accessories: ['accessory', 'bag', 'accessories'],
   jewelry: ['jewelry'],
   perfume: ['perfume', 'fragrance'],
-  other: ['outerwear', 'coat', 'unknown', 'null', 'empty'],
+  outerwear: ['outerwear', 'coat'],
+  other: ['unknown', 'null', 'empty'],
 };
 
 describe('groupClosetItems', () => {
@@ -75,9 +76,10 @@ describe('category resolution', () => {
     expect(canonicalCategory(undefined)).toBe(null);
   });
 
-  test('outerwear has no game slot but has a closet group', () => {
-    expect(gameSlotFor('jacket')).toBe(null);
-    expect(closetGroupFor('jacket')).toBe('other');
+  // Evoni, 2026-10-06: a jacket over a blouse.
+  test('outerwear has its own game slot', () => {
+    for (const c of ['outerwear', 'jacket', 'blazer', 'coat', 'cardigan', 'Leather Jacket']) expect(gameSlotFor(c)).toBe('outerwear');
+    expect(closetGroupFor('jacket')).toBe('outerwear');
     expect(gameSlotFor('jeans')).toBe('bottom');
   });
 });
@@ -145,7 +147,37 @@ describe('closet card backdrops', () => {
     expect(backdropFor({ clothing_category: 'dress' })).toBe('body');
     expect(backdropFor({ clothing_category: 'Ankle Boots' })).toBe('shoes');
     expect(backdropFor({ clothing_category: 'bag' })).toBe('accessories');
-    expect(backdropFor({ clothing_category: 'outerwear' })).toBe('other');
+    expect(backdropFor({ clothing_category: 'outerwear' })).toBe('outerwear');
+    expect(backdropFor({ clothing_category: 'costume piece' })).toBe('other');
     expect(backdropFor(null)).toBe('other');
+  });
+});
+
+// Evoni, 2026-10-06: "i cant select more than one top even though its a
+// jacket and blouse".
+describe('outerwear layers over the outfit', () => {
+  const blouse = { id: 'b', clothing_category: 'top' };
+  const trousers = { id: 'tr', clothing_category: 'bottom' };
+  const jacket = { id: 'j', clothing_category: 'jacket' };
+  const dress = { id: 'd', clothing_category: 'dress' };
+
+  test('a jacket and a blouse are both worn', () => {
+    const look = equipInto(equipInto(equipInto({}, blouse), trousers), jacket);
+    expect(look.top.id).toBe('b');
+    expect(look.bottom.id).toBe('tr');
+    expect(look.outerwear.id).toBe('j');
+  });
+
+  test('a dress keeps its jacket, and a dress replacing separates keeps it too', () => {
+    const look = equipInto(equipInto(equipInto({}, blouse), jacket), dress);
+    expect(look.body.id).toBe('d');
+    expect(look.top).toBeUndefined();
+    expect(look.outerwear.id).toBe('j');
+  });
+
+  test('outerwear is one layer: a second jacket replaces the first', () => {
+    const look = equipInto(equipInto({}, jacket), { id: 'coat', clothing_category: 'coat' });
+    expect(look.outerwear.id).toBe('coat');
+    expect(MULTI_SLOTS.has('outerwear')).toBe(false);
   });
 });

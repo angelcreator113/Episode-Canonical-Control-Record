@@ -175,7 +175,7 @@ const CLOSET = [
   { ...base, id: 'c-owned', name: 'Cotton Sundress', is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined },
   { ...base, id: 'c-cheap', name: 'Budget Wrap Dress', is_owned: false, lock_type: 'coin', coin_cost: 300, can_select: undefined, pool_role: undefined },
   { ...base, id: 'c-dear', name: 'Midnight Gown', is_owned: false, lock_type: 'coin', coin_cost: 900, can_select: undefined, pool_role: undefined },
-  { ...base, id: 'c-rep', name: 'Invite-Only Gown', is_owned: false, lock_type: 'reputation', reputation_required: 5, can_select: undefined, pool_role: undefined },
+  { ...base, id: 'c-rep', name: 'Invite-Only Gown', is_owned: false, lock_type: 'reputation', reputation_required: 5, coin_cost: 700, can_select: undefined, pool_role: undefined },
 ];
 
 function mockCloset() {
@@ -205,7 +205,8 @@ describe('EpisodeWardrobeGameplay — reach in Closet and Search (Task #1937)', 
 
     expect(within(cardOf('Budget Wrap Dress')).getByText(/Tap to equip · 🪙 300 on Lock/)).toBeTruthy();
     expect(within(cardOf('Midnight Gown')).getByText(/Need 900 coins/)).toBeTruthy();
-    expect(within(cardOf('Invite-Only Gown')).getByText(/Rep 5\+/)).toBeTruthy();
+    // Evoni, 2026-10-06: reputation no longer gates; the piece is bought for its coins.
+    expect(within(cardOf('Invite-Only Gown')).getByText(/Need 700 coins/)).toBeTruthy();
     expect(within(cardOf('Cotton Sundress')).getByText('✅ Tap to equip')).toBeTruthy();
 
     // The affordable one equips; the unaffordable one opens the inspector instead.
@@ -567,7 +568,7 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
   const EXPECT = [
     ['Top', 'Closet Blouse'], ['Bottom', 'Closet Trousers'], ['Bottom', 'Closet Mini Skirt'],
     ['Shoes', 'Closet Pumps'], ['Accessories', 'Closet Scarf'], ['Jewelry', 'Closet Pearls'],
-    ['Perfume', 'Closet Scent'], ['Other', 'Closet Trench'], ['Other', 'Closet Mystery'],
+    ['Perfume', 'Closet Scent'], ['Outerwear', 'Closet Trench'], ['Other', 'Closet Mystery'],
   ];
 
   test('pages past 200 items and shows every category, bottoms and Other included', async () => {
@@ -591,7 +592,8 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
     expect(screen.getByTestId('closet-category-k-odd').textContent).toBe('costume piece · Other');
     expect(screen.getByTestId('closet-category-k-skirt').textContent).toBe('Mini Skirt · Bottom');
     // The group switches carry their counts.
-    expect(screen.getByRole('button', { name: 'Other' }).textContent).toContain('2');
+    expect(screen.getByRole('button', { name: 'Other' }).textContent).toContain('1');
+    expect(screen.getByRole('button', { name: 'Outerwear' }).textContent).toContain('1');
     expect(screen.getByRole('button', { name: 'All' }).textContent).toContain(String(ALL.length));
   });
 
@@ -770,7 +772,7 @@ describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
   test('the Sets group shows the set as one card with its pieces', async () => {
     const card = await openSets();
     expect(within(card).getByText('Floral Corset Set')).toBeTruthy();
-    expect(within(card).getByText('4 pieces')).toBeTruthy();
+    expect(within(card).getByTestId('matching-set-cost-set-floral').textContent).toBe("4 pieces · all Lala's");
     expect(screen.getByText('1 set · Wear a set to equip every piece')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sets' }).textContent).toContain('1');
   });
@@ -804,14 +806,45 @@ describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
     expect(within(slotCard('jewelry')).getAllByText('Floral Earrings')).toHaveLength(1);
   });
 
-  test('a locked piece is left out and said so', async () => {
-    CLOSET[3] = { ...CLOSET[3], is_owned: false, lock_type: 'coin', coin_cost: 9999, is_visible: true };
+  // Evoni, 2026-10-06: every piece Lala doesn't own is for sale but
+  // brand-exclusive and season-drop ones.
+  test('a piece not for sale is left out and said so', async () => {
+    CLOSET[3] = { ...CLOSET[3], is_owned: false, lock_type: 'season_drop', season_unlock_episode: 9, is_visible: true };
     try {
       const card = await openSets();
+      expect(within(card).getByTestId('matching-set-cost-set-floral').textContent).toBe("4 pieces · all Lala's · 1 not for sale");
       fireEvent.click(within(card).getByRole('button', { name: 'Wear the set' }));
       await waitFor(() => expect(within(slotCard('top')).getByText('Floral Corset')).toBeTruthy());
       expect(within(slotCard('jewelry')).queryByText('Floral Choker')).toBeNull();
-      expect(await screen.findByText(/1 piece left out \(locked\): Floral Choker/)).toBeTruthy();
+      expect(await screen.findByText(/1 piece left out \(not for sale\): Floral Choker/)).toBeTruthy();
+    } finally {
+      CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
+    }
+  });
+
+  test('a set shows its price; pieces with no lock are bought on Lock with the rest', async () => {
+    CLOSET[2] = { ...CLOSET[2], is_owned: false, lock_type: 'none', coin_cost: 120 };
+    CLOSET[3] = { ...CLOSET[3], is_owned: null, lock_type: 'coin', coin_cost: 80 };
+    try {
+      const card = await openSets();
+      expect(within(card).getByTestId('matching-set-cost-set-floral').textContent).toBe('4 pieces · 🪙 200 to buy · Lala has 500');
+      fireEvent.click(within(card).getByRole('button', { name: 'Wear the set' }));
+      await waitFor(() => expect(within(slotCard('jewelry')).getByText('Floral Earrings')).toBeTruthy());
+      expect(within(slotCard('jewelry')).getByText('Floral Choker')).toBeTruthy();
+      expect(screen.getByTestId('look-cost').textContent).toContain('Look costs 🪙 200');
+    } finally {
+      CLOSET[2] = { ...own, id: 'f-ear', name: 'Floral Earrings', clothing_category: 'earrings', ...SET };
+      CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
+    }
+  });
+
+  test('a set Lala cannot afford says what it needs and does not equip', async () => {
+    CLOSET[3] = { ...CLOSET[3], is_owned: false, lock_type: 'coin', coin_cost: 9999, is_visible: true };
+    try {
+      const card = await openSets();
+      const btn = within(card).getByRole('button', { name: 'Need 🪙 9,999' });
+      expect(btn.disabled).toBe(true);
+      expect(screen.queryByTestId('outfit-look')).toBeNull();
     } finally {
       CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
     }
