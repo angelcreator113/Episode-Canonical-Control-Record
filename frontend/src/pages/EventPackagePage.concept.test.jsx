@@ -91,7 +91,7 @@ describe('EventPackagePage — Event concept (Task #2132)', () => {
     renderPage();
     const section = await screen.findByTestId('event-concept');
     // Behind the Scenes since the Event Package redesign (part 3): numbered, folded.
-    expect(within(section).getByRole('heading', { name: /^7\. Behind the Scenes/ })).toBeTruthy();
+    expect(within(section).getByRole('heading', { name: /^8\. Behind the Scenes/ })).toBeTruthy();
     expect(section.querySelector('details').open).toBe(false);
     expect(within(section).getByText('For planning; not shown to guests')).toBeTruthy();
 
