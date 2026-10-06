@@ -491,6 +491,32 @@
   padding: 4px 0;
 }
 
+/* A guest's name in the Full Guest List features or unfeatures them. */
+.epp-guest-list-item:has(> .epp-guest-toggle) { padding: 0; }
+.epp-guest-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 6px;
+  background: var(--surface-bg);
+  color: var(--lala-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.epp-guest-toggle:hover:not(:disabled) { border-color: var(--accent-light); }
+.epp-guest-toggle:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.epp-guest-toggle.is-featured { background: var(--accent-subtle); border-color: var(--accent-light); }
+.epp-guest-toggle:disabled { cursor: not-allowed; opacity: 0.55; }
+.epp-guest-toggle-name { min-width: 0; overflow-wrap: anywhere; }
+.epp-guest-list-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; }
+.epp-guest-toggle-state { flex-shrink: 0; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent-dark); }
+
 .epp-invitation-preview {
   width: 100%;
   max-width: 220px;
