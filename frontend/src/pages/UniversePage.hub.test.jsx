@@ -139,11 +139,20 @@ describe('UniversePage: the LalaVerse hub', () => {
       if (url.startsWith('/api/v1/calendar/events')) return { data: { events: [{ title: 'Fashion Week', start_datetime: '2099-11-03T12:00:00Z' }] } };
       if (url === '/api/v1/feed-enhanced/show-b/trending') return { data: { data: [{ topic: '#velvet', post_count: 3, total_engagement: 9 }] } };
       if (url === '/api/v1/world/tension-scanner') return { data: { status: 'ok', pairs: [] } };
+      if (url === '/api/v1/storyteller/books') return { data: { success: true, books: [{ id: 'b1', title: 'Before Lala', status: 'draft', chapter_count: 2, line_count: 10, approved_count: 4, last_chapter_title: 'The Studio' }] } };
       return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
     });
     renderAt('/universe');
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
     expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The LalaVerse · Overview');
+    // The books are back on the Overview (2026-10-06), with where to write and read them.
+    const books = screen.getByTestId('lalaverse-books');
+    expect(books.textContent).toContain('Before Lala');
+    expect(books.textContent).toContain('2 chapters · 10 lines');
+    expect(books.textContent).toContain('4 of 10 lines approved');
+    expect(books.textContent).toContain('Last worked on: The Studio');
+    expect(screen.getByRole('link', { name: 'Write →' }).getAttribute('href')).toBe('/book/b1');
+    expect(screen.getByRole('link', { name: 'Read' }).getAttribute('href')).toBe('/books/b1/read');
     expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The show.');
     const tile = (k) => screen.getByTestId(`lalaverse-tile-${k}`);
     expect(tile('episodes').textContent).toContain('1');
@@ -172,6 +181,7 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByTestId('lalaverse-banner').textContent).toContain('No description for this show yet');
     expect(screen.getByTestId('lalaverse-idea-state').textContent).toContain('could not be read');
     expect(screen.getByTestId('lalaverse-lately').textContent).toBe('No episodes or events yet.');
+    expect(screen.getByTestId('lalaverse-books').textContent).toContain('No books yet');
   });
 
   test('an unknown ?tab= falls back to Overview', async () => {

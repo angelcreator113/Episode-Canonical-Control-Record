@@ -16,8 +16,8 @@
  * TabOrientation, copy in lalaverseOrientation.js) stays under the banner,
  * dismissable per tab. The Overview is four tiles that open where the
  * work is, "Build the world" (components/WorldSetupProgress), what the
- * world is handing you and what happened lately (lib/lalaverseOverview.js),
- * each from real data or an honest empty line.
+ * world is handing you, what happened lately and the books (lib/
+ * lalaverseOverview.js), each from real data or an honest empty line.
  *
  * No hardcoded universe ID: it loads the active show (useActiveShow,
  * audit CTX-01) and asks which show when several exist and none is active.
@@ -28,7 +28,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../lib/closetGrouping';
-import { worldIdeas, latelyItems } from '../lib/lalaverseOverview';
+import { worldIdeas, latelyItems, bookSummary } from '../lib/lalaverseOverview';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 import ShowBiblePage from './ShowBiblePage';
@@ -118,7 +118,7 @@ function Overview() {
   const load = useCallback(async () => {
     if (!show) { setData(null); return; }
     try {
-      const [eventsRes, wardrobeRes, episodesRes, charsRes, calendarRes, trendingRes, tensionRes] = await Promise.allSettled([
+      const [eventsRes, wardrobeRes, episodesRes, charsRes, calendarRes, trendingRes, tensionRes, booksRes] = await Promise.allSettled([
         api.get(`/api/v1/world/${show.id}/events`),
         // Every piece and episode, not the first 500 and 100 (lib/fetchAllPages).
         fetchClosetWithTotal(api, show.id),
@@ -127,9 +127,11 @@ function Overview() {
         api.get('/api/v1/calendar/events?event_type=lalaverse_cultural'),
         api.get(`/api/v1/feed-enhanced/${show.id}/trending`),
         api.get('/api/v1/world/tension-scanner'),
+        // The novel's books (Before Lala), every one: they are not per show.
+        api.get('/api/v1/storyteller/books'),
       ]);
       const ok = (r) => r.status === 'fulfilled';
-      for (const [name, r] of [['events', eventsRes], ['closet', wardrobeRes], ['episodes', episodesRes], ['registries', charsRes], ['calendar', calendarRes], ['trending', trendingRes], ['tensions', tensionRes]]) {
+      for (const [name, r] of [['events', eventsRes], ['closet', wardrobeRes], ['episodes', episodesRes], ['registries', charsRes], ['calendar', calendarRes], ['trending', trendingRes], ['tensions', tensionRes], ['books', booksRes]]) {
         if (!ok(r)) console.error(`[LalaVerse] the ${name} could not be read:`, r.reason?.response?.status || r.reason?.message);
       }
 
@@ -158,6 +160,7 @@ function Overview() {
           failed: ideaFailures,
         }),
         lately: latelyItems({ episodes, events }),
+        books: ok(booksRes) ? (booksRes.value.data?.books || []).map(bookSummary) : null,
       });
     } catch (err) {
       console.error('UniversePage load error:', err);
@@ -243,6 +246,54 @@ function Overview() {
             <p className="lvh-footnote">From the dates episodes and events were made; the world keeps no activity log yet.</p>
           </section>
         </div>
+      )}
+
+      {data && (
+        <section className="lvh-card lvh-books" aria-labelledby="lvh-books-heading">
+          <div className="lvh-card-head">
+            <h2 id="lvh-books-heading" className="lvh-card-title">The books</h2>
+            <span className="lvh-card-sub">The novel side of the LalaVerse</span>
+            <Link className="lvh-card-link" to="/start">Open the writing desk →</Link>
+          </div>
+          {data.books == null ? (
+            <p className="lvh-empty" data-testid="lalaverse-books">The books could not be read just now.</p>
+          ) : data.books.length === 0 ? (
+            <p className="lvh-empty" data-testid="lalaverse-books">No books yet. A book started from the writing desk shows here.</p>
+          ) : (
+            <ul className="lvh-book-list" data-testid="lalaverse-books">
+              {data.books.map((b) => (
+                <li key={b.id} className="lvh-book">
+                  <div className="lvh-book-head">
+                    <span className="lvh-book-spine" aria-hidden="true" />
+                    <div className="lvh-book-titles">
+                      <h3 className="lvh-book-title">{b.title}</h3>
+                      {b.subtitle && <span className="lvh-book-subtitle">{b.subtitle}</span>}
+                    </div>
+                    <span className={`lvh-book-status is-${b.statusKey}`}>{b.status}</span>
+                  </div>
+                  {b.whose && <span className="lvh-book-whose">{b.whose}</span>}
+                  <span className="lvh-book-counts">{b.counts}</span>
+                  {b.total > 0 ? (
+                    <div className="lvh-book-progress">
+                      <div className="lvh-book-bar" role="progressbar" aria-label={`${b.title}: lines approved`} aria-valuemin={0} aria-valuemax={b.total} aria-valuenow={b.approved}>
+                        <span style={{ width: `${Math.round((b.approved / b.total) * 100)}%` }} />
+                      </div>
+                      <span className="lvh-book-approved">{b.approved.toLocaleString()} of {b.total.toLocaleString()} lines approved</span>
+                    </div>
+                  ) : (
+                    <span className="lvh-book-approved">Nothing written yet</span>
+                  )}
+                  {b.lastChapter && <span className="lvh-book-last">Last worked on: {b.lastChapter}</span>}
+                  {b.insight && <blockquote className="lvh-book-insight">{b.insight}</blockquote>}
+                  <span className="lvh-book-actions">
+                    <Link to={`/book/${b.id}`}>Write →</Link>
+                    {b.total > 0 && <Link to={`/books/${b.id}/read`}>Read</Link>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   );

@@ -109,3 +109,39 @@
   .lvh-idea { flex-direction: column; align-items: flex-start; gap: 6px; }
   .lvh-idea-action { min-height: 44px; }
 }
+
+/* ── The books (2026-10-06) ── */
+.lvh-books { margin-top: 16px; }
+.lvh-card-link { margin-left: auto; display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
+.lvh-card-link:hover { text-decoration: underline; }
+.lvh-book-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.lvh-book {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  padding: 16px 18px; border-radius: 16px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line);
+}
+.lvh-book-head { display: flex; align-items: flex-start; gap: 12px; }
+.lvh-book-spine { width: 8px; align-self: stretch; min-height: 40px; border-radius: 4px; background: var(--lala-gold); flex-shrink: 0; }
+.lvh-book-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.lvh-book-title { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 18px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.lvh-book-subtitle { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.lvh-book-status { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; background: var(--surface-card); color: var(--lala-gold-text); }
+.lvh-book-status.is-in_review { background: var(--info-bg); color: var(--info-text); }
+.lvh-book-status.is-locked { background: var(--success-bg); color: var(--success-text); }
+.lvh-book-whose { font-size: 12px; font-weight: 700; color: var(--lala-gold-text); }
+.lvh-book-counts, .lvh-book-last { font-size: 12px; color: var(--text-secondary); }
+.lvh-book-progress { display: flex; flex-direction: column; gap: 4px; }
+.lvh-book-bar { height: 8px; border-radius: 4px; background: var(--surface-card); overflow: hidden; }
+.lvh-book-bar span { display: block; height: 100%; background: var(--lala-gold); border-radius: 4px; }
+.lvh-book-approved { font-size: 12px; color: var(--text-secondary); }
+.lvh-book-insight {
+  margin: 4px 0 0; padding: 8px 12px; border-left: 3px solid var(--lala-gold);
+  font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 13px; line-height: 1.5; color: var(--text-primary);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.lvh-book-actions { display: flex; gap: 16px; margin-top: auto; }
+.lvh-book-actions a { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 700; color: var(--lala-gold-text); text-decoration: none; }
+.lvh-book-actions a:hover { text-decoration: underline; }
+@media (max-width: 720px) {
+  .lvh-book-list { grid-template-columns: 1fr; }
+  .lvh-card-link { margin-left: 0; }
+}
