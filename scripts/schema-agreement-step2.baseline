@@ -59,13 +59,6 @@ ProcessingQueue	retry_count	canon-missing-column
 ProcessingQueue	sqs_message_id	canon-missing-column
 ProcessingQueue	sqs_receipt_handle	canon-missing-column
 ProcessingQueue	started_at	canon-missing-column
-SceneAngle	angle_description	missing-column
-SceneAngle	artifact_flags	missing-column
-SceneAngle	camera_direction	missing-column
-SceneAngle	generation_attempt	missing-column
-SceneAngle	quality_review	missing-column
-SceneAngle	quality_score	missing-column
-SceneAngle	refined_prompt	missing-column
 SceneLayerConfiguration	-	no-table
 SceneLibrary	deleted_at	paranoid-no-deleted_at
 SceneTemplate	-	no-table
