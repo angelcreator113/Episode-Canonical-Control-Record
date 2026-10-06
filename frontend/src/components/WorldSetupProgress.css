@@ -1,0 +1,95 @@
+/* WorldSetupProgress: "Build the world" on the LalaVerse Overview (the
+   mock, 2026-10-06). Seven numbered circles on a dashed line; a done step's
+   circle is filled with its tone and checked. Tokens only: every tone's
+   fill is a "-text" color, so the white check and the number on white
+   both read 4.5:1. Below 720px the steps stack, the line runs down. */
+
+.wsp {
+  background: var(--surface-card);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.wsp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.wsp-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.wsp-sub { font-size: 13px; color: var(--text-secondary); }
+.wsp-count { margin-left: auto; font-size: 24px; font-weight: 800; color: var(--lala-lavender-text); }
+.wsp-count.is-complete { color: var(--success-text); }
+
+.wsp-unreachable {
+  margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px;
+  background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text);
+}
+
+.wsp-steps {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px;
+  position: relative;
+}
+/* The dashed line behind the circles. */
+.wsp-steps::before {
+  content: ''; position: absolute; top: 28px; left: 7%; right: 7%;
+  border-top: 2px dashed var(--lala-lavender-line);
+}
+
+.wsp-step { position: relative; min-width: 0; }
+.wsp-step-btn {
+  width: 100%; min-height: 44px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 6px 4px; background: none; border: none; border-radius: 12px; cursor: pointer;
+  font-family: inherit; text-align: center; color: var(--text-primary);
+}
+.wsp-step-btn:hover, .wsp-step-btn:focus-visible { background: var(--lala-lavender-soft); }
+
+.wsp-circle {
+  --tone: var(--lala-lavender-text);
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800; background: var(--surface-card);
+  color: var(--tone); border: 2px dashed var(--tone);
+}
+.wsp-step.is-done .wsp-circle { background: var(--tone); color: var(--text-inverse); border-style: solid; }
+
+.wsp-tone-1 .wsp-circle { --tone: var(--lala-lavender-text); }
+.wsp-tone-2 .wsp-circle { --tone: var(--danger-text); }
+.wsp-tone-3 .wsp-circle { --tone: var(--accent-dark); }
+.wsp-tone-4 .wsp-circle { --tone: var(--lala-gold-text); }
+.wsp-tone-5 .wsp-circle { --tone: var(--success-text); }
+.wsp-tone-6 .wsp-circle { --tone: var(--info-text); }
+.wsp-tone-7 .wsp-circle { --tone: var(--lala-lavender-dark); }
+
+.wsp-step-text { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.wsp-step-title { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.wsp-step-short { font-size: 11px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; }
+.wsp-step-count { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text-secondary); overflow-wrap: anywhere; }
+.wsp-step-count.is-warn { color: var(--warning-text); }
+.wsp-chip-warn {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  background: var(--warning-bg); color: var(--warning-text);
+}
+
+.wsp-next {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border-radius: 14px;
+  background: linear-gradient(90deg, var(--lala-lavender-soft), var(--accent-subtle));
+  font-size: 13px; color: var(--text-primary);
+}
+.wsp-next.is-complete { background: var(--success-bg); color: var(--success-text); font-weight: 600; }
+.wsp-next-mark { color: var(--lala-lavender-text); font-size: 16px; }
+.wsp-next-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; line-height: 1.5; }
+.wsp-next-text strong { color: var(--lala-lavender-text); }
+.wsp-next-btn {
+  min-height: 44px; padding: 0 20px; border: none; border-radius: 999px; cursor: pointer;
+  background: var(--lala-lavender); color: var(--text-inverse); font-weight: 700; font-size: 14px; font-family: inherit;
+}
+.wsp-next-btn:hover { background: var(--lala-lavender-dark); }
+
+@media (max-width: 720px) {
+  .wsp { padding: 16px; }
+  .wsp-steps { grid-template-columns: 1fr; gap: 2px; }
+  .wsp-steps::before { top: 28px; bottom: 28px; left: 27px; right: auto; border-top: none; border-left: 2px dashed var(--lala-lavender-line); }
+  .wsp-step-btn { flex-direction: row; align-items: center; text-align: left; gap: 12px; }
+  .wsp-step-text { align-items: flex-start; }
+  .wsp-next-btn { width: 100%; }
+}

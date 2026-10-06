@@ -35,7 +35,7 @@ describe('UniversePage: the LalaVerse hub', () => {
     renderAt('/universe');
     expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'bible', 'world', 'society', 'culture', 'state']);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, locations', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSnapshots, timeline, tensions']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, cities, venues', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSnapshots, timeline, tensions']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
     for (const label of ['Producer Mode', 'Show Dashboard', 'Show Bible', 'World Dashboard']) {
@@ -83,7 +83,8 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByRole('tab', { name: /^Show Bible/ }).getAttribute('aria-current')).toBe('page');
     const decisions = await screen.findByRole('button', { name: /Decisions/ });
     expect(decisions.style.fontWeight).toBe('700');
-    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    // The hub's banner is the only page heading; the embedded page has none of its own.
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['The rules of the world']);
     fireEvent.click(screen.getByRole('button', { name: /Guard/ }));
     expect(screen.getByRole('button', { name: /Guard/ }).style.fontWeight).toBe('700');
     // The hub tab survives the page's own tab switch.
@@ -98,7 +99,7 @@ describe('UniversePage: the LalaVerse hub', () => {
     // The Loop is a fold-out above the map, not a tab (per-tab fix, 2026-10-04).
     expect(screen.queryByText('The Loop')).toBeNull();
     expect(screen.getByTestId('world-loop').tagName).toBe('DETAILS');
-    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['The five DREAM cities']);
   });
 
   test('?tab=culture&sub=history opens Culture on its History sub-tab', async () => {
@@ -127,6 +128,50 @@ describe('UniversePage: the LalaVerse hub', () => {
     await screen.findByText('Archetypes');
     expect(screen.queryByTestId('orientation-society')).toBeNull();
     expect(screen.getByRole('button', { name: /^Guide: / })).toBeTruthy();
+  });
+
+  test('the Overview, to the mock: its banner, four tiles that open where the work is, ideas from real data, and lately', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url === '/api/v1/world/show-b/events') return { data: { events: [{ id: 'e1', name: 'Studio Session', created_at: '2026-10-03T00:00:00Z' }] } };
+      if (url.startsWith('/api/v1/episodes')) return { data: { data: [{ id: 'ep1', episode_number: 1, title: 'Pilot', created_at: '2026-10-01T00:00:00Z' }], pagination: { total: 1 } } };
+      if (url.startsWith('/api/v1/character-registry')) return { data: { registries: [{ characters: [{ id: 1 }, { id: 2 }] }] } };
+      if (url.startsWith('/api/v1/calendar/events')) return { data: { events: [{ title: 'Fashion Week', start_datetime: '2099-11-03T12:00:00Z' }] } };
+      if (url === '/api/v1/feed-enhanced/show-b/trending') return { data: { data: [{ topic: '#velvet', post_count: 3, total_engagement: 9 }] } };
+      if (url === '/api/v1/world/tension-scanner') return { data: { status: 'ok', pairs: [] } };
+      return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
+    });
+    renderAt('/universe');
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
+    expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The LalaVerse · Overview');
+    expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The show.');
+    const tile = (k) => screen.getByTestId(`lalaverse-tile-${k}`);
+    expect(tile('episodes').textContent).toContain('1');
+    expect(tile('episodes').getAttribute('href')).toBe('/shows/show-b/world?tab=season');
+    expect(tile('events').getAttribute('href')).toBe('/shows/show-b/world?tab=events');
+    expect(tile('characters').textContent).toContain('2');
+    expect(tile('characters').getAttribute('href')).toBe('/character-registry');
+    expect(tile('wardrobe').getAttribute('href')).toBe('/shows/show-b/world?tab=wardrobe-items');
+    expect(screen.getByTestId('lalaverse-idea-culture').textContent).toContain('Fashion Week is coming up in November');
+    expect(screen.getByTestId('lalaverse-idea-society').textContent).toContain('#velvet is trending');
+    expect(screen.getByTestId('lalaverse-idea-state').textContent).toBe('From StateNo tensions between characters yet.');
+    expect(screen.getByTestId('lalaverse-lately').textContent).toContain('Studio Session added to the Events library');
+    expect(screen.getByTestId('lalaverse-lately').textContent).toContain('Episode 1 created: Pilot');
+    // The Overview keeps its orientation strip under the banner.
+    expect(screen.getByTestId('orientation-overview')).toBeTruthy();
+  });
+
+  test('a show with no description says so instead of inventing one; a failed scan is not "no tensions"', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: [{ id: 'show-b', name: 'Styling Adventures' }] } };
+      if (url === '/api/v1/world/tension-scanner') return { data: { status: 'scan_failed', pairs: [] } };
+      return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
+    });
+    renderAt('/universe');
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
+    expect(screen.getByTestId('lalaverse-banner').textContent).toContain('No description for this show yet');
+    expect(screen.getByTestId('lalaverse-idea-state').textContent).toContain('could not be read');
+    expect(screen.getByTestId('lalaverse-lately').textContent).toBe('No episodes or events yet.');
   });
 
   test('an unknown ?tab= falls back to Overview', async () => {
