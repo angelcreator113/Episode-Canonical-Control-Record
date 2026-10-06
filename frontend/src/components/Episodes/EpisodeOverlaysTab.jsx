@@ -13,6 +13,11 @@
  * styles, flourish, framed card), EpisodeTaskListOverlay (approve, design);
  * the invitation is made in its Event Package. The show-wide list is
  * GET /api/v1/ui-overlays/:showId?episode_id= (the Lala's Phone tab's read).
+ *
+ * Evoni's Episode mock (2026-10-06): the tab opens on a preview with "Add an
+ * overlay" (from a document, from Lala's Feed, a notification or stat pop),
+ * then "Overlays by beat", a row per piece in beat order with Edit or Add
+ * (lib/episodeOverlays). The pieces' own panels follow as Details.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -22,6 +27,7 @@ import { getEpisodeOverlaysApi, STATUS_LABELS } from './EpisodeTitleChip';
 import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
 import { listEpisodePhoneOverlaysApi } from './EpisodeLalasPhoneTab';
+import { overlayRows, beatLabel, pieceBeat, previewPiece } from '../../lib/episodeOverlays';
 import './EpisodeOverlaysTab.css';
 
 
@@ -92,6 +98,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [showWide, setShowWide] = useState(null);
+  const [chosen, setChosen] = useState(null);
 
   const load = useCallback(() => {
     if (!episodeId) return;
@@ -125,19 +132,82 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const byKey = Object.fromEntries(pieces.map((p) => [p.key, p]));
   const invitation = byKey.invitation;
   const phoneHubPath = showId ? `/shows/${showId}/world?tab=overlays-tab` : '/phone-hub';
+  const feedPath = showId ? `/shows/${showId}/world?tab=feed` : null;
+  const rows = overlayRows(pieces, showWide || []);
+  const needed = rows.filter((r) => r.needed).length;
+  const shown = previewPiece(pieces, chosen);
+  // A row (or Add an overlay) opens its piece's panel under Details, and
+  // shows the piece in the preview.
+  const openPiece = (key) => {
+    setChosen(key);
+    const el = typeof document !== 'undefined' && document.querySelector(`[data-testid="eot-piece-${key}"]`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="eot-tab" data-testid="episode-overlays-tab">
-      <header className="eot-header">
-        <h2 className="eot-title"><Layers size={18} aria-hidden="true" /> Overlays</h2>
-        <p className="eot-sub">Every on-screen piece of this episode.</p>
-      </header>
-
       {error && <p className="eot-error" role="alert">{error}</p>}
       {!data && !error && <p className="eot-loading">Loading overlays…</p>}
 
       {data && (
+        <section className="eot-stage" aria-label="Preview and add an overlay">
+          <div className="eot-stage-preview" data-testid="eot-stage-preview">
+            {shown ? (
+              <img src={shown.image_url} alt={`Preview: ${shown.label}`} />
+            ) : (
+              <span className="eot-preview-empty"><ImageOff size={18} aria-hidden="true" /> Nothing made yet to preview</span>
+            )}
+            {shown && (
+              <span className="eot-stage-tag" data-testid="eot-stage-tag">
+                Preview · {pieceBeat(shown) ? beatLabel(pieceBeat(shown)) : shown.label}
+              </span>
+            )}
+          </div>
+          <div className="eot-add">
+            <h2 className="eot-add-title">Add an overlay</h2>
+            <button type="button" className="eot-add-option is-document" onClick={() => openPiece(byKey.task_list?.status === 'not_made' ? 'task_list' : 'invitation')}>
+              <strong>From a document</strong> <span>the invitation, the shopping list</span>
+            </button>
+            {feedPath && (
+              <Link className="eot-add-option is-feed" to={feedPath}>
+                <strong>From Lala&apos;s Feed</strong> <span>a post, comment or friend request</span>
+              </Link>
+            )}
+            <Link className="eot-add-option is-pop" to={phoneHubPath}>
+              <strong>Notification or stat pop</strong> <span>made in the Phone Hub</span>
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {data && (
+        <section className="eot-bybeat" aria-labelledby="eot-bybeat-title" data-testid="eot-bybeat">
+          <div className="eot-bybeat-head">
+            <h2 id="eot-bybeat-title" className="eot-add-title">Overlays by beat</h2>
+            <span className="eot-bybeat-needed" data-testid="eot-still-needed">
+              {needed === 0 ? 'all made' : `${needed} still needed`}
+            </span>
+          </div>
+          <ul className="eot-rows">
+            {rows.map((r) => (
+              <li key={r.key} className={`eot-row${r.needed ? ' is-needed' : ''}`} data-testid={`eot-row-${r.key}`}>
+                <span className="eot-row-beat">{beatLabel(r.beat)}</span>
+                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : r.kind === 'Phone Hub' ? 'hub' : 'title'}`}>{r.kind}</span>
+                <span className="eot-row-text">{r.text}</span>
+                {r.showWide ? (
+                  <Link className="eot-row-action" to={phoneHubPath}>{r.action}</Link>
+                ) : (
+                  <button type="button" className="eot-row-action" onClick={() => openPiece(r.key)}>{r.action}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {data && (
         <>
+          <h3 className="eot-details-title"><Layers size={14} aria-hidden="true" /> Details</h3>
           <section className="eot-group" aria-label="Title">
             <div className="eot-pieces">
               {byKey.title_overlay && <PieceCard piece={byKey.title_overlay} />}
