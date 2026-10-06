@@ -1,7 +1,8 @@
 /**
  * The Society tab after the per-tab fix (2026-10-04): each sub-tab says who
- * reads its lists (the generators read the Show Bible that Brain Update
- * writes into; the Feed generator keeps its own archetype list) and carries
+ * reads its lists (Brain Update writes them into the Show Bible, but no
+ * generator reads those cards yet, wiring map §8, 2026-10-06; the Feed
+ * generator keeps its own archetype list) and carries
  * the Brain Update button for the data it shows: Social Systems on
  * Archetypes and Social Rules, Calendar on Legends & Society, both on Trends.
  */
@@ -31,7 +32,11 @@ describe('Society tab', () => {
   test('Archetypes says the Feed generator does not read it, and carries the Social Systems button only', async () => {
     window.history.pushState({}, '', '/universe?tab=society');
     renderAt('/universe?tab=society');
-    expect(screen.getByTestId('society-reads-archetypes').textContent).toContain('own built-in list');
+    const note = screen.getByTestId('society-reads-archetypes').textContent;
+    expect(note).toContain('own built-in list');
+    expect(note).toContain('No generator reads those cards yet');
+    // The page has no editor and no generator reads the cards, so it claims neither.
+    expect(screen.queryByText(/script writers|Edit them here/)).toBeNull();
     await waitFor(() => expect(screen.getByTestId('brain-update-button').textContent).toBe('🧠 Brain Up to Date ✓'));
     expect(screen.queryByTestId('brain-update-button-calendar')).toBeNull();
   });
@@ -53,6 +58,8 @@ describe('Society tab', () => {
   test('every sub-tab has its note', () => {
     window.history.pushState({}, '', '/universe?tab=society&sub=rules');
     renderAt('/universe?tab=society&sub=rules');
-    expect(screen.getByTestId('society-reads-rules').textContent).toContain('not from this page');
+    const note = screen.getByTestId('society-reads-rules').textContent;
+    expect(note).toContain('No generator reads those cards yet');
+    expect(note).not.toMatch(/script writers|event generator|Amber read/);
   });
 });
