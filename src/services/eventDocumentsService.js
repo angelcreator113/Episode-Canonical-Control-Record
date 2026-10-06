@@ -234,6 +234,57 @@ async function approveDocument(models, { showId, eventId, type }) {
   return writeDocument(models.sequelize, eventId, type, doc);
 }
 
+// ─── Start Episode: the approved documents carried into the episode ─────────
+//
+// PR 3 of the event documents (Evoni, 2026-10-06: the documents live on the
+// event; episodes keep the lists they already have). Start Episode reads the
+// event's documents once, and only an approved one is used:
+//   - an approved shopping list becomes the episode's wardrobe list
+//     (episode_todo_lists.tasks), in place of the standard slots;
+//   - an approved career plan's "This event" lines become Lala's goals on
+//     the episode's task list (social_tasks), in place of the goals written
+//     from the event's fields. Its "Bigger goals" stay on the event: they are
+//     her career goals, tracked as CareerGoal rows, not this episode's tasks.
+// A draft is never carried. An episode already started keeps its lists.
+
+/** The event's document of this type, when it is approved; else null. */
+function approvedDocument(event, type) {
+  const doc = readDocuments(event)[type];
+  return doc && doc.status === 'approved' && Array.isArray(doc.items) && doc.items.length ? doc : null;
+}
+
+const docTag = (doc) => ({ type: doc.type, version: doc.version });
+
+/** An approved shopping list's lines as the episode's wardrobe tasks. */
+function shoppingListTasks(doc) {
+  return (doc?.items || []).map((i, n) => ({
+    slot: i.slot,
+    label: i.label,
+    description: i.description || '',
+    required: i.required === true,
+    completed: false,
+    order: n + 1,
+    from_event_document: docTag(doc),
+  }));
+}
+
+/** An approved career plan's "This event" lines as Lala's goal tasks. */
+function careerPlanGoals(doc) {
+  return (doc?.items || [])
+    .filter((i) => (i.section || 'this_event') === 'this_event')
+    .map((i) => ({
+      slot: `plan_${i.slot}`,
+      label: i.label,
+      description: i.description || '',
+      timing: 'during',
+      platform: null,
+      task_source: 'goal',
+      required: false,
+      completed: false,
+      from_event_document: docTag(doc),
+    }));
+}
+
 module.exports = {
   DOC_TYPES,
   HISTORY_MAX,
@@ -246,4 +297,7 @@ module.exports = {
   draftDocument,
   editDocument,
   approveDocument,
+  approvedDocument,
+  shoppingListTasks,
+  careerPlanGoals,
 };

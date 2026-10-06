@@ -146,7 +146,8 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
     <div className="evd" data-testid="event-documents">
       <p className="evd-intro">
         One system, three looks. Each document fills itself from the event, goes through the same steps
-        (Draft, Edit, Redraft, Approve), and once approved can be used on Lala&apos;s Phone or as an overlay.
+        (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
+        shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
         The invitation is in <a href="#epp-sec-invitation">1. The Event</a>.
       </p>
       {error && <p className="evd-error" role="alert">{error}</p>}

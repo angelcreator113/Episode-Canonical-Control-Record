@@ -525,8 +525,12 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
 
   console.log(`[TodoList] Generating for: ${event.name}`);
 
-  const tasks = await generateTasks(event);
-  console.log(`[TodoList] Generated ${tasks.length} tasks`);
+  // Event documents PR 3: the event's approved shopping list is the list;
+  // only an event without one gets a written list.
+  const { approvedDocument, shoppingListTasks } = require('./eventDocumentsService');
+  const approvedList = approvedDocument(event, 'shopping_list');
+  const tasks = approvedList ? shoppingListTasks(approvedList) : await generateTasks(event);
+  console.log(`[TodoList] ${approvedList ? `Approved shopping list (version ${approvedList.version})` : 'Generated'}: ${tasks.length} tasks`);
 
   const buffer = renderTodoAsset(tasks, event);
   const assetUrl = await uploadTodoAsset(buffer, episodeId);
