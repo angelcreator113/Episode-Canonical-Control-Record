@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { SECTIONS, sectionOf, summaryOf, parseContent } from './showBibleSections';
+import ShowBibleSummary from '../components/ShowBible/ShowBibleSummary';
 
 /**
  * ShowBiblePage — Unified knowledge base (enhanced)
@@ -12,6 +13,10 @@ import { SECTIONS, sectionOf, summaryOf, parseContent } from './showBibleSection
  *   Decisions — active/pending/archived workflow, bulk actions, source tracking
  *   Documents — ingest text, existing documents list
  *   Guard — franchise guard scene validation with rule counts
+ *
+ * In the LalaVerse hub (embedded) the tabs sit under the Bible's front page
+ * (components/ShowBible/ShowBibleSummary, the mock, 2026-10-06): Always
+ * true, the Canon guard's "Check now", and Decisions newest first.
  */
 
 
@@ -97,6 +102,13 @@ export default function ShowBiblePage({ embedded = false }) {
     loadEntries(); showToast(`${pending.length} entries activated`);
   };
 
+  // "+ Add a rule" on the front page: a new entry already marked always-inject.
+  const startRule = () => {
+    setEditingId(null);
+    setForm({ title: '', content: '', category: 'franchise_law', severity: 'critical', always_inject: true, scope: 'franchise' });
+    setShowForm(true);
+  };
+
   const startEdit = (entry) => {
     setEditingId(entry.id);
     setForm({ title: entry.title, content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content, null, 2), category: entry.category || 'franchise_law', severity: entry.severity || 'important', always_inject: entry.always_inject || false, scope: getScope(entry) });
@@ -168,6 +180,8 @@ export default function ShowBiblePage({ embedded = false }) {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '16px 24px' }}>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast.msg}</div>}
+
+      {embedded && <ShowBibleSummary entries={entries} loading={loading} show={show} onAddRule={startRule} onOpen={switchTab} />}
 
       {/* Header; inside the hub the tab is the heading and the counts stay */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
