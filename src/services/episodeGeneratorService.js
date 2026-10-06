@@ -24,6 +24,7 @@ const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../ut
 const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
 const { goalTaskScale, goalFields, composeGoalTasks, capCombinedGoals } = require('../utils/goalTasks');
 const { relationshipGoalTasks } = require('./dealTermsDraftService');
+const { approvedDocument, shoppingListTasks, careerPlanGoals } = require('./eventDocumentsService');
 const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('../utils/episodeTeaser');
 
 // ─── LALA'S GOAL TASKS (T9) ──────────────────────────────────────────────────
@@ -927,6 +928,18 @@ Return ONLY JSON.` }],
         : [],
     });
   }
+  // Event documents PR 3: an approved career plan's "This event" lines are
+  // Lala's goals for the episode, in place of the goals written above. The
+  // event's relationship goals join them (D13 answer 6) unless the plan
+  // already says the same; T9's combined limit still holds the list.
+  const approvedPlan = approvedDocument(event, 'career_plan');
+  const planGoals = approvedPlan ? careerPlanGoals(approvedPlan) : [];
+  if (planGoals.length) {
+    const said = new Set(planGoals.map((g) => g.label.trim().toLowerCase()));
+    const relationship = relationshipGoalTasks(event).filter((g) => !said.has(g.label.trim().toLowerCase()));
+    socialTasks = capCombinedGoals([...planGoals, ...relationship], goalTaskScale(event), 'CareerPlan');
+    console.log(`[EpisodeGenerator] ${event.name}: Lala's goals from the approved career plan (version ${approvedPlan.version})`);
+  }
   // T1 (§8(bb); Task #2292): the saved list may predate T1 and carry
   // required: true on generated tasks. Required comes only from the event's
   // deliverables (read above for the terms snapshot): generated tasks become
@@ -949,8 +962,11 @@ Return ONLY JSON.` }],
     }
   }
 
-  // Wardrobe tasks (the standard 7 slots)
-  const wardrobeTasks = [
+  // Wardrobe tasks: the event's approved shopping list (event documents PR
+  // 3), else the standard slots.
+  const approvedList = approvedDocument(event, 'shopping_list');
+  if (approvedList) console.log(`[EpisodeGenerator] ${event.name}: wardrobe list from the approved shopping list (version ${approvedList.version})`);
+  const wardrobeTasks = approvedList ? shoppingListTasks(approvedList) : [
     { slot: 'dress', label: `Outfit for ${event.name}`, description: event.dress_code ? `Dress code: ${event.dress_code}` : 'Choose an outfit that matches the event', required: true, completed: false },
     { slot: 'shoes', label: 'Shoes', description: 'Matching footwear', required: true, completed: false },
     { slot: 'accessories', label: 'Accessories', description: 'Bag, belt, or statement piece', required: false, completed: false },
