@@ -12,6 +12,7 @@ vi.mock('../../services/api', () => ({
 
 import api from '../../services/api';
 import EpisodeSpendingSection, { spendingNote, buildSpendingBody } from './EpisodeSpendingSection';
+import { MemoryRouter } from 'react-router-dom';
 import EpisodeMoneyTab from './EpisodeMoneyTab';
 
 const URL = '/api/v1/world/show-1/episodes/ep-1/spending';
@@ -120,7 +121,7 @@ describe('EpisodeMoneyTab with event spending', () => {
     };
     vi.mocked(api.get).mockResolvedValue({ data: { data: money } });
     vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
-    render(<EpisodeMoneyTab episode={{ id: 'ep-1' }} showId="show-1" />);
+    render(<MemoryRouter><EpisodeMoneyTab episode={{ id: 'ep-1' }} showId="show-1" /></MemoryRouter>);
     expect(await screen.findByTestId('em-spending')).toBeTruthy();
     fireEvent.click(screen.getByTestId('em-spending-remove-l2'));
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));

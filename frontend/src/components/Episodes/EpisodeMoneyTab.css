@@ -491,3 +491,110 @@
   text-align: right;
   color: var(--lala-ink-muted);
 }
+
+/* The redesign (Evoni's Episode mock, 2026-10-06): Earns, Spends and the
+   Net estimate, then every line in the estimate and the deal terms. */
+.em-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.em-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+.em-tile-earns { background: var(--lala-lavender-soft); }
+.em-tile-net { background: var(--accent-subtle); border-color: var(--accent-light); }
+.em-tile-label { font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.em-tile-earns .em-tile-label { color: var(--lala-lavender-text); }
+.em-tile-net .em-tile-label { color: var(--accent-dark); }
+.em-tile-value { font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--lala-ink); overflow-wrap: anywhere; }
+.em-tile-note { font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.em-tile-balance { margin-top: 6px; font-size: 12px; color: var(--lala-ink); }
+
+.em-estimate {
+  padding: 18px 20px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 12px;
+  background: var(--surface-card);
+  gap: 10px;
+}
+.em-estimate-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.em-estimate-title {
+  font-family: var(--font-prose);
+  font-size: 20px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--lala-ink);
+}
+.em-estimate-head .em-explain { margin: 0; }
+
+.em-est-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.em-est-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 160px) minmax(70px, auto) auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 10px;
+  background: var(--surface-card);
+  font-size: 13px;
+}
+.em-est-what { display: flex; flex-direction: column; min-width: 0; }
+.em-est-label { font-weight: 600; overflow-wrap: anywhere; }
+.em-est-source { font-size: 11px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.em-est-when { font-size: 12px; color: var(--lala-ink-muted); }
+.em-est-amount { text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; }
+.em-est-amount.em-pos { color: var(--lala-lavender-text); }
+.em-est-row.is-not_earned .em-est-label { text-decoration: line-through; color: var(--lala-ink-muted); }
+.em-est-row .em-chip { justify-self: end; font-family: inherit; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.em-chip-covered,
+.em-chip-none,
+.em-chip-planned { background: var(--lala-parchment-2); }
+
+.em-terms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--lala-parchment);
+  font-size: 13px;
+}
+.em-terms-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--lala-lavender);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.em-terms-link:hover { background: var(--lala-lavender-soft); }
+
+@media (max-width: 760px) {
+  .em-tiles { grid-template-columns: 1fr; }
+  .em-tile-value { font-size: 24px; }
+  .em-estimate { padding: 14px; }
+  .em-est-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'what amount' 'when chip';
+  }
+  .em-est-what { grid-area: what; }
+  .em-est-amount { grid-area: amount; }
+  .em-est-when { grid-area: when; }
+  .em-est-row .em-chip { grid-area: chip; }
+}
