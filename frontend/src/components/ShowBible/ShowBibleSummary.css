@@ -1,0 +1,79 @@
+/* ShowBibleSummary: the Show Bible's front page in the LalaVerse hub (the
+   mock, 2026-10-06), in the Bible's gold. Tokens only: --lala-gold-text is
+   text on white and on --lala-gold-soft; --lala-gold is a fill under ink. */
+
+.sbs { margin-bottom: 20px; }
+.sbs-grid {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start;
+}
+.sbs-card {
+  background: var(--surface-card); border: 1px solid var(--lala-gold-line); border-radius: 16px;
+  padding: 20px 22px; min-width: 0;
+}
+.sbs-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.sbs-guard { background: var(--lala-gold-soft); }
+.sbs-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.sbs-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.sbs-guard .sbs-title { color: var(--lala-gold-text); }
+.sbs-chip { padding: 3px 10px; border-radius: 999px; background: var(--surface-card); font-size: 12px; font-weight: 700; color: var(--lala-gold-text); }
+.sbs-sub { margin: 0 0 10px; font-size: 13px; color: var(--text-secondary); }
+.sbs-note { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.sbs-warn { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: var(--warning-bg); color: var(--warning-text); }
+.sbs-ok { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: var(--success-bg); color: var(--success-text); }
+
+.sbs-btn {
+  min-height: 44px; padding: 0 18px; border: none; border-radius: 999px; cursor: pointer;
+  background: var(--lala-gold); color: var(--text-primary); font-weight: 700; font-size: 14px; font-family: inherit;
+}
+.sbs-btn:hover:not(:disabled) { box-shadow: 0 0 0 3px var(--lala-gold-line); }
+.sbs-btn:disabled { cursor: default; opacity: 0.6; }
+.sbs-btn-head { margin-left: auto; }
+.sbs-link {
+  min-height: 44px; margin-top: 8px; padding: 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-gold-text);
+}
+
+.sbs-rules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sbs-rule {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 12px 14px; border-radius: 12px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line);
+}
+.sbs-rule-label { font-size: 12px; font-weight: 700; color: var(--lala-gold-text); }
+.sbs-rule-crit { font-weight: 600; }
+.sbs-rule-text { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+
+.sbs-findings { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sbs-finding {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-card); font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere;
+}
+.sbs-finding-title { font-size: 14px; }
+.sbs-finding-law, .sbs-finding-fix { color: var(--text-secondary); font-size: 12px; }
+.sbs-finding-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.sbs-finding-actions a, .sbs-finding-actions button {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-gold-text); text-decoration: none;
+}
+
+.sbs-timeline { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 3px solid var(--lala-gold-line); display: flex; flex-direction: column; gap: 14px; }
+.sbs-decision { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sbs-decision::before {
+  content: ''; position: absolute; left: -27px; top: 3px; width: 13px; height: 13px; border-radius: 50%; background: var(--lala-gold);
+}
+.sbs-when { font-size: 12px; font-weight: 700; color: var(--lala-gold-text); }
+.sbs-decision-text { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.sbs-affects { font-size: 12px; color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  /* One column in the mock's order: rules, the guard, decisions. */
+  .sbs-grid { grid-template-columns: 1fr; }
+  .sbs-col { display: contents; }
+  .sbs-rules-card { order: 1; }
+  .sbs-guard { order: 2; }
+  .sbs-decisions-card { order: 3; }
+}
+@media (max-width: 560px) {
+  .sbs-card { padding: 16px; }
+  .sbs-rules { grid-template-columns: 1fr; }
+  .sbs-btn-head { margin-left: 0; }
+}

@@ -22,6 +22,7 @@ const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
+const { guardItems, itemOfWarning } = require('../services/guardItems');
 
 const client = new Anthropic();
 
@@ -528,15 +529,26 @@ router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
 // that could not run (the AI's verdict unreadable) is 'check_failed' with
 // passed false; it used to answer passed: true, so a screen showed a green
 // pass for a check that never happened. warnings are { law, risk, suggestion }.
+//
+// Canon check (the LalaVerse Show Bible "Check now", 2026-10-06): instead of
+// one scene_brief the body may carry items, [{ key, label, brief }], up to
+// 25, each brief cut to 1,200 characters (services/guardItems). They are
+// checked in one call, and each warning names the item it is about (item:
+// key, or null when the verdict names none the request sent). Nothing is
+// stored. The route is AI-backed, so it carries aiRateLimiter.
 // ─────────────────────────────────────────────────────────────────────────────
 const guardResult = (status, warnings, rules_checked, message) =>
   ({ status, passed: status === 'passed', warnings, rules_checked, message });
 
-router.post('/franchise-brain/guard', requireAuth, async (req, res) => {
+router.post('/franchise-brain/guard', requireAuth, aiRateLimiter, async (req, res) => {
   const { scene_brief, characters_in_scene, scene_type, tone } = req.body;
+  const items = guardItems(req.body.items);
 
-  if (!scene_brief) {
-    return res.status(400).json({ error: 'scene_brief is required' });
+  if (typeof items === 'string') {
+    return res.status(400).json({ error: items });
+  }
+  if (!scene_brief && !items) {
+    return res.status(400).json({ error: 'scene_brief or items is required' });
   }
 
   try {
@@ -554,7 +566,24 @@ router.post('/franchise-brain/guard', requireAuth, async (req, res) => {
       return res.json(guardResult('passed', [], 0, 'No active laws to check against'));
     }
 
-    const guardPrompt = `You are the Pre-Generation Franchise Guard for Prime Studios.
+    const lawsText = laws.map(l => `[${l.severity.toUpperCase()}] ${l.title}\n${l.content}`).join('\n\n');
+    const guardPrompt = items ? `You are the Franchise Guard for Prime Studios, checking a show's existing episodes and events against its canon.
+
+ITEMS:
+${items.map((it) => `[${it.key}] ${it.label}\n${it.brief}`).join('\n\n')}
+
+FRANCHISE LAWS:
+${lawsText}
+
+Flag only places where an item disagrees with a law. Name the item by its key in brackets.
+
+Respond ONLY in valid JSON:
+{
+  "passed": true/false,
+  "warnings": [
+    { "item": "the item's key", "law": "which law", "risk": "what disagrees", "suggestion": "how to fix the item" }
+  ]
+}` : `You are the Pre-Generation Franchise Guard for Prime Studios.
 
 SCENE BRIEF: ${scene_brief}
 CHARACTERS: ${(characters_in_scene || []).join(', ')}
@@ -562,7 +591,7 @@ SCENE TYPE: ${scene_type || 'not specified'}
 TONE: ${tone || 'not specified'}
 
 FRANCHISE LAWS:
-${laws.map(l => `[${l.severity.toUpperCase()}] ${l.title}\n${l.content}`).join('\n\n')}
+${lawsText}
 
 Check this scene brief BEFORE generation. Flag anything in the brief that could lead the AI into a franchise violation.
 
@@ -576,7 +605,7 @@ Respond ONLY in valid JSON:
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: items ? 2500 : 1000,
       system: 'You are the franchise guard. Respond ONLY in valid JSON.',
       messages: [{ role: 'user', content: guardPrompt }],
     });
@@ -593,7 +622,11 @@ Respond ONLY in valid JSON:
     }
 
     const warnings = Array.isArray(parsed.warnings)
-      ? parsed.warnings.filter((w) => w && typeof w === 'object').map((w) => ({ law: String(w.law || 'Unnamed law'), risk: String(w.risk || ''), suggestion: String(w.suggestion || '') }))
+      ? parsed.warnings.filter((w) => w && typeof w === 'object').map((w) => {
+        const warning = { law: String(w.law || 'Unnamed law'), risk: String(w.risk || ''), suggestion: String(w.suggestion || '') };
+        if (items) warning.item = itemOfWarning(w, items);
+        return warning;
+      })
       : [];
     const status = warnings.length > 0 || parsed.passed === false ? 'issues' : 'passed';
     const message = status === 'passed'

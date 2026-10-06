@@ -8,8 +8,9 @@
 // A check that could not run (the AI's verdict unreadable) is 'check_failed'
 // with passed false. Until 2026-10-04 it answered passed: true ("allowing
 // through"), so the Show Bible showed a green pass for a check that never
-// happened; and the Show Bible sent scene_text, refused with 400. The page's
-// side is pinned by frontend ShowBiblePage.guard.test.jsx.
+// happened; and the Show Bible sent scene_text, refused with 400. Since
+// 2026-10-06 the body may carry items instead (the Show Bible's canon check,
+// services/guardItems). The page's side is pinned by frontend ShowBiblePage.guard.test.jsx.
 
 const fs = require('fs');
 const path = require('path');
@@ -22,10 +23,21 @@ const helperStart = SRC.indexOf('const guardResult = (status');
 const helper = SRC.slice(helperStart, start);
 
 describe('franchise-brain guard contract', () => {
-  test('the route reads scene_brief and refuses without it', () => {
+  test('the route reads scene_brief or items, and refuses without either', () => {
     expect(handler).toMatch(/const\s*\{\s*scene_brief,\s*characters_in_scene,\s*scene_type,\s*tone\s*\}\s*=\s*req\.body/);
-    expect(handler).toMatch(/'scene_brief is required'/);
+    expect(handler).toMatch(/const items = guardItems\(req\.body\.items\)/);
+    expect(handler).toMatch(/if \(typeof items === 'string'\) \{\s*return res\.status\(400\)/);
+    expect(handler).toMatch(/'scene_brief or items is required'/);
     expect(handler).not.toMatch(/scene_text/);
+  });
+
+  test('the guard calls the AI, so it is rate limited like every AI route (2026-10-06)', () => {
+    expect(handler).toMatch(/^router\.post\('\/franchise-brain\/guard', requireAuth, aiRateLimiter, async/);
+  });
+
+  test('a canon check names each warning\'s item, and stores nothing', () => {
+    expect(handler).toMatch(/if \(items\) warning\.item = itemOfWarning\(w, items\)/);
+    expect(handler).not.toMatch(/db\.\w+\.(create|update|bulkCreate|upsert|destroy)\(|\.save\(|sequelize\.query\(/);
   });
 
   test('one result format: status, passed derived from it, warnings, rules_checked, message', () => {
