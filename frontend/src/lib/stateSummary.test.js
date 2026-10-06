@@ -20,7 +20,7 @@ describe('stateSummary', () => {
     expect(tensionBars([pair('A', 'B', 'Simmering', { relationship_type: 'unknown' })]).rows[0].relationship).toBeNull();
   });
 
-  test('snapshotSummary keeps the automatic temperature rows out of the snapshots and reads the latest temperature', () => {
+  test('snapshotSummary keeps the temperature readings out of the snapshots and reads the latest temperature', () => {
     const s = snapshotSummary([
       { id: 't2', snapshot_label: 'temperature_update', created_at: '2026-10-03', metadata: { world_temperature: { value: 64 } } },
       { id: 'm2', snapshot_label: 'After the gala', created_at: '2026-10-02' },

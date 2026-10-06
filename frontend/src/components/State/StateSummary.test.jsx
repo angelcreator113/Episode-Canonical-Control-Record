@@ -57,7 +57,7 @@ describe('StateSummary', () => {
     expect(within(eps).getByText('Not yet')).toBeTruthy();
     expect(within(eps).getByRole('link', { name: 'The Gala' }).getAttribute('href')).toBe('/episodes/ep2');
     expect(screen.getByTestId('st-temperature').textContent).toBe('World temperature 62');
-    // The automatic temperature row is not a snapshot anyone saved.
+    // A temperature reading is not a snapshot anyone saved.
     expect(screen.getByTestId('st-saved').textContent).toContain('1 snapshot saved by hand');
     const tensions = screen.getByTestId('st-tensions');
     expect(within(tensions).getAllByRole('listitem').map((li) => li.querySelector('strong').textContent)).toEqual(['Nia & Rex', 'Sable & Lala']);

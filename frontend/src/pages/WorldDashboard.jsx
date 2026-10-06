@@ -126,7 +126,7 @@ export default function WorldDashboard({ embedded = false }) {
     } catch (err) { flash(err.response?.data?.error || 'Could not generate a proposal', 'error'); }
   };
 
-  // The automatic temperature rows are not snapshots anyone took.
+  // The temperature rows are readings, not snapshots anyone took.
   const saved = (snapshots || []).filter((s) => s.snapshot_label !== AUTO_SNAPSHOT_LABEL);
   const autoCount = (snapshots || []).length - saved.length;
 
@@ -187,7 +187,7 @@ export default function WorldDashboard({ embedded = false }) {
                     </li>
                   ))}
                 </ul>
-                {autoCount > 0 && <p className="wd-foot">{autoCount === 1 ? 'One automatic world temperature reading is' : `${autoCount} automatic world temperature readings are`} kept with the snapshots (one per accepted episode) and not listed here.</p>}
+                {autoCount > 0 && <p className="wd-foot">{autoCount === 1 ? 'One world temperature reading is' : `${autoCount} world temperature readings are`} kept with the snapshots and not listed here.</p>}
               </>
             )}
 

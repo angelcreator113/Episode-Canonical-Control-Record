@@ -11,11 +11,14 @@
  *                       sets evaluation_status 'accepted'; either says done.
  *                       Finalizing its money adds a 'computed' coins row.
  *   snapshots           GET /world/state/snapshots, the world facts saved by
- *                       hand. The list also holds the automatic
- *                       'temperature_update' rows (worldTemperatureService,
- *                       one per accepted episode, carrying
- *                       metadata.world_temperature); those are not shown as
- *                       snapshots, only the latest temperature is.
+ *                       hand. The list also holds 'temperature_update' rows
+ *                       carrying metadata.world_temperature, written only by
+ *                       POST /world-temperature/:universeId/snapshot
+ *                       (worldTemperatureRoutes → snapshotTemperature),
+ *                       which nothing in the app calls yet (wiring map,
+ *                       docs/reads/2026-10-06-lalaverse-wiring-map.md §4).
+ *                       Those are not shown as snapshots, only the latest
+ *                       temperature is.
  *                       Snapshots carry no show_id, so they are the world's.
  *   tensions            GET /world/tension-scanner: pairs whose relationship
  *                       is Simmering, Unresolved, High or Explosive. The
@@ -86,7 +89,7 @@ export function tensionBars(pairs, limit = 5) {
  * The snapshots split honestly: { baseline, saved, temperature, autoCount }.
  * baseline is the first snapshot saved by hand (the world before the
  * season's changes, by Evoni's own record); saved is every one by hand,
- * newest first; temperature is the latest automatic reading or null.
+ * newest first; temperature is the latest reading or null.
  */
 export function snapshotSummary(snapshots) {
   const list = (snapshots || []).filter((s) => s && s.snapshot_label);

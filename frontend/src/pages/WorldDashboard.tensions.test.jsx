@@ -78,7 +78,7 @@ describe('State tab: the Tensions contracts', () => {
 });
 
 describe('State tab: the front page drives the tabs below', () => {
-  test('"Take a snapshot" opens World State at the label; the automatic temperature rows are not listed as snapshots', async () => {
+  test('"Take a snapshot" opens World State at the label; the temperature rows are not listed as snapshots', async () => {
     window.history.pushState({}, '', '/universe?tab=state&sub=tensions');
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url.includes('tension-scanner')) return { data: { status: 'ok', pairs: [], count: 0, characters_scanned: 3 } };
@@ -95,6 +95,8 @@ describe('State tab: the front page drives the tabs below', () => {
     const panel = screen.getByRole('tabpanel', { name: 'World State' });
     expect(within(panel).getByText('Before the gala')).toBeTruthy();
     expect(within(panel).queryByText('temperature_update')).toBeNull();
-    expect(within(panel).getByText(/One automatic world temperature reading is kept/)).toBeTruthy();
+    expect(within(panel).getByText(/One world temperature reading is kept/)).toBeTruthy();
+    // Nothing records a reading per episode (the wiring map, §4), so the page doesn't say so.
+    expect(screen.queryByText(/accepted episode/)).toBeNull();
   });
 });
