@@ -1521,23 +1521,44 @@ export default function EventPackagePage() {
             {fullGuestListOpen && (
               guestList.length ? (
                 <>
+                {/* Each guest's name features or unfeatures them (up to
+                    MAX_FEATURED_GUESTS) while the package is editable; once
+                    Start Episode locks it the names are plain text. */}
+                {used ? (
+                  <p className="epp-guests-note epp-guest-list-note" data-testid="guest-list-locked">
+                    Featured attendees are locked with the package{lockEpisode?.episode_number ? ` (Episode ${lockEpisode.episode_number})` : ''}.
+                  </p>
+                ) : featuredGuests.length >= MAX_FEATURED_GUESTS && (
+                  <p className="epp-guests-note epp-guest-list-note" data-testid="guest-list-full">
+                    {MAX_FEATURED_GUESTS} of {MAX_FEATURED_GUESTS} featured. Click a featured guest to remove them first.
+                  </p>
+                )}
                 <ul className="epp-guest-list" id="epp-guest-list">
-                  {guestFold.shown.map((g, i) => (
-                    <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
-                      <span>{g.display_name || g.handle}</span>
-                      {g.featured ? (
-                        <span className="epp-saved-copy">Featured</span>
-                      ) : !used && (
-                        <button
-                          type="button" className="epp-inline-link"
-                          onClick={() => toggleFeatured(i)}
-                          disabled={guestSaving || featuredGuests.length >= MAX_FEATURED_GUESTS}
-                        >
-                          Make Featured
-                        </button>
-                      )}
-                    </li>
-                  ))}
+                  {guestFold.shown.map((g, i) => {
+                    const name = g.display_name || g.handle;
+                    return (
+                      <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
+                        {used ? (
+                          <>
+                            <span>{name}</span>
+                            {g.featured && <span className="epp-saved-copy">Featured</span>}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`epp-guest-toggle${g.featured ? ' is-featured' : ''}`}
+                            aria-pressed={!!g.featured}
+                            onClick={() => toggleFeatured(i)}
+                            disabled={guestSaving || (!g.featured && featuredGuests.length >= MAX_FEATURED_GUESTS)}
+                            title={g.featured ? `Remove ${name} from Featured` : `Feature ${name}`}
+                          >
+                            <span className="epp-guest-toggle-name">{name}</span>
+                            <span className="epp-guest-toggle-state">{g.featured ? '✓ Featured' : 'Feature'}</span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <ShowMoreToggle
                   open={allGuestsOpen} hidden={guestFold.hidden}
