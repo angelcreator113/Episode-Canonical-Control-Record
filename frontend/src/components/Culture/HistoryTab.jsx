@@ -1,12 +1,12 @@
 /**
  * HistoryTab — How the world remembers (merged Memory + Legacy)
- * Memory types, strength, archives, feuds, nostalgia, capsules, rankings
+ * Memory types, strength, archives, feuds, nostalgia, capsules, rankings.
+ *
+ * 2026-10-06: in the hub's design (pages/CultureEvents.css, tokens only);
+ * an item's own color from the data is only its accent.
  */
-import { useState, Fragment } from 'react';
+import { useState } from 'react';
 import { MEMORY_TYPES, STRENGTH_LEVELS, ARCHIVES, LEGEND_PATHS, FEUD_STAGES, NOSTALGIA_WAVES, CAPSULE_TYPES, RANKING_METRICS } from '../../data/memoryData';
-
-const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:12, marginBottom:6 };
-const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono', monospace", marginBottom:6 };
 
 const SECTIONS = [
   { key: 'how', label: 'How Memory Works' },
@@ -15,175 +15,134 @@ const SECTIONS = [
   { key: 'nostalgia', label: 'Nostalgia & Capsules' },
 ];
 
+const accent = (color) => (color ? { '--item': color } : undefined);
+
+/** A pair of boxes: what is kept (green) and what is lost (red). */
+function Pair({ keepLabel, keep, loseLabel, lose }) {
+  return (
+    <div className="ce-pair">
+      <div className="ce-keep"><span className="ce-label">{keepLabel}</span><p>{keep}</p></div>
+      <div className="ce-lose"><span className="ce-label">{loseLabel}</span><p>{lose}</p></div>
+    </div>
+  );
+}
+
 export default function HistoryTab({ data }) {
   const [section, setSection] = useState('how');
 
   return (
-    <div>
-      {/* Intro */}
-      <div style={{ background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:8, padding:'12px 16px', marginBottom:16, fontSize:12, color:'#555', lineHeight:1.6 }}>
-        <strong style={{ color:'#B8962E' }}>Memory is power.</strong> Who controls the archive controls the history. What gets remembered shapes what happens next. This tab defines how the LalaVerse processes its past.
-      </div>
+    <div className="ce-panel">
+      <p className="ce-intro"><strong>Memory is power.</strong> Who controls the archive controls the history. What gets remembered shapes what happens next. This tab defines how the LalaVerse processes its past.</p>
 
-      {/* Section toggle */}
-      <div style={{ display:'flex', gap:4, marginBottom:20 }}>
-        {SECTIONS.map(s => (
-          <button key={s.key} onClick={() => setSection(s.key)} style={{
-            padding:'6px 14px', fontSize:10, fontWeight:600, fontFamily:"'DM Mono', monospace",
-            borderRadius:6, border:'1px solid #e8e0d0', cursor:'pointer',
-            background: section === s.key ? '#2C2C2C' : '#fff',
-            color: section === s.key ? '#fff' : '#888',
-          }}>{s.label}</button>
+      <div className="ce-seg" role="group" aria-label="History sections">
+        {SECTIONS.map((s) => (
+          <button key={s.key} type="button" aria-pressed={section === s.key} className={section === s.key ? 'is-active' : ''} onClick={() => setSection(s.key)}>{s.label}</button>
         ))}
       </div>
 
-      {/* HOW MEMORY WORKS */}
       {section === 'how' && (
-        <div>
-          <div style={lbl}>MEMORY TYPES — What Gets Remembered</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:8, marginBottom:24 }}>
-            {(data.MEMORY_TYPES || MEMORY_TYPES).map(m => (
-              <div key={m.type} style={card}>
-                <div style={{ fontSize:13, fontWeight:700 }}>{m.icon} {m.type}</div>
-                <p style={{ fontSize:11, color:'#666', margin:'4px 0', lineHeight:1.4 }}>{m.created}</p>
-                <div style={{ background:'#f8f7f4', borderRadius:6, padding:'6px 8px', marginTop:6 }}>
-                  <div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>HOW IT'S REFERENCED</div>
-                  <p style={{ fontSize:10, color:'#555', margin:'2px 0', fontStyle:'italic' }}>{m.referenced}</p>
-                </div>
+        <>
+          <h3 className="ce-h3">Memory types · what gets remembered</h3>
+          <div className="ce-grid ce-grid-wide">
+            {(data.MEMORY_TYPES || MEMORY_TYPES).map((m) => (
+              <div key={m.type} className="ce-card">
+                <strong className="ce-card-title"><span aria-hidden="true">{m.icon}</span> {m.type}</strong>
+                <p className="ce-card-text">{m.created}</p>
+                <div className="ce-callout"><span className="ce-label">How it's referenced</span><p className="ce-quote">{m.referenced}</p></div>
               </div>
             ))}
           </div>
 
-          <div style={lbl}>STRENGTH LEVELS — How Long It Lasts</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8 }}>
-            {(data.STRENGTH_LEVELS || STRENGTH_LEVELS).map(s => (
-              <div key={s.level} style={{ ...card, borderTop:`3px solid ${s.color}`, textAlign:'center' }}>
-                <div style={{ width:28, height:28, borderRadius:'50%', background:s.color, color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700 }}>{s.level}</div>
-                <div style={{ fontSize:13, fontWeight:700, marginTop:4 }}>{s.name}</div>
-                <div style={{ fontSize:10, color:s.color, fontWeight:600, marginTop:2 }}>{s.lifespan}</div>
-                <p style={{ fontSize:10, color:'#666', margin:'6px 0 0', lineHeight:1.4 }}>{s.example}</p>
+          <h3 className="ce-h3">Strength levels · how long it lasts</h3>
+          <div className="ce-grid">
+            {(data.STRENGTH_LEVELS || STRENGTH_LEVELS).map((s) => (
+              <div key={s.level} className="ce-card ce-accent-top is-centered" style={accent(s.color)}>
+                <span className="ce-step">{s.level}</span>
+                <strong className="ce-card-title">{s.name}</strong>
+                <span className="ce-meta">{s.lifespan}</span>
+                <p className="ce-card-text">{s.example}</p>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
-      {/* ARCHIVES */}
       {section === 'archives' && (
-        <div>
-          <div style={lbl}>INSTITUTIONAL ARCHIVES — Who Controls the Record</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10 }}>
-            {(data.ARCHIVES || ARCHIVES).map(a => (
-              <div key={a.name} style={{ ...card, borderLeft:`4px solid ${a.accent}` }}>
-                <div style={{ fontSize:14, fontWeight:700, color:a.accent }}>{a.name}</div>
-                <div style={{ fontSize:10, color:'#888', marginTop:2 }}>Maintained by: {a.maintained}</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:8 }}>
-                  <div>
-                    <div style={{ fontSize:9, fontWeight:600, color:'#16a34a' }}>WHAT IT TRACKS</div>
-                    <p style={{ fontSize:10, color:'#666', margin:'2px 0', lineHeight:1.4 }}>{a.tracks}</p>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:9, fontWeight:600, color:'#dc2626' }}>WHAT IT LEAVES OUT</div>
-                    <p style={{ fontSize:10, color:'#666', margin:'2px 0', lineHeight:1.4 }}>{a.leaves_out}</p>
-                  </div>
-                </div>
-                <div style={{ background:'#f8f7f4', borderRadius:6, padding:'6px 8px', marginTop:8 }}>
-                  <div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>WHO CONTROLS THE NARRATIVE</div>
-                  <p style={{ fontSize:10, color:'#555', margin:'2px 0', fontStyle:'italic' }}>{a.control}</p>
-                </div>
+        <>
+          <h3 className="ce-h3">Institutional archives · who controls the record</h3>
+          <div className="ce-grid ce-grid-wide">
+            {(data.ARCHIVES || ARCHIVES).map((a) => (
+              <div key={a.name} className="ce-card ce-accent-left" style={accent(a.accent)}>
+                <strong className="ce-card-title">{a.name}</strong>
+                <span className="ce-meta">Maintained by: {a.maintained}</span>
+                <Pair keepLabel="What it tracks" keep={a.tracks} loseLabel="What it leaves out" lose={a.leaves_out} />
+                <div className="ce-callout"><span className="ce-label">Who controls the narrative</span><p className="ce-quote">{a.control}</p></div>
               </div>
             ))}
           </div>
 
-          <div style={{ ...lbl, marginTop:24 }}>INFLUENCE RANKINGS — How Impact Is Measured</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:8 }}>
-            {(data.RANKING_METRICS || RANKING_METRICS).map(r => (
-              <div key={r.metric} style={card}>
-                <div style={{ fontSize:12, fontWeight:700 }}>{r.metric}</div>
-                <p style={{ fontSize:10, color:'#666', margin:'4px 0' }}>{r.measures}</p>
-                <div style={{ fontSize:9, color:'#888' }}>Measured by: {r.measured_by}</div>
-                <div style={{ fontSize:9, color:'#dc2626', marginTop:4, fontStyle:'italic' }}>Misses: {r.misses}</div>
+          <h3 className="ce-h3">Influence rankings · how impact is measured</h3>
+          <div className="ce-grid ce-grid-wide">
+            {(data.RANKING_METRICS || RANKING_METRICS).map((r) => (
+              <div key={r.metric} className="ce-card">
+                <strong className="ce-card-title">{r.metric}</strong>
+                <p className="ce-card-text">{r.measures}</p>
+                <span className="ce-meta">Measured by: {r.measured_by}</span>
+                <span className="ce-misses">Misses: {r.misses}</span>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
-      {/* LEGENDS & FEUDS */}
       {section === 'legends' && (
-        <div>
-          <div style={lbl}>PATHS TO LEGENDARY STATUS</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:8, marginBottom:24 }}>
-            {(data.LEGEND_PATHS || LEGEND_PATHS).map(l => (
-              <div key={l.path} style={card}>
-                <div style={{ fontSize:13, fontWeight:700, marginBottom:6 }}>{l.path}</div>
-                <div style={{ display:'flex', gap:6 }}>
-                  <div style={{ flex:1, background:'#e8f5e9', borderRadius:6, padding:6 }}>
-                    <div style={{ fontSize:8, fontWeight:700, color:'#2e7d32' }}>REQUIRES</div>
-                    <p style={{ fontSize:10, color:'#555', margin:'2px 0' }}>{l.requires}</p>
-                  </div>
-                  <div style={{ flex:1, background:'#ffebee', borderRadius:6, padding:6 }}>
-                    <div style={{ fontSize:8, fontWeight:700, color:'#c62828' }}>COSTS</div>
-                    <p style={{ fontSize:10, color:'#555', margin:'2px 0' }}>{l.costs}</p>
-                  </div>
-                </div>
+        <>
+          <h3 className="ce-h3">Paths to legendary status</h3>
+          <div className="ce-grid ce-grid-wide">
+            {(data.LEGEND_PATHS || LEGEND_PATHS).map((l) => (
+              <div key={l.path} className="ce-card">
+                <strong className="ce-card-title">{l.path}</strong>
+                <Pair keepLabel="Requires" keep={l.requires} loseLabel="Costs" lose={l.costs} />
               </div>
             ))}
           </div>
 
-          <div style={lbl}>HISTORICAL FEUDS — How Rivalries Evolve</div>
-          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-            {(data.FEUD_STAGES || FEUD_STAGES).map((f, i, a) => (
-              <Fragment key={f.stage}>
-                <div style={{ ...card, borderTop:`3px solid ${f.color}`, flex:'1 1 180px', minWidth:180, marginBottom:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:f.color }}>{f.stage}</div>
-                  <p style={{ fontSize:10, color:'#666', margin:'4px 0', lineHeight:1.4 }}>{f.looks}</p>
-                  <div style={{ fontSize:9, color:'#888' }}>{f.attention}</div>
-                </div>
-                {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </Fragment>
+          <h3 className="ce-h3">Historical feuds · how rivalries evolve</h3>
+          <ol className="ce-stages">
+            {(data.FEUD_STAGES || FEUD_STAGES).map((f) => (
+              <li key={f.stage} className="ce-card ce-accent-top" style={accent(f.color)}>
+                <strong className="ce-card-title">{f.stage}</strong>
+                <p className="ce-card-text">{f.looks}</p>
+                <span className="ce-meta">{f.attention}</span>
+              </li>
             ))}
-          </div>
-        </div>
+          </ol>
+        </>
       )}
 
-      {/* NOSTALGIA & CAPSULES */}
       {section === 'nostalgia' && (
-        <div>
-          <div style={lbl}>NOSTALGIA WAVES — When the Past Returns</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:8, marginBottom:24 }}>
-            {(data.NOSTALGIA_WAVES || NOSTALGIA_WAVES).map(n => (
-              <div key={n.type} style={card}>
-                <div style={{ fontSize:13, fontWeight:700 }}>{n.type}</div>
-                <p style={{ fontSize:10, color:'#666', margin:'4px 0', lineHeight:1.4 }}>{n.returns}</p>
-                <div style={{ background:'#f8f7f4', borderRadius:6, padding:'6px 8px', marginTop:4 }}>
-                  <div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>THE GAP</div>
-                  <p style={{ fontSize:10, color:'#555', margin:'2px 0', fontStyle:'italic' }}>{n.gap}</p>
-                </div>
+        <>
+          <h3 className="ce-h3">Nostalgia waves · when the past returns</h3>
+          <div className="ce-grid ce-grid-wide">
+            {(data.NOSTALGIA_WAVES || NOSTALGIA_WAVES).map((n) => (
+              <div key={n.type} className="ce-card">
+                <strong className="ce-card-title">{n.type}</strong>
+                <p className="ce-card-text">{n.returns}</p>
+                <div className="ce-callout"><span className="ce-label">The gap</span><p className="ce-quote">{n.gap}</p></div>
               </div>
             ))}
           </div>
 
-          <div style={lbl}>TIME CAPSULES — Retrospectives That Rewrite History</div>
-          {(data.CAPSULE_TYPES || CAPSULE_TYPES).map(c => (
-            <div key={c.type} style={{ ...card, marginBottom:8 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:13, fontWeight:700 }}>{c.type}</span>
-                <span style={{ fontSize:9, color:'#888' }}>{c.made_by}</span>
+          <h3 className="ce-h3">Time capsules · retrospectives that rewrite history</h3>
+          <div className="ce-list">
+            {(data.CAPSULE_TYPES || CAPSULE_TYPES).map((c) => (
+              <div key={c.type} className="ce-card">
+                <div className="ce-card-top"><strong className="ce-card-title">{c.type}</strong><span className="ce-meta">{c.made_by}</span></div>
+                <Pair keepLabel="Included" keep={c.included} loseLabel="Left out" lose={c.left_out} />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:6 }}>
-                <div style={{ background:'#e8f5e9', borderRadius:6, padding:6 }}>
-                  <div style={{ fontSize:8, fontWeight:700, color:'#2e7d32' }}>INCLUDED</div>
-                  <p style={{ fontSize:10, color:'#555', margin:'2px 0' }}>{c.included}</p>
-                </div>
-                <div style={{ background:'#ffebee', borderRadius:6, padding:6 }}>
-                  <div style={{ fontSize:8, fontWeight:700, color:'#c62828' }}>LEFT OUT</div>
-                  <p style={{ fontSize:10, color:'#555', margin:'2px 0' }}>{c.left_out}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

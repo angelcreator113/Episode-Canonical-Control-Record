@@ -13,6 +13,11 @@
  * 2026-10-04: the page-level "Push to Brain" button is gone. It clicked
  * two hidden buttons that no longer existed, so it did nothing, and the
  * show picker sat in the same hidden block.
+ *
+ * 2026-10-06, to the LalaVerse mock: in the hub the tabs sit under the
+ * year (components/Culture/CultureYear: twelve months, the chosen month's
+ * events and awards, the cultural memory), and the page and its three tabs
+ * are in the hub's design (CultureEvents.css, tokens only).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
@@ -26,6 +31,8 @@ import HistoryTab from '../components/Culture/HistoryTab';
 import { CALENDAR_DEFAULTS } from '../data/calendarData';
 import { MEMORY_DEFAULTS } from '../data/memoryData';
 import { tabFromSearch } from '../utils/worldRedirects';
+import CultureYear from '../components/Culture/CultureYear';
+import './CultureEvents.css';
 
 // File-local cross-CP duplicates of CP10 CulturalCalendar helpers per
 // v2.12 §9.11 file-local convention. listShowsApi reaches 5-fold
@@ -68,7 +75,7 @@ export default function CultureEvents({ embedded = false }) {
   useEffect(() => {
     listCalendarEventsApi('lalaverse_cultural')
       .then(d => setEvents(d.events || []))
-      .catch(e => console.error(e)).finally(() => setLoading(false));
+      .catch((e) => console.error('[Culture] the cultural calendar could not be read:', e?.message)).finally(() => setLoading(false));
   }, []);
 
   const handleCreateEvent = useCallback(async (ev) => {
@@ -85,68 +92,60 @@ export default function CultureEvents({ embedded = false }) {
       await deleteCalendarEventApi(id);
       setEvents(p => p.filter(e => e.id !== id));
       flash('Deleted');
-    } catch { flash('Delete failed', 'error'); }
+    } catch (err) { console.error('[Culture] delete failed:', err?.message); flash('Delete failed', 'error'); }
   }, []);
 
   const saving = ccSaving || cmSaving;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
-      {/* Header; inside the LalaVerse hub the tab is the heading */}
-      <div style={{ display: 'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems: 'flex-start', marginBottom: embedded ? 8 : 20 }}>
-        {!embedded && <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#2C2C2C', margin: 0 }}>Culture & Events</h1>
-          <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>What happens in the LalaVerse, who covers it, and what becomes legend</p>
-        </div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {saving && <span style={{ fontSize: 11, color: 'var(--lala-gold-text)' }}>Saving...</span>}
-          {/* The action that belongs to the open sub-tab: the show for a new event, or that sub-tab's Brain Update */}
-          {tab === 'events' && shows.length > 1 && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
-              New events go to
-              <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Choose a show…" />
-            </label>
-          )}
-          {tab === 'awards' && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
-          {tab === 'history' && <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid #e8e0d0' }}>
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            padding: '10px 20px', fontSize: 12, fontWeight: 600,
-            fontFamily: "'DM Mono', monospace",
-            background: tab === t.key ? '#2C2C2C' : 'transparent',
-            color: tab === t.key ? '#fff' : '#888',
-            border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-          }}>
-            <span>{t.label}</span>
-            <span style={{ fontSize: 8, opacity: 0.6, fontWeight: 400 }}>{t.desc}</span>
-          </button>
-        ))}
-      </div>
+    <div className={`ce${embedded ? ' is-embedded' : ''}`}>
+      {embedded && (
+        <CultureYear calendar={events} loading={loading} awards={ccData.AWARD_SHOWS} showId={showId}
+          onCreateEvent={(ev) => ev && handleCreateEvent(ev)} onOpen={setTab} />
+      )}
 
       {/* Toast */}
       {toast && (
-        <div style={{ padding: '10px 16px', marginBottom: 12, borderRadius: 8, fontSize: 13, fontWeight: 600, background: toast.type === 'success' ? '#e8f5e9' : '#ffebee', color: toast.type === 'success' ? '#2e7d32' : '#c62828', display: 'flex', justifyContent: 'space-between' }}>
+        <div className={`ce-toast is-${toast.type}`} role="status">
           <span>{toast.message || toast.msg}</span>
-          <button onClick={() => setToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>x</button>
+          <button type="button" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
         </div>
       )}
 
-      {/* Tab content */}
-      {tab === 'events' && (
-        <EventsTab events={events} loading={loading} onCreateEvent={handleCreateEvent} onDelete={handleDelete} />
-      )}
-      {tab === 'awards' && (
-        <AwardsMediaTab data={ccData} />
-      )}
-      {tab === 'history' && (
-        <HistoryTab data={cmData} />
-      )}
+      <section className="ce-shell" aria-label="Culture and events">
+        {/* Header; inside the LalaVerse hub the tab's banner is the heading */}
+        <div className="ce-head">
+          <div>
+            {!embedded && <h1 className="ce-h1">Culture &amp; Events</h1>}
+            <h2 className="ce-title">{embedded ? 'The calendar, the coverage, the memory' : 'What happens in the LalaVerse, who covers it, and what becomes legend'}</h2>
+          </div>
+          <div className="ce-head-actions">
+            {saving && <span className="ce-saving">Saving…</span>}
+            {/* The action that belongs to the open sub-tab: the show for a new event, or that sub-tab's Brain Update */}
+            {tab === 'events' && shows.length > 1 && (
+              <label className="ce-show-pick">
+                New events go to
+                <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Choose a show…" />
+              </label>
+            )}
+            {tab === 'awards' && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
+            {tab === 'history' && <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />}
+          </div>
+        </div>
+
+        <div className="ce-tabs" role="tablist" aria-label="Culture">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`ce-tab${tab === t.key ? ' is-active' : ''}`} onClick={() => setTab(t.key)}>
+              <span>{t.label}</span>
+              <span className="ce-tab-desc">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+
+        {tab === 'events' && <EventsTab events={events} loading={loading} onCreateEvent={handleCreateEvent} onDelete={handleDelete} />}
+        {tab === 'awards' && <AwardsMediaTab data={ccData} />}
+        {tab === 'history' && <HistoryTab data={cmData} />}
+      </section>
     </div>
   );
 }
