@@ -3,6 +3,10 @@
  * Merges: WorldInfrastructure + WorldLocations. The Loop (how the world's
  * layers connect) is a fold-out intro above the map, not a tab (2026-10-04);
  * the Locations tab is the doorway to the Property Manager.
+ *
+ * In the LalaVerse hub (embedded) the tabs sit under the city explorer
+ * (components/World/DreamCityExplorer, the mock, 2026-10-06): pick a DREAM
+ * city to see its venues, schools and companies.
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
@@ -10,6 +14,7 @@ import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
+import DreamCityExplorer from '../components/World/DreamCityExplorer';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
@@ -129,6 +134,13 @@ export default function WorldFoundation({ embedded = false }) {
     catch { flash('Seed failed', 'error'); }
   }, [flash, loadLocations]);
 
+  // The explorer's "+ Add": a new location already in the chosen city.
+  const addInCity = (cityName) => {
+    setTab('locations'); setEditId(null);
+    setForm({ ...emptyForm, city: cityName });
+    setShowForm(true);
+  };
+
   const startEdit = (loc) => {
     setEditId(loc.id);
     setForm({ name: loc.name || '', description: loc.description || '', location_type: loc.location_type || 'venue', narrative_role: loc.narrative_role || '', street_address: loc.street_address || '', city: loc.city || '', district: loc.district || '', venue_type: loc.venue_type || '', property_type: loc.property_type || '', parent_location_id: loc.parent_location_id || '', venue_details: loc.venue_details || emptyForm.venue_details });
@@ -172,6 +184,11 @@ export default function WorldFoundation({ embedded = false }) {
   return (
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
+      {embedded && (
+        <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
+          locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')} />
+      )}
+
       {/* Header; inside the LalaVerse hub the tab is the heading */}
       <div style={{ display: 'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems: 'flex-start', marginBottom: embedded ? 8 : 20 }}>
         {!embedded && <div>
