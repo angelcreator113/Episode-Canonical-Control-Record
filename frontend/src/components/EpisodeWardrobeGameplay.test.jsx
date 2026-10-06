@@ -235,6 +235,18 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     mockApi();
   });
 
+  // Evoni's Episode mock (2026-10-05): Lala's look, with the dress code, each
+  // piece owned or still to buy, and what the look costs against her coins.
+  test("Lala's look: the dress code, owned or to buy, and the look's cost", async () => {
+    await renderGame({ event: { id: 'ev-1', name: 'Garden Gala', event_type: 'gala', prestige: 6, strictness: 5, dress_code: 'Garden formal' } });
+    expect(screen.getByTestId('look-header').textContent).toContain("Lala's look");
+    expect(screen.getByTestId('look-header').textContent).toContain('500 coins');
+    expect(screen.getByTestId('look-dress-code').textContent).toBe('Dress code: Garden formal');
+    expect(screen.getByTestId('slot-cost-d-draft').textContent).toBe('to buy · 🪙 300');
+    expect(screen.getByTestId('slot-cost-s1').textContent).toBe('owned');
+    expect(screen.getByTestId('look-cost').textContent).toBe('Look costs 🪙 300 · Lala has 500After the look 200');
+  });
+
   test('Lock calls the atomic endpoint once with every piece', async () => {
     api.post.mockImplementation((url) => {
       if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });
@@ -254,7 +266,7 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     expect(lockCalls[0][1].wardrobe_ids).toHaveLength(2);
     expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/select')).toHaveLength(0);
     // The header shows the returned balance.
-    expect(await screen.findByText('🪙 200')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('look-header').textContent).toContain('200 coins'));
   });
 
   // Evoni, 2026-10-05: the page's coin chip kept the old balance after a
@@ -273,7 +285,7 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     const poolsBefore = api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool').length;
     fireEvent.click(await screen.findByRole('button', { name: /Lock Outfit/ }));
     await screen.findByText('Outfit Locked');
-    expect(await screen.findByText('🪙 200')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('look-header').textContent).toContain('200 coins'));
     expect(onCoinsChange).toHaveBeenCalledTimes(1);
     expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/browse-pool')).toHaveLength(poolsBefore);
   });

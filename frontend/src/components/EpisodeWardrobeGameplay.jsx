@@ -41,16 +41,16 @@ import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_
 // (Task #2377), built on the shared taxonomy in lib/wardrobeSlots.
 
 const TIER_STYLES = {
-  basic: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b', emoji: '🧵' },
-  mid: { bg: '#eef2ff', border: '#c7d2fe', color: '#6366f1', emoji: '💜' },
-  luxury: { bg: '#fef3c7', border: '#fde68a', color: '#92400e', emoji: '💎' },
-  elite: { bg: '#fef3c7', border: '#f59e0b', color: '#78350f', emoji: '👑' },
+  basic: { bg: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)', color: 'var(--lala-ink-muted)', emoji: '🧵' },
+  mid: { bg: 'var(--lala-lavender-soft)', border: 'var(--lala-lavender-line)', color: 'var(--lala-lavender-text)', emoji: '💜' },
+  luxury: { bg: 'var(--warning-bg)', border: 'var(--warning-border)', color: 'var(--warning-text)', emoji: '💎' },
+  elite: { bg: 'var(--warning-bg)', border: 'var(--warning)', color: 'var(--warning-text)', emoji: '👑' },
 };
 const ROLE_STYLES = {
-  safe: { bg: '#f0fdf4', border: '#bbf7d0', label: '✅ Safe', color: '#16a34a' },
-  stretch: { bg: '#eef2ff', border: '#c7d2fe', label: '⬆️ Stretch', color: '#6366f1' },
-  risky: { bg: '#fef2f2', border: '#fecaca', label: '⚡ Risky', color: '#dc2626' },
-  locked_tease: { bg: '#f8fafc', border: '#e2e8f0', label: '🔒 Locked', color: '#94a3b8' },
+  safe: { bg: 'var(--success-bg)', border: 'var(--success-border)', label: '✅ Safe', color: 'var(--success-text)' },
+  stretch: { bg: 'var(--lala-lavender-soft)', border: 'var(--lala-lavender-line)', label: '⬆️ Stretch', color: 'var(--lala-lavender-text)' },
+  risky: { bg: 'var(--danger-bg)', border: 'var(--danger-border)', label: '⚡ Risky', color: 'var(--danger-text)' },
+  locked_tease: { bg: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)', label: '🔒 Locked', color: 'var(--lala-ink-muted)' },
 };
 const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
 
@@ -74,7 +74,7 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
     width: size || '100%',
     height: height || size,
     borderRadius: radius,
-    background: '#f8fafc',
+    background: 'var(--lala-parchment-2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -591,6 +591,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     return hasBody && hasShoes;
   }, [filledSlots]);
 
+  // Evoni's Episode mock: what the look costs, the pieces Lala does not own yet.
+  const lookCost = useMemo(() => outfitPieces(filledSlots)
+    .filter(({ item: w }) => w && w.is_owned === false)
+    .reduce((n, { item: w }) => n + (Number(w.coin_cost) || 0), 0), [filledSlots]);
+
   // ─── RENDER ───
   if (loading) {
     return (
@@ -598,7 +603,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         <div style={W.loadingBox}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👗</div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>Opening the closet...</div>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Loading wardrobe for this event</div>
+          <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>Loading wardrobe for this event</div>
         </div>
       </div>
     );
@@ -609,39 +614,49 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       {error && <div style={W.errorBanner}>{error}<button onClick={() => setError(null)} style={W.xBtn}>✕</button></div>}
       {success && <div style={W.successBanner}>{success}</div>}
 
-      {/* ═══ EVENT BANNER ═══ */}
-      <div style={W.eventBanner}>
-        <div>
-          <div style={W.eventLabel}>STYLING FOR</div>
-          <div style={W.eventName}>{event.name || 'Untitled Event'}</div>
+      {/* ═══ LALA'S LOOK (Evoni's Episode mock, 2026-10-05): the look, the
+          beat that needs it, the dress code; the event's name, prestige,
+          strictness and host stay as tags. ═══ */}
+      <div style={W.eventBanner} data-testid="look-header">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h3 style={W.lookTitle}>Lala's look</h3>
+            <span style={W.lookChip}>{outfitLocked ? 'Locked' : 'Beat 8 needs it'}</span>
+            <span style={W.eventName}>for {event.name || 'Untitled Event'}</span>
+          </div>
           <div style={W.eventTags}>
-            {event.dress_code && <span style={W.eventTag}>👗 {event.dress_code}</span>}
-            <span style={W.eventTag}>⭐ {event.prestige || '?'}</span>
-            <span style={W.eventTag}>📏 {event.strictness || '?'}</span>
-            {event.host_brand && <span style={W.eventTag}>🏛️ {event.host_brand}</span>}
+            <span style={W.eventTag}>Prestige {event.prestige || '?'}</span>
+            <span style={W.eventTag}>Strictness {event.strictness || '?'}</span>
+            {event.host_brand && <span style={W.eventTag}>{event.host_brand}</span>}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 9, color: '#880e4f', letterSpacing: 1, fontWeight: 600 }}>COINS</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: coins < 100 ? '#dc2626' : '#4a1942' }}>🪙 {coins}</div>
+          <div style={{ fontSize: 11, color: 'var(--lala-ink-muted)', fontWeight: 600 }}>Lala has</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: coins < 100 ? 'var(--danger-text)' : 'var(--lala-ink)' }}>{Number(coins).toLocaleString()} coins</div>
+          {!outfitLocked && (
+            <button type="button" style={W.linkBtn} onClick={() => { setBrowseMode('closet'); setActiveSlot(ALL_GROUP.key); loadCloset(); }}>Open full closet</button>
+          )}
         </div>
       </div>
+      {event.dress_code && (
+        <div style={W.dressCode} data-testid="look-dress-code"><strong>Dress code:</strong> {event.dress_code}</div>
+      )}
 
       {/* ═══ TODO CHECKLIST (collapsible) ═══ */}
       {todoCompletion && (
-        <details open style={{ marginBottom: 12, background: todoCompletion.allDone ? '#f0fdf4' : '#FAF7F0', border: `1px solid ${todoCompletion.allDone ? '#bbf7d0' : '#D4AF37'}`, borderRadius: 10, overflow: 'hidden' }}>
-          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#1a1a2e', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <details open style={{ marginBottom: 12, background: todoCompletion.allDone ? 'var(--success-bg)' : 'var(--lala-parchment)', border: `1px solid ${todoCompletion.allDone ? 'var(--success-border)' : 'var(--lala-gold)'}`, borderRadius: 10, overflow: 'hidden' }}>
+          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--lala-ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>📋 Getting Ready — {todoCompletion.done}/{todoCompletion.total}</span>
-            {todoCompletion.allDone && <span style={{ color: '#1A7A40', fontSize: 11 }}>✓ Ready!</span>}
+            {todoCompletion.allDone && <span style={{ color: 'var(--success-text)', fontSize: 11 }}>✓ Ready!</span>}
           </summary>
           <div style={{ padding: '0 16px 10px' }}>
             {todoCompletion.tasks.map(t => (
               <div key={t.slot} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: t.completed ? 0.6 : 1 }}>
-                <div style={{ width: 16, height: 16, borderRadius: 3, border: t.completed ? 'none' : '1.5px solid #B8962E', background: t.completed ? '#1A7A40' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {t.completed && <span style={{ color: '#FFF', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                <div style={{ width: 16, height: 16, borderRadius: 3, border: t.completed ? 'none' : '1.5px solid var(--lala-gold)', background: t.completed ? 'var(--success)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {t.completed && <span style={{ color: 'var(--text-inverse)', fontSize: 10, fontWeight: 700 }}>✓</span>}
                 </div>
-                <span style={{ fontSize: 12, color: t.completed ? '#888' : '#1a1a2e', textDecoration: t.completed ? 'line-through' : 'none' }}>{t.label}</span>
-                {!t.required && <span style={{ fontSize: 9, color: '#B8962E' }}>optional</span>}
+                <span style={{ fontSize: 12, color: t.completed ? 'var(--lala-ink-muted)' : 'var(--lala-ink)', textDecoration: t.completed ? 'line-through' : 'none' }}>{t.label}</span>
+                {!t.required && <span style={{ fontSize: 9, color: 'var(--lala-gold-text)' }}>optional</span>}
               </div>
             ))}
           </div>
@@ -654,13 +669,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           <span style={{ fontSize: 28 }}>🔒</span>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800 }}>Outfit Locked</div>
-            <div data-testid="locked-synergy" style={{ fontSize: 12, color: '#64748b' }}>
+            <div data-testid="locked-synergy" style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>
               {synergy
                 ? <>Synergy: {synergy.total}/100 — {synergy.confidence.emoji} {synergy.confidence.label}</>
                 : scoreMessage}
             </div>
             {pendingPieces.length > 0 && (
-              <div data-testid="pending-note" title={pendingPieces.map(p => p.name).filter(Boolean).join(', ')} style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
+              <div data-testid="pending-note" title={pendingPieces.map(p => p.name).filter(Boolean).join(', ')} style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 2 }}>
                 {pendingPieces.length === 1
                   ? "1 piece awaiting approval isn't counted yet"
                   : `${pendingPieces.length} pieces awaiting approval aren't counted yet`}
@@ -681,14 +696,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             <div style={W.confidenceCard} aria-busy={score.status === 'loading'} data-score-status={score.status}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>Outfit Synergy</span>
-                <span data-testid="synergy-score" style={{ fontSize: 18, fontWeight: 800, color: synergy ? synergy.confidence.color : '#94a3b8', opacity: score.status === 'loading' ? 0.5 : 1 }}>
+                <span data-testid="synergy-score" style={{ fontSize: 18, fontWeight: 800, color: synergy ? synergy.confidence.color : 'var(--lala-ink-muted)', opacity: score.status === 'loading' ? 0.5 : 1 }}>
                   {synergy ? `${synergy.confidence.emoji || ''} ${synergy.total}` : (score.status === 'loading' ? '…' : '—')}
                 </span>
               </div>
               <div style={W.synergyBar}>
-                <div style={{ height: '100%', width: `${synergy ? synergy.total : 0}%`, borderRadius: 4, background: synergy ? `linear-gradient(90deg, ${synergy.confidence.color}80, ${synergy.confidence.color})` : 'transparent', transition: 'width 0.5s' }} />
+                <div style={{ height: '100%', width: `${synergy ? synergy.total : 0}%`, borderRadius: 4, background: synergy ? synergy.confidence.color : 'transparent', transition: 'width 0.5s' }} />
               </div>
-              <div data-testid="lala-line" style={{ fontSize: 11, fontStyle: 'italic', color: synergy ? synergy.confidence.color : '#94a3b8', marginTop: 5 }}>
+              <div data-testid="lala-line" style={{ fontSize: 11, fontStyle: 'italic', color: synergy ? synergy.confidence.color : 'var(--lala-ink-muted)', marginTop: 5 }}>
                 {synergy && synergy.confidence.lala ? `"${synergy.confidence.lala}"` : scoreMessage}
               </div>
               {synergy && synergy.total > 0 && (
@@ -702,7 +717,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
             {/* W1: a matching set worn shows as one look. */}
             {looks.map(look => (
-              <div key={look.id} data-testid="outfit-look" style={{ padding: '6px 10px', marginBottom: 6, borderRadius: 8, background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#6d28d9', fontSize: 12, fontWeight: 700 }}>
+              <div key={look.id} data-testid="outfit-look" style={{ padding: '6px 10px', marginBottom: 6, borderRadius: 8, background: 'var(--lala-lavender-soft)', border: '1px solid var(--lala-lavender-line)', color: 'var(--lala-lavender-text)', fontSize: 12, fontWeight: 700 }}>
                 {`Look: ${look.name}`}
               </div>
             ))}
@@ -719,8 +734,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   onClick={() => (!item || multi) && setActiveSlot(slot.key)}
                   style={{
                     ...W.slotCard,
-                    border: isActive ? '2px solid #6366f1' : item ? '2px solid #bbf7d0' : '1px solid #e2e8f0',
-                    background: item ? '#f0fdf4' : isActive ? '#eef2ff' : '#fff',
+                    border: isActive ? '2px solid var(--lala-lavender)' : item ? '1px solid var(--lala-parchment-3)' : '1px dashed var(--lala-lavender-line)',
+                    background: item ? 'var(--lala-parchment)' : isActive ? 'var(--lala-lavender-soft)' : 'var(--surface-card)',
                     cursor: item && !multi ? 'default' : 'pointer',
                   }}>
                   {(multi && pieces.length > 0 ? pieces : [item]).map((piece, pi) => (
@@ -732,18 +747,24 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {pi === 0 && (
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-ink)' }}>
                             {slot.label}
-                            {slot.required && !piece && <span style={{ color: '#dc2626', fontSize: 9 }}> *</span>}
-                            {multi && pieces.length > 1 && <span style={{ color: '#64748b', fontSize: 10, fontWeight: 400 }}> · {pieces.length} pieces</span>}
+                            {slot.required && !piece && <span style={{ color: 'var(--danger-text)', fontSize: 9 }}> *</span>}
+                            {multi && pieces.length > 1 && <span style={{ color: 'var(--lala-ink-muted)', fontSize: 10, fontWeight: 400 }}> · {pieces.length} pieces</span>}
                           </div>
                         )}
                         {piece ? (
-                          <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>{piece.name}</div>
+                          <div style={{ fontSize: 13, color: 'var(--lala-ink)', fontWeight: 700 }}>{piece.name}</div>
                         ) : (
-                          <div style={{ fontSize: 10, color: '#94a3b8' }}>{slot.desc}</div>
+                          <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>{slot.desc}</div>
                         )}
                       </div>
+                      {/* Owned, or still to buy (charged at Finalize), as in Evoni's Episode mock. */}
+                      {piece && (
+                        <span data-testid={`slot-cost-${piece.id}`} style={{ fontSize: 12, color: 'var(--lala-ink-muted)', whiteSpace: 'nowrap' }}>
+                          {piece.is_owned !== false ? 'owned' : `to buy · 🪙 ${Number(piece.coin_cost || 0).toLocaleString()}`}
+                        </span>
+                      )}
                       {piece && (
                         <button onClick={(e) => { e.stopPropagation(); removeFromSlot(slot.key, piece.id); setActiveSlot(slot.key); }}
                           aria-label={`Remove ${piece.name}`} style={W.removeBtn}>✕</button>
@@ -753,28 +774,33 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   {item && !multi && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                       <span style={W.miniTier(item.tier)}>{TIER_STYLES[item.tier]?.emoji} {item.tier}</span>
-                      {item.match_score != null && <span style={{ fontSize: 9, color: '#64748b' }}>Match: {item.match_score}</span>}
+                      {item.match_score != null && <span style={{ fontSize: 9, color: 'var(--lala-ink-muted)' }}>Match: {item.match_score}</span>}
                     </div>
                   )}
                   {multi && item && (
-                    <div style={{ fontSize: 10, color: '#6366f1', marginTop: 4 }}>+ Add another</div>
+                    <div style={{ fontSize: 10, color: 'var(--lala-lavender-text)', marginTop: 4 }}>+ Add another</div>
                   )}
                 </div>
               );
             })}
 
+            {/* What the look costs Lala (the pieces still to buy), against her coins. */}
+            <div data-testid="look-cost" style={W.costBar}>
+              <span>Look costs <strong>🪙 {lookCost.toLocaleString()}</strong> · Lala has <strong>{Number(coins).toLocaleString()}</strong></span>
+              <span>After the look <strong style={{ color: coins - lookCost < 0 ? 'var(--danger-text)' : 'var(--lala-ink)' }}>{(coins - lookCost).toLocaleString()}</strong></span>
+            </div>
             <button onClick={lockOutfit} disabled={!canLock || confirming}
               style={{ ...W.lockBtn, opacity: canLock ? 1 : 0.4 }}>
               {confirming ? '⏳ Locking...' : canLock ? '🔒 Lock Outfit' : '⚠️ Fill required slots'}
             </button>
             {!canLock && (
-              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', textAlign: 'center' }}>
                 Need: {!filledSlots.body && !(filledSlots.top && filledSlots.bottom) ? 'body ' : ''}
                 {!filledSlots.shoes ? 'shoes' : ''}
               </div>
             )}
             <button onClick={handleLalaSuggests} disabled={suggestingOutfit || pool.length === 0}
-              style={{ ...W.lockBtn, background: 'linear-gradient(135deg, #B8962E, #D4AF37)', marginTop: 6, opacity: pool.length > 0 ? 1 : 0.4 }}>
+              style={{ ...W.lockBtn, background: 'var(--surface-card)', color: 'var(--lala-lavender-text)', border: '1px solid var(--lala-lavender)', marginTop: 6, opacity: pool.length > 0 ? 1 : 0.4 }}>
               {suggestingOutfit ? '✨ Lala is thinking...' : '✨ Lala Suggests'}
             </button>
           </div>
@@ -782,7 +808,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           {/* ──── RIGHT: BROWSE ──── */}
           <div style={W.browsePanel}>
             {/* Browse mode tabs */}
-            <div style={{ display: 'flex', gap: 0, marginBottom: 10, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 0, marginBottom: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, padding: 3 }}>
               {[
                 { key: 'pool', label: 'For This Event' },
                 { key: 'closet', label: 'Full Closet' },
@@ -795,7 +821,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   if (m.key === 'closet') setActiveSlot(ALL_GROUP.key);
                   if (m.key !== 'pool' && (m.key !== browseMode || closetItems.length === 0)) loadCloset();
                 }}
-                  style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? '#fff' : 'transparent', color: browseMode === m.key ? '#6366f1' : '#64748b', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? 'var(--surface-card)' : 'transparent', color: browseMode === m.key ? 'var(--lala-lavender-text)' : 'var(--lala-ink-muted)', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                   {m.label}
                 </button>
               ))}
@@ -805,28 +831,28 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             {browseMode === 'search' && (
               <input type="text" placeholder="Search by name, brand, or tag..." value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
             )}
 
             {closetError && browseMode !== 'pool' && (
-              <div data-testid="closet-error" role="alert" style={{ padding: '8px 10px', marginBottom: 8, borderRadius: 8, background: '#fef2f2', color: '#b91c1c', fontSize: 12 }}>
-                Couldn't load the closet ({closetError}). <button type="button" onClick={loadCloset} style={{ border: 'none', background: 'none', color: '#b91c1c', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}>Try again</button>
+              <div data-testid="closet-error" role="alert" style={{ padding: '8px 10px', marginBottom: 8, borderRadius: 8, background: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: 12 }}>
+                Couldn't load the closet ({closetError}). <button type="button" onClick={loadCloset} style={{ border: 'none', background: 'none', color: 'var(--danger-text)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}>Try again</button>
               </div>
             )}
             {closetLoading && browseMode !== 'pool' && (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Loading closet...</div>
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--lala-ink-muted)', fontSize: 12 }}>Loading closet...</div>
             )}
 
             <div style={W.browseHeader}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
-                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : activeSlot === ALL_GROUP.key ? ALL_GROUP.icon : activeSlot === SETS_GROUP.key ? SETS_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : activeSlot === ALL_GROUP.key ? ALL_GROUP.label : activeSlot === SETS_GROUP.key ? SETS_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--lala-ink)' }}>
+                  {activeSlot === OTHER_GROUP.key ? OTHER_GROUP.icon : activeSlot === ALL_GROUP.key ? ALL_GROUP.icon : activeSlot === SETS_GROUP.key ? SETS_GROUP.icon : (CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕')} {browseMode === 'pool' ? 'Matches the dress code · ' : ''}{activeSlot === 'body' ? 'Dress' : activeSlot === OTHER_GROUP.key ? OTHER_GROUP.label : activeSlot === ALL_GROUP.key ? ALL_GROUP.label : activeSlot === SETS_GROUP.key ? SETS_GROUP.label : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{activeSlot === SETS_GROUP.key
+                <div style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>{activeSlot === SETS_GROUP.key
                   ? `${matchingSets.length} set${matchingSets.length === 1 ? '' : 's'} · Wear a set to equip every piece`
                   : `${filteredBrowseItems.length} items · ${activeSlot === OTHER_GROUP.key ? 'Browse only — no game slot' : 'Click to equip'}`}</div>
                 {browseMode === 'closet' && !closetLoading && !closetError && (
-                  <div data-testid="closet-count" style={{ fontSize: 11, color: closetTotal != null && closetTotal > closetItems.length ? '#b91c1c' : '#94a3b8' }}>
+                  <div data-testid="closet-count" style={{ fontSize: 11, color: closetTotal != null && closetTotal > closetItems.length ? 'var(--danger-text)' : 'var(--lala-parchment-3)' }}>
                     {`${closetItems.length} of ${closetTotal ?? closetItems.length} pieces${closetTotal != null && closetTotal > closetItems.length ? ' — some did not load' : ''}`}
                   </div>
                 )}
@@ -840,7 +866,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   : [ALL_GROUP, SETS_GROUP, ...SLOT_DEFS, OTHER_GROUP]
                 ).map(s => (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)} title={s.label} aria-label={s.label}
-                    style={{ ...W.slotSwitch, background: activeSlot === s.key ? '#6366f1' : '#f1f5f9', color: activeSlot === s.key ? '#fff' : '#64748b' }}>
+                    style={{ ...W.slotSwitch, background: activeSlot === s.key ? 'var(--lala-lavender)' : 'var(--lala-parchment-2)', color: activeSlot === s.key ? 'var(--text-inverse)' : 'var(--lala-ink-muted)' }}>
                     {s.icon}
                     {/* W3: each group's piece count in the closet. */}
                     {browseMode !== 'pool' && <span style={{ fontSize: 9, marginLeft: 2 }}>{closetGroupCounts[s.key] || 0}</span>}
@@ -855,21 +881,21 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 const wornIds = new Set(outfitPieces(filledSlots).map(({ item: w }) => w.id));
                 const wearing = set.pieces.every(p => wornIds.has(p.id));
                 return (
-                  <div key={set.id} data-testid={`matching-set-${set.id}`} style={{ ...W.browseCard, gridColumn: '1/-1', border: '1px solid #ddd6fe' }}>
+                  <div key={set.id} data-testid={`matching-set-${set.id}`} style={{ ...W.browseCard, gridColumn: '1/-1', border: '1px solid var(--lala-lavender-line)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{set.name}</div>
-                        <div style={{ fontSize: 10, color: '#94a3b8' }}>{`${set.pieces.length} pieces`}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lala-ink)' }}>{set.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>{`${set.pieces.length} pieces`}</div>
                       </div>
                       {wearing
-                        ? <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>✓ Wearing</span>
-                        : <button type="button" onClick={() => wearSet(set)} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Wear the set</button>}
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)' }}>✓ Wearing</span>
+                        : <button type="button" onClick={() => wearSet(set)} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Wear the set</button>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {set.pieces.map(p => (
                         <div key={p.id} title={p.name} style={{ width: 56, textAlign: 'center', opacity: p.can_select ? 1 : 0.45 }}>
                           <GarmentImage item={p} fallback={CAT_ICONS[p.clothing_category] || '👕'} size={48} />
-                          <div style={{ fontSize: 9, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                          <div style={{ fontSize: 9, color: 'var(--lala-ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                         </div>
                       ))}
                     </div>
@@ -877,7 +903,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 );
               })}
               {browseMode !== 'pool' && activeSlot === SETS_GROUP.key && matchingSets.length === 0 && !closetLoading && (
-                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 24, color: '#94a3b8', fontSize: 12 }}>
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 24, color: 'var(--lala-ink-muted)', fontSize: 12 }}>
                   No matching sets yet. Link pieces as a set in the show's Wardrobe (select pieces, then Create set).
                 </div>
               )}
@@ -909,22 +935,22 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     <div style={{ marginBottom: 6 }}>
                       <GarmentImage item={item} fallback={CAT_ICONS[item.clothing_category] || '👕'} height={120} />
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lala-ink)', marginBottom: 1 }}>{item.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
                     {item.outfit_set_id && (
-                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: '#7c3aed', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: 'var(--lala-lavender-text)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</span>
                         {browseMode === 'pool' && (
                           <button type="button" data-testid={`wear-set-${item.id}`}
                             onClick={(e) => { e.stopPropagation(); wearSetOf(item); }}
-                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: '#7c3aed', color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
                             Wear the set
                           </button>
                         )}
                       </div>
                     )}
                     {browseMode !== 'pool' && (
-                      <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>
+                      <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>
                         {`${item.clothing_category || 'no category'} · ${[...SLOT_DEFS, OTHER_GROUP].find(g => g.key === closetGroupFor(item.clothing_category))?.label || 'Other'}`}
                       </div>
                     )}
@@ -934,18 +960,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       ))}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <div style={{ flex: 1, height: 3, background: '#f1f5f9', borderRadius: 2 }}>
-                        <div style={{ height: '100%', width: `${Math.min(100, (item.match_score / 60) * 100)}%`, borderRadius: 2, background: item.match_score >= 40 ? '#16a34a' : item.match_score >= 20 ? '#eab308' : '#dc2626' }} />
+                      <div style={{ flex: 1, height: 3, background: 'var(--lala-parchment-2)', borderRadius: 2 }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, (item.match_score / 60) * 100)}%`, borderRadius: 2, background: item.match_score >= 40 ? 'var(--success)' : item.match_score >= 20 ? 'var(--warning)' : 'var(--danger)' }} />
                       </div>
                       <span style={{ fontSize: 10, fontWeight: 700 }}>{item.match_score}</span>
                     </div>
                     <div style={{ fontSize: 9, marginTop: 3, fontWeight: 600,
-                      color: isUsed ? '#6366f1' : item.can_select ? '#16a34a' : item.can_purchase ? '#eab308' : '#dc2626' }}>
+                      color: isUsed ? 'var(--lala-lavender-text)' : item.can_select ? 'var(--success-text)' : item.can_purchase ? 'var(--warning)' : 'var(--danger)' }}>
                       {isUsed ? '✓ In outfit'
                         : item.can_select ? (item.can_purchase ? `✅ Tap to equip · 🪙 ${item.coin_cost} on Lock` : '✅ Tap to equip')
                         : item.can_purchase ? (
                           <span onClick={(e) => { e.stopPropagation(); purchaseItem(item); }}
-                            style={{ cursor: 'pointer', color: '#eab308' }}>
+                            style={{ cursor: 'pointer', color: 'var(--warning-text)' }}>
                             🪙 Buy for {item.coin_cost} coins
                           </span>
                         )
@@ -959,7 +985,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 );
               })}
               {filteredBrowseItems.length === 0 && activeSlot !== SETS_GROUP.key && !(browseMode !== 'pool' && closetLoading) && !(browseMode === 'search' && !searchQuery.trim()) && (
-                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 30, color: '#94a3b8' }}>
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 30, color: 'var(--lala-ink-muted)' }}>
                   <div style={{ fontSize: 24 }}>{[...SLOT_DEFS, OTHER_GROUP].find(s => s.key === activeSlot)?.icon || '👕'}</div>
                   <div style={{ fontSize: 12, marginTop: 6 }}>No {activeSlot} items available</div>
                 </div>
@@ -971,24 +997,24 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
       {/* ═══ OUTFIT HISTORY ═══ */}
       {outfitHistory.length > 0 && (
-        <details style={{ marginTop: 16, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#1a1a2e' }}>
+        <details style={{ marginTop: 16, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, overflow: 'hidden' }}>
+          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--lala-ink)' }}>
             👗 Outfit History — {outfitHistory.length} episode{outfitHistory.length !== 1 ? 's' : ''}
           </summary>
           <div style={{ padding: '0 16px 12px' }}>
             {outfitHistory.map(ep => (
-              <div key={ep.episode_id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#6366f1', flexShrink: 0 }}>
+              <div key={ep.episode_id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--lala-parchment-2)', alignItems: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--lala-parchment-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'var(--lala-lavender-text)', flexShrink: 0 }}>
                   {ep.episode_number || '?'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{ep.episode_title || 'Untitled'}</div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-ink)' }}>{ep.episode_title || 'Untitled'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>
                     {ep.event_name && <span>{ep.event_name} · </span>}
                     {ep.items.length} pieces · {ep.items.map(i => i.name).slice(0, 3).join(', ')}{ep.items.length > 3 ? '...' : ''}
                   </div>
                 </div>
-                {ep.prestige && <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>⭐{ep.prestige}</span>}
+                {ep.prestige && <span style={{ fontSize: 10, color: 'var(--lala-gold-text)', fontWeight: 600 }}>⭐{ep.prestige}</span>}
               </div>
             ))}
           </div>
@@ -1004,24 +1030,24 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               <GarmentImage item={inspecting} fallback={CAT_ICONS[inspecting.clothing_category] || '👕'} size={96} radius={12} />
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800 }}>{inspecting.name}</div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{inspecting.clothing_category} · {inspecting.color || '—'} · {inspecting.tier}</div>
+                <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{inspecting.clothing_category} · {inspecting.color || '—'} · {inspecting.tier}</div>
               </div>
             </div>
-            <div style={{ padding: 12, background: '#f8fafc', borderRadius: 10, marginBottom: 10 }}>
+            <div style={{ padding: 12, background: 'var(--lala-parchment-2)', borderRadius: 10, marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>Match Score</span>
-                <span style={{ fontSize: 15, fontWeight: 800, color: inspecting.match_score >= 40 ? '#16a34a' : '#eab308' }}>{inspecting.match_score}/60</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: inspecting.match_score >= 40 ? 'var(--success-text)' : 'var(--warning-text)' }}>{inspecting.match_score}/60</span>
               </div>
-              <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3 }}>
-                <div style={{ height: '100%', width: `${Math.min(100, (inspecting.match_score / 60) * 100)}%`, borderRadius: 3, background: inspecting.match_score >= 40 ? '#16a34a' : '#eab308' }} />
+              <div style={{ height: 6, background: 'var(--lala-parchment-3)', borderRadius: 3 }}>
+                <div style={{ height: '100%', width: `${Math.min(100, (inspecting.match_score / 60) * 100)}%`, borderRadius: 3, background: inspecting.match_score >= 40 ? 'var(--success)' : 'var(--warning)' }} />
               </div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
                 {(inspecting.match_reasons || []).map((r, i) => <span key={i} style={W.reasonPill}>{r}</span>)}
               </div>
             </div>
-            <div style={{ padding: 12, background: '#fef3c7', borderRadius: 10, marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#6366f1', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
-              <div style={{ fontSize: 13, fontStyle: 'italic', color: '#475569' }}>"{inspecting.lala_reaction}"</div>
+            <div style={{ padding: 12, background: 'var(--warning-bg)', borderRadius: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--lala-lavender-text)', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
+              <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--lala-ink-muted)' }}>"{inspecting.lala_reaction}"</div>
             </div>
             {inspecting.can_select && (
               <button onClick={() => assignToSlot(inspecting)} style={W.modalSelectBtn}>✨ Equip</button>
@@ -1033,7 +1059,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               </button>
             )}
             {!inspecting.can_select && !inspecting.can_purchase && (
-              <div style={{ padding: 10, background: '#f8fafc', borderRadius: 8, textAlign: 'center', color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>
+              <div style={{ padding: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, textAlign: 'center', color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 600 }}>
                 🔒 {inspecting.lock_type === 'reputation' ? `Rep ${inspecting.reputation_required}+` :
                   inspecting.lock_type === 'brand_exclusive' ? 'Brand Exclusive' :
                   inspecting.lock_type === 'season_drop' ? `Drops Ep ${inspecting.season_unlock_episode}` :
@@ -1053,16 +1079,20 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 const W = {
   container: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
   loadingBox: { textAlign: 'center', padding: 60 },
-  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, marginBottom: 10 },
-  successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#16a34a', fontSize: 13, marginBottom: 10, fontWeight: 600 },
-  xBtn: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' },
-  eventBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', background: 'linear-gradient(135deg, #fce4ec, #f8bbd0)', borderRadius: 14, marginBottom: 12, color: '#4a1942' },
-  eventLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: '#c2185b', marginBottom: 2 },
-  eventName: { fontSize: 16, fontWeight: 800, marginBottom: 4, color: '#4a1942' },
-  eventTags: { display: 'flex', gap: 5, flexWrap: 'wrap' },
-  eventTag: { padding: '2px 8px', background: 'rgba(194,24,91,0.1)', borderRadius: 5, fontSize: 10, color: '#880e4f' },
-  lockedBanner: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: '#f0fdf4', border: '2px solid #bbf7d0', borderRadius: 12, marginBottom: 12 },
-  unlockBtn: { marginLeft: 'auto', padding: '6px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#64748b' },
+  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 8, color: 'var(--danger-text)', fontSize: 13, marginBottom: 10 },
+  successBanner: { padding: '10px 16px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 8, color: 'var(--success-text)', fontSize: 13, marginBottom: 10, fontWeight: 600 },
+  xBtn: { background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer' },
+  eventBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', padding: '18px 22px', background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 14, marginBottom: 10, color: 'var(--lala-ink)' },
+  lookTitle: { margin: 0, fontFamily: 'var(--font-prose)', fontSize: 22, fontWeight: 600, color: 'var(--lala-ink)' },
+  lookChip: { padding: '2px 10px', borderRadius: 999, background: 'var(--warning-bg)', color: 'var(--warning-text)', fontSize: 12, fontWeight: 600 },
+  linkBtn: { marginTop: 4, padding: 0, border: 'none', background: 'none', color: 'var(--lala-lavender-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  dressCode: { padding: '12px 16px', marginBottom: 12, borderRadius: 12, background: 'var(--accent-subtle)', color: 'var(--lala-ink)', fontSize: 14, lineHeight: 1.5 },
+  eventLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: 'var(--accent-dark)', marginBottom: 2 },
+  eventName: { fontSize: 13, color: 'var(--lala-ink-muted)' },
+  eventTags: { display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 },
+  eventTag: { padding: '2px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)' },
+  lockedBanner: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: 'var(--success-bg)', border: '2px solid var(--success-border)', borderRadius: 12, marginBottom: 12 },
+  unlockBtn: { marginLeft: 'auto', padding: '6px 14px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: 'var(--lala-ink-muted)' },
   // flexWrap: at 375px the browse panel drops under the slots (Task #2377).
   mainLayout: { display: 'flex', flexWrap: 'wrap', gap: 16, minHeight: 480 },
   // The slots column is 250px beside the browse panel and the full width
@@ -1070,25 +1100,26 @@ const W = {
   // stayed 250px and left half the screen empty). The browse panel's large
   // grow weight keeps the slots at about 250px when the two share a row.
   slotsPanel: { flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: 6 },
-  confidenceCard: { padding: 12, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 2 },
-  synergyBar: { height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
-  synBadge: { padding: '1px 5px', background: '#eef2ff', borderRadius: 3, fontSize: 8, color: '#4338ca', fontWeight: 600 },
+  confidenceCard: { padding: 12, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 12, marginBottom: 2 },
+  synergyBar: { height: 6, background: 'var(--lala-parchment-2)', borderRadius: 3, overflow: 'hidden' },
+  synBadge: { padding: '1px 5px', background: 'var(--lala-lavender-soft)', borderRadius: 3, fontSize: 8, color: 'var(--lala-lavender-text)', fontWeight: 600 },
+  costBar: { display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 4, padding: '10px 12px', borderRadius: 10, background: 'var(--lala-lavender-soft)', color: 'var(--lala-ink)', fontSize: 13 },
   slotCard: { padding: '8px 12px', borderRadius: 10, transition: 'all 0.15s' },
-  removeBtn: { width: 22, height: 22, borderRadius: '50%', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  removeBtn: { width: 22, height: 22, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   miniTier: (tier) => ({ padding: '1px 5px', borderRadius: 3, fontSize: 8, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
-  lockBtn: { padding: '11px 18px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
+  lockBtn: { padding: '11px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
   browsePanel: { flex: '999 1 280px', minWidth: 0 },
   browseHeader: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   slotSwitch: { width: 30, height: 30, borderRadius: 7, border: 'none', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   browseGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 },
-  browseCard: { padding: 12, borderRadius: 12, background: '#fff', transition: 'all 0.15s' },
+  browseCard: { padding: 12, borderRadius: 12, background: 'var(--surface-card)', transition: 'all 0.15s' },
   rolePill: { padding: '1px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700 },
   tierPill: { padding: '1px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' },
-  tagPill: { padding: '1px 4px', background: '#f1f5f9', borderRadius: 3, fontSize: 8, color: '#64748b' },
+  tagPill: { padding: '1px 4px', background: 'var(--lala-parchment-2)', borderRadius: 3, fontSize: 8, color: 'var(--lala-ink-muted)' },
   overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal: { background: '#fff', borderRadius: 18, padding: 22, maxWidth: 420, width: '100%', position: 'relative', maxHeight: '80vh', overflowY: 'auto' },
-  modalClose: { position: 'absolute', top: 12, right: 12, background: '#f1f5f9', border: 'none', width: 28, height: 28, borderRadius: '50%', fontSize: 13, cursor: 'pointer', color: '#64748b' },
-  reasonPill: { padding: '2px 6px', background: '#eef2ff', borderRadius: 4, fontSize: 9, color: '#4338ca', fontWeight: 600 },
-  modalSelectBtn: { width: '100%', padding: '11px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
-  modalBuyBtn: { width: '100%', padding: '9px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 6 },
+  modal: { background: 'var(--surface-card)', borderRadius: 18, padding: 22, maxWidth: 420, width: '100%', position: 'relative', maxHeight: '80vh', overflowY: 'auto' },
+  modalClose: { position: 'absolute', top: 12, right: 12, background: 'var(--lala-parchment-2)', border: 'none', width: 28, height: 28, borderRadius: '50%', fontSize: 13, cursor: 'pointer', color: 'var(--lala-ink-muted)' },
+  reasonPill: { padding: '2px 6px', background: 'var(--lala-lavender-soft)', borderRadius: 4, fontSize: 9, color: 'var(--lala-lavender-text)', fontWeight: 600 },
+  modalSelectBtn: { width: '100%', padding: '11px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
+  modalBuyBtn: { width: '100%', padding: '9px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8, color: 'var(--warning-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 6 },
 };
