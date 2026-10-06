@@ -41,6 +41,10 @@ const REAL = (url) => {
   if (url.includes('world/locations')) return { data: { locations: [{ id: 1 }] } };
   if (url.includes('social-profiles')) return { data: { profiles: [{ id: 'p1' }], pagination: { page: 1, limit: 1, total: 42, totalPages: 42 }, statusCounts: { total: 40 } } };
   if (url.includes('/world/show-b/events')) return { data: { success: true, events: [{ id: 'e1' }] } };
+  // Nothing synced into the Brain yet.
+  if (url.includes('franchise-brain/sync/status')) return { data: { success: true, data: {
+    world_foundation: { cards: 0, legacy: 0 }, social_systems: { cards: 0, legacy: 0 }, cultural_memory: { cards: 0, legacy: 0 },
+  } } };
   return { data: {} };
 };
 
@@ -58,11 +62,11 @@ describe('WorldSetupProgress', () => {
     expect(screen.getByTestId('world-setup-count').textContent).toBe('5/7');
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('5');
     // The page-content object is the content itself: 2 usable sections of 3 keys (the empty array is not configuration).
-    expect(screen.getByTestId('world-setup-count-infrastructure').textContent).toBe('2 sections');
+    expect(screen.getByTestId('world-setup-count-infrastructure').textContent).toBe('Saved · 2 sections');
     expect(screen.getByRole('button', { name: 'Step 2: Social Systems' })).toBeTruthy();
-    expect(screen.getByTestId('world-setup-count-influencer').textContent).toBe('0 sections');
+    expect(screen.getByTestId('world-setup-count-influencer').textContent).toBe('Starter content only, not in the Brain yet');
     expect(screen.getByRole('button', { name: 'Step 4: Cultural Memory' })).toBeTruthy();
-    expect(screen.getByTestId('world-setup-count-calendar').textContent).toBe('3 events');
+    expect(screen.getByTestId('world-setup-count-calendar').textContent).toBe('3 cultural calendar events');
     expect(screen.getByTestId('world-setup-count-locations').textContent).toBe('1 locations');
     // The feed count is pagination.total, not a top-level count.
     expect(screen.getByRole('button', { name: 'Step 6: Generate Feed (done)' })).toBeTruthy();
@@ -102,5 +106,34 @@ describe('WorldSetupProgress', () => {
     expect(without.done.events).toBe(false);
     expect(without.counts.events).toBe(0);
     expect(calls().some((u) => u.includes('/events?status=draft'))).toBe(false);
+  });
+
+  test('a page synced into the Brain is done though nothing was saved on it, and says so', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('franchise-brain/sync/status')) return { data: { success: true, data: {
+        world_foundation: { cards: 0, legacy: 0 }, social_systems: { cards: 14, legacy: 0 }, cultural_memory: { cards: 0, legacy: 1 },
+      } } };
+      return REAL(url);
+    });
+    renderIt('show-b');
+    await screen.findByRole('button', { name: 'Step 2: Social Systems (done)' });
+    expect(screen.getByTestId('world-setup-count-influencer').textContent).toBe('In the Brain · 14 cards');
+    expect(screen.getByRole('button', { name: 'Step 4: Cultural Memory (done)' })).toBeTruthy();
+    expect(screen.getByTestId('world-setup-count-memory').textContent).toBe('In the Brain · 1 card');
+    expect(screen.getByTestId('world-setup-count').textContent).toBe('7/7');
+  });
+
+  test('when the Brain cannot be read, a page with no saved edits is "could not check"', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('franchise-brain/sync/status')) throw Object.assign(new Error('boom'), { response: { status: 500 } });
+      return REAL(url);
+    });
+    renderIt('show-b');
+    await screen.findByRole('button', { name: 'Step 2: Social Systems (could not check)' });
+    expect(screen.getByRole('button', { name: 'Step 1: World Foundation (done)' })).toBeTruthy();
+    expect(screen.getByTestId('world-setup-count-infrastructure').textContent).toBe('Saved · 2 sections');
+    expect(screen.getByTestId('world-setup-unreachable').textContent).toContain('2 steps could not be checked');
+    spy.mockRestore();
   });
 });

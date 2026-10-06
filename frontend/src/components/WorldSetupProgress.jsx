@@ -13,6 +13,14 @@
  * /social-profiles answers { profiles, pagination: { total } } (the check read
  * `count`). Each check measures usable records, not just presence, and an
  * endpoint that could not be reached is "could not check", not "not done".
+ *
+ * Steps 1, 2 and 4 (2026-10-06, Evoni: "these dont seem to be hooked up to
+ * the system"): their pages open on built-in starter content that is only
+ * saved once edited, and what the rest of the system reads is the Franchise
+ * Brain, filled by each page's Brain Update. Such a step is done when the
+ * Brain holds that page's cards (GET /franchise-brain/sync/status) or the
+ * page has saved edits, and says which; with neither it says the page has
+ * starter content only, not in the Brain yet.
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -44,7 +52,20 @@ const usableSections = (content) => Object.values(content || {}).filter((v) => (
 )).length;
 
 /** What each step counts, in words, for the step card. */
-export const COUNT_LABELS = { infrastructure: 'sections', influencer: 'sections', calendar: 'events', memory: 'sections', locations: 'locations', feed: 'profiles', events: 'draft events' };
+export const COUNT_LABELS = { infrastructure: 'sections', influencer: 'sections', calendar: 'cultural calendar events', memory: 'sections', locations: 'locations', feed: 'profiles', events: 'draft events' };
+
+// The Brain Update source of each step whose page opens on starter content.
+export const BRAIN_SOURCES = { infrastructure: 'world_foundation', influencer: 'social_systems', memory: 'cultural_memory' };
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** What a Brain-backed step says: in the Brain, saved, or starter content only. */
+export function brainDetail(cards, sections) {
+  const parts = [];
+  if (cards > 0) parts.push(`In the Brain · ${plural(cards, 'card')}`);
+  if (sections > 0) parts.push(`Saved · ${plural(sections, 'section')}`);
+  return parts.length ? parts.join(' · ') : 'Starter content only, not in the Brain yet';
+}
 
 /**
  * The seven checks; `showId` is the active show for the events check.
@@ -53,6 +74,7 @@ export const COUNT_LABELS = { infrastructure: 'sections', influencer: 'sections'
 export async function checkSetup(showId) {
   const counts = {};
   const unreachable = [];
+  const details = {};
   const count = async (key, url, measure) => {
     const body = url ? await safeFetch(url) : {};
     if (body === null) { unreachable.push(key); counts[key] = 0; return; }
@@ -67,7 +89,25 @@ export async function checkSetup(showId) {
   if (showId) await count('events', `${API}/world/${showId}/events?status=draft`, (b) => (Array.isArray(b.events) ? b.events.length : 0));
   else counts.events = 0;
   const done = Object.fromEntries(Object.entries(counts).map(([k, n]) => [k, n > 0]));
-  return { done, counts, unreachable };
+
+  // Steps 1, 2 and 4: the Brain's cards from the page count as well as its
+  // saved edits. A Brain that could not be read leaves a step with no saved
+  // edits as "could not check".
+  const brainBody = await safeFetch(`${API}/franchise-brain/sync/status`);
+  const brain = brainBody ? (brainBody.data || {}) : null;
+  for (const [key, source] of Object.entries(BRAIN_SOURCES)) {
+    if (unreachable.includes(key)) continue;
+    const sections = counts[key] || 0;
+    if (!brain) {
+      if (!sections) unreachable.push(key);
+      else details[key] = brainDetail(0, sections);
+      continue;
+    }
+    const cards = (Number(brain[source]?.cards) || 0) + (Number(brain[source]?.legacy) || 0);
+    done[key] = cards > 0 || sections > 0;
+    details[key] = brainDetail(cards, sections);
+  }
+  return { done, counts, unreachable, details };
 }
 
 export default function WorldSetupProgress({ showId }) {
@@ -122,7 +162,11 @@ export default function WorldSetupProgress({ showId }) {
                   <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{step.title}</span>
                   {isDone && <span style={{ fontSize: 9, padding: '2px 6px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 600 }}>DONE</span>}
                   {isUnreachable && <span style={{ fontSize: 9, padding: '2px 6px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 4, fontWeight: 600 }}>COULD NOT CHECK</span>}
-                  {result && !isUnreachable && <span data-testid={`world-setup-count-${step.key}`} style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>{n} {COUNT_LABELS[step.key]}</span>}
+                  {result && !isUnreachable && (
+                    <span data-testid={`world-setup-count-${step.key}`} style={{ fontSize: 10, color: !isDone && result.details?.[step.key] ? 'var(--warning-text)' : 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
+                      {result.details?.[step.key] || `${n} ${COUNT_LABELS[step.key]}`}
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 4px', lineHeight: 1.5 }}>{step.description}</p>
                 <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--lala-gold-text)' }}>Feeds:</strong> {step.feeds.join(' · ')}</div>
