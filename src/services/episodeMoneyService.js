@@ -116,6 +116,32 @@ async function spendingView(sequelize, episodeId) {
  *   lines, unplanned, projection, warnings, reconciliation
  * }>} null when the episode is missing, deleted, or of another show.
  */
+/**
+ * Lala's look as Finalize will charge it (episodeLookCharges), for the
+ * plan's "Lala's look" lines (Evoni, 2026-10-06). A piece of the look
+ * already paid for in this episode (bought in the styling game, or charged
+ * by Finalize) is listed at what it posted, so its line reads Posted.
+ * Finalize charges the look only for an episode with an event, so without
+ * one there is none. Returns { pieces, charges }.
+ */
+async function lookPlan(sequelize, { showId, episodeId, event, rows = [] }) {
+  if (!event) return { pieces: 0, charges: [] };
+  const { loadLookPieces, boughtPieceIds, lookCharges } = require('./episodeLookCharges');
+  const pieces = await loadLookPieces(sequelize, { episodeId, event });
+  const charges = lookCharges(pieces, await boughtPieceIds(sequelize, { showId, episodeId, pieces }));
+  const listed = new Set(charges.map((c) => `${c.category}|${c.piece.id}`));
+  const byId = new Map(pieces.map((p) => [String(p.id), p]));
+  for (const r of rows) {
+    if (r.category !== 'wardrobe_purchase' && r.category !== 'wardrobe_rental') continue;
+    const piece = r.source_id != null ? byId.get(String(r.source_id)) : null;
+    const key = `${r.category}|${r.source_id}`;
+    if (!piece || listed.has(key)) continue;
+    listed.add(key);
+    charges.push({ category: r.category, piece, amount: Math.abs(Number(r.amount) || 0) });
+  }
+  return { pieces: pieces.length, charges };
+}
+
 async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   const [episode] = await sequelize.query(
     'SELECT id, show_id, money_plan FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
@@ -159,12 +185,14 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
   // Phase B (§8(gg) MB1–MB3): the lines, their states and the projection.
   const { listSpending, hadSpendingLines } = require('./episodeSpendingService');
   const { plannedLines, buildMoneyLines, moneyWarnings } = require('./episodeMoneyLines');
+  const look = await lookPlan(sequelize, { showId, episodeId, event, rows: posted });
   const plan = plannedLines({
     event,
     costs,
     deliverables,
     spending: await listSpending(sequelize, episodeId),
     hadSpending: await hadSpendingLines(sequelize, episodeId),
+    look: look.charges,
   });
   const { lines, unplanned, projection } = buildMoneyLines({
     plan, rows: posted, balance, completed: !spending.editable,
@@ -182,6 +210,8 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     lines,
     unplanned,
     projection,
+    // Lala's look: how many pieces it holds (0: not chosen yet).
+    look: { pieces: look.pieces },
     // MB4: early warnings, never blocking.
     warnings: moneyWarnings({ lines, projection, balance }),
     // MB6: after Complete, the plan saved at Start Episode beside what posted.

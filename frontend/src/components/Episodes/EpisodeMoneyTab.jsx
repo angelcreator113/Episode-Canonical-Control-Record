@@ -207,7 +207,7 @@ export default function EpisodeMoneyTab({ episode, showId }) {
                 className={`em-est-row is-${r.chipKind}`}
                 data-testid={r.unplannedId ? `em-unplanned-${r.unplannedId}` : `em-line-${r.key}`}
               >
-                <span className="em-est-what">
+                <span className="em-est-what" title={r.pieces ? r.pieces.join(', ') : undefined}>
                   <span className="em-est-label">{r.label}</span>
                   <span className="em-est-source">{r.source}</span>
                 </span>

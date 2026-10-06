@@ -556,6 +556,7 @@
 .em-est-amount.em-pos { color: var(--lala-lavender-text); }
 .em-est-row.is-not_earned .em-est-label { text-decoration: line-through; color: var(--lala-ink-muted); }
 .em-est-row .em-chip { justify-self: end; font-family: inherit; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.em-chip-missing { color: var(--warning-text); border-color: var(--warning-border); background: var(--warning-bg); }
 .em-chip-covered,
 .em-chip-none,
 .em-chip-planned { background: var(--lala-parchment-2); }
