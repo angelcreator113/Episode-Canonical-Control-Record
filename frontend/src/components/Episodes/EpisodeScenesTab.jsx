@@ -308,6 +308,11 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
   const issueByBeat = new Map(issues.map((i) => [i.beat_number, i]));
   const groups = groupBeats(plan, locations.locations);
   const storyOrder = [...plan].sort((a, b) => a.beat_number - b.beat_number);
+  // Evoni's Episode mock (2026-10-05): "N of M beats have a scene", and the
+  // scene set card shows one location, the event's unless another is picked.
+  const withScene = plan.filter((b) => b.scene_set_id && beatImage(b)).length;
+  const shownLocation = locations.locations.find((x) => x.scene_set_id === openLocation)
+    || locations.locations.find((x) => x.role === 'event') || locations.locations[0] || null;
   const editingNumber = beats.editingBeat?.beat_number ?? null;
 
   return (
@@ -391,8 +396,13 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
         </section>
       )}
 
-      {/* ===== Locations: a compact strip (L12; S9 b) ===== */}
-      <section className="est-section est-section-compact" data-testid="est-locations">
+      <div className="est-layout">
+      {/* ===== Locations: the scene set card (Evoni's Episode mock; L12; S9 b) ===== */}
+      <section className="est-section est-section-compact est-sets" data-testid="est-locations">
+        <div className="est-sets-head">
+          <h3 className="est-sets-title">Scene set</h3>
+          {shownLocation?.role === 'event' && <span className="est-sets-chip">From the event</span>}
+        </div>
         <div className="est-location-strip" data-testid="est-location-strip">
           <MapPin size={15} className="est-location-strip-icon" aria-hidden="true" />
           {locations.locations.length === 0 ? (
@@ -400,18 +410,15 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
           ) : locations.locations.map((l) => (
             <button
               key={`${l.role}-${l.scene_set_id}`} type="button"
-              className={`est-location-chip${openLocation === l.scene_set_id ? ' is-open' : ''}`}
-              aria-expanded={openLocation === l.scene_set_id}
-              onClick={() => setOpenLocation((cur) => (cur === l.scene_set_id ? null : l.scene_set_id))}
+              className={`est-location-chip${shownLocation?.scene_set_id === l.scene_set_id ? ' is-open' : ''}`}
+              aria-pressed={shownLocation?.scene_set_id === l.scene_set_id}
+              onClick={() => setOpenLocation(l.scene_set_id)}
               data-testid={`est-location-chip-${l.scene_set_id}`}
             >{`${locationLabel(l)} · ${l.scene_set?.name || 'Scene set'}`}</button>
           ))}
-          <button className="est-btn est-btn-outline est-btn-sm" onClick={openLocations} data-testid="est-edit-locations">
-            Edit locations
-          </button>
         </div>
         {(() => {
-          const l = locations.locations.find((x) => x.scene_set_id === openLocation);
+          const l = shownLocation;
           if (!l) return null;
           const views = l.angle_count ?? 0;
           return (
@@ -432,6 +439,9 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
             </div>
           );
         })()}
+        <button className="est-btn est-btn-outline est-btn-sm est-sets-edit" onClick={openLocations} data-testid="est-edit-locations">
+          {locations.locations.length ? 'Add or change a set' : 'Choose the locations'}
+        </button>
         {locationsEdit && (
           <EpisodeLocationsStep
             showId={showId}
@@ -450,9 +460,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       <section className="est-section" data-testid="est-beats">
         <div className="est-section-header">
           <div className="est-section-title">
-            <Film size={18} />
-            <h3>Beats</h3>
-            <span className="est-count">{total}</span>
+            <h3>Beat by beat</h3>
+            <span className="est-count" data-testid="est-beats-count">{total ? `${withScene} of ${total} beats have a scene` : 'No beats yet'}</span>
           </div>
           {total > 0 && (
             <label className="est-group-toggle">
@@ -478,7 +487,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                 const issue = issueByBeat.get(n);
                 const change = () => { if (!beat.locked) beats.openEditor(beat); };
                 return (
-                  <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}${issue ? ' is-attention' : ''}`}>
+                  <li key={beat.id || n} className={`est-beat${beat.locked ? ' is-locked' : ''}${editing ? ' is-editing' : ''}${issue ? ' is-attention' : ''}${img ? '' : ' is-missing'}`}>
                     <div className="est-beat-main" data-testid={`est-beat-${n}`}>
                       <span className="est-beat-thumb-wrap">
                         {img
@@ -503,7 +512,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                       <button type="button" className="est-btn est-btn-outline est-btn-sm" onClick={change} disabled={beat.locked}
                         aria-label={`Change background for beat ${n}`}
                         title={beat.locked ? 'Locked: unlock it in Details to change it' : undefined}>
-                        Change background
+                        {img ? 'Change' : 'Pick'}
                       </button>
                       <button type="button" className="est-btn est-btn-outline est-btn-sm" aria-expanded={detailsOpen}
                         aria-label={`Details for beat ${n}`} onClick={() => setOpenDetails((cur) => (cur === n ? null : n))}>
@@ -546,6 +555,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
           </div>
         ))}
       </section>
+
+      </div>
 
       {/* ===== Older scenes (L12a) ===== */}
       {olderScenes.length > 0 && (

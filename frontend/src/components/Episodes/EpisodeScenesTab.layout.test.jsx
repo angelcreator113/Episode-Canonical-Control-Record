@@ -174,4 +174,20 @@ describe('EpisodeScenesTab, the compact layout (S9 b)', () => {
     expect(screen.queryByTestId('est-attention-1')).toBeNull();
     expect(screen.getByTestId('est-beat-5').closest('li').className).toContain('is-attention');
   });
+
+  // Evoni's Episode mock (2026-10-05): the scene set card beside the beats.
+  test("the scene set card shows the event's set by default; the beats say how many have a scene, a missing one offers Pick", async () => {
+    renderTab();
+    const sets = await screen.findByTestId('est-locations');
+    await within(sets).findByTestId('est-location-detail-set-venue');
+    expect(within(sets).getByText('From the event')).toBeTruthy();
+    // Beat 12 has no image; beats 1, 10 and 11 show one.
+    expect((await screen.findByTestId('est-beats-count')).textContent).toBe('3 of 4 beats have a scene');
+    const missing = screen.getByTestId('est-beat-12').closest('li');
+    expect(missing.className).toContain('is-missing');
+    expect(within(missing).getByRole('button', { name: 'Change background for beat 12' }).textContent).toBe('Pick');
+    fireEvent.click(within(sets).getByTestId('est-location-chip-set-home'));
+    expect(within(sets).getByTestId('est-location-detail-set-home')).toBeTruthy();
+    expect(within(sets).queryByText('From the event')).toBeNull();
+  });
 });
