@@ -22,11 +22,20 @@ export function pageScrollTop() {
  * True while the page is scrolled more than `threshold` pixels down. The
  * episode page uses it to collapse its sticky header to the title and
  * navigation while scrolling (S9 b, Evoni 2026-10-02; §8(hh)).
+ *
+ * `release` (default: `threshold`) is where it turns false again: once past
+ * `threshold` it stays true until the page is back above `release`. Two
+ * thresholds keep a toggle that changes the page's layout from flipping back
+ * and forth around one line (Evoni, 2026-10-06: the episode banner
+ * flickered between full and compact while scrolling).
  */
-export default function useScrolledPast(threshold = 120) {
+export default function useScrolledPast(threshold = 120, release = threshold) {
   const [past, setPast] = useState(() => pageScrollTop() > threshold);
   useEffect(() => {
-    const onScroll = () => setPast(pageScrollTop() > threshold);
+    const onScroll = () => {
+      const top = pageScrollTop();
+      setPast((was) => (was ? top >= release : top > threshold));
+    };
     onScroll();
     // Capture: a scroll on <body> or .app-content does not reach a window
     // listener; on the document in the capture phase it does.
@@ -36,6 +45,6 @@ export default function useScrolledPast(threshold = 120) {
       document.removeEventListener('scroll', onScroll, { capture: true });
       window.removeEventListener('scroll', onScroll);
     };
-  }, [threshold]);
+  }, [threshold, release]);
   return past;
 }
