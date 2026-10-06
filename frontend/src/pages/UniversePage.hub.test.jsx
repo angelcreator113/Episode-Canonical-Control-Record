@@ -81,12 +81,12 @@ describe('UniversePage: the LalaVerse hub', () => {
   test('?tab=bible&sub=decisions opens the Show Bible on Decisions, no page heading; its tabs write ?sub= and keep the hub tab', async () => {
     renderAt('/universe?tab=bible&sub=decisions');
     expect(screen.getByRole('tab', { name: /^Show Bible/ }).getAttribute('aria-current')).toBe('page');
-    const decisions = await screen.findByRole('button', { name: /Decisions/ });
-    expect(decisions.style.fontWeight).toBe('700');
+    const decisions = await screen.findByRole('tab', { name: /^Decisions/ });
+    expect(decisions.getAttribute('aria-selected')).toBe('true');
     // The hub's banner is the only page heading; the embedded page has none of its own.
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['The rules of the world']);
-    fireEvent.click(screen.getByRole('button', { name: /Guard/ }));
-    expect(screen.getByRole('button', { name: /Guard/ }).style.fontWeight).toBe('700');
+    fireEvent.click(screen.getByRole('tab', { name: /^Guard/ }));
+    expect(screen.getByRole('tab', { name: /^Guard/ }).getAttribute('aria-selected')).toBe('true');
     // The hub tab survives the page's own tab switch.
     expect(screen.getByRole('tab', { name: /^Show Bible/ }).getAttribute('aria-current')).toBe('page');
   });

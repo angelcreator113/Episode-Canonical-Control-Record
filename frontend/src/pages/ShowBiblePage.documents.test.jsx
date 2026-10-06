@@ -45,9 +45,8 @@ describe('Show Bible: the Documents contract', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/franchise-brain/ingest-document', { document_text: 'Lala never apologises in public.', source_name: 'Lala character bio' }));
     expect(await screen.findByText('Extracted 3 entries, now pending review')).toBeTruthy();
     // The review queue: Decisions, on Pending.
-    await waitFor(() => expect(screen.getByRole('button', { name: /^⚖️ Decisions/ }).style.fontWeight).toBe('700'));
-    expect(screen.getByRole('button', { name: /^Pending \(/ }).style.fontWeight).toBe('600');
-    expect(screen.getByRole('button', { name: /^Pending \(/ }).style.color).not.toBe('rgb(148, 163, 184)');
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Decisions/ }).getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByRole('button', { name: /^Pending \(/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
   test('a source name is never empty on the wire', async () => {
