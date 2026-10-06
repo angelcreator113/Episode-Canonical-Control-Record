@@ -12,7 +12,7 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -50,7 +50,7 @@ import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sp
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
-import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } from '../utils/eventPagination';
+import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText, EVENTS_PER_PAGE } from '../utils/eventPagination';
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
 import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAllPages';
@@ -486,10 +486,20 @@ function WorldAdmin() {
     return () => clearTimeout(timer);
   }, [toast]);
   const [generateTarget, setGenerateTarget] = useState(null);
-  const [eventSearch, setEventSearch] = useState('');
-  const [eventStatusFilter, setEventStatusFilter] = useState('all');
-  // Deal-type filter, next to the status filters (Task #2361).
-  const [eventDealFilter, setEventDealFilter] = useState('all');
+  // The Events queue's search, state filter, deal-type filter (Task #2361)
+  // and sort live in the URL with its page (utils/eventPagination
+  // readEventQuery), so a refresh or Back keeps the queue where it was. Each
+  // change is one URL update that also sends the queue to page 1.
+  const eventQuery = readEventQuery(searchParams);
+  const eventSearch = eventQuery.search;
+  const eventStatusFilter = eventQuery.state;
+  const eventDealFilter = eventQuery.deal;
+  const eventSort = eventQuery.sort; // name | prestige | cost | created | status
+  const setEventQuery = (patch) => setSearchParams((prev) => nextEventParams(prev, patch), { replace: true });
+  const setEventSearch = (search) => setEventQuery({ search });
+  const setEventStatusFilter = (state) => setEventQuery({ state });
+  const setEventDealFilter = (deal) => setEventQuery({ deal });
+  const setEventSort = (sort) => setEventQuery({ sort });
   const [eventDetailModal, setEventDetailModal] = useState(null);
   // The Scene Brief before a venue or base generation from an event (S2, S3,
   // S5): { kind: 'venue', event, onDone } | { kind: 'base', event, set }.
@@ -562,7 +572,6 @@ function WorldAdmin() {
   }, [activeTab, subTab, showId, financeConfig]);
 
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
-  const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   // Shared "Also draft a script" toggle — applies to single-event AND
   // multi-event generate. Unchecked by default to keep token spend low
   // unless the creator opts in. (Bulk-select state already lives above
@@ -598,18 +607,35 @@ function WorldAdmin() {
   // first and send the queue back to page 1.
   const eventPage = parseEventPage(searchParams.get(EVENT_PAGE_PARAM));
   const eventsGridRef = useRef(null);
-  const setEventPage = (n) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (n > 1) next.set(EVENT_PAGE_PARAM, String(n));
-      else next.delete(EVENT_PAGE_PARAM);
-      return next;
-    }, { replace: true });
-  };
+  const setEventPage = (n) => setEventQuery({ page: n });
   const goToEventPage = (n) => {
     setEventPage(n);
     requestAnimationFrame(() => eventsGridRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
   };
+  // Filtered, sorted, then paged (Task #2360).
+  const visibleEvents = useMemo(() => worldEvents.filter(ev => {
+    const q = eventSearch.toLowerCase();
+    const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
+    // Filters by the same computed queue state the chips above
+    // count and the cards below display (Task #1648) — not the
+    // raw world_events.status.
+    const matchStatus = eventStatusFilter === 'all' || computeEventState(ev) === eventStatusFilter;
+    return matchSearch && matchStatus && matchesDealTypeFilter(ev, eventDealFilter);
+  }).sort((a, b) => {
+    if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
+    if (eventSort === 'cost') return (b.cost_coins || 0) - (a.cost_coins || 0);
+    if (eventSort === 'status') return (a.status || '').localeCompare(b.status || '');
+    if (eventSort === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    return (a.name || '').localeCompare(b.name || '');
+  }), [worldEvents, eventSearch, eventStatusFilter, eventDealFilter, eventSort]);
+  const eventsView = paginateEvents(visibleEvents, eventPage);
+  // A page past the end (after a delete or a narrower filter) is put right
+  // in the URL once the events have loaded, so Back and refresh land on a
+  // page that exists.
+  useEffect(() => {
+    if (loading || !loadedOnceRef.current) return;
+    if (eventsView.page !== eventPage) setEventPage(eventsView.page);
+  }, [loading, eventsView.page, eventPage]); // eslint-disable-line react-hooks/exhaustive-deps
   // The inline event editor renders above the queue, but it can be opened
   // from below it (a warning's Edit, a suggestion's + Create, a template).
   // Bring its top into view when it opens off-screen.
@@ -2177,7 +2203,7 @@ The revised event should feel like a completely different experience from the si
             <div className="wa-ev-head-actions">
               <label className="wa-ev-search">
                 <Search size={15} aria-hidden="true" />
-                <input type="text" value={eventSearch} onChange={e => { setEventSearch(e.target.value); setEventPage(1); }} placeholder="Search events" aria-label="Search events" />
+                <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events" aria-label="Search events" />
               </label>
               <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
                 <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
@@ -2334,7 +2360,7 @@ The revised event should feel like a completely different experience from the si
               return (
                 <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on}
                   className={`wa-ev-state${on ? ' active' : ''}`}
-                  onClick={() => { setEventStatusFilter(on ? 'all' : key); setEventPage(1); }}>
+                  onClick={() => setEventStatusFilter(on ? 'all' : key)}>
                   <span className="wa-ev-state-label" style={{ color: cfg.color }}>{cfg.label}</span>
                   <span className="wa-ev-state-count">{n}</span>
                 </button>
@@ -2343,18 +2369,18 @@ The revised event should feel like a completely different experience from the si
           </div>
           <div className="wa-ev-refine">
             {eventStatusFilter !== 'all' && (
-              <button type="button" className="wa-ev-show-all" data-testid="events-filter-all" onClick={() => { setEventStatusFilter('all'); setEventPage(1); }}>
+              <button type="button" className="wa-ev-show-all" data-testid="events-filter-all" onClick={() => setEventStatusFilter('all')}>
                 Show all {worldEvents.length}
               </button>
             )}
             <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
-              onChange={e => { setEventDealFilter(e.target.value); setEventPage(1); }}
+              onChange={e => setEventDealFilter(e.target.value)}
               style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
               {dealTypeFilterOptions(worldEvents).map(o => (
                 <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
               ))}
             </select>
-            <select value={eventSort} onChange={e => { setEventSort(e.target.value); setEventPage(1); }} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
+            <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
               <option value="name">Sort: Name</option>
               <option value="prestige">Sort: Prestige ↓</option>
               <option value="cost">Sort: Cost ↓</option>
@@ -2929,22 +2955,7 @@ The revised event should feel like a completely different experience from the si
 
           {/* Events grid — filtered + sorted, then paged (Task #2360) */}
           {(() => {
-            const visibleEvents = worldEvents.filter(ev => {
-              const q = eventSearch.toLowerCase();
-              const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
-              // Filters by the same computed queue state the chips above
-              // count and the cards below display (Task #1648) — not the
-              // raw world_events.status.
-              const matchStatus = eventStatusFilter === 'all' || computeEventState(ev) === eventStatusFilter;
-              return matchSearch && matchStatus && matchesDealTypeFilter(ev, eventDealFilter);
-            }).sort((a, b) => {
-              if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
-              if (eventSort === 'cost') return (b.cost_coins || 0) - (a.cost_coins || 0);
-              if (eventSort === 'status') return (a.status || '').localeCompare(b.status || '');
-              if (eventSort === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-              return (a.name || '').localeCompare(b.name || '');
-            });
-            const { page, totalPages, pageItems } = paginateEvents(visibleEvents, eventPage);
+            const { page, totalPages, pageItems } = eventsView;
             // Wardrobe vs dress code conflicts show on the affected card.
             const conflictsByEvent = new Map(getDressCodeConflicts().map(c => [c.event.id, c]));
             return (
@@ -3129,6 +3140,11 @@ The revised event should feel like a completely different experience from the si
               </div>
             )}
           </div>
+          {worldEvents.length > 0 && (
+            <p className="wa-ev-range" data-testid="events-range" aria-live="polite">
+              {eventRangeText({ page, perPage: EVENTS_PER_PAGE, matching: visibleEvents.length, total: worldEvents.length })}
+            </p>
+          )}
           {totalPages > 1 && (
             <nav className="wa-ev-pager" aria-label="Event pages" data-testid="events-pager">
               <button type="button" className="wa-ev-pager-btn" data-testid="events-page-prev"

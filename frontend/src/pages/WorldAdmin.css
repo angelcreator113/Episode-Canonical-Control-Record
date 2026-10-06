@@ -1017,3 +1017,6 @@
 .wa-lf-link-btn:hover:not(:disabled) { text-decoration: underline; }
 .wa-lf-link-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .wa-lf-message .wa-lf-link-btn { padding: 0 0 0 8px; }
+
+/* The queue's true counts under the cards: "Showing 10–18 of 214 matching · 250 events". */
+.wa-ev-range { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
