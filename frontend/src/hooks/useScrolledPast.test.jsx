@@ -45,4 +45,24 @@ describe('useScrolledPast (S9 b)', () => {
     expect(pageScrollTop()).toBe(250);
     document.body.scrollTop = 0;
   });
+
+  // Evoni, 2026-10-06: the banner flickered between full and compact.
+  test('with a release line it stays past until scrolled back above it', () => {
+    window.scrollY = 0;
+    const { result } = renderHook(() => useScrolledPast(120, 60));
+    const at = (y) => act(() => { window.scrollY = y; window.dispatchEvent(new Event('scroll')); });
+    at(121);
+    expect(result.current).toBe(true);
+    at(90); // between the lines: no flip back
+    expect(result.current).toBe(true);
+    at(119);
+    expect(result.current).toBe(true);
+    at(59);
+    expect(result.current).toBe(false);
+    at(100); // between the lines on the way down: no flip either
+    expect(result.current).toBe(false);
+    at(121);
+    expect(result.current).toBe(true);
+    window.scrollY = 0;
+  });
 });

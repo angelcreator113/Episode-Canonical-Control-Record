@@ -3338,6 +3338,11 @@
 
 /* The main tabs: white pills on a pink band; Production counts what is left. */
 .ed-page { --ed-gutter: 20px; }
+/* The banner flicker (Evoni, 2026-10-06): no scroll anchoring on the
+   episode page, so the browser does not move the scroll while the header
+   animates between full and compact (.ed-header-spacer holds its height). */
+.ed-page { overflow-anchor: none; }
+.ed-header-spacer { flex-shrink: 0; }
 @media (min-width: 1025px) { .ed-page { --ed-gutter: 48px; } }
 @media (max-width: 768px) { .ed-page { --ed-gutter: 12px; } }
 .ed-page .ed-wrap { max-width: 1240px; padding-top: 0; padding-left: var(--ed-gutter); padding-right: var(--ed-gutter); }
