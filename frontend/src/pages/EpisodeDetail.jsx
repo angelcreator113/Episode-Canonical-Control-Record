@@ -925,6 +925,7 @@ const EpisodeDetail = () => {
             episode={episode}
             showId={episode?.show_id || episode?.showId}
             onChecks={reportChecks}
+            onOpenTab={openTab}
           />
         )}
 
