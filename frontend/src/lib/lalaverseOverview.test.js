@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { nextCulturalEvent, topTrend, topTension, worldIdeas, latelyItems } from './lalaverseOverview';
+import { nextCulturalEvent, topTrend, topTension, worldIdeas, latelyItems, bookSummary } from './lalaverseOverview';
 
 const NOW = new Date('2026-10-06T12:00:00Z');
 
@@ -62,5 +62,12 @@ describe('the LalaVerse Overview helpers', () => {
       events: [{ id: 'e1', name: 'Studio Session', created_at: '2026-10-03' }, { id: 'e2', created_at: '2026-10-04' }],
     });
     expect(items.map((i) => `${i.name} ${i.verb}`)).toEqual(['Studio Session added to the Events library', 'Episode 1 created: Pilot']);
+  });
+
+  test('a book says its status, whose story it is, its counts and how much is approved', () => {
+    const b = bookSummary({ id: 'b1', title: 'Before Lala', subtitle: 'A memoir', status: 'in_review', character_name: 'JustAWoman', era_name: 'Before', chapter_count: 3, line_count: 40, approved_count: 10, pending_count: 2, last_chapter_title: 'The Studio', recent_insight: 'She kept the receipts.' });
+    expect(b).toEqual({ id: 'b1', title: 'Before Lala', subtitle: 'A memoir', status: 'In review', statusKey: 'in_review', whose: 'JustAWoman · Before', counts: '3 chapters · 40 lines · 2 waiting for review', approved: 10, total: 40, lastChapter: 'The Studio', insight: 'She kept the receipts.' });
+    const empty = bookSummary({ id: 'b2' });
+    expect([empty.title, empty.status, empty.whose, empty.counts, empty.total]).toEqual(['Untitled book', 'Draft', null, '0 chapters · 0 lines', 0]);
   });
 });

@@ -127,3 +127,34 @@ export function latelyItems({ episodes, events, limit = 5 }) {
   }
   return rows.sort((a, b) => b.at - a.at).slice(0, limit);
 }
+
+const BOOK_STATUS = { draft: 'Draft', in_review: 'In review', locked: 'Locked' };
+
+/**
+ * A book on the Overview (Evoni, 2026-10-06: "add book information back to
+ * overview and style it"), from GET /storyteller/books: { id, title,
+ * subtitle, status, whose, counts, approved, total, lastChapter, insight }.
+ * approved / total are the lines approved of all lines written, the
+ * book's progress; total 0 is a book with nothing written yet.
+ */
+export function bookSummary(book) {
+  const total = Number(book?.line_count) || 0;
+  const approved = Number(book?.approved_count) || 0;
+  const chapters = Number(book?.chapter_count) || 0;
+  const pending = Number(book?.pending_count) || 0;
+  const whose = [book?.character_name, book?.era_name, book?.season_label].filter(Boolean).join(' · ') || null;
+  const counts = [plural(chapters, 'chapter'), plural(total, 'line'), pending ? `${pending} waiting for review` : null].filter(Boolean).join(' · ');
+  return {
+    id: book?.id,
+    title: book?.title || 'Untitled book',
+    subtitle: book?.subtitle || null,
+    status: BOOK_STATUS[book?.status] || 'Draft',
+    statusKey: BOOK_STATUS[book?.status] ? book.status : 'draft',
+    whose,
+    counts,
+    approved,
+    total,
+    lastChapter: book?.last_chapter_title || null,
+    insight: book?.recent_insight || null,
+  };
+}
