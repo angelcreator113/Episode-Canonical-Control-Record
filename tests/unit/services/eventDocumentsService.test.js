@@ -48,7 +48,7 @@ beforeEach(() => {
 describe('eventDocumentsService', () => {
   test('nothing is drafted yet: both documents are null', async () => {
     const { models } = fakeModels(EVENT);
-    expect(await svc.getDocuments(models, ids)).toEqual({ shopping_list: null, career_plan: null });
+    expect(await svc.getDocuments(models, ids)).toEqual({ shopping_list: null, career_plan: null, deliverables: [] });
   });
 
   test('a shopping list drafts from the episode list writer, as a draft, version 1', async () => {

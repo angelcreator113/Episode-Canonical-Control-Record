@@ -64,6 +64,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   afterAll(async () => {
     for (const show of shows) {
+      await run(`DELETE FROM event_deliverables WHERE event_id IN (SELECT id FROM world_events WHERE show_id = :show)`, { show })
+        .catch((err) => console.error('cleanup event_deliverables:', err.message));
       await run(`DELETE FROM world_events WHERE show_id = :show`, { show });
       await run(`DELETE FROM shows WHERE id = :show`, { show });
     }
@@ -73,7 +75,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const ids = await seed();
     const empty = await auth(request(app).get(`${base(ids)}/documents`));
     expect(empty.status).toBe(200);
-    expect(empty.body.data).toEqual({ shopping_list: null, career_plan: null });
+    expect(empty.body.data).toEqual({ shopping_list: null, career_plan: null, deliverables: [] });
 
     const drafted = await auth(request(app).post(`${base(ids)}/documents/shopping_list/draft`));
     expect(drafted.status).toBe(200);
@@ -120,5 +122,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const early = await auth(request(app).put(`${base(ids)}/documents/career_plan`)).send({ items: [{ label: 'x' }] });
     expect(early.status).toBe(404);
     expect(early.body.error).toMatch(/Draft it first/);
+  });
+
+  it("GET carries the deal's deliverables, expected of her: required or not, and who they are owed to", async () => {
+    const ids = await seed();
+    const empty = await auth(request(app).get(`${base(ids)}/documents`));
+    expect(empty.status).toBe(200);
+    expect(empty.body.data.deliverables).toEqual([]);
+    const { insertEventDeliverables } = require('../../src/services/eventTermsService');
+    await insertEventDeliverables(models.sequelize, ids.event, [
+      { description: 'Wearable art reel', deliverable_type: 'instagram_reel', required: true, owed_to: 'brand' },
+      { description: 'Story shout-out', deliverable_type: 'instagram_stories', quantity: 3, required: false, owed_to: 'host' },
+    ]);
+    const res = await auth(request(app).get(`${base(ids)}/documents`));
+    const byLabel = Object.fromEntries(res.body.data.deliverables.map((d) => [d.label, d]));
+    expect(Object.keys(byLabel).sort()).toEqual(['Story shout-out', 'Wearable art reel']);
+    expect(byLabel['Wearable art reel']).toMatchObject({ required: true, owed_to: 'brand', detail: '1 Instagram Reel' });
+    expect(byLabel['Story shout-out']).toMatchObject({ required: false, owed_to: 'host', detail: '3 Instagram Stories' });
+    // Never stored in the plan.
+    expect((await stored(ids)).documents).toBeUndefined();
   });
 });

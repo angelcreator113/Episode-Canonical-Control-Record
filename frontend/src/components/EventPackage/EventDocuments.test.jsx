@@ -82,6 +82,32 @@ describe('EventDocuments', () => {
     expect(within(card).getByText('one step at a time, L.')).toBeTruthy();
   });
 
+  test("the deal's deliverables come first, as Expected of her, required or optional, with who they are owed to", async () => {
+    const deliverables = [
+      { id: 'd-1', label: 'Wearable art reel', detail: '1 Instagram Reel · due 2026-11-14', required: true, owed_to: 'brand' },
+      { id: 'd-2', label: 'Story shout-out', detail: '3 Instagram Stories', required: false, owed_to: 'host' },
+    ];
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: PLAN, deliverables } } });
+    renderDocs();
+    const list = await screen.findByTestId('evd-career-deliverables');
+    const reel = within(list).getByTestId('evd-deliverable-d-1');
+    expect(reel.textContent).toContain('Wearable art reel');
+    expect(reel.textContent).toContain('1 Instagram Reel · due 2026-11-14 · for the brand');
+    expect(reel.textContent).toContain('Required');
+    expect(within(list).getByTestId('evd-deliverable-d-2').textContent).toContain('3 Instagram Stories · for the host');
+    expect(within(list).getByTestId('evd-deliverable-d-2').textContent).toContain('Optional');
+    // Expected of her, then This event, then Bigger goals.
+    const labels = [...screen.getByTestId('evd-career-card').querySelectorAll('.evd-career-label')].map((el) => el.textContent);
+    expect(labels).toEqual(['Expected of her', 'This event', 'Bigger goals']);
+  });
+
+  test('with no deliverables in the deal, the section is left out', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: PLAN, deliverables: [] } } });
+    renderDocs();
+    await screen.findByTestId('evd-career-card');
+    expect(screen.queryByTestId('evd-career-deliverables')).toBeNull();
+  });
+
   test('Edit saves her lines through PUT; Approve approves; Redraft writes a new draft', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
     api.put.mockResolvedValue({ data: { success: true, data: { ...SHOP, version: 2, source: 'edited', items: [{ slot: 'shoes', label: 'Gold heels' }], history: [SHOP] } } });

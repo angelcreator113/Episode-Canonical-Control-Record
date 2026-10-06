@@ -193,10 +193,37 @@ function assertType(type) {
   if (!isDocType(type)) throw new EventDocumentError(400, `Unknown document: ${type}`);
 }
 
-/** GET: both documents. */
+/**
+ * What the deal expects of her at this event (Evoni, 2026-10-06: "add
+ * deliverables to career goals list whichever ones are expected of her for
+ * that event"): each of the event's deliverables, as the episode's task list
+ * shows it (socialTaskSource.deliverableTask). Read live from the terms,
+ * never stored in the career plan, so an Edit or Redraft cannot drop one and
+ * the list always matches the deal. Start Episode already puts them on the
+ * episode's task list, required.
+ */
+async function expectedOfHer(sequelize, eventId) {
+  const { listEventDeliverables } = require('./eventTermsService');
+  const { withDeliverableTasks } = require('../utils/socialTaskSource');
+  try {
+    const rows = await listEventDeliverables(sequelize, eventId);
+    return withDeliverableTasks([], rows).map((t) => ({
+      id: t.deliverable_id,
+      label: t.label,
+      detail: t.description,
+      required: t.required,
+      owed_to: t.owed_to,
+    }));
+  } catch (err) {
+    console.error('[EventDocuments] deliverables read failed (the career plan shows none):', err.message);
+    return [];
+  }
+}
+
+/** GET: both documents, and the deliverables expected of her. */
 async function getDocuments(models, { showId, eventId }) {
   const event = await loadEvent(models.sequelize, showId, eventId);
-  return readDocuments(event);
+  return { ...readDocuments(event), deliverables: await expectedOfHer(models.sequelize, event.id) };
 }
 
 /** Draft, or redraft: a new draft written from the event. */
