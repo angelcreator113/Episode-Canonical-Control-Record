@@ -24,7 +24,10 @@ export const EP_TABS = [
     { key: 'money', label: 'Money' },
     { key: 'assets', label: 'Assets' },
   ]},
+  // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
+  // Evaluation, Story and Distribution stay (her ruling).
   { key: 'results', icon: '👑', label: 'Results', subs: [
+    { key: 'summary', label: 'Summary' },
     { key: 'evaluation', label: 'Evaluation' },
     { key: 'story', label: 'Story' },
     { key: 'distribution', label: 'Distribution' },

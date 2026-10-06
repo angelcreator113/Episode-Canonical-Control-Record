@@ -26,6 +26,7 @@ const EpisodeProductionChecklist = lazy(() => import('../components/Episodes/Epi
 const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
 const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
 const EpisodeOverlaysTab = lazy(() => import('../components/Episodes/EpisodeOverlaysTab'));
+const EpisodeResultsSummary = lazy(() => import('../components/Episodes/EpisodeResultsSummary'));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
@@ -836,6 +837,11 @@ const EpisodeDetail = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* Results → Summary (Evoni's Episode mock): the one page. */}
+        {tabKey === 'results.summary' && (
+          <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab} />
         )}
 
         {/* Story Tab — links to Stories page */}
