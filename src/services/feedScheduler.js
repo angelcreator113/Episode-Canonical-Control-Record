@@ -17,6 +17,10 @@
 
 /* eslint-disable no-console */
 const Anthropic = require('@anthropic-ai/sdk');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
+
+// The Show Bible for one generation, or none (JustAWoman's Feed is the real world).
+const NO_BRAIN = Object.freeze({ block: null, ids: [] });
 
 // feedProfileUtils imported for future use
 // const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
@@ -331,6 +335,7 @@ She posts for women. Men show up with their wallets and something in her respond
 
   // Inject arc context — current phase affects what kind of profiles to generate
   let arcDirective = '';
+  let sparkShowId = null;
   try {
     const { getArcContext } = require('./arcProgressionService');
     // Get show_id from any existing profile
@@ -340,6 +345,7 @@ She posts for women. Men show up with their wallets and something in her respond
         'SELECT DISTINCT show_id FROM social_profiles WHERE show_id IS NOT NULL LIMIT 1'
       );
       const showId = showRows?.[0]?.show_id;
+      sparkShowId = showId || null;
       if (showId) {
         const arc = await getArcContext(showId, { sequelize: db.sequelize });
         if (arc) {
@@ -357,11 +363,15 @@ ${arc.narrative_debt?.length > 0 ? `NARRATIVE WEIGHT: ${arc.narrative_debt.map(d
     }
   } catch { /* arc system not available */ }
 
+  // LalaVerse creators follow the Show Bible (2026-10-06). JustAWoman's Feed
+  // (Book 1) is the real world, so it gets none of the LalaVerse's rules.
+  const brain = layer === 'lalaverse' ? await loadBrainContext(db, { showId: sparkShowId, label: 'FeedScheduler' }) : NO_BRAIN;
+
   const prompt = `You are designing the social media feed for a novel. Generate exactly ${count} unique creator sparks — each one a seed for a full AI-generated social media profile.
 
 LAYER: ${layer === 'lalaverse' ? 'LalaVerse (Book 2)' : "JustAWoman's Feed (Book 1)"}
 ${layerContext}
-${arcDirective}
+${arcDirective}${brain.block || ''}
 
 EXISTING FEED COMPOSITION (${existing.length} profiles):
 - Handles already used: ${existingHandles || 'none yet'}
@@ -410,6 +420,7 @@ Return ONLY the JSON array. No markdown, no explanation.`;
   // Sparks are small objects (~200 tokens each) — 4000 is plenty for up to 20 sparks
   // Using Haiku for sparks: simpler task, ~4x cheaper than Sonnet
   const response = await callClaude(prompt, { maxTokens: 4000, model: AI_MODEL_SIMPLE });
+  await recordRuleUse(db.sequelize, brain.ids, 'FeedScheduler');
   console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
@@ -564,6 +575,17 @@ async function generateAndSaveProfile(db, spark, layer) {
         detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
       };
 
+  // LalaVerse profiles follow the Show Bible (2026-10-06); JustAWoman's do not.
+  let brain = NO_BRAIN;
+  if (layer === 'lalaverse') {
+    let showId = null;
+    try {
+      const [showRows] = await db.sequelize.query('SELECT DISTINCT show_id FROM social_profiles WHERE show_id IS NOT NULL LIMIT 1');
+      showId = showRows?.[0]?.show_id || null;
+    } catch (showErr) { console.warn('[FeedScheduler] could not read the Feed\'s show for its Bible rules:', showErr.message); }
+    brain = await loadBrainContext(db, { showId, label: 'FeedScheduler' });
+  }
+
   // Compact prompt for batch generation — ~60% smaller than the full buildGenerationPrompt
   const ctx = characterContext;
   const adv = spark.advanced_context || {};
@@ -574,7 +596,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}
+${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${brain.block || ''}
 
 IMPORTANT RULES:
 - Creators exist across MULTIPLE platforms with DIFFERENT personas on each
@@ -652,6 +674,7 @@ Return ONLY valid JSON with these fields:
 }`;
 
   const response = await callClaude(prompt, { maxTokens: 8000 });
+  await recordRuleUse(db.sequelize, brain.ids, 'FeedScheduler');
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);

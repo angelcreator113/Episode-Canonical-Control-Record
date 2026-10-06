@@ -15,6 +15,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
 const { detectViralTier } = require('./feedEngagementService');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -158,12 +159,15 @@ Follow Bias: ${arc.feed_behavior?.follow_bias || 'balanced'}`;
     }
   } catch { /* arc system not available — continue without */ }
 
+  // The Show Bible's always-true rules (2026-10-06): the posts are canon too.
+  const brain = await loadBrainContext(models, { showId, label: 'FeedPosts' });
+
   const prompt = `You are generating social media feed posts that appear AFTER an episode of "Styling Adventures with Lala."
 
 EPISODE: ${episode.title || `Episode ${episode.episode_number}`}
 ${eventContext}
 ${financialContext}
-${wardrobeContext}${arcContext}
+${wardrobeContext}${arcContext}${brain.block || ''}
 
 WHAT HAPPENED (script excerpt):
 ${scriptSummary}
@@ -232,6 +236,7 @@ Return ONLY the JSON array.`;
     max_tokens: 6000,
     messages: [{ role: 'user', content: prompt }],
   });
+  await recordRuleUse(models.sequelize, brain.ids, 'FeedPosts');
 
   const rawText = response.content[0]?.text || '';
 

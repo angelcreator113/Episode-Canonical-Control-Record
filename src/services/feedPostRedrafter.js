@@ -14,6 +14,7 @@
 
 const { isLive, LOCKED_MESSAGE } = require('./feedPostStatus');
 const { DraftError, VOICE_ATTRIBUTES } = require('./feedCommentDrafter');
+const { loadBrainContext, recordRuleUse } = require('./brainRules');
 
 const MODELS = ['claude-sonnet-4-6'];
 const NOTE_MAX = 300;
@@ -41,7 +42,7 @@ async function posterProfile(models, post) {
   return SocialProfile.findOne({ where: { handle }, attributes: VOICE_ATTRIBUTES });
 }
 
-function buildPrompt(post, profile, note) {
+function buildPrompt(post, profile, note, brainBlock = null) {
   const who = post.poster_display_name || profile?.display_name || `@${String(post.poster_handle || 'lala').replace(/^@/, '')}`;
   const voice = profile ? [
     profile.archetype ? `archetype: ${profile.archetype}` : null,
@@ -52,7 +53,7 @@ function buildPrompt(post, profile, note) {
 
 Who is posting: ${who}${post.poster_platform ? ` (${post.poster_platform})` : ''}
 ${voice ? `Their voice:\n${voice}\n` : 'No profile is on file: take the voice from the draft itself.\n'}${post.narrative_function ? `What the post does: ${String(post.narrative_function).replace(/_/g, ' ')}\n` : ''}${note ? `Evoni's note for this redraft: ${note}\n` : ''}
-The draft:
+${brainBlock ? `${brainBlock}\n` : ''}The draft:
 ${post.content_text || ''}`;
 }
 
@@ -67,7 +68,9 @@ async function redraftPost(models, postId, { note = null } = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new DraftError(503, 'ANTHROPIC_API_KEY not configured');
 
   const profile = await posterProfile(models, post);
-  const prompt = buildPrompt(post, profile, note ? note.trim() : null);
+  // A redraft stays canon: the Show Bible's always-true rules (2026-10-06).
+  const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedRedraft' });
+  const prompt = buildPrompt(post, profile, note ? note.trim() : null, brain.block);
   let message;
   for (const model of MODELS) {
     try {
@@ -78,6 +81,7 @@ async function redraftPost(models, postId, { note = null } = {}) {
       if (model === MODELS[MODELS.length - 1]) throw modelErr;
     }
   }
+  await recordRuleUse(models.sequelize, brain.ids, 'FeedRedraft');
   const text = (message?.content?.[0]?.text || '').trim().replace(/^["“](.*)["”]$/s, '$1').trim();
   if (!text) throw new DraftError(502, 'The redraft came back empty. Try again.');
 

@@ -15,7 +15,7 @@ export const ORIENTATION = {
   },
   bible: {
     title: 'The Show Bible is what the AI believes',
-    what: 'Laws, locked decisions, world facts and character truths as text entries. This is the canon the generators read: the script writer, the event generator, Amber, the memories engine, story evaluation and the franchise guard.',
+    what: 'Laws, locked decisions, world facts and character truths as text entries. This is the canon the generators read: the script writer, the event generators, the Feed (posts, comments, redrafts and LalaVerse profiles), seasonal events, Amber, the memories engine, story evaluation and the franchise guard.',
     reads: 'Every AI call that writes for the show. Entries marked "always inject" go into each prompt; "critical" ones into the guard and Amber; the rest are stored and reviewed but not read by the generators.',
     doHere: 'Write a rule the AI must follow as a new entry and mark it always-inject. Review pending entries under Decisions. Paste a document under Documents to extract entries. Check a scene against the canon under Guard.',
   },

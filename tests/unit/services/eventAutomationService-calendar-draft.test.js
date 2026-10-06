@@ -93,6 +93,9 @@ describe('the draft call', () => {
       venueName: 'Club Noir',
       userId: 'u1',
       context: { title: 'Holiday Gala', theme: 'luxury_prestige', description: 'The season\'s biggest night.' },
+      // The models and show, so the draft reads the show's Bible rules (2026-10-06).
+      models: m,
+      showId: 'show-1',
     });
     expect(JSON.stringify(ctx)).not.toContain('SECRET');
   });

@@ -3046,7 +3046,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // budget refusal, and the event keeps the template description with no
     // draft keys. auto_drafted records what was drafted, for step 4's
     // "Auto-drafted · <source>" label.
-    const draft = await draftEventConcept(p, { venueName: venue?.name || null, userId: req.user?.id });
+    const draft = await draftEventConcept(p, { venueName: venue?.name || null, userId: req.user?.id, models: req.app.locals.db || require('../models'), showId: req.params.showId });
     const descriptionText = draft ? draft.description : templateDescription;
     // Task #2124 (§8(u) R7): the same draft may carry styling. With it,
     // dress_code and dress_code_keywords go to their columns and the brief

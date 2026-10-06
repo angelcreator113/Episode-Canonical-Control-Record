@@ -18,6 +18,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
+const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 
 const client = new Anthropic();
 
@@ -53,7 +54,7 @@ router.post('/generate-events', requireAuth, aiRateLimiter, async (req, res) => 
       }
     }
 
-    const prompt = await buildEventPrompt(db, show_id);
+    const { prompt, brainIds } = await buildEventPrompt(db, show_id);
 
     let message;
     for (const model of MODELS) {
@@ -73,6 +74,7 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
         if (model === MODELS[MODELS.length - 1]) throw modelErr;
       }
     }
+    await recordRuleUse(db.sequelize, brainIds, 'EventGenerator');
 
     const raw = message.content[0].text.trim().replace(/```json|```/g, '').trim();
     let events;
@@ -155,25 +157,13 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
 
 // ── Prompt ────────────────────────────────────────────────────────────────
 
-async function buildEventPrompt(db, _show_id) {
-  // Load Show Brain rules for context
-  let brainContext = '';
-  try {
-    const brainEntries = await db.FranchiseKnowledge.findAll({
-      where: { status: 'active', always_inject: true },
-      attributes: ['title', 'content'],
-      limit: 10,
-      order: [['severity', 'ASC']],
-    });
-    if (brainEntries.length > 0) {
-      const rules = brainEntries.map(e => {
-        const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
-        const summary = content.length > 200 ? content.slice(0, 200) + '...' : content;
-        return `- ${e.title}: ${summary}`;
-      }).join('\n');
-      brainContext = `\nSHOW BRAIN RULES (follow these):\n${rules}\n`;
-    }
-  } catch (e) { /* franchise_knowledge may not exist */ }
+async function buildEventPrompt(db, show_id) {
+  // The Show Bible's always-true rules for this show (2026-10-06), through
+  // the same picker as the script writer: the show's own rules and the
+  // franchise's, critical first, in full. It read ten rules cut to 200
+  // characters, for every show, and dropped a failed read silently.
+  const brain = await loadBrainContext(db, { showId: show_id, label: 'EventGenerator' });
+  const brainContext = brain.block || '';
 
   // Load World Locations for event placement
   let locationContext = '';
@@ -191,7 +181,7 @@ async function buildEventPrompt(db, _show_id) {
     }
   } catch (e) { /* world_locations may not exist */ }
 
-  return `Generate exactly 24 LalaVerse game events for the Styling Adventures fashion show.
+  const prompt = `Generate exactly 24 LalaVerse game events for the Styling Adventures fashion show.
 ${brainContext}${locationContext}
 CATEGORY SPLIT (non-negotiable):
 - industry: 12 events (primary — this is a fashion show first)
@@ -229,6 +219,8 @@ For each event return a JSON object with these exact fields:
 }
 
 Return a JSON array of exactly 24 objects. No other text.`;
+  return { prompt, brainIds: brain.ids };
 }
 
 module.exports = router;
+module.exports.buildEventPrompt = buildEventPrompt;
