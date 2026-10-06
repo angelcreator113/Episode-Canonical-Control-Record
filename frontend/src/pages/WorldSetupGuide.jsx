@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
+import { checkSetup, COUNT_LABELS } from '../components/WorldSetupProgress';
 import './WorldLocations.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
@@ -115,67 +117,25 @@ export default function WorldSetupGuide() {
   const [status, setStatus] = useState({});
   const [loading, setLoading] = useState(true);
 
+  // The same checks as the LalaVerse Overview's World Setup
+  // (components/WorldSetupProgress checkSetup, 2026-10-06): the routes' real
+  // shapes, the active show (audit CTX-01) rather than the first show the
+  // API returns, steps 1, 2 and 4 counted from the Franchise Brain as well
+  // as saved edits, and "could not check" apart from "not done". This page
+  // checked page-content's `data` (never there), the profiles' `count`
+  // (never there) and the first show, and logged nothing on a failure.
+  const { showId, loaded: showsLoaded } = useActiveShow();
+  const [result, setResult] = useState(null);
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const checks = {};
-
-        // Check infrastructure
-        try {
-          const d = await getPageContentApi('world_infrastructure');
-          checks.infrastructure = d?.data && Object.keys(d.data).length > 0;
-        } catch { checks.infrastructure = false; }
-
-        // Check influencer systems
-        try {
-          const d = await getPageContentApi('influencer_systems');
-          checks.influencer = d?.data && Object.keys(d.data).length > 0;
-        } catch { checks.influencer = false; }
-
-        // Check cultural calendar events
-        try {
-          const d = await listCalendarEventsApi('lalaverse_cultural');
-          checks.calendar = (d.events || []).length > 0;
-        } catch { checks.calendar = false; }
-
-        // Check cultural memory
-        try {
-          const d = await getPageContentApi('cultural_memory');
-          checks.memory = d?.data && Object.keys(d.data).length > 0;
-        } catch { checks.memory = false; }
-
-        // Check locations
-        try {
-          const d = await listLocationsApi();
-          checks.locations = (d.locations || []).length > 0;
-        } catch { checks.locations = false; }
-
-        // Check feed profiles
-        try {
-          const d = await listSocialProfilesApi('feed_layer=lalaverse&limit=1');
-          checks.feed = (d.count || 0) > 0;
-        } catch { checks.feed = false; }
-
-        // Check world events
-        try {
-          const shows = await listShowsApi();
-          const showId = (shows.data || [])[0]?.id;
-          if (showId) {
-            const ed = await listWorldEventsApi(showId, 'draft');
-            checks.events = (ed.events || []).length > 0;
-          } else {
-            checks.events = false;
-          }
-        } catch { checks.events = false; }
-
-        setStatus(checks);
-      } catch (e) {
-        console.error('Status check failed:', e);
-      }
-      setLoading(false);
-    };
-    checkStatus();
-  }, []);
+    if (!showsLoaded) return undefined;
+    let live = true;
+    setLoading(true);
+    checkSetup(showId || undefined)
+      .then((r) => { if (live) { setResult(r); setStatus(r.done); } })
+      .catch((err) => { console.error('[WorldSetupGuide] setup check failed:', err); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [showId, showsLoaded]);
 
   const completedCount = Object.values(status).filter(Boolean).length;
   const totalCount = STEPS.length;
@@ -210,6 +170,9 @@ export default function WorldSetupGuide() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {STEPS.map((step) => {
             const done = status[step.checkField];
+            const unreachable = (result?.unreachable || []).includes(step.checkField);
+            const detail = result?.details?.[step.checkField]
+              || (result && !unreachable ? `${result.counts?.[step.checkField] ?? 0} ${COUNT_LABELS[step.checkField]}` : null);
             return (
               <div
                 key={step.key}
@@ -238,6 +201,8 @@ export default function WorldSetupGuide() {
                       <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#B8962E' }}>STEP {step.num}</span>
                       <span style={{ fontWeight: 600, fontSize: 14, color: '#2C2C2C' }}>{step.title}</span>
                       {done && <span style={{ fontSize: 9, padding: '2px 6px', background: '#d4edda', color: '#166534', borderRadius: 4, fontWeight: 600 }}>DONE</span>}
+                      {unreachable && <span data-testid={`guide-unreachable-${step.checkField}`} style={{ fontSize: 9, padding: '2px 6px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 4, fontWeight: 600 }}>COULD NOT CHECK</span>}
+                      {detail && <span data-testid={`guide-detail-${step.checkField}`} style={{ fontSize: 10, color: done ? '#666' : 'var(--warning-text)', fontFamily: "'DM Mono', monospace" }}>{detail}</span>}
                     </div>
                     <p style={{ fontSize: 12, color: '#666', margin: '0 0 8px', lineHeight: 1.5 }}>{step.description}</p>
                     <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
