@@ -863,6 +863,7 @@
 .wa-wd-backdrop.bd-accessories { --bd: var(--success-bg); }
 .wa-wd-backdrop.bd-jewelry { --bd: var(--warning-bg); }
 .wa-wd-backdrop.bd-perfume { --bd: var(--danger-bg); }
+.wa-wd-backdrop.bd-outerwear { --bd: var(--info-bg); }
 .wa-wd-backdrop .wa-wd-img { padding: 8%; box-sizing: border-box; filter: drop-shadow(0 10px 12px rgba(44, 44, 44, 0.18)); }
 
 /* A matching set as one card: its pieces side by side (two across, a 2×2

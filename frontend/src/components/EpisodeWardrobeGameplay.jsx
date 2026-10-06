@@ -52,7 +52,7 @@ const ROLE_STYLES = {
   risky: { bg: 'var(--danger-bg)', border: 'var(--danger-border)', label: '⚡ Risky', color: 'var(--danger-text)' },
   locked_tease: { bg: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)', label: '🔒 Locked', color: 'var(--lala-ink-muted)' },
 };
-const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
+const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', outerwear: '🧥', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
 
 // How long the draft score waits after the last slot change before asking
 // the server (Task #1943).
@@ -438,7 +438,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   // ─── v3: Browse items based on mode ───
   const filteredBrowseItems = useMemo(() => {
     // Task #2377: the Other tab holds every item no game slot accepts
-    // (outerwear, unknown or missing category) so none vanish.
+    // (an unknown or missing category) so none vanish.
     if (activeSlot === SETS_GROUP.key) return []; // W1: the Sets group lists sets, not pieces
     const inSlot = activeSlot === ALL_GROUP.key
       ? () => true
