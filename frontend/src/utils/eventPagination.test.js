@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { EVENTS_PER_PAGE, parseEventPage, paginateEvents, eventPageNumbers } from './eventPagination';
+import { EVENTS_PER_PAGE, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText } from './eventPagination';
 
 const list = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -30,3 +30,29 @@ describe('eventPagination (Task #2360)', () => {
     expect(eventPageNumbers(12, 12)).toEqual([1, 'gap', 11, 12]);
   });
 });
+
+describe('the queue in the URL', () => {
+  test('readEventQuery: each value from the URL, else its default; an unknown sort is name', () => {
+    expect(readEventQuery(new URLSearchParams(''))).toEqual({ search: '', state: 'all', deal: 'all', sort: 'name' });
+    expect(readEventQuery(new URLSearchParams('evq=gala&evstate=ready&evdeal=gifted&evsort=cost')))
+      .toEqual({ search: 'gala', state: 'ready', deal: 'gifted', sort: 'cost' });
+    expect(readEventQuery(new URLSearchParams('evsort=nope')).sort).toBe('name');
+  });
+
+  test('nextEventParams: a filter change resets the page; defaults leave the URL; a page alone moves it', () => {
+    const prev = new URLSearchParams('tab=events&evpage=7&evdeal=gifted');
+    expect(nextEventParams(prev, { state: 'ready' }).toString()).toBe('tab=events&evdeal=gifted&evstate=ready');
+    expect(nextEventParams(prev, { deal: 'all' }).toString()).toBe('tab=events');
+    expect(nextEventParams(prev, { page: 3 }).toString()).toBe('tab=events&evpage=3&evdeal=gifted');
+    expect(nextEventParams(prev, { search: '' }).get('evq')).toBeNull();
+  });
+
+  test('eventRangeText: the page range, the matching count and the total', () => {
+    expect(eventRangeText({ page: 1, perPage: 9, matching: 260, total: 260 })).toBe('Showing 1–9 of 260 events');
+    expect(eventRangeText({ page: 14, perPage: 9, matching: 120, total: 260 })).toBe('Showing 118–120 of 120 matching · 260 events');
+    expect(eventRangeText({ page: 1, perPage: 9, matching: 1, total: 1 })).toBe('Showing 1 of 1 event');
+    expect(eventRangeText({ page: 1, perPage: 9, matching: 0, total: 12 })).toBe('No events match · 12 events');
+    expect(eventRangeText({ page: 1, perPage: 9, matching: 0, total: 0 })).toBe('No events yet');
+  });
+});
+
