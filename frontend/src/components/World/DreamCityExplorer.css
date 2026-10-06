@@ -1,0 +1,86 @@
+/* DreamCityExplorer: the World tab's front page (the mock, 2026-10-06).
+   Tokens only. Each city has a tone after the mock: D pink, R gold,
+   E green, A lavender, M blue; --city-text reads 4.5:1 on --city-soft
+   and on white (DreamCityExplorer.theme.test.js). */
+
+.dce {
+  display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 16px;
+  align-items: stretch; margin-bottom: 20px;
+}
+
+.dce-city-d { --city-soft: var(--accent-subtle);      --city-line: var(--accent-light);       --city-text: var(--accent-dark); }
+.dce-city-r { --city-soft: var(--lala-gold-soft);     --city-line: var(--lala-gold-line);     --city-text: var(--lala-gold-text); }
+.dce-city-e { --city-soft: var(--success-bg);         --city-line: var(--success-border);     --city-text: var(--success-text); }
+.dce-city-a { --city-soft: var(--lala-lavender-soft); --city-line: var(--lala-lavender-line); --city-text: var(--lala-lavender-text); }
+.dce-city-m { --city-soft: var(--info-bg);            --city-line: var(--info-border);        --city-text: var(--info-text); }
+
+/* ── The map ── */
+.dce-map {
+  position: relative; min-height: 460px; overflow: hidden;
+  border-radius: 20px; border: 1px solid var(--success-border);
+  background: linear-gradient(160deg, var(--success-bg), var(--info-bg));
+}
+.dce-roads { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dce-roads line { stroke: var(--success-border); stroke-width: 3; stroke-dasharray: 8 6; vector-effect: non-scaling-stroke; }
+.dce-water { position: absolute; left: 0; right: 0; bottom: 0; height: 12%; background: var(--info-border); opacity: 0.45; border-radius: 50% 50% 0 0 / 40% 40% 0 0; }
+.dce-bubbles { position: absolute; inset: 0; }
+.dce-bubble {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 132px; height: 132px; border-radius: 50%; padding: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: var(--city-soft); border: 3px solid var(--surface-card); cursor: pointer;
+  font-family: inherit; color: var(--text-primary); text-align: center;
+  box-shadow: 0 6px 18px -8px var(--city-line);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.dce-bubble:hover { transform: translate(-50%, -50%) scale(1.04); }
+.dce-bubble.is-active { border-color: var(--city-text); transform: translate(-50%, -50%) scale(1.06); }
+.dce-letter { font-size: 26px; font-weight: 800; line-height: 1; color: var(--city-text); }
+.dce-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.dce-count { font-size: 11px; color: var(--text-secondary); }
+
+/* ── The side cards ── */
+.dce-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start; }
+.dce-card { background: var(--surface-card); border: 1px solid var(--success-border); border-radius: 16px; padding: 18px 20px; min-width: 0; }
+.dce-soft { background: var(--success-bg); }
+.dce-city-card { background: var(--city-soft); border-color: var(--city-line); }
+.dce-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--city-text); margin-bottom: 4px; }
+.dce-city-name { margin: 0 0 8px; font-size: 26px; font-weight: 800; color: var(--text-primary); }
+.dce-known { margin: 0 0 6px; font-size: 14px; line-height: 1.5; color: var(--text-primary); }
+.dce-energy { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.dce-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.dce-title { margin: 0 0 10px; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.dce-card-head .dce-title { margin: 0; }
+.dce-link {
+  margin-left: auto; min-height: 44px; padding: 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--success-text);
+}
+.dce-note { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+.dce-venues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dce-venue { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-bg); }
+.dce-venue-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--success-bg); flex-shrink: 0; }
+.dce-venue-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.dce-venue-text strong { font-size: 14px; color: var(--text-primary); }
+
+.dce-schools { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.dce-schools strong { color: var(--text-primary); }
+
+@media (max-width: 900px) {
+  .dce { grid-template-columns: 1fr; }
+}
+/* On a phone the map is a row of chips: the bubbles would not fit. */
+@media (max-width: 560px) {
+  .dce-map { min-height: 0; padding: 12px; }
+  .dce-roads, .dce-water { display: none; }
+  .dce-bubbles { position: static; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .dce-bubble {
+    position: static; transform: none; flex-shrink: 0;
+    width: auto; height: auto; min-height: 44px; border-radius: 999px; padding: 6px 14px;
+    flex-direction: row; gap: 6px;
+  }
+  .dce-bubble:hover, .dce-bubble.is-active { transform: none; }
+  .dce-letter { font-size: 18px; }
+  .dce-count { display: none; }
+  .dce-card { padding: 16px; }
+}
