@@ -23,8 +23,15 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
   const guests = event.canon_consequences?.automation?.guest_profiles || [];
   const featured = guests.filter((g) => g && g.featured);
   const featuredNames = featured.map((g) => g.display_name || g.handle).filter(Boolean);
+  // Evoni (2026-10-06): the event's place is its venue name and address
+  // (Event Package → Place), with or without a linked World Location. Only
+  // venue_location_id counted, so an event with a typed venue read "No
+  // venue". A venue fills Location (and counts as carried); the scene set
+  // is still asked for in the Event Package.
   const venueName = venueLocation?.name || text(event.venue_name) || null;
-  const hasVenue = !!event.venue_location_id;
+  const venueAddress = text(event.venue_address) || null;
+  const hasVenue = !!event.venue_location_id || !!venueName;
+  const venueText = `${venueName || 'Venue'}${venueAddress ? `, ${venueAddress}` : ''}`;
   const hasSet = !!event.scene_set_id;
   const pieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
   const hasLook = pieces.length > 0 || !!event.outfit_set_id;
@@ -44,9 +51,9 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
       fix: null,
     },
     {
-      key: 'location', label: 'Location', done: hasVenue && hasSet,
+      key: 'location', label: 'Location', done: hasVenue,
       detail: hasVenue
-        ? (hasSet ? `${venueName || 'Venue'} · ${sceneSet?.name || 'scene set chosen'}` : `${venueName || 'Venue'} · no scene set yet`)
+        ? (hasSet ? `${venueText} · ${sceneSet?.name || 'scene set chosen'}` : `${venueText} · no scene set yet`)
         : 'No venue',
       fix: hasVenue && !hasSet ? 'package' : null,
     },

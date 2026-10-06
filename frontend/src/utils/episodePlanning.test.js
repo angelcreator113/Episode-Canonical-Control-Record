@@ -49,9 +49,10 @@ describe('episodePlanning', () => {
       event: { ...EVENT, scene_set_id: null, outfit_pieces: [], narrative_stakes: null, canon_consequences: { automation: { guest_profiles: [{ profile_id: 3 }] } } },
     });
     const items = byKey(p);
-    expect(p.done).toBe(1);
+    expect(p.done).toBe(2); // Event, and Location: the venue counts without its scene set
     expect(items.cast).toMatchObject({ done: false, detail: '1 invited, none featured; the script draws on the full guest list' });
-    expect(items.location).toMatchObject({ done: false, detail: 'Club Noir · no scene set yet', fix: 'package' });
+    // A venue fills Location (Evoni, 2026-10-06); the scene set is still asked for.
+    expect(items.location).toMatchObject({ done: true, detail: 'Club Noir · no scene set yet', fix: 'package' });
     expect(items.look).toMatchObject({ done: false, fix: 'wardrobe' });
     expect(items.stakes).toMatchObject({ done: false, fix: null });
   });
@@ -64,5 +65,24 @@ describe('episodePlanning', () => {
 
   test('an episode with no source event has no planning view', () => {
     expect(episodePlanning({ episode: {}, event: null })).toBeNull();
+  });
+
+  // Evoni, 2026-10-06: an episode from an event with a venue showed "No
+  // venue" when the venue had no linked World Location.
+  test('the event\'s venue (name and address) fills Location, with or without a linked location', () => {
+    const typed = { ...EVENT, venue_location_id: null, venue_name: 'The Glasshouse', venue_address: '12 Bloom St, Midtown', scene_set_id: null };
+    const p = episodePlanning({ episode: {}, event: typed });
+    expect(byKey(p).location).toMatchObject({ done: true, detail: 'The Glasshouse, 12 Bloom St, Midtown · no scene set yet', fix: 'package' });
+    expect(p.done).toBe(5);
+
+    const linked = episodePlanning({
+      episode: {}, event: { ...EVENT, venue_address: '1 Noir Ave' },
+      venueLocation: { id: 'loc-1', name: 'Club Noir' }, sceneSet: { name: 'Main Room' },
+    });
+    expect(byKey(linked).location).toMatchObject({ done: true, detail: 'Club Noir, 1 Noir Ave · Main Room', fix: null });
+
+    const none = episodePlanning({ episode: {}, event: { ...EVENT, venue_location_id: null, venue_name: '  ', scene_set_id: null } });
+    expect(byKey(none).location).toMatchObject({ done: false, detail: 'No venue', fix: null });
+    expect(none.done).toBe(4);
   });
 });
