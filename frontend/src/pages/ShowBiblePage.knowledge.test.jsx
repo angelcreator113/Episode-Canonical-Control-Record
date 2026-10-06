@@ -1,13 +1,15 @@
 /**
- * The Show Bible's Knowledge tab puts every active entry in exactly one
- * section (2026-10-04): the Show Brain seeder's JSON `section`, the source
+ * sectionOf still names the LalaVerse page an entry came from (its source
+ * chip); since 2026-10-06 the Knowledge tab groups by category ("By
+ * category": the sections left ~600 entries in Uncategorized). It put every
+ * active entry in exactly one section (2026-10-04): the Show Brain seeder's JSON `section`, the source
  * document's LalaVerse page, or Uncategorized. The old grouping read a
  * field the API never sends and then applies_to[0], which matched no
  * section, so a hundred active rules showed as ten empty sections.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SECTIONS, UNCATEGORIZED, sectionOf, summaryOf } from './showBibleSections';
 
@@ -53,22 +55,49 @@ describe('sectionOf', () => {
   });
 });
 
-describe('Show Bible: the Knowledge tab', () => {
+describe('Show Bible: the Knowledge tab, by category (2026-10-06)', () => {
+  const DOCS = [{ id: 'd1', source_name: 'Pasted document', entries_created: 1, document_text: 'Lala never breaks the fourth wall. She never winks at the camera.', created_at: '2026-10-01T00:00:00Z' }];
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn.mockReset());
     vi.mocked(api.get).mockImplementation(async (url) => (
-      url.includes('/entries') ? { data: { entries: ENTRIES, count: ENTRIES.length } } : { data: { documents: [], count: 0 } }
+      url.includes('/entries') ? { data: { entries: ENTRIES, count: ENTRIES.length } } : { data: { documents: DOCS, count: 1 } }
     ));
   });
 
-  test('section counts add up to the active count and Uncategorized holds the rest', async () => {
+  test('every active entry sits in its category, biggest first, and the counts add up', async () => {
     render(<MemoryRouter initialEntries={['/universe?tab=bible&sub=knowledge']}><ShowBiblePage embedded /></MemoryRouter>);
-    const counts = await screen.findAllByTestId(/^bible-section-count-/);
-    expect(counts).toHaveLength(SECTIONS.length);
-    const total = counts.reduce((n, el) => n + Number(el.textContent), 0);
-    expect(total).toBe(ENTRIES.filter((e) => e.status === 'active').length);
-    expect(screen.getByTestId('bible-section-count-identity').textContent).toBe('1');
-    expect(screen.getByTestId('bible-section-count-cultural_system').textContent).toBe('1');
-    expect(screen.getByTestId(`bible-section-count-${UNCATEGORIZED}`).textContent).toBe('2');
+    const counts = await screen.findAllByTestId(/^bible-category-count-/);
+    expect(counts.map((el) => el.getAttribute('data-testid'))).toEqual(['bible-category-count-franchise_law', 'bible-category-count-locked_decision', 'bible-category-count-world']);
+    expect(counts.map((el) => el.textContent)).toEqual(['4', '1', '1']);
+    expect(counts.reduce((n, el) => n + Number(el.textContent), 0)).toBe(ENTRIES.filter((e) => e.status === 'active').length);
+    // Empty categories are one line, not empty boxes.
+    expect(screen.getByTestId('bible-unfilled').textContent).toBe('Not filled yet: Characters, Narrative, Technical, Brand.');
+  });
+
+  test('an opened category shows each entry with where it came from', async () => {
+    render(<MemoryRouter initialEntries={['/universe?tab=bible&sub=knowledge']}><ShowBiblePage embedded /></MemoryRouter>);
+    fireEvent.click((await screen.findByTestId('bible-category-count-franchise_law')).closest('button'));
+    expect(screen.getByText('From Pasted document')).toBeTruthy();
+    expect(screen.getByText('Culture & Events page')).toBeTruthy();
+    expect(screen.getAllByText('Identity page').length).toBe(1);
+  });
+
+  test('a document card shows its rules and its text, and "See its rules" opens Knowledge on them', async () => {
+    render(<MemoryRouter initialEntries={['/universe?tab=bible&sub=documents']}><ShowBiblePage embedded /></MemoryRouter>);
+    const docs = await screen.findByTestId('bible-documents');
+    expect(docs.textContent).toContain('Pasted document');
+    expect(docs.textContent).toContain('1 entry extracted');
+    expect(docs.textContent).toContain('1 active');
+    fireEvent.click(screen.getByRole('button', { name: 'Read the start' }));
+    expect(docs.textContent).toContain('Lala never breaks the fourth wall.');
+    // The other sources: the LalaVerse pages and what was written here.
+    expect(screen.getByTestId('bible-sources').textContent).toContain('Written here');
+    fireEvent.click(screen.getByRole('button', { name: 'See its 1 rule →' }));
+    expect(screen.getByRole('tab', { name: /^Knowledge/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('bible-doc-filter').textContent).toContain('Pasted document');
+    expect(screen.getByText('Ingested rule')).toBeTruthy();
+    expect(screen.queryByText('Trend lifecycle')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show every source' }));
+    expect(screen.queryByTestId('bible-doc-filter')).toBeNull();
   });
 });

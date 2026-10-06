@@ -36,21 +36,25 @@ beforeEach(() => {
 describe('Show Bible: stored scope', () => {
   test('the Franchise and Show filters follow the stored scope, not the category', async () => {
     renderAt('/universe?tab=bible&sub=knowledge');
-    const uncategorized = await screen.findByTestId('bible-section-count-uncategorized');
-    expect(uncategorized.textContent).toBe('2');
-    fireEvent.click(screen.getByRole('button', { name: /Franchise/ }));
-    expect(screen.getByTestId('bible-section-count-uncategorized').textContent).toBe('1');
-    fireEvent.click(screen.getByTestId('bible-section-count-uncategorized').closest('div[style]'));
+    // Grouped by category (2026-10-06): one technical, one franchise law.
+    expect((await screen.findByTestId('bible-category-count-technical')).textContent).toBe('1');
+    expect(screen.getByTestId('bible-category-count-franchise_law').textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Franchise' }));
+    expect(screen.getByRole('button', { name: 'Franchise' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('bible-category-count-franchise_law')).toBeNull();
+    fireEvent.click(screen.getByTestId('bible-category-count-technical').closest('button'));
     expect(screen.getByText('Gold is never text')).toBeTruthy();
     expect(screen.queryByText('Lala never knows')).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: /Show · Styling Adventures with Lala/ }));
+    expect(screen.queryByTestId('bible-category-count-technical')).toBeNull();
+    fireEvent.click(screen.getByTestId('bible-category-count-franchise_law').closest('button'));
     expect(screen.getByText('Lala never knows')).toBeTruthy();
     expect(screen.queryByText('Gold is never text')).toBeNull();
   });
 
   test('a new show-scoped entry is sent with the active show id; a franchise one with none', async () => {
     renderAt('/universe?tab=bible&sub=knowledge');
-    await screen.findByTestId('bible-section-count-uncategorized');
+    await screen.findByTestId('bible-category-count-technical');
     fireEvent.click(screen.getByRole('button', { name: /New Entry/ }));
     fireEvent.change(screen.getByPlaceholderText('Entry title...'), { target: { value: 'Season 2 opens in Paris' } });
     fireEvent.change(screen.getByPlaceholderText('Entry content...'), { target: { value: 'Locked.' } });
