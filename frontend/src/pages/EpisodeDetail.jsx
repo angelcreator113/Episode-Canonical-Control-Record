@@ -180,7 +180,49 @@ const EpisodeDetail = () => {
   // (Task #2356): the brief's event (episode_briefs.event_id, §8(w) P2),
   // which GET /episodes/:id/events returns first, flagged link.anchor.
   const [sourceEvent, setSourceEvent] = useState(null);
-  const headerCompact = useScrolledPast(120);
+  // Evoni, 2026-10-06: the banner flickered between full and compact while
+  // scrolling. Compacting made the header shorter (and it animates its
+  // height), the content moved up, and the scroll fell back under the one
+  // threshold, so it expanded again. Now it compacts past 120px and expands
+  // only above 60px, and a spacer under it holds the rest of the full
+  // header's height on every frame of the animation, so the header and the
+  // spacer always measure the full height and nothing below them moves.
+  // The spacer is sized straight on the element, with no re-render while
+  // scrolling. EpisodeDetail.css turns scroll anchoring off on the page.
+  const headerCompact = useScrolledPast(120, 60);
+  const headerRef = useRef(null);
+  const spacerRef = useRef(null);
+  const headerCompactRef = useRef(headerCompact);
+  headerCompactRef.current = headerCompact;
+  const headerEpisodeId = episode?.id;
+  useEffect(() => {
+    const el = headerRef.current;
+    const spacer = spacerRef.current;
+    if (!el || !spacer || typeof ResizeObserver === 'undefined') return undefined;
+    // The full header's height, read while it is full and settled: its
+    // padding and title size animate for 0.3s (`transition: all 0.3s`) after
+    // each switch, so heights inside that window are not the full one.
+    const SETTLE_MS = 400;
+    let full = 0;
+    let wasCompact = headerCompactRef.current;
+    let switchedAt = 0;
+    const sync = () => {
+      const compact = headerCompactRef.current;
+      if (compact !== wasCompact) { wasCompact = compact; switchedAt = performance.now(); }
+      const h = el.offsetHeight;
+      if (!compact && performance.now() - switchedAt > SETTLE_MS) full = h;
+      spacer.style.height = `${Math.max(0, full - h)}px`;
+    };
+    const onEnd = (e) => { if (e.target === el) sync(); };
+    el.addEventListener('transitionend', onEnd);
+    const ro = new ResizeObserver(sync);
+    ro.observe(el, { box: 'border-box' });
+    sync();
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('transitionend', onEnd);
+    };
+  }, [headerEpisodeId]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [characterState, setCharacterState] = useState({});
 
@@ -536,7 +578,7 @@ const EpisodeDetail = () => {
     <div className="ed-page">
       {/* Simplified Header: Identity + Action */}
       {/* S9 (b): collapses to the title and navigation while scrolling. */}
-      <div className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
+      <div ref={headerRef} className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
         <div className="ed-header-left">
           <button onClick={() => navigate(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
             ← Back to Show
@@ -672,6 +714,8 @@ const EpisodeDetail = () => {
           </div>
         </div>
       </div>
+      {/* Holds the rest of the full header's height while it is compact (headerRef). */}
+      <div ref={spacerRef} className="ed-header-spacer" aria-hidden="true" data-testid="ed-header-spacer" />
 
       {/* Main Content Wrapper */}
       <div className="ed-wrap">
