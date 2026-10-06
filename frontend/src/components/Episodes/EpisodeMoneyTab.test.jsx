@@ -6,6 +6,7 @@
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
@@ -15,13 +16,14 @@ import api from '../../services/api';
 import EpisodeMoneyTab from './EpisodeMoneyTab';
 
 const EPISODE = { id: 'ep-1', show_id: 'show-1' };
+const renderTab = () => render(<MemoryRouter><EpisodeMoneyTab episode={EPISODE} showId="show-1" /></MemoryRouter>);
 
 const LINES = [
-  { key: 'appearance_fee|ev-1', label: 'Appearance fee', kind: 'income', amount: 450, signed: 450, state: 'posted', trigger: 'at Complete', payer: { who: 'brand', name: 'Maison Belle' } },
-  { key: 'deal_bonus|ev-1|slay', label: 'Bonus (SLAY)', kind: 'income', amount: 200, signed: 200, state: 'planned', trigger: 'if SLAY', conditional: true, tier: 'slay', payer: { who: 'brand', name: 'Maison Belle' } },
-  { key: 'content_fee|d-1', label: 'Content fee: One reel', kind: 'income', amount: 120, signed: 120, state: 'pending', trigger: 'on approval', payer: { who: 'brand', name: 'Maison Belle' } },
-  { key: 'event_cost|c-1', label: 'Car', kind: 'expense', amount: 60, signed: -60, state: 'planned', trigger: 'at Complete', payer: { who: 'lala', name: 'Lala' } },
-  { key: 'covered|c-2', label: 'Ticket', kind: 'expense', amount: 0, signed: 0, covered: true, covered_amount: 40, state: 'covered', trigger: null, payer: { who: 'host', name: 'Nia Vale' } },
+  { key: 'appearance_fee|ev-1', category: 'appearance_fee', label: 'Appearance fee', kind: 'income', amount: 450, signed: 450, state: 'posted', trigger: 'at Complete', payer: { who: 'brand', name: 'Maison Belle' } },
+  { key: 'deal_bonus|ev-1|slay', category: 'deal_bonus', label: 'Bonus (SLAY)', kind: 'income', amount: 200, signed: 200, state: 'planned', trigger: 'if SLAY', conditional: true, tier: 'slay', payer: { who: 'brand', name: 'Maison Belle' } },
+  { key: 'content_fee|d-1', category: 'content_fee', label: 'Content fee: One reel', kind: 'income', amount: 120, signed: 120, state: 'pending', trigger: 'on approval', payer: { who: 'brand', name: 'Maison Belle' } },
+  { key: 'event_cost|c-1', category: 'event_cost', label: 'Car', kind: 'expense', amount: 60, signed: -60, state: 'planned', trigger: 'at Complete', payer: { who: 'lala', name: 'Lala' } },
+  { key: 'covered|c-2', category: 'event_cost', label: 'Ticket', kind: 'expense', amount: 0, signed: 0, covered: true, covered_amount: 40, state: 'covered', trigger: null, payer: { who: 'host', name: 'Nia Vale' } },
 ];
 
 const money = (over = {}) => ({
@@ -50,53 +52,74 @@ describe('EpisodeMoneyTab', () => {
     vi.mocked(api.get).mockReset();
   });
 
-  test('shows the actual balance, the projected balance after the episode and the projected net (MB3)', async () => {
+  test('Earns, Spends and the Net estimate; the net is the projected net, with her balance before and after (MB3)', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: money() } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
-    expect(await screen.findByText('1,600 🪙')).toBeTruthy();
+    const earns = await screen.findByTestId('em-earns');
     expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-1/episodes/ep-1/money');
-    expect(within(screen.getByTestId('em-projected-balance')).getByText('1,660 🪙')).toBeTruthy();
+    expect(within(earns).getByText('+570')).toBeTruthy();
+    expect(earns.textContent).toContain('2 lines: Appearance fee and Content fee: One reel');
+    const spends = screen.getByTestId('em-spends');
+    expect(within(spends).getByText('−150')).toBeTruthy();
+    expect(spends.textContent).toContain('Car and Purchase: Gold Gown; Ticket is comped');
     const net = screen.getByTestId('em-net');
     expect(within(net).getByText('+420')).toBeTruthy();
-    expect(net.textContent).toContain('Posted so far: +360.');
+    expect(net.textContent).toContain('Adds up exactly the lines below');
+    expect(screen.getByTestId('em-projected-balance').textContent).toBe('Lala has 1,600 · 1,660 after this episode');
   });
 
   test('a conditional bonus is shown beside the net as "+ up to X if SLAY", never counted (Q3)', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: money() } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     const chips = await screen.findByTestId('em-conditional');
     expect(chips.textContent).toBe('+ up to 200 if SLAY');
     expect(within(screen.getByTestId('em-net')).getByText('+420')).toBeTruthy(); // not 620
+    const bonus = screen.getByTestId('em-line-deal_bonus|ev-1|slay');
+    expect(bonus.textContent).toContain('up to +200');
+    expect(bonus.textContent).toContain('If SLAY');
   });
 
-  test('each line shows its state, trigger, payer and amount; covered and unplanned lines are marked (MB1, MB2)', async () => {
+  test('every line says where it comes from, when, what it adds and its state; comped and unplanned lines are marked (MB1, MB2)', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: money() } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     const fee = await screen.findByTestId('em-line-content_fee|d-1');
     expect(fee.textContent).toContain('Content fee: One reel');
-    expect(fee.textContent).toContain('Pending');
-    expect(fee.textContent).toContain('on approval');
-    expect(fee.textContent).toContain('Paid by Maison Belle');
+    expect(fee.textContent).toContain('Deal · Paid content · Paid by Maison Belle');
+    expect(fee.textContent).toContain('On approval');
     expect(fee.textContent).toContain('+120');
+    expect(fee.textContent).toContain('Pending');
 
     const car = screen.getByTestId('em-line-event_cost|c-1');
-    expect(car.textContent).toContain('Planned');
-    expect(car.textContent).toContain('Lala pays');
+    expect(car.textContent).toContain('Event cost · Lala pays');
+    expect(car.textContent).toContain('At Complete');
     expect(car.textContent).toContain('−60');
+    expect(car.textContent).toContain('Planned');
 
     expect(screen.getByTestId('em-line-appearance_fee|ev-1').textContent).toContain('Posted');
     const ticket = screen.getByTestId('em-line-covered|c-2');
-    expect(ticket.textContent).toContain('Covered by Nia Vale (40)');
-    expect(screen.getByTestId('em-unplanned-r9').textContent).toContain('Posted, not planned');
+    expect(ticket.textContent).toContain('Event cost · comped by Nia Vale');
+    expect(ticket.textContent).toContain('Comped 40');
+    const gown = screen.getByTestId('em-unplanned-r9');
+    expect(gown.textContent).toContain('Wardrobe · bought');
+    expect(gown.textContent).toContain('Posted, not planned');
+  });
+
+  test('the deal terms note says they can be reopened while the episode is a draft, with a link to the event', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: money({ spending: null }) } });
+    renderTab();
+
+    const terms = await screen.findByTestId('em-terms');
+    expect(terms.textContent).toContain('The episode is still a draft, so they can be reopened.');
+    expect(within(terms).getByRole('link', { name: 'Open terms in the event' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-deal');
   });
 
   test('money warnings show first, with the shortfall, and block nothing (MB4)', async () => {
     const warnings = [{ code: 'COSTS_EXCEED_BALANCE', shortfall: 50, message: 'Event spending (150) is more than Lala has (100): 50 short before any income arrives.' }];
     vi.mocked(api.get).mockResolvedValue({ data: { data: money({ warnings }) } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     const banner = await screen.findByTestId('em-warnings');
     expect(banner.getAttribute('role')).toBe('alert');
@@ -106,7 +129,7 @@ describe('EpisodeMoneyTab', () => {
 
   test('no warnings, no banner', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: money({ warnings: [] }) } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
     await screen.findByTestId('em-lines');
     expect(screen.queryByTestId('em-warnings')).toBeNull();
   });
@@ -119,14 +142,14 @@ describe('EpisodeMoneyTab', () => {
       totals: { planned_net: 360, posted_net: 280, difference: -80 },
       rows: [
         { key: 'appearance_fee|ev-1', label: 'Appearance fee', planned: 450, posted: 450, difference: 0, status: 'as_planned' },
-        { key: 'deal_bonus|ev-1|slay', label: 'Bonus (SLAY)', planned: 0, planned_conditional: 200, posted: null, difference: null, status: 'not_earned', conditional: true },
+        { key: 'deal_bonus|ev-1|slay', category: 'deal_bonus', label: 'Bonus (SLAY)', planned: 0, planned_conditional: 200, posted: null, difference: null, status: 'not_earned', conditional: true },
         { key: 'event_spending|s-1', label: 'Champagne × 3', planned: -30, posted: -45, difference: -15, status: 'changed',
           draft_change: { from: { quantity: 2, unit_price: 15 }, to: { quantity: 3, unit_price: 15 } } },
-        { key: 'content_fee|d-1', label: 'Content fee: One reel', planned: 120, posted: null, difference: null, status: 'outstanding', pending: true },
+        { key: 'content_fee|d-1', category: 'content_fee', label: 'Content fee: One reel', planned: 120, posted: null, difference: null, status: 'outstanding', pending: true },
       ],
     };
     vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation }) } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     const section = await screen.findByTestId('em-reconciliation');
     expect(section.textContent).toContain('Each line as planned at Start Episode');
@@ -147,12 +170,12 @@ describe('EpisodeMoneyTab', () => {
   test('with no saved plan the reconciliation says it compares with the plan as it stands; before Complete there is none', async () => {
     const reconciliation = { basis: 'current', planned_at: null, highlighted: 0, totals: { planned_net: 0, posted_net: 0, difference: 0 }, rows: [] };
     vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation }) } });
-    const { unmount } = render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    const { unmount } = renderTab();
     expect((await screen.findByTestId('em-reconciliation')).textContent).toContain('No plan was saved at Start Episode for this episode');
     unmount();
 
     vi.mocked(api.get).mockResolvedValue({ data: { data: money({ reconciliation: null }) } });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
     await screen.findByTestId('em-lines');
     expect(screen.queryByTestId('em-reconciliation')).toBeNull();
   });
@@ -161,7 +184,7 @@ describe('EpisodeMoneyTab', () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { data: money({ event: null, lines: [], unplanned: [], projection: { ...money().projection, conditional: [] } }) },
     });
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
     expect(screen.queryByTestId('em-conditional')).toBeNull();
@@ -170,7 +193,7 @@ describe('EpisodeMoneyTab', () => {
   test('a failed load says so', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(api.get).mockRejectedValue(new Error('boom'));
-    render(<EpisodeMoneyTab episode={EPISODE} showId="show-1" />);
+    renderTab();
 
     expect(await screen.findByText(/Couldn't load this episode's money/)).toBeTruthy();
   });
