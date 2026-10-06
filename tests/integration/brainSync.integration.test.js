@@ -161,4 +161,18 @@ const PAGE = () => ({
     const ok = await auth(request(app).patch(`/api/v1/franchise-brain/entries/${legacy.id}`)).send({ content: 'Edited legacy text' });
     expect(ok.status).toBe(200);
   });
+
+  // World Setup (2026-10-06): a page synced into the Brain counts as set up.
+  test('GET sync/status reports, per page, the active cards it owns and its legacy entries', async () => {
+    const res = await auth(request(app).get('/api/v1/franchise-brain/sync/status'));
+    expect(res.status).toBe(200);
+    const own = await active();
+    const [{ legacy }] = await rows(`SELECT COUNT(*)::int AS legacy FROM franchise_knowledge
+      WHERE source_key IS NULL AND source_document = 'influencer-systems-v1.0' AND status IN ('active', 'pending_review') AND deleted_at IS NULL`);
+    expect(res.body.data.social_systems).toMatchObject({ label: expect.any(String), cards: own.length, legacy });
+    expect(own.length).toBeGreaterThan(0);
+    expect(Object.keys(res.body.data)).toEqual(expect.arrayContaining(['world_foundation', 'cultural_memory', 'social_systems']));
+    expect((await request(app).get('/api/v1/franchise-brain/sync/status')).status).toBe(401);
+  });
 });
+

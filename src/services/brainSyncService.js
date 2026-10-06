@@ -178,6 +178,32 @@ async function applySync(sequelize, source, pageData, fingerprint) {
   return { applied, preview: await previewSync(sequelize, source, pageData) };
 }
 
+/**
+ * Per page, what the Brain holds from it (World Setup, 2026-10-06: a page
+ * full of built-in content that was never synced read as "0 sections"):
+ * { [source]: { label, cards, legacy, last_synced } }. cards are the active
+ * cards the page's Brain Update owns (source_key prefix); legacy counts the
+ * older Push to Brain entries of its source document. Reads only.
+ */
+async function syncStatus(sequelize) {
+  const out = {};
+  for (const manifest of Object.values(MANIFESTS)) {
+    const prefix = `${manifest.SOURCE}:`;
+    const [[row]] = await sequelize.query(
+      `SELECT COUNT(*)::int AS cards, MAX(updated_at) AS last_synced FROM franchise_knowledge
+        WHERE source_key IS NOT NULL AND LEFT(source_key, LENGTH(:prefix)) = :prefix
+          AND status = 'active' AND deleted_at IS NULL`,
+      { replacements: { prefix } });
+    const [[{ legacy }]] = await sequelize.query(
+      `SELECT COUNT(*)::int AS legacy FROM franchise_knowledge
+        WHERE source_key IS NULL AND source_document = :doc
+          AND status IN ('active', 'pending_review') AND deleted_at IS NULL`,
+      { replacements: { doc: manifest.SOURCE_DOCUMENT } });
+    out[manifest.SOURCE] = { label: manifest.LABEL, cards: row?.cards || 0, legacy: legacy || 0, last_synced: row?.last_synced || null };
+  }
+  return out;
+}
+
 /** The source label for a source_key ('social_systems:…' → 'Social Systems'), or null. */
 function sourceLabelFor(sourceKey) {
   if (typeof sourceKey !== 'string') return null;
@@ -185,4 +211,4 @@ function sourceLabelFor(sourceKey) {
   return manifest ? manifest.LABEL : null;
 }
 
-module.exports = { MANIFESTS, SyncError, cardHash, previewSync, applySync, sourceLabelFor };
+module.exports = { MANIFESTS, SyncError, cardHash, previewSync, applySync, sourceLabelFor, syncStatus };

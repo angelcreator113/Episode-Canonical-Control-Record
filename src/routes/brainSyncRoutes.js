@@ -6,6 +6,7 @@
 //
 // POST /api/v1/franchise-brain/sync/:source/preview — what syncing this page would change (reads only)
 // POST /api/v1/franchise-brain/sync/:source/apply   — apply the reviewed sync (fingerprint from the preview)
+// GET  /api/v1/franchise-brain/sync/status          — per page, how many Brain cards it owns (reads only; World Setup)
 //
 // Body for both: { page_data } (the page's usePageData data map); apply
 // also { fingerprint }. Both require auth; preview is a POST only because
@@ -15,13 +16,22 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
-const { SyncError, previewSync, applySync } = require('../services/brainSyncService');
+const { SyncError, previewSync, applySync, syncStatus } = require('../services/brainSyncService');
 
 const fail = (res, err, what) => {
   if (err instanceof SyncError) return res.status(err.status).json({ error: err.message });
   console.error(`[BrainSync] ${what} failed:`, err);
   return res.status(500).json({ error: err.message });
 };
+
+router.get('/franchise-brain/sync/status', requireAuth, async (req, res) => {
+  try {
+    const data = await syncStatus(db.sequelize);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return fail(res, err, 'status');
+  }
+});
 
 router.post('/franchise-brain/sync/:source/preview', requireAuth, async (req, res) => {
   try {
