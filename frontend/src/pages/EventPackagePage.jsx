@@ -91,6 +91,7 @@ import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventLookRecommendations from '../components/EventPackage/EventLookRecommendations';
+import EventDocuments from '../components/EventPackage/EventDocuments';
 import EventGuestRecommendations from '../components/EventPackage/EventGuestRecommendations';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import TermsReopenPanel from '../components/EventPackage/TermsReopenPanel';
@@ -1867,8 +1868,24 @@ export default function EventPackagePage() {
           )}
         </section>
 
-        {/* 7. Behind the Scenes: the creation draft's planning notes, folded. */}
-        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} number={7} />
+        {/* 7. In-world documents (Evoni, 2026-10-06): the shopping list and
+            the career plan beside the invitation, each Draft, Edit, Redraft
+            and Approve like it. */}
+        <section id="epp-sec-documents" className="epp-section" data-testid="documents-section">
+          <div className="epp-section-header">
+            <h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2>
+          </div>
+          <EventDocuments
+            showId={showId}
+            eventId={eventId}
+            event={event}
+            outfitPieces={outfitPieces}
+            balance={moneyPreview?.balance ?? null}
+          />
+        </section>
+
+        {/* 8. Behind the Scenes: the creation draft's planning notes, folded. */}
+        <EventConceptSection event={event} dressCodeEdited={basics.dressCode.state === 'edited'} number={8} />
 
       </div>
       </div>

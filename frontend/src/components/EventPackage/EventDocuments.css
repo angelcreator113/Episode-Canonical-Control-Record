@@ -1,0 +1,166 @@
+/* EventDocuments — the Event Package's in-world documents (Evoni's Episode
+   mock, 2026-10-06): the shopping list as a handwritten note on lined pink
+   paper, the career plan as a lavender card. Colours through tokens only. */
+.evd { display: flex; flex-direction: column; gap: 12px; }
+.evd-intro { margin: 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.evd-intro a { color: var(--lala-lavender-text); font-weight: 600; }
+.evd-error { margin: 0; color: var(--danger-text); font-size: 13px; }
+.evd-muted { color: var(--lala-ink-muted); font-size: 13px; }
+.evd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.evd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+.evd .evd-title { margin: 0; font-family: var(--font-prose); font-size: 20px !important; font-weight: 600; color: var(--lala-ink); }
+.evd-from { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.evd-stage { display: flex; justify-content: center; padding: 8px 0; min-height: 220px; }
+.evd-blank {
+  align-self: center;
+  max-width: 280px;
+  padding: 18px;
+  border: 1px dashed var(--lala-lavender-line);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--lala-ink-muted);
+}
+
+/* The shopping list: lined pink paper, a red margin, tape, handwriting. */
+.evd-paper {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  padding: 22px 18px 18px 40px;
+  border-radius: 4px;
+  background-color: var(--accent-subtle);
+  background-image:
+    linear-gradient(90deg, transparent 28px, var(--accent-light) 28px, var(--accent-light) 29px, transparent 29px),
+    repeating-linear-gradient(transparent 0, transparent 29px, var(--lala-parchment-3) 29px, var(--lala-parchment-3) 30px);
+  box-shadow: 0 8px 18px rgba(44, 44, 44, 0.10);
+  font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+  color: var(--accent-dark);
+}
+.evd-tape {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 90px;
+  height: 16px;
+  transform: translateX(-50%) rotate(-2deg);
+  background: var(--lala-lavender-light);
+  opacity: 0.8;
+}
+.evd-paper-title { font-size: 26px; font-weight: 600; line-height: 30px; }
+.evd-paper-by { font-size: 17px; line-height: 30px; }
+.evd-paper-lines { list-style: none; margin: 0; padding: 0; }
+.evd-paper-lines li { display: flex; align-items: baseline; gap: 6px; font-size: 20px; line-height: 30px; }
+.evd-box {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--lala-ink);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--lala-ink);
+}
+.evd-line-text { min-width: 0; overflow-wrap: anywhere; }
+.evd-paper-lines li.is-owned .evd-line-text { text-decoration: line-through; }
+.evd-line-cost { white-space: nowrap; }
+.evd-paper-total { margin-top: 4px; font-size: 22px; font-weight: 600; line-height: 30px; }
+.evd-paper-note { font-size: 17px; line-height: 30px; }
+
+/* The career plan: a lavender card, two sections of checkboxes, a signature. */
+.evd-career {
+  width: 100%;
+  max-width: 300px;
+  padding: 18px 20px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--surface-card), var(--lala-lavender-soft));
+  color: var(--lala-ink);
+}
+.evd-career-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--lala-lavender-line); }
+.evd-career-title { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-lavender-text); }
+.evd-career-label {
+  margin: 12px 0 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lala-ink-muted);
+}
+.evd-career-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.evd-career-list li { display: flex; align-items: flex-start; gap: 8px; }
+.evd-check { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--lala-lavender-text); border-radius: 3px; }
+.evd-career-sign { margin-top: 18px; text-align: right; font-family: 'Caveat', 'Segoe Print', cursive; font-size: 19px; color: var(--accent-dark); }
+
+/* The steps under each document. */
+.evd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.evd-state { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.evd-state.is-none { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
+.evd-state.is-draft { background: var(--accent-subtle); color: var(--accent-dark); }
+.evd-state.is-approved { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.evd-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+}
+.evd-link:hover:not(:disabled) { text-decoration: underline; }
+.evd-link:disabled { opacity: 0.5; cursor: not-allowed; }
+.evd-meta { margin: 0; font-size: 12px; color: var(--lala-ink-muted); }
+.evd-spin { animation: evd-spin 1s linear infinite; }
+@keyframes evd-spin { to { transform: rotate(360deg); } }
+
+/* Edit: one input per line. */
+.evd-editor { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.evd-editor-row { display: flex; gap: 6px; }
+.evd-editor-row input, .evd-editor-row select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.evd-editor-row input { flex: 1 1 auto; }
+.evd-icon { padding: 4px 6px; border: none; background: none; color: var(--lala-ink-muted); cursor: pointer; }
+.evd-editor-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.evd-grow { flex: 1 1 auto; }
+.evd-save {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--lala-lavender);
+  color: var(--text-inverse);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.evd-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 760px) {
+  .evd-grid { grid-template-columns: minmax(0, 1fr); }
+  .evd-card { padding: 16px; }
+}

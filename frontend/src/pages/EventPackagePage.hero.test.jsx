@@ -63,7 +63,7 @@ describe('Event Package header', () => {
     expect(look.getAttribute('data-state')).not.toBe('complete'); // no outfit yet
 
     const toc = screen.getByTestId('package-toc');
-    expect([...toc.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Deal & Money', 'Story Stakes']);
+    expect([...toc.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Deal & Money', 'Story Stakes', 'In-world documents']);
     expect(within(toc).getByTestId('toc-look').className).toMatch(/state-(warning|blocking)/);
     expect(within(toc).getByTestId('toc-deal').className).toBe('state-none');
     // The old Review section is folded into the strip, under its old anchor.

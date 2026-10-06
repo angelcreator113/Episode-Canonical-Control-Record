@@ -85,6 +85,8 @@ export const PAGE_SECTIONS = [
   // Part 3: the terms and the money, the story stakes, the planning notes.
   { anchor: 'deal', label: 'Deal & Money', covers: [] },
   { anchor: 'stakes', label: 'Story Stakes', covers: ['stakes'] },
+  // The in-world documents beside the invitation (Evoni, 2026-10-06).
+  { anchor: 'documents', label: 'In-world documents', covers: [] },
   { anchor: 'concept', label: 'Behind the Scenes', covers: [], optional: true },
 ];
 
