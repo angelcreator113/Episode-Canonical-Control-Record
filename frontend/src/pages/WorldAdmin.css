@@ -851,20 +851,7 @@
   .wa-cc-people { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Closet card backdrops (Evoni, 2026-10-05: "so images are not just a png
-   file"): a pastel by the piece's slot under a soft studio glow, and a light
-   shadow under the piece, so a cut-out reads as a product photo. A photo
-   with its own background covers the glow. */
-.wa-wd-backdrop { --bd: var(--lala-parchment-2); background: radial-gradient(ellipse 70% 60% at 50% 45%, var(--surface-card) 0%, var(--bd) 72%); }
-.wa-wd-backdrop.bd-body { --bd: var(--lala-lavender-soft); }
-.wa-wd-backdrop.bd-top { --bd: var(--lala-parchment-2); }
-.wa-wd-backdrop.bd-bottom { --bd: var(--primary-subtle); }
-.wa-wd-backdrop.bd-shoes { --bd: var(--accent-subtle); }
-.wa-wd-backdrop.bd-accessories { --bd: var(--success-bg); }
-.wa-wd-backdrop.bd-jewelry { --bd: var(--warning-bg); }
-.wa-wd-backdrop.bd-perfume { --bd: var(--danger-bg); }
-.wa-wd-backdrop.bd-outerwear { --bd: var(--info-bg); }
-.wa-wd-backdrop .wa-wd-img { padding: 8%; box-sizing: border-box; filter: drop-shadow(0 10px 12px rgba(44, 44, 44, 0.18)); }
+/* Closet card backdrops: styles/wardrobe-backdrop.css. */
 
 /* A matching set as one card: its pieces side by side (two across, a 2×2
    grid for three or four), each on its own backdrop. */

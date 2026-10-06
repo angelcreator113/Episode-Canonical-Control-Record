@@ -33,7 +33,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
+import '../styles/wardrobe-backdrop.css';
 
 // ─── CONSTANTS ───
 
@@ -65,16 +66,19 @@ const SCORE_DEBOUNCE_MS = 350;
 
 function GarmentImage({ item, fallback, size, height, radius = 8 }) {
   const url = resolveWardrobeImageUrl(item);
-  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} />;
+  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} backdrop={backdropFor(item)} />;
 }
 
-function GarmentImageInner({ url, name, fallback, size, height, radius }) {
+// The piece sits on Producer Mode's closet backdrop for its slot (Evoni,
+// 2026-10-06: "the backgrounds to look the same as producer mode
+// wardrobe"; styles/wardrobe-backdrop.css).
+function GarmentImageInner({ url, name, fallback, size, height, radius, backdrop }) {
   const [failed, setFailed] = useState(false);
+  const backdropClass = `wa-wd-backdrop bd-${backdrop}`;
   const box = {
     width: size || '100%',
     height: height || size,
     borderRadius: radius,
-    background: 'var(--lala-parchment-2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -84,14 +88,15 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
   if (!url || failed) {
     const emojiSize = Math.min(40, Math.max(16, Math.round((height || size || 40) * 0.5)));
     return (
-      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} style={box}>
+      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} className={backdropClass} style={box}>
         <span style={{ fontSize: emojiSize }}>{fallback}</span>
       </div>
     );
   }
   return (
-    <div style={box}>
+    <div className={backdropClass} style={box}>
       <img
+        className="wa-wd-img"
         src={url}
         alt={name || 'Wardrobe item'}
         loading="lazy"

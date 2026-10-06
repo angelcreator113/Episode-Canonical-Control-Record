@@ -54,6 +54,7 @@ import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers } fr
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
 import './WorldAdmin.css';
+import '../styles/wardrobe-backdrop.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
 // `api` import style preserved (file already partial-migrated at line 6306).
