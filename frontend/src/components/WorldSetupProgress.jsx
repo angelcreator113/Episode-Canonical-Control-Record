@@ -25,17 +25,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
+import './WorldSetupProgress.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 export const SETUP_STEPS = [
-  { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', route: '/universe?tab=world', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
-  { num: 2, key: 'influencer', icon: '⭐', title: 'Social Systems', route: '/universe?tab=society', description: 'How influence works — archetypes, relationships, economy, trends.', feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'] },
-  { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', route: '/universe?tab=culture', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
-  { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', route: '/universe?tab=culture&sub=history', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
-  { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', route: '/universe?tab=world&sub=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
-  { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', route: '/feed?tab=people&layer=lalaverse', description: "Create Lala's social world — influencers, rivals, friends.", feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
-  { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', route: '/universe?tab=culture&sub=events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
+  { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', short: 'DREAM cities, companies, universities, legends', route: '/universe?tab=world', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
+  { num: 2, key: 'influencer', icon: '⭐', title: 'Social Systems', short: 'archetypes, relationships, economy, trends', route: '/universe?tab=society', description: 'How influence works — archetypes, relationships, economy, trends.', feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'] },
+  { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', short: 'yearly rhythm, awards, micro events', route: '/universe?tab=culture', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
+  { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', short: 'history and what people remember', route: '/universe?tab=culture&sub=history', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
+  { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', short: 'where things happen', route: '/universe?tab=world&sub=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
+  { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', short: 'the people with a voice', route: '/feed?tab=people&layer=lalaverse', description: "Create Lala's social world — influencers, rivals, friends.", feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
+  { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', short: 'the moments episodes are made from', route: '/universe?tab=culture&sub=events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
 ];
 
 // A fetch that reports "unreachable" (null) apart from "empty".
@@ -110,6 +111,21 @@ export async function checkSetup(showId) {
   return { done, counts, unreachable, details };
 }
 
+/**
+ * The first step still to do, for the "Next" banner: not done and not
+ * "could not check". Null until the checks are in, and once all are done.
+ */
+export function nextStep(result) {
+  if (!result?.done) return null;
+  const unreachable = result.unreachable || [];
+  return SETUP_STEPS.find((s) => !result.done[s.key] && !unreachable.includes(s.key)) || null;
+}
+
+/*
+ * "Build the world" (the LalaVerse mock, 2026-10-06): the seven steps as
+ * numbered circles on a dashed line, a checked circle once done, each with
+ * its one-line scope and what it holds, then a banner naming the next step.
+ */
 export default function WorldSetupProgress({ showId }) {
   const navigate = useNavigate();
   const [result, setResult] = useState(null);
@@ -125,56 +141,60 @@ export default function WorldSetupProgress({ showId }) {
   const done = status ? Object.values(status).filter(Boolean).length : 0;
   const complete = status && done === total;
   const unreachable = result?.unreachable || [];
+  const next = nextStep(result);
 
   return (
-    <section aria-labelledby="world-setup-heading" style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '16px 18px', marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <h3 id="world-setup-heading" style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>🧭 World Setup</h3>
-        <div data-testid="world-setup-count" style={{ fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: status ? (complete ? 'var(--success-text)' : 'var(--lala-gold-text)') : 'var(--text-secondary)' }}>
+    <section className="wsp" aria-labelledby="world-setup-heading">
+      <div className="wsp-head">
+        <h2 id="world-setup-heading" className="wsp-title">Build the world</h2>
+        <span className="wsp-sub">{status ? `Each step feeds the next. ${done} of ${total} done.` : 'Each step feeds the next. Checking…'}</span>
+        <div data-testid="world-setup-count" className={`wsp-count${complete ? ' is-complete' : ''}`}
+          role="progressbar" aria-label="World setup steps done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
           {status ? `${done}/${total}` : '…'}
         </div>
       </div>
-      <div role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} style={{ background: 'var(--lala-parchment-2)', borderRadius: 8, height: 8, marginBottom: 12, overflow: 'hidden' }}>
-        <div style={{ background: complete ? 'var(--success)' : 'var(--lala-gold)', height: '100%', width: `${(done / total) * 100}%`, borderRadius: 8, transition: 'width 0.3s' }} />
-      </div>
-      <div style={{ background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        <strong style={{ color: 'var(--lala-gold-text)' }}>How it connects:</strong> Foundation defines the world → Social Systems govern behavior → Culture & Events creates yearly events → Memory gives depth → Locations are where things happen → Feed profiles are the people → Events are the story moments.
-      </div>
       {unreachable.length > 0 && (
-        <div data-testid="world-setup-unreachable" style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning-text)', fontSize: 12 }}>
+        <div data-testid="world-setup-unreachable" className="wsp-unreachable">
           {unreachable.length === 1 ? 'One step could not be checked' : `${unreachable.length} steps could not be checked`} (the server did not answer). Those are not counted as done or not done.
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8 }}>
+      <ol className="wsp-steps">
         {SETUP_STEPS.map((step) => {
           const isDone = Boolean(status?.[step.key]);
           const isUnreachable = unreachable.includes(step.key);
           const n = result?.counts?.[step.key];
+          const detail = result?.details?.[step.key];
           return (
-            <button key={step.key} type="button" onClick={() => navigate(step.route)} aria-label={`Step ${step.num}: ${step.title}${isDone ? ' (done)' : isUnreachable ? ' (could not check)' : ''}`}
-              style={{ textAlign: 'left', background: isDone ? 'var(--success-bg)' : 'var(--surface-card)', border: `1px solid ${isDone ? 'var(--success-border)' : 'var(--lala-parchment-3)'}`, borderRadius: 8, padding: 12, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10, fontFamily: 'inherit' }}>
-              <div aria-hidden="true" style={{ width: 30, height: 30, borderRadius: '50%', background: isDone ? 'var(--success)' : 'var(--surface-bg)', color: isDone ? 'var(--text-inverse)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0, border: `2px solid ${isDone ? 'var(--success)' : 'var(--lala-parchment-3)'}` }}>
-                {isDone ? '✓' : step.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--lala-gold-text)' }}>STEP {step.num}</span>
-                  <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{step.title}</span>
-                  {isDone && <span style={{ fontSize: 9, padding: '2px 6px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 600 }}>DONE</span>}
-                  {isUnreachable && <span style={{ fontSize: 9, padding: '2px 6px', background: 'var(--warning-bg)', color: 'var(--warning-text)', borderRadius: 4, fontWeight: 600 }}>COULD NOT CHECK</span>}
+            <li key={step.key} className={`wsp-step wsp-tone-${step.num}${isDone ? ' is-done' : ''}`}>
+              <button type="button" className="wsp-step-btn" onClick={() => navigate(step.route)}
+                aria-label={`Step ${step.num}: ${step.title}${isDone ? ' (done)' : isUnreachable ? ' (could not check)' : ''}`}>
+                <span className="wsp-circle" aria-hidden="true">{isDone ? '✓' : step.num}</span>
+                <span className="wsp-step-text">
+                  <span className="wsp-step-title">{step.title}</span>
+                  <span className="wsp-step-short">{step.short}</span>
+                  {isUnreachable && <span className="wsp-chip-warn">Could not check</span>}
                   {result && !isUnreachable && (
-                    <span data-testid={`world-setup-count-${step.key}`} style={{ fontSize: 10, color: !isDone && result.details?.[step.key] ? 'var(--warning-text)' : 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
-                      {result.details?.[step.key] || `${n} ${COUNT_LABELS[step.key]}`}
+                    <span data-testid={`world-setup-count-${step.key}`} className={`wsp-step-count${!isDone && detail ? ' is-warn' : ''}`}>
+                      {detail || `${n} ${COUNT_LABELS[step.key]}`}
                     </span>
                   )}
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 4px', lineHeight: 1.5 }}>{step.description}</p>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--lala-gold-text)' }}>Feeds:</strong> {step.feeds.join(' · ')}</div>
-              </div>
-            </button>
+                </span>
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ol>
+      {next && (
+        <div className="wsp-next" data-testid="world-setup-next">
+          <span className="wsp-next-mark" aria-hidden="true">✦</span>
+          <div className="wsp-next-text">
+            <strong>Next: {next.title}</strong>
+            <span>{next.description} It feeds {next.feeds.join(', ')}.</span>
+          </div>
+          <button type="button" className="wsp-next-btn" onClick={() => navigate(next.route)}>Start step {next.num}</button>
+        </div>
+      )}
+      {complete && <div className="wsp-next is-complete" data-testid="world-setup-next">Every step is done: the world is set up.</div>}
     </section>
   );
 }

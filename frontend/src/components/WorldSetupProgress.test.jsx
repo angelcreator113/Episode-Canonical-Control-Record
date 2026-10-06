@@ -18,7 +18,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldSetupProgress, { SETUP_STEPS, checkSetup } from './WorldSetupProgress';
+import WorldSetupProgress, { SETUP_STEPS, checkSetup, nextStep } from './WorldSetupProgress';
 
 const Where = () => { const l = useLocation(); return <div data-testid="where">{l.pathname}{l.search}</div>; };
 // The section is rendered at /overview so a step's /universe target lands on Where.
@@ -72,8 +72,21 @@ describe('WorldSetupProgress', () => {
     expect(screen.getByRole('button', { name: 'Step 6: Generate Feed (done)' })).toBeTruthy();
     expect(screen.getByTestId('world-setup-count-feed').textContent).toBe('42 profiles');
     expect(screen.getByTestId('world-setup-count-events').textContent).toBe('1 draft events');
-    expect(screen.getAllByText('DONE')).toHaveLength(5);
+    // Done steps are checked circles (the mock, 2026-10-06); open ones show their number.
+    expect(screen.getAllByRole('button', { name: /\(done\)$/ })).toHaveLength(5);
+    expect(screen.getAllByText('✓')).toHaveLength(5);
     expect(screen.queryByTestId('world-setup-unreachable')).toBeNull();
+    // The banner names the first step still to do.
+    expect(screen.getByTestId('world-setup-next').textContent).toContain('Next: Social Systems');
+  });
+
+  test('"Start step N" opens the first open step; with every step done it says so', async () => {
+    renderIt('show-b');
+    fireEvent.click(await screen.findByRole('button', { name: 'Start step 2' }));
+    expect(screen.getByTestId('where').textContent).toBe('/universe?tab=society');
+    expect(nextStep({ done: Object.fromEntries(SETUP_STEPS.map((s) => [s.key, true])), unreachable: [] })).toBeNull();
+    expect(nextStep({ done: { infrastructure: false }, unreachable: ['infrastructure'] })?.key).toBe('influencer');
+    expect(nextStep(null)).toBeNull();
   });
 
   test('a step opens its hub tab', async () => {
@@ -88,7 +101,7 @@ describe('WorldSetupProgress', () => {
     renderIt('show-b');
     await screen.findByRole('button', { name: 'Step 5: Locations & Venues (could not check)' });
     expect(screen.getByTestId('world-setup-unreachable').textContent).toContain('One step could not be checked');
-    expect(screen.getByText('COULD NOT CHECK')).toBeTruthy();
+    expect(screen.getByText('Could not check')).toBeTruthy();
     expect(screen.queryByTestId('world-setup-count-locations')).toBeNull();
     expect(screen.getByTestId('world-setup-count').textContent).toBe('4/7');
     spy.mockRestore();

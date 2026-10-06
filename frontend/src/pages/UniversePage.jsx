@@ -6,23 +6,29 @@
  * knowledge, decisions, documents, guard), World (the DREAM map and
  * locations), Society (archetypes, legends, rules, trends), Culture (the
  * calendar, awards and media, history) and State (snapshots, timeline,
- * tensions). The Overview carries the world's setup progress. Every tab
- * opens with a three-line orientation strip (components/TabOrientation,
- * copy in lalaverseOrientation.js): what it holds, what reads it, what to
- * do here. Each tab mounts its page in embedded mode; `?tab=`
- * names the tab and `?sub=` the page's own tab (utils/worldRedirects.js).
- * The Sidebar's LalaVerse row opens the hub; the Bible is its Bible tab
- * (the Sidebar's own Show Bible row is gone, 2026-10-04).
+ * tensions). Each tab mounts its page in embedded mode; `?tab=` names the
+ * tab and `?sub=` the page's own tab (utils/worldRedirects.js). The
+ * Sidebar's LalaVerse row opens the hub; the Bible is its Bible tab.
+ *
+ * To Evoni's mock (Lalas_Social_Media_Page_3, 2026-10-06): the tabs are
+ * six colored cards, and every tab opens on a banner in its color (kicker,
+ * title, one line). The three-line orientation strip (components/
+ * TabOrientation, copy in lalaverseOrientation.js) stays under the banner,
+ * dismissable per tab. The Overview is four tiles that open where the
+ * work is, "Build the world" (components/WorldSetupProgress), what the
+ * world is handing you and what happened lately (lib/lalaverseOverview.js),
+ * each from real data or an honest empty line.
  *
  * No hardcoded universe ID: it loads the active show (useActiveShow,
  * audit CTX-01) and asks which show when several exist and none is active.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../lib/closetGrouping';
+import { worldIdeas, latelyItems } from '../lib/lalaverseOverview';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 import ShowBiblePage from './ShowBiblePage';
@@ -33,51 +39,56 @@ import WorldDashboard from './WorldDashboard';
 import WorldSetupProgress from '../components/WorldSetupProgress';
 import TabOrientation from '../components/TabOrientation';
 import { ORIENTATION } from './lalaverseOrientation';
+import './LalaVerseHub.css';
 
 export const HUB_TABS = [
   { key: 'overview', label: 'Overview', desc: 'The world at a glance' },
-  { key: 'bible', label: 'Show Bible', desc: 'Canon, decisions, guard' },
-  { key: 'world', label: 'World', desc: 'Map, locations' },
-  { key: 'society', label: 'Society', desc: 'Archetypes, legends, trends' },
-  { key: 'culture', label: 'Culture', desc: 'Calendar, awards, history' },
-  { key: 'state', label: 'State', desc: 'Snapshots, timeline, tensions' },
+  { key: 'bible', label: 'Show Bible', desc: 'Canon, decisions, guard',
+    title: 'The rules of the world', line: 'What is always true, what you decided and when, and anything that breaks the rules.' },
+  { key: 'world', label: 'World', desc: 'Map, cities, venues',
+    title: 'The five DREAM cities', line: 'The cities, their places, companies and people. Everything an event needs a location for starts here.' },
+  { key: 'society', label: 'Society', desc: 'Archetypes, legends, trends',
+    title: 'How influence works', line: 'Who people are, how they rise, and what everyone is talking about this season.' },
+  { key: 'culture', label: 'Culture', desc: 'Calendar, awards, history',
+    title: 'The yearly rhythm', line: 'What happens when, in every season: the calendar, the awards and the history the world remembers.' },
+  { key: 'state', label: 'State', desc: 'Snapshots, timeline, tensions',
+    title: 'How the world is right now', line: 'Snapshots after each episode, a timeline of what changed, and the tensions that could become stories.' },
 ];
 
-// The tabs never shrink: the strip scrolls sideways instead. On touch screens
-// styles/responsive.css gives every button min-width: 44px, which replaces
-// the flex default (min-width: auto) and let the tabs squeeze to 44px, so
-// their one-line descriptions ran into each other.
-const tabStyle = (active) => ({
-  padding: '10px 16px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Mono', monospace",
-  flexShrink: 0, whiteSpace: 'nowrap',
-  background: active ? 'var(--primary)' : 'transparent',
-  color: active ? 'var(--text-inverse)' : 'var(--text-secondary)',
-  border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
-  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-});
+/** The banner every tab opens on, in the tab's color. */
+function HubBanner({ tab, title, line }) {
+  const label = HUB_TABS.find((t) => t.key === tab)?.label;
+  return (
+    <header className={`lvh-banner lvh-tone-${tab}`} data-testid="lalaverse-banner">
+      <div className="lvh-kicker">The LalaVerse · {label}</div>
+      <h1 className="lvh-banner-title">{title}</h1>
+      {line && <p className="lvh-banner-line">{line}</p>}
+      <span className="lvh-banner-mark" aria-hidden="true">✦</span>
+    </header>
+  );
+}
 
 export default function UniversePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const wanted = searchParams.get('tab');
   const tab = HUB_TABS.some((t) => t.key === wanted) ? wanted : 'overview';
+  const current = HUB_TABS.find((t) => t.key === tab);
   const switchTab = (key) => setSearchParams({ tab: key });
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--lala-gold-text)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-        The LalaVerse
-      </div>
-      <div role="tablist" aria-label="LalaVerse" style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--lala-parchment-3)', overflowX: 'auto' }}>
+    <div className="lvh">
+      <div role="tablist" aria-label="LalaVerse" className="lvh-tabs">
         {HUB_TABS.map((t) => (
-          <button key={t.key} id={`lalaverse-tab-${t.key}`} role="tab" aria-selected={tab === t.key} aria-current={tab === t.key ? 'page' : undefined}
-            onClick={() => switchTab(t.key)} style={tabStyle(tab === t.key)}>
-            <span>{t.label}</span>
-            <span style={{ fontSize: 10, fontWeight: 400, whiteSpace: 'nowrap' }}>{t.desc}</span>
+          <button key={t.key} type="button" id={`lalaverse-tab-${t.key}`} role="tab" aria-selected={tab === t.key} aria-current={tab === t.key ? 'page' : undefined}
+            onClick={() => switchTab(t.key)} className={`lvh-tab lvh-tone-${t.key}${tab === t.key ? ' is-active' : ''}`}>
+            <span className="lvh-tab-label"><span className="lvh-dot" aria-hidden="true" />{t.label}</span>
+            <span className="lvh-tab-desc">{t.desc}</span>
           </button>
         ))}
       </div>
       <div role="tabpanel" aria-labelledby={`lalaverse-tab-${tab}`}>
-        <TabOrientation key={tab} id={tab} {...ORIENTATION[tab]} />
+        {tab !== 'overview' && <HubBanner tab={tab} title={current.title} line={current.line} />}
+        {tab !== 'overview' && <TabOrientation key={tab} id={tab} {...ORIENTATION[tab]} />}
         {tab === 'overview' && <Overview />}
         {tab === 'bible' && <ShowBiblePage embedded />}
         {tab === 'world' && <WorldFoundation embedded />}
@@ -89,110 +100,102 @@ export default function UniversePage() {
   );
 }
 
-/** The active show's world at a glance: stats, production, world context, series and books. */
+const IDEA_TONE = { culture: 'culture', society: 'society', state: 'state' };
+
+/** The active show's world at a glance: tiles, setup, ideas, lately. */
 function Overview() {
   // Audit CTX-01 (2026-10-03): the active show, never the first one the
   // API returned; with several and none active, Evoni chooses.
   const { shows, show, loaded, failed, needsChoice, choose } = useActiveShow();
-  const [stats, setStats] = useState(null);
-  // The show the stats were loaded for. The content shows only once the stats
-  // are in for the current show, whatever order the hook's and this page's
+  const [data, setData] = useState(null);
+  // The show the data was loaded for. The content shows only once the data
+  // is in for the current show, whatever order the hook's and this page's
   // state updates land in; a loading flag flipped by the previous show (or
   // by "no show yet") let the content render once, hide behind the loader,
   // then swap back, remounting the setup section and refiring its checks.
-  const [statsFor, setStatsFor] = useState(null);
-  const [universe, setUniverse] = useState(null);
-  const [series, setSeries] = useState([]);
-  const [books, setBooks] = useState([]);
+  const [dataFor, setDataFor] = useState(null);
 
   const load = useCallback(async () => {
-    if (!show) { setStats(null); return; }
+    if (!show) { setData(null); return; }
     try {
-      // Load stats in parallel
-      const [eventsRes, wardrobeRes, episodesRes, overlaysRes, charsRes, booksRes] = await Promise.allSettled([
-        api.get(`/api/v1/world/${show.id}/events?limit=100`),
+      const [eventsRes, wardrobeRes, episodesRes, charsRes, calendarRes, trendingRes, tensionRes] = await Promise.allSettled([
+        api.get(`/api/v1/world/${show.id}/events`),
         // Every piece and episode, not the first 500 and 100 (lib/fetchAllPages).
         fetchClosetWithTotal(api, show.id),
         fetchAllEpisodes(api, show.id),
-        api.get(`/api/v1/ui-overlays/${show.id}`),
-        api.get('/api/v1/character-registry/registries?limit=50').catch(() => ({ data: {} })),
-        api.get('/api/v1/storyteller/books').catch(() => ({ data: {} })),
+        api.get('/api/v1/character-registry/registries?limit=50'),
+        api.get('/api/v1/calendar/events?event_type=lalaverse_cultural'),
+        api.get(`/api/v1/feed-enhanced/${show.id}/trending`),
+        api.get('/api/v1/world/tension-scanner'),
       ]);
+      const ok = (r) => r.status === 'fulfilled';
+      for (const [name, r] of [['events', eventsRes], ['closet', wardrobeRes], ['episodes', episodesRes], ['registries', charsRes], ['calendar', calendarRes], ['trending', trendingRes], ['tensions', tensionRes]]) {
+        if (!ok(r)) console.error(`[LalaVerse] the ${name} could not be read:`, r.reason?.response?.status || r.reason?.message);
+      }
 
-      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
-      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.items || []) : [];
-      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.items || []) : [];
-      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
-      const registries = charsRes.status === 'fulfilled' ? (charsRes.value.data?.registries || []) : [];
-      const characters = registries.flatMap(r => r.characters || []);
-      const booksData = booksRes.status === 'fulfilled' ? (booksRes.value.data?.books || []) : [];
+      const events = ok(eventsRes) ? (eventsRes.value.data?.events || []) : [];
+      const episodes = ok(episodesRes) ? (episodesRes.value.items || []) : [];
+      const registries = ok(charsRes) ? (charsRes.value.data?.registries || []) : [];
+      const tensionBody = ok(tensionRes) ? tensionRes.value.data : null;
+      const ideaFailures = [
+        !ok(calendarRes) && 'culture',
+        !ok(trendingRes) && 'society',
+        (!tensionBody || tensionBody.status === 'scan_failed') && 'state',
+      ].filter(Boolean);
 
-      setBooks(booksData);
-
-      setStats({
-        events: events.length,
-        wardrobe: wardrobe.length,
-        episodes: Array.isArray(episodes) ? episodes.length : 0,
-        overlays: overlays.filter(o => o.generated || o.url || o.asset_id).length,
-        overlaysTotal: overlays.length,
-        characters: Array.isArray(characters) ? characters.length : 0,
-        books: booksData.length,
-        wardrobeValue: wardrobe.reduce((s, w) => s + (parseFloat(w.price) || 0), 0),
-        completed: (Array.isArray(episodes) ? episodes : []).filter(e => e.evaluation_status === 'accepted').length,
+      setData({
+        counts: {
+          episodes: ok(episodesRes) ? episodes.length : null,
+          events: ok(eventsRes) ? events.length : null,
+          characters: ok(charsRes) ? registries.flatMap((r) => r.characters || []).length : null,
+          wardrobe: ok(wardrobeRes) ? (wardrobeRes.value.items || []).length : null,
+        },
+        ideas: worldIdeas({
+          calendarEvents: ok(calendarRes) ? calendarRes.value.data?.events : [],
+          trending: ok(trendingRes) ? trendingRes.value.data?.data : [],
+          tensions: tensionBody?.pairs || [],
+          showId: show.id,
+          failed: ideaFailures,
+        }),
+        lately: latelyItems({ episodes, events }),
       });
-
-      // Try loading universe from show's universe_id (or first available)
-      try {
-        const universeId = show.universe_id;
-        if (universeId) {
-          const uRes = await api.get(`/api/v1/universe/${universeId}`);
-          setUniverse(uRes.data?.universe || null);
-          const sRes = await api.get(`/api/v1/universe/series?universe_id=${universeId}`);
-          setSeries(sRes.data?.series || []);
-        }
-      } catch { /* universe not seeded — that's fine */ }
-
     } catch (err) {
       console.error('UniversePage load error:', err);
     } finally {
-      setStatsFor(String(show.id));
+      setDataFor(String(show.id));
     }
   }, [show]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (!loaded || (show && statsFor !== String(show.id))) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading LalaVerse...</div>;
+  if (!loaded || (show && dataFor !== String(show.id))) return <div className="lvh-loading">Loading LalaVerse...</div>;
   if (needsChoice) return <ShowChooser shows={shows} onChoose={choose} purpose="to open its LalaVerse overview" />;
+
+  const producer = (sub) => (show ? `/shows/${show.id}/world?tab=${sub}` : '/universe');
+  const counts = data?.counts || {};
+  const tiles = [
+    { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open Season Plan', to: producer('season'), tone: 'overview' },
+    { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: producer('events'), tone: 'culture' },
+    { key: 'characters', label: 'Characters', value: counts.characters, note: 'across every registry', link: 'Open Character Registry', to: '/character-registry', tone: 'society' },
+    { key: 'wardrobe', label: 'Wardrobe', value: counts.wardrobe, link: 'Open Full Closet', to: producer('wardrobe-items'), tone: 'world' },
+  ];
 
   return (
     <div>
-      {failed && <div role="alert" style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', fontSize: 13 }}>The shows could not be loaded, so this overview has no show to describe.</div>}
-      {/* Hero */}
-      <div style={{ background: 'var(--lala-parchment-2)', borderRadius: 12, padding: '24px 28px', marginBottom: 16, border: '1px solid var(--lala-gold-line)' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--lala-gold-text)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-          {universe?.name || 'The LalaVerse'}
-        </div>
-        <h1 style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {show?.name || 'Styling Adventures with Lala'}
-        </h1>
-        <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          {show?.description || universe?.description || 'A narrative-driven luxury fashion life simulator. Fashion is strategy. Reputation is currency. Legacy is built episode by episode.'}
-        </p>
-      </div>
+      {failed && <div role="alert" className="lvh-alert">The shows could not be loaded, so this overview has no show to describe.</div>}
+      <HubBanner tab="overview" title={show?.name || 'Styling Adventures with Lala'}
+        line={show?.description || 'No description for this show yet. Add one in the show’s settings.'} />
+      <TabOrientation id="overview" {...ORIENTATION.overview} />
 
-      {/* Stats Grid */}
-      {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 16 }}>
-          {[
-            { label: 'Episodes', value: stats.episodes, icon: '📺', color: 'var(--primary-text)' },
-            { label: 'Events', value: stats.events, icon: '💌', color: 'var(--warning-text)' },
-            { label: 'Characters', value: stats.characters, icon: '👥', color: 'var(--accent-dark)' },
-            { label: 'Wardrobe', value: stats.wardrobe, icon: '👗', color: 'var(--lala-gold-text)' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{s.icon} {s.label}</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
-            </div>
+      {data && (
+        <div className="lvh-tiles">
+          {tiles.map((t) => (
+            <Link key={t.key} to={t.to} className={`lvh-tile lvh-tone-${t.tone}`} data-testid={`lalaverse-tile-${t.key}`}>
+              <span className="lvh-tile-label">{t.label}{t.note && <span className="lvh-tile-note"> · {t.note}</span>}</span>
+              <span className="lvh-tile-value">{t.value == null ? '—' : t.value.toLocaleString()}</span>
+              {t.value == null && <span className="lvh-tile-note">Could not be counted just now</span>}
+              <span className="lvh-tile-link">{t.link} →</span>
+            </Link>
           ))}
         </div>
       )}
@@ -200,78 +203,45 @@ function Overview() {
       {/* World setup: the seven steps and which are done (was World Dashboard's Setup Progress tab) */}
       <WorldSetupProgress showId={show?.id} />
 
-      {/* Two columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>
-        {/* Production Overview */}
-        <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>🎬 Production</h3>
-          {[
-            { label: 'Episodes Created', value: stats?.episodes || 0 },
-            { label: 'Episodes Completed', value: stats?.completed || 0 },
-            { label: "Lala's Phone", value: `${stats?.overlays || 0}/${stats?.overlaysTotal || 0}` },
-            { label: 'Wardrobe Value', value: `$${(stats?.wardrobeValue || 0).toLocaleString()}` },
-          ].map(row => (
-            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.value}</span>
+      {data && (
+        <div className="lvh-columns">
+          <section className="lvh-card" aria-labelledby="lvh-ideas-heading">
+            <div className="lvh-card-head">
+              <h2 id="lvh-ideas-heading" className="lvh-card-title">What the world is handing you</h2>
+              <span className="lvh-card-sub">Ideas from the calendar, the Feed and the tensions</span>
             </div>
-          ))}
-        </div>
+            <ul className="lvh-ideas">
+              {data.ideas.map((idea) => (
+                <li key={idea.key} className={`lvh-idea lvh-tone-${IDEA_TONE[idea.key]}${idea.empty ? ' is-empty' : ''}`} data-testid={`lalaverse-idea-${idea.key}`}>
+                  <span className="lvh-idea-from">{idea.from}</span>
+                  <span className="lvh-idea-text">
+                    {idea.empty || idea.text}
+                    {idea.detail && <span className="lvh-idea-detail"> · {idea.detail}</span>}
+                  </span>
+                  {!idea.empty && <Link className="lvh-idea-action" to={idea.to}>{idea.action} →</Link>}
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        {/* World Context */}
-        <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>🌍 World</h3>
-          {universe ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {universe.core_themes?.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Core Themes</div>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {universe.core_themes.map(t => (
-                      <span key={t} style={{ padding: '2px 8px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 6, fontSize: 11, color: 'var(--lala-gold-text)' }}>{t}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {universe.pnos_beliefs && (
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Story Laws</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{universe.pnos_beliefs.slice(0, 200)}...</div>
-                </div>
-              )}
+          <section className="lvh-card" aria-labelledby="lvh-lately-heading">
+            <div className="lvh-card-head">
+              <h2 id="lvh-lately-heading" className="lvh-card-title">Lately in the LalaVerse</h2>
             </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              Universe not configured yet. World rules are managed in the Show Bible.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Series & Books */}
-      {(series.length > 0 || books.length > 0) && (
-        <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '16px 18px', marginBottom: 16 }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>📚 Series & Books</h3>
-          {series.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Series ({series.length})</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {series.map(s => (
-                  <span key={s.id} style={{ padding: '4px 12px', background: 'var(--lala-parchment-2)', borderRadius: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+            {data.lately.length ? (
+              <ul className="lvh-lately" data-testid="lalaverse-lately">
+                {data.lately.map((item) => (
+                  <li key={item.key} className={`lvh-lately-item is-${item.kind}`}>
+                    <span className="lvh-dot" aria-hidden="true" />
+                    <span><strong>{item.name}</strong> {item.verb}</span>
+                  </li>
                 ))}
-              </div>
-            </div>
-          )}
-          {books.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Books ({books.length})</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {books.map(b => (
-                  <span key={b.id} style={{ padding: '4px 12px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 12, color: 'var(--lala-gold-text)' }}>{b.title}</span>
-                ))}
-              </div>
-            </div>
-          )}
+              </ul>
+            ) : (
+              <p className="lvh-empty" data-testid="lalaverse-lately">No episodes or events yet.</p>
+            )}
+            <p className="lvh-footnote">From the dates episodes and events were made; the world keeps no activity log yet.</p>
+          </section>
         </div>
       )}
     </div>

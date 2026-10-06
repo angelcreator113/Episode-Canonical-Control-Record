@@ -1,0 +1,111 @@
+/* LalaVerseHub.css — the LalaVerse hub (pages/UniversePage.jsx), to Evoni's
+   mock (Lalas_Social_Media_Page_3, 2026-10-06): six colored tab cards, a
+   banner per tab in its color, and the Overview's tiles, ideas and lately.
+   Tokens only. Each tone sets four variables: --tone-soft (a wash),
+   --tone-line (a border), --tone-text (text on the wash and on white,
+   4.5:1 or better, measured in UniversePage.tabs.test.js) and --tone-dot. */
+
+.lvh { max-width: 1200px; margin: 0 auto; padding: 16px 24px 32px; }
+
+.lvh-tone-overview { --tone-soft: var(--lala-lavender-soft); --tone-line: var(--lala-lavender-line); --tone-text: var(--lala-lavender-text); --tone-dot: var(--lala-lavender); }
+.lvh-tone-bible    { --tone-soft: var(--lala-gold-soft);     --tone-line: var(--lala-gold-line);     --tone-text: var(--lala-gold-text);     --tone-dot: var(--lala-gold); }
+.lvh-tone-world    { --tone-soft: var(--success-bg);         --tone-line: var(--success-border);     --tone-text: var(--success-text);       --tone-dot: var(--success-text); }
+.lvh-tone-society  { --tone-soft: var(--danger-bg);          --tone-line: var(--danger-border);      --tone-text: var(--danger-text);        --tone-dot: var(--danger); }
+.lvh-tone-culture  { --tone-soft: var(--accent-subtle);      --tone-line: var(--accent-light);       --tone-text: var(--accent-dark);        --tone-dot: var(--accent); }
+.lvh-tone-state    { --tone-soft: var(--info-bg);            --tone-line: var(--info-border);        --tone-text: var(--info-text);          --tone-dot: var(--info); }
+
+.lvh-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--tone-dot, var(--lala-lavender)); flex-shrink: 0; }
+
+/* ── Tab cards ── */
+.lvh-tabs {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px;
+  margin-bottom: 16px; padding: 2px 2px 8px;
+}
+.lvh-tab {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  min-height: 44px; min-width: 0; padding: 10px 14px; text-align: left; cursor: pointer;
+  background: var(--surface-card); border: 1.5px solid var(--tone-line); border-radius: 14px;
+  font-family: inherit; color: var(--text-primary);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.lvh-tab:hover { background: var(--tone-soft); }
+.lvh-tab.is-active {
+  background: var(--tone-soft); border: 2px solid var(--tone-text);
+  transform: translateY(-2px); box-shadow: 0 4px 0 var(--tone-line);
+}
+.lvh-tab-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; color: var(--tone-text); white-space: nowrap; }
+.lvh-tab-desc { font-size: 11px; line-height: 1.35; color: var(--text-secondary); }
+
+/* ── Banner ── */
+.lvh-banner {
+  position: relative; overflow: hidden;
+  background: var(--tone-soft); border: 1.5px solid var(--tone-line); border-radius: 20px;
+  padding: 26px 32px; margin-bottom: 16px;
+}
+.lvh-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tone-text); margin-bottom: 6px; }
+.lvh-banner-title { margin: 0 0 6px; font-size: 32px; line-height: 1.15; font-weight: 800; color: var(--text-primary); overflow-wrap: anywhere; }
+.lvh-banner-line { margin: 0; max-width: 780px; font-size: 15px; line-height: 1.5; color: var(--text-secondary); }
+.lvh-banner-mark { position: absolute; top: 18px; right: 28px; font-size: 22px; color: var(--tone-text); }
+
+/* ── Overview ── */
+.lvh-loading { padding: 40px; text-align: center; color: var(--text-secondary); }
+.lvh-alert { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; background: var(--accent-subtle); border: 1px solid var(--accent); font-size: 13px; }
+
+.lvh-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.lvh-tile {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 44px;
+  padding: 18px 20px; border-radius: 18px; background: var(--tone-soft); border: 1px solid var(--tone-line);
+  color: var(--tone-text); text-decoration: none;
+}
+.lvh-tile:hover, .lvh-tile:focus-visible { border-color: var(--tone-text); }
+.lvh-tile-label { font-size: 14px; font-weight: 700; }
+.lvh-tile-note { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+.lvh-tile-value { font-size: 36px; line-height: 1.1; font-weight: 800; }
+.lvh-tile-link { font-size: 12px; font-weight: 700; }
+
+.lvh-columns { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.lvh-card { background: var(--surface-card); border: 1px solid var(--lala-lavender-line); border-radius: 16px; padding: 20px 22px; min-width: 0; }
+.lvh-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.lvh-card-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.lvh-card-sub { font-size: 13px; color: var(--text-secondary); }
+
+.lvh-ideas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lvh-idea {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 14px; background: var(--tone-soft); color: var(--tone-text);
+}
+.lvh-idea-from { padding: 3px 10px; border-radius: 999px; background: var(--surface-card); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.lvh-idea-text { flex: 1; min-width: 160px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.lvh-idea.is-empty .lvh-idea-text { font-weight: 500; color: var(--text-secondary); }
+.lvh-idea-detail { font-weight: 500; }
+.lvh-idea-action { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 700; color: var(--tone-text); text-decoration: none; white-space: nowrap; }
+.lvh-idea-action:hover { text-decoration: underline; }
+
+.lvh-lately { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lvh-lately-item { display: flex; align-items: baseline; gap: 10px; font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.lvh-lately-item.is-episode { --tone-dot: var(--lala-lavender); }
+.lvh-lately-item.is-event { --tone-dot: var(--accent); }
+.lvh-empty { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.lvh-footnote { margin: 12px 0 0; font-size: 11px; color: var(--text-secondary); }
+
+/* ── Narrow screens ── */
+@media (max-width: 900px) {
+  .lvh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lvh-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .lvh { padding: 12px 16px 24px; }
+  /* The cards never shrink: the strip scrolls sideways (on touch screens
+     styles/responsive.css gives every button min-width: 44px, which would
+     otherwise let a card squeeze until its words ran into each other). */
+  .lvh-tabs { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
+  .lvh-tab { flex-shrink: 0; width: 168px; scroll-snap-align: start; }
+  .lvh-tab-desc { white-space: nowrap; }
+  .lvh-banner { padding: 20px; border-radius: 16px; }
+  .lvh-banner-title { font-size: 26px; padding-right: 24px; }
+  .lvh-tile { padding: 14px 16px; }
+  .lvh-tile-value { font-size: 30px; }
+  .lvh-card { padding: 16px; }
+  .lvh-idea { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .lvh-idea-action { min-height: 44px; }
+}
