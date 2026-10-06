@@ -43,7 +43,7 @@ describe('lookBuilder', () => {
   test('the rows: worn pieces, then the slots still worth picking', () => {
     const rows = lookRows(toggleInLook({}, dress, lala));
     expect(rows.map((r) => [r.slot, r.item?.id || null])).toEqual([
-      ['body', 'd'], ['shoes', null], ['accessories', null], ['jewelry', null], ['perfume', null],
+      ['body', 'd'], ['outerwear', null], ['shoes', null], ['accessories', null], ['jewelry', null], ['perfume', null],
     ]);
     const split = lookRows(toggleInLook({}, top, lala)).map((r) => [r.slot, r.item?.id || null]);
     expect(split.slice(0, 2)).toEqual([['top', 't'], ['bottom', null]]);

@@ -33,7 +33,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
+import '../styles/wardrobe-backdrop.css';
 
 // ─── CONSTANTS ───
 
@@ -52,7 +53,7 @@ const ROLE_STYLES = {
   risky: { bg: 'var(--danger-bg)', border: 'var(--danger-border)', label: '⚡ Risky', color: 'var(--danger-text)' },
   locked_tease: { bg: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)', label: '🔒 Locked', color: 'var(--lala-ink-muted)' },
 };
-const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
+const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', outerwear: '🧥', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
 
 // How long the draft score waits after the last slot change before asking
 // the server (Task #1943).
@@ -65,16 +66,19 @@ const SCORE_DEBOUNCE_MS = 350;
 
 function GarmentImage({ item, fallback, size, height, radius = 8 }) {
   const url = resolveWardrobeImageUrl(item);
-  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} />;
+  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} backdrop={backdropFor(item)} />;
 }
 
-function GarmentImageInner({ url, name, fallback, size, height, radius }) {
+// The piece sits on Producer Mode's closet backdrop for its slot (Evoni,
+// 2026-10-06: "the backgrounds to look the same as producer mode
+// wardrobe"; styles/wardrobe-backdrop.css).
+function GarmentImageInner({ url, name, fallback, size, height, radius, backdrop }) {
   const [failed, setFailed] = useState(false);
+  const backdropClass = `wa-wd-backdrop bd-${backdrop}`;
   const box = {
     width: size || '100%',
     height: height || size,
     borderRadius: radius,
-    background: 'var(--lala-parchment-2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -84,14 +88,15 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
   if (!url || failed) {
     const emojiSize = Math.min(40, Math.max(16, Math.round((height || size || 40) * 0.5)));
     return (
-      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} style={box}>
+      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} className={backdropClass} style={box}>
         <span style={{ fontSize: emojiSize }}>{fallback}</span>
       </div>
     );
   }
   return (
-    <div style={box}>
+    <div className={backdropClass} style={box}>
       <img
+        className="wa-wd-img"
         src={url}
         alt={name || 'Wardrobe item'}
         loading="lazy"
@@ -438,7 +443,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   // ─── v3: Browse items based on mode ───
   const filteredBrowseItems = useMemo(() => {
     // Task #2377: the Other tab holds every item no game slot accepts
-    // (outerwear, unknown or missing category) so none vanish.
+    // (an unknown or missing category) so none vanish.
     if (activeSlot === SETS_GROUP.key) return []; // W1: the Sets group lists sets, not pieces
     const inSlot = activeSlot === ALL_GROUP.key
       ? () => true

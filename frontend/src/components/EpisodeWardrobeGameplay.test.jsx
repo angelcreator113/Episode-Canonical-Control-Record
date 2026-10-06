@@ -568,7 +568,7 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
   const EXPECT = [
     ['Top', 'Closet Blouse'], ['Bottom', 'Closet Trousers'], ['Bottom', 'Closet Mini Skirt'],
     ['Shoes', 'Closet Pumps'], ['Accessories', 'Closet Scarf'], ['Jewelry', 'Closet Pearls'],
-    ['Perfume', 'Closet Scent'], ['Other', 'Closet Trench'], ['Other', 'Closet Mystery'],
+    ['Perfume', 'Closet Scent'], ['Outerwear', 'Closet Trench'], ['Other', 'Closet Mystery'],
   ];
 
   test('pages past 200 items and shows every category, bottoms and Other included', async () => {
@@ -592,7 +592,8 @@ describe('EpisodeWardrobeGameplay — Full Closet categories (Task #2377)', () =
     expect(screen.getByTestId('closet-category-k-odd').textContent).toBe('costume piece · Other');
     expect(screen.getByTestId('closet-category-k-skirt').textContent).toBe('Mini Skirt · Bottom');
     // The group switches carry their counts.
-    expect(screen.getByRole('button', { name: 'Other' }).textContent).toContain('2');
+    expect(screen.getByRole('button', { name: 'Other' }).textContent).toContain('1');
+    expect(screen.getByRole('button', { name: 'Outerwear' }).textContent).toContain('1');
     expect(screen.getByRole('button', { name: 'All' }).textContent).toContain(String(ALL.length));
   });
 
