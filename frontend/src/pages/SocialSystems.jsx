@@ -10,87 +10,23 @@
  * gossip outlets, algorithm forces, drama mechanics) on Legends & Society,
  * both on Trends. The Feed generator keeps its own built-in archetype
  * list and reads nothing from this page (src/services/feedScheduler.js).
+ *
+ * 2026-10-06, to the LalaVerse mock: in the hub the tabs sit under the
+ * Society front page (components/Society/SocietySummary: the Feed's
+ * archetypes counted, what is trending, Lala on the career ladder, the
+ * legends), and the whole page is in the hub's design (SocialSystems.css,
+ * tokens only; a list item's own color from the data is only its accent).
  */
-import { useState, Fragment } from 'react';
+import { useState } from 'react';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext } from '../components/EditItemModal';
 import BrainUpdate from '../components/BrainUpdate';
+import SocietySummary from '../components/Society/SocietySummary';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
-import { CELEBRITY_HIERARCHY, FASHION_TIERS, BEAUTY_TIERS, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, AWARD_SHOWS, CALENDAR_DEFAULTS } from '../data/calendarData';
+import { CELEBRITY_HIERARCHY, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, CALENDAR_DEFAULTS } from '../data/calendarData';
 import { tabFromSearch } from '../utils/worldRedirects';
-
-const LEGENDARY_GROUPS = [
-  { group: 'Fashion Icons', icon: '👗', color: '#d4789a', roles: [
-    { role: 'The Style Queen', fn: 'Defines what is fashionable this season', signature: 'Her opinion reshapes the Feed overnight' },
-    { role: 'Dazzle Muse', fn: 'The living embodiment of Dazzle District\'s aesthetic', signature: 'Every Dazzle Season moment is built around her' },
-    { role: 'The Runway Architect', fn: 'Designs the shows that define the Atelier Circuit', signature: 'Their runway is the reference point for the year' },
-    { role: 'Street Style Sovereign', fn: 'Bridges street style and high fashion', signature: 'Discovered at Style Market, now front row at every show' },
-    { role: 'The Fashion Archivist', fn: 'Documents and preserves fashion history', signature: 'The ultimate authority on what actually happened' },
-  ]},
-  { group: 'Beauty Legends', icon: '✨', color: '#a889c8', roles: [
-    { role: 'The Glow Guru', fn: 'Defines beauty standards — recommendations sell out in hours', signature: 'The beauty world waits for her review' },
-    { role: 'Skin Scientist', fn: 'Makes skincare evidence-based and aspirational', signature: 'Translates beauty lab science into the Feed\'s language' },
-    { role: 'The Makeup Oracle', fn: 'Predicts beauty trends before they surface', signature: 'The look she posts in January becomes March\'s trend' },
-    { role: 'Lash Empress', fn: 'Rules the lash and eye beauty space', signature: 'Started in Radiance Row salons' },
-    { role: 'The Aesthetic Alchemist', fn: 'Combines beauty, fashion, and art', signature: 'Impossible to copy because the source is interior life' },
-  ]},
-  { group: 'Creator Economy', icon: '💰', color: '#c9a84c', roles: [
-    { role: 'The Creator King', fn: 'Represents success culture', signature: 'Every Dream Market launch is compared to his' },
-    { role: 'The Digital Mogul', fn: 'Built an empire from content', signature: 'The creator who became a corporation' },
-    { role: 'The Brand Builder', fn: 'Turns creator identity into brand equity', signature: 'The difference between creator and business, visible' },
-    { role: 'The Collab Queen', fn: 'Creates partnerships nobody saw coming', signature: 'Her collab announcements trend before the product exists' },
-    { role: 'The Community Architect', fn: 'Built the most loyal audience', signature: 'Her community is a movement, not a following' },
-  ]},
-  { group: 'Entertainment Stars', icon: '🎤', color: '#b89060', roles: [
-    { role: 'The Viral Comedian', fn: 'Makes the platform laugh', signature: 'The meme that defined the year was hers' },
-    { role: 'The Music Architect', fn: 'Builds sonic worlds, not just songs', signature: 'Her sound lives in half the Feed\'s content' },
-    { role: 'The Nightlife Queen', fn: 'Controls what happens after midnight', signature: 'Her guest list is the event' },
-    { role: 'The Performance Icon', fn: 'Elevates creator content to performance art', signature: 'Live videos feel like theater' },
-    { role: 'The Stage Rebel', fn: 'Breaks every entertainment convention', signature: 'The performance nobody can explain' },
-  ]},
-  { group: 'Lifestyle', icon: '🌿', color: '#6bba9a', roles: [
-    { role: 'The Travel Queen', fn: 'Makes the world accessible and aspirational', signature: 'Her location tags become destinations' },
-    { role: 'The Fitness Titan', fn: 'Physical transformation as identity', signature: 'The workout that trended' },
-    { role: 'The Wellness Prophet', fn: 'Counter-narrative to hustle culture', signature: 'Permission structure for a generation' },
-    { role: 'The Food Visionary', fn: 'Food as culture, not just content', signature: 'The recipe that became a cultural moment' },
-    { role: 'The Adventure Creator', fn: 'Makes risk look beautiful', signature: 'Content nobody else would make' },
-  ]},
-  { group: 'Commentators', icon: '📝', color: '#7ab3d4', roles: [
-    { role: 'The Culture Analyst', fn: 'Makes sense of what\'s happening in real time', signature: 'Analysis drops within hours — always definitive' },
-    { role: 'The Trend Oracle', fn: 'Predicts cultural shifts — always right, always cryptic', signature: 'The post from six months ago that predicted this' },
-    { role: 'The Social Philosopher', fn: 'Asks questions the platform avoids', signature: 'The thread that stopped the Feed' },
-    { role: 'The Media Critic', fn: 'Holds media networks accountable', signature: 'The only creator gossip outlets fear' },
-    { role: 'The Gossip Empress', fn: 'Knows everything, shares strategically', signature: 'She knew before the announcement' },
-  ]},
-  { group: 'Visionaries', icon: '🎨', color: '#d4789a', roles: [
-    { role: 'The Art Visionary', fn: 'Makes the platform take beauty seriously', signature: 'Made people forget they were on social media' },
-    { role: 'The Photography Legend', fn: 'Documents LalaVerse', signature: 'The image that became the year\'s icon' },
-    { role: 'The Design Genius', fn: 'Solves problems beautifully', signature: 'The product that felt inevitable' },
-    { role: 'The Storytelling Master', fn: 'Makes content feel like literature', signature: 'The series everyone finished in one sitting' },
-    { role: 'The Visual Poet', fn: 'Creates images that operate like poetry', signature: 'One post, everyone had a different interpretation' },
-  ]},
-  { group: 'Rising Icons', icon: '🚀', color: '#c9a84c', roles: [
-    { role: 'The Breakout Creator', fn: 'The name everyone learned this year', signature: 'Unknown in January. Nominee in November.' },
-    { role: 'The New Wave Designer', fn: 'Bringing the next aesthetic', signature: 'Style Market discovery. Atelier Circuit in two years.' },
-    { role: 'The Beauty Prodigy', fn: 'Doing things that shouldn\'t be possible at her age', signature: 'Found during Glow Week' },
-    { role: 'The Street Innovator', fn: 'Rewriting what street style means', signature: 'The look everyone copied' },
-    { role: 'The Viral Wildcard', fn: 'Nobody predicted her', signature: 'The post that broke the Feed. Twice.' },
-  ]},
-  { group: 'Cultural Legends', icon: '🏆', color: '#a889c8', roles: [
-    { role: 'The Legacy Builder', fn: 'Everything she built outlasted the platforms', signature: 'The creator other creators cite' },
-    { role: 'The Creator Mentor', fn: 'Grows other creators — legacy through multiplication', signature: 'Her roster is longer than most brand portfolios' },
-    { role: 'The Platform Pioneer', fn: 'Was there before the platform was what it is', signature: 'Posts from before the algorithm knew what to do' },
-    { role: 'The Trend Historian', fn: 'Documents where trends actually came from', signature: 'The correction post that credited the right person' },
-    { role: 'The Culture Keeper', fn: 'Preserves what LalaVerse was', signature: 'The archive that breaks hearts when found' },
-  ]},
-  { group: 'Global Icons', icon: '🌐', color: '#6bba9a', roles: [
-    { role: 'The Digital Empress', fn: 'Operates across every platform — omnipresent', signature: 'Exists everywhere and loses nothing in translation' },
-    { role: 'The Internet Prince', fn: 'Male cultural icon who transcends categories', signature: 'His aesthetic is referenced by every tier' },
-    { role: 'The Fashion Empress', fn: 'Total fashion authority', signature: 'When she and the Style Queen agree, the trend is over' },
-    { role: 'The Glow Queen', fn: 'Total beauty authority', signature: 'The face and the formula. Both.' },
-    { role: 'The Creator Icon', fn: 'What a creator can become in LalaVerse', signature: 'The answer to what this platform makes possible' },
-  ]},
-];
+import { LEGENDARY_GROUPS } from '../data/legendaryGroups';
+import './SocialSystems.css';
 
 const TABS = [
   { key: 'archetypes', label: 'Archetypes' },
@@ -109,265 +45,261 @@ const READS = {
   trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. Nothing reads the page itself.',
 };
 
-const tb = (a) => ({ padding:'8px 16px', fontSize:12, fontWeight:600, fontFamily:"'DM Mono', monospace", background: a?'#2C2C2C':'transparent', color: a?'#fff':'#888', border:'none', borderRadius:'6px 6px 0 0', cursor:'pointer' });
-const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:14, marginBottom:8 };
-const lbl = { fontSize:10, fontWeight:600, color:'#B8962E', fontFamily:"'DM Mono', monospace", marginBottom:6 };
+// A list item's own color (from the data files) as its accent only.
+const accent = (color) => (color ? { '--item': color } : undefined);
+
+/** A row of stages joined by arrows (the trend engines). */
+function Stages({ items, meta }) {
+  return (
+    <ol className="ss-stages">
+      {items.map((s) => (
+        <li key={s.stage} className="ss-stage" style={accent(s.color)}>
+          <span className="ss-stage-num">{s.stage}</span>
+          <strong>{s.name}</strong>
+          <span className="ss-meta">{meta(s)}</span>
+          {s.story && <span className="ss-quote">{s.story}</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function SocialSystems({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
   const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
-  const { data: ccData, updateItem: ccUpdate, addItem: ccAdd, removeItem: ccRemove, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
+  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
   const [openLegend, setOpenLegend] = useState('Fashion Icons');
   const [expandedArch, setExpandedArch] = useState(null);
 
   const saving = isSaving || ccSaving;
+  // The front page's legend chips open a group on the Legends tab.
+  const openFromSummary = (key, group) => { setTab(key); if (group) setOpenLegend(group); };
 
   return (
     <PageEditContext.Provider value={{ data: tab === 'legends' ? { ...isData, ...ccData, LEGENDARY_GROUPS } : isData, setEditItem, removeItem: isRemove }}>
-    <div style={{ maxWidth:1100, margin:'0 auto', padding: embedded ? 0 : '24px 20px' }}>
-      {/* Header; inside the LalaVerse hub the tab is the heading */}
-      <div style={{ display:'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems:'flex-start', marginBottom: embedded ? 8 : 20 }}>
-        {!embedded && <div>
-          <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>Social Systems</h1>
-          <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Archetypes, legends, relationships, economy, trends — the rules of the LalaVerse</p>
-        </div>}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          {saving && <span style={{ fontSize:11, color:'var(--lala-gold-text)' }}>Saving...</span>}
-          {/* The Brain Update for the data the open sub-tab shows */}
-          {(tab === 'archetypes' || tab === 'rules' || tab === 'trends') && <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />}
-          {(tab === 'legends' || tab === 'trends') && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
+    <div className={`ss${embedded ? ' is-embedded' : ''}`}>
+      {embedded && <SocietySummary legendGroups={LEGENDARY_GROUPS} onOpen={openFromSummary} />}
+
+      <section className="ss-shell" aria-label="Social systems">
+        {/* Header; inside the LalaVerse hub the tab's banner is the heading */}
+        <div className="ss-head">
+          <div>
+            {!embedded && <h1 className="ss-h1">Social Systems</h1>}
+            <h2 className="ss-title">{embedded ? 'The rules of society' : 'Archetypes, legends, relationships, economy, trends'}</h2>
+            <p className="ss-sub">The patterns the LalaVerse runs on. Edit them here; Brain Update sends them to the Show Bible.</p>
+          </div>
+          <div className="ss-head-actions">
+            {saving && <span className="ss-saving">Saving…</span>}
+            {/* The Brain Update for the data the open sub-tab shows */}
+            {(tab === 'archetypes' || tab === 'rules' || tab === 'trends') && <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />}
+            {(tab === 'legends' || tab === 'trends') && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
+          </div>
         </div>
-      </div>
 
-      <div style={{ display:'flex', gap:4, marginBottom:12, borderBottom:'1px solid #e8e0d0' }}>
-        {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={tb(tab===t.key)}>{t.label}</button>)}
-      </div>
-      <p data-testid={`society-reads-${tab}`} style={{ fontSize:11, lineHeight:1.5, color:'var(--text-secondary)', background:'var(--surface-bg)', border:'1px solid var(--lala-parchment-3)', borderRadius:8, padding:'8px 12px', margin:'0 0 16px' }}>
-        <strong style={{ color:'var(--lala-gold-text)', fontFamily:"'DM Mono', monospace", fontSize:10, letterSpacing:'0.06em' }}>WHO READS THIS </strong>{READS[tab]}
-      </p>
+        <div className="ss-tabs" role="tablist" aria-label="Social systems">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`ss-tab${tab === t.key ? ' is-active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
+          ))}
+        </div>
+        <p data-testid={`society-reads-${tab}`} className="ss-reads"><strong>Who reads this </strong>{READS[tab]}</p>
 
-      {/* ARCHETYPES */}
-      {tab === 'archetypes' && (
-        <div>
-          <p style={{ fontSize:12, color:'#666', marginBottom:16, lineHeight:1.5 }}>Every major creator tends to fall into one of these 15 patterns. The tension between two archetypes in the same person is often the story.</p>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:8 }}>
-            {(isData.ARCHETYPES || ARCHETYPES).map(a => (
-              <div key={a.num} onClick={() => setExpandedArch(expandedArch===a.num ? null : a.num)} style={{ ...card, borderTop:`3px solid ${a.color}`, cursor:'pointer' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <span style={{ fontSize:10, color:a.color, fontFamily:"'DM Mono', monospace", fontWeight:700 }}>{a.num}</span>
-                  <span style={{ fontSize:16 }}>{a.icon}</span>
-                </div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#2C2C2C', marginTop:4 }}>{a.name}</div>
-                <p style={{ fontSize:11, color:'#666', margin:'4px 0 0', lineHeight:1.4 }}>{a.content}</p>
-                {expandedArch === a.num && (
-                  <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid #f0f0f0' }}>
-                    <div style={{ fontSize:10, color:'#B8962E', fontWeight:600 }}>AUDIENCE EFFECT</div>
-                    <p style={{ fontSize:11, color:'#555', margin:'2px 0 6px' }}>{a.audience}</p>
-                    <div style={{ fontSize:10, color:'#B8962E', fontWeight:600 }}>NARRATIVE FUNCTION</div>
-                    <p style={{ fontSize:11, color:'#555', margin:'2px 0 0', fontStyle:'italic' }}>{a.narrative}</p>
+        {/* ARCHETYPES */}
+        {tab === 'archetypes' && (
+          <div className="ss-panel">
+            <p className="ss-note">Every major creator tends to fall into one of these patterns. The tension between two archetypes in the same person is often the story. Open one for its effect on the audience and what it does in the story.</p>
+            <ul className="ss-grid">
+              {(isData.ARCHETYPES || ARCHETYPES).map((a) => {
+                const open = expandedArch === a.num;
+                return (
+                  <li key={a.num} className={`ss-card ss-accent-top${open ? ' is-open' : ''}`} style={accent(a.color)}>
+                    <button type="button" className="ss-card-btn" aria-expanded={open} onClick={() => setExpandedArch(open ? null : a.num)}>
+                      <span className="ss-card-top"><span className="ss-num">{a.num}</span><span aria-hidden="true">{a.icon}</span></span>
+                      <strong className="ss-card-title">{a.name}</strong>
+                      <span className="ss-card-text">{a.content}</span>
+                    </button>
+                    {open && (
+                      <div className="ss-card-more">
+                        <span className="ss-label">Audience effect</span>
+                        <p>{a.audience}</p>
+                        <span className="ss-label">Narrative function</span>
+                        <p className="ss-quote">{a.narrative}</p>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {/* LEGENDS & SOCIETY */}
+        {tab === 'legends' && (
+          <div className="ss-panel">
+            <h3 className="ss-h3">The 50 legendary influencers</h3>
+            <p className="ss-note">The most powerful cultural figures in the LalaVerse. All placeholders: names are assigned through the Character Registry.</p>
+            <div className="ss-chips" role="group" aria-label="Legend groups">
+              {LEGENDARY_GROUPS.map((g) => (
+                <button key={g.group} type="button" aria-pressed={openLegend === g.group} className={`ss-chip${openLegend === g.group ? ' is-active' : ''}`} onClick={() => setOpenLegend(g.group)}>
+                  <span aria-hidden="true">{g.icon}</span> {g.group}
+                </button>
+              ))}
+            </div>
+            {LEGENDARY_GROUPS.filter((g) => g.group === openLegend).map((g) => (
+              <ul key={g.group} className="ss-list" data-testid="ss-legend-roles">
+                {g.roles.map((r) => (
+                  <li key={r.role} className="ss-row ss-accent-left" style={accent(g.color)}>
+                    <strong>{r.role}</strong> <span className="ss-chip-mini">Placeholder</span>
+                    <span className="ss-card-text">{r.fn}</span>
+                    <span className="ss-quote">"{r.signature}"</span>
+                  </li>
+                ))}
+              </ul>
+            ))}
+
+            <h3 className="ss-h3">Celebrity hierarchy</h3>
+            <ul className="ss-grid ss-grid-sm">
+              {(ccData.CELEBRITY_HIERARCHY || CELEBRITY_HIERARCHY).map((h) => (
+                <li key={h.tier} className="ss-card ss-accent-top" style={accent(h.color)}>
+                  <span className="ss-card-top"><span className="ss-num">Tier {h.tier}</span><span className="ss-meta">{h.followers}</span></span>
+                  <strong className="ss-card-title">{h.name}</strong>
+                  <span className="ss-card-text">{h.desc}</span>
+                </li>
+              ))}
+            </ul>
+
+            <h3 className="ss-h3">The 25 most famous</h3>
+            <ul className="ss-grid ss-grid-sm">
+              {(ccData.FAMOUS_CHARACTERS || FAMOUS_CHARACTERS).map((c) => (
+                <li key={c.rank} className="ss-card ss-accent-top" style={accent(c.color)}>
+                  <span className="ss-card-top"><span className="ss-num">#{c.rank}</span><span aria-hidden="true">{c.icon}</span></span>
+                  <strong className="ss-card-title">{c.title}</strong>
+                  <span className="ss-card-text">{c.role}</span>
+                </li>
+              ))}
+            </ul>
+
+            <h3 className="ss-h3">Gossip media networks</h3>
+            <ul className="ss-grid">
+              {(ccData.GOSSIP_MEDIA || GOSSIP_MEDIA).map((m) => (
+                <li key={m.name} className="ss-card ss-accent-top" style={accent(m.color?.text)}>
+                  <strong className="ss-card-title">{m.name}</strong>
+                  <span className="ss-meta">{[m.focus, m.style].filter(Boolean).join(' · ')}</span>
+                  <span className="ss-card-text">{m.covers}</span>
+                  <span className="ss-quote">{m.power}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* SOCIAL RULES */}
+        {tab === 'rules' && (
+          <div className="ss-panel">
+            <h3 className="ss-h3">Relationship types</h3>
+            <ul className="ss-list">
+              {(isData.RELATIONSHIP_TYPES || RELATIONSHIP_TYPES).map((r) => (
+                <li key={r.type} className="ss-row ss-accent-left" style={accent(r.color)}>
+                  <strong className="ss-card-title"><span aria-hidden="true">{r.icon}</span> {r.type}</strong>
+                  <div className="ss-three">
+                    <div><span className="ss-label">Looks like</span><p>{r.looksLike}</p></div>
+                    <div><span className="ss-label">Creates</span><p>{r.creates}</p></div>
+                    <div><span className="ss-label">Breaks</span><p>{r.breaks}</p></div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* LEGENDS & SOCIETY */}
-      {tab === 'legends' && (
-        <div>
-          {/* 50 Legends */}
-          <div style={lbl}>THE 50 LEGENDARY INFLUENCERS</div>
-          <p style={{ fontSize:12, color:'#666', marginBottom:12 }}>The most powerful cultural figures in LalaVerse. All placeholders — names assigned through Character Registry.</p>
-          <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:12 }}>
-            {LEGENDARY_GROUPS.map(g => (
-              <button key={g.group} onClick={() => setOpenLegend(g.group)} style={{ padding:'4px 10px', fontSize:10, borderRadius:12, border:`1px solid ${openLegend===g.group ? g.color : '#e8e0d0'}`, background:openLegend===g.group ? g.color+'15' : '#fff', color:openLegend===g.group ? g.color : '#666', cursor:'pointer', fontWeight:600 }}>
-                {g.icon} {g.group}
-              </button>
-            ))}
-          </div>
-          {LEGENDARY_GROUPS.filter(g => g.group === openLegend).map(g => (
-            <div key={g.group} style={{ display:'grid', gap:6 }}>
-              {g.roles.map(r => (
-                <div key={r.role} style={{ ...card, borderLeft:`3px solid ${g.color}` }}>
-                  <div style={{ fontSize:13, fontWeight:700 }}>{r.role} <span style={{ fontSize:10, color:'#aaa' }}>[placeholder]</span></div>
-                  <p style={{ fontSize:11, color:'#666', margin:'2px 0' }}>{r.fn}</p>
-                  <p style={{ fontSize:11, color:'#888', fontStyle:'italic', margin:0 }}>"{r.signature}"</p>
-                </div>
+                  {r.storyBreaks && <span className="ss-quote">{r.storyBreaks}</span>}
+                </li>
               ))}
-            </div>
-          ))}
+            </ul>
 
-          {/* Celebrity Hierarchy */}
-          <div style={{ ...lbl, marginTop:28 }}>CELEBRITY HIERARCHY</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
-            {(ccData.CELEBRITY_HIERARCHY || CELEBRITY_HIERARCHY).map(h => (
-              <div key={h.tier} style={{ ...card, borderTop:`3px solid ${h.color}` }}>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:h.color }}>Tier {h.tier}</span>
-                  <span style={{ fontSize:10, color:'#888' }}>{h.followers}</span>
-                </div>
-                <div style={{ fontSize:12, fontWeight:700, marginTop:2 }}>{h.name}</div>
-                <p style={{ fontSize:10, color:'#666', margin:'4px 0 0', lineHeight:1.4 }}>{h.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Famous 25 */}
-          <div style={{ ...lbl, marginTop:28 }}>THE 25 MOST FAMOUS</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:6 }}>
-            {(ccData.FAMOUS_CHARACTERS || FAMOUS_CHARACTERS).map(c => (
-              <div key={c.rank} style={{ ...card, borderTop:`2px solid ${c.color}`, padding:10 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <span style={{ fontSize:12, fontWeight:800, color:c.color }}>#{c.rank}</span>
-                  <span style={{ fontSize:14 }}>{c.icon}</span>
-                </div>
-                <div style={{ fontSize:12, fontWeight:700, marginTop:2 }}>{c.title}</div>
-                <p style={{ fontSize:10, color:'#666', margin:'2px 0 0' }}>{c.role}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Media Outlets */}
-          <div style={{ ...lbl, marginTop:28 }}>GOSSIP MEDIA NETWORKS</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:8 }}>
-            {(ccData.GOSSIP_MEDIA || GOSSIP_MEDIA).map(m => (
-              <div key={m.name} style={{ ...card, background:m.color.bg }}>
-                <div style={{ fontSize:13, fontWeight:700, color:m.color.text }}>{m.name}</div>
-                <div style={{ fontSize:10, color:'#888' }}>{m.focus} · {m.style}</div>
-                <p style={{ fontSize:11, color:'#555', margin:'4px 0', lineHeight:1.4 }}>{m.covers}</p>
-                <p style={{ fontSize:10, color:'#666', fontStyle:'italic', margin:0 }}>{m.power}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* SOCIAL RULES */}
-      {tab === 'rules' && (
-        <div>
-          <div style={lbl}>RELATIONSHIP TYPES</div>
-          {(isData.RELATIONSHIP_TYPES || RELATIONSHIP_TYPES).map(r => (
-            <div key={r.type} style={{ ...card, borderLeft:`3px solid ${r.color}` }}>
-              <div style={{ fontSize:14, fontWeight:700 }}>{r.icon} {r.type}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:8 }}>
-                <div><div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>LOOKS LIKE</div><p style={{ fontSize:11, color:'#666', margin:'2px 0' }}>{r.looksLike}</p></div>
-                <div><div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>CREATES</div><p style={{ fontSize:11, color:'#666', margin:'2px 0' }}>{r.creates}</p></div>
-                <div><div style={{ fontSize:9, fontWeight:600, color:'#B8962E' }}>BREAKS</div><p style={{ fontSize:11, color:'#666', margin:'2px 0' }}>{r.breaks}</p></div>
-              </div>
-              <p style={{ fontSize:11, color:'#888', fontStyle:'italic', marginTop:6 }}>{r.storyBreaks}</p>
-            </div>
-          ))}
-
-          <div style={{ ...lbl, marginTop:28 }}>CREATOR ECONOMY</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:8 }}>
-            {(isData.ECONOMY_STREAMS || ECONOMY_STREAMS).map(e => (
-              <div key={e.stream} style={{ ...card, borderTop:`3px solid ${e.color}` }}>
-                <div style={{ fontSize:16 }}>{e.icon}</div>
-                <div style={{ fontSize:12, fontWeight:700, marginTop:2 }}>{e.stream}</div>
-                <p style={{ fontSize:11, color:'#666', margin:'4px 0' }}>{e.what}</p>
-                <div style={{ fontSize:10, color:'#888' }}>{e.who}</div>
-                <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'4px 0 0' }}>{e.narrative}</p>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...lbl, marginTop:28 }}>INFLUENCE FORCES</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
-            {(isData.INFLUENCE_FORCES || INFLUENCE_FORCES).map(f => (
-              <div key={f.force} style={{ ...card, borderTop:`3px solid ${f.color}` }}>
-                <div style={{ fontSize:20, color:f.color }}>{f.icon}</div>
-                <div style={{ fontSize:13, fontWeight:700, marginTop:2 }}>{f.force}</div>
-                <p style={{ fontSize:11, color:'#666', margin:'4px 0' }}>{f.definition}</p>
-                <div style={{ fontSize:9, fontWeight:600, color:'#16a34a' }}>BUILT BY: <span style={{ fontWeight:400, color:'#666' }}>{f.built}</span></div>
-                <div style={{ fontSize:9, fontWeight:600, color:'#dc2626', marginTop:2 }}>DESTROYED BY: <span style={{ fontWeight:400, color:'#666' }}>{f.destroys}</span></div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...lbl, marginTop:28 }}>LEGACY SIGNALS</div>
-          {(isData.LEGACY_SIGNALS || LEGACY_SIGNALS).map(l => (
-            <div key={l.signal} style={{ ...card, borderLeft:`3px solid ${l.color}` }}>
-              <div style={{ fontSize:13, fontWeight:700 }}>{l.icon} {l.signal}</div>
-              <p style={{ fontSize:11, color:'#666', margin:'4px 0' }}>{l.looksLike}</p>
-              <p style={{ fontSize:11, color:'#888', fontStyle:'italic', margin:0 }}>{l.story}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* TRENDS */}
-      {tab === 'trends' && (
-        <div>
-          <div style={lbl}>FASHION TREND ENGINE — 5 STAGES</div>
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:20, flexWrap:'wrap' }}>
-            {(isData.FASHION_TREND_STAGES || FASHION_TREND_STAGES).map((s, i, a) => (
-              <Fragment key={s.stage}>
-                <div style={{ ...card, borderTop:`3px solid ${s.color}`, flex:'1 1 140px', minWidth:140 }}>
-                  <div style={{ width:24, height:24, borderRadius:'50%', background:s.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{s.stage}</div>
-                  <div style={{ fontSize:12, fontWeight:700, marginTop:4 }}>{s.name}</div>
-                  <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{s.who}</div>
-                  <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'4px 0 0' }}>{s.story}</p>
-                </div>
-                {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </Fragment>
-            ))}
-          </div>
-
-          <div style={lbl}>BEAUTY TREND ENGINE — 4 STAGES</div>
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:20, flexWrap:'wrap' }}>
-            {(isData.BEAUTY_TREND_STAGES || BEAUTY_TREND_STAGES).map((s, i, a) => (
-              <Fragment key={s.stage}>
-                <div style={{ ...card, borderTop:`3px solid ${s.color}`, flex:'1 1 160px', minWidth:160 }}>
-                  <div style={{ width:24, height:24, borderRadius:'50%', background:s.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{s.stage}</div>
-                  <div style={{ fontSize:12, fontWeight:700, marginTop:4 }}>{s.name}</div>
-                  <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{s.where}</div>
-                  <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'4px 0 0' }}>{s.story}</p>
-                </div>
-                {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </Fragment>
-            ))}
-          </div>
-
-          <div style={lbl}>MOMENTUM WAVES</div>
-          {(isData.MOMENTUM_WAVES || MOMENTUM_WAVES).map(m => (
-            <div key={m.event} style={{ ...card, borderLeft:`3px solid ${m.color}` }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:13, fontWeight:700 }}>{m.icon} {m.event}</span>
-                <span style={{ fontSize:10, color:m.color }}>{m.duration}</span>
-              </div>
-              <div style={{ fontSize:11, color:'#666', marginTop:4 }}>{m.feedEffect}</div>
-              <p style={{ fontSize:11, color:'#888', fontStyle:'italic', margin:'4px 0 0' }}>{m.permanent}</p>
-            </div>
-          ))}
-
-          <div style={{ ...lbl, marginTop:28 }}>ALGORITHM & DRAMA</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            <div>
-              <div style={{ fontSize:10, fontWeight:700, color:'#666', marginBottom:6 }}>ALGORITHM FORCES</div>
-              {(ccData.ALGORITHM_FORCES || ALGORITHM_FORCES).map(f => (
-                <div key={f.name} style={{ ...card, borderTop:`2px solid ${f.color}`, padding:10 }}>
-                  <div style={{ fontSize:12, fontWeight:700 }}>{f.icon} {f.name}</div>
-                  <div style={{ fontSize:10, color:'#888' }}>{f.measuredBy}</div>
-                  <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'2px 0 0' }}>{f.storyHook}</p>
-                </div>
+            <h3 className="ss-h3">Creator economy</h3>
+            <ul className="ss-grid ss-grid-sm">
+              {(isData.ECONOMY_STREAMS || ECONOMY_STREAMS).map((e) => (
+                <li key={e.stream} className="ss-card ss-accent-top" style={accent(e.color)}>
+                  <span aria-hidden="true" className="ss-icon">{e.icon}</span>
+                  <strong className="ss-card-title">{e.stream}</strong>
+                  <span className="ss-card-text">{e.what}</span>
+                  <span className="ss-meta">{e.who}</span>
+                  {e.narrative && <span className="ss-quote">{e.narrative}</span>}
+                </li>
               ))}
-            </div>
-            <div>
-              <div style={{ fontSize:10, fontWeight:700, color:'#666', marginBottom:6 }}>DRAMA MECHANICS</div>
-              {(ccData.DRAMA_MECHANICS || DRAMA_MECHANICS).map(d => (
-                <div key={d.type} style={{ ...card, borderLeft:`2px solid ${d.color}`, padding:10 }}>
-                  <div style={{ fontSize:12, fontWeight:700 }}>{d.icon} {d.type}</div>
-                  <div style={{ fontSize:10, color:'#888' }}>{d.trigger}</div>
-                  <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'2px 0 0' }}>{d.storyThread}</p>
-                </div>
+            </ul>
+
+            <h3 className="ss-h3">Influence forces</h3>
+            <ul className="ss-grid">
+              {(isData.INFLUENCE_FORCES || INFLUENCE_FORCES).map((f) => (
+                <li key={f.force} className="ss-card ss-accent-top" style={accent(f.color)}>
+                  <span aria-hidden="true" className="ss-icon">{f.icon}</span>
+                  <strong className="ss-card-title">{f.force}</strong>
+                  <span className="ss-card-text">{f.definition}</span>
+                  <span className="ss-built"><span className="ss-label">Built by</span> {f.built}</span>
+                  <span className="ss-destroyed"><span className="ss-label">Destroyed by</span> {f.destroys}</span>
+                </li>
               ))}
+            </ul>
+
+            <h3 className="ss-h3">Legacy signals</h3>
+            <ul className="ss-list">
+              {(isData.LEGACY_SIGNALS || LEGACY_SIGNALS).map((l) => (
+                <li key={l.signal} className="ss-row ss-accent-left" style={accent(l.color)}>
+                  <strong className="ss-card-title"><span aria-hidden="true">{l.icon}</span> {l.signal}</strong>
+                  <span className="ss-card-text">{l.looksLike}</span>
+                  {l.story && <span className="ss-quote">{l.story}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* TRENDS */}
+        {tab === 'trends' && (
+          <div className="ss-panel">
+            <h3 className="ss-h3">Fashion trend engine · 5 stages</h3>
+            <Stages items={isData.FASHION_TREND_STAGES || FASHION_TREND_STAGES} meta={(s) => s.who} />
+            <h3 className="ss-h3">Beauty trend engine · 4 stages</h3>
+            <Stages items={isData.BEAUTY_TREND_STAGES || BEAUTY_TREND_STAGES} meta={(s) => s.where} />
+
+            <h3 className="ss-h3">Momentum waves</h3>
+            <ul className="ss-list">
+              {(isData.MOMENTUM_WAVES || MOMENTUM_WAVES).map((m) => (
+                <li key={m.event} className="ss-row ss-accent-left" style={accent(m.color)}>
+                  <span className="ss-card-top"><strong><span aria-hidden="true">{m.icon}</span> {m.event}</strong><span className="ss-meta">{m.duration}</span></span>
+                  <span className="ss-card-text">{m.feedEffect}</span>
+                  {m.permanent && <span className="ss-quote">{m.permanent}</span>}
+                </li>
+              ))}
+            </ul>
+
+            <h3 className="ss-h3">Algorithm &amp; drama</h3>
+            <div className="ss-two">
+              <div>
+                <span className="ss-label">Algorithm forces</span>
+                <ul className="ss-list">
+                  {(ccData.ALGORITHM_FORCES || ALGORITHM_FORCES).map((f) => (
+                    <li key={f.name} className="ss-row ss-accent-left" style={accent(f.color)}>
+                      <strong><span aria-hidden="true">{f.icon}</span> {f.name}</strong>
+                      <span className="ss-meta">{f.measuredBy}</span>
+                      {f.storyHook && <span className="ss-quote">{f.storyHook}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <span className="ss-label">Drama mechanics</span>
+                <ul className="ss-list">
+                  {(ccData.DRAMA_MECHANICS || DRAMA_MECHANICS).map((d) => (
+                    <li key={d.type} className="ss-row ss-accent-left" style={accent(d.color)}>
+                      <strong><span aria-hidden="true">{d.icon}</span> {d.type}</strong>
+                      <span className="ss-meta">{d.trigger}</span>
+                      {d.storyThread && <span className="ss-quote">{d.storyThread}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
       {editItem && <EditItemModal item={editItem.item} title={`Edit ${editItem.key}`} onSave={(updated) => { if (editItem.index === -1) isAdd(editItem.key, updated); else isUpdate(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} />}
     </div>
