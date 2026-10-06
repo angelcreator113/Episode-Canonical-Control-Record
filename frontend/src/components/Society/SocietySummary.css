@@ -1,0 +1,83 @@
+/* SocietySummary: the Society tab's front page (the mock, 2026-10-06), in
+   the hub's peach for Society. Tokens only; the five archetype tones are
+   the hub's (peach, pink, lavender, green, blue), each text 4.5:1 on its
+   wash (SocietySummary.theme.test.js). */
+
+.soc { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 20px; }
+.soc-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.soc-card { background: var(--surface-card); border: 1px solid var(--danger-border); border-radius: 16px; padding: 18px 20px; min-width: 0; }
+.soc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.soc-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.soc-sub { font-size: 13px; color: var(--text-secondary); }
+.soc-link {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 44px;
+  font-size: 13px; font-weight: 700; color: var(--danger-text); text-decoration: none;
+}
+.soc-link:hover { text-decoration: underline; }
+.soc-btn {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 999px;
+  background: var(--danger); color: var(--text-inverse); font-size: 14px; font-weight: 700; text-decoration: none;
+}
+.soc-btn:hover { background: var(--danger-text); }
+.soc-note { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.soc-foot { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+
+.soc-tone-0 { --soc-soft: var(--danger-bg);          --soc-text: var(--danger-text); }
+.soc-tone-1 { --soc-soft: var(--accent-subtle);      --soc-text: var(--accent-dark); }
+.soc-tone-2 { --soc-soft: var(--lala-lavender-soft); --soc-text: var(--lala-lavender-text); }
+.soc-tone-3 { --soc-soft: var(--success-bg);         --soc-text: var(--success-text); }
+.soc-tone-4 { --soc-soft: var(--info-bg);            --soc-text: var(--info-text); }
+
+/* ── Archetypes ── */
+.soc-arch { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.soc-arch-tile {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px; border-radius: 14px;
+  background: var(--soc-soft); color: var(--soc-text);
+}
+.soc-arch-tile.is-empty { background: var(--surface-bg); color: var(--text-secondary); }
+.soc-arch-count { font-size: 26px; line-height: 1; font-weight: 800; }
+.soc-arch-label { font-size: 13px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.soc-arch-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface-card); overflow: hidden; }
+.soc-arch-bar span { display: block; height: 100%; background: var(--soc-text); border-radius: 3px; }
+
+/* ── Trends ── */
+.soc-trends { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.soc-trend { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto; gap: 12px; align-items: center; font-size: 14px; }
+.soc-trend-topic { font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.soc-trend-bar { display: block; height: 10px; border-radius: 5px; background: var(--danger-bg); overflow: hidden; }
+.soc-trend-bar span { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--danger-border), var(--danger)); }
+.soc-trend-posts { font-size: 12px; font-weight: 700; color: var(--danger-text); white-space: nowrap; }
+
+/* ── Career ladder ── */
+.soc-ladder-card { background: var(--danger-bg); }
+.soc-ladder-card .soc-title { color: var(--danger-text); margin-bottom: 12px; }
+.soc-ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.soc-rung {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 14px; border-radius: 12px;
+  background: var(--surface-card); border: 1px solid var(--danger-border); font-size: 14px; color: var(--text-primary);
+}
+.soc-rung.is-here { border: 2px solid var(--danger); font-weight: 800; }
+.soc-rung-num { font-weight: 800; color: var(--danger-text); width: 14px; }
+.soc-rung-label { flex: 1; font-weight: 700; min-width: 0; }
+.soc-rung-rep { font-weight: 500; font-size: 12px; color: var(--text-secondary); }
+.soc-here { padding: 3px 10px; border-radius: 999px; background: var(--danger); color: var(--text-inverse); font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+/* ── Legends ── */
+.soc-legends { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.soc-legend {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--danger-border); background: var(--surface-card); cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--text-primary);
+}
+.soc-legend:hover { background: var(--danger-bg); }
+.soc-legend-n { padding: 1px 7px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-text); font-size: 11px; font-weight: 800; }
+
+@media (max-width: 1000px) { .soc-arch { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .soc { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .soc-card { padding: 16px; }
+  .soc-arch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .soc-trend { grid-template-columns: minmax(0, 1fr) auto; }
+  .soc-trend-bar { grid-column: 1 / -1; order: 3; }
+  .soc-btn, .soc-link { margin-left: 0; }
+}
