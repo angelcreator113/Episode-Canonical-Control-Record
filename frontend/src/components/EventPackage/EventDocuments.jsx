@@ -27,7 +27,7 @@ const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
   { type: 'shopping_list', title: 'Shopping list', from: 'From the look: the pieces to find, owned or to buy, the total against her coins' },
-  { type: 'career_plan', title: 'Career plan', from: 'From this event and her active career goals' },
+  { type: 'career_plan', title: 'Career plan', from: 'From the deal, this event and her active career goals' },
 ];
 
 function ShoppingPaper({ doc, event, outfitPieces, balance }) {
@@ -54,7 +54,12 @@ function ShoppingPaper({ doc, event, outfitPieces, balance }) {
   );
 }
 
-function CareerCard({ doc }) {
+// What the deal expects of her at this event, from its terms (live, never
+// part of the plan's own lines): a deliverable's format, due date and who
+// it is owed to, and whether it is required.
+const owedText = (d) => (d.owed_to === 'brand' ? 'for the brand' : 'for the host');
+
+function CareerCard({ doc, deliverables = [] }) {
   const { thisEvent, biggerGoals } = careerSections(doc);
   const row = (i, n) => (
     <li key={`${i.slot}-${n}`}>
@@ -67,6 +72,23 @@ function CareerCard({ doc }) {
       <div className="evd-career-head">
         <span className="evd-career-title">Career Plan</span>
       </div>
+      {deliverables.length > 0 && (
+        <>
+          <div className="evd-career-label">Expected of her</div>
+          <ul className="evd-career-list" data-testid="evd-career-deliverables">
+            {deliverables.map((d) => (
+              <li key={d.id} data-testid={`evd-deliverable-${d.id}`}>
+                <span className="evd-check" aria-hidden="true" />
+                <span>
+                  {d.label}
+                  <span className="evd-deliverable-detail">{[d.detail, owedText(d)].filter(Boolean).join(' · ')}</span>
+                </span>
+                <span className={`evd-deliverable-tag${d.required ? ' is-required' : ''}`}>{d.required ? 'Required' : 'Optional'}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <div className="evd-career-label">This event</div>
       <ul className="evd-career-list">{thisEvent.length ? thisEvent.map(row) : <li className="evd-muted">No goals for this event</li>}</ul>
       <div className="evd-career-label">Bigger goals</div>
@@ -174,7 +196,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                   {doc && editing !== type && type === 'shopping_list' && (
                     <ShoppingPaper doc={doc} event={event} outfitPieces={outfitPieces} balance={balance} />
                   )}
-                  {doc && editing !== type && type === 'career_plan' && <CareerCard doc={doc} />}
+                  {doc && editing !== type && type === 'career_plan' && <CareerCard doc={doc} deliverables={docs.deliverables || []} />}
                 </div>
                 <div className="evd-actions">
                   <span className={`evd-state is-${state.key}`} data-testid={`evd-state-${type}`}>{state.label}</span>
