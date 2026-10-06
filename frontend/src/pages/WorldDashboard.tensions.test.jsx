@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -41,7 +41,9 @@ describe('State tab: the Tensions contracts', () => {
     scanner({ status: 'ok', pairs: [PAIR], count: 1, characters_scanned: 5 });
     vi.mocked(api.post).mockResolvedValue({ data: { proposal: { scene_title: 'Lala × Nia Vale — Explosive', characters: ['lala', 'niavale'], character_ids: ['c-1', 'c-2'] } } });
     renderAt('/universe?tab=state&sub=tensions');
-    expect((await screen.findByText(/Lala/)).textContent).toContain('Nia Vale');
+    // The scanner's own panel (the hub's front page lists the pair too).
+    const panel = await screen.findByTestId('wd-tensions-panel');
+    expect((await within(panel).findByText(/Lala/)).textContent).toContain('Nia Vale');
     expect(screen.queryByText(/Unknown/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Propose Scene' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/create-tension-proposal', { char_a: PAIR.char_a, char_b: PAIR.char_b, tension_state: 'Explosive', relationship_type: 'rival', conflict_summary: 'The Dazzle Season cover.', romantic: false }));
@@ -72,5 +74,27 @@ describe('State tab: the Tensions contracts', () => {
     renderAt('/universe?tab=state&sub=tensions');
     fireEvent.click(await screen.findByRole('button', { name: 'Propose Scene' }));
     expect(await screen.findByText('char_a.name and char_b.name required')).toBeTruthy();
+  });
+});
+
+describe('State tab: the front page drives the tabs below', () => {
+  test('"Take a snapshot" opens World State at the label; the automatic temperature rows are not listed as snapshots', async () => {
+    window.history.pushState({}, '', '/universe?tab=state&sub=tensions');
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('tension-scanner')) return { data: { status: 'ok', pairs: [], count: 0, characters_scanned: 3 } };
+      if (url.includes('state/snapshots')) return { data: { snapshots: [
+        { id: 't1', snapshot_label: 'temperature_update', created_at: '2026-10-03', metadata: { world_temperature: { value: 55 } } },
+        { id: 's1', snapshot_label: 'Before the gala', world_facts: ['Velvet is in'], created_at: '2026-09-01' },
+      ] } };
+      return { data: { events: [] } };
+    });
+    renderAt('/universe?tab=state&sub=tensions');
+    fireEvent.click(await screen.findByRole('button', { name: 'Take a snapshot' }));
+    const label = await screen.findByLabelText('Snapshot label *');
+    await waitFor(() => expect(document.activeElement).toBe(label));
+    const panel = screen.getByRole('tabpanel', { name: 'World State' });
+    expect(within(panel).getByText('Before the gala')).toBeTruthy();
+    expect(within(panel).queryByText('temperature_update')).toBeNull();
+    expect(within(panel).getByText(/One automatic world temperature reading is kept/)).toBeTruthy();
   });
 });

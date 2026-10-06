@@ -2,11 +2,19 @@
  * WorldDashboard — World State + Tensions (the LalaVerse hub's State tab)
  * Merges: UniverseWorldStatePage. Its Setup Progress moved to the hub's
  * Overview as components/WorldSetupProgress (2026-10-04).
+ *
+ * 2026-10-06: in the hub's design (WorldDashboard.css, tokens only, State's
+ * blue). Inside the hub the front page (components/State/StateSummary)
+ * comes first, fed by this page's snapshots and tension scan; the World
+ * State and Tensions tabs stay below it.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
 import { tabFromSearch } from '../utils/worldRedirects';
+import StateSummary from '../components/State/StateSummary';
+import { AUTO_SNAPSHOT_LABEL, TENSION_LEVELS, snapshotLine } from '../lib/stateSummary';
+import './WorldDashboard.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -30,18 +38,21 @@ const TABS = [
   { key: 'tensions', label: 'Tensions' },
 ];
 
-const tb = (a) => ({ padding:'8px 16px', fontSize:12, fontWeight:600, fontFamily:"'DM Mono', monospace", background:a?'#2C2C2C':'transparent', color:a?'#fff':'#888', border:'none', borderRadius:'6px 6px 0 0', cursor:'pointer' });
-const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:14, marginBottom:8 };
-const inputStyle = { padding:'7px 10px', borderRadius:6, border:'1px solid #e0d9ce', fontSize:12, width:'100%', boxSizing:'border-box' };
+const TL_TYPES = [['plot', 'Plot'], ['backstory', 'Backstory'], ['world', 'World'], ['character', 'Character'], ['relationship', 'Relationship']];
+const IMPACTS = [['minor', 'Minor'], ['moderate', 'Moderate'], ['major', 'Major'], ['catastrophic', 'Catastrophic']];
+const toneOf = (state) => TENSION_LEVELS[String(state || '').toLowerCase()]?.tone || 'blue';
 
 export default function WorldDashboard({ embedded = false }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'state', undefined, 'sub'));
   const [toast, setToast] = useState(null);
   const flash = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
+  const snapLabelRef = useRef(null);
+  const [focusSnap, setFocusSnap] = useState(false);
 
-  // World state
-  const [snapshots, setSnapshots] = useState([]);
+  // World state; snapshots is null until the first read lands.
+  const [snapshots, setSnapshots] = useState(null);
+  const [snapFailed, setSnapFailed] = useState(false);
   const [snapLoading, setSnapLoading] = useState(false);
   const [snapForm, setSnapForm] = useState({ snapshot_label:'', world_facts:'', active_threads:'' });
   const [timelineEvents, setTimelineEvents] = useState([]);
@@ -55,7 +66,12 @@ export default function WorldDashboard({ embedded = false }) {
   const [tensionLoading, setTensionLoading] = useState(false);
 
   // Load state data
-  const loadSnapshots = useCallback(async () => { setSnapLoading(true); try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots||[]); } catch(e){console.error(e);} finally{setSnapLoading(false);} }, []);
+  const loadSnapshots = useCallback(async () => {
+    setSnapLoading(true);
+    try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots||[]); setSnapFailed(false); }
+    catch(e){ console.error(e); setSnapshots((prev) => prev || []); setSnapFailed(true); }
+    finally{setSnapLoading(false);}
+  }, []);
   const loadTimeline = useCallback(async () => { setTlLoading(true); try { const r = await listTimelineApi(); setTimelineEvents(r.data?.events||[]); } catch(e){console.error(e);} finally{setTlLoading(false);} }, []);
   // The scanner contract (routes/worldStudio.js): pairs carry char_a / char_b
   // as { id, name } objects (the page read char_a_name, which never existed,
@@ -67,7 +83,27 @@ export default function WorldDashboard({ embedded = false }) {
     finally { setTensionLoading(false); }
   }, []);
 
-  useEffect(() => { if (tab==='state') { loadSnapshots(); loadTimeline(); } if (tab==='tensions') loadTensions(); }, [tab]);
+  // In the hub the front page shows both, so both load at once.
+  const [loadedTabs] = useState(() => new Set());
+  useEffect(() => {
+    const want = embedded ? ['state', 'tensions'] : [tab];
+    for (const k of want) {
+      if (loadedTabs.has(k)) continue;
+      loadedTabs.add(k);
+      if (k === 'state') { loadSnapshots(); loadTimeline(); }
+      if (k === 'tensions') loadTensions();
+    }
+  }, [tab, embedded, loadedTabs, loadSnapshots, loadTimeline, loadTensions]);
+
+  // "Take a snapshot" on the front page opens World State at the form.
+  useEffect(() => {
+    if (!focusSnap || tab !== 'state') return;
+    setFocusSnap(false);
+    const el = snapLabelRef.current;
+    if (el) { el.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); el.focus(); }
+  }, [focusSnap, tab]);
+  const takeSnapshot = () => { setTab('state'); setFocusSnap(true); };
+  const openTensions = () => setTab('tensions');
 
   const saveSnapshot = async () => {
     try { await createSnapshotApi({ snapshot_label:snapForm.snapshot_label, world_facts:snapForm.world_facts?snapForm.world_facts.split('\n').filter(Boolean):[], active_threads:snapForm.active_threads?snapForm.active_threads.split('\n').filter(Boolean):[] }); flash('Snapshot saved'); setSnapForm({snapshot_label:'',world_facts:'',active_threads:''}); loadSnapshots(); } catch { flash('Failed','error'); }
@@ -90,97 +126,146 @@ export default function WorldDashboard({ embedded = false }) {
     } catch (err) { flash(err.response?.data?.error || 'Could not generate a proposal', 'error'); }
   };
 
+  // The automatic temperature rows are not snapshots anyone took.
+  const saved = (snapshots || []).filter((s) => s.snapshot_label !== AUTO_SNAPSHOT_LABEL);
+  const autoCount = (snapshots || []).length - saved.length;
+
   return (
-    <div style={{ maxWidth:1100, margin:'0 auto', padding: embedded ? 0 : '24px 20px' }}>
-      {/* Header; inside the LalaVerse hub the tab is the heading */}
-      <div style={{ display:'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems:'flex-start', marginBottom: embedded ? 8 : 20 }}>
-        {!embedded && <div>
-          <h1 style={{ fontSize:22, fontWeight:700, color:'#2C2C2C', margin:0 }}>World Dashboard</h1>
-          <p style={{ fontSize:12, color:'#888', margin:'4px 0 0' }}>Current world state and character tensions</p>
-        </div>}
-      </div>
+    <div className={`wd${embedded ? ' is-embedded' : ''}`}>
+      {embedded && (
+        <StateSummary
+          snapshots={snapshots}
+          snapshotsFailed={snapFailed}
+          tensions={{ pairs: tensionPairs, scan: tensionLoading ? null : tensionScan }}
+          onTakeSnapshot={takeSnapshot}
+          onOpenTensions={openTensions}
+        />
+      )}
 
-      <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'1px solid #e8e0d0' }}>
-        {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={tb(tab===t.key)}>{t.label}</button>)}
-      </div>
-
-      {/* WORLD STATE */}
-      {tab === 'state' && (
-        <div>
-          <h2 style={{ fontSize:15, fontWeight:700, margin:'0 0 12px' }}>State Snapshots</h2>
-          <div style={{ ...card, background:'#FAF7F0', border:'1px solid #e8e0d0' }}>
-            <input style={inputStyle} placeholder="Snapshot Label *" value={snapForm.snapshot_label} onChange={e=>setSnapForm(p=>({...p,snapshot_label:e.target.value}))} />
-            <textarea style={{...inputStyle,marginTop:6,resize:'vertical'}} rows={2} placeholder="World Facts (one per line)" value={snapForm.world_facts} onChange={e=>setSnapForm(p=>({...p,world_facts:e.target.value}))} />
-            <textarea style={{...inputStyle,marginTop:6,resize:'vertical'}} rows={2} placeholder="Active Threads (one per line)" value={snapForm.active_threads} onChange={e=>setSnapForm(p=>({...p,active_threads:e.target.value}))} />
-            <button onClick={saveSnapshot} disabled={!snapForm.snapshot_label} style={{ marginTop:8, padding:'6px 14px', fontSize:11, fontWeight:600, background:'#2C2C2C', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' }}>Save Snapshot</button>
+      <div className="wd-shell">
+        {/* Inside the LalaVerse hub the tab is the heading */}
+        {!embedded && (
+          <div className="wd-head">
+            <h1 className="wd-h1">World Dashboard</h1>
+            <p className="wd-note">Current world state and character tensions</p>
           </div>
-          {snapLoading ? <div style={{color:'#999',textAlign:'center',padding:20}}>Loading...</div> : snapshots.map(s => (
-            <div key={s.id} style={card}>
-              <div style={{fontWeight:600,fontSize:13}}>{s.snapshot_label}</div>
-              <div style={{fontSize:10,color:'#888'}}>Position: {s.timeline_position||'—'}</div>
-              {s.world_facts?.length>0 && <div style={{marginTop:4}}>{s.world_facts.map((f,i)=><span key={i} style={{fontSize:10,background:'#f0eee8',borderRadius:3,padding:'1px 5px',marginRight:3}}>{f}</span>)}</div>}
-              {s.active_threads?.length>0 && <div style={{marginTop:3}}>{s.active_threads.map((t,i)=><span key={i} style={{fontSize:10,background:'#e8edf5',borderRadius:3,padding:'1px 5px',marginRight:3}}>{t}</span>)}</div>}
-            </div>
-          ))}
+        )}
 
-          <h2 style={{ fontSize:15, fontWeight:700, margin:'24px 0 12px' }}>Timeline Events</h2>
-          <div style={{ ...card, background:'#FAF7F0', border:'1px solid #e8e0d0' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-              <input style={inputStyle} placeholder="Event Name *" value={tlForm.event_name} onChange={e=>setTlForm(p=>({...p,event_name:e.target.value}))} />
-              <input style={inputStyle} placeholder="Story Date" value={tlForm.story_date} onChange={e=>setTlForm(p=>({...p,story_date:e.target.value}))} />
-              <select style={inputStyle} value={tlForm.event_type} onChange={e=>setTlForm(p=>({...p,event_type:e.target.value}))}>
-                <option value="plot">Plot</option><option value="backstory">Backstory</option><option value="world">World</option><option value="character">Character</option><option value="relationship">Relationship</option>
-              </select>
-              <select style={inputStyle} value={tlForm.impact_level} onChange={e=>setTlForm(p=>({...p,impact_level:e.target.value}))}>
-                <option value="minor">Minor</option><option value="moderate">Moderate</option><option value="major">Major</option><option value="catastrophic">Catastrophic</option>
-              </select>
-            </div>
-            <textarea style={{...inputStyle,marginTop:6,resize:'vertical'}} rows={2} placeholder="Description" value={tlForm.event_description} onChange={e=>setTlForm(p=>({...p,event_description:e.target.value}))} />
-            <button onClick={saveTimelineEvent} disabled={!tlForm.event_name} style={{ marginTop:8, padding:'6px 14px', fontSize:11, fontWeight:600, background:'#2C2C2C', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' }}>Add Event</button>
-          </div>
-          {tlLoading ? <div style={{color:'#999',textAlign:'center',padding:20}}>Loading...</div> : timelineEvents.map(ev => (
-            <div key={ev.id} style={{...card,display:'flex',justifyContent:'space-between'}}>
-              <div>
-                <div style={{fontWeight:600,fontSize:13}}>{ev.impact_level==='catastrophic'?'🔥':ev.impact_level==='major'?'⚠️':'•'} {ev.event_name}</div>
-                <div style={{fontSize:10,color:'#888'}}>{ev.event_type} · {ev.impact_level}{ev.story_date?` · ${ev.story_date}`:''}</div>
-                {ev.event_description && <div style={{fontSize:11,color:'#666',marginTop:2}}>{ev.event_description}</div>}
+        <div className="wd-tabs" role="tablist" aria-label="State sections">
+          {TABS.map(t => <button key={t.key} type="button" role="tab" aria-selected={tab===t.key} className={`wd-tab${tab===t.key?' is-active':''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
+        </div>
+
+        {/* WORLD STATE */}
+        {tab === 'state' && (
+          <div role="tabpanel" aria-label="World State">
+            <h2 className="wd-h2">State snapshots</h2>
+            <p className="wd-note">What is true of the world at a point in the story: its facts and the threads still open.</p>
+            <div className="wd-form">
+              <label className="wd-field"><span>Snapshot label *</span>
+                <input ref={snapLabelRef} className="wd-input" placeholder="e.g. Before the Dazzle Season" value={snapForm.snapshot_label} onChange={e=>setSnapForm(p=>({...p,snapshot_label:e.target.value}))} />
+              </label>
+              <div className="wd-two">
+                <label className="wd-field"><span>World facts (one per line)</span>
+                  <textarea className="wd-input" rows={3} value={snapForm.world_facts} onChange={e=>setSnapForm(p=>({...p,world_facts:e.target.value}))} />
+                </label>
+                <label className="wd-field"><span>Active threads (one per line)</span>
+                  <textarea className="wd-input" rows={3} value={snapForm.active_threads} onChange={e=>setSnapForm(p=>({...p,active_threads:e.target.value}))} />
+                </label>
               </div>
-              <button onClick={()=>deleteTimelineEvent(ev.id)} style={{background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:14}}>x</button>
+              <button type="button" className="wd-btn" onClick={saveSnapshot} disabled={!snapForm.snapshot_label}>Save Snapshot</button>
             </div>
-          ))}
-        </div>
-      )}
+            {snapLoading && !snapshots ? <p className="wd-empty">Loading…</p> : (
+              <>
+                {snapFailed && <p className="wd-empty">The snapshots could not be read just now.</p>}
+                {!snapFailed && saved.length === 0 && <p className="wd-empty">No snapshots saved yet.</p>}
+                <ul className="wd-list">
+                  {saved.map(s => (
+                    <li key={s.id} className="wd-card">
+                      <div className="wd-card-top"><strong className="wd-card-title">{s.snapshot_label}</strong><span className="wd-meta">{snapshotLine(s)}{s.timeline_position ? ` · position ${s.timeline_position}` : ''}</span></div>
+                      {s.world_facts?.length>0 && <div className="wd-chips">{s.world_facts.map((f,i)=><span key={i} className="wd-chip">{typeof f === 'string' ? f : f?.fact}</span>)}</div>}
+                      {s.active_threads?.length>0 && <div className="wd-chips">{s.active_threads.map((t,i)=><span key={i} className="wd-chip is-thread">{typeof t === 'string' ? t : t?.name || t?.thread_name}</span>)}</div>}
+                    </li>
+                  ))}
+                </ul>
+                {autoCount > 0 && <p className="wd-foot">{autoCount === 1 ? 'One automatic world temperature reading is' : `${autoCount} automatic world temperature readings are`} kept with the snapshots (one per accepted episode) and not listed here.</p>}
+              </>
+            )}
 
-      {/* TENSIONS */}
-      {tab === 'tensions' && (
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-            <h2 style={{margin:0,fontSize:15,fontWeight:700}}>Character Tension Scanner</h2>
-            <button onClick={loadTensions} disabled={tensionLoading} style={{padding:'6px 14px',fontSize:11,fontWeight:600,background:'#FAF7F0',border:'1px solid #e8e0d0',borderRadius:6,cursor:'pointer'}}>{tensionLoading?'Scanning...':'Rescan'}</button>
+            <h2 className="wd-h2 is-spaced">Timeline events</h2>
+            <p className="wd-note">What happened in the world, in story order. Each one also lands on the story calendar.</p>
+            <div className="wd-form">
+              <div className="wd-two">
+                <label className="wd-field"><span>Event name *</span>
+                  <input className="wd-input" value={tlForm.event_name} onChange={e=>setTlForm(p=>({...p,event_name:e.target.value}))} />
+                </label>
+                <label className="wd-field"><span>Story date</span>
+                  <input className="wd-input" value={tlForm.story_date} onChange={e=>setTlForm(p=>({...p,story_date:e.target.value}))} />
+                </label>
+                <label className="wd-field"><span>Type</span>
+                  <select className="wd-input" value={tlForm.event_type} onChange={e=>setTlForm(p=>({...p,event_type:e.target.value}))}>
+                    {TL_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </label>
+                <label className="wd-field"><span>Impact</span>
+                  <select className="wd-input" value={tlForm.impact_level} onChange={e=>setTlForm(p=>({...p,impact_level:e.target.value}))}>
+                    {IMPACTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="wd-field"><span>Description</span>
+                <textarea className="wd-input" rows={2} value={tlForm.event_description} onChange={e=>setTlForm(p=>({...p,event_description:e.target.value}))} />
+              </label>
+              <button type="button" className="wd-btn" onClick={saveTimelineEvent} disabled={!tlForm.event_name}>Add Event</button>
+            </div>
+            {tlLoading ? <p className="wd-empty">Loading…</p> : timelineEvents.length === 0 ? <p className="wd-empty">No timeline events yet.</p> : (
+              <ul className="wd-list">
+                {timelineEvents.map(ev => (
+                  <li key={ev.id} className={`wd-card wd-event is-${ev.impact_level || 'minor'}`}>
+                    <div className="wd-card-top">
+                      <strong className="wd-card-title">{ev.event_name}</strong>
+                      <button type="button" className="wd-delete" aria-label={`Delete ${ev.event_name}`} onClick={()=>deleteTimelineEvent(ev.id)}>Delete</button>
+                    </div>
+                    <span className="wd-meta">{ev.event_type} · {ev.impact_level}{ev.story_date?` · ${ev.story_date}`:''}</span>
+                    {ev.event_description && <p className="wd-card-text">{ev.event_description}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          {tensionLoading ? <div style={{textAlign:'center',color:'#999',padding:40}}>Scanning...</div> : (
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))',gap:10}}>
-              {tensionPairs.map((p,i) => (
-                <div key={i} style={card}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <span style={{fontWeight:700,fontSize:13}}>{p.char_a?.name || 'Unknown'} <span style={{color:'#c44'}}>⚡</span> {p.char_b?.name || 'Unknown'}</span>
-                    <span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:10,background:p.tension_state==='Explosive'?'#fee':p.tension_state==='Simmering'?'#fff3e0':'#f5f5f5',color:p.tension_state==='Explosive'?'#c44':p.tension_state==='Simmering'?'#e65100':'#666'}}>{p.tension_state}</span>
-                  </div>
-                  <div style={{fontSize:11,color:'#888',marginTop:4}}>{p.relationship_type}{p.romantic?' · 💕':''}</div>
-                  {p.conflict_summary && <div style={{fontSize:11,color:'#666',marginTop:4,lineHeight:1.4}}>{p.conflict_summary}</div>}
-                  <button onClick={()=>proposeTensionScene(p)} style={{marginTop:8,padding:'5px 12px',fontSize:10,fontWeight:600,background:'#2C2C2C',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>Propose Scene</button>
-                </div>
-              ))}
-              {/* Three different empties: the scan failed, nothing to scan, nothing simmering */}
-              {tensionPairs.length===0 && tensionScan?.status === 'scan_failed' && <div data-testid="tensions-scan-failed" style={{gridColumn:'1/-1',padding:'12px 16px',borderRadius:8,background:'var(--warning-bg)',border:'1px solid var(--warning-border)',color:'var(--warning-text)',fontSize:12}}>The scan could not run{tensionScan.error ? `: ${tensionScan.error}` : ''}. This is not "no tension". Rescan, or check the server log.</div>}
-              {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned === 0 && <div data-testid="tensions-no-data" style={{color:'var(--text-secondary)',gridColumn:'1/-1',textAlign:'center',padding:40}}>No active characters with relationship data to scan. Add relationships in the Character Registry first.</div>}
-              {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned > 0 && <div data-testid="tensions-none" style={{color:'var(--text-secondary)',gridColumn:'1/-1',textAlign:'center',padding:40}}>No high-tension pairs among {tensionScan.characters_scanned} characters.</div>}
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      {toast && <div style={{position:'fixed',bottom:24,right:24,padding:'10px 20px',borderRadius:8,fontSize:13,fontWeight:600,zIndex:9999,background:toast.type==='error'?'#fee':'#e8f5e9',color:toast.type==='error'?'#c44':'#2e7d32',border:`1px solid ${toast.type==='error'?'#fcc':'#c8e6c9'}`}}>{toast.msg}</div>}
+        {/* TENSIONS */}
+        {tab === 'tensions' && (
+          <div role="tabpanel" aria-label="Tensions" data-testid="wd-tensions-panel">
+            <div className="wd-card-top wd-section-head">
+              <h2 className="wd-h2">Character tension scanner</h2>
+              <button type="button" className="wd-btn is-quiet" onClick={loadTensions} disabled={tensionLoading}>{tensionLoading?'Scanning...':'Rescan'}</button>
+            </div>
+            <p className="wd-note">Pairs whose relationship is Simmering, Unresolved, High or Explosive. Propose Scene turns one into a scene proposal for Story Evaluation.</p>
+            {tensionLoading ? <p className="wd-empty">Scanning…</p> : (
+              <div className="wd-grid">
+                {tensionPairs.map((p,i) => (
+                  <div key={i} className={`wd-card wd-pair wd-tone-${toneOf(p.tension_state)}`}>
+                    <div className="wd-card-top">
+                      <strong className="wd-card-title">{p.char_a?.name || 'Unknown'} &amp; {p.char_b?.name || 'Unknown'}</strong>
+                      <span className="wd-state">{p.tension_state}</span>
+                    </div>
+                    <span className="wd-meta">{p.relationship_type}{p.romantic?' · romantic':''}</span>
+                    {p.conflict_summary && <p className="wd-card-text">{p.conflict_summary}</p>}
+                    <button type="button" className="wd-btn is-small" onClick={()=>proposeTensionScene(p)}>Propose Scene</button>
+                  </div>
+                ))}
+                {/* Three different empties: the scan failed, nothing to scan, nothing simmering */}
+                {tensionPairs.length===0 && tensionScan?.status === 'scan_failed' && <div data-testid="tensions-scan-failed" className="wd-warn">The scan could not run{tensionScan.error ? `: ${tensionScan.error}` : ''}. This is not "no tension". Rescan, or check the server log.</div>}
+                {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned === 0 && <div data-testid="tensions-no-data" className="wd-empty is-wide">No active characters with relationship data to scan. Add relationships in the Character Registry first.</div>}
+                {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned > 0 && <div data-testid="tensions-none" className="wd-empty is-wide">No high-tension pairs among {tensionScan.characters_scanned} characters.</div>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {toast && <div role="status" className={`wd-toast${toast.type==='error'?' is-error':''}`}>{toast.msg}</div>}
     </div>
   );
 }

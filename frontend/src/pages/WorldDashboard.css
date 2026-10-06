@@ -1,0 +1,78 @@
+/* WorldDashboard.css — the State tab's World State and Tensions sub-tabs
+   in the hub's design (2026-10-06): white cards on parchment, State's blue
+   for the page's own marks. Tokens only. A tension pair's tone is its
+   level (explosive peach, high pink, unresolved gold, simmering blue), as
+   on the front page (components/State/StateSummary). */
+
+.wd { max-width: 1200px; margin: 0 auto; }
+.wd:not(.is-embedded) { padding: 16px 24px 32px; }
+.wd-shell { background: var(--surface-card); border: 1px solid var(--info-border); border-radius: 20px; padding: 22px 24px; }
+.wd-head { margin-bottom: 14px; }
+.wd-h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; color: var(--text-primary); }
+.wd-h2 { margin: 0 0 4px; font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.wd-h2.is-spaced { margin-top: 26px; }
+.wd-note { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.wd-foot { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.wd-empty { margin: 4px 0 8px; font-size: 13px; color: var(--text-secondary); }
+.wd-empty.is-wide { grid-column: 1 / -1; text-align: center; padding: 24px 12px; }
+.wd-warn { grid-column: 1 / -1; padding: 12px 16px; border-radius: 12px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 13px; overflow-wrap: anywhere; }
+
+.wd-tabs { display: flex; gap: 8px; margin-bottom: 18px; overflow-x: auto; padding-bottom: 2px; }
+.wd-tab {
+  flex-shrink: 0; min-height: 44px; padding: 6px 18px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--info-border); background: var(--surface-card); color: var(--text-primary);
+  font: inherit; font-size: 14px; font-weight: 700;
+}
+.wd-tab.is-active { background: var(--info-text); border-color: var(--info-text); color: var(--text-inverse); }
+
+/* ── Forms ── */
+.wd-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px 16px; border-radius: 14px; background: var(--info-bg); }
+.wd-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wd-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wd-field > span { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.wd-input {
+  width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--info-border); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; resize: vertical;
+}
+.wd-input:focus { outline: 2px solid var(--info-text); outline-offset: 1px; }
+.wd-btn {
+  align-self: flex-start; min-height: 44px; padding: 0 18px; border-radius: 999px; border: none;
+  background: var(--info-text); color: var(--text-inverse); cursor: pointer; font: inherit; font-size: 14px; font-weight: 700;
+}
+.wd-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.wd-btn.is-quiet { background: var(--surface-card); color: var(--info-text); border: 1px solid var(--info-border); }
+.wd-btn.is-small { min-height: 40px; font-size: 13px; margin-top: 4px; }
+
+/* ── Lists ── */
+.wd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.wd-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px; border-radius: 14px; background: var(--surface-bg); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.wd-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wd-section-head { margin-bottom: 4px; }
+.wd-card-title { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+.wd-card-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
+.wd-meta { font-size: 12px; color: var(--text-secondary); }
+.wd-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.wd-chip { padding: 2px 10px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--border); font-size: 12px; color: var(--text-primary); }
+.wd-chip.is-thread { background: var(--info-bg); border-color: var(--info-border); }
+.wd-delete { min-height: 36px; padding: 0 12px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--danger-border); color: var(--danger-text); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+
+.wd-event { border-left: 4px solid var(--info-border); }
+.wd-event.is-major { border-left-color: var(--lala-gold); }
+.wd-event.is-catastrophic { border-left-color: var(--danger); }
+
+.wd-tone-peach { --wd-text: var(--danger-text);    --wd-line: var(--danger); }
+.wd-tone-pink  { --wd-text: var(--accent-dark);    --wd-line: var(--accent); }
+.wd-tone-gold  { --wd-text: var(--lala-gold-text); --wd-line: var(--lala-gold); }
+.wd-tone-blue  { --wd-text: var(--info-text);      --wd-line: var(--info); }
+.wd-pair { border-top: 4px solid var(--wd-line); }
+.wd-state { padding: 2px 10px; border-radius: 999px; background: var(--surface-card); font-size: 12px; font-weight: 800; color: var(--wd-text); }
+
+.wd-toast { position: fixed; bottom: 24px; right: 24px; z-index: var(--z-toast); padding: 10px 18px; border-radius: 12px; font-size: 13px; font-weight: 600; background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+.wd-toast.is-error { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); }
+
+@media (max-width: 720px) {
+  .wd-shell { padding: 16px; border-radius: 16px; }
+  .wd-two, .wd-grid { grid-template-columns: 1fr; }
+  .wd-toast { left: 16px; right: 16px; }
+}
