@@ -41,7 +41,7 @@ const STEPS = [
     route: '/universe?tab=world',
     description: 'Define the DREAM cities, companies, universities, and legendary figures of the LalaVerse. This is the foundation — who runs what, where power lives.',
     feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'],
-    action: 'Set up cities, corporations, and schools → Push to Brain',
+    action: 'Set up cities, corporations, and schools → Brain Update',
     checkField: 'infrastructure',
   },
   {
@@ -52,7 +52,7 @@ const STEPS = [
     route: '/universe?tab=society',
     description: 'How does influence work? Creator archetypes, relationship types, income streams, trend cycles. These rules determine how feed profiles behave.',
     feeds: ['Feed profile generation', 'Event automation', 'Story evaluation'],
-    action: 'Review archetypes and economy → Push to Brain',
+    action: 'Review archetypes and economy → Brain Update',
     checkField: 'influencer',
   },
   {
@@ -74,7 +74,7 @@ const STEPS = [
     route: '/universe?tab=culture',
     description: 'How the world remembers its past — legends, feuds, anniversaries. Gives characters shared history to reference in dialogue and content.',
     feeds: ['Character dialogue', 'Feed post generation', 'Story depth'],
-    action: 'Review memory types → Push to Brain',
+    action: 'Review memory types → Brain Update',
     checkField: 'memory',
   },
   {
@@ -163,7 +163,7 @@ export default function WorldSetupGuide() {
 
         {/* How it connects */}
         <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '16px 20px', marginBottom: 28, fontSize: 13, color: '#555', lineHeight: 1.6 }}>
-          <strong style={{ color: '#B8962E' }}>How it all connects:</strong> Infrastructure defines the world → Influencer rules govern how people behave → Cultural Calendar creates yearly events → Memory gives depth → Locations are where things happen → Feed profiles are the people → Events are the story moments. Each layer feeds into the next. Push each to Franchise Brain so the AI uses your rules.
+          <strong style={{ color: '#B8962E' }}>How it all connects:</strong> Infrastructure defines the world → Influencer rules govern how people behave → Cultural Calendar creates yearly events → Memory gives depth → Locations are where things happen → Feed profiles are the people → Events are the story moments. Each layer feeds into the next. On the World, Society and Culture pages, Brain Update (Connect to Brain the first time) copies the page into the Show Bible as cards.
         </div>
 
         {/* Steps */}
