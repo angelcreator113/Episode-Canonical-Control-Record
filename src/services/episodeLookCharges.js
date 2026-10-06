@@ -112,4 +112,45 @@ function lookCharges(pieces, bought = new Set()) {
   return charges;
 }
 
-module.exports = { UUID_RE, loadLookPieces, boughtPieceIds, lookCharges };
+/**
+ * Lala's look as the Event Package shows it once the event has started an
+ * episode (Evoni, 2026-10-06: "wardrobe pieces are not showing"). After
+ * Start Episode the look is chosen in the episode's styling game, which
+ * links pieces to the episode (episode_wardrobe); the event's own
+ * outfit_pieces is only the look picked before. By the rule Finalize
+ * charges by (loadLookPieces):
+ *   state 'locked'  the approved links, the look Finalize charges;
+ *   state 'chosen'  pieces linked but not locked yet (pending, not rejected);
+ *   state 'event'   no links: the outfit saved on the event;
+ *   state 'none'    nothing chosen anywhere.
+ * Returns { episode_id, state, pieces: [{ id, name, is_owned, coin_cost }] }.
+ */
+async function episodeLook(sequelize, { episodeId, event }) {
+  const slim = (p) => ({
+    id: p.id,
+    name: p.name || null,
+    is_owned: p.is_owned === true,
+    coin_cost: p.coin_cost != null ? (parseFloat(p.coin_cost) || 0) : (p.price != null ? (parseFloat(p.price) || 0) : null),
+  });
+  let linked = [];
+  try {
+    linked = await sequelize.query(
+      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, COALESCE(ew.approval_status, 'pending') AS approval_status
+         FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
+        WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
+          AND COALESCE(ew.approval_status, 'pending') <> 'rejected'
+          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL
+        ORDER BY ew.created_at ASC, w.id ASC`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+  } catch (linkErr) {
+    console.error('[EpisodeLook] Could not read the episode\'s look for episode', episodeId, linkErr.message);
+  }
+  const approved = linked.filter((p) => p.approval_status === 'approved');
+  if (approved.length) return { episode_id: episodeId, state: 'locked', pieces: approved.map(slim) };
+  if (linked.length) return { episode_id: episodeId, state: 'chosen', pieces: linked.map(slim) };
+  const saved = await loadLookPieces(sequelize, { episodeId, event });
+  return { episode_id: episodeId, state: saved.length ? 'event' : 'none', pieces: saved.map(slim) };
+}
+
+module.exports = { UUID_RE, loadLookPieces, boughtPieceIds, lookCharges, episodeLook };
