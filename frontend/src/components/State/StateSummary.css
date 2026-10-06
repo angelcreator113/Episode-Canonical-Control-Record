@@ -1,0 +1,66 @@
+/* StateSummary: the State tab's front page (the mock, 2026-10-06), in the
+   hub's blue for State. Tokens only. A tension's tone is its level:
+   explosive peach, high pink, unresolved gold, simmering blue; every
+   tone's text reads 4.5:1 on white (StateSummary.theme.test.js). */
+
+.st { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+.st-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.st-card { background: var(--surface-card); border: 1px solid var(--info-border); border-radius: 16px; padding: 18px 20px; min-width: 0; }
+.st-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.st-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.st-sub { font-size: 13px; color: var(--text-secondary); }
+.st-note { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.st-foot { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.st-btn {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 999px;
+  border: none; background: var(--info-text); color: var(--text-inverse); cursor: pointer; font: inherit; font-size: 14px; font-weight: 700;
+}
+.st-link {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 44px;
+  font-size: 13px; font-weight: 700; color: var(--info-text); text-decoration: none;
+}
+.st-link:hover, .st-more:hover { text-decoration: underline; }
+.st-more { min-height: 44px; padding: 0; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--info-text); }
+
+/* ── Snapshots ── */
+.st-snaps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.st-snap {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px 14px; border-radius: 14px;
+  background: var(--surface-card); border: 1px solid var(--info-border); overflow-wrap: anywhere;
+}
+.st-snap.is-done { background: var(--info-bg); border: 2px solid var(--info-text); }
+.st-snap-kicker { font-size: 12px; font-weight: 800; color: var(--info-text); }
+.st-snap-title { font-size: 15px; font-weight: 800; color: var(--text-primary); text-decoration: none; }
+a.st-snap-title:hover { text-decoration: underline; }
+.st-snap-meta { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.st-snap.is-done .st-snap-meta { color: var(--text-primary); }
+.st-snaps + .st-note { margin-top: 12px; }
+
+/* ── Tensions ── */
+.st-tone-peach { --st-text: var(--danger-text);        --st-fill: var(--danger); }
+.st-tone-pink  { --st-text: var(--accent-dark);        --st-fill: var(--accent); }
+.st-tone-gold  { --st-text: var(--lala-gold-text);     --st-fill: var(--lala-gold); }
+.st-tone-blue  { --st-text: var(--info-text);          --st-fill: var(--info); }
+.st-tensions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.st-tension { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.st-tension-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.st-tension-state { font-size: 13px; font-weight: 800; color: var(--st-text); }
+.st-bar { display: block; height: 14px; border-radius: 999px; background: var(--info-bg); overflow: hidden; }
+.st-bar span { display: block; height: 100%; border-radius: 999px; background: var(--st-fill); }
+.st-tension-text { font-size: 12px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* ── What changed ── */
+.st-changed { background: var(--info-bg); }
+.st-changed .st-title { color: var(--info-text); }
+.st-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.st-changes li { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.st-when { font-size: 13px; color: var(--text-primary); }
+.st-change-text { font-size: 13px; color: var(--text-primary); }
+.st-changed .st-note, .st-changed .st-foot { color: var(--text-primary); }
+
+@media (max-width: 900px) { .st-cols { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .st-card { padding: 16px; }
+  .st-snaps { grid-template-columns: 1fr; }
+  .st-btn { margin-left: 0; }
+}

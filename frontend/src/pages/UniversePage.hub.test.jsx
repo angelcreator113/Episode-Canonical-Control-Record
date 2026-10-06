@@ -70,10 +70,11 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByTestId('world-setup-count')).toBeTruthy();
   });
 
-  test('the State tab holds World State and Tensions only; setup is gone from it', async () => {
+  test('the State tab holds its front page, World State and Tensions; setup is gone from it', async () => {
     renderAt('/universe?tab=state');
-    await screen.findByText('World State');
-    expect(screen.getByText('Tensions')).toBeTruthy();
+    expect(await screen.findByRole('tab', { name: 'World State' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Tensions' })).toBeTruthy();
+    expect(screen.getByTestId('state-summary')).toBeTruthy();
     expect(screen.queryByText('Setup Progress')).toBeNull();
     expect(screen.queryByTestId('world-setup-count')).toBeNull();
   });
