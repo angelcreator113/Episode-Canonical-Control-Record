@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import SocialTaskBadge from '../SocialTaskBadge';
 import { isSocialTaskRequired } from '../../utils/socialTaskSource';
-import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
 
 // The wardrobe list wears the gold family, the career list the teal
 // family: the fill for borders and check squares, the soft tint for
@@ -408,14 +407,6 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
           );
         })}
       </div>
-      )}
-
-      {/* P14 (Task #2395): approve the task list, design its overlay */}
-      {!isWardrobe && careerList && (
-        <EpisodeTaskListOverlay
-          episodeId={episodeId}
-          listKey={JSON.stringify((careerList.tasks || []).map((t) => [t.label, t.description, t.task_source, t.required]))}
-        />
       )}
 
       {error && (

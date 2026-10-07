@@ -1,7 +1,7 @@
 /**
  * Production → Overlays (P15, Evoni 2026-09-30). GET /episodes/:id/overlays
  * against the test database, through the app:
- *   - an episode with nothing made lists its four pieces as not made, with
+ *   - an episode with nothing made lists its pieces as not made, with
  *     the costs of making them, and makes no image call;
  *   - a saved title overlay is approved; a changed title makes it outdated;
  *     the banner chip follows it;
@@ -107,12 +107,13 @@ afterAll(() => setOverlaysOnBeats(false));
   const overlays = (ids) => auth(request(app).get(`/api/v1/episodes/${ids.ep}/overlays`));
   const byKey = (res) => Object.fromEntries(res.body.data.pieces.map((p) => [p.key, p]));
 
-  it('nothing made: four pieces, not made, with their costs; no image call', async () => {
+  it('nothing made: every piece not made, with their costs; no image call', async () => {
     const ids = await seed();
     const res = await overlays(ids);
     expect(res.status).toBe(200);
     expect(res.body.data.pieces.map((p) => [p.key, p.status])).toEqual([
-      ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'], ['task_list', 'not_made'],
+      ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'],
+      ['shopping_list_doc', 'not_made'], ['career_plan_doc', 'not_made'],
     ]);
     const pieces = byKey(res);
     expect(pieces.invitation.event).toEqual({ id: ids.event, show_id: ids.show, name: 'Velvet Gala' });
@@ -183,6 +184,33 @@ afterAll(() => setOverlaysOnBeats(false));
     expect(pieces.title_overlay.beat.number).toBe(1);
     const live = await q(`SELECT asset_id FROM timeline_placements WHERE episode_id = :ep AND deleted_at IS NULL`, ids);
     expect(live.map((r) => r.asset_id)).toEqual([pieces.title_overlay.asset_id]);
+  });
+
+  // Evoni, 2026-10-07: "add the document overlays to the episode's list".
+  it("the event's shopping list and career plan are listed: approved with their drawn overlay, outdated once edited", async () => {
+    const ids = await seed();
+    const overlay = { asset_id: uuid(), url: 'data:image/png;base64,AAAA', version: 2, made_at: new Date().toISOString() };
+    const docs = {
+      shopping_list: { type: 'shopping_list', status: 'approved', version: 2, items: [{ slot: 'dress', label: 'A dress' }], overlay },
+      career_plan: { type: 'career_plan', status: 'draft', version: 3, items: [{ slot: 'g', label: 'Meet the team' }], overlay: { ...overlay, version: 1 } },
+    };
+    await run(`UPDATE world_events SET canon_consequences = :cc WHERE id = :event`, { ...ids, cc: JSON.stringify({ documents: docs }) });
+    const pieces = byKey(await overlays(ids));
+    expect(pieces.shopping_list_doc).toMatchObject({
+      label: 'Shopping list', status: 'approved', image_url: overlay.url, asset_id: overlay.asset_id, beat: null,
+      document: { type: 'shopping_list', status: 'approved', version: 2 },
+      event: { id: ids.event, name: 'Velvet Gala' },
+    });
+    expect(pieces.career_plan_doc).toMatchObject({ label: 'Career plan', status: 'outdated', image_url: overlay.url });
+  });
+
+  // Evoni, 2026-10-07: "retire the ai made task list overlay".
+  it('the task-list overlay routes are retired: design, approve and state are gone, and nothing is generated', async () => {
+    const ids = await seed();
+    expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/task-list-overlay`))).status).toBe(404);
+    expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/task-list/approve`)).send({})).status).toBe(404);
+    expect((await auth(request(app).get(`/api/v1/episodes/${ids.ep}/task-list-overlay`))).status).toBe(404);
+    expect(genSpy).not.toHaveBeenCalled();
   });
 
   it('an unknown episode is 404; no login is 401', async () => {

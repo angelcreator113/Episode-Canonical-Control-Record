@@ -5,15 +5,17 @@
  * off beats for now (Evoni, 2026-10-07), so the rows carry no beat.
  *
  * The pieces are GET /episodes/:id/overlays (episodeOverlaysService): the
- * title overlay, the framed card, the invitation and the task-list overlay,
- * each approved, outdated or not made.
+ * title overlay, the framed card, the invitation and the event's shopping
+ * list and career plan (drawn when approved, Evoni
+ * 2026-10-07), each approved, outdated or not made.
  */
 
 const KIND = {
   title_overlay: 'Title',
   framed_card: 'Title card',
   invitation: 'Document',
-  task_list: 'Document',
+  shopping_list_doc: 'Document',
+  career_plan_doc: 'Document',
 };
 
 // What each piece shows, in the mock's words.
@@ -21,8 +23,12 @@ const TEXT = {
   title_overlay: 'The episode title',
   framed_card: 'Full-screen framed title card',
   invitation: 'Invitation, full screen',
-  task_list: 'Task list',
+  shopping_list_doc: 'Shopping list',
+  career_plan_doc: 'Career plan',
 };
+
+/** The pieces drawn from the event's documents (made in In-world documents). */
+export const DOCUMENT_KEYS = Object.freeze(['invitation', 'shopping_list_doc', 'career_plan_doc']);
 
 /** A piece is still needed until it is approved (not made, or outdated). */
 export function pieceNeeded(piece) {
