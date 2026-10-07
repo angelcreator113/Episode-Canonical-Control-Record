@@ -3,11 +3,13 @@
  * Evoni's mock (2026-10-06): the five DREAM cities as a map of bubbles;
  * pick one to see what it is known for, its venues (from the World
  * locations, with the events that use them) and its schools and
- * companies. The World page's own tabs (The Map, Locations) stay below.
+ * companies. Below it sit the illustrated map (its pin positions feed the
+ * phone's map) and the Locations list; the old city, school and company
+ * cards were dropped from the hub as duplicates of this (2026-10-07).
  *
  * Honest about the data (lib/dreamCityExplorer): a venue counts for a city
  * only when its city field names it; companies and legends carry no city
- * in the data, so the card says they are not placed yet.
+ * in the data, so the card lists them as not placed in a city yet.
  */
 import React, { useState } from 'react';
 import { cityPlaces, placeCounts, citySchools, cityCompanies } from '../../lib/dreamCityExplorer';
@@ -32,7 +34,7 @@ export default function DreamCityExplorer({ cities, universities, corporations, 
   const counts = placeCounts(locations, list);
   const places = city ? cityPlaces(locations, city) : [];
   const schools = city ? citySchools(universities, city) : [];
-  const companies = city ? cityCompanies(corporations, city) : { here: [], unplaced: 0 };
+  const companies = city ? cityCompanies(corporations, city) : { here: [], unplaced: [] };
   const placed = (key) => Boolean(SPOTS[key]);
 
   return (
@@ -113,8 +115,14 @@ export default function DreamCityExplorer({ cities, universities, corporations, 
               </ul>
             )}
             {schools.length === 0 && companies.here.length === 0 && <p className="dce-note">No school or company is placed in {city.name} yet.</p>}
-            {companies.unplaced > 0 && (
-              <p className="dce-note">{companies.unplaced === 1 ? 'One company names' : `${companies.unplaced} companies name`} no city yet, and legends are not tied to a city. They are listed under The Map below.</p>
+            {companies.unplaced.length > 0 && (
+              <div data-testid="dce-unplaced">
+                <p className="dce-note">Not placed in a city yet:</p>
+                <ul className="dce-schools">
+                  {companies.unplaced.map((c) => <li key={c.name}><strong>{c.name}</strong>{c.industry && <span> · {c.industry}</span>}</li>)}
+                </ul>
+                <p className="dce-note">Legends are not tied to a city; they are on the Society tab.</p>
+              </div>
             )}
           </section>
         </div>

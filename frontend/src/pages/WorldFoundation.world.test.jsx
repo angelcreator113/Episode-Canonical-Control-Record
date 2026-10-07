@@ -36,6 +36,16 @@ describe('World tab', () => {
     expect(loop.open).toBe(true);
   });
 
+  test('in the hub the map keeps the illustrated map but not the old city, school and company cards', () => {
+    window.history.pushState({}, '', '/universe?tab=world');
+    renderAt('/universe?tab=world');
+    expect(screen.getByTestId('dream-city-explorer')).toBeTruthy();
+    expect(screen.queryByText('DREAM CITIES')).toBeNull();
+    expect(screen.queryByText('UNIVERSITIES')).toBeNull();
+    expect(screen.queryByText('CORPORATIONS')).toBeNull();
+    expect(screen.getByText('Upload Map Image')).toBeTruthy();
+  });
+
   test('a ?sub=loop link lands on the map', () => {
     window.history.pushState({}, '', '/universe?tab=world&sub=loop');
     renderAt('/universe?tab=world&sub=loop');

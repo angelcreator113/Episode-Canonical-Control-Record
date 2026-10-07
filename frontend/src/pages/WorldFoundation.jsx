@@ -6,7 +6,10 @@
  *
  * In the LalaVerse hub (embedded) the tabs sit under the city explorer
  * (components/World/DreamCityExplorer, the mock, 2026-10-06): pick a DREAM
- * city to see its venues, schools and companies.
+ * city to see its venues, schools and companies. There The Map keeps the
+ * Loop and the illustrated map (Edit Positions sets the phone map's pins)
+ * but not the old city, university and corporation cards, which the
+ * explorer shows (2026-10-07).
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
@@ -283,6 +286,8 @@ export default function WorldFoundation({ embedded = false }) {
             </div>
           )}
 
+          {/* City, university and corporation cards: the standalone page only; in the hub the explorer above shows them */}
+          {!embedded && (<>
           {/* City cards below map */}
           <div style={{ marginTop: 24 }}>
             <div style={labelStyle}>DREAM CITIES</div>
@@ -332,6 +337,7 @@ export default function WorldFoundation({ embedded = false }) {
               ))}
             </div>
           </div>
+          </>)}
         </div>
       )}
 

@@ -272,10 +272,12 @@ export default function DreamMap({
               <div style={{ position: 'absolute', left: '5%', top: '15%', width: '35%', height: '55%', background: 'radial-gradient(ellipse, rgba(200,180,140,0.6) 0%, rgba(180,160,120,0.3) 60%, transparent 80%)', borderRadius: '40%' }} />
               <div style={{ position: 'absolute', left: '35%', top: '10%', width: '40%', height: '50%', background: 'radial-gradient(ellipse, rgba(190,170,130,0.5) 0%, rgba(170,150,110,0.3) 60%, transparent 80%)', borderRadius: '30%' }} />
               <div style={{ position: 'absolute', left: '60%', top: '20%', width: '35%', height: '60%', background: 'radial-gradient(ellipse, rgba(180,200,160,0.4) 0%, rgba(160,180,140,0.2) 60%, transparent 80%)', borderRadius: '35%' }} />
-              {/* Upload prompt */}
-              <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
-                Upload your rendered DREAM map below
-              </div>
+              {/* Upload prompt: above the legend and zoom row, wrapping on a phone; Edit Positions shows its own banner here */}
+              {!editMode && (
+                <div data-testid="dream-map-upload-prompt" style={{ position: 'absolute', bottom: 56, left: '50%', transform: 'translateX(-50%)', width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: 11, fontFamily: "'DM Mono', monospace" }}>
+                  Upload your rendered DREAM map below
+                </div>
+              )}
             </div>
           )}
 
