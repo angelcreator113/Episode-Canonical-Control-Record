@@ -3014,6 +3014,7 @@ router.post('/world/characters/:id/relationships', requireAuth, async (req, res)
       related_character_id, related_character_name, related_character_source,
       relationship_type, family_role, history_summary, current_status,
       tension_state, romantic_eligible, knows_about_transfer, series_layer, notes,
+      conflict_summary, is_romantic,
     } = req.body;
 
     const relId = uuidv4();
@@ -3055,10 +3056,21 @@ router.post('/world/characters/:id/relationships', requireAuth, async (req, res)
 
     // 2. Append to JSONB graph on world_characters
     const graph = safeJson(char.relationship_graph);
+    // The tension scanner (GET /world/tension-scanner) reads related_character_*
+    // and tension_state; World Studio's relationship card reads character_*.
+    // This entry carried only character_* and no tension, so a relationship
+    // added here never showed as a tension (wiring map,
+    // docs/reads/2026-10-06-lalaverse-wiring-map.md §4 finding 4a, fix-list
+    // item 10). It now carries both.
     graph.push({
       rel_id: relId,
+      related_character_id: related_character_id || null,
+      related_character_name: related_character_name || '',
       character_id: related_character_id || null,
       character_name: related_character_name || '',
+      tension_state: tension_state || 'Stable',
+      conflict_summary: conflict_summary || '',
+      is_romantic: !!is_romantic,
       relationship_type: relationship_type || '',
       family_role: family_role || null,
       history_summary: history_summary || '',
@@ -3110,6 +3122,9 @@ router.put('/world/characters/:id/relationships/:relId', requireAuth, async (req
     const idx = graph.findIndex(r => r.rel_id === req.params.relId);
     if (idx !== -1) {
       graph[idx] = { ...graph[idx], ...req.body };
+      // Keep the scanner's and the card's name keys in step.
+      if (req.body.related_character_name !== undefined) graph[idx].character_name = req.body.related_character_name;
+      else if (req.body.character_name !== undefined) graph[idx].related_character_name = req.body.character_name;
       await sequelize.query(
         `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
         { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
@@ -3506,10 +3521,12 @@ router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
   try {
+    // world_characters has name, not display_name: selecting display_name
+    // failed on every migrated database, so every scan was scan_failed.
     const rows = await Q(req,
-      `SELECT c.id, c.display_name, c.character_type, c.status, c.relationship_graph, c.world_tag
+      `SELECT c.id, c.name AS display_name, c.character_type, c.status, c.relationship_graph, c.world_tag
        FROM world_characters c WHERE c.status = 'active'
-       ORDER BY c.display_name ASC`
+       ORDER BY c.name ASC`
     );
     const pairs = [];
     const seen = new Set();
@@ -3518,12 +3535,14 @@ router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
       for (const rel of graph) {
         const tension = rel.tension_state || rel.tension_level || 'Stable';
         if (!isHighTension(tension)) continue;
-        const pairKey = [char.id, rel.related_character_id || rel.target_id].sort().join('|');
+        // Older World Studio entries carry character_id / character_name only.
+        const otherId = rel.related_character_id || rel.character_id || rel.target_id;
+        const pairKey = [char.id, otherId].sort().join('|');
         if (seen.has(pairKey)) continue;
         seen.add(pairKey);
         pairs.push({
           char_a: { id: char.id, name: char.display_name, world_tag: char.world_tag },
-          char_b: { id: rel.related_character_id || rel.target_id, name: rel.related_character_name || rel.target_name },
+          char_b: { id: otherId, name: rel.related_character_name || rel.character_name || rel.target_name },
           tension_state: tension,
           relationship_type: rel.relationship_type || 'unknown',
           conflict_summary: rel.conflict_summary || rel.history_summary || '',
@@ -3544,13 +3563,14 @@ router.post('/world/create-story-task', requireAuth, async (req, res) => {
     const { character_id } = req.body;
     if (!character_id) return res.status(400).json({ error: 'character_id required' });
     const [char] = await Q(req,
-      `SELECT id, display_name, character_key, character_type, world_tag, surface_want, real_want, arc_role, origin_story, relationship_graph, how_they_meet, dynamic
+      // world_characters has name, and no character_key (the slug below falls back to the name).
+      `SELECT id, name AS display_name, character_type, world_tag, surface_want, real_want, arc_role, origin_story, relationship_graph, how_they_meet, dynamic
        FROM world_characters WHERE id = :id`,
       { replacements: { id: character_id } }
     );
     if (!char) return res.status(404).json({ error: 'Character not found' });
     const graph = safeJson(char.relationship_graph);
-    const keyRels = graph.slice(0, 3).map(r => `${r.related_character_name || 'unknown'} (${r.relationship_type || 'connected'})`).join(', ');
+    const keyRels = graph.slice(0, 3).map(r => `${r.related_character_name || r.character_name || 'unknown'} (${r.relationship_type || 'connected'})`).join(', ');
     const task = {
       title: `${char.display_name} — ${char.arc_role || char.character_type || 'Character'} Arc`,
       description: [char.origin_story, char.how_they_meet, char.dynamic].filter(Boolean).join(' ').slice(0, 500),
