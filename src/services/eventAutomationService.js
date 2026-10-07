@@ -780,6 +780,12 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       strictness,
       deadline_type: deadlineType,
       location_hint: venueAddress || calendarEvent.location_name || venueName || null,
+      // The venue's World Location on the event itself, not only in the
+      // automation copy: readers of the column (the event-detail lookup,
+      // Planning → Location) missed it (wiring map,
+      // docs/reads/2026-10-06-lalaverse-wiring-map.md claim d, fix-list
+      // item 12).
+      venue_location_id: venue?.id || null,
       venue_name: venueName || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
@@ -801,10 +807,10 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       } else {
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
-           prestige, cost_coins, strictness, deadline_type, location_hint, venue_name, venue_address,
+           prestige, cost_coins, strictness, deadline_type, location_hint, venue_location_id, venue_name, venue_address,
            event_date, event_time, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
            VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
-           :prestige, :cost_coins, :strictness, :deadline_type, :location_hint, :venue_name, :venue_address,
+           :prestige, :cost_coins, :strictness, :deadline_type, :location_hint, :venue_location_id, :venue_name, :venue_address,
            :event_date, :event_time, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
           {
             replacements: {
@@ -821,9 +827,9 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       try {
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, cost_coins, strictness,
-           location_hint, venue_name, venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
+           location_hint, venue_location_id, venue_name, venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
            VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :cost_coins, :strictness,
-           :location_hint, :venue_name, :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
+           :location_hint, :venue_location_id, :venue_name, :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
           {
             replacements: {
               id: eventData.id, show_id: showId, name: eventName,
@@ -831,6 +837,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
               description: eventData.description || eventName,
               prestige, cost_coins: eventData.cost_coins || 100, strictness: eventData.strictness || 5,
               location_hint: eventData.location_hint || null,
+              venue_location_id: eventData.venue_location_id || null,
               venue_name: eventData.venue_name || null, venue_address: eventData.venue_address || null,
               event_date: eventData.event_date || null, event_time: eventData.event_time || null,
               canon_consequences: JSON.stringify(eventData.canon_consequences),
