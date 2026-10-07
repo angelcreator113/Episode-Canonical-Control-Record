@@ -97,7 +97,9 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
       expect(screen.getByTestId(`basics-${key}-state`).textContent).toContain('Waiting for format');
       expect(screen.queryByTestId(`basics-${key}-suggestion`)).toBeNull();
       expect(screen.queryByTestId(`basics-${key}-accept`)).toBeNull();
-      expect(within(row).getByRole('button', { name: 'Set' })).toBeTruthy();
+      // Listed once under Still to fill, its name opening it (Evoni's review, item 5).
+      expect(within(screen.getByTestId('basics-to-fill')).getByTestId(`basics-${key}`)).toBe(row);
+      expect(within(row).getByRole('button')).toBeTruthy();
     }
 
     // Readiness lists both as not ready, with the waiting note.
@@ -111,7 +113,7 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
   test('Task #2148: a waiting time can still be typed and saved directly', async () => {
     renderPage();
     const time = await screen.findByTestId('basics-time');
-    fireEvent.click(within(time).getByRole('button', { name: 'Set' }));
+    fireEvent.click(within(time).getByRole('button', { name: 'Time' }));
     const dialog = await screen.findByRole('dialog', { name: 'Start time' });
     expect(within(dialog).queryByText(/Fill in suggestion/)).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Start time'), { target: { value: '19:45' } });
@@ -166,6 +168,42 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     expect(screen.getByTestId('basics-format').getAttribute('data-state')).toBe('missing');
     expect(screen.queryByTestId('basics-category-suggestion')).toBeNull();
     expect(screen.queryByTestId('basics-format-suggestion')).toBeNull();
+  });
+
+  // Evoni's review, item 5: one "Still to fill" line, one Fill in that walks it.
+  test('what is still to fill is listed once; Fill in opens each in turn, Close stops', async () => {
+    stored = { ...stored, name: 'Event with Kai', canon_consequences: { automation: {} } };
+    renderPage();
+    const list = await screen.findByTestId('basics-to-fill');
+    const keys = [...list.querySelectorAll('[data-testid^="basics-"][data-state]')].map((li) => li.getAttribute('data-testid'));
+    expect(keys).toEqual(expect.arrayContaining(['basics-category', 'basics-format']));
+    // A set field reads as plain text: no "Set" tag.
+    expect(screen.getByTestId('basics-date').getAttribute('data-state')).toBe('set');
+    expect(screen.queryByTestId('basics-date-state')).toBeNull();
+
+    const first = list.querySelector('[data-state] button').textContent;
+    fireEvent.click(screen.getByTestId('basics-fill-in'));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.getAttribute('aria-label')).toMatch(new RegExp(first === 'Time' ? 'Start time' : first, 'i'));
+    const input = dialog.querySelector('input, select, textarea');
+    fireEvent.change(input, { target: { value: input.tagName === 'SELECT' ? input.options[1].value : (input.type === 'time' ? '19:45' : 'Something') } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    // Saved, and the next field opens on its own.
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const next = await screen.findByRole('dialog');
+    expect(next.getAttribute('aria-label')).not.toBe(dialog.getAttribute('aria-label'));
+    fireEvent.click(within(next).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  test('a set field is a plain row, not in Still to fill', async () => {
+    stored = { ...stored, category: 'arts_entertainment', format: 'gala', event_time: '19:00', dress_code: 'black tie', description: 'A night.' };
+    renderPage();
+    const category = await screen.findByTestId('basics-category');
+    expect(category.getAttribute('data-state')).toBe('set');
+    expect(screen.queryByTestId('basics-category-state')).toBeNull();
+    expect(screen.queryByTestId('basics-to-fill')).toBeNull();
   });
 
   test('a stored value outside the taxonomy is still flagged', async () => {

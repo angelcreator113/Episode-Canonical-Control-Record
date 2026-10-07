@@ -206,6 +206,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [reqDraft, setReqDraft] = useState(null);
   const [compDraft, setCompDraft] = useState(null);
   const [restrictionText, setRestrictionText] = useState('');
+  // With no restrictions the box is one line; + Add opens the input.
+  const [restrictionAddOpen, setRestrictionAddOpen] = useState(false);
   const [restrictionError, setRestrictionError] = useState(null);
   const [dealDraft, setDealDraft] = useState(null); // null, or the chosen deal type ('' = none)
   const [termSaving, setTermSaving] = useState(null); // 'requirements' | 'restrictions' | 'compensation' | 'deal type'
@@ -424,7 +426,9 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
 
       <div className="epp-terms-grid">
         {/* Access requirements */}
-        <div className="epp-term" data-testid="terms-access">
+        {/* An empty term is one line under the filled ones (Evoni's review,
+            item 6): its title, None set, and its action. */}
+        <div className={`epp-term${!reqDraft && !requirements.length ? ' is-empty' : ''}`} data-testid="terms-access">
           <div className="epp-term-head">
             <span className="epp-term-title"><KeyRound size={14} aria-hidden="true" /> Access requirements</span>
             {!locked && !reqDraft && (
@@ -466,7 +470,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         </div>
 
         {/* Deliverables */}
-        <div className="epp-term" data-testid="terms-deliverables">
+        <div className={`epp-term${!delivForm && !delivLoading && !delivLoadError && !deliverables.length ? ' is-empty' : ''}`} data-testid="terms-deliverables">
           <div className="epp-term-head">
             <span className="epp-term-title"><ClipboardList size={14} aria-hidden="true" /> Deliverables</span>
             {!locked && !delivForm && (
@@ -696,9 +700,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         </div>
 
         {/* Restrictions */}
-        <div className="epp-term" data-testid="terms-restrictions">
+        <div className={`epp-term${!restrictions.length && !restrictionAddOpen ? ' is-empty' : ''}`} data-testid="terms-restrictions">
           <div className="epp-term-head">
             <span className="epp-term-title"><Ban size={14} aria-hidden="true" /> Restrictions</span>
+            {!locked && !restrictions.length && !restrictionAddOpen && (
+              <button type="button" className="epp-inline-link" data-testid="terms-restriction-open" onClick={() => setRestrictionAddOpen(true)}>
+                <Plus size={11} aria-hidden="true" /> Add
+              </button>
+            )}
           </div>
           {restrictions.length ? (
             <ul className="epp-term-list">
@@ -719,11 +728,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               ))}
             </ul>
           ) : <div className="epp-empty">None set</div>}
-          {!locked && (
+          {!locked && (restrictions.length > 0 || restrictionAddOpen) && (
             <div className="epp-term-add">
               <input
                 type="text" maxLength={RESTRICTION_MAX} placeholder="e.g. No competing beauty brands for 90 days"
-                value={restrictionText} data-testid="terms-restriction-input"
+                value={restrictionText} data-testid="terms-restriction-input" autoFocus={restrictionAddOpen && !restrictions.length}
                 onChange={(e) => { setRestrictionText(e.target.value); setRestrictionError(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addRestriction(); } }}
               />

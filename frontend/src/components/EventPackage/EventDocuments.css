@@ -20,16 +20,17 @@
 .evd .evd-title { margin: 0; font-family: var(--font-prose); font-size: 20px !important; font-weight: 600; color: var(--lala-ink); }
 .evd-from { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
 .evd-stage { display: flex; justify-content: center; padding: 8px 0; min-height: 220px; }
-.evd-blank {
-  align-self: center;
-  max-width: 280px;
-  padding: 18px;
-  border: 1px dashed var(--lala-lavender-line);
-  border-radius: 10px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--lala-ink-muted);
+.evd-card.is-blank {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 12px 16px;
 }
+.evd .evd-card.is-blank .evd-title { font-size: 17px !important; }
+.evd-card.is-blank .evd-from { grid-column: 1; }
+.evd-card.is-blank .evd-stage { display: none; }
+.evd-card.is-blank .evd-actions { grid-column: 2; grid-row: 1 / span 2; }
 
 /* The shopping list: lined pink paper, a red margin, tape, handwriting. */
 .evd-paper {
@@ -93,7 +94,7 @@
 .evd-career-title { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-lavender-text); }
 .evd-career-label {
   margin: 12px 0 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -167,4 +168,8 @@
 @media (max-width: 760px) {
   .evd-grid { grid-template-columns: minmax(0, 1fr); }
   .evd-card { padding: 16px; }
+}
+@media (max-width: 480px) {
+  .evd-card.is-blank { grid-template-columns: minmax(0, 1fr); }
+  .evd-card.is-blank .evd-actions { grid-column: 1; grid-row: auto; margin-top: 6px; }
 }
