@@ -7,6 +7,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
 
 const API = '/api/v1';
 
@@ -26,6 +27,8 @@ export const createTensionProposalApi = (payload) =>
   apiClient.post(`${API}/world/create-tension-proposal`, payload);
 
 export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
+  // A snapshot is saved to the active show's universe (wiring map fix-list item 17).
+  const { showId } = useActiveShow();
   const navigate = useNavigate();
   const [subTab, setSubTab] = useState(activeSubTab);
   const [toast, setToast] = useState(null);
@@ -71,6 +74,7 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
   const saveSnapshot = useCallback(async () => {
     const body = {
       snapshot_label: snapForm.snapshot_label,
+      ...(showId ? { show_id: showId } : {}),
       world_facts: snapForm.world_facts ? snapForm.world_facts.split('\n').filter(Boolean) : [],
       active_threads: snapForm.active_threads ? snapForm.active_threads.split('\n').filter(Boolean) : [],
     };
@@ -80,7 +84,7 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
       setSnapForm({ snapshot_label: '', world_facts: '', active_threads: '' });
       loadSnapshots();
     } catch (e) { flash('Save failed', 'error'); }
-  }, [snapForm, loadSnapshots]);
+  }, [snapForm, loadSnapshots, showId]);
 
   const saveTimelineEvent = useCallback(async () => {
     try {
