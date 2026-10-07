@@ -1678,22 +1678,42 @@ router.post('/:id/finalize', requireAuth, guardJustAWomanRecord, async (req, res
 // Promotes a social profile into a world character — auto-creates RegistryCharacter
 router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
-  const { crossing_note, registry_id } = req.body;
+  const { crossing_note, registry_id, show_id } = req.body;
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
     if (profile.status === 'crossed') return res.status(409).json({ error: 'Already crossed into world.' });
 
-    // Auto-create registry character from social profile
+    // Auto-create registry character from social profile, in the registry
+    // named, else the show's newest registry, else the newest registry. The
+    // guard used to require registry_id, which the page never sends, so no
+    // Cross ever made a character (wiring map §6 finding 6b, fix-list item 7,
+    // docs/reads/2026-10-06-lalaverse-wiring-map.md).
     let registryCharacter = null;
-    if (registry_id && !profile.registry_character_id) {
-      const targetRegistry = db.CharacterRegistry
-        ? (registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id)
-        : null;
+    let registryNote = null;
+    if (!profile.registry_character_id) {
+      const newest = { order: [['created_at', 'DESC']] };
+      // show_id is a UUID column; anything else is ignored, not a 500.
+      const showId = typeof show_id === 'string' && /^[0-9a-f-]{36}$/i.test(show_id) ? show_id : null;
+      const targetRegistry = !db.CharacterRegistry ? null
+        : registry_id
+        || (showId && (await db.CharacterRegistry.findOne({ where: { show_id: showId }, ...newest }))?.id)
+        || (await db.CharacterRegistry.findOne(newest))?.id
+        || null;
 
-      if (targetRegistry && db.RegistryCharacter) {
+      if (!targetRegistry || !db.RegistryCharacter) {
+        registryNote = 'No character registry to add this profile to yet.';
+      } else {
         const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
-        registryCharacter = await db.RegistryCharacter.create({
+        // (registry_id, character_key) is unique: a character already under
+        // this key is the same person unless another profile holds it.
+        const existing = await db.RegistryCharacter.findOne({ where: { registry_id: targetRegistry, character_key: charKey } });
+        if (existing && existing.feed_profile_id && String(existing.feed_profile_id) !== String(profile.id)) {
+          registryNote = `The registry already has a character "${charKey}" linked to another profile; none was created.`;
+        } else if (existing) {
+          registryCharacter = existing;
+          await profile.update({ registry_character_id: existing.id });
+        } else registryCharacter = await db.RegistryCharacter.create({
           registry_id: targetRegistry,
           character_key: charKey,
           display_name: profile.display_name || profile.handle,
@@ -1713,9 +1733,11 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
           },
         });
 
-        await profile.update({
-          registry_character_id: registryCharacter.id,
-        });
+        if (registryCharacter && !profile.registry_character_id) {
+          await profile.update({
+            registry_character_id: registryCharacter.id,
+          });
+        }
       }
     }
 
@@ -1753,6 +1775,7 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
     return res.json({
       profile,
       registry_character: registryCharacter,
+      registry_note: registryNote,
       crossed: true,
       social_leverage: syncResult?.socialLeverage || null,
     });
