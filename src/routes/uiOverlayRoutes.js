@@ -399,14 +399,15 @@ router.post('/:showId/remove-bg/:assetId', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/upload/:overlayType — upload custom image for an overlay
-// Optional body field: variant_label (e.g. "Locked", "Unlocked") — defaults to replacing the single asset
+// Replaces the type's main image. Variants (a variant_label body field) were
+// removed (Evoni, 2026-10-07, Lala's Phone step 2): the field is ignored, and
+// variant images uploaded before stay as they are.
 router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'), async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes, uploadOverlayToS3 } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
-    const variantLabel = req.body?.variant_label || null;
 
     const allTypes = await getAllOverlayTypes(showId, models);
     const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
@@ -416,7 +417,7 @@ router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'),
     // Upload to S3 first — if this fails we haven't touched the DB yet.
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
 
-    // Replace the previous image (the same variant) and insert the new one
+    // Replace the previous main image and insert the new one
     // in one transaction, carrying its tap zones, content areas, fit and
     // category (uiOverlayAssetReplace; Evoni, 2026-10-07, Lala's Phone step
     // 1). A failure rolls back, so the old image stays, and is an error.
@@ -425,13 +426,12 @@ router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'),
     let carried = [];
     try {
       ({ assetId, carried } = await replaceOverlayAsset(models.sequelize, {
-        showId, overlayId: overlayType.id, variantLabel, assetId: uuidv4(),
-        name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`, url,
+        showId, overlayId: overlayType.id, assetId: uuidv4(),
+        name: `UI Overlay: ${overlayType.name}`, url,
         metadata: {
           source: 'custom-upload', overlay_type: overlayType.id,
           overlay_beat: overlayType.beat, overlay_category: overlayType.category,
           uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
-          ...(variantLabel ? { variant_label: variantLabel } : {}),
         },
       }));
     } catch (assetErr) {

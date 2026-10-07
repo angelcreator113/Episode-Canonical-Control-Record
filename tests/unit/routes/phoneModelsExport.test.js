@@ -51,10 +51,33 @@ describe('the export', () => {
 describe('mission create, edit and delete reach PhoneMission instead of throwing', () => {
   test('POST creates through PhoneMission.create', async () => {
     const create = jest.spyOn(db.PhoneMission, 'create').mockResolvedValue({ id: 'm1', name: 'Find the key' });
-    const res = await as(request(app).post(MISSIONS)).send({ name: 'Find the key' });
+    const res = await as(request(app).post(MISSIONS)).send({ name: 'Find the key', episode_id: EP });
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ success: true, mission: { id: 'm1', name: 'Find the key' } });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Find the key', show_id: SHOW }));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Find the key', show_id: SHOW, episode_id: EP }));
+  });
+
+  // Missions belong to an episode (Evoni, 2026-10-07, Lala's Phone step 2).
+  test('POST without an episode is refused', async () => {
+    const create = jest.spyOn(db.PhoneMission, 'create');
+    const res = await as(request(app).post(MISSIONS)).send({ name: 'Follow Lala' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('A mission belongs to an episode: episode_id is required.');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("PUT can't make an episode's mission show-wide, but can move an older show-wide one to an episode", async () => {
+    const scoped = { id: 'm1', episode_id: EP, update: jest.fn(async () => {}) };
+    jest.spyOn(db.PhoneMission, 'findOne').mockResolvedValueOnce(scoped);
+    const refused = await as(request(app).put(`${MISSIONS}/m1`)).send({ name: 'X', episode_id: null });
+    expect(refused.status).toBe(400);
+    expect(scoped.update).not.toHaveBeenCalled();
+
+    const older = { id: 'm2', episode_id: null, update: jest.fn(async () => {}) };
+    jest.spyOn(db.PhoneMission, 'findOne').mockResolvedValueOnce(older);
+    const moved = await as(request(app).put(`${MISSIONS}/m2`)).send({ name: 'Y', episode_id: EP });
+    expect(moved.status).toBe(200);
+    expect(older.update).toHaveBeenCalledWith(expect.objectContaining({ episode_id: EP }));
   });
 
   test('PUT finds and updates through PhoneMission.findOne', async () => {

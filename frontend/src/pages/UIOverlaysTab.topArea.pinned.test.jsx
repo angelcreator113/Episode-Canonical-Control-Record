@@ -79,9 +79,11 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
     expect(tiles).toEqual(['1/4screens ready', '4screens', '1icon']);
   });
 
-  test('More holds Flow Map, Export, Batch Upload and the frame', async () => {
+  // The contact sheet and batch upload were removed (Evoni, 2026-10-07,
+  // Lala's Phone step 2).
+  test('More holds the Flow Map and the frame', async () => {
     await renderPage();
-    expect(menuItems('More')).toEqual(['Flow Map', 'Export contact sheet', 'Batch Upload', 'Upload Frame']);
+    expect(menuItems('More')).toEqual(['Flow Map', 'Upload Frame']);
   });
 
   test('"+ Add" asks what you are adding: Screen, Icon or Content Area', async () => {
@@ -91,11 +93,12 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
     expect(document.querySelector('.overlays-toolbar .toolbar-menu')).toBeTruthy();
   });
 
-  test('the stage row reads Build · Connect · Content · Preview · Advanced, Build current', async () => {
+  // Advanced ▾ (show-wide Missions) is gone: missions are per episode now.
+  test('the stage row reads Build · Connect · Content · Preview, Build current', async () => {
     await renderPage();
     const row = document.querySelector('.phone-hub-stage-row');
     const names = within(row).getAllByRole('button').map(b => b.textContent.trim());
-    expect(names).toEqual(['Build', 'Connect', 'Content', 'Preview', 'Advanced']);
+    expect(names).toEqual(['Build', 'Connect', 'Content', 'Preview']);
     expect(within(row).getByRole('button', { name: 'Build' }).getAttribute('aria-current')).toBe('page');
   });
 

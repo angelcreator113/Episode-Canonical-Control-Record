@@ -571,7 +571,44 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
    ScreenFlowMap — Visual diagram of screen connections
    ────────────────────────────────────────────── */
 
-function ScreenFlowMap({ screens = [], onSelectScreen, selectedScreen }) {
+/**
+ * With onClose (Producer Mode → Lala's Phone → More → Flow Map) it opens over
+ * the page with a heading and a Close button; it used to render at the foot
+ * of the page with no way out but clicking a screen (Evoni, 2026-10-07).
+ */
+function ScreenFlowMap({ onClose, ...props }) {
+  useEffect(() => {
+    if (!onClose) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  if (!onClose) return <ScreenFlowGraph {...props} />;
+  return (
+    <div
+      role="dialog" aria-label="Flow Map" data-testid="flow-map"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(44, 44, 44, 0.55)' }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 32px)', overflow: 'auto', background: TOKENS.parchment, borderRadius: 16, padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+          <div>
+            <div style={{ fontFamily: "'Lora', serif", fontSize: 18, fontWeight: 600, color: TOKENS.ink }}>Flow Map</div>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+              How the screens connect: gold arrows are tap zones, dashed ones are icons. Tap a screen to open it.
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ minHeight: 36, padding: '6px 14px', borderRadius: 999, border: '1px solid var(--lala-parchment-3)', background: 'transparent', color: TOKENS.ink, fontFamily: MONO, fontSize: 12, cursor: 'pointer' }}>
+            Close
+          </button>
+        </div>
+        <ScreenFlowGraph {...props} />
+      </div>
+    </div>
+  );
+}
+
+function ScreenFlowGraph({ screens = [], onSelectScreen, selectedScreen }) {
   // Only show screens that have images
   const nodes = useMemo(() => screens.filter(s => s.url), [screens]);
   const cols = Math.max(3, Math.ceil(Math.sqrt(nodes.length)));

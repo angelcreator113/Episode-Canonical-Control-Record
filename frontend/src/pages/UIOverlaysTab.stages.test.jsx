@@ -20,9 +20,6 @@ vi.mock('../components/phone/PhoneMapView', async (importOriginal) => {
 });
 vi.mock('../components/ScreenLinkEditor', () => ({ default: () => <div data-testid="view-zones" /> }));
 vi.mock('../components/ContentZoneEditor', () => ({ default: () => <div data-testid="view-content" /> }));
-vi.mock('../components/phone-editor/MissionEditor', () => ({
-  default: ({ open }) => (open ? <div data-testid="view-missions" /> : null),
-}));
 vi.mock('../components/phone-editor/AIAssistantPanel', () => ({ default: () => null }));
 vi.mock('../components/phone-editor/AIProposalReview', () => ({ default: () => null }));
 
@@ -70,13 +67,6 @@ describe('UIOverlaysTab — stages (Task #2010)', () => {
     stage('Content');
     expect(await screen.findByTestId('view-content')).toBeTruthy();
     expect(screen.queryByTestId('view-zones')).toBeNull();
-  });
-
-  test('Advanced ▸ Missions opens the missions editor', async () => {
-    await renderPage();
-    stage('Advanced');
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Missions' }));
-    expect(await screen.findByTestId('view-missions')).toBeTruthy();
   });
 
   test('Preview puts the embedded phone in the device\'s place, beside the screen list', async () => {

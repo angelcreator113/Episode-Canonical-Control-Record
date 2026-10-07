@@ -110,47 +110,6 @@
   border-color: var(--lala-gold);
 }
 
-/* Advanced ▾ — a small menu holding Missions. */
-.phone-hub-advanced {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.phone-hub-advanced-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 30;
-  min-width: 160px;
-  margin-top: 4px;
-  padding: 4px;
-  background: var(--lala-surface, #fff);
-  border: 1px solid var(--lala-parchment-3);
-  border-radius: var(--lala-radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.phone-hub-advanced-item {
-  display: block;
-  width: 100%;
-  min-height: 40px;
-  padding: 8px 12px;
-  text-align: left;
-  font-size: var(--text-sm, 13px);
-  font-family: var(--font-ui);
-  color: var(--lala-ink);
-  background: none;
-  border: none;
-  border-radius: var(--lala-radius);
-  cursor: pointer;
-}
-
-.phone-hub-advanced-item:hover,
-.phone-hub-advanced-item.active {
-  background: var(--lala-gold-soft);
-  color: var(--lala-gold);
-}
-
 /* Build stage: Screens | Icons, with today's counts. */
 .phone-hub-build-toggle {
   display: inline-flex;

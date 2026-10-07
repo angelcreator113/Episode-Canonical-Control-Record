@@ -8,14 +8,15 @@ import MissionEditor from '../phone-editor/MissionEditor';
  * #1908 it renders as the Missions section of EpisodeLalasPhoneTab rather
  * than as the whole Production → Phone tab.
  *
- * Lists every mission visible to this episode (show-wide + episode-scoped),
- * with inline is_active toggles and a one-click jump into the existing
- * MissionEditor modal scoped to this episodeId. The editor handles full
- * CRUD; this tab keeps the episode page focused on at-a-glance status.
+ * Lists this episode's missions, with inline is_active toggles and a
+ * one-click jump into the MissionEditor modal for this episodeId. The
+ * editor handles full CRUD; this tab keeps the episode page focused on
+ * at-a-glance status.
  *
- * Scope semantics (per phoneMissionRoutes.js GET handler):
- *   episode_id IS NULL  → show-wide  (active on every episode)
- *   episode_id = X      → episode-specific (this episode only)
+ * Missions belong to one episode (Evoni, 2026-10-07, Lala's Phone step 2:
+ * "i dont think missions need show level"). A mission made show-wide before
+ * (episode_id NULL) still runs on every episode; it is listed as "All
+ * episodes (older)" with Move to this episode.
  */
 
 function EpisodePhoneMissionsTab({ episode }) {
@@ -47,24 +48,45 @@ function EpisodePhoneMissionsTab({ episode }) {
   // PUT payload minimal (just the existing mission fields with is_active
   // swapped) so we don't accidentally clobber objectives via missing fields
   // in validateMissionPayload.
+  const putMission = (mission, changes) => {
+    const { name, description, icon_url, start_condition, objectives, reward_actions, display_order, episode_id, is_active } = mission;
+    return api.put(`/api/v1/ui-overlays/${showId}/missions/${mission.id}`, {
+      name,
+      description: description || null,
+      icon_url: icon_url || null,
+      start_condition: start_condition || null,
+      objectives: objectives || [],
+      reward_actions: reward_actions || [],
+      display_order: display_order || 0,
+      episode_id: episode_id || null,
+      is_active,
+      ...changes,
+    });
+  };
+
   const toggleActive = async (mission) => {
     setTogglingId(mission.id);
     try {
-      const { name, description, icon_url, start_condition, objectives, reward_actions, display_order, episode_id } = mission;
-      await api.put(`/api/v1/ui-overlays/${showId}/missions/${mission.id}`, {
-        name,
-        description: description || null,
-        icon_url: icon_url || null,
-        start_condition: start_condition || null,
-        objectives: objectives || [],
-        reward_actions: reward_actions || [],
-        display_order: display_order || 0,
-        episode_id: episode_id || null,
-        is_active: !mission.is_active,
-      });
+      await putMission(mission, { is_active: !mission.is_active });
       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, is_active: !m.is_active } : m));
     } catch (err) {
+      console.error('[EpisodePhoneMissionsTab] toggle failed:', err);
       alert('Toggle failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  // An older show-wide mission becomes this episode's (it stops running on
+  // the others).
+  const moveHere = async (mission) => {
+    setTogglingId(mission.id);
+    try {
+      await putMission(mission, { episode_id: episodeId });
+      setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, episode_id: episodeId } : m));
+    } catch (err) {
+      console.error('[EpisodePhoneMissionsTab] move failed:', err);
+      alert('Move failed: ' + (err?.response?.data?.error || err.message));
     } finally {
       setTogglingId(null);
     }
@@ -101,7 +123,7 @@ function EpisodePhoneMissionsTab({ episode }) {
         <div style={{ flex: '1 1 220px', minWidth: 0 }}>
           <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" }}>Missions</h3>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Read-only observers that watch playthrough state and report progress. Show-wide missions run on every episode; episode-scoped missions only run here.
+            Goals Lala works toward in this episode's phone. They watch the play-through and report progress.
           </div>
         </div>
         <button onClick={() => setEditorOpen(true)} style={S.primaryBtn} disabled={!showId || !episodeId}>
@@ -113,8 +135,10 @@ function EpisodePhoneMissionsTab({ episode }) {
       {!loading && !error && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <span style={{ ...S.statPill, background: 'var(--success-bg)', color: 'var(--success-text)' }}>✓ {activeCount} active</span>
-          <span style={{ ...S.statPill, background: 'var(--primary-subtle)', color: 'var(--primary-text)' }}>🌍 {showWide.length} show-wide</span>
           <span style={{ ...S.statPill, background: 'var(--accent-subtle)', color: 'var(--accent-dark)' }}>📍 {episodeOnly.length} this episode</span>
+          {showWide.length > 0 && (
+            <span style={{ ...S.statPill, background: 'var(--primary-subtle)', color: 'var(--primary-text)' }} data-testid="missions-older">{showWide.length} older, on all episodes</span>
+          )}
         </div>
       )}
 
@@ -125,7 +149,7 @@ function EpisodePhoneMissionsTab({ episode }) {
         <div style={S.card}>
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)' }}>
             <div style={{ fontSize: 13, marginBottom: 6 }}>No missions yet.</div>
-            <div style={{ fontSize: 11, lineHeight: 1.5 }}>Click <strong>Manage missions</strong> to create one — show-wide for cross-episode goals (onboarding, follow Lala) or episode-scoped for one-off objectives (find the invite, complete the date).</div>
+            <div style={{ fontSize: 11, lineHeight: 1.5 }}>Click <strong>Manage missions</strong> to create one, like find the invite or complete the date.</div>
           </div>
         </div>
       )}
@@ -139,7 +163,7 @@ function EpisodePhoneMissionsTab({ episode }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{m.name}</div>
-                  <span style={S.scopeBadge(isShowWide)}>{isShowWide ? 'SHOW-WIDE' : 'THIS EPISODE'}</span>
+                  {isShowWide && <span style={S.scopeBadge(isShowWide)}>ALL EPISODES (OLDER)</span>}
                   {!m.is_active && <span style={{ ...S.scopeBadge(false), background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)' }}>INACTIVE</span>}
                 </div>
                 {m.description && (
@@ -162,13 +186,24 @@ function EpisodePhoneMissionsTab({ episode }) {
                 >
                   {togglingId === m.id ? '…' : (m.is_active ? '● Active' : '○ Inactive')}
                 </button>
+                {isShowWide && (
+                  <button
+                    onClick={() => moveHere(m)}
+                    disabled={togglingId === m.id}
+                    title="Make it this episode's mission; it stops running on the others"
+                    style={S.ghostBtn}
+                    data-testid={`mission-move-${m.id}`}
+                  >
+                    Move to this episode
+                  </button>
+                )}
               </div>
             </div>
           </div>
         );
       })}
 
-      {/* Reuse existing show-wide editor scoped to this episode. The host
+      {/* The mission editor, for this episode. The host
           owns open/close; reload after the modal closes so toggles + edits
           performed inside reflect immediately. */}
       <MissionEditor

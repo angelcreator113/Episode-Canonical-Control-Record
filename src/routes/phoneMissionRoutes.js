@@ -1,5 +1,11 @@
 /**
- * phoneMissionRoutes — CRUD for show/episode-scoped missions (read-only observers).
+ * phoneMissionRoutes — CRUD for episode missions (read-only observers).
+ *
+ * Missions belong to one episode (Evoni, 2026-10-07, Lala's Phone step 2:
+ * "i dont think missions need show level"): a new mission needs an
+ * episode_id, and an episode's mission cannot be made show-wide. Missions
+ * made show-wide before (episode_id NULL) still run on every episode until
+ * they are moved to one (PUT with an episode_id) or deleted.
  *
  * Mounted at `/api/v1/ui-overlays/:showId/missions`. Missions use the SAME
  * condition grammar as zones + content zones, validated via phoneConditionSchema
@@ -65,6 +71,7 @@ router.post('/', requireAuth, async (req, res) => {
     const models = require('../models');
     const { error, value } = validateMissionPayload(req.body);
     if (error) return res.status(400).json({ success: false, error });
+    if (!value.episode_id) return res.status(400).json({ success: false, error: 'A mission belongs to an episode: episode_id is required.' });
     const mission = await models.PhoneMission.create({
       ...value,
       show_id: req.params.showId,
@@ -90,6 +97,9 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     const { error, value } = validateMissionPayload(req.body);
     if (error) return res.status(400).json({ success: false, error });
+    if (mission.episode_id && !value.episode_id) {
+      return res.status(400).json({ success: false, error: "A mission belongs to an episode: it can't be made show-wide." });
+    }
 
     await mission.update(value);
     return res.json({ success: true, mission });

@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check } from 'lucide-react';
 import api from '../services/api';
 import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
@@ -18,7 +18,6 @@ import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, res
 
 // A stable empty list for a screen with no content areas (Lala's Phone step 1).
 const NO_ZONES = Object.freeze([]);
-import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
 import ActionRow from '../components/phone-editor/ActionRow';
 import ZoneIconPicker, { ZoneIconSummary } from '../components/phone-editor/ZoneIconPicker';
@@ -193,9 +192,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   // Top-level tab bar state — replaces the old `editingLinks` boolean and
   // PhoneHub's internal `gridSection`. Values: 'screens' | 'icons' |
-  // 'placements' | 'zones' | 'content' | 'missions' | 'preview'. The row
+  // 'placements' | 'zones' | 'content' | 'preview'. The row
   // shows them as stages (doctrine rule 18, Task #2010): Build (screens,
-  // icons), Connect (zones), Content, Preview, and Advanced ▾ (missions).
+  // icons), Connect (zones), Content and Preview. Missions are made per
+  // episode, in its Lala's Phone tab (Evoni, 2026-10-07).
   const [activeTab, setActiveTab] = useState('screens');
   const editingLinks = activeTab === 'zones';  // kept as an alias so legacy
                                                 // references below keep working
@@ -248,18 +248,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [flowAudit, setFlowAudit] = useState(null);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
-  const [activeVariantIdx, setActiveVariantIdx] = useState(0);
-  const [addingVariant, setAddingVariant] = useState(false);
-  const [newVariantLabel, setNewVariantLabel] = useState('');
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, content: false, variants: true });
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
   const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const activeScreenRef = useRef(null);  // ref mirror of activeScreen for stable closures
-  const [batchUploading, setBatchUploading] = useState(false);
   const [hiddenScreens, setHiddenScreens] = useState(() => {
     // Guard against malformed storage (non-array JSON) — earlier bugs wrote
     // strings or objects; if `.includes()` is called on a non-array it throws
@@ -272,9 +267,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   });
   const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
-  const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
-  const batchInputRef = useRef(null);
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
   // Save the zone editor's unsaved changes before Done, a screen switch or
   // the jump to Content (Task #2016; one editor since Task #2021).
@@ -439,70 +432,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (frameInputRef.current) frameInputRef.current.value = '';
   };
 
-  // Batch upload — match files to existing screen types by filename
-  const handleBatchUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length || !showId) return;
-    // Match against the show's DB-defined screen keys
-    const screenKeys = overlays.map(o => o.id);
-    const matchCount = files.filter(f => {
-      const name = f.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
-      return screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
-    }).length;
-    if (matchCount > 0 && overlays.some(o => o.generated)) {
-      if (!confirm(`Upload ${files.length} files? This may overwrite ${matchCount} existing screens.`)) {
-        if (batchInputRef.current) batchInputRef.current.value = '';
-        return;
-      }
-    }
-    setBatchUploading(true);
-    let uploaded = 0;
-    let failed = 0;
-
-    for (const file of files) {
-      const name = file.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
-      // Try to match filename to an existing screen key
-      const match = screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
-      if (!match) {
-        // No existing type matches — create a new type from the filename.
-        // If that 409s (a type with the same slug already exists but our local
-        // screenKeys list was stale, or the slug matches an icon vs a screen),
-        // fall through to the upload step instead of marking the file failed.
-        const cleanName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-        const typeKey = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
-        try {
-          try {
-            await api.post(`/api/v1/ui-overlays/${showId}/types`, {
-              name: cleanName, beat: 'Various', description: `Uploaded from ${file.name}`,
-              prompt: `Phone screen for ${cleanName}`, category: 'phone',
-            });
-          } catch (createErr) {
-            // 409 = type already exists under this slug; upload to it anyway.
-            // Anything else is a real create failure — surface as file failure.
-            if (createErr?.response?.status !== 409) throw createErr;
-          }
-          const fd = new FormData();
-          fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${typeKey}`, fd);
-          uploaded++;
-        } catch { failed++; }
-        continue;
-      }
-      // Upload to existing type
-      try {
-        const fd = new FormData();
-        fd.append('image', file);
-        await api.post(`/api/v1/ui-overlays/${showId}/upload/${match}`, fd);
-        uploaded++;
-      } catch { failed++; }
-    }
-
-    loadOverlays(false);
-    setBatchUploading(false);
-    flash(`Batch upload: ${uploaded} uploaded${failed ? `, ${failed} failed/unmatched` : ''}`, failed && !uploaded ? 'error' : 'success');
-    if (batchInputRef.current) batchInputRef.current.value = '';
-  };
-
   // Load shows
   useEffect(() => {
     if (propShowId) { setShowId(propShowId); return; }
@@ -655,8 +584,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setPanelOpen(true);
     setNavHistory([]);
     setActiveTab('screens');
-    setActiveVariantIdx(0);
-    setAddingVariant(false);
     setEditingName(false);
     setEditorTab('actions');
   };
@@ -763,31 +690,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       // placements draw the new image by its key; nothing is placed.
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  // Upload variant
-  const handleVariantUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeScreen?.id || !newVariantLabel.trim() || !showId) return;
-    try {
-      const fd = new FormData();
-      fd.append('image', file);
-      fd.append('variant_label', newVariantLabel.trim());
-      await api.post(`/api/v1/ui-overlays/${showId}/upload/${activeScreen.id}`, fd);
-      flash(`Variant "${newVariantLabel.trim()}" uploaded!`);
-      setNewVariantLabel('');
-      setAddingVariant(false);
-      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
-      const all = res.data?.data || [];
-      setOverlays(all);
-      const updated = all.find(o => o.id === activeScreen.id);
-      if (updated) {
-        setActiveScreen(updated);
-        // Switch to the new variant
-        if (updated.variants) setActiveVariantIdx(updated.variants.length - 1);
-      }
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
-    if (variantInputRef.current) variantInputRef.current.value = '';
   };
 
   // Remove background
@@ -1108,11 +1010,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // Missions modal (PR4). No per-episode context here — missions are show-scoped,
-  // optionally per-episode, and that's picked inside the editor form.
-  // Opened when activeTab === 'missions'; closing reverts to the Screens tab.
-  const missionsOpen = activeTab === 'missions';
-
   // Preview stage (Task #2010): the embedded, non-saving Preview phone takes
   // the device's place — no playthrough, nothing saved, as in the Episode
   // tab. It starts on the selected screen when that screen has an image,
@@ -1325,33 +1222,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
-  // Export contact sheet — download all screen thumbnails
-  const handleExportContactSheet = async () => {
-    const generated = overlays.filter(o => o.generated && o.url);
-    if (!generated.length) { flash('No screens to export', 'error'); return; }
-    // Create a simple HTML table of images and download as page
-    const html = `<!DOCTYPE html><html><head><title>Phone Screens - Contact Sheet</title>
-<style>body{background:#1a1a2e;margin:40px;font-family:'DM Mono',monospace;color:#fff}
-h1{color:#B8962E;font-size:20px;margin-bottom:20px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-.card{background:#2a2a4a;border-radius:12px;overflow:hidden;text-align:center}
-.card img{width:100%;aspect-ratio:9/16;object-fit:cover}
-.card p{padding:8px;font-size:11px;color:#aaa;margin:0}</style></head>
-<body><h1>Phone Screens Contact Sheet</h1><div class="grid">
-${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); return `<div class="card"><img src="${esc(s.url)}"/><p>${esc(s.name)}</p></div>`; }).join('')}
-</div></body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'phone-screens-contact-sheet.html';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    flash('Contact sheet downloaded!');
-  };
-
   const generatedCount = overlays.filter(o => o.generated).length;
   const headerTiles = phoneHubTiles(overlays, screenDiagnostics);
   // The screen panel's status: the cards' Ready rule and their lines in one
@@ -1468,18 +1338,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
     setFlowAudit(auditPhoneFlow(overlays.filter(o => o.generated && o.url && isScreen(o)), home.id));
   };
 
-  // Lightweight mission count fetch — refreshes on mount + whenever the
-  // missions modal closes (after a save/delete). Keeps the step header in
-  // sync without prop-drilling the modal's internal list.
-  const [missionCount, setMissionCount] = useState(0);
-  useEffect(() => {
-    if (!showId || missionsOpen) return;
-    let cancelled = false;
-    api.get(`/api/v1/ui-overlays/${showId}/missions`)
-      .then(r => { if (!cancelled) setMissionCount((r.data?.missions || []).length); })
-      .catch(() => { /* table may not exist yet; leave count at 0 */ });
-    return () => { cancelled = true; };
-  }, [showId, missionsOpen]);
 
 
   return (
@@ -1535,7 +1393,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
 
         {/* "+ Add" asks one question: a Screen, an Icon or a Content Area
-            (doctrine rule 18, Task #2024). Batch Upload and the phone frame
+            (doctrine rule 18, Task #2024). The Flow Map and the phone frame
             live in "More". */}
         <div className="overlays-toolbar ph-hero-tools">
           <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId}>
@@ -1553,7 +1411,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               <span className="overlays-add-chooser__desc">A part of a screen whose content changes per episode</span>
             </button>
           </ToolbarMenu>
-          <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           <div className="overlays-header-actions">
             {/* Size-guide toggle stays as a small icon button (frequent quick-check). */}
@@ -1562,17 +1419,13 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             </button>
             {/* The header Preview button was removed (Task #2016): the Preview
                 stage plays the phone inside the page. */}
-            {/* Flow Map, Export, Batch Upload and the phone frame sit in "More":
-                used less often ("+ Add" only asks what you're adding, Task #2024). */}
+            {/* The Flow Map and the phone frame sit in "More": used less often
+                ("+ Add" only asks what you're adding, Task #2024). Batch upload,
+                the contact sheet and variants were removed (Evoni, 2026-10-07,
+                Lala's Phone step 2). */}
             <ToolbarMenu label="More">
               <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
                 <GitBranch size={13} /> Flow Map
-              </button>
-              <button onClick={handleExportContactSheet} disabled={!generatedCount}>
-                <Download size={13} /> Export contact sheet
-              </button>
-              <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId}>
-                <Upload size={13} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
               </button>
               <button onClick={() => frameInputRef.current?.click()}>
                 <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
@@ -2354,7 +2207,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             <div className="editor-modal-header">
               <div className="editor-modal-header-left">
                 {(() => {
-                  const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
+                  const displayUrl = activeScreen.url;
                   const iconThumb = isIcon(activeScreen) || activeScreen.type === 'icon';
                   return displayUrl ? (
                     <div className={`editor-modal-thumb ${iconThumb ? 'icon' : 'screen'}`}>
@@ -2586,31 +2439,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           </p>
                         );
                       })()}
-                    </div>
-                  )}
-
-                  {/* Variants */}
-                  {(activeScreen.variants?.length > 1 || activeScreen.url) && (
-                    <div className="editor-section">
-                      <div className="editor-section-label">Variants</div>
-                      {/* Thumbnails, the chosen one ringed, and a + tile (Evoni's mock, 2026-10-07) */}
-                      <div className="editor-variant-tiles">
-                        {(activeScreen.variants?.length > 1 ? activeScreen.variants : [{ asset_id: activeScreen.asset_id || activeScreen.id, url: activeScreen.url, variant_label: 'Default' }]).map((v, i) => (
-                          <button key={v.asset_id || i} type="button" onClick={() => setActiveVariantIdx(i)} className={`editor-variant-tile ${activeVariantIdx === i ? 'active' : ''}`} title={v.variant_label} aria-label={v.variant_label}>
-                            {v.url ? <img src={v.url} alt="" /> : <span>{v.variant_label}</span>}
-                          </button>
-                        ))}
-                        <button type="button" onClick={() => setAddingVariant(!addingVariant)} className="editor-variant-tile add" aria-label="Add a variant">+</button>
-                      </div>
-                      <p className="editor-variant-hint">e.g. a night version, or a cracked-screen version for one episode</p>
-                      {addingVariant && (
-                        <div className="editor-variant-add">
-                          <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" className="editor-variant-input" />
-                          <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} className="editor-variant-upload-btn">Upload</button>
-                          <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} className="editor-modal-icon-btn"><X size={14} /></button>
-                        </div>
-                      )}
-                      <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
                     </div>
                   )}
 
@@ -2849,13 +2677,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       })()}
       </>
       )}
-
-      {/* Missions editor — show-scoped CRUD modal */}
-      <MissionEditor
-        open={missionsOpen}
-        showId={showId}
-        onClose={() => setActiveTab('screens')}
-      />
 
       {/* Flow Map — visual graph of screen-to-screen links */}
       {showFlowMap && (

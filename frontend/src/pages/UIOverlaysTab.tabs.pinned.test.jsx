@@ -6,9 +6,9 @@
  * Build · Connect · Content · Preview · Advanced. The row is stubbed to one
  * button per activeTab key, so these tests pin the page's key → view wiring,
  * not the row's labels: screens and icons open PhoneHub's grids, zones the
- * zone workspace, content the content workspace, missions the missions
- * editor; closing missions returns to screens; PhoneHub's onEditZones reaches
- * zones.
+ * zone workspace, content the content workspace; PhoneHub's onEditZones
+ * reaches zones. The missions key was removed with show-wide missions
+ * (Evoni, 2026-10-07, Lala's Phone step 2).
  */
 
 import React from 'react';
@@ -19,11 +19,11 @@ vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
 }));
 
-const KEYS = ['screens', 'icons', 'zones', 'content', 'missions'];
+const KEYS = ['screens', 'icons', 'zones', 'content'];
 vi.mock('../components/PhoneHubSectionTabs', () => ({
   default: ({ activeTab, onChangeTab }) => (
     <div data-testid="tab-row" data-active={activeTab}>
-      {['screens', 'icons', 'zones', 'content', 'missions'].map((k) => (
+      {['screens', 'icons', 'zones', 'content'].map((k) => (
         <button key={k} type="button" onClick={() => onChangeTab(k)}>{`tab-${k}`}</button>
       ))}
     </div>
@@ -44,11 +44,6 @@ vi.mock('../components/phone/PhoneMapView', async (importOriginal) => {
 });
 vi.mock('../components/ScreenLinkEditor', () => ({ default: () => <div data-testid="view-zones" /> }));
 vi.mock('../components/ContentZoneEditor', () => ({ default: () => <div data-testid="view-content" /> }));
-vi.mock('../components/phone-editor/MissionEditor', () => ({
-  default: ({ open, onClose }) => (open ? (
-    <div data-testid="view-missions"><button type="button" onClick={onClose}>close missions</button></div>
-  ) : null),
-}));
 vi.mock('../components/phone-editor/AIAssistantPanel', () => ({ default: () => null }));
 vi.mock('../components/phone-editor/AIProposalReview', () => ({ default: () => null }));
 vi.mock('../components/PhonePreviewMode', () => ({ default: () => null, ScreenFlowMap: () => null }));
@@ -82,7 +77,6 @@ const views = () => ({
   icons: !!grid('icon'),
   zones: !!screen.queryByTestId('view-zones'),
   content: !!screen.queryByTestId('view-content'),
-  missions: !!screen.queryByTestId('view-missions'),
 });
 const only = (key) => Object.fromEntries(KEYS.map((k) => [k, k === key]));
 
@@ -97,16 +91,7 @@ describe('UIOverlaysTab — tab keys open their views, pinned (Task #2010)', () 
     await renderPage();
     fireEvent.click(screen.getByText(`tab-${key}`));
     await waitFor(() => expect(screen.getByTestId('tab-row').getAttribute('data-active')).toBe(key));
-    // Missions is a modal over the page; the page underneath shows no grid.
     expect(views()).toEqual(only(key));
-  });
-
-  test('closing missions returns to screens', async () => {
-    await renderPage();
-    fireEvent.click(screen.getByText('tab-missions'));
-    fireEvent.click(await screen.findByText('close missions'));
-    await waitFor(() => expect(screen.getByTestId('tab-row').getAttribute('data-active')).toBe('screens'));
-    expect(views()).toEqual(only('screens'));
   });
 
   test('PhoneHub\'s onEditZones reaches zones', async () => {
