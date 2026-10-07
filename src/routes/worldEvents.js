@@ -218,9 +218,12 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     // Place — the linked World Location's type and its own dress code, read
     // only as inputs to the Event Package's dress-code suggestion (Task
     // #1755). Nothing here is written.
+    // The id lives top-level or, for calendar-spawned events, only in the
+    // automation copy (the frontend's resolveEventVenueAndDate rule).
     let venueLocation = null;
-    if (event.venue_location_id && models.WorldLocation) {
-      const loc = await models.WorldLocation.findByPk(event.venue_location_id, {
+    const venueLocationId = event.venue_location_id || event.canon_consequences?.automation?.venue_location_id || null;
+    if (venueLocationId && models.WorldLocation) {
+      const loc = await models.WorldLocation.findByPk(venueLocationId, {
         attributes: ['id', 'name', 'venue_type', 'venue_details'],
       }).catch((e) => { console.error('[WorldEvents] venue location lookup failed:', e.message); return null; });
       if (loc) {

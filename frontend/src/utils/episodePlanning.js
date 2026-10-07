@@ -14,6 +14,7 @@
  * Pure; no I/O.
  */
 import { describeEventOrganizer } from './eventOrganizer';
+import { resolveEventVenueAndDate } from './eventReadiness';
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -28,9 +29,15 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
   // venue_location_id counted, so an event with a typed venue read "No
   // venue". A venue fills Location (and counts as carried); the scene set
   // is still asked for in the Event Package.
-  const venueName = venueLocation?.name || text(event.venue_name) || null;
-  const venueAddress = text(event.venue_address) || null;
-  const hasVenue = !!event.venue_location_id || !!venueName;
+  // 2026-10-07: read through resolveEventVenueAndDate, the Place's own rule,
+  // so a venue that lives only in the automation copy (calendar-spawned
+  // events) counts here too; it read "No venue" while the Place showed it
+  // (wiring map, docs/reads/2026-10-06-lalaverse-wiring-map.md claim d,
+  // fix-list item 11).
+  const place = resolveEventVenueAndDate(event);
+  const venueName = venueLocation?.name || text(place.venueName) || null;
+  const venueAddress = text(place.venueAddress) || null;
+  const hasVenue = !!place.venueLocationId || !!venueName;
   const venueText = `${venueName || 'Venue'}${venueAddress ? `, ${venueAddress}` : ''}`;
   const hasSet = !!event.scene_set_id;
   const pieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];

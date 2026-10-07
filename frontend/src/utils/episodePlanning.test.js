@@ -85,4 +85,19 @@ describe('episodePlanning', () => {
     expect(byKey(none).location).toMatchObject({ done: false, detail: 'No venue', fix: null });
     expect(none.done).toBe(4);
   });
+
+  // Wiring map claim d (2026-10-07): a calendar-spawned event keeps its venue
+  // only in the automation copy; the Event Package's Place showed it
+  // (resolveEventVenueAndDate) while Planning said "No venue".
+  test("a venue that lives only in the automation copy fills Location, as on the Place", () => {
+    const spawned = {
+      ...EVENT, venue_location_id: null, venue_name: null, venue_address: null, scene_set_id: null,
+      canon_consequences: { ...EVENT.canon_consequences, automation: { ...(EVENT.canon_consequences?.automation || {}), venue_location_id: 'loc-9', venue_name: "STUDIO BY SABLE's Studio", venue_address: '4 Avenue Row' } },
+    };
+    expect(byKey(episodePlanning({ episode: {}, event: spawned })).location)
+      .toMatchObject({ done: true, detail: "STUDIO BY SABLE's Studio, 4 Avenue Row · no scene set yet", fix: 'package' });
+    // The id alone (no name in either home) still counts as a venue.
+    const idOnly = { ...spawned, canon_consequences: { automation: { venue_location_id: 'loc-9' } } };
+    expect(byKey(episodePlanning({ episode: {}, event: idOnly })).location).toMatchObject({ done: true });
+  });
 });
