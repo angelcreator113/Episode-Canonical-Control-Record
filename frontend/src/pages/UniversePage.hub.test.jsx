@@ -160,6 +160,9 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(tile('episodes').getAttribute('href')).toBe('/shows/show-b/world?tab=season');
     expect(tile('events').getAttribute('href')).toBe('/shows/show-b/world?tab=events');
     expect(tile('characters').textContent).toContain('2');
+    // The show's cast, not every show's (wiring map, fix-list item 16).
+    expect(tile('characters').textContent).toContain('in this show’s registries');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/character-registry/registries?show_id=show-b&limit=100');
     expect(tile('characters').getAttribute('href')).toBe('/character-registry');
     expect(tile('wardrobe').getAttribute('href')).toBe('/shows/show-b/world?tab=wardrobe-items');
     expect(screen.getByTestId('lalaverse-idea-culture').textContent).toContain('Fashion Week is coming up in November');

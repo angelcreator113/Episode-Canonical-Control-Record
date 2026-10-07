@@ -48,6 +48,8 @@ function getModels() {
 /*  REGISTRIES                                                         */
 /* ================================================================== */
 
+const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * GET /registries
  * List all registries with character-count + status summary
@@ -57,7 +59,15 @@ router.get('/registries', requireAuth, async (req, res) => {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
     const offset = parseInt(req.query.offset, 10) || 0;
+    // ?show_id= lists one show's registries (the LalaVerse Overview's
+    // Characters tile counts the show's cast, not every show's; wiring map,
+    // fix-list item 16).
+    const { show_id: showId } = req.query;
+    if (showId !== undefined && !SHOW_ID_RE.test(String(showId))) {
+      return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID)' });
+    }
     const { count, rows: registries } = await CharacterRegistry.findAndCountAll({
+      ...(showId !== undefined ? { where: { show_id: showId } } : {}),
       include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
       order: [['created_at', 'DESC']],
       limit,
