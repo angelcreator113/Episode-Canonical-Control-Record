@@ -101,6 +101,7 @@ import EventVenueLook from '../components/EventPackage/EventVenueLook';
 import ShowMoreToggle from '../components/ShowMoreToggle';
 import { visibleSlice } from '../lib/showMore';
 import EventLookImage from '../components/EventPackage/EventLookImage';
+import { pieceChargeText } from '../lib/lookCharge';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -1790,7 +1791,7 @@ export default function EventPackagePage() {
                         <span className="epp-outfit-piece-name">{piece.name || 'Unnamed piece'}</span>
                         {episodeLook && (
                           <span className="epp-outfit-piece-cost" data-testid={`look-piece-cost-${piece.id || i}`}>
-                            {piece.is_owned ? 'owned' : piece.coin_cost != null ? `to buy · ${Number(piece.coin_cost).toLocaleString()} coins` : 'to buy'}
+                            {pieceChargeText(piece)}
                           </span>
                         )}
                       </li>

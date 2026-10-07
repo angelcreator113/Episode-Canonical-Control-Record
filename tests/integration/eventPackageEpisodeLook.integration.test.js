@@ -100,4 +100,20 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   it('before Start Episode there is no episode look', async () => {
     expect(await getLook(await seed({ started: false }))).toBeNull();
   });
+
+  // One rule for the look's cost (Evoni, 2026-10-07): each piece carries the
+  // charge Finalize books, so the Package and the Wardrobe show its total.
+  it("each piece carries Finalize's charge: gifted and borrowed are free, a rental costs its rental price", async () => {
+    const ids = await seed();
+    const gift = await models.Wardrobe.create({ name: 'Gifted Clutch', clothing_category: 'accessories', show_id: ids.show, coin_cost: 300, is_owned: false, acquisition_type: 'gifted' });
+    const rent = await models.Wardrobe.create({ name: 'Rented Earrings', clothing_category: 'jewelry', show_id: ids.show, coin_cost: 900, rental_price: 75, is_owned: false, acquisition_type: 'rented' });
+    for (const w of [ids.dress, ids.flats, gift.id, rent.id]) await link(ids, w, 'approved');
+    const look = await getLook(ids);
+    const byName = Object.fromEntries(look.pieces.map((p) => [p.name, p]));
+    expect(byName['Sculpted Linen Dress'].charge).toEqual({ category: 'wardrobe_purchase', amount: 420 });
+    expect(byName['Polished Flats']).toMatchObject({ charge: null, free_because: 'owned' });
+    expect(byName['Gifted Clutch']).toMatchObject({ charge: null, free_because: 'gifted' });
+    expect(byName['Rented Earrings'].charge).toEqual({ category: 'wardrobe_rental', amount: 75 });
+    expect(look.total).toBe(495);
+  });
 });

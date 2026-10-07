@@ -864,7 +864,10 @@ const EpisodeDetail = () => {
                     episodeId={episodeId}
                     showId={episode?.show_id || episode?.showId}
                     event={selectedEvent}
-                    characterState={characterState}
+                    // One coin balance (Evoni, 2026-10-07): the game reads Lala's
+                    // ledger balance, the number Money and the header show, not
+                    // the separately stored character coins.
+                    characterState={headerBalance !== null ? { ...characterState, coins: headerBalance } : characterState}
                     onCoinsChange={bumpBalance}
                     onOutfitComplete={(result) => {
                       console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);

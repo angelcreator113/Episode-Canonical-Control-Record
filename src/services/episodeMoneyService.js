@@ -282,7 +282,10 @@ async function eventMoneyPreview(sequelize, { showId, event, episodeId = null, t
   const spending = episodeId ? await listSpending(sequelize, episodeId, { transaction }) : [];
   const hadSpending = episodeId ? await hadSpendingLines(sequelize, episodeId, { transaction }) : false;
   const { plannedLines, buildMoneyLines, moneyWarnings } = require('./episodeMoneyLines');
-  const plan = plannedLines({ event, costs, deliverables, spending, hadSpending });
+  // The look's to-buy pieces are planned here too, as on the Money tab: the
+  // preview used to leave them out (Evoni, 2026-10-07).
+  const look = await lookPlan(sequelize, { showId, episodeId, event });
+  const plan = plannedLines({ event, costs, deliverables, spending, hadSpending, look: look.charges });
   const { lines, projection } = buildMoneyLines({ plan, rows: [], balance });
   return { balance, lines, projection, warnings: moneyWarnings({ lines, projection, balance }) };
 }
