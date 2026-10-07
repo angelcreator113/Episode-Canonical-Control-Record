@@ -2766,7 +2766,7 @@ The revised event should feel like a completely different experience from the si
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>{helperText}</div>
                     {types.length === 0 ? (
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0' }}>
-                        No types defined for this category yet — generate them in the UI Overlays tab, or add a custom name below.
+                        No types defined for this category yet — make them in Assets → Lala's Phone or Overlays, or add a custom name below.
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>

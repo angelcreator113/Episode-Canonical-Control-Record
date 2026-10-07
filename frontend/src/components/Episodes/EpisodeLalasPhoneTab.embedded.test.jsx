@@ -113,7 +113,7 @@ describe('EpisodeLalasPhoneTab — embedded phone (Task #1994)', () => {
   });
 
   // Evoni's Episode mock (2026-10-06): + Add screen and Edit tap zones.
-  test('Add screen and Edit tap zones link to Phone Studio, the show\'s Phone Hub', async () => {
+  test('Add screen and Edit tap zones link to the show\'s Lala\'s Phone in Producer Mode', async () => {
     mockGets();
     renderTab();
     await phonePane();
@@ -122,13 +122,13 @@ describe('EpisodeLalasPhoneTab — embedded phone (Task #1994)', () => {
     }
   });
 
-  test('with no screens, the phone shows "Select a screen" and points to Phone Studio', async () => {
+  test('with no screens, the phone shows "Select a screen" and points to Producer Mode → Lala\'s Phone', async () => {
     mockGets({ overlays: [] });
     renderTab();
     const pane = screen.getByRole('complementary', { name: 'Phone' });
     expect(await within(pane).findByText('Select a screen')).toBeTruthy();
     expect(within(pane).getByText(/No screens yet/)).toBeTruthy();
-    expect(within(pane).getByRole('link', { name: 'Phone Studio' }).getAttribute('href'))
+    expect(within(pane).getByRole('link', { name: "Producer Mode → Lala's Phone" }).getAttribute('href'))
       .toBe('/shows/s-1/world?tab=overlays-tab');
   });
 

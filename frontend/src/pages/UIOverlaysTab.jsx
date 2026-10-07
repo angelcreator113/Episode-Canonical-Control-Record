@@ -1351,18 +1351,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
       {/* Several shows and none active: choose one first (audit CTX-01). */}
       {!propShowId && !showId && shows.length > 1 && (
-        <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open its Phone Hub" />
+        <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open Lala's Phone" />
       )}
 
       {/* The header card (Evoni's mock, 2026-10-07): the title and its line,
           three tiles counted by the screen cards' own Ready rule
           (lib/phoneHubSummary), and the setup guide inside the card. */}
-      <section className="ph-hero" aria-label="Phone Hub">
+      <section className="ph-hero" aria-label="Lala's Phone">
       <div className="overlays-header">
         <div className="overlays-header-top">
           <div className="ph-hero-main">
             <div className="ph-hero-text">
-              <h2 className="ph-hero-title">Phone Hub</h2>
+              <h2 className="ph-hero-title">Lala&apos;s Phone</h2>
               <p className="ph-hero-line">One phone for the whole show. Episodes pick screens from here.</p>
             </div>
             {/* Show selector — visible when no propShowId so user can switch shows */}
@@ -2348,12 +2348,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         </button>
                         <button
                           onClick={() => {
-                            if (window.confirm('Move this item to the UI Overlays tab? It will disappear from the Phone Hub.')) {
+                            if (window.confirm("Move this to the show's Overlays? It will leave Lala's Phone.")) {
                               handleChangeScreenType('production');
                             }
                           }}
                           className={`editor-type-btn ${activeScreen.category === 'production' ? 'active-overlay' : ''}`}
-                          title="Move to UI Overlays tab"
+                          title="Move to the show's Overlays"
                         >
                           UI overlay
                         </button>

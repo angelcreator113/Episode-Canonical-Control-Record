@@ -183,7 +183,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">
                   No screens yet. Build them in{' '}
-                  {studioPath ? <Link to={studioPath}>Phone Studio</Link> : 'Phone Studio'}.
+                  {studioPath ? <Link to={studioPath}>Producer Mode → Lala&apos;s Phone</Link> : <>Producer Mode → Lala&apos;s Phone</>}.
                 </p>
               ) : (
                 <>
@@ -207,7 +207,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
               )}
             </div>
             <p className="lalas-phone-subtitle">
-              One phone, scoped to this episode. Screens are built in Phone Studio; this episode can have its own version of any of them.
+              One phone, scoped to this episode. Screens are built in Producer Mode → Lala&apos;s Phone; this episode can have its own version of any of them.
             </p>
             {overlaysLoading && <div className="lalas-phone-muted">Loading phone screens…</div>}
             {overlaysError && <div className="lalas-phone-error">Error: {overlaysError}</div>}
@@ -225,7 +225,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                 </div>
                 {screens.length === 0 ? (
                   <div className="lalas-phone-empty">
-                    No phone screens are generated for this show yet. Screens are built in the Phone Hub.
+                    No phone screens are generated for this show yet. Screens are built in Producer Mode → Lala's Phone.
                   </div>
                 ) : (
                   <ul className="lalas-phone-screens">
