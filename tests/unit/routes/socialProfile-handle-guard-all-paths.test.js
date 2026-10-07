@@ -219,6 +219,27 @@ describe('POST /character-generation/confirm-feed — Task #1893', () => {
     expect(SocialProfile.create).toHaveBeenCalledTimes(1);
     expect(SocialProfile.untouched()).toBe(true);
   });
+
+  // Wiring map §6 finding 6a, fix-list item 8: the profile links back to its
+  // character, and the layer is the one asked for (else the default).
+  it('the created profile points back at its character and carries the layer asked for', async () => {
+    const SocialProfile = fakeSocialProfile([LIVE], { rawAttributes });
+    const character = { id: 'c1', update: jest.fn().mockResolvedValue(undefined) };
+    const app = mountCharGen(SocialProfile, character);
+
+    await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
+      .send({ character_id: 'c1', feed_layer: 'lalaverse', feed_proposal: { handle: '@new_one', platform: 'tiktok' } });
+    expect(SocialProfile.create.mock.calls[0][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'lalaverse' });
+    expect(character.update).toHaveBeenCalledWith(expect.objectContaining({ feed_profile_id: expect.anything() }));
+
+    await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
+      .send({ character_id: 'c1', feed_proposal: { handle: '@new_two', platform: 'tiktok', feed_layer: 'lalaverse' } });
+    expect(SocialProfile.create.mock.calls[1][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'lalaverse' });
+
+    await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
+      .send({ character_id: 'c1', feed_layer: 'nonsense', feed_proposal: { handle: '@new_three', platform: 'tiktok' } });
+    expect(SocialProfile.create.mock.calls[2][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'real_world' });
+  });
 });
 
 // ── 3. Feed scheduler ────────────────────────────────────────────────────────
