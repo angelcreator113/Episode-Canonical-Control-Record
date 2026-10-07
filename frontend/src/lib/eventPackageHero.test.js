@@ -83,11 +83,12 @@ describe('Event Package header helpers', () => {
         { key: 'fee', signed: 439 }, { key: 'entry', signed: -50, covered: true }, { key: 'taxi', signed: -30 },
         { key: 'bonus', signed: 200, conditional: true },
       ],
-      projection: { conditional: [{ tier: 'slay', label: 'a SLAY', amount: 150 }] },
+      projection: { conditional: [{ tier: 'slay', label: 'a SLAY', amount: 150 }, { tier: 'pass', label: 'a PASS', amount: 60 }] },
     });
     expect(tiles.map((t) => [t.key, t.value, t.sub])).toEqual([
       ['earns', '439 coins', 'planned income'], ['pays', '30 coins', '1 cost covered'], ['bonus', 'up to 150 coins', 'if she earns it'],
     ]);
     expect(dealTiles({ lines: [], projection: null }).map((t) => t.value)).toEqual(['0 coins', '0 coins', 'None']);
+    // The tiers are exclusive: "up to" is the best one, not the sum (Evoni, 2026-10-07).
   });
 });

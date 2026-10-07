@@ -89,9 +89,11 @@ function lookRow(money, lookLines) {
   }
   if (!money?.event || !money.look) return null;
   const chosen = money.look.pieces > 0;
+  // Nothing to charge is not always "all owned": gifted and borrowed pieces
+  // cost nothing too (Evoni, 2026-10-07).
   return {
-    key: 'look', label: "Lala's look", source: chosen ? 'Wardrobe · every piece owned' : 'Wardrobe · to-buy pieces',
-    when: 'At Finalize', amount: 0, amountText: chosen ? '0' : '—', chip: chosen ? 'All owned' : 'Not chosen',
+    key: 'look', label: "Lala's look", source: chosen ? 'Wardrobe · nothing to buy or rent' : 'Wardrobe · to-buy pieces',
+    when: 'At Finalize', amount: 0, amountText: chosen ? '0' : '—', chip: chosen ? 'Nothing to pay' : 'Not chosen',
     chipKind: chosen ? 'none' : 'missing', counts: 0,
   };
 }
@@ -117,7 +119,8 @@ export function estimateRows(money) {
       key: l.key,
       label: l.label,
       source: `${SOURCE[l.category] || capital(words(l.category)) || 'Terms'} · ${payerText(l)}`,
-      when: capital(l.trigger || 'at Complete'),
+      // A covered line is never charged; it used to read "At Complete".
+      when: l.covered ? 'Not charged' : capital(l.trigger || 'at Complete'),
       amount: counts,
       amountText,
       chip,
@@ -185,7 +188,8 @@ export function moneyTiles(money) {
 
 /** Where the deal terms stand, under the estimate (null without an event). */
 export function termsNote(money) {
-  if (!money?.event) return null;
+  // Only an event with deal terms has terms to lock (Evoni, 2026-10-07).
+  if (!money?.event || money.event.deal === false) return null;
   const draft = money.spending ? money.spending.editable !== false : true;
   return draft
     ? 'Deal terms are locked at Start Episode. The episode is still a draft, so they can be reopened.'

@@ -204,7 +204,9 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     balance,
     rows: posted,
     net,
-    event: event ? { id: event.id, name: event.name } : null,
+    // deal: whether the event has deal terms (Evoni, 2026-10-07: the terms
+    // note spoke of locked deal terms on events that have none).
+    event: event ? { id: event.id, name: event.name, deal: isDealEvent(event) } : null,
     expected: expectedLines(event, costs, deliverables),
     spending,
     lines,
