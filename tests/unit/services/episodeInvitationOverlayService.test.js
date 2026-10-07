@@ -11,6 +11,13 @@ const {
   placeInvitationOnBeat,
 } = require('../../../src/services/episodeInvitationOverlayService');
 
+// These cover placing overlays on beats, off for now (Evoni, 2026-10-07:
+// "none of the overlays should be beats for now"); the rule is kept for
+// when it is turned back on.
+const { setOverlaysOnBeats } = require('../../../src/services/episodeBeatPlacement');
+beforeAll(() => setOverlaysOnBeats(true));
+afterAll(() => setOverlaysOnBeats(false));
+
 describe('invitation beat and type identity', () => {
   test('the invitation beat is the canonical beat that opens the invite letter overlay (beat 5, Reveal)', () => {
     expect(INVITATION_BEAT).toMatchObject({ number: 5, name: 'Reveal', screen_action: 'OPEN_LETTER_INVITE_OVERLAY' });
@@ -148,5 +155,23 @@ describe('placeInvitationOnBeat', () => {
     const out = await placeInvitationOnBeat(models, { episodeId: 'ep-1', assetId: 'inv-2' });
     expect(out.anchor).toBe('first-scene');
     expect(created[0]).toMatchObject({ scene_id: 'scene-1', properties: expect.objectContaining({ anchor: 'first-scene' }) });
+  });
+});
+
+describe('overlays kept off beats (Evoni, 2026-10-07: "none of the overlays should be beats for now")', () => {
+  const { isOverlaysOnBeats } = require('../../../src/services/episodeBeatPlacement');
+  beforeEach(() => setOverlaysOnBeats(false));
+  afterEach(() => setOverlaysOnBeats(true));
+
+  test('off by default, so approving an invitation places it nowhere: not on its beat, not on the first scene', async () => {
+    jest.isolateModules(() => {
+      expect(require('../../../src/services/episodeBeatPlacement').isOverlaysOnBeats()).toBe(false);
+    });
+    expect(isOverlaysOnBeats()).toBe(false);
+    const { models, created } = buildModels({ event: approvedEvent });
+    const out = await placeInvitationOnBeat(models, { episodeId: 'ep-1', assetId: 'inv-2' });
+    expect(out).toEqual({ placement: null, anchor: null, beat: null });
+    expect(created).toEqual([]);
+    expect(models.TimelinePlacement.create).not.toHaveBeenCalled();
   });
 });

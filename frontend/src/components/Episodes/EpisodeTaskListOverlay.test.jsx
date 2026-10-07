@@ -55,7 +55,8 @@ describe('EpisodeTaskListOverlay', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/task-list-overlay');
     const img = await screen.findByTestId('etlo-thumb');
     expect(img.getAttribute('src')).toBe('https://img/tl.png');
-    expect(screen.getByText('Episode overlay · Beat 9: Reminder/Deadline')).toBeTruthy();
+    expect(screen.getByText('Episode overlay')).toBeTruthy();
+    expect(screen.queryByText(/Beat 9/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Design task-list overlay/ })).toBeNull();
   });
 

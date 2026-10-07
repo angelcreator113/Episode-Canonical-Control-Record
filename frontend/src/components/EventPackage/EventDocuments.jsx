@@ -131,7 +131,10 @@ function Editor({ type, doc, onCancel, onSave, saving }) {
   );
 }
 
-export default function EventDocuments({ showId, eventId, event, outfitPieces = [], balance = null }) {
+// lead: a card shown first in the grid (the episode's Overlays tab puts the
+// invitation there, Evoni's mock 2026-10-07); intro=false leaves out the
+// paragraph when the page already explains the documents.
+export default function EventDocuments({ showId, eventId, event, outfitPieces = [], balance = null, lead = null, intro = true }) {
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
@@ -166,17 +169,18 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
 
   return (
     <div className="evd" data-testid="event-documents">
-      <p className="evd-intro">
+      {intro && <p className="evd-intro">
         One system, three looks. Each document fills itself from the event, goes through the same steps
         (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
         shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
         The invitation is in <a href="#epp-sec-invitation">1. The Event</a>.
-      </p>
+      </p>}
       {error && <p className="evd-error" role="alert">{error}</p>}
       {!docs && !error && <p className="evd-muted">Loading documents…</p>}
-      {docs && (
-        <div className="evd-grid">
-          {DOCS.map(({ type, title, from }) => {
+      {(docs || lead) && (
+        <div className={`evd-grid${lead ? ' has-lead' : ''}`}>
+          {lead}
+          {docs && DOCS.map(({ type, title, from }) => {
             const doc = docs[type];
             const state = docState(doc);
             const isBusy = (a) => busy === `${type}:${a}`;

@@ -7,6 +7,8 @@
 .evd-error { margin: 0; color: var(--danger-text); font-size: 13px; }
 .evd-muted { color: var(--lala-ink-muted); font-size: 13px; }
 .evd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.evd-grid.has-lead { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .evd-grid.has-lead { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .evd-card {
   display: flex;
   flex-direction: column;
@@ -166,10 +168,16 @@
 .evd-save:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 760px) {
-  .evd-grid { grid-template-columns: minmax(0, 1fr); }
+  .evd-grid, .evd-grid.has-lead { grid-template-columns: minmax(0, 1fr); }
   .evd-card { padding: 16px; }
 }
 @media (max-width: 480px) {
   .evd-card.is-blank { grid-template-columns: minmax(0, 1fr); }
   .evd-card.is-blank .evd-actions { grid-column: 1; grid-row: auto; margin-top: 6px; }
 }
+
+/* Beside the invitation (the episode's Overlays tab, three across) an
+   undrafted document stacks: title, what it comes from, Draft. */
+.evd-grid.has-lead > .evd-card { align-self: start; }
+.evd-grid.has-lead .evd-card.is-blank { grid-template-columns: minmax(0, 1fr); }
+.evd-grid.has-lead .evd-card.is-blank .evd-actions { grid-column: 1; grid-row: auto; margin-top: 6px; }

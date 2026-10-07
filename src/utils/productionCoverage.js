@@ -36,6 +36,7 @@ const PER_EPISODE_ENVIRONMENT = new Set([1, 2]);
 const INTERFACE_SURFACES = new Set(["Lala's Phone", 'Full Screen']);
 const UNTRACKED = 'Clips could not be read';
 const OVERLAYS_UNTRACKED = 'Overlays could not be read';
+const OVERLAYS_OFF_BEATS = 'Overlays are kept off beats for now';
 const PERFORMER = { host: 'justawoman', character: 'lala' };
 
 const surfacesOf = (s) => (s && typeof s === 'object' ? [s.start, s.end] : [s]);
@@ -56,7 +57,9 @@ function beatRequirements(beat) {
  * planRows: the episode's scene_plans rows ({ beat_number, ... });
  * readiness: planReadiness(planRows) ({ not_ready: [{ beat_number, text }] });
  * overlays: beat-anchored placements ({ beat_number, label }), or null
- * when they could not be read;
+ * when they could not be read, or 'off' while overlays are kept off beats
+ * (episodeBeatPlacement, Evoni 2026-10-07): the interface indicator is then
+ * not tracked rather than missing;
  * clips: the episode's performance clips ({ canonical_beat_number,
  * performer, label, status }), or null when they could not be read.
  * Returns { beats, required, met, untracked, covered, total, next } where
@@ -69,7 +72,7 @@ function computeCoverage({ planRows = [], readiness = null, overlays = [], clips
   const planned = new Set((planRows || []).map((r) => Number(r.beat_number)));
   const notReady = new Map(((readiness && readiness.not_ready) || []).map((n) => [Number(n.beat_number), n.text]));
   const overlaysByBeat = new Map();
-  for (const o of overlays || []) {
+  for (const o of Array.isArray(overlays) ? overlays : []) {
     const n = Number(o.beat_number);
     if (!overlaysByBeat.has(n)) overlaysByBeat.set(n, []);
     overlaysByBeat.get(n).push(o.label || 'Overlay');
@@ -94,7 +97,9 @@ function computeCoverage({ planRows = [], readiness = null, overlays = [], clips
         else if (notReady.has(beat.number)) { state = false; text = notReady.get(beat.number); }
         else { state = true; }
       } else if (key === 'interface') {
-        if (overlays === null) {
+        if (overlays === 'off') {
+          text = OVERLAYS_OFF_BEATS;
+        } else if (overlays === null) {
           text = OVERLAYS_UNTRACKED;
         } else {
           const placed = overlaysByBeat.get(beat.number) || [];

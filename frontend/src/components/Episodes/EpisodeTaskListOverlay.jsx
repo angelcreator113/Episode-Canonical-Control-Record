@@ -3,7 +3,8 @@
  * 2026-09-30): "An episode's task list can be approved; approving offers
  * "Design task-list overlay" (cost shown) in the event's visual direction;
  * it becomes an episode overlay placed on the tasks/deadline beat,
- * replacing an earlier one."
+ * replacing an earlier one." Kept off beats for now (Evoni, 2026-10-07:
+ * "none of the overlays should be beats for now").
  *
  * Rendered under the Career Checklist (EpisodeTodoList), the view of the
  * episode's one task list. All state comes from
@@ -139,11 +140,8 @@ export default function EpisodeTaskListOverlay({ episodeId, listKey = '', showPr
             alt="Task-list overlay"
             data-testid="etlo-thumb"
           />
-          {overlay.beat?.number && (
-            <figcaption className="etlo-caption">
-              Episode overlay · Beat {overlay.beat.number}{overlay.beat.name ? `: ${overlay.beat.name}` : ''}
-            </figcaption>
-          )}
+          {/* Not on a beat for now (Evoni, 2026-10-07). */}
+          <figcaption className="etlo-caption">Episode overlay</figcaption>
         </figure>
       )}
 

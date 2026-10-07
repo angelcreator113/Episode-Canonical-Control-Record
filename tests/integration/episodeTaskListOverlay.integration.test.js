@@ -49,6 +49,13 @@ const TASKS = [
   { slot: 'career_network', label: 'Meet the editor', description: '', task_source: 'optional', generated_by: 'career', required: false, completed: false },
 ];
 
+// These cover placing overlays on beats, off for now (Evoni, 2026-10-07:
+// "none of the overlays should be beats for now"); the rule is kept for
+// when it is turned back on.
+const { setOverlaysOnBeats } = require('../../src/services/episodeBeatPlacement');
+beforeAll(() => setOverlaysOnBeats(true));
+afterAll(() => setOverlaysOnBeats(false));
+
 (shouldSkip ? describe.skip : describe)('Episode task list approval + task-list overlay (P14)', () => {
   const shows = [];
   let token;

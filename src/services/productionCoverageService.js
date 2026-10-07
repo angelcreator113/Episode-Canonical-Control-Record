@@ -33,16 +33,21 @@ async function loadCoverage(models, episodeId) {
 
   // timeline_placements is not created by the canon migration tree, so a
   // database without it reads the interface indicator as "not tracked".
-  let overlays = null;
-  try {
-    const [placed] = await sequelize.query(
-      `SELECT label, properties->>'beat_number' AS beat_number
-         FROM timeline_placements
-        WHERE episode_id = :episodeId AND deleted_at IS NULL AND properties->>'anchor' = 'beat'`,
-      { replacements: { episodeId } });
-    overlays = (placed || []).map((p) => ({ beat_number: Number(p.beat_number), label: p.label }));
-  } catch (err) {
-    console.error('[ProductionCoverage] overlay read failed:', err.message);
+  // Overlays kept off beats for now (episodeBeatPlacement): not tracked.
+  const { isOverlaysOnBeats } = require('./episodeBeatPlacement');
+  let overlays = 'off';
+  if (isOverlaysOnBeats()) {
+    overlays = null;
+    try {
+      const [placed] = await sequelize.query(
+        `SELECT label, properties->>'beat_number' AS beat_number
+           FROM timeline_placements
+          WHERE episode_id = :episodeId AND deleted_at IS NULL AND properties->>'anchor' = 'beat'`,
+        { replacements: { episodeId } });
+      overlays = (placed || []).map((p) => ({ beat_number: Number(p.beat_number), label: p.label }));
+    } catch (err) {
+      console.error('[ProductionCoverage] overlay read failed:', err.message);
+    }
   }
 
   let clips = null;

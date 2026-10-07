@@ -226,6 +226,8 @@ async function getEpisodeOverlays(models, episodeId) {
     title: { text: ep.title || '', approved: Boolean(title?.approved) },
     pieces,
     title_chip: titleChip(pieces),
+    // The event its documents come from (the redesigned tab, 2026-10-07).
+    event: event ? { id: event.id, show_id: event.show_id || ep.show_id, name: event.name || null } : null,
   };
 }
 

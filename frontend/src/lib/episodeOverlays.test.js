@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { overlayRows, pieceBeat, beatLabel, previewPiece, pieceNeeded } from './episodeOverlays';
+import { overlayRows, previewPiece, pieceNeeded } from './episodeOverlays';
 
 const PIECES = [
   { key: 'title_overlay', label: 'Title overlay', status: 'approved', image_url: 'https://x/t.png', beat: null, expected_beat: null },
@@ -9,30 +9,17 @@ const PIECES = [
 ];
 
 describe('episodeOverlays (Evoni\'s Episode mock, 2026-10-06)', () => {
-  test('rows run by beat, unplaced last, each with its kind, text and action', () => {
-    const rows = overlayRows(PIECES, [
-      { id: 'notif', asset_id: 'a-n', name: 'Notification banner', generated: true, beat: 2 },
-      { id: 'hud', name: 'HUD', generated: true },
+  test('a row per piece, in order, with its kind, text and action; no beat (2026-10-07)', () => {
+    const rows = overlayRows(PIECES);
+    expect(rows.map((r) => [r.key, r.kind, r.action, r.needed])).toEqual([
+      ['title_overlay', 'Title', 'Edit', false],
+      ['framed_card', 'Title card', 'Update', true],
+      ['invitation', 'Document', 'Edit', false],
+      ['task_list', 'Document', 'Add', true],
     ]);
-    expect(rows.map((r) => [r.key, r.beat?.number ?? null, r.kind, r.action, r.needed])).toEqual([
-      ['framed_card', 1, 'Title card', 'Update', true],
-      ['show-a-n', 2, 'Phone Hub', 'Edit', false],
-      ['invitation', 5, 'Document', 'Edit', false],
-      ['task_list', 9, 'Document', 'Add', true],
-      ['title_overlay', null, 'Title', 'Edit', false],
-    ]);
-    expect(rows.find((r) => r.key === 'task_list').text).toBe('Shopping list (not made yet)');
+    expect(rows.every((r) => !('beat' in r))).toBe(true);
+    expect(rows.find((r) => r.key === 'task_list').text).toBe('Task list (not made yet)');
     expect(rows.find((r) => r.key === 'framed_card').text).toBe('Full-screen framed title card (outdated)');
-    expect(rows.filter((r) => r.needed)).toHaveLength(2);
-  });
-
-  test('a piece\'s beat: placed, else where it goes, else none', () => {
-    expect(pieceBeat(PIECES[2])).toEqual({ number: 5, name: 'Reveal', placed: true });
-    expect(pieceBeat(PIECES[3])).toEqual({ number: 9, name: 'Reminder/Deadline', placed: false });
-    expect(pieceBeat(PIECES[0])).toBeNull();
-    expect(beatLabel(pieceBeat(PIECES[2]))).toBe('Beat 5');
-    expect(beatLabel(pieceBeat(PIECES[3]))).toBe('Beat 9 · not placed yet');
-    expect(beatLabel(null)).toBe('Not on a beat');
     expect(pieceNeeded(PIECES[0])).toBe(false);
     expect(pieceNeeded(PIECES[1])).toBe(true);
   });

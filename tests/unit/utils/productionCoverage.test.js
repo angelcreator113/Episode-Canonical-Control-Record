@@ -100,6 +100,21 @@ describe('loadCoverage', () => {
     planReadiness: jest.fn(() => ({ ready: 0, total: 0, not_ready: [] })),
   }));
   const { loadCoverage } = require('../../../src/services/productionCoverageService');
+  // Overlays are kept off beats for now (Evoni, 2026-10-07); these cover
+  // the overlay read for when placing is turned back on.
+  const beatPlacement = require('../../../src/services/episodeBeatPlacement');
+  beforeEach(() => beatPlacement.setOverlaysOnBeats(true));
+  afterEach(() => beatPlacement.setOverlaysOnBeats(false));
+
+  test('overlays kept off beats: no overlay read, the interface indicator is not tracked rather than missing', async () => {
+    beatPlacement.setOverlaysOnBeats(false);
+    const query = jest.fn(async () => [[]]);
+    const models = { ScenePlan: { findAll: jest.fn(async () => allPlanned().map((r) => ({ toJSON: () => r }))) }, SceneSet: {}, sequelize: { query } };
+    const c = await loadCoverage(models, 'ep-1');
+    expect(query.mock.calls.some(([sql]) => /timeline_placements/.test(sql))).toBe(false);
+    expect(c.beats.find((b) => b.number === 5).indicators.interface).toEqual({ requirement: 'required', met: null, text: 'Overlays are kept off beats for now' });
+    expect(c.next?.indicator).not.toBe('interface');
+  });
 
   test('reads the plan and the beat-anchored overlays for the episode only', async () => {
     const query = jest.fn(async (sql) => (/episode_performance_clips/.test(sql)
