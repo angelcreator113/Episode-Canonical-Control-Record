@@ -422,6 +422,32 @@ router.post('/:id/title-overlay/flourish', validateUUIDParam('id'), requireAuth,
   }
 });
 
+// Change the title overlay's words: body { title }. They become the episode's
+// approved title and an existing overlay is redrawn in its style (no image
+// cost). Evoni, 2026-10-07: "edit/delete episode title".
+router.put('/:id/title-overlay/words', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setTitleWords } = require('../services/episodeTitleOverlayService');
+    const data = await setTitleWords(models, req.params.id, req.body?.title);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'PUT /:id/title-overlay/words');
+  }
+});
+
+// Delete the title overlay (and its flourish and placements); the title stays.
+router.delete('/:id/title-overlay', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { deleteTitleOverlay } = require('../services/episodeTitleOverlayService');
+    const data = await deleteTitleOverlay(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'DELETE /:id/title-overlay');
+  }
+});
+
 // ==================== EPISODE OVERLAYS (P15) ====================
 // Production's Overlays tab: every on-screen piece the episode owns (title
 // overlay, framed card, invitation, task-list overlay) with its preview,

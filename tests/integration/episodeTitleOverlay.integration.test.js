@@ -198,4 +198,53 @@ async function pngInfo(dataUrl) {
     await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title/approve`)).send({ title: 'Gala Night Two' });
     expect((await state(ids)).body.data.offer).toMatchObject({ offered: true, kind: 'design' });
   });
+
+  // Evoni, 2026-10-07: "i need to be able to edit/delete episode title" (the
+  // Title overlay).
+  it('changing the words renames and approves the title, and redraws the overlay in its style, with no image call', async () => {
+    const ids = await seed();
+    await approve(ids);
+    await save(ids, { variant: 'classic', band: { enabled: true, opacity: 0.25 } });
+    const before = (await liveOverlays(ids))[0];
+    const res = await auth(request(app).put(`/api/v1/episodes/${ids.ep}/title-overlay/words`)).send({ title: '  Velvet   Night ' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.approved).toBe(true);
+    expect(res.body.data.overlay).toMatchObject({ outdated: false, designed_for: 'Velvet Night', style: { variant: 'classic', band: { enabled: true, opacity: 0.25 } } });
+    expect(genSpy).not.toHaveBeenCalled();
+    const ep = await one(`SELECT title, title_approved_value FROM episodes WHERE id = :ep`, ids);
+    expect(ep).toEqual({ title: 'Velvet Night', title_approved_value: 'Velvet Night' });
+    const live = await liveOverlays(ids);
+    expect(live).toHaveLength(1);
+    expect(live[0].id).not.toBe(before.id);
+    expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/title-overlay/words`)).send({ title: '   ' })).status).toBe(400);
+  });
+
+  it('changing the words with no overlay yet only renames and approves', async () => {
+    const ids = await seed();
+    const res = await auth(request(app).put(`/api/v1/episodes/${ids.ep}/title-overlay/words`)).send({ title: 'Rose Gold Hour' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.approved).toBe(true);
+    expect(res.body.data.overlay).toBeNull();
+    expect(await liveOverlays(ids)).toHaveLength(0);
+  });
+
+  it('deleting the overlay removes its image and flourish; the title stays', async () => {
+    const ids = await seed();
+    await approve(ids);
+    await save(ids, { variant: 'classic', band: { enabled: false } });
+    await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay/flourish`));
+    const res = await auth(request(app).delete(`/api/v1/episodes/${ids.ep}/title-overlay`));
+    expect(res.status).toBe(200);
+    expect(res.body.data.deleted).toBeGreaterThanOrEqual(1);
+    expect(await liveOverlays(ids)).toHaveLength(0);
+    const flourishes = await sequelize.query(
+      `SELECT id FROM assets WHERE episode_id = :ep AND asset_role = 'UI.OVERLAY.EPISODE_TITLE_FLOURISH' AND deleted_at IS NULL`,
+      { replacements: ids, type: sequelize.QueryTypes.SELECT });
+    expect(flourishes).toHaveLength(0);
+    const st = (await state(ids)).body.data;
+    expect(st.overlay).toBeNull();
+    expect(st.approved).toBe(true);
+    const ep = await one(`SELECT title, title_overlay_asset_id FROM episodes WHERE id = :ep`, ids);
+    expect(ep).toEqual({ title: 'Gala Night', title_overlay_asset_id: null });
+  });
 });
