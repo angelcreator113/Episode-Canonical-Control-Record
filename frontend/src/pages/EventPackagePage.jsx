@@ -503,6 +503,33 @@ export default function EventPackagePage() {
       .finally(() => setVenueLocationsLoading(false));
   }, [venuePickerOpen, venueLocations]);
 
+  // "On this page" marks the section in view (Evoni's review, item 9): on a
+  // phone the chip row stays under the header, so this shows where you are
+  // and its chip scrolls into the row. No IntersectionObserver (tests): no mark.
+  const [activeAnchor, setActiveAnchor] = useState(null);
+  const tocListRef = useRef(null);
+  useEffect(() => {
+    if (loading || typeof IntersectionObserver === 'undefined') return undefined;
+    const sections = [...document.querySelectorAll('.epp-sections > section[id^="epp-sec-"]')];
+    if (!sections.length) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      const hit = entries.filter((e) => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (hit) setActiveAnchor(hit.target.id.replace('epp-sec-', ''));
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    sections.forEach((sec) => observer.observe(sec));
+    return () => observer.disconnect();
+  }, [loading]);
+  useEffect(() => {
+    const list = tocListRef.current;
+    const chip = activeAnchor && list?.querySelector(`[data-testid="toc-${activeAnchor}"]`);
+    if (!chip || list.scrollWidth <= list.clientWidth) return;
+    const left = chip.offsetLeft - list.offsetLeft;
+    if (left < list.scrollLeft || left + chip.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollTo?.({ left: Math.max(0, left - 16), behavior: 'smooth' });
+    }
+  }, [activeAnchor]);
+
   if (loading) {
     return (
       <div className="epp-page epp-center">
@@ -1305,10 +1332,13 @@ export default function EventPackagePage() {
       <div className="epp-body">
       <nav className="epp-toc" aria-label="On this page" data-testid="package-toc">
         <span className="epp-toc-eyebrow">On this page</span>
-        <ul>
+        <ul ref={tocListRef}>
           {pageNav(readiness, { has: { concept: hasConcept(event) } }).map((s) => (
             <li key={s.anchor}>
-              <a href={`#epp-sec-${s.anchor}`} className={`state-${s.state}`} data-testid={`toc-${s.anchor}`}>
+              <a
+                href={`#epp-sec-${s.anchor}`} className={`state-${s.state}${s.anchor === activeAnchor ? ' is-active' : ''}`}
+                aria-current={s.anchor === activeAnchor ? 'location' : undefined} data-testid={`toc-${s.anchor}`}
+              >
                 <span className="epp-toc-dot" aria-hidden="true" />{s.label}
               </a>
             </li>

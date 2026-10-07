@@ -5,7 +5,7 @@
  * jumps to it, and a menu whose dots mark the sections that need attention.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -85,5 +85,31 @@ describe('Event Package header', () => {
     expect(details.id).toBe('epp-sec-review');
     expect(within(details).getByTestId('readiness')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Review' })).toBeNull();
+  });
+});
+
+// Evoni's review, item 9: "On this page" marks the section in view.
+describe('Event Package — On this page follows the scroll', () => {
+  test('the section the observer reports in view is the current chip; none before', async () => {
+    let report;
+    const observed = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb) { report = cb; }
+      observe(el) { observed.push(el); }
+      disconnect() {}
+    });
+    try {
+      renderPage();
+      await screen.findByTestId('package-toc');
+      expect(observed.map((el) => el.id)).toContain('epp-sec-deal');
+      expect(screen.getByTestId('toc-deal').getAttribute('aria-current')).toBeNull();
+      const deal = observed.find((el) => el.id === 'epp-sec-deal');
+      act(() => report([{ isIntersecting: true, target: deal, boundingClientRect: { top: 100 } }]));
+      expect(screen.getByTestId('toc-deal').getAttribute('aria-current')).toBe('location');
+      expect(screen.getByTestId('toc-deal').className).toContain('is-active');
+      expect(screen.getByTestId('toc-identity').getAttribute('aria-current')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
