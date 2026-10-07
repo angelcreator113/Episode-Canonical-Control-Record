@@ -40,7 +40,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       { ...ids, name: `Look ${ids.show.slice(0, 8)}`, slug: `look-${ids.show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
                VALUES (:ep, :show, 'Look episode', 1, 'draft', NOW(), NOW())`, ids);
-    const dress = await models.Wardrobe.create({ name: 'Sculpted Linen Dress', clothing_category: 'dress', show_id: ids.show, lock_type: 'coin', coin_cost: 420, is_owned: false });
+    const dress = await models.Wardrobe.create({ name: 'Sculpted Linen Dress', clothing_category: 'dress', show_id: ids.show, lock_type: 'coin', coin_cost: 420, is_owned: false, s3_url: 'https://cdn.example/dress.jpg' });
     const flats = await models.Wardrobe.create({ name: 'Polished Flats', clothing_category: 'shoes', show_id: ids.show, coin_cost: 180, is_owned: true });
     Object.assign(ids, { dress: dress.id, flats: flats.id });
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, prestige, outfit_pieces, created_at, updated_at)
@@ -78,6 +78,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       ['Sculpted Linen Dress', false, 420],
       ['Polished Flats', true, 180],
     ]);
+    // Each piece's picture for the Package (Evoni, 2026-10-07); null without one.
+    expect(look.pieces.map((p) => p.image_url)).toEqual(['https://cdn.example/dress.jpg', null]);
   });
 
   it('pieces linked but not locked are "chosen"; a rejected link is left out', async () => {
@@ -90,8 +92,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it("no links: the event's own outfit; nothing anywhere: none", async () => {
-    const withOutfit = await seed({ eventOutfit: [{ id: 'snap-1', name: 'Saved Gown', coin_cost: 300, is_owned: false }] });
-    expect(await getLook(withOutfit)).toMatchObject({ state: 'event', pieces: [{ name: 'Saved Gown', coin_cost: 300 }] });
+    const withOutfit = await seed({ eventOutfit: [{ id: 'snap-1', name: 'Saved Gown', coin_cost: 300, is_owned: false, image_url: 'https://cdn.example/gown.jpg' }] });
+    expect(await getLook(withOutfit)).toMatchObject({ state: 'event', pieces: [{ name: 'Saved Gown', coin_cost: 300, image_url: 'https://cdn.example/gown.jpg' }] });
     expect(await getLook(await seed())).toMatchObject({ state: 'none', pieces: [] });
   });
 
