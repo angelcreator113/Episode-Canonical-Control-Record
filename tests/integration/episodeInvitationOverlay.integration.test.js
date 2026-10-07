@@ -35,6 +35,13 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v || {});
 
+// These cover placing overlays on beats, off for now (Evoni, 2026-10-07:
+// "none of the overlays should be beats for now"); the rule is kept for
+// when it is turned back on.
+const { setOverlaysOnBeats } = require('../../src/services/episodeBeatPlacement');
+beforeAll(() => setOverlaysOnBeats(true));
+afterAll(() => setOverlaysOnBeats(false));
+
 (shouldSkip ? describe.skip : describe)('The approved invitation is the episode\'s invitation overlay (P10)', () => {
   let token;
   let createdPlacementsTable = false;

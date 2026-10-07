@@ -1,13 +1,12 @@
 /**
  * Production → Overlays as Evoni's Episode mock draws it (2026-10-06): a
- * preview with "Add an overlay", then "Overlays by beat", each row a beat,
- * its kind, what it shows, and Edit or Add; rows still needed are dashed.
+ * preview with "Add an overlay", then the episode's overlays, each row its
+ * kind, what it shows, and Edit or Add; rows still needed are dashed. Kept
+ * off beats for now (Evoni, 2026-10-07), so the rows carry no beat.
  *
  * The pieces are GET /episodes/:id/overlays (episodeOverlaysService): the
- * title overlay, the framed card, the invitation and the task-list overlay
- * (the wardrobe shopping list), each approved, outdated or not made, placed
- * on a beat or with the beat it goes on. The show-wide overlays are the
- * Phone Hub's, read-only here.
+ * title overlay, the framed card, the invitation and the task-list overlay,
+ * each approved, outdated or not made.
  */
 
 const KIND = {
@@ -22,15 +21,8 @@ const TEXT = {
   title_overlay: 'The episode title',
   framed_card: 'Full-screen framed title card',
   invitation: 'Invitation, full screen',
-  task_list: 'Shopping list',
+  task_list: 'Task list',
 };
-
-/** The beat a piece is on, or goes on: { number, name, placed }, or null. */
-export function pieceBeat(piece) {
-  if (piece?.beat?.number) return { number: piece.beat.number, name: piece.beat.name || null, placed: true };
-  if (piece?.expected_beat?.number) return { number: piece.expected_beat.number, name: piece.expected_beat.name || null, placed: false };
-  return null;
-}
 
 /** A piece is still needed until it is approved (not made, or outdated). */
 export function pieceNeeded(piece) {
@@ -38,53 +30,21 @@ export function pieceNeeded(piece) {
 }
 
 /**
- * The rows of "Overlays by beat": the episode's pieces, then the show-wide
- * overlays that are placed on a beat, by beat (unplaced last, in the
- * pieces' order).
+ * The rows of "The episode's overlays": one per piece, in the pieces'
+ * order, with its kind, what it shows and its action. No beats (Evoni,
+ * 2026-10-07: "none of the overlays should be beats for now").
  */
-export function overlayRows(pieces = [], library = []) {
-  const rows = (pieces || []).filter(Boolean).map((p, i) => {
-    const beat = pieceBeat(p);
-    const needed = pieceNeeded(p);
+export function overlayRows(pieces = []) {
+  return (pieces || []).filter(Boolean).map((p) => {
     const note = p.status === 'outdated' ? ' (outdated)' : p.status === 'not_made' ? ' (not made yet)' : '';
     return {
       key: p.key,
-      order: i,
-      beat,
       kind: KIND[p.key] || 'Overlay',
       text: `${TEXT[p.key] || p.label}${note}`,
-      needed,
+      needed: pieceNeeded(p),
       action: p.status === 'approved' ? 'Edit' : p.status === 'outdated' ? 'Update' : 'Add',
-      library: false,
     };
   });
-  // The show-library overlays the episode places (Evoni, 2026-10-07:
-  // GET /episodes/:id/overlays → library): one row each on its beat.
-  (library || []).forEach((o, i) => {
-    const n = typeof o?.beat === 'object' ? o?.beat?.number : o?.beat;
-    if (!n) return;
-    rows.push({
-      key: `lib-${o.asset_id || o.id}`,
-      order: 100 + i,
-      beat: { number: Number(n), name: (typeof o?.beat === 'object' && o.beat.name) || null, placed: true },
-      kind: 'Show overlay',
-      text: o.name || o.id,
-      needed: false,
-      action: 'Change',
-      library: true,
-    });
-  });
-  return rows.sort((a, b) => {
-    const an = a.beat?.number ?? Infinity;
-    const bn = b.beat?.number ?? Infinity;
-    return an - bn || a.order - b.order;
-  });
-}
-
-/** "Beat 5", "Beat 5 · not placed yet", or "Not on a beat". */
-export function beatLabel(beat) {
-  if (!beat) return 'Not on a beat';
-  return beat.placed ? `Beat ${beat.number}` : `Beat ${beat.number} · not placed yet`;
 }
 
 /** The piece the preview shows: the chosen one, else the first with an image. */
