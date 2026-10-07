@@ -136,6 +136,9 @@ const EpisodeDetail = () => {
   // The header's balance chip (§8(aa) M1): Lala's ledger balance, from the
   // same /balance the Dashboard reads. It opens Production → Money.
   const [headerBalance, setHeaderBalance] = useState(null);
+  // A balance that could not be read says so on the chip (Evoni, 2026-10-07;
+  // the chip used to vanish).
+  const [balanceFailed, setBalanceFailed] = useState(false);
   // Bumped by the wardrobe game after a purchase or a paid lock, so the chip
   // follows the balance (Evoni, 2026-10-05: it kept the old number).
   const [balanceVersion, setBalanceVersion] = useState(0);
@@ -145,8 +148,11 @@ const EpisodeDetail = () => {
     if (!chipShowId) return undefined;
     let cancelled = false;
     getShowBalanceApi(chipShowId)
-      .then((balance) => { if (!cancelled) setHeaderBalance(balance); })
-      .catch((err) => { console.error('[EpisodeDetail] balance load failed:', err); });
+      .then((balance) => { if (!cancelled) { setHeaderBalance(balance); setBalanceFailed(false); } })
+      .catch((err) => {
+        console.error('[EpisodeDetail] balance load failed:', err);
+        if (!cancelled) setBalanceFailed(true);
+      });
     return () => { cancelled = true; };
   }, [chipShowId, balanceVersion]);
   const openMoneyTab = () => openTab('money');
@@ -608,15 +614,15 @@ const EpisodeDetail = () => {
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
                 Working Episode
               </span>
-              {headerBalance !== null && (
+              {(headerBalance !== null || balanceFailed) && (
                 <button
                   type="button"
                   className="ed-balance-chip"
                   onClick={openMoneyTab}
-                  title="Lala's balance. Open this episode's money."
+                  title={balanceFailed ? "Lala's balance couldn't be read. Open this episode's money." : "Lala's balance. Open this episode's money."}
                   data-testid="ed-balance-chip"
                 >
-                  {coinsLabel(headerBalance)}
+                  {balanceFailed && headerBalance === null ? 'Coins unavailable' : coinsLabel(headerBalance)}
                 </button>
               )}
             </div>

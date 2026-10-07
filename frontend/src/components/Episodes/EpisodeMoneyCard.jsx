@@ -14,6 +14,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Coins } from 'lucide-react';
 import api from '../../services/api';
 
 const coins = (n) => Math.abs(Math.round(Number(n) || 0)).toLocaleString();
@@ -58,7 +59,7 @@ export default function EpisodeMoneyCard({ showId, episodeId }) {
   return (
     <div style={S.card} data-testid="episode-money-card">
       <div style={S.head}>
-        <span style={S.label}>💰 Money</span>
+        <span style={{ ...S.label, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Coins size={13} aria-hidden="true" /> Money</span>
         <Link to={`/episodes/${episodeId}?tab=money`} style={S.link} data-testid="episode-money-card-link">See all in Money →</Link>
       </div>
       {failed && <div style={S.note}>Couldn't load this episode's money.</div>}

@@ -115,13 +115,18 @@ function Reconciliation({ recon }) {
 export default function EpisodeMoneyTab({ episode, showId }) {
   const [money, setMoney] = useState(null);
   const [error, setError] = useState(null);
+  // A failed refresh after a change: the view stays, and says it may be out
+  // of date (Evoni, 2026-10-07; it used to fail silently).
+  const [staleError, setStaleError] = useState(null);
 
   // After a spending write: reload quietly, keeping the view on screen.
   const reload = useCallback(async () => {
     try {
       setMoney(await getEpisodeMoneyApi(showId, episode.id));
+      setStaleError(null);
     } catch (err) {
       console.error('[EpisodeMoneyTab] reload failed:', err);
+      setStaleError("Your change was saved, but the numbers couldn't refresh. They may be out of date.");
     }
   }, [showId, episode?.id]);
 
@@ -151,6 +156,12 @@ export default function EpisodeMoneyTab({ episode, showId }) {
 
   return (
     <div className="em-tab">
+      {staleError && (
+        <div className="em-stale" role="alert" data-testid="em-stale">
+          <span>{staleError}</span>
+          <button type="button" className="em-link" onClick={reload}>Refresh</button>
+        </div>
+      )}
       {warnings.length > 0 && (
         <div className="em-warnings" role="alert" data-testid="em-warnings">
           <div className="em-warnings-head"><AlertTriangle size={14} aria-hidden /> Money warning</div>

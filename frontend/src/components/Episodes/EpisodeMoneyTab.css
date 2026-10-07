@@ -397,6 +397,21 @@
   }
 }
 
+/* A refresh that failed after a change (2026-10-07). */
+.em-stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger-border, var(--danger-text));
+  border-radius: var(--lala-radius, 8px);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
 /* MB4 (§8(gg)): early warnings, never blocking. */
 .em-warnings {
   padding: 10px 12px;

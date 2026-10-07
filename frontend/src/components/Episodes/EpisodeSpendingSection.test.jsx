@@ -24,6 +24,9 @@ const LINES = [
 ];
 const spending = (over = {}) => ({ lines: LINES, total: 285, editable: true, ...over });
 
+// Removing asks first (2026-10-07); these tests say yes unless they say otherwise.
+beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true); });
+
 const renderSection = (over = {}, onChanged = vi.fn().mockResolvedValue()) => {
   render(<EpisodeSpendingSection showId="show-1" episodeId="ep-1" spending={spending(over)} onChanged={onChanged} />);
   return onChanged;
@@ -125,5 +128,14 @@ describe('EpisodeMoneyTab with event spending', () => {
     expect(await screen.findByTestId('em-spending')).toBeTruthy();
     fireEvent.click(screen.getByTestId('em-spending-remove-l2'));
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+  });
+
+  test('Remove asks first; saying no keeps the line', async () => {
+    vi.mocked(api.delete).mockClear();
+    renderSection();
+    window.confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('em-spending-remove-l1'));
+    expect(window.confirm).toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
   });
 });

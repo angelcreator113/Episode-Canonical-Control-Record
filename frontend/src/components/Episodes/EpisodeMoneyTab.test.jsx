@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -196,5 +196,24 @@ describe('EpisodeMoneyTab', () => {
     renderTab();
 
     expect(await screen.findByText(/Couldn't load this episode's money/)).toBeTruthy();
+  });
+
+  // Evoni, 2026-10-07: a refresh that fails after a change used to be silent.
+  test('a change saved but not refreshed says the numbers may be out of date, with Refresh', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { data: money({ spending: { lines: [], total: 0, editable: true } }) } });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    renderTab();
+    fireEvent.click(await screen.findByTestId('em-spending-add'));
+    fireEvent.change(screen.getByTestId('em-spending-label'), { target: { value: 'Photo booth' } });
+    fireEvent.change(screen.getByTestId('em-spending-quantity'), { target: { value: '1' } });
+    fireEvent.change(screen.getByTestId('em-spending-unit-price'), { target: { value: '75' } });
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network'));
+    fireEvent.click(screen.getByTestId('em-spending-save'));
+    expect((await screen.findByTestId('em-stale')).textContent).toMatch(/couldn't refresh/);
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { data: money({ spending: { lines: [], total: 0, editable: true } }) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await screen.findByText('Every line in the estimate');
+    await vi.waitFor(() => expect(screen.queryByTestId('em-stale')).toBeNull());
   });
 });

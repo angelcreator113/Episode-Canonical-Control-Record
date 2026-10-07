@@ -101,7 +101,12 @@ export default function EpisodeSpendingSection({ showId, episodeId, spending, on
       : updateSpendingApi(showId, episodeId, form, built.body)), 'Failed to save the line');
   };
 
-  const remove = (line) => run(() => deleteSpendingApi(showId, episodeId, line.id), 'Failed to remove the line');
+  // Removing asks first (Evoni, 2026-10-07).
+  const remove = (line) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Remove "${line.label || 'this line'}" from the event spending?`)) return undefined;
+    return run(() => deleteSpendingApi(showId, episodeId, line.id), 'Failed to remove the line');
+  };
 
   return (
     <section className="em-section" data-testid="em-spending">
