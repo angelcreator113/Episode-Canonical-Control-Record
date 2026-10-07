@@ -209,7 +209,10 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
         return true;
       }),
       is_active: isActive,
-      episode_id: scopeToEpisode && episodeId ? episodeId : null,
+      // An episode's mission keeps its episode when edited from the show's
+      // Phone (no episodeId there); it used to turn show-wide on save
+      // (Evoni, 2026-10-07, Lala's Phone step 1).
+      episode_id: scopeToEpisode ? (episodeId || initial?.episode_id || null) : null,
     };
 
     setSaving(true);

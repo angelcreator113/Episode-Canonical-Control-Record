@@ -57,7 +57,12 @@ export default function ContentZoneEditor({
   const [eventsLoading, setEventsLoading] = useState(false);
   const containerRef = useRef(null);
 
-  useEffect(() => { setLocalZones(zones); setIsDirty(false); }, [zones]);
+  // Reset to the saved zones only when they change, not when the parent
+  // passes a new but equal array: a re-render of the Phone page used to wipe
+  // unsaved content areas (Evoni, 2026-10-07, Lala's Phone step 1).
+  const zonesKey = JSON.stringify(zones || []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setLocalZones(zones || []); setIsDirty(false); }, [zonesKey]);
 
   // Load social profiles for picker dropdowns
   useEffect(() => {

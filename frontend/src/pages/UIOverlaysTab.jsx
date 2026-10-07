@@ -15,6 +15,9 @@ import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById } from '../lib/phoneHubSummary';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
+
+// A stable empty list for a screen with no content areas (Lala's Phone step 1).
+const NO_ZONES = Object.freeze([]);
 import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
 import ActionRow from '../components/phone-editor/ActionRow';
@@ -200,6 +203,16 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const editingContent = activeTab === 'content';  // new Content top-level tab,
                                                    // promoted out of the old
                                                    // Zones mode toggle.
+  // Connect and Content edit a screen, never an icon: with an icon selected
+  // they used to open on it and save tap zones onto the icon's image. They
+  // move to the home screen, else the first screen with an image (Evoni,
+  // 2026-10-07, Lala's Phone step 1).
+  useEffect(() => {
+    if (!(editingLinks || editingContent) || !activeScreen || isScreen(activeScreen)) return;
+    const target = overlays.find(o => o.is_home && o.generated && o.url && isScreen(o))
+      || overlays.find(o => o.generated && o.url && isScreen(o));
+    if (target) setActiveScreen(target);
+  }, [editingLinks, editingContent, activeScreen, overlays]);
   // Connect has one zone editor, ScreenLinkEditor (Task #2021): it draws tap
   // zones, places library icons by tapping, and edits both. The Tap / Icon
   // toggle and IconPlacementMode are gone. Content zones are a different
@@ -728,7 +741,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (!file || !activeScreen?.id) return;
     // Confirm overwrite if screen already has an image
     if (activeScreen.url && activeScreen.generated) {
-      if (!confirm(`"${activeScreen.name}" already has an image. Replace it?`)) {
+      if (!confirm(`"${activeScreen.name}" already has an image. Replace it? Its tap zones, content areas and fit stay.`)) {
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -1636,7 +1649,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             onToggleShowHidden={() => setShowHidden(h => !h)}
             showPreview
           />
-          {!((editingLinks || editingContent) && activeScreen?.url) && <div className="phone-hub-main">
+          {!((editingLinks || editingContent) && activeScreen?.url && isScreen(activeScreen)) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1710,7 +1723,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 what it acts on. */}
           </div>}
 
-          {editingLinks && activeScreen?.url && (
+          {editingLinks && activeScreen?.url && isScreen(activeScreen) && (
             /* ── Unified Zones Tab — rendered as tab content inside the same
                  Phone Hub shell so section tabs remain visible.
                  ── */
@@ -2264,7 +2277,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           {/* ── Content Workspace — top-level tab. Mirrors the Zones workspace
                layout (sticky phone on the left, controls on the right) so the
                phone sits in the exact same visual slot as Screens/Icons/Zones. */}
-          {editingContent && activeScreen?.url && (() => {
+          {editingContent && activeScreen?.url && isScreen(activeScreen) && (() => {
             const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
             const switchToScreen = (target) => {
               if (!target || target.id === activeScreen.id) return;
@@ -2284,7 +2297,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       screenUrl={activeScreen.url}
                       screen={activeScreen}
                       globalFit={globalFit}
-                      zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                      zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || NO_ZONES}
                       screenLinks={getScreenLinks(activeScreen)}
                       showId={showId}
                       onSave={handleSaveContentZones}
