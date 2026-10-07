@@ -128,9 +128,9 @@
 
 .scene-sets-title {
   margin: 0;
-  font-family: 'Lora', serif;
-  font-size: var(--text-xl);
-  font-weight: 700;
+  font-family: var(--font-prose);
+  font-size: 30px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -149,9 +149,9 @@
 }
 
 .scene-sets-filter-pill {
-  background: var(--primary-subtle);
-  color: var(--primary-text);
-  border: none;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  border: 1px solid var(--lala-lavender-line);
   border-radius: 20px;
   padding: 5px 14px;
   font-family: 'DM Mono', monospace;
@@ -166,7 +166,7 @@
 }
 
 .scene-sets-filter-pill.active {
-  background: var(--primary);
+  background: var(--lala-lavender);
   color: var(--text-inverse);
 }
 
@@ -183,11 +183,12 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--lala-gold);
-  background: var(--lala-gold-soft);
-  color: var(--lala-gold-text);
+  padding: 0 20px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-dark);
+  background: var(--accent-dark);
+  color: var(--text-inverse);
   font-family: 'DM Mono', monospace;
   font-size: var(--text-sm);
   font-weight: 600;
@@ -942,10 +943,10 @@
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 
 .scene-sets-btn-generate {
-  background: var(--primary);
+  background: var(--lala-lavender);
   color: var(--text-inverse);
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 6px 14px;
   font-family: 'DM Mono', monospace;
   font-size: var(--text-sm);
@@ -4143,8 +4144,8 @@
 }
 .scene-sets-card-status.is-error { color: var(--danger-text); }
 .scene-sets-card-status.is-busy { color: var(--primary-text); }
-.scene-sets-card-open { display: flex; margin-top: 8px; }
-.scene-sets-card-open .scene-sets-btn-generate { flex: 1; justify-content: center; }
+.scene-sets-card-open { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.scene-sets-card-open .scene-sets-btn-generate { flex: none; justify-content: center; min-height: 40px; padding: 0 20px; font-family: var(--font-ui); font-size: 14px; }
 
 /* The set's workspace: the main background, then additional views. */
 .scene-sets-ws-main {
@@ -4186,7 +4187,7 @@
   background: transparent; border: none; padding: 4px 12px; font-family: 'DM Mono', monospace; font-size: 11px;
   color: var(--text-secondary); cursor: pointer; display: inline-flex; gap: 4px; align-items: center;
 }
-.scene-sets-scope-btn.active { background: var(--primary); color: var(--text-inverse); }
+.scene-sets-scope-btn.active { background: var(--lala-lavender); color: var(--text-inverse); }
 .scene-sets-scope-count { opacity: 0.7; font-size: 10px; }
 .scene-sets-pager {
   display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
@@ -4214,3 +4215,60 @@
 @media (hover: none) { .scene-sets-promote-btn { opacity: 1; } }
 .scene-sets-approved-row { flex-wrap: wrap; }
 .scene-sets-approved-hint { flex-basis: 100%; font-size: 10px; color: var(--text-secondary); line-height: 1.4; }
+
+/* ── Producer Mode look (Evoni's mock, 2026-10-07): the header card with
+   its tiles, one filter row, the angle hint, sections by type, and the
+   card's angle dots, episode chips and lavender Open set. ── */
+.ss-hero {
+  align-items: center;
+  padding: 24px 28px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 20px;
+  background: var(--lala-lavender-soft);
+}
+.ss-hero-text { flex: 1 1 320px; min-width: 0; }
+.ss-hero .scene-sets-subtitle { margin: 6px 0 0; font-family: var(--font-sans); font-size: 15px; color: var(--text-secondary); }
+.ss-tiles { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ss-tile { display: flex; flex-direction: column; align-items: center; min-width: 72px; padding: 8px 14px; border-radius: 14px; background: var(--surface-card); }
+.ss-tile-value { font-family: var(--font-prose); font-size: 26px; font-weight: 600; line-height: 1.15; color: var(--lala-lavender-text); }
+.ss-tile-label { font-family: var(--font-sans); font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.ss-filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
+.ss-filter-row .scene-sets-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.ss-filter-row .scene-sets-filter-pill { min-height: 38px; padding: 0 16px; font-family: var(--font-sans); font-size: 14px; }
+.ss-pill-count { font-weight: 500; opacity: 0.85; }
+.ss-filter-row .scene-sets-scope { margin-left: auto; }
+.ss-filter-row .scene-sets-search-wrap { flex: 0 1 220px; min-width: 160px; }
+.ss-hint { font-family: var(--font-sans); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 20px; padding: 12px 18px; border: 1px solid var(--warning-border); border-radius: 14px; background: var(--warning-bg); font-size: 14px; color: var(--text-primary); }
+.ss-hint p { margin: 0; flex: 1 1 280px; min-width: 0; }
+.ss-hint-go { flex: none; font-weight: 700; color: var(--warning-text); text-decoration: none; }
+.ss-hint-go:hover { text-decoration: underline; }
+.ss-section { margin: 0 0 24px; }
+.ss-section-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--text-primary); }
+.ss-section-dot { align-self: center; width: 10px; height: 10px; border-radius: 50%; background: var(--text-secondary); }
+.ss-section-home_base .ss-section-dot { background: var(--accent-dark); }
+.ss-section-closet .ss-section-dot { background: var(--lala-lavender); }
+.ss-section-event_location .ss-section-dot { background: var(--success-text); }
+.ss-section-line { font-family: var(--font-sans); font-size: 14px; font-weight: 400; color: var(--text-secondary); }
+.scene-sets-card { border-color: var(--lala-lavender-line); border-radius: 20px; box-shadow: 0 6px 20px rgba(91, 75, 138, 0.08); }
+.scene-sets-card .scene-sets-card-title { font-family: var(--font-prose); font-size: 22px; font-weight: 600; }
+.ss-card-sub { font-family: var(--font-sans); margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }
+.ss-angles { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ss-angle-dots { display: inline-flex; gap: 4px; }
+.ss-angle-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); }
+.ss-angle-dot.is-made { background: var(--lala-lavender); border-color: var(--lala-lavender); }
+.ss-angle-line { font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
+.ss-angle-line.is-short { color: var(--warning-text); }
+.ss-card-eps { display: inline-flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.ss-chip { font-family: var(--font-sans); padding: 3px 10px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; }
+.ss-chip-quiet { background: var(--lala-parchment-2); color: var(--text-secondary); }
+@media (max-width: 700px) {
+  .ss-hero { padding: 18px; }
+  .ss-tiles { width: 100%; }
+  .ss-tile { flex: 1 1 0; min-width: 0; padding: 8px 6px; }
+  .ss-hero .scene-sets-btn-create { width: 100%; justify-content: center; }
+  .ss-filter-row .scene-sets-scope { margin-left: 0; }
+  .ss-filter-row .scene-sets-search-wrap { flex: 1 1 100%; width: 100%; max-width: none; }
+  .ss-filter-row .scene-sets-search-input { width: 100%; }
+}
+.ss-filter-row .scene-sets-scope-btn, .ss-filter-row .scene-sets-search-input, .ss-filter-row .scene-sets-select-sm, .ss-hero .scene-sets-btn-create { font-family: var(--font-sans); }
+.ss-hero .scene-sets-btn-create { font-size: 15px; }
