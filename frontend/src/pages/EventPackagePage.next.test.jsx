@@ -106,7 +106,48 @@ describe('Continue → at the top of the Package', () => {
     renderPage();
     const bar = await screen.findByTestId('package-next');
     expect(bar.getAttribute('data-kind')).toBe('ready');
-    expect(within(bar).getByTestId('package-continue-start')).toBeTruthy();
+    expect(within(bar).getByTestId('start-episode')).toBeTruthy();
+    expect(within(bar).queryByTestId('package-continue')).toBeNull();
+  });
+
+  // Evoni's review, item 8: one primary action, in one place.
+  test('while a gate is missing, Continue is the only action: no Start Episode anywhere', async () => {
+    stored = { ...GATED_EVENT, venue_location_id: null };
+    renderPage();
+    const bar = await screen.findByTestId('package-next');
+    expect(within(bar).getByTestId('package-continue').className).toContain('epp-btn-primary');
+    expect(screen.queryByTestId('start-episode')).toBeNull();
+  });
+
+  test('with the gates met, Start Episode is the one primary; an open recommendation is a quiet Review', async () => {
+    stored = { ...COMPLETE_EVENT, narrative_stakes: null };
+    renderPage();
+    const bar = await screen.findByTestId('package-next');
+    expect(within(bar).getByTestId('start-episode').className).toContain('epp-btn-primary');
+    expect(within(bar).getByTestId('package-continue').className).not.toContain('epp-btn-primary');
+    expect(screen.getAllByTestId('start-episode')).toHaveLength(1);
+  });
+
+  // Item 4: the foot of the page lists what is missing in the strip tiles' own words.
+  test('the foot lists each blocking section exactly as its strip tile reads, linking to it', async () => {
+    stored = { ...GATED_EVENT, venue_location_id: null };
+    renderPage();
+    const foot = await screen.findByTestId('start-blocked');
+    const tile = screen.getByTestId('strip-place');
+    const link = within(foot).getByTestId('start-blocked-place');
+    const [label, text] = [tile.querySelector('strong').textContent, tile.querySelector('span').textContent];
+    expect(link.textContent).toBe(text === label ? label : `${label}: ${text}`);
+    expect(link.getAttribute('href')).toBe(tile.getAttribute('href'));
+    const blockingTiles = [...screen.getByTestId('readiness-strip').querySelectorAll('.epp-strip-tile[data-state="blocking"]')];
+    expect(foot.querySelectorAll('a')).toHaveLength(blockingTiles.length);
+  });
+
+  test('a ready Package has no missing list at the foot, only the way back up', async () => {
+    stored = { ...COMPLETE_EVENT };
+    renderPage();
+    await screen.findByTestId('package-next');
+    expect(screen.queryByTestId('start-blocked')).toBeNull();
+    expect(screen.getByTestId('package-foot-top').getAttribute('href')).toBe('#epp-readiness');
   });
 
   test('a used event shows no next step', async () => {
