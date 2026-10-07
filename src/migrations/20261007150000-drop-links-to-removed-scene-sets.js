@@ -16,6 +16,15 @@
 
 module.exports = {
   async up(queryInterface) {
+    // A fresh database may not have these tables yet (scene_set_episodes is
+    // created outside this tree's normal order); then there is nothing to drop.
+    const [[present]] = await queryInterface.sequelize.query(
+      `SELECT to_regclass('public.scene_set_episodes') IS NOT NULL AND to_regclass('public.scene_sets') IS NOT NULL
+              AND to_regclass('public.scene_plans') IS NOT NULL AS ok`);
+    if (!present?.ok) {
+      console.log('[migration 20261007150000] scene_set_episodes, scene_sets or scene_plans missing; nothing to drop');
+      return;
+    }
     const [, meta] = await queryInterface.sequelize.query(
       `UPDATE scene_set_episodes l SET deleted_at = NOW(), updated_at = NOW()
         WHERE l.deleted_at IS NULL
