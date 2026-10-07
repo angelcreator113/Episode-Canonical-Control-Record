@@ -2,8 +2,8 @@
  * UIOverlaysTab — the Phone Hub's top area and the screen cards' output,
  * pinned before the setup guide (Task #2053, step 1).
  *
- * Written against main before any source change. The header (title, "N/M
- * screens ready", More), the "+ Add" chooser, the stage row and each screen
+ * Written against main before any source change. The header (title, the
+ * tiles since the 2026-10-07 redesign, More), the "+ Add" chooser, the stage row and each screen
  * card's status stay as they are; the setup guide is added beside them, so
  * every assertion here holds before and after.
  */
@@ -66,11 +66,17 @@ const menuItems = (label) => {
 };
 
 describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)', () => {
-  test('the header reads Phone Hub and "N/M screens ready"', async () => {
+  // The header's tiles (Evoni's mock, 2026-10-07) replace "4/5 screens ready",
+  // which counted every row with an image, the Call icon included. Ready is
+  // the cards' rule: Homepage has a zone with no destination, mail inbox has
+  // nothing linking to it and dm thread has no image, so 1 of the 4 screens.
+  test('the header reads Phone Hub, its line, and screens ready · screens · icons', async () => {
     await renderPage();
     const header = document.querySelector('.overlays-header');
     expect(within(header).getByRole('heading', { name: 'Phone Hub' })).toBeTruthy();
-    expect(within(header).getByText('4/5 screens ready')).toBeTruthy();
+    expect(within(header).getByText('One phone for the whole show. Episodes pick screens from here.')).toBeTruthy();
+    const tiles = Array.from(header.querySelectorAll('[data-testid="phone-hub-tiles"] li')).map(li => li.textContent);
+    expect(tiles).toEqual(['1/4screens ready', '4screens', '1icon']);
   });
 
   test('More holds Flow Map, Export, Batch Upload and the frame', async () => {

@@ -11,6 +11,7 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maxim
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
+import { phoneHubTiles, screenCaption } from '../lib/phoneHubSummary';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 import MissionEditor from '../components/phone-editor/MissionEditor';
@@ -1329,6 +1330,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
   };
 
   const generatedCount = overlays.filter(o => o.generated).length;
+  const headerTiles = phoneHubTiles(overlays, screenDiagnostics);
 
   // Step-header derived counts. "Screens" excludes phone icons — icons are
   // app tiles that live on a screen, not standalone workspaces.
@@ -1457,15 +1459,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open its Phone Hub" />
       )}
 
-      {/* Header */}
+      {/* The header card (Evoni's mock, 2026-10-07): the title and its line,
+          three tiles counted by the screen cards' own Ready rule
+          (lib/phoneHubSummary), and the setup guide inside the card. */}
+      <section className="ph-hero" aria-label="Phone Hub">
       <div className="overlays-header">
         <div className="overlays-header-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>Phone Hub</h2>
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
-                {generatedCount}/{overlays.length} screens ready
-              </p>
+          <div className="ph-hero-main">
+            <div className="ph-hero-text">
+              <h2 className="ph-hero-title">Phone Hub</h2>
+              <p className="ph-hero-line">One phone for the whole show. Episodes pick screens from here.</p>
             </div>
             {/* Show selector — visible when no propShowId so user can switch shows */}
             {!propShowId && shows.length > 0 && (
@@ -1482,6 +1485,39 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               </select>
             )}
           </div>
+          {!loading && (
+            <ul className="ph-hero-tiles" data-testid="phone-hub-tiles">
+              {headerTiles.map(t => (
+                <li key={t.key} className="ph-hero-tile">
+                  <span className="ph-hero-tile-value">{t.value}</span>
+                  <span className="ph-hero-tile-label">{t.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* "+ Add" asks one question: a Screen, an Icon or a Content Area
+            (doctrine rule 18, Task #2024). Batch Upload and the phone frame
+            live in "More". */}
+        <div className="overlays-toolbar ph-hero-tools">
+          <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId}>
+            <div className="overlays-add-chooser__title" role="presentation">What are you adding?</div>
+            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Screen</span>{' '}
+              <span className="overlays-add-chooser__desc">A page of the phone, like a feed, a chat or settings</span>
+            </button>
+            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Icon</span>{' '}
+              <span className="overlays-add-chooser__desc">An app icon you place on a screen to open another</span>
+            </button>
+            <button className="overlays-add-chooser__option" onClick={() => setContentAreaPick(true)} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Content Area</span>{' '}
+              <span className="overlays-add-chooser__desc">A part of a screen whose content changes per episode</span>
+            </button>
+          </ToolbarMenu>
+          <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
+          <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           <div className="overlays-header-actions">
             {/* Size-guide toggle stays as a small icon button (frequent quick-check). */}
             <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" className="overlays-header-btn" style={{ color: '#aaa', border: '1px solid #eee' }}>
@@ -1540,30 +1576,20 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </div>
         )}
 
-        {/* "+ Add" asks one question: a Screen, an Icon or a Content Area
-            (doctrine rule 18, Task #2024). Batch Upload and the phone frame
-            live in the header's "More" menu. */}
-        <div className="overlays-toolbar">
-          <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId}>
-            <div className="overlays-add-chooser__title" role="presentation">What are you adding?</div>
-            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
-              <span className="overlays-add-chooser__label">Screen</span>{' '}
-              <span className="overlays-add-chooser__desc">A page of the phone, like a feed, a chat or settings</span>
-            </button>
-            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId}>
-              <span className="overlays-add-chooser__label">Icon</span>{' '}
-              <span className="overlays-add-chooser__desc">An app icon you place on a screen to open another</span>
-            </button>
-            <button className="overlays-add-chooser__option" onClick={() => setContentAreaPick(true)} disabled={!showId}>
-              <span className="overlays-add-chooser__label">Content Area</span>{' '}
-              <span className="overlays-add-chooser__desc">A part of a screen whose content changes per episode</span>
-            </button>
-          </ToolbarMenu>
-          <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
-          <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
-          {/* Missions moved to the tab bar (see PhoneHub). Toolbar button removed. */}
-        </div>
       </div>
+
+      {/* The setup guide (doctrine rule 18, Task #2053): plain-word progress,
+          one next step; it collapses once screens, icons and links are done. */}
+      {!loading && (
+        <PhoneSetupGuide
+          progress={setupProgress}
+          collapsed={setupGuideCollapsed}
+          onToggle={toggleSetupGuide}
+          onContinue={continueSetup}
+          onRunPreview={runSetupFlowTest}
+        />
+      )}
+      </section>
 
       {loading ? (
         <div className="overlays-loading">
@@ -1572,17 +1598,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
-        {/* The setup guide (doctrine rule 18, Task #2053) replaces the old
-            4-step guide: plain-word progress, one next step, and it collapses
-            once the phone's screens, icons and links are done. */}
-        <PhoneSetupGuide
-          progress={setupProgress}
-          collapsed={setupGuideCollapsed}
-          onToggle={toggleSetupGuide}
-          onContinue={continueSetup}
-          onRunPreview={runSetupFlowTest}
-        />
-
         <div className="phone-hub-layout">
           {/* Section tabs rendered outside PhoneHub so they stay visible
               even when PhoneHub unmounts for the Zones workspace. */}
@@ -1630,6 +1645,19 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 activeTab={previewing ? 'screens' : activeTab}
                 onChangeTab={setActiveTab}
                 suppressSectionTabs
+                deviceFooter={!previewing && activeScreen && isScreen(activeScreen) ? (
+                  <div className="ph-device-caption" data-testid="phone-device-caption">
+                    <div className="ph-device-name">{activeScreen.name}</div>
+                    <div className="ph-device-meta">{screenCaption(activeScreen, screenDiagnostics)}</div>
+                    <div className="ph-device-actions">
+                      <button type="button" className="ph-btn ph-btn--primary" onClick={() => openScreenEditor(activeScreen)}>Edit screen</button>
+                      {/* The Preview stage, starting on this screen; nothing there is saved. */}
+                      {activeScreen.generated && activeScreen.url && (
+                        <button type="button" className="ph-btn" onClick={() => setActiveTab('preview')}>Play through</button>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
                 devicePane={previewing ? (
                   <div className="phone-hub-preview-pane">
                     {/* Keyed on the starting screen and each pick: picking a

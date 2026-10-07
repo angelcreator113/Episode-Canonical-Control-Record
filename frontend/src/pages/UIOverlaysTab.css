@@ -29,9 +29,83 @@
   color: #991b1b;
 }
 
-/* ── Header ── */
-.overlays-header {
+/* ── Header card (Evoni's mock, 2026-10-07): the title, its line and three
+   tiles, the tools, and the setup guide inside one soft lavender card. ── */
+.ph-hero {
+  box-sizing: border-box;
+  max-width: 100%;
   margin-bottom: 20px;
+  padding: 20px 24px;
+  background: linear-gradient(120deg, var(--surface-card, #fff) 0%, var(--lala-lavender-soft) 60%, var(--accent-subtle) 100%);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 18px;
+}
+
+.ph-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ph-hero-title {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ph-hero-line {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.ph-hero-tiles {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-hero-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 8px 14px;
+  background: var(--surface-card, #fff);
+  border-radius: 12px;
+}
+
+.ph-hero-tile-value {
+  font-family: var(--font-prose);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--lala-lavender-text);
+}
+
+.ph-hero-tile-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ph-hero-tools {
+  margin-bottom: 14px;
+}
+
+.ph-hero-tools .overlays-header-actions {
+  width: auto;
+  margin-left: auto;
+}
+
+.overlays-header {
+  margin-bottom: 0;
 }
 
 .overlays-header-top {
@@ -891,6 +965,24 @@
 
 /* ── Responsive header ── */
 @media (max-width: 600px) {
+  .ph-hero {
+    padding: 16px;
+  }
+
+  .ph-hero-title {
+    font-size: 24px;
+  }
+
+  .ph-hero-tiles {
+    width: 100%;
+  }
+
+  .ph-hero-tile {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+  }
+
   .overlays-header-top {
     flex-wrap: wrap;
   }
@@ -1068,4 +1160,63 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ── Under the phone (Evoni's mock, 2026-10-07): the shown screen's name,
+   what it holds, Edit screen and Play through. ── */
+.ph-device-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  text-align: center;
+}
+
+.ph-device-name {
+  font-family: var(--font-prose);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.ph-device-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ph-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ph-btn {
+  min-height: 40px;
+  padding: 8px 18px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ph-btn:hover {
+  background: var(--lala-lavender-soft);
+}
+
+.ph-btn--primary {
+  color: var(--text-inverse);
+  background: var(--lala-lavender);
+  border-color: var(--lala-lavender);
+}
+
+.ph-btn--primary:hover {
+  background: var(--lala-lavender-dark);
 }

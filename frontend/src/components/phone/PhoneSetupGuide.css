@@ -6,11 +6,11 @@
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  background: var(--lala-parchment, #FAF7F0);
-  border: 1px solid rgba(184, 150, 46, 0.35);
-  border-radius: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 12px;
   font-family: 'DM Mono', monospace;
   color: var(--lala-ink, #2C2C2C);
 }
@@ -45,9 +45,37 @@
   flex: none;
 }
 
-.phone-setup-guide__summary {
+/* Three parts, filled as Screens, Icons and Links are done. */
+.phone-setup-guide__bar {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+}
+
+.phone-setup-guide__seg {
+  width: 30px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+}
+
+.phone-setup-guide__seg.is-done {
+  background: var(--lala-lavender);
+}
+
+.phone-setup-guide__next {
   font-size: 11px;
-  color: #7a7263;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-setup-guide__summary {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-secondary);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -66,11 +94,12 @@
 .phone-setup-guide__continue {
   flex: none;
   max-width: 100%;
-  padding: 5px 10px;
-  background: var(--lala-gold, #B8962E);
+  min-height: 36px;
+  padding: 6px 16px;
+  background: var(--lala-lavender);
   border: 0;
-  border-radius: 6px;
-  color: #fff;
+  border-radius: 999px;
+  color: var(--text-inverse);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -128,4 +157,20 @@
   font: inherit;
   font-size: 10px;
   cursor: pointer;
+}
+
+.phone-setup-guide__continue:hover {
+  background: var(--lala-lavender-dark);
+}
+
+/* A phone: the next step wraps to its own line instead of cutting off. */
+@media (max-width: 600px) {
+  .phone-setup-guide__toggle {
+    flex-wrap: wrap;
+  }
+
+  .phone-setup-guide__next {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
 }
