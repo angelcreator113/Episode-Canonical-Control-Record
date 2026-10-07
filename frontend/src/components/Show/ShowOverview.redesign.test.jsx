@@ -80,8 +80,9 @@ describe('ShowOverview, an episode in production', () => {
     expect(card.textContent).toContain('I Designed My Outfit');
     expect(card.textContent).toContain('Season 1 · Episode 1');
     expect(within(card).getByRole('link', { name: 'Open script' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
-    // The checks load: nothing set up but the linked event.
-    await waitFor(() => expect(screen.getByTestId('sov-checklist').querySelectorAll('.sov-step')).toHaveLength(6));
+    // The checks load: nothing set up but the linked event. Seven steps:
+    // Lala's Phone is a live section since the checklist fixes (2026-10-07).
+    await waitFor(() => expect(screen.getByTestId('sov-checklist').querySelectorAll('.sov-step')).toHaveLength(7));
     expect(screen.getByTestId('sov-next-step').textContent).toContain('Finish Episode Brief for Episode 1');
     const money = screen.getByTestId('sov-money');
     await waitFor(() => expect(money.textContent).toContain('+600'));

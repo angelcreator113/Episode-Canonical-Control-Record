@@ -68,7 +68,6 @@ export const CHECKLIST_SECTIONS = [
     id: 'overlays',
     icon: '📱',
     label: "Lala's Phone",
-    unavailableReason: 'Phone missions not deployed yet (phone_missions absent from canon)',
     items: [
       { id: 'overlays_generated', label: 'Phone screens generated',   required: false },
     ],
@@ -93,8 +92,11 @@ export const CHECKLIST_SECTIONS = [
   },
 ];
 
-// The endpoint census records phone_missions as absent from canon:
-// docs/audit/Checklist_Endpoint_Census_2026-09-18.md.
+// Lala's Phone counts the show's generated phone-screen images (GET
+// /ui-overlays/:showId, assets rows); it never read phone_missions
+// (docs/audit/Checklist_Endpoint_Census_2026-09-18.md §155), so the section
+// is no longer marked unavailable for that table (the checklist fixes,
+// 2026-10-07). A section can still set unavailableReason.
 /**
  * "Venue image generated" (B3, Evoni 2026-10-02): the event's scene set has
  * an actual base image. It was true whenever the event had a scene set,
@@ -122,6 +124,13 @@ export function computeSectionState(section, checks) {
 
   if (requiredItems.length > 0 && checkedRequired.length === requiredItems.length) {
     return { state: 'complete', why: 'All required items done' };
+  }
+  // A section with nothing required (Social & Content, Lala's Phone) says
+  // so, rather than "0 of 0 required items done" (the checklist fixes, 2026-10-07).
+  if (requiredItems.length === 0) {
+    if (checkedItems.length === section.items.length) return { state: 'complete', why: 'Nothing required; all done' };
+    if (checkedItems.length > 0) return { state: 'in_progress', why: 'Nothing required' };
+    return { state: 'needs_setup', why: 'Nothing required; nothing set up yet' };
   }
   if (checkedItems.length > 0) {
     return {
@@ -193,8 +202,9 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
         textDecoration: checked ? 'line-through' : 'none',
       }}>
         {item.label}
+        {/* On its own line, so a long label wraps cleanly beside its button (the checklist fixes, 2026-10-07). */}
         {item.required && !checked && (
-          <span style={{ marginLeft: 6, fontSize: 10, color: PINK_TEXT, fontWeight: 700, textTransform: 'uppercase' }}>
+          <span className="ckh-required" style={{ display: 'block', fontSize: 10, color: PINK_TEXT, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             required
           </span>
         )}

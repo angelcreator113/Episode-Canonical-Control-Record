@@ -34,6 +34,16 @@ beforeEach(() => {
 });
 
 describe('ProductionCoveragePanel', () => {
+  // The checklist fixes (2026-10-07): an answer without the counts or beats shows nothing, not blanks.
+  test('an incomplete answer shows nothing rather than "of required ready"', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { clips: [], coverage: {} } } });
+    const { container } = render(<ProductionCoveragePanel episodeId="ep-1" />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('production-coverage')).toBeNull();
+    expect(container.textContent).not.toMatch(/of required ready/);
+  });
+
   test('summary separates ready, required and not-tracked; Continue opens the Scenes tab for a missing set', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: COVERAGE } });
     render(<ProductionCoveragePanel episodeId="ep-1" />);
