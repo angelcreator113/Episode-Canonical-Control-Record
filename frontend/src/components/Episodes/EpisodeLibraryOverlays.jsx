@@ -37,12 +37,12 @@ export default function EpisodeLibraryOverlays({ showId }) {
     <section className="eot-section eot-library" id="eot-library" aria-labelledby="eot-library-title" data-testid="eot-library">
       <div className="eot-section-head">
         <div>
-          <h2 id="eot-library-title" className="eot-section-title">From the show library</h2>
-          <p className="eot-section-sub">The show&apos;s own overlays, made once and ready for every episode. Make or change them in the show&apos;s Overlays.</p>
+          <h2 id="eot-library-title" className="eot-section-title">Show-wide overlays this episode can use</h2>
+          <p className="eot-section-sub">Shared across every episode; made and changed in the show&apos;s Overlays.</p>
         </div>
         {showId && (
           <Link className="eot-link" to={libraryPath} data-testid="eot-library-link">
-            The show&apos;s Overlays <ExternalLink size={13} aria-hidden="true" />
+            Edit in the show&apos;s Overlays <ExternalLink size={13} aria-hidden="true" />
           </Link>
         )}
       </div>
@@ -51,17 +51,19 @@ export default function EpisodeLibraryOverlays({ showId }) {
         <p className="eot-note" data-testid="eot-library-empty">The show has no ready overlays yet. Make them in the show&apos;s Overlays.</p>
       )}
       {overlays && overlays.length > 0 && (
-        <ul className="eot-lib-list">
+        // Chips (Evoni's screenshot, 2026-10-07): each opens its image.
+        <ul className="eot-lib-chips">
           {overlays.map((o) => (
-            <li key={o.id} className="eot-lib-item" data-testid={`eot-lib-${o.id}`}>
-              <span className="eot-lib-thumb">
-                {o.url ? <img src={o.url} alt="" /> : <ImageOff size={16} aria-hidden="true" />}
-              </span>
-              <span className="eot-lib-text">
-                <strong className="eot-lib-name">{String(o.name || o.id).replace(/^UI Overlay:\s*/i, '')}</strong>
-                {o.description && <span className="eot-lib-where">{o.description}</span>}
-              </span>
-              <a className="eot-link" href={o.url} target="_blank" rel="noreferrer">View</a>
+            <li key={o.id} data-testid={`eot-lib-${o.id}`}>
+              <a className="eot-lib-chip" href={o.url} target="_blank" rel="noreferrer" title="View">
+                <span className="eot-lib-thumb">
+                  {o.url ? <img src={o.url} alt="" /> : <ImageOff size={16} aria-hidden="true" />}
+                </span>
+                <span className="eot-lib-text">
+                  <strong className="eot-lib-name">{String(o.name || o.id).replace(/^UI Overlay:\s*/i, '')}</strong>
+                  {o.description && <span className="eot-lib-where">{o.description}</span>}
+                </span>
+              </a>
             </li>
           ))}
         </ul>

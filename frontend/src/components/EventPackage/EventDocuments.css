@@ -197,3 +197,71 @@
 .evd-grid.has-lead > .evd-card { align-self: start; }
 .evd-grid.has-lead .evd-card.is-blank { grid-template-columns: minmax(0, 1fr); }
 .evd-grid.has-lead .evd-card.is-blank .evd-actions { grid-column: 1; grid-row: auto; margin-top: 6px; }
+
+/* layout="wide" (the episode's Overlays tab, 2026-10-07): one wide card per
+   document, its paper on the left and its title, state and actions on the
+   right; stacked on a phone. */
+.evd.is-wide .evd-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.evd.is-wide .evd-card {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  grid-template-areas:
+    "stage title"
+    "stage from"
+    "stage actions"
+    "stage overlay"
+    "stage meta"
+    "stage cost"
+    "stage rest";
+  grid-template-rows: auto auto auto auto auto auto 1fr;
+  column-gap: 24px;
+  align-items: start;
+  padding: 20px;
+}
+
+.evd.is-wide .evd-card > .evd-title { grid-area: title; }
+.evd.is-wide .evd-card > .evd-from { grid-area: from; }
+.evd.is-wide .evd-card > .evd-stage { grid-area: stage; align-self: stretch; }
+.evd.is-wide .evd-card > .evd-actions { grid-area: actions; }
+.evd.is-wide .evd-card > .evd-overlay { grid-area: overlay; }
+.evd.is-wide .evd-card > .evd-meta { grid-area: meta; }
+.evd.is-wide .evd-card > .eot-cost { grid-area: cost; }
+
+.evd.is-wide .evd-card.is-blank {
+  grid-template-areas: "stage title" "stage from" "stage actions" "stage rest";
+  grid-template-rows: auto auto auto 1fr;
+}
+
+.evd.is-wide .evd-card.is-blank > .evd-stage {
+  min-height: 140px;
+  border: 1px dashed var(--lala-lavender-line);
+  border-radius: 12px;
+  background: var(--lala-lavender-soft);
+}
+
+@media (max-width: 700px) {
+  .evd.is-wide .evd-card,
+  .evd.is-wide .evd-card.is-blank {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage" "title" "from" "actions" "overlay" "meta" "cost";
+    grid-template-rows: none;
+    row-gap: 8px;
+    padding: 16px;
+  }
+}
+
+
+/* Wide cards fill the column (the lead grid sets align-self: start). */
+.evd.is-wide .evd-grid.has-lead > .evd-card,
+.evd.is-wide .evd-grid > .evd-card { align-self: stretch; width: 100%; box-sizing: border-box; }
+.evd.is-wide .evd-grid.has-lead .evd-card.is-blank { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); }
+.evd.is-wide .evd-grid.has-lead .evd-card.is-blank .evd-actions { grid-column: auto; grid-row: auto; margin-top: 0; }
+.evd.is-wide .eot-invite-frame { max-width: 200px; margin: 0 auto; }
+@media (max-width: 700px) {
+  .evd.is-wide .evd-grid.has-lead .evd-card.is-blank { grid-template-columns: minmax(0, 1fr); }
+}
