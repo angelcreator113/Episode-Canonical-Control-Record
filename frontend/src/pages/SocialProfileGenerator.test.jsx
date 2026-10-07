@@ -136,10 +136,12 @@ describe('SocialProfileGenerator — Track 3 module-scope helpers', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/api/v1/social-profiles/p-1/finalize');
     });
 
-    test('crossProfileApi POST on /:id/cross with empty body', async () => {
+    test('crossProfileApi POST on /:id/cross with the show, or an empty body without one', async () => {
       vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+      await crossProfileApi('p-1', 'show-b');
+      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/social-profiles/p-1/cross', { show_id: 'show-b' });
       await crossProfileApi('p-1');
-      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/social-profiles/p-1/cross', {});
+      expect(apiClient.post).toHaveBeenLastCalledWith('/api/v1/social-profiles/p-1/cross', {});
     });
 
     test('editProfileApi PUT on /:id with updates', async () => {

@@ -17,6 +17,7 @@ import { ProfileComparison, LalaReactions, FeedTimeline, RelationshipWeb } from 
 import FeedViewContent from './feed/FeedViews';
 import { isOrganizedByProfile } from '../utils/eventOrganizer';
 import { openAuthedEventStream } from '../utils/authedEventStream';
+import { showIdFromPath, rememberedShowId } from '../utils/activeShow';
 
 // Local Spinner — avoid named import that fails during code-splitting
 function Spinner() {
@@ -50,7 +51,9 @@ export const generateProfileApi = (payload) => apiClient.post(`${API}/generate`,
 // Task #1828: AI-drafted form fields only — the server saves nothing.
 export const autofillDraftApi = (payload) => apiClient.post(`${API}/autofill-draft`, payload);
 export const finalizeProfileApi = (id) => apiClient.post(`${API}/${id}/finalize`);
-export const crossProfileApi = (id) => apiClient.post(`${API}/${id}/cross`, {});
+// The show goes with a Cross so the profile's registry character lands in
+// that show's registry (the route falls back to the newest registry).
+export const crossProfileApi = (id, showId) => apiClient.post(`${API}/${id}/cross`, showId ? { show_id: showId } : {});
 export const editProfileApi = (id, updates) => apiClient.put(`${API}/${id}`, updates);
 export const deleteProfileById = (id) => apiClient.delete(`${API}/${id}`);
 export const regenerateProfileApi = (id, payload) => apiClient.post(`${API}/${id}/regenerate`, payload);
@@ -484,7 +487,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   };
 
   const finalizeProfile = async id=>{try{const res=await finalizeProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
-  const crossProfile   = async id=>{try{const res=await crossProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const crossProfile   = async id=>{try{const res=await crossProfileApi(id, showId || showIdFromPath(window.location.pathname) || rememberedShowId());const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const editProfile    = async(id,updates)=>{try{const res=await editProfileApi(id,updates);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const deleteProfile  = async id=>{if(!window.confirm("Delete this profile? It'll be hidden from the Feed. It can be restored, though not from this screen yet."))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
 
