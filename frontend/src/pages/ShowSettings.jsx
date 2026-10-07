@@ -22,22 +22,13 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../lib/closetGrouping';
+import {
+  STATUSES, ERAS, ECONOMY_MODELS, showFromResponse, settingsFromShow, settingsError, settingsUpdate,
+} from '../lib/showSettings';
 
 const TABS = [
   { key: 'config',   icon: '⚙️',  label: 'Config'   },
   { key: 'advanced', icon: '🔧',  label: 'Advanced'  },
-];
-
-const ERAS = [
-  'Pre-Prime Era',
-  'Prime Era',
-  'Post-Prime Era',
-];
-
-const ECONOMY_MODELS = [
-  'Prime Coins + Dream Fund',
-  'Coins Only',
-  'Custom',
 ];
 
 export default function ShowSettings() {
@@ -52,14 +43,7 @@ export default function ShowSettings() {
   const [toast, setToast]       = useState(null);
 
   // Config form
-  const [form, setForm] = useState({
-    title:          '',
-    status:         'active',
-    era:            'Pre-Prime Era',
-    season_length:  24,
-    economy_model:  'Prime Coins + Dream Fund',
-    description:    '',
-  });
+  const [form, setForm] = useState(() => settingsFromShow(null));
   const [dirty, setDirty] = useState(false);
 
   // Advanced state
@@ -88,31 +72,35 @@ export default function ShowSettings() {
     setLoading(true);
     try {
       const res = await api.get(`/api/v1/shows/${showId}`);
-      const s   = res.data?.show || res.data;
+      const s   = showFromResponse(res);
+      if (!s) throw new Error('no show in the response');
       setShow(s);
-      setForm({
-        title:         s.title        || s.name || '',
-        status:        s.status       || 'active',
-        era:           s.era          || 'Pre-Prime Era',
-        season_length: s.season_length || 24,
-        economy_model: s.economy_model || 'Prime Coins + Dream Fund',
-        description:   s.description  || '',
-      });
+      setForm(settingsFromShow(s));
+      setDirty(false);
     } catch (err) {
-      showToast('Failed to load show', 'error');
+      console.error('[ShowSettings] load failed:', err);
+      showToast("Couldn't load the show. Refresh to try again.", 'error');
     } finally {
       setLoading(false);
     }
   }
 
   async function saveConfig() {
+    const problem = settingsError(form);
+    if (problem) { showToast(problem, 'error'); return; }
     setSaving(true);
     try {
-      await api.put(`/api/v1/shows/${showId}`, form);
+      // Read the show again so metadata saved meanwhile (Lala's home) is kept.
+      const fresh = showFromResponse(await api.get(`/api/v1/shows/${showId}`)) || show;
+      const res = await api.put(`/api/v1/shows/${showId}`, settingsUpdate(form, fresh));
+      const saved = res.data?.data;
+      if (saved?.id) { setShow(saved); setForm(settingsFromShow(saved)); }
       setDirty(false);
       showToast('Settings saved');
     } catch (err) {
-      showToast(err.response?.data?.error || err.message, 'error');
+      console.error('[ShowSettings] save failed:', err);
+      const why = err.response?.data?.message || err.response?.data?.error;
+      showToast(why ? `Not saved: ${why}` : "Not saved: couldn't reach the server.", 'error');
     } finally {
       setSaving(false);
     }
@@ -160,7 +148,7 @@ export default function ShowSettings() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `${(show?.title || 'show').replace(/\s+/g, '-').toLowerCase()}-export-${Date.now()}.json`;
+      a.download = `${(show?.name || 'show').replace(/\s+/g, '-').toLowerCase()}-export-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
       showToast('Export downloaded');
@@ -211,7 +199,7 @@ export default function ShowSettings() {
         <Link to={`/shows/${showId}`} style={s.backLink}>← Back to Show</Link>
         <div style={s.headerMain}>
           <h1 style={s.title}>⚙️ Settings</h1>
-          <div style={s.subtitle}>{show?.title || show?.name || 'Show'}</div>
+          <div style={s.subtitle}>{show?.name || 'Show'}</div>
         </div>
         <div style={s.headerNote}>
           World-building tools have moved to{' '}
@@ -274,12 +262,13 @@ export default function ShowSettings() {
 
             {/* Show Details */}
             <ConfigBlock title='Show Details'>
-              <Field label='Title'>
+              <Field label='Name'>
                 <input
                   style={s.input}
-                  value={form.title}
-                  onChange={e => setField('title', e.target.value)}
+                  value={form.name}
+                  onChange={e => setField('name', e.target.value)}
                   placeholder='Styling Adventures'
+                  data-testid='settings-name'
                 />
               </Field>
               <Field label='Description'>
@@ -297,9 +286,9 @@ export default function ShowSettings() {
                   value={form.status}
                   onChange={e => setField('status', e.target.value)}
                 >
-                  <option value='active'>Active</option>
-                  <option value='paused'>Paused</option>
-                  <option value='archived'>Archived</option>
+                  {STATUSES.map(st => (
+                    <option key={st.value} value={st.value}>{st.label}</option>
+                  ))}
                 </select>
               </Field>
               <ReadOnlyField label='Show ID' value={showId} mono />
