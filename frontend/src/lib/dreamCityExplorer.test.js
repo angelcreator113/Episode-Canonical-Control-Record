@@ -36,7 +36,7 @@ describe('the city explorer helpers', () => {
     const dazzle = DREAM_CITIES.find((c) => c.key === 'dazzle_district');
     expect(citySchools(UNIVERSITIES, dazzle).map((u) => u.name)).toEqual(['The Dazzle Academy']);
     expect(citySchools(UNIVERSITIES, ECHO)).toEqual([]);
-    expect(cityCompanies(CORPORATIONS, dazzle)).toEqual({ here: [], unplaced: CORPORATIONS.length });
-    expect(cityCompanies([{ name: 'Nova Studios', city: 'Echo Park' }, { name: 'X' }], ECHO)).toEqual({ here: [{ name: 'Nova Studios', city: 'Echo Park' }], unplaced: 1 });
+    expect(cityCompanies(CORPORATIONS, dazzle)).toEqual({ here: [], unplaced: CORPORATIONS });
+    expect(cityCompanies([{ name: 'Nova Studios', city: 'Echo Park' }, { name: 'X' }], ECHO)).toEqual({ here: [{ name: 'Nova Studios', city: 'Echo Park' }], unplaced: [{ name: 'X' }] });
   });
 });
