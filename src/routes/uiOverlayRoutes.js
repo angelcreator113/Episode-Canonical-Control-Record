@@ -876,7 +876,9 @@ router.post('/:showId/types', requireAuth, async (req, res) => {
     // (NOT NULL in older schemas) stays happy.
     const effectivePrompt = prompt && prompt.trim()
       ? prompt
-      : `Phone ${category === 'phone_icon' || category === 'icon' ? 'icon' : 'screen'} for "${name}".`;
+      : category === 'production'
+        ? `Show overlay for "${name}", 16:9.`
+        : `Phone ${category === 'phone_icon' || category === 'icon' ? 'icon' : 'screen'} for "${name}".`;
 
     // Guard against dangling `opens_screen` references — only accept keys that
     // correspond to a live overlay type on the same show. Null/empty is fine

@@ -12,6 +12,11 @@
  *
  * Same backend as the Phone Hub (/api/v1/ui-overlays/), category
  * 'production'.
+ *
+ * New overlay starts from a picture (Evoni, 2026-10-07: "i need to be able
+ * to upload pictures in producer mode overlays"): upload one, or describe
+ * it for Make with AI. With a picture, the type is made and the picture
+ * uploaded to it (POST /types, then POST /upload/:type_key).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Sparkles, Loader2, Upload, Trash2, Download, X, Plus, ImageOff, Ruler } from 'lucide-react';
@@ -20,6 +25,23 @@ import { episodesUsing, usageLine, libraryTiles, overlayState } from '../lib/sho
 import './ProductionOverlaysTab.css';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
+
+/** The upload limit (multer in uiOverlayRoutes). */
+const MAX_BYTES = 10 * 1024 * 1024;
+
+/** Why a picture can't be used, in plain words; null when it can. */
+export function pictureProblem(file) {
+  if (!file) return null;
+  if (!String(file.type || '').startsWith('image/')) return 'Choose an image (PNG or JPG).';
+  if (file.size > MAX_BYTES) return 'The picture is over 10 MB. Choose a smaller one.';
+  return null;
+}
+
+/** A name from a file name: "lower-third_gold.png" → "Lower third gold". */
+export function nameFromFile(file) {
+  const base = String(file?.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : '';
+}
 
 export default function ProductionOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
@@ -135,18 +157,34 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  const create = async (form) => {
+  // Returns an error to show in the dialog, or null once it is added.
+  const create = async (form, file) => {
+    let made;
     try {
       const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: 'production' });
-      setCreateOpen(false);
-      flash(`${res.data?.data?.name || form.name} added`);
-      load(false);
-      return true;
+      made = res.data?.data || {};
     } catch (err) {
       console.error('[ShowOverlays] create failed:', err);
-      flash(errorText(err), 'error');
-      return false;
+      return err?.response?.status === 409 ? 'There is already an overlay with that name.' : errorText(err);
     }
+    const name = made.name || form.name;
+    if (file && made.type_key) {
+      try {
+        const fd = new FormData();
+        fd.append('image', file);
+        await api.post(`/api/v1/ui-overlays/${showId}/upload/${made.type_key}`, fd);
+        flash(`${name} added`);
+      } catch (err) {
+        // The overlay is made; its card's Upload can try the picture again.
+        console.error('[ShowOverlays] upload after create failed:', err);
+        flash(`${name} added, but the picture didn't upload: ${errorText(err)}. Use Upload on its card.`, 'error');
+      }
+    } else {
+      flash(`${name} added`);
+    }
+    setCreateOpen(false);
+    load(false);
+    return null;
   };
 
   const tiles = libraryTiles(overlays, usage);
@@ -202,7 +240,7 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
         <section className="sol-empty" data-testid="sol-empty">
           <ImageOff size={28} aria-hidden="true" />
           <h3>No overlays yet</h3>
-          <p>Add the show&apos;s on-screen pieces once; every episode can use them.</p>
+          <p>Upload a picture or make one with AI. Add the show&apos;s on-screen pieces once; every episode can use them.</p>
           <button type="button" className="sol-btn is-primary" onClick={() => setCreateOpen(true)} disabled={!showId}>
             <Plus size={15} aria-hidden="true" /> New overlay
           </button>
@@ -261,16 +299,36 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
 
 function CreateOverlayDialog({ onClose, onCreate }) {
   const [form, setForm] = useState({ name: '', description: '', prompt: '' });
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const ready = form.name.trim() && form.prompt.trim();
+  const ready = form.name.trim() && (file || form.prompt.trim());
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  const pick = (e) => {
+    const chosen = e.target.files?.[0];
+    e.target.value = '';
+    if (!chosen) return;
+    const problem = pictureProblem(chosen);
+    if (problem) { setError(problem); return; }
+    setError(null);
+    setFile(chosen);
+    setPreview(URL.createObjectURL(chosen));
+    setForm((f) => (f.name.trim() ? f : { ...f, name: nameFromFile(chosen) }));
+  };
+
+  const clearPicture = () => { setFile(null); setPreview(null); };
 
   const submit = async (e) => {
     e.preventDefault();
     if (!ready || saving) return;
     setSaving(true);
-    const ok = await onCreate({ name: form.name.trim(), description: form.description.trim(), prompt: form.prompt.trim() });
-    if (!ok) setSaving(false);
+    setError(null);
+    const problem = await onCreate({ name: form.name.trim(), description: form.description.trim(), prompt: form.prompt.trim() }, file);
+    if (problem) { setError(problem); setSaving(false); }
   };
 
   return (
@@ -281,6 +339,22 @@ function CreateOverlayDialog({ onClose, onCreate }) {
           <button type="button" className="sol-icon" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button>
         </div>
         <form className="sol-form" onSubmit={submit}>
+          {preview ? (
+            <div className="sol-picture" data-testid="sol-new-preview">
+              <img src={preview} alt="The picture to upload" />
+              <div className="sol-picture-bar">
+                <span className="sol-picture-name">{file?.name}</span>
+                <button type="button" className="sol-link" onClick={clearPicture} disabled={saving}>Remove</button>
+              </div>
+            </div>
+          ) : (
+            <label className="sol-drop" data-testid="sol-new-drop">
+              <input type="file" accept="image/*" onChange={pick} hidden data-testid="sol-new-file" />
+              <Upload size={22} aria-hidden="true" />
+              <strong>Upload a picture</strong>
+              <span>PNG or JPG, up to 10 MB. 1920 × 1080 for full screen.</span>
+            </label>
+          )}
           <label>
             <span>Name</span>
             <input value={form.name} onChange={set('name')} placeholder="Show title card, lower third, exit button…" maxLength={100} autoFocus />
@@ -290,9 +364,11 @@ function CreateOverlayDialog({ onClose, onCreate }) {
             <input value={form.description} onChange={set('description')} placeholder="Where it appears in an episode" maxLength={200} />
           </label>
           <label>
-            <span>What to draw</span>
-            <textarea value={form.prompt} onChange={set('prompt')} rows={3} placeholder="Describe it for Make with AI; you can upload your own image instead later." />
+            <span>{file ? <>What to draw <em>(optional, for Remake with AI)</em></> : <>Or describe it for AI</>}</span>
+            <textarea value={form.prompt} onChange={set('prompt')} rows={3} placeholder="Describe it for Make with AI" />
           </label>
+          {error && <p className="sol-form-error" role="alert" data-testid="sol-new-error">{error}</p>}
+          {!ready && !error && <p className="sol-form-hint" data-testid="sol-new-missing">{!form.name.trim() ? 'Add a name' : 'Upload a picture or describe it for AI'}</p>}
           <div className="sol-form-actions">
             <button type="button" className="sol-btn" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="submit" className="sol-btn is-primary" disabled={!ready || saving}>{saving ? 'Adding…' : 'Add overlay'}</button>
