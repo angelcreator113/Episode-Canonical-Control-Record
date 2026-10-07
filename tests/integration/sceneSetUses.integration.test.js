@@ -25,6 +25,7 @@ const junctionMigration = require('../../src/migrations/20260324000000-add-scene
 const sortOrderMigration = require('../../src/migrations/20260626000001-add-sort-order-to-scene-set-episodes');
 const rolesMigration = require('../../src/migrations/20261002100000-add-scene-set-episode-roles');
 const scenePlanIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
+const dropLinksMigration = require('../../src/migrations/20261007150000-drop-links-to-removed-scene-sets');
 const { resolveSetShowId } = require('../../src/services/sceneSetUsesService');
 
 const { sequelize } = models;
@@ -122,6 +123,44 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(orphaned.status).toBe(200);
     expect(orphaned.body.uses_left).toMatchObject({ beats: 2, total: 7 });
     expect(await isDeleted(old)).toBe(true);
+  });
+
+  // Evoni, 2026-10-07: the removed-sets bar showed on an episode whose beats
+  // all had live scenes; leftover episode links were the cause.
+  const liveLinks = async (setId) => (await rows(
+    'SELECT episode_id FROM scene_set_episodes WHERE scene_set_id = :setId AND deleted_at IS NULL ORDER BY episode_id', { setId })).map((r) => r.episode_id);
+
+  it('deleted anyway: episode links no beat uses are dropped; an episode whose beats use it keeps its link and still lists it', async () => {
+    const old = await sceneSet('Old bedroom');
+    const withBeats = await episode();
+    const linkOnly = await episode();
+    await useEverywhere(old, withBeats);
+    await location(old, linkOnly, 'home');
+
+    const res = await auth(request(app).delete(`/api/v1/scene-sets/${old}?confirm_orphan=true`));
+    expect(res.status).toBe(200);
+    expect(res.body.links_dropped).toBe(1);
+    expect(await liveLinks(old)).toEqual([withBeats]);
+    expect((await auth(request(app).get(`/api/v1/episodes/${linkOnly}/removed-sets`))).body.data).toEqual([]);
+    const listed = (await auth(request(app).get(`/api/v1/episodes/${withBeats}/removed-sets`))).body.data;
+    expect(listed.map((s) => [s.name, s.beats])).toEqual([['Old bedroom', [1, 2]]]);
+  });
+
+  it('migration: existing links to removed sets that no beat uses are dropped; live sets and beat-used links stay', async () => {
+    const gone = await sceneSet('Lalas house', { deleted: true });
+    const live = await sceneSet('Lalas house live');
+    const linkOnly = await episode();
+    const withBeat = await episode();
+    await location(gone, linkOnly, 'home');
+    await location(live, linkOnly, 'closet');
+    await location(gone, withBeat, 'home');
+    await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, locked, chosen_by_user, sort_order, ai_suggested, created_at, updated_at)
+               VALUES (:id, :ep, 1, 'Beat 1', :setId, false, true, 1, false, NOW(), NOW())`, { id: uuid(), ep: withBeat, setId: gone });
+
+    await dropLinksMigration.up(sequelize.getQueryInterface(), Sequelize);
+    expect(await liveLinks(gone)).toEqual([withBeat]);
+    expect(await liveLinks(live)).toEqual([linkOnly]);
+    expect((await auth(request(app).get(`/api/v1/episodes/${linkOnly}/removed-sets`))).body.data).toEqual([]);
   });
 
   it('D1: deleting with a replacement moves every use to it, then deletes', async () => {

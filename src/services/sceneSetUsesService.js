@@ -144,6 +144,28 @@ async function removedSetsForEpisode(sequelize, episodeId) {
   return rows.map((r) => ({ scene_set_id: r.id, name: r.name, deleted_at: r.deleted_at, beats: (typeof r.beats === 'string' ? JSON.parse(r.beats) : r.beats) || [] }));
 }
 
+/**
+ * Episode links (scene_set_episodes) to a removed set that no beat of that
+ * episode uses (Evoni, 2026-10-07: the "scene sets you removed" bar showed
+ * on an episode whose 14 beats all had live scenes; what it found were
+ * these leftover links). They are soft-deleted: a location needs a live
+ * set, and nothing else reads them. A link whose set a beat still uses is
+ * kept, so the bar names that beat and Move my beats carries the location
+ * with it. setId limits it to one set (its delete), else every removed
+ * set. Returns how many links were dropped.
+ */
+async function dropRemovedSetLinks(sequelize, { setId = null, transaction = null } = {}) {
+  const [, meta] = await sequelize.query(
+    `UPDATE scene_set_episodes l SET deleted_at = NOW(), updated_at = NOW()
+      WHERE l.deleted_at IS NULL
+        ${setId ? 'AND l.scene_set_id = :setId' : ''}
+        AND EXISTS (SELECT 1 FROM scene_sets s WHERE s.id = l.scene_set_id AND s.deleted_at IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM scene_plans p
+                         WHERE p.episode_id = l.episode_id AND p.scene_set_id = l.scene_set_id AND p.deleted_at IS NULL)`,
+    { replacements: { setId }, ...(transaction ? { transaction } : {}) });
+  return meta?.rowCount ?? 0;
+}
+
 /** D2: move an episode's uses of removed sets, each to its chosen live replacement, in one transaction. */
 async function moveRemovedSetsForEpisode(sequelize, episodeId, moves) {
   if (!Array.isArray(moves) || !moves.length) throw new SceneSetUsesError('moves must be a non-empty list of { from, to }');
@@ -165,4 +187,5 @@ module.exports = {
   resolveSetShowId,
   removedSetsForEpisode,
   moveRemovedSetsForEpisode,
+  dropRemovedSetLinks,
 };
