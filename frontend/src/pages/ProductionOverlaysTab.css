@@ -188,6 +188,28 @@
 .sol-form textarea { resize: vertical; }
 .sol-form input:focus, .sol-form textarea:focus { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
 .sol-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.sol-form-error { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); font-size: 13px; }
+.sol-form-hint { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.sol-drop {
+  align-items: center;
+  justify-content: center;
+  gap: 4px !important;
+  min-height: 132px;
+  padding: 16px;
+  border: 2px dashed var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  text-align: center;
+  cursor: pointer;
+}
+.sol-drop:hover, .sol-drop:focus-within { border-color: var(--lala-lavender); }
+.sol-drop strong { font-size: 15px; }
+.sol-drop span { font-size: 12px; font-weight: 400; color: var(--lala-ink-muted); }
+.sol-picture { border: 1px solid var(--lala-lavender-line); border-radius: 14px; overflow: hidden; }
+.sol-picture img { display: block; width: 100%; max-height: 220px; object-fit: contain; background: var(--lala-parchment); }
+.sol-picture-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: 13px; }
+.sol-picture-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lala-ink-muted); }
 
 .sol-spin { animation: sol-spin 1s linear infinite; }
 @keyframes sol-spin { to { transform: rotate(360deg); } }
