@@ -183,6 +183,38 @@ router.get('/:showId', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/v1/ui-overlays/:showId/usage — which episodes place each of the
+// show's overlay images (Evoni, 2026-10-07: the show's Overlays library says
+// "Used in 3 episodes"). An episode uses an overlay when one of its
+// live timeline_placements row names the asset; deleted episodes and assets
+// are left out. Returns { data: { [asset_id]: [{ id, episode_number, title }] } }.
+// Read-only.
+router.get('/:showId/usage', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    // No timeline_placements table (a database built before it): nothing is placed.
+    const [[table]] = await models.sequelize.query(`SELECT to_regclass('public.timeline_placements') IS NOT NULL AS ok`);
+    if (!table?.ok) return res.json({ success: true, data: {} });
+    const [rows] = await models.sequelize.query(
+      `SELECT DISTINCT tp.asset_id, e.id, e.episode_number, e.title
+         FROM timeline_placements tp
+         JOIN assets a ON a.id = tp.asset_id AND a.show_id = :showId
+                      AND a.asset_type = 'UI_OVERLAY' AND a.deleted_at IS NULL
+         JOIN episodes e ON e.id = tp.episode_id AND e.deleted_at IS NULL
+        WHERE tp.deleted_at IS NULL
+        ORDER BY e.episode_number NULLS LAST, e.id`,
+      { replacements: { showId: req.params.showId } });
+    const usage = {};
+    for (const r of rows || []) {
+      (usage[r.asset_id] = usage[r.asset_id] || []).push({ id: r.id, episode_number: r.episode_number, title: r.title });
+    }
+    return res.json({ success: true, data: usage });
+  } catch (err) {
+    console.error('[UIOverlay] Usage lookup failed:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/v1/ui-overlays/:showId/generate-all — start generating all missing overlays (async)
 router.post('/:showId/generate-all', requireAuth, async (req, res) => {
   try {
