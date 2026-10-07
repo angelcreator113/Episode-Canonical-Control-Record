@@ -24,6 +24,13 @@ describe('world tension scanner contract', () => {
     expect(scanner).toMatch(/char_a:\s*\{\s*id:\s*char\.id,\s*name:\s*char\.display_name,\s*world_tag:\s*char\.world_tag\s*\}/);
     expect(scanner).toMatch(/char_b:\s*\{\s*id:\s*rel\.related_character_id \|\| rel\.target_id,\s*name:/);
   });
+  test('the scanner and the context summary share one high-tension check', () => {
+    expect(SRC).toMatch(/const \{ isHighTension \} = require\('\.\.\/services\/tensionLevels'\)/);
+    expect(scanner).toMatch(/if \(!isHighTension\(tension\)\) continue;/);
+    expect(SRC).toMatch(/if \(isHighTension\(t\)\) tensionCount\+\+;/);
+    // No caller keeps its own list again.
+    expect(SRC).not.toMatch(/\['Simmering', 'Explosive'/);
+  });
   test('a scan says whether it ran, and a failed one is logged, not an empty list', () => {
     expect(scanner).toMatch(/res\.json\(\{\s*status:\s*'ok',\s*pairs,\s*count:\s*pairs\.length,\s*characters_scanned:\s*rows\.length\s*\}\)/);
     expect(scanner).toMatch(/status:\s*'scan_failed'/);

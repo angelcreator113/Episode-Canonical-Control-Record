@@ -38,6 +38,7 @@ const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/
 // ── DB ─────────────────────────────────────────────────────────────────────
 const models = require('../models');
 const { factsOf, normalizeFacts } = require('../services/worldFacts');
+const { isHighTension } = require('../services/tensionLevels');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
@@ -3516,8 +3517,7 @@ router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
       const graph = safeJson(char.relationship_graph);
       for (const rel of graph) {
         const tension = rel.tension_state || rel.tension_level || 'Stable';
-        const isHigh = ['Simmering', 'Explosive', 'Unresolved', 'High', 'high', 'simmering', 'explosive'].includes(tension);
-        if (!isHigh) continue;
+        if (!isHighTension(tension)) continue;
         const pairKey = [char.id, rel.related_character_id || rel.target_id].sort().join('|');
         if (seen.has(pairKey)) continue;
         seen.add(pairKey);
@@ -3633,7 +3633,7 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
         const graph = safeJson(c.relationship_graph);
         for (const r of graph) {
           const t = r.tension_state || r.tension_level || 'Stable';
-          if (['Simmering', 'Explosive', 'Unresolved', 'High', 'high', 'simmering', 'explosive'].includes(t)) tensionCount++;
+          if (isHighTension(t)) tensionCount++;
         }
       }
     } catch (err) { console.warn('[world-studio] tension count error:', err?.message); }
