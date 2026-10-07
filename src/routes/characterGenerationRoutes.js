@@ -41,6 +41,9 @@ router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
 router.use(hideAuthorOnlyFieldsFromNonAdmins);
 
+// social_profiles.feed_layer's values (models/SocialProfile.js).
+const FEED_LAYERS = ['real_world', 'lalaverse'];
+
 function getModels(req) {
   return req.app.get('models') || require('../models');
 }
@@ -186,7 +189,7 @@ router.post('/confirm', async (req, res) => {
 // Author confirms the Feed profile proposal → creates social_profile + links
 // ────────────────────────────────────────────────────────────────────────────
 router.post('/confirm-feed', async (req, res) => {
-  const { character_id, feed_proposal } = req.body;
+  const { character_id, feed_proposal, feed_layer } = req.body;
 
   if (!character_id || !feed_proposal) {
     return res.status(400).json({ error: 'character_id and feed_proposal required' });
@@ -219,6 +222,12 @@ router.post('/confirm-feed', async (req, res) => {
       follower_count_approx: feed_proposal.follower_range || 'micro',
       status:          'generated',
       auto_generated:  true,
+      // Both directions of the link, and the layer, as registry create's
+      // autoCreateFeedProfile writes them (the profile used to carry no
+      // registry_character_id and always took the default layer: wiring map,
+      // docs/reads/2026-10-06-lalaverse-wiring-map.md §6 finding 6a).
+      registry_character_id: character.id,
+      feed_layer:      FEED_LAYERS.includes(feed_layer || feed_proposal.feed_layer) ? (feed_layer || feed_proposal.feed_layer) : 'real_world',
     });
     warnTruncated('confirm-feed', truncated);
 
