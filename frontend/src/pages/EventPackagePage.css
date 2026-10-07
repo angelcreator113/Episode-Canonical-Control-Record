@@ -85,7 +85,9 @@
 }
 .epp-status-ready { background: var(--success-bg); color: var(--success-text); }
 .epp-status-used  { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
-.epp-status-draft { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
+.epp-status-needs_setup { background: var(--warning-bg); color: var(--warning-text); }
+.epp-status-needs_organizer { background: var(--danger-bg); color: var(--danger-text); }
+.epp-status-archived { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
 
 .epp-toast {
   background: var(--lala-gold-soft);
