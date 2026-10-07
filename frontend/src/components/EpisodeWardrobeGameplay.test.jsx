@@ -882,3 +882,24 @@ describe('EpisodeWardrobeGameplay — Wear the set from For This Event', () => {
     expect(screen.getAllByText('Safari Boots').length).toBeGreaterThan(0);
   });
 });
+
+// The wardrobe fixes (Evoni, 2026-10-07: "Fix the broken bits").
+describe('EpisodeWardrobeGameplay — the wardrobe fixes', () => {
+  test('a piece shows only the colour and era it has: no "— · —"', async () => {
+    const { pieceDetails } = await import('./EpisodeWardrobeGameplay');
+    expect(pieceDetails({ color: 'Gold', era_alignment: 'Modern' })).toBe('Gold · Modern');
+    expect(pieceDetails({ color: 'Gold' })).toBe('Gold');
+    expect(pieceDetails({ era_alignment: 'Y2K' })).toBe('Y2K');
+    expect(pieceDetails({})).toBe('');
+  });
+
+  test('what the look still needs, in plain words', async () => {
+    const { stillNeeded } = await import('./EpisodeWardrobeGameplay');
+    expect(stillNeeded({})).toBe('a dress (or a top and bottom) and shoes');
+    expect(stillNeeded({ top: {} })).toBe('a dress (or a top and bottom) and shoes');
+    expect(stillNeeded({ body: {} })).toBe('shoes');
+    expect(stillNeeded({ top: {}, bottom: {} })).toBe('shoes');
+    expect(stillNeeded({ shoes: {} })).toBe('a dress (or a top and bottom)');
+    expect(stillNeeded({ body: {}, shoes: {} })).toBe('');
+  });
+});
