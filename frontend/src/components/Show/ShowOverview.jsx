@@ -92,7 +92,7 @@ function useNextSlot(showId) {
   return { ...state, reload: load };
 }
 
-/** The checklist's sections that report a state (the phone's is not deployed). */
+/** The checklist's sections that report a state (all of them since the checklist fixes, 2026-10-07; a section may still set unavailableReason). */
 const LIVE_SECTIONS = CHECKLIST_SECTIONS.filter((sec) => !sec.unavailableReason);
 
 /**
