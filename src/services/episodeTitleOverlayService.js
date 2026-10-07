@@ -555,7 +555,72 @@ async function getTitleOverlayState(models, episodeId) {
   return titleOverlayState(ep, asset || null);
 }
 
+/**
+ * Change the overlay's words (Evoni, 2026-10-07: "i need to be able to
+ * edit/delete episode title" — the Title overlay). The overlay is set from
+ * the episode's approved title, so its words are the title: the new words
+ * become the episode's title, approved, and an existing overlay is redrawn
+ * in the same lettering, band and flourish, at no image cost.
+ * @returns the title card state (GET /:id/title-card's shape)
+ */
+async function setTitleWords(models, episodeId, words) {
+  const { sequelize } = models;
+  const title = typeof words === 'string' ? words.replace(/\s+/g, ' ').trim() : '';
+  if (!title) throw new TitleOverlayError('Type the words for the title.', 400, 'TITLE_EMPTY');
+  if (title.length > 255) throw new TitleOverlayError('The title is too long (255 characters at most).', 400, 'TITLE_TOO_LONG');
+  const ep = await loadEpisode(sequelize, episodeId);
+  if (!ep) throw new TitleOverlayError('Episode not found', 404, 'EPISODE_NOT_FOUND');
+  await sequelize.query(
+    `UPDATE episodes SET title = :title, updated_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL`,
+    { replacements: { title, episodeId } }
+  );
+  const { approveTitle, getTitleCardState } = require('./episodeTitleCardService');
+  await approveTitle(models, episodeId, { expectedTitle: title });
+  if (ep.title_overlay_asset_id) await saveTitleOverlay(models, episodeId, {});
+  return getTitleCardState(models, episodeId);
+}
+
+/**
+ * Delete the title overlay: its image and flourish leave the episode and the
+ * timeline, and the episode no longer has one. The title itself stays.
+ * @returns {{ deleted: number }} how many images were removed
+ */
+async function deleteTitleOverlay(models, episodeId) {
+  const { sequelize } = models;
+  const ep = await loadEpisode(sequelize, episodeId);
+  if (!ep) throw new TitleOverlayError('Episode not found', 404, 'EPISODE_NOT_FOUND');
+  return sequelize.transaction(async (transaction) => {
+    const [gone] = await sequelize.query(
+      `UPDATE assets SET deleted_at = NOW(), updated_at = NOW()
+        WHERE episode_id = :episodeId AND asset_role IN (:roles) AND deleted_at IS NULL
+        RETURNING id`,
+      { replacements: { episodeId, roles: [TITLE_OVERLAY_ROLE, FLOURISH_ROLE] }, transaction }
+    );
+    const ids = (gone || []).map((r) => r.id);
+    const [[reg]] = await sequelize.query(
+      "SELECT to_regclass('public.timeline_placements') IS NOT NULL AS present",
+      { transaction }
+    );
+    if (ids.length > 0 && reg?.present) {
+      await sequelize.query(
+        `UPDATE timeline_placements SET deleted_at = NOW(), updated_at = NOW()
+          WHERE episode_id = :episodeId AND asset_id IN (:ids) AND deleted_at IS NULL`,
+        { replacements: { episodeId, ids }, transaction }
+      );
+    }
+    await sequelize.query(
+      `UPDATE episodes SET title_overlay_asset_id = NULL, title_overlay_title = NULL, title_overlay_style = NULL,
+              updated_at = NOW()
+        WHERE id = :episodeId`,
+      { replacements: { episodeId }, transaction }
+    );
+    return { deleted: ids.length };
+  });
+}
+
 module.exports = {
+  setTitleWords,
+  deleteTitleOverlay,
   TITLE_OVERLAY_ROLE,
   TITLE_OVERLAY_BEAT,
   FLOURISH_ROLE,

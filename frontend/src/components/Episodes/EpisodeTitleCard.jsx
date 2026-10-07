@@ -30,7 +30,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Clapperboard, RefreshCw, TriangleAlert, Type, Sparkles } from 'lucide-react';
+import { BadgeCheck, Clapperboard, RefreshCw, TriangleAlert, Type, Sparkles, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import './EpisodeTitleCard.css';
 
@@ -46,6 +46,11 @@ export const saveTitleOverlayApi = async (episodeId, body) =>
   (await api.post(`/api/v1/episodes/${episodeId}/title-overlay`, body))?.data?.data;
 export const addFlourishApi = async (episodeId) =>
   (await api.post(`/api/v1/episodes/${episodeId}/title-overlay/flourish`))?.data?.data;
+// Evoni, 2026-10-07: "i need to be able to edit/delete episode title".
+export const setTitleWordsApi = async (episodeId, title) =>
+  (await api.put(`/api/v1/episodes/${episodeId}/title-overlay/words`, { title }))?.data?.data;
+export const deleteTitleOverlayApi = async (episodeId) =>
+  (await api.delete(`/api/v1/episodes/${episodeId}/title-overlay`))?.data?.data;
 
 export function formatEstimate(estimate) {
   if (!estimate || typeof estimate.usd !== 'number') return 'price not set';
@@ -58,8 +63,9 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
   const episodeId = episode?.id;
   const title = episode?.title || '';
   const [state, setState] = useState(null);
-  const [busy, setBusy] = useState(null); // 'approve' | 'design' | null
+  const [busy, setBusy] = useState(null); // 'approve' | 'design' | 'words' | 'delete' | null
   const [error, setError] = useState(null);
+  const [words, setWords] = useState(null); // the words being edited, or null
 
   const load = useCallback(() => {
     if (!episodeId) return;
@@ -107,6 +113,43 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
     }
   };
 
+  // The overlay's words are the episode's title: saving renames and approves
+  // it, and redraws an existing overlay in its style, at no image cost.
+  const saveWords = async (e) => {
+    e?.preventDefault?.();
+    const next = (words || '').trim();
+    if (!next) { setError('Type the words for the title.'); return; }
+    setBusy('words');
+    setError(null);
+    try {
+      setState(await setTitleWordsApi(episodeId, next));
+      setWords(null);
+      onChange?.();
+    } catch (err) {
+      console.error('[EpisodeTitleCard] changing the words failed:', err);
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteOverlay = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Delete the title overlay? It leaves the episode and its timeline. The title stays.')) return;
+    setBusy('delete');
+    setError(null);
+    try {
+      await deleteTitleOverlayApi(episodeId);
+      setState((st) => ({ ...st, overlay: null }));
+      onChange?.();
+    } catch (err) {
+      console.error('[EpisodeTitleCard] delete overlay failed:', err);
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!episodeId || !state) {
     return error ? <div className="etc-panel"><p className="etc-error" role="alert">{error}</p></div> : null;
   }
@@ -117,6 +160,33 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
 
   return (
     <div className="etc-panel" data-testid="episode-title-card">
+      {words !== null ? (
+        <form className="etc-words" onSubmit={saveWords} data-testid="etc-words-form">
+          <label className="etc-words-label" htmlFor={`etc-words-${episodeId}`}>The title&apos;s words</label>
+          <input
+            id={`etc-words-${episodeId}`} className="etc-words-input" value={words} maxLength={255} autoFocus
+            onChange={(e) => setWords(e.target.value)} data-testid="etc-words-input"
+          />
+          <p className="etc-words-hint">This becomes the episode&apos;s title{state.overlay ? ', and the overlay is redrawn in its style at no cost' : ''}.</p>
+          <div className="etc-row">
+            <button type="submit" className="etc-btn etc-btn-primary" disabled={busy !== null || !words.trim()} data-testid="etc-words-save">
+              {busy === 'words' ? 'Saving…' : 'Save words'}
+            </button>
+            <button type="button" className="etc-btn" onClick={() => setWords(null)} disabled={busy !== null}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <div className="etc-row">
+          <button type="button" className="etc-btn" onClick={() => setWords(title)} disabled={busy !== null} data-testid="etc-words-edit">
+            <Pencil size={14} aria-hidden="true" /> Edit words
+          </button>
+          {state.overlay && (
+            <button type="button" className="etc-btn etc-btn-danger" onClick={deleteOverlay} disabled={busy !== null} data-testid="etc-overlay-delete">
+              <Trash2 size={14} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete overlay'}
+            </button>
+          )}
+        </div>
+      )}
       <div className="etc-row">
         {approved ? (
           <span className="etc-approved" data-testid="etc-approved">
