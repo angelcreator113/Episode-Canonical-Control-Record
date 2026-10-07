@@ -26,6 +26,23 @@ export function docState(doc) {
   return { key: 'draft', label: 'Draft' };
 }
 
+/**
+ * The document's overlay (Evoni, 2026-10-07: the documents as overlays),
+ * drawn on approval (eventDocumentOverlayService): current when drawn from
+ * the approved version as it stands, outdated once edited or redrafted.
+ */
+export function docOverlay(doc) {
+  if (!doc) return null;
+  const url = doc.overlay?.url || null;
+  if (url && doc.status === 'approved' && doc.overlay.version === doc.version) {
+    return { key: 'current', url, label: 'Overlay ready' };
+  }
+  if (url) {
+    return { key: 'outdated', url, label: doc.status === 'approved' ? 'Overlay out of date' : 'Overlay out of date until approved' };
+  }
+  return { key: 'not_made', url: null, label: doc.status === 'approved' ? 'No overlay yet' : 'Overlay made on approval' };
+}
+
 // A piece's category as the shopping list's line (the server's
 // todoListService listSlotOf names the same lines).
 const CANONICAL_TO_LINE = {

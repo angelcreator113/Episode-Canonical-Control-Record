@@ -231,8 +231,8 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
               <h2 id="eot-docs-title" className="eot-section-title">In-world documents</h2>
               <p className="eot-section-sub">
                 One system, three looks. Each document fills itself from the event and goes through the same steps
-                (Draft, Edit, Redraft, Approve). Approved, the invitation is an overlay for this episode; the shopping
-                list and the career plan go on the episode&apos;s lists.
+                (Draft, Edit, Redraft, Approve). Approved, each is an overlay image for this episode; the shopping list
+                and the career plan also go on the episode&apos;s lists.
               </p>
             </div>
           </div>

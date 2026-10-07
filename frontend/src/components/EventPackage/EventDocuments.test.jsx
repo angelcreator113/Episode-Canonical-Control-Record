@@ -147,4 +147,35 @@ describe('EventDocuments', () => {
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(jsx).not.toMatch(/#[0-9a-f]{3,8}\b/i);
   });
+
+  test('an approved document shows its overlay; one without gets Make overlay, which draws it', async () => {
+    const overlay = { asset_id: 'a-1', url: 'https://cdn/shop.png', version: 1 };
+    api.get.mockResolvedValue({ data: { success: true, data: {
+      shopping_list: { ...SHOP, status: 'approved', overlay },
+      career_plan: { ...PLAN, status: 'approved' },
+    } } });
+    renderDocs();
+    const shopOverlay = await screen.findByTestId('evd-overlay-shopping_list');
+    expect(shopOverlay.textContent).toContain('Overlay ready');
+    expect(shopOverlay.querySelector('img').getAttribute('src')).toBe(overlay.url);
+    expect(screen.queryByTestId('evd-make-overlay-shopping_list')).toBeNull();
+
+    expect(screen.getByTestId('evd-overlay-career_plan').textContent).toContain('No overlay yet');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...PLAN, status: 'approved', overlay: { asset_id: 'a-2', url: 'https://cdn/plan.png', version: 1 } } } });
+    fireEvent.click(screen.getByTestId('evd-make-overlay-career_plan'));
+    await waitFor(() => expect(screen.getByTestId('evd-overlay-career_plan').textContent).toContain('Overlay ready'));
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/career_plan/approve`);
+  });
+
+  test('a draft edited after its overlay was drawn says the overlay is out of date', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: {
+      shopping_list: { ...SHOP, version: 2, overlay: { asset_id: 'a-1', url: 'https://cdn/shop.png', version: 1 } },
+      career_plan: null,
+    } } });
+    renderDocs();
+    const row = await screen.findByTestId('evd-overlay-shopping_list');
+    expect(row.className).toContain('is-outdated');
+    expect(row.textContent).toContain('Overlay out of date until approved');
+    expect(screen.queryByTestId('evd-make-overlay-shopping_list')).toBeNull();
+  });
 });
