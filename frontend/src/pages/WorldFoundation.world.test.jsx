@@ -60,4 +60,15 @@ describe('World tab', () => {
     expect(link.getAttribute('href')).toBe('/property-manager');
     expect(screen.getByPlaceholderText('Search locations...')).toBeTruthy();
   });
+
+  test('a location\'s city is one of the five DREAM cities, chosen from a list (wiring map, fix-list item 18)', () => {
+    window.history.pushState({}, '', '/universe?tab=world&sub=locations');
+    renderAt('/universe?tab=world&sub=locations');
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Location' }));
+    const city = screen.getByRole('combobox', { name: 'City' });
+    expect([...city.options].map((o) => o.textContent)).toEqual(['No city', 'Dazzle District', 'Radiance Row', 'Echo Park', 'Ascent Tower', 'Maverick Harbor']);
+    fireEvent.change(city, { target: { value: 'Echo Park' } });
+    expect(city.value).toBe('Echo Park');
+    expect(screen.queryByPlaceholderText('City (e.g. Dazzle District)')).toBeNull();
+  });
 });

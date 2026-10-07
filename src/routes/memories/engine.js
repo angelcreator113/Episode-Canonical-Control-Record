@@ -4287,7 +4287,7 @@ Return ONLY valid JSON:
   "dramatic_irony": [{ "statement": "what the reader knows that characters don't", "characters_unaware": ["who doesn't know"] }],
   "open_mysteries": [{ "question": "what the reader is now wondering", "planted_in": "brief description of the moment" }],
   "foreshadow_seeds": [{ "detail": "the image/moment/detail", "potential_payoff": "what it could connect to later" }],
-  "new_locations": [{ "name": "location name", "description": "sensory description", "location_type": "interior|exterior|digital|vehicle", "narrative_role": "what role this place plays" }],
+  "new_locations": [{ "name": "location name", "description": "sensory description", "location_type": "interior|exterior|digital|vehicle", "narrative_role": "what role this place plays", "city": "Dazzle District|Radiance Row|Echo Park|Ascent Tower|Maverick Harbor, or omit when the story does not say" }],
   "world_events": [{ "event_name": "short name", "event_description": "what happened", "event_type": "plot|emotional|social|professional", "impact_level": "minor|moderate|major", "characters_involved": ["character_keys"] }],
   "therapy_opening": "one sentence a therapist could use to open the next session"
 }`;
@@ -4427,6 +4427,9 @@ Return ONLY valid JSON:
               description: loc.description || null,
               location_type: ['interior', 'exterior', 'digital', 'vehicle'].includes(loc.location_type) ? loc.location_type : 'interior',
               narrative_role: loc.narrative_role || null,
+              // One of the five DREAM cities when the story names one, else
+              // none (wiring map, fix-list item 18).
+              city: require('../../utils/lalaHome').dreamCityName(loc.city),
               associated_characters: [characterKey],
               sensory_details: loc.description ? { from_story: loc.description } : {},
               metadata: { source_story: storyNumber, auto_extracted: true },
