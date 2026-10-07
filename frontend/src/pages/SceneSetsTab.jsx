@@ -12,6 +12,7 @@ import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import useSpecBuild from '../hooks/useSpecBuild';
 import { sceneSetTiles, typeCounts, sectionsOf, angleHint, angleLine, episodeChips } from '../lib/sceneSetsSummary';
+import { uploadedAnglePayloads } from '../lib/angleUpload';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -999,7 +1000,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, hideShow = false }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, hideShow = false, onUploadAngles }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
@@ -2012,7 +2013,21 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
                     {/* Additional views */}
                     <div className="scene-sets-ws-subhead">Additional views</div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                      {/* Her own images as angles, several at once (Evoni, 2026-10-07) */}
+                      {onUploadAngles && (
+                        <label className="scene-sets-btn-details" data-testid={`scene-set-upload-angles-${set.id}`} style={{ cursor: 'pointer' }}>
+                          <Upload size={12} /> Upload angles
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/png,image/webp"
+                            style={{ display: 'none' }}
+                            aria-label="Upload angle images"
+                            onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) onUploadAngles(set, files); }}
+                          />
+                        </label>
+                      )}
                       {hasBase && (
                         <button className="scene-sets-btn-details" disabled={seeding} onClick={async () => {
                           setSeeding(true);
@@ -3490,6 +3505,33 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
+  // Several of her own images at once, each its own angle named from its file
+  // (Evoni, 2026-10-07). One at a time, so a failure names the file it hit.
+  const handleUploadAngles = async (set, files) => {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    const payloads = uploadedAnglePayloads(list, (set.angles || []).map((a) => a.angle_label));
+    let done = 0;
+    const failed = [];
+    for (let i = 0; i < list.length; i += 1) {
+      try {
+        const res = await createAngleApi(set.id, payloads[i]);
+        const angleId = res.data?.data?.id;
+        if (!angleId) throw new Error('no angle id');
+        const formData = new FormData();
+        formData.append('images', list[i]);
+        await uploadAngleApi(set.id, angleId, formData);
+        done += 1;
+      } catch (err) {
+        console.error('[SceneSets] angle upload failed:', list[i]?.name, err);
+        failed.push(list[i]?.name || `image ${i + 1}`);
+      }
+    }
+    if (done) showToast(`Uploaded ${done} angle${done === 1 ? '' : 's'}`);
+    if (failed.length) showToast(`Could not upload ${failed.join(', ')}`, 'error');
+    await fetchSets();
+  };
+
   const handleUploadAngleImage = async (set, angleId, file) => {
     try {
       const formData = new FormData();
@@ -3843,6 +3885,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}
               onUploadAngleImage={handleUploadAngleImage}
+              onUploadAngles={handleUploadAngles}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteSet={handleDeleteSet}
