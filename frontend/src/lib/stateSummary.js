@@ -10,6 +10,8 @@
  *                       writes Lala's deltas as a 'computed' row for it and
  *                       sets evaluation_status 'accepted'; either says done.
  *                       Finalizing its money adds a 'computed' coins row.
+ *                       Those rows are read on their own (?source=computed),
+ *                       not from the newest 50 that "what changed" reads.
  *   snapshots           GET /world/state/snapshots, the world facts saved by
  *                       hand. The list also holds 'temperature_update' rows
  *                       carrying metadata.world_temperature, written only by
