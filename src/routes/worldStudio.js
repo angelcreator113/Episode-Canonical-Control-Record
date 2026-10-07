@@ -40,6 +40,7 @@ const models = require('../models');
 const { factsOf, normalizeFacts } = require('../services/worldFacts');
 const { isHighTension } = require('../services/tensionLevels');
 const { universeIdForShow } = require('../services/worldSnapshotForShow');
+const { dreamCityName } = require('../utils/lalaHome');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
@@ -3253,6 +3254,9 @@ router.post('/world/locations', requireAuth, async (req, res) => {
     const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // A DREAM city is stored as DREAM_CITIES spells it, so the map counts
+    // it; another city is kept as written (wiring map, fix-list item 18).
+    const cityName = dreamCityName(city) || (city ? String(city).trim() : null) || null;
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
       const loc = await WorldLocation.create({
@@ -3262,7 +3266,7 @@ router.post('/world/locations', requireAuth, async (req, res) => {
         narrative_role, associated_characters: associated_characters || [],
         parent_location_id, metadata: metadata || {},
         street_address: street_address || null,
-        city: city || null,
+        city: cityName,
         district: district || null,
         coordinates: coordinates || null,
         venue_type: venue_type || null,
@@ -3275,11 +3279,11 @@ router.post('/world/locations', requireAuth, async (req, res) => {
     }
     const id = require('uuid').v4();
     await sequelize.query(
-      `INSERT INTO world_locations (id, name, slug, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, created_at, updated_at)
-       VALUES (:id, :name, :slug, :desc, :lt, :sd::jsonb, :nr, :ac::jsonb, :plid, :meta::jsonb, NOW(), NOW())`,
-      { replacements: { id, name, slug, desc: description || null, lt: location_type || 'interior', sd: JSON.stringify(sensory_details || {}), nr: narrative_role || null, ac: JSON.stringify(associated_characters || []), plid: parent_location_id || null, meta: JSON.stringify(metadata || {}) } }
+      `INSERT INTO world_locations (id, name, slug, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, created_at, updated_at)
+       VALUES (:id, :name, :slug, :desc, :lt, :sd::jsonb, :nr, :ac::jsonb, :plid, :meta::jsonb, :street, :city, :district, NOW(), NOW())`,
+      { replacements: { id, name, slug, desc: description || null, lt: location_type || 'interior', sd: JSON.stringify(sensory_details || {}), nr: narrative_role || null, ac: JSON.stringify(associated_characters || []), plid: parent_location_id || null, meta: JSON.stringify(metadata || {}), street: street_address || null, city: cityName, district: district || null } }
     );
-    res.json({ location: { id, name, slug, description, location_type, sensory_details, narrative_role } });
+    res.json({ location: { id, name, slug, description, location_type, sensory_details, narrative_role, city: cityName } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3293,6 +3297,7 @@ router.put('/world/locations/:id', requireAuth, async (req, res) => {
       if (!loc) return res.status(404).json({ error: 'Not found' });
       const updates = {};
       for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+      if (updates.city !== undefined) updates.city = dreamCityName(updates.city) || (updates.city ? String(updates.city).trim() : null) || null;
       if (updates.name) updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       await loc.update(updates);
       return res.json({ location: loc });

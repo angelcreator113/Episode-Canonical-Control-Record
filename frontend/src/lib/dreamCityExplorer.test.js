@@ -32,6 +32,17 @@ describe('the city explorer helpers', () => {
     expect(placeCounts(locations, DREAM_CITIES)).toMatchObject({ echo_park: 3, dazzle_district: 1, radiance_row: 0 });
   });
 
+  test('a room with no city is in its property\'s city (wiring map, fix-list item 18)', () => {
+    const locations = [
+      { id: 'p', name: 'Penthouse', location_type: 'property', city: 'Echo Park' },
+      { id: 'r', name: 'Closet', location_type: 'interior', parent_location_id: 'p' },
+      { id: 'r2', name: 'Dressing Room', location_type: 'interior', parent_location_id: 'r' },
+      { id: 'o', name: 'Orphan Room', location_type: 'interior', parent_location_id: 'missing' },
+    ];
+    expect(cityPlaces(locations, ECHO).map((p) => p.name).sort()).toEqual(['Closet', 'Dressing Room', 'Penthouse']);
+    expect(placeCounts(locations, DREAM_CITIES)).toMatchObject({ echo_park: 3, dazzle_district: 0 });
+  });
+
   test('schools come by city; companies with no city are counted, never guessed', () => {
     const dazzle = DREAM_CITIES.find((c) => c.key === 'dazzle_district');
     expect(citySchools(UNIVERSITIES, dazzle).map((u) => u.name)).toEqual(['The Dazzle Academy']);

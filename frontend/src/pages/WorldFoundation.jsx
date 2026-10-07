@@ -375,7 +375,16 @@ export default function WorldFoundation({ embedded = false }) {
                 <select style={inputStyle} value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))}>
                   {LOCATION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-                <input style={inputStyle} placeholder="City (e.g. Dazzle District)" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} />
+                {/* One of the five DREAM cities, so the map places it (wiring map,
+                    fix-list item 18); a city already stored outside them stays
+                    choosable rather than being dropped on save. */}
+                <select style={inputStyle} aria-label="City" value={form.city || ''} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}>
+                  <option value="">No city</option>
+                  {(data.DREAM_CITIES || DREAM_CITIES).map(c => <option key={c.key} value={c.name}>{c.name}</option>)}
+                  {form.city && !(data.DREAM_CITIES || DREAM_CITIES).some(c => c.name === form.city) && (
+                    <option value={form.city}>{form.city} (not a DREAM city)</option>
+                  )}
+                </select>
                 <input style={inputStyle} placeholder="District" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} />
                 <input style={inputStyle} placeholder="Street Address" value={form.street_address} onChange={e => setForm(p => ({ ...p, street_address: e.target.value }))} />
                 <input style={inputStyle} placeholder="Narrative Role" value={form.narrative_role} onChange={e => setForm(p => ({ ...p, narrative_role: e.target.value }))} />

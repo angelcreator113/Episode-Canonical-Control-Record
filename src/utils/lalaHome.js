@@ -108,6 +108,17 @@ function isDreamCity(name) {
   return Boolean(n) && DREAM_CITIES.some((c) => c.toLowerCase() === n);
 }
 
+/**
+ * The DREAM city a text names, spelled as DREAM_CITIES spells it, or null.
+ * Reads a name or a key ("Echo Park", "echo park", "echo_park"), as the
+ * World tab's map does (frontend lib/dreamCityExplorer inCity).
+ */
+function dreamCityName(text) {
+  const t = String(text || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  return DREAM_CITIES.find((c) => c.toLowerCase() === t) || null;
+}
+
 /** Whether a place name is Lala's home city or home neighbourhood. */
 function isHomePlace(name, home) {
   const n = normCity(name);
@@ -148,6 +159,7 @@ module.exports = {
   HOME_FIELDS,
   DREAM_CITIES,
   isDreamCity,
+  dreamCityName,
   normCity,
   readLalaHome,
   readLalaHomeBody,
