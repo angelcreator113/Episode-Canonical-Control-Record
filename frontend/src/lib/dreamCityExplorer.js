@@ -52,11 +52,11 @@ export function citySchools(universities, city) {
   return (universities || []).filter((u) => inCity(u?.city, city));
 }
 
-/** Companies placed in the city, and how many name no city at all. */
+/** Companies placed in the city, and those that name no city at all. */
 export function cityCompanies(corporations, city) {
   const list = corporations || [];
   return {
     here: list.filter((c) => c?.city && inCity(c.city, city)),
-    unplaced: list.filter((c) => !c?.city).length,
+    unplaced: list.filter((c) => c && !c.city),
   };
 }

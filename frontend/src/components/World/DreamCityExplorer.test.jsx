@@ -25,7 +25,9 @@ describe('DreamCityExplorer', () => {
     expect(buttons[0].textContent).toContain('1 place');
     expect(screen.getByTestId('dce-city').textContent).toContain('Dazzle District');
     expect(screen.getByTestId('dce-companies').textContent).toContain('The Dazzle Academy');
-    expect(screen.getByTestId('dce-companies').textContent).toContain(`${CORPORATIONS.length} companies name no city yet`);
+    const unplaced = screen.getByTestId('dce-unplaced').textContent;
+    expect(unplaced).toContain('Not placed in a city yet');
+    CORPORATIONS.forEach((c) => expect(unplaced).toContain(c.name));
   });
 
   test('picking a city shows its venues and the events that use them', () => {
