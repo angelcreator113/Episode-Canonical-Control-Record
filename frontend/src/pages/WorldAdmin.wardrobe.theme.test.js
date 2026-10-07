@@ -43,7 +43,8 @@ describe('Wardrobe theme', () => {
     expect(wardrobe).toMatch(/background: isBulkSelected \? 'var\(--lala-gold\)' : 'rgba\(255,255,255,0\.9\)'/);
     expect(wardrobe).toMatch(/isBulkSelected && <span style=\{\{ color: 'var\(--text-primary\)'/);
     expect(wardrobe).toMatch(/background: 'var\(--danger\)', color: 'var\(--text-inverse\)', border: 'none', borderRadius: 4, fontSize: 10/);
-    expect(wardrobe).toMatch(/border: 'none', borderRadius: 6, background: 'var\(--primary\)', color: 'var\(--text-inverse\)', cursor: wardrobeAnalyzing/);
+    // Add piece is its own dialog now (components/Wardrobe/AddPieceDialog, 2026-10-07).
+    expect(wardrobe).toMatch(/<AddPieceDialog\b/);
     expect(wardrobe).toMatch(/background: promotingVariant \? 'var\(--text-secondary\)' : 'var\(--primary-dark\)', color: 'var\(--text-inverse\)'/);
     expect(wardrobe).toMatch(/background: sendingToPhone \? 'var\(--text-secondary\)' : 'var\(--accent-dark\)', color: 'var\(--text-inverse\)'/);
     expect(wardrobe).not.toMatch(/color: 'var\(--lala-gold\)'/);
@@ -54,7 +55,6 @@ describe('Wardrobe theme', () => {
     expect(wardrobe).toMatch(/background: 'var\(--warning-bg\)', borderRadius: 6, border: '1px solid var\(--warning-border\)'/);
     expect(wardrobe).toMatch(/<span className="wa-wd-unassigned"/);
     expect(css).toMatch(/\.wa-wd-unassigned \{[^}]*background: var\(--warning-bg\); border: 1px solid var\(--warning-border\); color: var\(--warning-text\)/);
-    expect(wardrobe).toMatch(/background: 'var\(--danger-bg\)', border: '1px solid var\(--danger-border\)', borderRadius: 6, fontSize: 12, color: 'var\(--danger-text\)'/);
     expect(wardrobe).toMatch(/background: 'var\(--accent-subtle\)', borderRadius: 4, fontSize: 9, color: 'var\(--accent-dark\)'/);
     expect(wardrobe).toMatch(/\{owned \? 'Owned' : coinCost > 0 \? `\$\{coinCost\.toLocaleString\(\)\} coins` : 'Free'\}/);
     expect(wardrobe).toMatch(/background: 'var\(--surface-bg\)', border: '1px solid var\(--lala-gold-line\)', borderRadius: 8 \}\}>/);

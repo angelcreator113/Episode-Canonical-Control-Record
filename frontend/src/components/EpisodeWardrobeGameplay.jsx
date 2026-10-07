@@ -55,6 +55,20 @@ const ROLE_STYLES = {
 };
 const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', outerwear: '🧥', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
 
+/** A piece's colour and era, whichever it has ("Gold · Modern"), or ''. */
+export const pieceDetails = (item) => [item?.color, item?.era_alignment].filter(Boolean).join(' · ');
+
+/**
+ * What the look still needs before it can be locked, in plain words:
+ * "a dress (or a top and bottom) and shoes", "shoes", or '' when nothing.
+ */
+export function stillNeeded(slots = {}) {
+  const need = [];
+  if (!slots.body && !(slots.top && slots.bottom)) need.push('a dress (or a top and bottom)');
+  if (!slots.shoes) need.push('shoes');
+  return need.join(' and ');
+}
+
 // How long the draft score waits after the last slot change before asking
 // the server (Task #1943).
 const SCORE_DEBOUNCE_MS = 350;
@@ -807,8 +821,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             </button>
             {!canLock && (
               <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', textAlign: 'center' }}>
-                Need: {!filledSlots.body && !(filledSlots.top && filledSlots.bottom) ? 'body ' : ''}
-                {!filledSlots.shoes ? 'shoes' : ''}
+                Need {stillNeeded(filledSlots)}
               </div>
             )}
             <button onClick={handleLalaSuggests} disabled={suggestingOutfit || pool.length === 0}
@@ -955,7 +968,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       <GarmentImage item={item} fallback={CAT_ICONS[item.clothing_category] || '👕'} height={120} />
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lala-ink)', marginBottom: 1 }}>{item.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
+                    {/* Only what the piece has: no "— · —" (the wardrobe fixes, 2026-10-07). */}
+                    {pieceDetails(item) && <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>{pieceDetails(item)}</div>}
                     {item.outfit_set_id && (
                       <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: 'var(--lala-lavender-text)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</span>
@@ -1045,7 +1059,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               <GarmentImage item={inspecting} fallback={CAT_ICONS[inspecting.clothing_category] || '👕'} size={96} radius={12} />
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800 }}>{inspecting.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{inspecting.clothing_category} · {inspecting.color || '—'} · {inspecting.tier}</div>
+                <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{[inspecting.clothing_category, inspecting.color, inspecting.tier].filter(Boolean).join(' · ')}</div>
               </div>
             </div>
             <div style={{ padding: 12, background: 'var(--lala-parchment-2)', borderRadius: 10, marginBottom: 10 }}>

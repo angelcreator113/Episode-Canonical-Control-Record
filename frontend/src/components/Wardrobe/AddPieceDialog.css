@@ -1,0 +1,156 @@
+/* Producer Mode → Wardrobe → Add piece (Evoni, 2026-10-07), in the
+   Overlays and Scene Sets style: prose title, sans labels, lavender lines.
+   Colours through tokens only (AddPieceDialog.theme.test.js). */
+
+.apd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(44, 44, 44, 0.45);
+}
+
+.apd-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  border-radius: 20px;
+  background: var(--surface-card);
+  box-shadow: 0 16px 40px rgba(44, 44, 44, 0.2);
+  font-family: var(--font-sans);
+  color: var(--lala-ink);
+  overflow: hidden;
+}
+
+.apd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 22px 10px; }
+.apd-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; line-height: 1.25; color: var(--lala-ink); }
+.apd-sub { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--lala-ink-muted); }
+
+.apd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--lala-ink-muted);
+  cursor: pointer;
+}
+.apd-icon:hover:not(:disabled) { border-color: var(--lala-lavender-line); color: var(--lala-lavender-text); }
+
+.apd-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 18px;
+  padding: 8px 22px 16px;
+  overflow-y: auto;
+}
+
+.apd-photo-col { display: flex; flex-direction: column; gap: 10px; }
+.apd-drop {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1.5px dashed var(--lala-lavender-line);
+  border-radius: 16px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+}
+.apd-drop:hover, .apd-drop:focus-visible { border-color: var(--lala-lavender); outline: none; }
+.apd-drop.has-photo { border-style: solid; background: repeating-conic-gradient(var(--lala-parchment-2) 0 25%, var(--surface-card) 0 50%) 0 0 / 14px 14px; }
+.apd-drop img { width: 100%; height: 100%; object-fit: contain; }
+.apd-drop-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; text-align: center; font-size: 12px; }
+.apd-drop-empty strong { font-size: 14px; }
+.apd-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+.apd-fields { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.apd-section { display: flex; flex-direction: column; gap: 10px; }
+.apd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.apd-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.apd-field.is-wide { grid-column: 1 / -1; }
+.apd-label { font-size: 12px; font-weight: 600; color: var(--lala-ink); }
+.apd-hint { font-size: 11px; color: var(--lala-ink-muted); }
+.apd-field input, .apd-field select, .apd-field textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  font: inherit;
+  font-size: 14px;
+  color: var(--lala-ink);
+}
+.apd-field textarea { resize: vertical; }
+.apd-field input:focus, .apd-field select:focus, .apd-field textarea:focus { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+
+.apd-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--lala-ink); cursor: pointer; }
+.apd-check svg { color: var(--accent-dark); }
+
+.apd-more { border: 1px solid var(--lala-lavender-line); border-radius: 14px; padding: 10px 14px; }
+.apd-more[open] { padding-bottom: 14px; }
+.apd-more > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; list-style: none; }
+.apd-more > summary::-webkit-details-marker { display: none; }
+.apd-more > summary::before { content: '›'; display: inline-block; width: 10px; color: var(--lala-lavender-text); transition: transform 0.15s; }
+.apd-more[open] > summary::before { transform: rotate(90deg); }
+.apd-more[open] > summary { margin-bottom: 10px; }
+.apd-more-title { font-family: var(--font-prose); font-size: 16px; font-weight: 600; color: var(--lala-ink); }
+.apd-more-line { font-size: 12px; color: var(--lala-ink-muted); }
+.apd-more .apd-check { margin-top: 10px; }
+
+.apd-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; padding: 12px 22px 16px; border-top: 1px solid var(--lala-lavender-line); }
+.apd-actions { display: flex; gap: 8px; margin-left: auto; }
+.apd-missing { flex: 1 1 200px; margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.apd-error { flex: 1 1 200px; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); font-size: 13px; line-height: 1.45; }
+
+.apd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  background: var(--surface-card);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.apd-btn:hover:not(:disabled) { border-color: var(--lala-lavender); background: var(--lala-lavender-soft); }
+.apd-btn.is-soft { width: 100%; justify-content: center; background: var(--lala-lavender-soft); }
+.apd-btn.is-primary { border-color: var(--lala-lavender); background: var(--lala-lavender); color: var(--text-inverse); }
+.apd-btn.is-primary:hover:not(:disabled) { border-color: var(--lala-lavender-dark); background: var(--lala-lavender-dark); }
+.apd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.apd-link { padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
+.apd-link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 2px; }
+
+.apd-spin { animation: apd-spin 1s linear infinite; }
+@keyframes apd-spin { to { transform: rotate(360deg); } }
+
+/* Phone width: one column, the photo a short band on top. */
+@media (max-width: 640px) {
+  .apd-backdrop { padding: 8px; align-items: stretch; }
+  .apd-dialog { max-height: calc(100vh - 16px); border-radius: 16px; }
+  .apd-head { padding: 14px 16px 8px; }
+  .apd-body { grid-template-columns: minmax(0, 1fr); padding: 6px 16px 14px; }
+  .apd-drop { aspect-ratio: auto; height: 180px; }
+  .apd-grid { grid-template-columns: minmax(0, 1fr); }
+  .apd-foot { padding: 10px 16px 14px; }
+  .apd-actions { width: 100%; }
+  .apd-actions .apd-btn { flex: 1 1 0; justify-content: center; }
+}
