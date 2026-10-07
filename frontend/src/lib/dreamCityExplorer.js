@@ -3,9 +3,9 @@
  * 2026-10-06): pick one of the five DREAM cities and see its places,
  * schools and companies. Pure: DreamCityExplorer renders.
  *
- * A location names its city in free text (world_locations.city), so a
- * venue belongs to a city when its city reads as the city's name or key
- * ("Dazzle District", "dazzle district", "dazzle_district"). Universities
+ * A location names its city in world_locations.city, so a venue belongs
+ * to a city when its city (or, for a room, its parent's) reads as the
+ * city's name or key ("Dazzle District", "dazzle district", "dazzle_district"). Universities
  * carry a city; corporations and legends carry none in the data, so the
  * explorer says they are not placed rather than guessing.
  */
@@ -30,12 +30,28 @@ export function venueLine(loc) {
 }
 
 /**
+ * A location's city: its own, else its parent's, up the chain (a room is
+ * in its property's city; wiring map, fix-list item 18).
+ */
+export function placeCity(loc, byId) {
+  const seen = new Set();
+  let cur = loc;
+  while (cur && !seen.has(cur.id)) {
+    if (cur.city) return cur.city;
+    seen.add(cur.id);
+    cur = cur.parent_location_id ? byId.get(String(cur.parent_location_id)) : null;
+  }
+  return null;
+}
+
+/**
  * The city's places: every location in it except the city row itself,
  * venues first, then by how many events use them.
  */
 export function cityPlaces(locations, city) {
+  const byId = new Map((locations || []).filter(Boolean).map((l) => [String(l.id), l]));
   return (locations || [])
-    .filter((l) => l && l.location_type !== 'city' && inCity(l.city, city))
+    .filter((l) => l && l.location_type !== 'city' && inCity(placeCity(l, byId), city))
     .sort((a, b) => Number(b.location_type === 'venue') - Number(a.location_type === 'venue')
       || (b.events?.length || 0) - (a.events?.length || 0)
       || String(a.name).localeCompare(String(b.name)))
