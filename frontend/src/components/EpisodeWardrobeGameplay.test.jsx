@@ -903,3 +903,62 @@ describe('EpisodeWardrobeGameplay — the wardrobe fixes', () => {
     expect(stillNeeded({ body: {}, shoes: {} })).toBe('');
   });
 });
+
+// Evoni, 2026-10-07: "connect wardrobe to the event".
+describe('EpisodeWardrobeGameplay — the event\'s look', () => {
+  const GOWN = { ...base, id: 'ev-gown', name: 'Event Gown', clothing_category: 'dress', is_owned: true, s3_url: RAW };
+  const HEELS = { ...base, id: 'ev-heels', name: 'Event Heels', clothing_category: 'shoes', is_owned: false, lock_type: 'coin', coin_cost: 120, can_select: true };
+  const EVENT = {
+    id: 'ev-1', show_id: 'show-1', name: 'Garden Gala', event_type: 'gala', prestige: 6, strictness: 5,
+    outfit_pieces: [
+      { id: 'ev-gown', name: 'Event Gown', category: 'dress', is_owned: true, coin_cost: 0, image_url: RAW },
+      { id: 'ev-heels', name: 'Event Heels', category: 'shoes', is_owned: false, coin_cost: 120 },
+      { id: 'gone', name: 'Old Clutch', category: 'bag', is_owned: true },
+    ],
+  };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => {
+      if (url.startsWith('/api/v1/wardrobe?show_id=')) return Promise.resolve({ data: { data: [GOWN, HEELS] } });
+      if (url.endsWith('/todo')) {
+        return Promise.resolve({ data: { data: { tasks: [
+          { slot: 'dress', label: 'A dress that moves', required: true, from_event_document: { type: 'shopping_list', version: 2 } },
+        ] } } });
+      }
+      return poolGet(url);
+    });
+  });
+
+  test("shows the event's pieces, starts from them, and says when the look matches", async () => {
+    await renderGame({ event: EVENT });
+    const card = screen.getByTestId('event-look');
+    expect(within(card).getByText('Event Gown')).toBeTruthy();
+    expect(within(card).getByText('🪙 120')).toBeTruthy();
+    expect(screen.getByTestId('event-look-state').textContent).toBe("The look here differs from the event's: 3 of its 3 pieces not worn.");
+    expect(screen.getByTestId('event-look-link').getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+
+    fireEvent.click(screen.getByTestId('event-look-start'));
+    await waitFor(() => expect(screen.getByTestId('slot-cost-ev-gown').textContent).toBe('owned'));
+    expect(screen.getByTestId('slot-cost-ev-heels').textContent).toBe('to buy · 🪙 120');
+    // The clutch is no longer in the closet: named, and the look still differs by it.
+    expect(await screen.findByText(/Wearing the event's look · not in the closet: Old Clutch/)).toBeTruthy();
+    expect(screen.getByTestId('event-look-state').textContent).toBe("The look here differs from the event's: 1 of its 3 pieces not worn.");
+  });
+
+  test('the list is named for where it comes from: the approved shopping list', async () => {
+    await renderGame({ event: EVENT });
+    expect((await screen.findByTestId('look-list-title')).textContent).toBe('Shopping list — 0/1');
+    expect(screen.getByTestId('look-list-source').textContent).toContain("From the event's approved shopping list.");
+  });
+
+  test('an event with no look says so and links to the Event Package', async () => {
+    await renderGame({ event: { ...EVENT, outfit_pieces: [] } });
+    expect(screen.getByTestId('event-look-state').textContent).toBe('The event has no look yet. Pick one in the Event Package, or style one here.');
+    expect(screen.queryByTestId('event-look-start')).toBeNull();
+    expect(screen.getByTestId('event-look-link').textContent).toBe('Open the Event Package');
+  });
+});

@@ -34,6 +34,7 @@ import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
+import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import '../styles/wardrobe-backdrop.css';
 
 // ─── CONSTANTS ───
@@ -527,6 +528,47 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
   };
 
+  // The event's look (Evoni, 2026-10-07: "connect wardrobe to the event"):
+  // the Event Package's pieces, started from here. The closet's own rows
+  // are worn (their lock and price as the closet has them), replacing the
+  // look on screen; a piece no longer in the closet is named.
+  const eventPieces = useMemo(() => eventLookPieces(event), [event]);
+  const againstEvent = useMemo(() => lookAgainstEvent(filledSlots, eventPieces), [filledSlots, eventPieces]);
+  const packagePath = eventPackagePath(showId, event);
+  const [startingFromEvent, setStartingFromEvent] = useState(false);
+  const wearEventLook = async () => {
+    setStartingFromEvent(true);
+    setError(null);
+    try {
+      const closet = closetItems.length > 0 ? closetItems : await loadCloset();
+      if (!closet) { setError("Could not load the closet to wear the event's look"); return; }
+      const byId = new Map(closet.map(i => [String(i.id), withReach(i, { coins, reputation })]));
+      const rows = eventPieces.map(p => byId.get(String(p.id))).filter(Boolean);
+      const gone = eventPieces.filter(p => !byId.has(String(p.id)));
+      const { cost } = setCost(rows);
+      if (cost > coins) {
+        setError(`The event's look costs 🪙 ${cost.toLocaleString()} for the pieces Lala doesn't own; she has ${Number(coins).toLocaleString()}`);
+        return;
+      }
+      const locked = rows.filter(p => !p.can_select);
+      const noSlot = rows.filter(p => p.can_select && !gameSlotFor(p.clothing_category));
+      const order = ['body', 'top', 'bottom'];
+      const wearable = rows.filter(p => p.can_select && gameSlotFor(p.clothing_category)).sort((a, b) => {
+        const ia = order.indexOf(gameSlotFor(a.clothing_category));
+        const ib = order.indexOf(gameSlotFor(b.clothing_category));
+        return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib);
+      });
+      setFilledSlots(wearable.reduce((acc, piece) => equipInto(acc, piece), {}));
+      const notes = [];
+      if (gone.length) notes.push(`not in the closet: ${gone.map(p => p.name || 'a piece').join(', ')}`);
+      if (locked.length) notes.push(`not for sale: ${locked.map(p => p.name).join(', ')}`);
+      if (noSlot.length) notes.push(`no game slot: ${noSlot.map(p => p.name).join(', ')}`);
+      setSuccess([`Wearing the event's look`, ...notes].join(' · '));
+    } finally {
+      setStartingFromEvent(false);
+    }
+  };
+
   // Wear a piece's whole matching set from For This Event (Evoni, 2026-10-05:
   // the set's name showed on the card but only Full Closet could wear it).
   // The set's pieces are the closet's, loaded first when it is not yet.
@@ -668,14 +710,68 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         <div style={W.dressCode} data-testid="look-dress-code"><strong>Dress code:</strong> {event.dress_code}</div>
       )}
 
+      {/* ═══ THE EVENT'S LOOK (Evoni, 2026-10-07: "connect wardrobe to the
+          event"): the look the Event Package picked, whether the look here
+          still matches it, and Start from the event's look. ═══ */}
+      <section style={W.eventLook} data-testid="event-look" aria-label="The event's look">
+        <div style={W.eventLookHead}>
+          <div style={{ minWidth: 0 }}>
+            <h4 style={W.eventLookTitle}>The event&apos;s look</h4>
+            <p style={W.eventLookSub} data-testid="event-look-state">
+              {againstEvent.state === 'none' && 'The event has no look yet. Pick one in the Event Package, or style one here.'}
+              {againstEvent.state === 'same' && 'The look here is the event\'s look.'}
+              {againstEvent.state === 'differs' && (againstEvent.notWorn.length
+                ? `The look here differs from the event's: ${againstEvent.notWorn.length} of its ${eventPieces.length} pieces not worn.`
+                : "The look here differs from the event's: it adds other pieces.")}
+            </p>
+          </div>
+          <div style={W.eventLookActions}>
+            {eventPieces.length > 0 && !outfitLocked && againstEvent.state !== 'same' && (
+              <button type="button" style={W.eventLookBtn} onClick={wearEventLook} disabled={startingFromEvent} data-testid="event-look-start">
+                {startingFromEvent ? 'Starting…' : "Start from the event's look"}
+              </button>
+            )}
+            {packagePath && (
+              <a href={packagePath} style={W.linkBtn} data-testid="event-look-link">
+                {eventPieces.length ? 'Change it in the Event Package' : 'Open the Event Package'}
+              </a>
+            )}
+          </div>
+        </div>
+        {eventPieces.length > 0 && (
+          <ul style={W.eventLookList}>
+            {eventPieces.map(p => (
+              <li key={p.id} style={W.eventLookPiece} data-testid={`event-look-piece-${p.id}`}>
+                <span style={W.eventLookThumb}>
+                  {p.image_url ? <img src={p.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (CAT_ICONS[p.category] || '👕')}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={W.eventLookName}>{p.name || 'A piece'}</span>
+                  <span style={W.eventLookMeta}>{p.is_owned ? 'owned' : `🪙 ${Number(p.coin_cost || 0).toLocaleString()}`}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {/* ═══ TODO CHECKLIST (collapsible) ═══ */}
       {todoCompletion && (
         <details open style={{ marginBottom: 12, background: todoCompletion.allDone ? 'var(--success-bg)' : 'var(--lala-parchment)', border: `1px solid ${todoCompletion.allDone ? 'var(--success-border)' : 'var(--lala-gold)'}`, borderRadius: 10, overflow: 'hidden' }}>
           <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--lala-ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>📋 Getting Ready — {todoCompletion.done}/{todoCompletion.total}</span>
+            {/* The episode's wardrobe list, named for where it comes from (2026-10-07). */}
+            <span data-testid="look-list-title">
+              {shoppingListSource(todoList?.tasks).fromDocument ? 'Shopping list' : 'Getting ready'} — {todoCompletion.done}/{todoCompletion.total}
+            </span>
             {todoCompletion.allDone && <span style={{ color: 'var(--success-text)', fontSize: 11 }}>✓ Ready!</span>}
           </summary>
           <div style={{ padding: '0 16px 10px' }}>
+            <p style={W.listSource} data-testid="look-list-source">
+              {shoppingListSource(todoList?.tasks).fromDocument
+                ? "From the event's approved shopping list."
+                : "The standard list. An approved shopping list from the Event Package is used when an episode starts."}
+              {packagePath && <> <a href={packagePath} style={W.inlineLink}>Open the Event Package</a></>}
+            </p>
             {todoCompletion.tasks.map(t => (
               <div key={t.slot} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: t.completed ? 0.6 : 1 }}>
                 <div style={{ width: 16, height: 16, borderRadius: 3, border: t.completed ? 'none' : '1.5px solid var(--lala-gold)', background: t.completed ? 'var(--success)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1113,6 +1209,19 @@ const W = {
   lookChip: { padding: '2px 10px', borderRadius: 999, background: 'var(--warning-bg)', color: 'var(--warning-text)', fontSize: 12, fontWeight: 600 },
   linkBtn: { marginTop: 4, padding: 0, border: 'none', background: 'none', color: 'var(--lala-lavender-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   dressCode: { padding: '12px 16px', marginBottom: 12, borderRadius: 12, background: 'var(--accent-subtle)', color: 'var(--lala-ink)', fontSize: 14, lineHeight: 1.5 },
+  eventLook: { marginBottom: 12, padding: '14px 16px', borderRadius: 14, border: '1px solid var(--lala-lavender-line)', background: 'var(--surface-card)' },
+  eventLookHead: { display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px 16px' },
+  eventLookTitle: { margin: 0, fontFamily: 'var(--font-prose)', fontSize: 17, fontWeight: 600, color: 'var(--lala-ink)' },
+  eventLookSub: { margin: '4px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--lala-ink-muted)' },
+  eventLookActions: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
+  eventLookBtn: { padding: '6px 14px', borderRadius: 999, border: '1px solid var(--lala-lavender)', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+  eventLookList: { display: 'flex', flexWrap: 'wrap', gap: 10, margin: '12px 0 0', padding: 0, listStyle: 'none' },
+  eventLookPiece: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%', padding: '6px 10px 6px 6px', borderRadius: 12, background: 'var(--lala-lavender-soft)' },
+  eventLookThumb: { display: 'grid', placeItems: 'center', flex: 'none', width: 40, height: 40, overflow: 'hidden', borderRadius: 8, background: 'var(--surface-card)', fontSize: 18 },
+  eventLookName: { display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--lala-ink)', overflowWrap: 'anywhere' },
+  eventLookMeta: { display: 'block', fontSize: 11, color: 'var(--lala-lavender-text)' },
+  listSource: { margin: '0 0 6px', fontSize: 12, lineHeight: 1.45, color: 'var(--lala-ink-muted)' },
+  inlineLink: { fontWeight: 600, color: 'var(--lala-lavender-text)' },
   eventLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: 'var(--accent-dark)', marginBottom: 2 },
   eventName: { fontSize: 13, color: 'var(--lala-ink-muted)' },
   eventTags: { display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 },
