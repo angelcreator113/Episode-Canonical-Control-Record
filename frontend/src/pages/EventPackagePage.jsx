@@ -1772,9 +1772,22 @@ export default function EventPackagePage() {
                 <>
                   <span className="epp-col-title">Her outfit</span>
                   <ul className="epp-outfit-pieces">
+                    {/* Each piece as its picture (Evoni, 2026-10-07: "show the
+                        images instead of just the name"); a shirt stands in
+                        when there is none or it fails to load. */}
                     {outfitPieces.map((piece, i) => (
-                      <li key={piece.id || i} className="epp-outfit-piece">
-                        {piece.name || 'Unnamed piece'}
+                      <li key={piece.id || i} className="epp-outfit-piece" data-testid={`look-piece-${piece.id || i}`}>
+                        <span className="epp-outfit-piece-img">
+                          <Shirt size={22} aria-hidden="true" />
+                          {piece.image_url && (
+                            <img
+                              src={piece.image_url} alt={piece.name || 'Outfit piece'} loading="lazy"
+                              data-testid={`look-piece-img-${piece.id || i}`}
+                              onError={(e) => { e.currentTarget.hidden = true; }}
+                            />
+                          )}
+                        </span>
+                        <span className="epp-outfit-piece-name">{piece.name || 'Unnamed piece'}</span>
                         {episodeLook && (
                           <span className="epp-outfit-piece-cost" data-testid={`look-piece-cost-${piece.id || i}`}>
                             {piece.is_owned ? 'owned' : piece.coin_cost != null ? `to buy · ${Number(piece.coin_cost).toLocaleString()} coins` : 'to buy'}
