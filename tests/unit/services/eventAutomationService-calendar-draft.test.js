@@ -126,6 +126,20 @@ describe('the draft call', () => {
   });
 });
 
+// Wiring map fix-list item 12 (2026-10-07): the venue's World Location on the
+// event's own column, not only in the automation copy.
+describe('the venue is on the event itself', () => {
+  test('venue_location_id is written top-level as well as in automation', async () => {
+    mockDraft.mockResolvedValue(null);
+    const { m, create } = models();
+    await spawnEventsFromCalendar(cal(), 'show-1', m);
+    const d = create.mock.calls[0][0];
+    expect(d.venue_location_id).toBe('loc-1');
+    expect(d.venue_name).toBe('Club Noir');
+    expect(d.canon_consequences.automation.venue_location_id).toBe('loc-1');
+  });
+});
+
 describe('a null draft leaves the event exactly as before', () => {
   test('template name and description, no time, category, format or keywords, no draft keys', async () => {
     mockDraft.mockResolvedValue(null);
