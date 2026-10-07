@@ -1425,13 +1425,15 @@ module.exports = {
         });
       }
 
-      // Resolve showId: explicit in body wins, else fall back to the wardrobe
-      // row's own show_id, else null (global scope).
+      // Resolve showId: explicit in body wins, else the wardrobe row's own
+      // show_id. A phone belongs to a show: GET /ui-overlays/:showId lists
+      // only a show's screens, so a screen with no show could never appear.
       const showId = bodyShowId || item.show_id || null;
-
-      const { Asset } = models;
-      if (!Asset) {
-        return res.status(500).json({ error: 'Asset model not available' });
+      if (!showId) {
+        return res.status(400).json({
+          error: 'Choose a show',
+          message: "This piece isn't in a show yet, so there is no phone to send it to.",
+        });
       }
 
       // Pre-wire a default "Equip" tap zone that fills the outfit slot matching
@@ -1480,22 +1482,50 @@ module.exports = {
         });
       }
 
-      // Create the phone screen. UIOverlaysTab picks it up through the
-      // existing GET /api/v1/ui-overlays/:showId listing (filters by
-      // asset_type='UI_OVERLAY' + show_id + episode_id).
+      // Create the phone screen. GET /ui-overlays/:showId lists a show's
+      // screens from its ui_overlay_types rows, so the screen needs one: it
+      // used to be saved with overlay_type 'wardrobe_detail' and no type row,
+      // so Lala's Phone never showed it (Evoni, 2026-10-07). One screen per
+      // piece and backdrop; sending it again replaces the image and keeps the
+      // zones drawn on it.
       const assetName = `${item.name || 'Wardrobe Item'} — ${variant} detail`;
-      const asset = await Asset.create({
-        asset_type: 'UI_OVERLAY',
-        asset_group: 'WARDROBE',
-        asset_scope: episodeId ? 'EPISODE' : (showId ? 'SHOW' : 'GLOBAL'),
-        show_id: showId,
-        episode_id: episodeId || null,
-        name: assetName,
-        s3_url_processed: backdropUrl,
-        s3_key_raw: backdropKey,
-        content_type: 'image/jpeg',
-        metadata: {
-          overlay_type: 'wardrobe_detail',
+      const typeKey = `wardrobe_${String(item.id).replace(/-/g, '').slice(0, 12)}_${variant}`;
+      const { carriedFrom } = require('../services/uiOverlayAssetReplace');
+      const asset = await sequelize.transaction(async (transaction) => {
+        const [types] = await sequelize.query(
+          `SELECT id FROM ui_overlay_types WHERE show_id = :showId AND type_key = :typeKey AND deleted_at IS NULL LIMIT 1`,
+          { replacements: { showId, typeKey }, transaction });
+        if (!types.length) {
+          await sequelize.query(
+            `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, created_at, updated_at)
+             VALUES (:id, :showId, :typeKey, :name, 'phone', 'Various', :description, :prompt, 100, NOW(), NOW())`,
+            { replacements: {
+              id: uuidv4(), showId, typeKey, name: assetName,
+              description: `Wardrobe: ${item.name || 'a piece'}`,
+              prompt: `Phone screen for "${assetName}".`,
+            }, transaction });
+        }
+        const live = `asset_type = 'UI_OVERLAY' AND show_id = :showId AND metadata->>'overlay_type' = :typeKey
+                      AND deleted_at IS NULL AND ${episodeId ? 'episode_id = :episodeId' : 'episode_id IS NULL'}`;
+        const replacements = { showId, typeKey, episodeId: episodeId || null };
+        const [previous] = await sequelize.query(`SELECT metadata FROM assets WHERE ${live} ORDER BY created_at DESC LIMIT 1`, { replacements, transaction });
+        await sequelize.query(`UPDATE assets SET deleted_at = NOW() WHERE ${live}`, { replacements, transaction });
+        const carried = previous[0] ? carriedFrom(previous[0].metadata) : {};
+        // A plain INSERT of columns every database has: Asset.create also
+        // writes model columns no migration creates (processing_metadata),
+        // which fails on a database built from src/migrations.
+        const assetId = uuidv4();
+        await sequelize.query(
+          `INSERT INTO assets (id, name, asset_type, asset_group, asset_scope, show_id, episode_id, s3_url_raw, s3_url_processed,
+                               s3_key_raw, content_type, metadata, created_at, updated_at)
+           VALUES (:id, :name, 'UI_OVERLAY', 'WARDROBE', :scope, :showId, :episodeId, :url, :url, :key, 'image/jpeg', CAST(:metadata AS jsonb), NOW(), NOW())`,
+          { replacements: {
+            id: assetId, name: assetName, scope: episodeId ? 'EPISODE' : 'SHOW', showId, episodeId: episodeId || null,
+            url: backdropUrl, key: backdropKey || null,
+            metadata: JSON.stringify({
+          overlay_type: typeKey,
+          overlay_category: 'phone',
+          source_kind: 'wardrobe_detail',
           wardrobe_id: item.id,
           wardrobe_variant: variant,
           // Pre-wired: the Equip zone fills the correct outfit slot on tap, and
@@ -1507,7 +1537,10 @@ module.exports = {
           // when the screen's content_zones include a price zone.
           wardrobe_price: item.price ? Number(item.price) : null,
           wardrobe_brand: item.brand || null,
-        },
+          ...carried,
+}),
+          }, transaction });
+        return { id: assetId };
       });
 
       console.log(`[Wardrobe] Sent to phone — item=${id} variant=${variant} asset=${asset.id}`);
@@ -1516,6 +1549,7 @@ module.exports = {
         success: true,
         data: {
           asset_id: asset.id,
+          type_key: typeKey,
           wardrobe_id: item.id,
           variant,
           show_id: showId,
