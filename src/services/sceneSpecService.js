@@ -2,7 +2,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 
-const SPEC_VERSION = '2.0';
+const SPEC_VERSION = '2.1'; // 2.1 (2026-10-07): view + frame; angles fit the picture
 
 /**
  * Build a SceneSpec from a base image using Claude Vision.
@@ -167,6 +167,29 @@ async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
 }
 
 /**
+ * The part of the base picture a camera contract covers ("frame", 0-1
+ * fractions of the image), or null: no contract for this label, no frame,
+ * or a frame that is not a usable box (outside the picture, or under a
+ * tenth of it either way). Evoni, 2026-10-07: angles crop the set's own
+ * picture where the spec says the shot is, never a fixed bedroom box.
+ */
+function contractFrame(spec, angleLabel) {
+  const label = String(angleLabel || '').toUpperCase();
+  const contracts = Array.isArray(spec?.camera_contracts) ? spec.camera_contracts : [];
+  const norm = (a) => String(a || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const contract = contracts.find((c) => norm(c.angle) === label)
+    || contracts.find((c) => c.angle && label.includes(norm(c.angle)));
+  const f = contract?.frame;
+  if (!f || typeof f !== 'object') return null;
+  const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v));
+  const left = n(f.left); const top = n(f.top); const width = n(f.width); const height = n(f.height);
+  if (![left, top, width, height].every(Number.isFinite)) return null;
+  if (left < 0 || top < 0 || width < 0.1 || height < 0.1) return null;
+  if (left + width > 1.001 || top + height > 1.001) return null;
+  return { left, top, width: Math.min(width, 1 - left), height: Math.min(height, 1 - top) };
+}
+
+/**
  * Build the Claude Vision prompt for scene spec extraction.
  */
 function buildSpecPrompt(sceneSet) {
@@ -189,7 +212,9 @@ function buildSpecPrompt(sceneSet) {
     stateRule = 'Create 1-2 room states.';
     scaleNote = 'This is a TRANSITION space — hallway, elevator, car, street. Keep it focused.';
   } else if (isHome) {
-    angleRule = 'Create 4-8 camera angles covering different parts of the room.';
+    // Evoni, 2026-10-07: "still trying to do 8 of the wrong angle". A home
+    // base can be the outside of the house; plan only what this picture holds.
+    angleRule = 'Create 2-8 camera angles, only as many as this picture supports. For an INTERIOR, cover different parts of the room that are visible. For an EXTERIOR (the outside of the house: facade, entrance, driveway, garden, pool), every angle must be of the outside (e.g. ESTABLISHING, ENTRANCE, GARDEN, DETAIL of the facade); never plan a bed, vanity, closet or other interior angle the picture does not show.';
     stateRule = 'Create at least 3 room states (morning, evening, night minimum).';
     scaleNote = 'This is a RECURRING location — Lala lives here. Every detail matters for continuity across episodes.';
   } else {
@@ -206,9 +231,11 @@ ${nameHint} ${typeHint}
 ${descHint}
 ${scaleNote}
 
-Analyze this image and return a complete JSON SceneSpec:
+Analyze this image and return a complete JSON SceneSpec.
+FIRST decide what the picture shows: an interior (inside a room), an exterior (the outside of a building, a street, a garden) or both. Set "view" to "interior", "exterior" or "mixed", and plan every camera angle from what is actually in THIS picture. For an exterior, "room" describes the place as a whole and "walls" describe the visible sides or facades.
 
 {
+  "view": "interior | exterior | mixed",
   "room": {
     "label": "descriptive name for this room",
     "narrative_role": "what this room says about who lives here — one sentence",
@@ -263,9 +290,10 @@ Analyze this image and return a complete JSON SceneSpec:
 
   "camera_contracts": [
     {
-      "angle": "WIDE | CLOSE | VANITY | WINDOW | DOORWAY | OVERHEAD | DETAIL | or custom",
+      "angle": "WIDE | ESTABLISHING | ENTRANCE | GARDEN | CLOSE | DETAIL | DOORWAY | WINDOW | VANITY | OVERHEAD | or custom (only what this picture holds)",
       "kind": "front | inside | back | area | zone | extra",
       "description": "what this shot shows and why",
+      "frame": { "left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0 },
       "required": ["obj-id-1", "obj-id-2"],
       "expected": ["obj-id-3"],
       "out_of_frame": ["obj-id-4"],
@@ -295,6 +323,7 @@ RULES:
 8. List EVERY visible object — furniture, decor, lighting, architecture. Don't skip small items.
 9. If there is text/signage visible, the exact text is CRITICAL for continuity.
 10. This should be luxury-scale. Describe materials at their highest plausible tier.
+11. "frame" is the part of THIS picture the shot covers, as fractions of the image (left, top, width, height between 0 and 1). Give it only when the shot is a part of what this picture shows (a close-up of the vanity on the right, a detail of the door); set "frame": null when the shot looks somewhere the picture does not show (behind the camera, another side, a different height).
 
 Return ONLY the JSON. No markdown, no commentary.`;
 }
@@ -547,6 +576,8 @@ function mergeSpecEdits(existingSpec, edits) {
 
 module.exports = {
   buildSceneSpec,
+  buildSpecPrompt,
+  contractFrame,
   validateSpecCandidate,
   buildAngleConstraints,
   buildStateAmbient,

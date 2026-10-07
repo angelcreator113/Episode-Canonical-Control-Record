@@ -1531,8 +1531,11 @@ const CAMERA_CROP_MAP = {
  * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
  * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
-async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged } = {}) {
-  const config = CAMERA_CROP_MAP[angleLabel];
+async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged, frame = null } = {}) {
+  // A frame from the set's own spec is a pure crop of that part of its
+  // picture; without one, the fixed map (direct callers only: generateAngle
+  // crops only with a frame, Evoni 2026-10-07).
+  const config = frame ? { crop: frame, extend: 'none', extendAmount: 0 } : CAMERA_CROP_MAP[angleLabel];
   if (!config || !baseImageUrl) return null;
 
   try {
@@ -1854,13 +1857,18 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // Every billed image call below reports its logged cost here (Task #2396).
     const angleCosts = createCostCollector(`angle ${sceneAngle.id} (${angleLabel})`);
 
-    // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
-    // For angles where we can crop from the base image, this gives the best
-    // consistency because original pixels are kept untouched.
-    if (referenceImageForEdit && CAMERA_CROP_MAP[angleLabel] !== undefined) {
+    // ── STEP 1: Crop the set's own picture where its spec says the shot is ──
+    // Pixel-preserving when the shot is part of the picture. Evoni,
+    // 2026-10-07 ("still trying to do 8 of the wrong angle"): the fixed crop
+    // boxes were drawn for one bedroom (VANITY = the right side, WINDOW = the
+    // left) and cut the same region from every set's picture, a house's
+    // outside included. Now only a frame from this set's spec is cropped;
+    // without one the angle is generated.
+    const frame = sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
+    if (referenceImageForEdit && frame) {
       stillUrl = await cropAndOutpaint(
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
-        { onLogged: angleCosts.onLogged },
+        { onLogged: angleCosts.onLogged, frame },
       );
       if (stillUrl) {
         usedCropOutpaint = true;
