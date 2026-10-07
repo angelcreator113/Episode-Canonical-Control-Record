@@ -150,7 +150,8 @@ describe('UIOverlaysTab — "Set as Home Screen" hint (Task #2016)', () => {
   async function openEditor(name) {
     fireEvent.click(within(cardOf(name)).getByRole('button', { name: 'Screen options' }));
     fireEvent.click(within(cardOf(name)).getByText('Edit'));
-    return screen.findByText(/Set as Home Screen|★ Home Screen/);
+    // The Home screen switch (Evoni's mock, 2026-10-07; it was a "Set as Home Screen" button).
+    return screen.findByRole('switch', { name: /Home screen/ });
   }
 
   test('with no home marked, it names the screen the phone opens on', async () => {

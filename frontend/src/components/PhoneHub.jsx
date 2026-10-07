@@ -251,6 +251,11 @@ export default function PhoneHub({
   // Optional node under the phone (Evoni's mock, 2026-10-07): the page's
   // caption for the shown screen with Edit screen and Play through.
   deviceFooter = null,
+  // A slot beside the grid for the screen being edited (Evoni's mock,
+  // 2026-10-07): the page portals its panel into detailRef. While it is
+  // open the phone steps aside.
+  detailOpen = false,
+  detailRef = null,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -393,8 +398,10 @@ export default function PhoneHub({
   }, [highlightIconKey, deviceScreen, firstScreen, persistentLinks, iconTypes]);
 
   return (
-    <div className="phone-hub-inner">
-      {/* Phone Device */}
+    <div className={`phone-hub-inner${detailOpen ? ' has-detail' : ''}`}>
+      {/* Phone Device — while a screen's panel is open the grid and the panel
+          share the row instead (Evoni's mock, 2026-10-07). */}
+      {!detailOpen && (
       <div className="phone-hub-device">
       {devicePane || (<>
       <PhoneDevice
@@ -479,6 +486,7 @@ export default function PhoneHub({
       )}
       </>)}
       </div>
+      )}
 
       {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
           page stays focused on one surface instead of two stacked grids. */}
@@ -573,10 +581,14 @@ export default function PhoneHub({
         )}
       </div>
 
+      {detailOpen && <aside className="phone-hub-detail" aria-label="Screen details" ref={detailRef} />}
+
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
+        .phone-hub-detail { flex: 0 0 380px; min-width: 0; position: sticky; top: 20px; align-self: flex-start; max-height: calc(100vh - 40px); overflow-y: auto; }
+        .phone-hub-inner.has-detail .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 
         .phone-hub-screen-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;
@@ -694,6 +706,8 @@ export default function PhoneHub({
         }
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
+          .phone-hub-inner.has-detail { flex-direction: column-reverse; }
+          .phone-hub-detail { flex: none; position: static; max-height: none; overflow: visible; }
           .phone-hub-device { align-items: center; position: static; }
           .phone-hub-frame { width: 220px; }
           .phone-hub-screen-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }

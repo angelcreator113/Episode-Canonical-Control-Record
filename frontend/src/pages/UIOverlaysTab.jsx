@@ -7,11 +7,12 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
+import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
-import { phoneHubTiles, screenCaption } from '../lib/phoneHubSummary';
+import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById } from '../lib/phoneHubSummary';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 import MissionEditor from '../components/phone-editor/MissionEditor';
@@ -222,6 +223,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try { localStorage.setItem('screenLinkEditor.iconGridSnap', tapIconGridSnap ? '1' : '0'); } catch (err) { console.warn('[UIOverlaysTab] localStorage unavailable:', err.message); }
   }, [tapIconGridSnap]);
   const [iconSidePanel, setIconSidePanel] = useState(null);
+  // The Build stage's slot for the screen panel (PhoneHub's aside).
+  const [detailHost, setDetailHost] = useState(null);
   // Which zone row has its advanced panel (conditions + actions) open.
   // Kept separate from selection so picking a target doesn't auto-open a
   // big drawer.
@@ -329,6 +332,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // showing whatever the creator was previewing — closing the editor and
   // having the phone snap back to Home was disorienting and made it hard to
   // browse screens without committing to editing each one.
+  // The panel lives beside the Build grid; another stage closes it.
+  useEffect(() => {
+    if (panelOpen && !['screens', 'icons', 'placements'].includes(activeTab)) setPanelOpen(false);
+  }, [panelOpen, activeTab]);
+
   const closePanel = useCallback(() => {
     setPanelOpen(false);
     setActiveTab('screens');
@@ -1331,6 +1339,20 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   const generatedCount = overlays.filter(o => o.generated).length;
   const headerTiles = phoneHubTiles(overlays, screenDiagnostics);
+  // The screen panel's status: the cards' Ready rule and their lines in one
+  // ("5 icons · 5/5 linked"), for a screen; icons have none.
+  const panelStatus = (() => {
+    if (!activeScreen || !isScreen(activeScreen) || activeScreen.placeholder) return null;
+    const home = homeScreenOf(overlays);
+    const st = screenCardStatus({
+      hasImage: !!(activeScreen.generated && activeScreen.url),
+      diagnostics: screenDiagnostics.get(activeScreen.id),
+      isHome: activeScreen.id === home?.id,
+      incoming: incomingById(overlays.filter(o => isScreen(o))).get(activeScreen.id) || 0,
+    });
+    const line = st.lines.filter(l => l.key !== 'image' || l.warn).map(l => l.text.replace(/^✓ /, '')).join(' · ');
+    return { ready: st.ready, line };
+  })();
 
   // Step-header derived counts. "Screens" excludes phone icons — icons are
   // app tiles that live on a screen, not standalone workspaces.
@@ -1645,6 +1667,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 activeTab={previewing ? 'screens' : activeTab}
                 onChangeTab={setActiveTab}
                 suppressSectionTabs
+                detailOpen={!!(panelOpen && activeScreen && ['screens', 'icons', 'placements'].includes(activeTab))}
+                detailRef={setDetailHost}
                 deviceFooter={!previewing && activeScreen && isScreen(activeScreen) ? (
                   <div className="ph-device-caption" data-testid="phone-device-caption">
                     <div className="ph-device-name">{activeScreen.name}</div>
@@ -2298,10 +2322,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
 
       {/* ── Floating Editor Modal ── */}
-      {activeScreen && panelOpen && (
-        <>
-          <div className="editor-modal-scrim" onClick={closePanel} />
-          <div className="editor-modal">
+      {/* The screen's panel, docked beside the grid in Build (Evoni's mock,
+          2026-10-07; it was a centred modal over a scrim). PhoneHub holds
+          the slot; the panel is portalled into it. */}
+      {activeScreen && panelOpen && (() => { const panel = (
+          <div className={`editor-modal${detailHost ? ' editor-panel' : ''}`}>
             {/* ── Header ── */}
             <div className="editor-modal-header">
               <div className="editor-modal-header-left">
@@ -2337,15 +2362,23 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         title="Click to rename"
                       >{activeScreen.name}</div>
                     )}
+                  </div>
+                  {/* Kind, home and status, as on the screen cards (Evoni's mock, 2026-10-07) */}
+                  <div className="editor-panel-chips">
                     <span className={`editor-modal-badge ${(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'badge-icon' : 'badge-screen'}`}>
-                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
+                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'Icon' : 'Screen'}
                     </span>
+                    {isScreen(activeScreen) && activeScreen.is_home && <span className="editor-panel-home">★ Home screen</span>}
                   </div>
-                  <div className="editor-modal-meta">
-                    {activeScreen.beat && <span>{activeScreen.beat}</span>}
-                    {activeScreen.beat && activeScreen.description && <span className="meta-dot" />}
-                    {activeScreen.description && <span>{activeScreen.description.slice(0, 80)}</span>}
-                  </div>
+                  {panelStatus && (
+                    <div className="editor-panel-status" data-testid="editor-panel-status">
+                      <span className={`editor-panel-status__word${panelStatus.ready ? ' is-ready' : ''}`}>{panelStatus.ready ? 'Ready' : 'Needs setup'}</span>
+                      {panelStatus.line && <span className="editor-panel-status__line">{panelStatus.line}</span>}
+                    </div>
+                  )}
+                  {activeScreen.description && (
+                    <div className="editor-modal-meta"><span>{activeScreen.description.slice(0, 80)}</span></div>
+                  )}
                 </div>
               </div>
               <div className="editor-modal-header-actions">
@@ -2363,7 +2396,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               {[
                 { key: 'actions', label: 'Actions' },
                 ...(activeScreen?.url && !activeScreen.placeholder ? [
-                  { key: 'fit', label: 'Image Fit' },
+                  { key: 'fit', label: 'Image fit' },
                 ] : []),
                 // Placements tab — icons only. Shows every screen the icon
                 // is placed on, with one-click unlink + add-to-new-screen,
@@ -2397,9 +2430,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     setPanelOpen(false);
                   }}
                   title="Open the Zones tab for this screen"
-                  style={{ marginLeft: 'auto', color: 'var(--lala-gold)' }}
                 >
-                  Edit zones →
+                  Zones →
                 </button>
               )}
             </div>
@@ -2424,7 +2456,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       into the UI Overlays (ProductionOverlaysTab) view. */}
                   {activeScreen.asset_id && (
                     <div className="editor-section">
-                      <div className="editor-section-label">Type</div>
+                      <div className="editor-section-label">This is a</div>
                       <div className="editor-type-toggle">
                         <button
                           onClick={() => handleChangeScreenType('phone')}
@@ -2447,7 +2479,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           className={`editor-type-btn ${activeScreen.category === 'production' ? 'active-overlay' : ''}`}
                           title="Move to UI Overlays tab"
                         >
-                          UI Overlay
+                          UI overlay
                         </button>
                       </div>
                     </div>
@@ -2484,16 +2516,17 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {/* Primary Actions — Generate is gold (primary); Upload is ink-muted
                       so the two read as equal-weight options without competing for
                       the eye. Previously Upload was sky-blue which fought the gold palette. */}
+                  <div className="editor-section-label">Picture</div>
                   <div className="editor-primary-actions">
                     {!activeScreen.placeholder ? (
                       <>
-                        <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#6B6557" primary />
+                        <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} className="ph-btn ph-btn--primary editor-picture-btn" />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} className="ph-btn editor-picture-btn" />
                       </>
                     ) : (
                       <>
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#6B6557" primary />
-                        <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} className="ph-btn editor-picture-btn" />
+                        <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} className="ph-btn ph-btn--primary editor-picture-btn" />
                       </>
                     )}
                   </div>
@@ -2501,8 +2534,19 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {/* Home Screen Toggle */}
                   {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
                     <div className="editor-section">
-                      <button onClick={handleSetHome} className={`editor-home-btn ${activeScreen.is_home ? 'is-home' : ''}`}>
-                        {activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}
+                      {/* A switch (Evoni's mock, 2026-10-07; it was a "Set as Home Screen" button) */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!activeScreen.is_home}
+                        onClick={handleSetHome}
+                        className={`editor-home-switch${activeScreen.is_home ? ' is-home' : ''}`}
+                      >
+                        <span className="editor-home-switch__text">
+                          <strong>Home screen</strong>
+                          <span>The phone opens here</span>
+                        </span>
+                        <span className="editor-home-switch__track" aria-hidden="true"><span className="editor-home-switch__knob" /></span>
                       </button>
                       {/* With no home marked, say where the phone opens instead —
                           the first generated screen, as PhoneHub picks it (Task #2016). */}
@@ -2526,25 +2570,22 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {(activeScreen.variants?.length > 1 || activeScreen.url) && (
                     <div className="editor-section">
                       <div className="editor-section-label">Variants</div>
-                      {activeScreen.variants?.length > 1 && (
-                        <div className="editor-variant-pills">
-                          {activeScreen.variants.map((v, i) => (
-                            <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} className={`editor-variant-pill ${activeVariantIdx === i ? 'active' : ''}`}>
-                              {v.variant_label}
-                            </button>
-                          ))}
-                          <button onClick={() => setAddingVariant(!addingVariant)} className="editor-variant-pill add">+</button>
-                        </div>
-                      )}
+                      {/* Thumbnails, the chosen one ringed, and a + tile (Evoni's mock, 2026-10-07) */}
+                      <div className="editor-variant-tiles">
+                        {(activeScreen.variants?.length > 1 ? activeScreen.variants : [{ asset_id: activeScreen.asset_id || activeScreen.id, url: activeScreen.url, variant_label: 'Default' }]).map((v, i) => (
+                          <button key={v.asset_id || i} type="button" onClick={() => setActiveVariantIdx(i)} className={`editor-variant-tile ${activeVariantIdx === i ? 'active' : ''}`} title={v.variant_label} aria-label={v.variant_label}>
+                            {v.url ? <img src={v.url} alt="" /> : <span>{v.variant_label}</span>}
+                          </button>
+                        ))}
+                        <button type="button" onClick={() => setAddingVariant(!addingVariant)} className="editor-variant-tile add" aria-label="Add a variant">+</button>
+                      </div>
+                      <p className="editor-variant-hint">e.g. a night version, or a cracked-screen version for one episode</p>
                       {addingVariant && (
                         <div className="editor-variant-add">
                           <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" className="editor-variant-input" />
                           <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} className="editor-variant-upload-btn">Upload</button>
                           <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} className="editor-modal-icon-btn"><X size={14} /></button>
                         </div>
-                      )}
-                      {!activeScreen.variants && activeScreen.url && !addingVariant && (
-                        <button onClick={() => setAddingVariant(true)} className="editor-add-variant-btn"><Layers size={14} /> Add Variant</button>
                       )}
                       <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
                     </div>
@@ -2555,10 +2596,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       sit next to benign buttons and get hit by accident. */}
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-secondary-actions">
-                      {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
+                      {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} className="ph-chip-btn" />}
                       {activeScreen.asset_id && (() => {
                         const removing = bgAttempts[activeScreen.id]?.state === 'removing';
-                        return <ActionBtn icon={removing ? Loader : Eraser} label={removing ? 'Removing…' : 'Remove BG'} onClick={handleRemoveBg} disabled={removing} color="#6B6557" />;
+                        return <ActionBtn icon={removing ? Loader : Eraser} label={removing ? 'Removing…' : 'Remove background'} onClick={handleRemoveBg} disabled={removing} className="ph-chip-btn" />;
                       })()}
                       {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
                         <DuplicateSettingsBtn
@@ -2596,8 +2637,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       visible boundary so Delete isn't a one-tap mistake next to Download. */}
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-danger-zone">
-                      <div className="editor-section-label editor-danger-zone-label">Danger Zone</div>
-                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#B84D2E" />
+                      <button type="button" className="editor-delete-link" onClick={handleDelete}>
+                        <Trash2 size={13} aria-hidden="true" /> Delete this {isIcon(activeScreen) ? 'icon' : 'screen'}…
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2772,8 +2814,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
           </div>
-        </>
-      )}
+        );
+        // Without the Build slot (another stage, or PhoneHub not mounted)
+        // it opens as the centred modal it was.
+        return detailHost ? createPortal(panel, detailHost) : (
+          <>
+            <div className="editor-modal-scrim" onClick={closePanel} />
+            {panel}
+          </>
+        );
+      })()}
       </>
       )}
 
@@ -2964,7 +3014,15 @@ function SectionHeader({ label, expanded, onToggle, badge }) {
   );
 }
 
-function ActionBtn({ icon: Icon, label, onClick, disabled, color, primary }) {
+function ActionBtn({ icon: Icon, label, onClick, disabled, color, primary, className }) {
+  // With a className the page's CSS styles it (the screen panel, 2026-10-07).
+  if (className) {
+    return (
+      <button type="button" onClick={onClick} disabled={disabled} className={className}>
+        <Icon size={14} aria-hidden="true" /> {label}
+      </button>
+    );
+  }
   return (
     <button onClick={onClick} disabled={disabled} style={{
       display: 'flex', alignItems: 'center', justifyContent: primary ? 'center' : 'flex-start', gap: 6,
@@ -2999,7 +3057,7 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
-      <ActionBtn icon={Copy} label="Copy To" onClick={() => setOpen(!open)} color="#7ab3d4" />
+      <ActionBtn icon={Copy} label="Copy to…" onClick={() => setOpen(!open)} className="ph-chip-btn" />
       {open && (
         <div className="overlays-dup-dropdown">
           <div className="overlays-dup-dropdown__header">
