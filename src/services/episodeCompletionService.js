@@ -565,6 +565,11 @@ ${narrativeLines.short || ''}`,
         applies_to: JSON.stringify(['episode_history', 'character_arc', evalResult.tier_final]),
         source_document: 'episode-completion',
         source_version: FORMULA_VERSION,
+        // The show's own canon: its episodes happened in this show, so
+        // Cultural memory and the state snapshot are per show (wiring map,
+        // fix-list item 15).
+        scope: 'show',
+        show_id: episode.show_id || null,
         extracted_by: 'system', // an allowed value (services/franchiseKnowledgeValues); source_document says episode-completion
         status: 'active',
         review_note: `Auto-generated on episode completion — ${new Date().toISOString()}`,
@@ -584,6 +589,8 @@ ${narrativeLines.short || ''}`,
       applies_to: JSON.stringify(['character_state', 'justawoman', 'current_stats']),
       source_document: 'episode-completion',
       source_version: FORMULA_VERSION,
+      scope: 'show',
+      show_id: episode.show_id || null,
       extracted_by: 'system', // an allowed value (services/franchiseKnowledgeValues); source_document says episode-completion
       status: 'active',
       review_note: `Auto-generated character state snapshot — Episode ${episode.episode_number}`,
@@ -592,24 +599,27 @@ ${narrativeLines.short || ''}`,
       updated_at: new Date(),
     });
 
-    // Supersede previous character state snapshot
+    // Supersede this show's previous character state snapshot (and any
+    // written before snapshots carried a show), not another show's.
     await sequelize.query(
       `UPDATE franchise_knowledge SET status = 'superseded', updated_at = NOW()
        WHERE source_document = 'episode-completion' AND category = 'character'
-       AND applies_to::text LIKE '%current_stats%' AND status = 'active'`,
+       AND applies_to::text LIKE '%current_stats%' AND status = 'active'
+       AND (show_id = :showId OR show_id IS NULL)`,
+      { replacements: { showId: episode.show_id || null } },
     ).catch(err => console.warn('[episodeCompletion] supersede previous state:', err?.message));
 
     // Insert new knowledge entries
     await sequelize.query(
-      `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, extracted_by, status, review_note, injection_count, created_at, updated_at)
-       VALUES ${episodeKnowledge.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
-      { replacements: episodeKnowledge.flatMap(e => [e.title, e.content, e.category, e.severity, e.always_inject, e.applies_to, e.source_document, e.source_version, e.extracted_by, e.status, e.review_note, e.injection_count, e.created_at, e.updated_at]) }
+      `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, scope, show_id, extracted_by, status, review_note, injection_count, created_at, updated_at)
+       VALUES ${episodeKnowledge.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      { replacements: episodeKnowledge.flatMap(e => [e.title, e.content, e.category, e.severity, e.always_inject, e.applies_to, e.source_document, e.source_version, e.scope, e.show_id, e.extracted_by, e.status, e.review_note, e.injection_count, e.created_at, e.updated_at]) }
     ).catch(async () => {
       // Fallback: insert one at a time if bulk fails
       for (const entry of episodeKnowledge) {
         await sequelize.query(
-          `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, extracted_by, status, review_note, injection_count, created_at, updated_at)
-           VALUES (:title, :content, :category, :severity, :always_inject, :applies_to, :source_document, :source_version, :extracted_by, :status, :review_note, :injection_count, :created_at, :updated_at)`,
+          `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, scope, show_id, extracted_by, status, review_note, injection_count, created_at, updated_at)
+           VALUES (:title, :content, :category, :severity, :always_inject, :applies_to, :source_document, :source_version, :scope, :show_id, :extracted_by, :status, :review_note, :injection_count, :created_at, :updated_at)`,
           { replacements: entry }
         ).catch(err => console.warn('[episodeCompletion] fallback insert:', err?.message));
       }
