@@ -31,10 +31,22 @@ try { decisionLoggerModule = require('../utils/decisionLogger'); } catch (e) { d
 // GET /api/v1/world/:showId/history
 // ═══════════════════════════════════════════
 
+// ?source= narrows to one kind of row, so the State tab can read every
+// episode's 'computed' rows without wardrobe purchases and edits pushing
+// the earliest episodes past the limit (wiring map, fix-list item 14).
+// ?limit= is 1..HISTORY_MAX_LIMIT, 50 when absent or not a number.
+const HISTORY_SOURCES = ['computed', 'override', 'manual', 'wardrobe_purchase'];
+const HISTORY_MAX_LIMIT = 1000;
+
 router.get('/world/:showId/history', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
-    const { limit = 50 } = req.query;
+    const { source } = req.query;
+    if (source !== undefined && !HISTORY_SOURCES.includes(source)) {
+      return res.status(400).json({ error: `source must be one of ${HISTORY_SOURCES.join(', ')}` });
+    }
+    const asked = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), HISTORY_MAX_LIMIT) : 50;
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
@@ -42,10 +54,10 @@ router.get('/world/:showId/history', requireAuth, async (req, res) => {
       `SELECT csh.*, e.title as episode_title, e.episode_number
        FROM character_state_history csh
        LEFT JOIN episodes e ON e.id = csh.episode_id
-       WHERE csh.show_id = :showId
+       WHERE csh.show_id = :showId${source ? ' AND csh.source = :source' : ''}
        ORDER BY csh.created_at DESC
        LIMIT :limit`,
-      { replacements: { showId, limit: parseInt(limit) } }
+      { replacements: { showId, limit, ...(source ? { source } : {}) } }
     );
 
     return res.json({ success: true, history });
