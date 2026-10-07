@@ -48,7 +48,7 @@ const OVERLAYS = [
   { id: 'dms', name: 'DMs', category: 'phone', generated: true, url: 'https://x/dms.png', asset_id: 'a-dms', screen_links: null, content_zones: [{ id: 'c1' }] },
   { id: 'camera', name: 'Camera', category: 'phone', generated: false, url: null },
   { id: 'dm_icon', name: 'DM Icon', category: 'phone_icon', generated: true, url: 'https://x/i.png', asset_id: 'a-i' },
-  { id: 'hud', name: 'HUD Bar', category: 'ui', generated: true, url: 'https://x/hud.png', asset_id: 'a-hud' },
+  { id: 'hud', name: 'HUD Bar', category: 'production', generated: true, url: 'https://x/hud.png', asset_id: 'a-hud' },
 ];
 
 const MOMENTS = [
@@ -108,6 +108,14 @@ describe('EpisodeLalasPhoneTab — module-scope helpers', () => {
     expect(out.missingScreens.map(s => s.id)).toEqual(['camera']);
     expect(out.icons.map(s => s.id)).toEqual(['dm_icon']);
     expect(out.missingIcons).toEqual([]);
+  });
+
+  // One rule with Producer Mode (lib/overlayUtils, Evoni 2026-10-07): a
+  // screen there is a screen here, whatever its category says.
+  test('splitPhoneOverlays counts a screen the way Producer Mode does', () => {
+    const out = splitPhoneOverlays([{ id: 'app', category: 'phone_app', generated: true }, { id: 'legacy', category: 'icon', generated: true }]);
+    expect(out.screens.map(s => s.id)).toEqual(['app']);
+    expect(out.icons.map(s => s.id)).toEqual(['legacy']);
   });
 });
 

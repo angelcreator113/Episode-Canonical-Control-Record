@@ -74,26 +74,30 @@ const snapZone = (z, enabled) => {
   };
 };
 
+// Shared empty defaults: a fresh [] per render re-ran the effects that reset
+// the zones, so an editor rendered without these props never settled.
+const NO_ITEMS = [];
+
 const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   screen,
   screenUrl,
-  links = [],
-  screenTypes = [],
+  links = NO_ITEMS,
+  screenTypes = NO_ITEMS,
   generatedScreenKeys,
-  iconOverlays = [],
+  iconOverlays = NO_ITEMS,
   globalFit,
   customFrameUrl,
   phoneSkin,
   onSave,
   onUploadIcon,
   onNavigate,
-  navigationHistory = [],
+  navigationHistory = NO_ITEMS,
   onBack,
   onRequestAiZones,  // (hint?: string) => Promise<{ proposal, context_summary }> — parent hits /ai/add-zones
   // Bulk-place support (Phase 3.3). allScreens = list of screens creators can copy
   // the current zone onto. onBulkPlace(zone, targetScreenIds) persists a copy of the
   // zone (icon, label, position) onto each target screen.
-  allScreens = [],
+  allScreens = NO_ITEMS,
   onBulkPlace,
   onZonesChange,
   readOnly = false,
@@ -103,7 +107,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // editing chrome so creators have full visual context — they can see
   // where wardrobe grids, feeds, etc. live and avoid placing icons over
   // them. Pass `getContentZones(screen)` from the parent.
-  contentZones = [],
+  contentZones = NO_ITEMS,
   showId,
   sidePanel = null,
   multiSelect = false,
@@ -257,6 +261,21 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     // Delete several zones in one undo step (ICON mode's Delete Selected, Task #2021).
     removeZones: (ids) => removeZones(ids),
     transformZones: (kind) => transformZones(kind),
+    // AI "Add zones" from the Connect sidebar (Evoni, 2026-10-07): its only
+    // button sat in the toolbar Connect never shows. Opens the review on a
+    // proposal; returns how many zones were proposed, or throws.
+    requestAiZones: async (hint) => {
+      if (!onRequestAiZones || aiBusy) return 0;
+      setAiBusy(true);
+      try {
+        const result = await onRequestAiZones(hint);
+        const count = result?.proposal?.zones?.length || 0;
+        if (count) setAiProposal(result);
+        return count;
+      } finally {
+        setAiBusy(false);
+      }
+    },
     undo,
     redo,
   }));
@@ -604,7 +623,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       // can find this zone in activeScreen.screen_links. Without this, newly-drawn
       // zones get silently wiped when the parent re-hydrates from the server.
       if (isDirty && onSave) {
-        onSave(zones);
+        await onSave(zones);
         setIsDirty(false);
       }
       setUploadingForZone(linkId);
@@ -832,6 +851,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           }}
         />
       )}
+
+      {/* The icon file input sits outside the list, which Connect never shows:
+          inside it, "Upload a custom icon" did nothing (Evoni, 2026-10-07). */}
+      <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconFileChange} style={{ display: 'none' }} data-testid="zone-icon-file" />
 
       {/* Migration notice — one-time warning so users know to re-check pre-existing zones */}
       {showMigrationNotice && !embedded && (
@@ -1549,7 +1572,6 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             })}
           </div>
 
-          <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconFileChange} style={{ display: 'none' }} />
         </div>
       )}
       </div>{/* /.sle-main-row */}

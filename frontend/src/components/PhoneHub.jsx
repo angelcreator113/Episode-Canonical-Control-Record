@@ -281,7 +281,7 @@ export default function PhoneHub({
   // selected it keeps the last screen shown, looked up by id so it is never
   // stale, or the home screen if there was none.
   // isIcon covers both icon categories; `type` is the older marker the page also checks.
-  const iconSelected = !!activeScreen && (isIcon(activeScreen) || activeScreen.type === 'icon');
+  const iconSelected = isIcon(activeScreen);
   const [lastScreenId, setLastScreenId] = useState(null);
   if (activeScreen && !iconSelected && activeScreen.id !== lastScreenId) {
     setLastScreenId(activeScreen.id);

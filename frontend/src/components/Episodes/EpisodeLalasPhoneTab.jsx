@@ -5,6 +5,7 @@ import { Play, MessageCircle, ListChecks } from 'lucide-react';
 import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import PhonePreviewMode from '../PhonePreviewMode';
+import { isIcon, isScreen } from '../../lib/overlayUtils';
 import './EpisodeLalasPhoneTab.css';
 
 /**
@@ -36,10 +37,10 @@ import './EpisodeLalasPhoneTab.css';
  * mock's beat and Approved / Draft are not shown.
  */
 
-// Same phone-family split the Phone Hub (UIOverlaysTab) uses: 'phone' is a
-// screen, 'phone_icon' / 'icon' are home-screen icons; anything else is a
-// non-phone UI overlay and is not shown here.
-const ICON_CATEGORIES = new Set(['phone_icon', 'icon']);
+// The phone's one rule for screens and icons (lib/overlayUtils isScreen /
+// isIcon), the same as Producer Mode's: this tab used to count only category
+// 'phone' as a screen, so a screen Producer Mode showed could be missing here
+// (Evoni, 2026-10-07, one system).
 
 // ── Module-scope API helpers (existing routes, unchanged) ──
 
@@ -74,8 +75,8 @@ export function playablePhoneScreens(overlays) {
 }
 
 export function splitPhoneOverlays(overlays) {
-  const phone = (overlays || []).filter(o => o && (o.category || 'phone') === 'phone');
-  const icons = (overlays || []).filter(o => o && ICON_CATEGORIES.has(o.category));
+  const phone = (overlays || []).filter(isScreen);
+  const icons = (overlays || []).filter(isIcon);
   return {
     screens: phone.filter(o => o.generated),
     missingScreens: phone.filter(o => !o.generated),
