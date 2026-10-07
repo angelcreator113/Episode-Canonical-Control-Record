@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
+import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
 import apiClient from '../services/api';
 import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
@@ -11,6 +11,7 @@ import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import useSpecBuild from '../hooks/useSpecBuild';
+import { sceneSetTiles, typeCounts, sectionsOf, angleHint, angleLine, episodeChips } from '../lib/sceneSetsSummary';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -998,7 +999,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, hideShow = false }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
@@ -1381,11 +1382,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
         <div className="scene-sets-card-header">
           <h3 className="scene-sets-card-title" onClick={() => openWorkspace('angles')} style={{ cursor: 'pointer' }}>{set.name}</h3>
 
+          {/* Under the name: the default role and the show when it is not the one in view */}
+          {(defaultRole || (!hideShow && set.show)) && (
+            <p className="ss-card-sub">
+              {[defaultRole ? `Default ${defaultRole}` : null, !hideShow && set.show ? set.show.name : null].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {/* The angles made, as dots and words (Evoni's mock, 2026-10-07) */}
+          <div className="ss-angles" data-testid={`scene-set-views-${set.id}`}>
+            {totalAngles > 0 && (
+              <span className="ss-angle-dots" aria-hidden="true">
+                {sortedAngles.slice(0, 8).map((a) => <span key={a.id} className={`ss-angle-dot${a.generation_status === 'complete' ? ' is-made' : ''}`} />)}
+              </span>
+            )}
+            <span className={`ss-angle-line${totalAngles > 0 && readyAngles < totalAngles ? ' is-short' : ''}`}>{angleLine(set)}</span>
+          </div>
           <div className="scene-sets-card-meta-line">
-            {set.show && <span className="scene-sets-meta-chip"><Tv size={9} /> {set.show.name}</span>}
-            {totalAngles > 0 && <span className="scene-sets-meta-chip" data-testid={`scene-set-views-${set.id}`}><Camera size={9} /> {readyAngles === totalAngles ? `${totalAngles} view${totalAngles !== 1 ? 's' : ''}` : `${readyAngles}/${totalAngles} views`}</span>}
             {eventLookCount > 0 && <span className="scene-sets-meta-chip" data-testid={`scene-set-event-looks-count-${set.id}`}><Sparkles size={9} /> {eventLookCount} event look{eventLookCount !== 1 ? 's' : ''}</span>}
-            {set.episodes?.length > 0 && <span className="scene-sets-meta-chip"><Film size={9} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || '?'}` : `${set.episodes.length} eps`}</span>}
           </div>
           {cardStatus && (
             <div className={`scene-sets-card-status is-${cardStatus.tone}`} data-testid={`scene-set-status-${set.id}`}>
@@ -1393,6 +1406,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
             </div>
           )}
           <div className="scene-sets-card-open">
+            <span className="ss-card-eps">
+              {episodeChips(set).length > 0
+                ? episodeChips(set).slice(0, 2).map((e) => <span key={e} className="ss-chip">{e}</span>)
+                : <span className="ss-chip ss-chip-quiet">Not used yet</span>}
+              {episodeChips(set).length > 2 && <span className="ss-chip">+{episodeChips(set).length - 2}</span>}
+            </span>
             <button type="button" onClick={() => openWorkspace('angles')} className="scene-sets-btn-generate" data-testid={`scene-set-open-${set.id}`}>
               Open Set
             </button>
@@ -3561,15 +3580,14 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   // The cost of the sets in view, not of every show's (audit CTX-03).
   const scopedSets = useMemo(() => filterSceneSets(sets, { scope: activeScope, showId: pageShowId }), [sets, activeScope, pageShowId]);
-  const totalCost = scopedSets.reduce((sum, s) => {
-    const setCost = parseFloat(s.generation_cost || 0);
-    const anglesCost = (s.angles || []).reduce((a, ang) => a + parseFloat(ang.generation_cost || 0), 0);
-    return sum + setCost + anglesCost;
-  }, 0);
+  // The header's tiles and the type pills' counts read the sets in view;
+  // the hint reads them too (lib/sceneSetsSummary).
+  const typeCountsInScope = useMemo(() => typeCounts(scopedSets), [scopedSets]);
+  const hint = useMemo(() => angleHint(scopedSets), [scopedSets]);
 
   const types = ['ALL', 'HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'];
   const typeLabels = {
-    ALL: 'All', HOME_BASE: 'Home Base', CLOSET: 'Closet',
+    ALL: 'All', HOME_BASE: 'Home base', CLOSET: 'Closet',
     EVENT_LOCATION: 'Events', TRANSITION: 'Transitions', OTHER: 'Other',
   };
   const isFiltering = filterType !== 'ALL' || searchQuery.trim() !== '' || statusFilter !== 'all';
@@ -3577,12 +3595,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   return (
     <div className="scene-sets-container">
-      {/* S8: the way back to the page that opened Scene Sets; else, in a show, back to the show. */}
-      {isAppPath(searchParams.get('from')) ? <SceneSetsHandoff set={sets.find((x) => x.id === focusSetId) || null} zone={focusZone} /> : pageShowId && (
-        <Link className="scene-sets-back-link" to={`/shows/${pageShowId}`} data-testid="scene-sets-back-to-show">
-          ← Back to {allShows.find((sh) => sh.id === pageShowId)?.name || 'show'}
-        </Link>
-      )}
+      {/* S8: the way back to the page that opened Scene Sets. In a show the
+          page sits inside Producer Mode, whose header already leads back to
+          the show (Evoni's mock, 2026-10-07: no second "Back to …"). */}
+      {isAppPath(searchParams.get('from')) && <SceneSetsHandoff set={sets.find((x) => x.id === focusSetId) || null} zone={focusZone} />}
       {/* Toast */}
       {toast && (
         <div className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
@@ -3590,70 +3606,82 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         </div>
       )}
 
-      {/* Header row */}
-      <div className="scene-sets-header">
-        <div>
+      {/* Header card (Evoni's mock, 2026-10-07): the title and its line, three
+          tiles for the sets in view (lib/sceneSetsSummary), New scene set; then
+          one row of filters: the types with their counts, the shows, search,
+          status and sort. */}
+      <div className="scene-sets-header ss-hero">
+        <div className="ss-hero-text">
           <h2 className="scene-sets-title">Scene Sets</h2>
-          <p className="scene-sets-subtitle">
-            Create backgrounds and event looks for your locations
-            {totalCost > 0 && (
-              <span className="scene-sets-total-cost"> · {totalCost.toFixed(1)} credits used</span>
-            )}
-          </p>
+          <p className="scene-sets-subtitle">The places Lala's story happens: her home base, her closet, and every event's look.</p>
         </div>
-
-        <div className="scene-sets-header-actions">
-          <button
-            className="scene-sets-btn-create"
-            onClick={() => setShowCreateForm(f => !f)}
-          >
-            {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Scene Set</>}
-          </button>
-          <div className="scene-sets-filters">
-            <div className="scene-sets-search-wrap">
-              <Search size={12} className="scene-sets-search-icon" />
-              <input
-                className="scene-sets-search-input"
-                placeholder="Search scene sets..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
-            {types.map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                className={`scene-sets-filter-pill${filterType === t ? ' active' : ''}`}
-              >
-                {typeLabels[t]}
-              </button>
-            ))}
-          </div>
-          <div className="scene-sets-filters-row2">
-            {pageShowId && (
-              <div className="scene-sets-scope" role="group" aria-label="Which shows">
-                <button type="button" aria-pressed={activeScope === 'show'} className={`scene-sets-scope-btn${activeScope === 'show' ? ' active' : ''}`} onClick={() => setScope('show')}>
-                  This show <span className="scene-sets-scope-count">{scopeCounts?.show ?? showSetCount}</span>
-                </button>
-                <button type="button" aria-pressed={activeScope === 'shared'} className={`scene-sets-scope-btn${activeScope === 'shared' ? ' active' : ''}`} onClick={() => setScope('shared')}
-                  title="Sets that belong to no show or are marked franchise assets, usable by every show">
-                  Shared <span className="scene-sets-scope-count">{scopeCounts?.shared ?? sharedSetCount}</span>
-                </button>
-                <button type="button" aria-pressed={activeScope === 'all'} className={`scene-sets-scope-btn${activeScope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>
-                  All shows <span className="scene-sets-scope-count">{scopeCounts?.all ?? sets.length}</span>
-                </button>
-              </div>
-            )}
-            <select className="scene-sets-select-sm" aria-label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="all">Any status</option>
-              {Object.entries(SET_PROGRESS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-            </select>
-            <select className="scene-sets-select-sm" aria-label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-              {Object.entries(SORTS).map(([k, { label }]) => <option key={k} value={k}>{label}</option>)}
-            </select>
-          </div>
-        </div>
+        <ul className="ss-tiles" data-testid="scene-sets-tiles">
+          {sceneSetTiles(scopedSets).map((t) => (
+            <li key={t.key} className={`ss-tile ss-tile-${t.key}`}>
+              <span className="ss-tile-value">{t.value}</span>
+              <span className="ss-tile-label">{t.label}</span>
+            </li>
+          ))}
+        </ul>
+        <button
+          className="scene-sets-btn-create"
+          onClick={() => setShowCreateForm(f => !f)}
+        >
+          {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Scene Set</>}
+        </button>
       </div>
+
+      <div className="ss-filter-row">
+        <div className="scene-sets-filters">
+          {types.map(t => (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`scene-sets-filter-pill${filterType === t ? ' active' : ''}`}
+            >
+              {typeLabels[t]} <span className="ss-pill-count">· {typeCountsInScope[t] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+        {pageShowId && (
+          <div className="scene-sets-scope" role="group" aria-label="Which shows">
+            <button type="button" aria-pressed={activeScope === 'show'} className={`scene-sets-scope-btn${activeScope === 'show' ? ' active' : ''}`} onClick={() => setScope('show')}>
+              This show <span className="scene-sets-scope-count">{scopeCounts?.show ?? showSetCount}</span>
+            </button>
+            <button type="button" aria-pressed={activeScope === 'shared'} className={`scene-sets-scope-btn${activeScope === 'shared' ? ' active' : ''}`} onClick={() => setScope('shared')}
+              title="Sets that belong to no show or are marked franchise assets, usable by every show">
+              Shared <span className="scene-sets-scope-count">{scopeCounts?.shared ?? sharedSetCount}</span>
+            </button>
+            <button type="button" aria-pressed={activeScope === 'all'} className={`scene-sets-scope-btn${activeScope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>
+              All shows <span className="scene-sets-scope-count">{scopeCounts?.all ?? sets.length}</span>
+            </button>
+          </div>
+        )}
+        <div className="scene-sets-search-wrap">
+          <Search size={12} className="scene-sets-search-icon" />
+          <input
+            className="scene-sets-search-input"
+            placeholder="Search scene sets..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <select className="scene-sets-select-sm" aria-label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="all">Any status</option>
+          {Object.entries(SET_PROGRESS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+        <select className="scene-sets-select-sm" aria-label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          {Object.entries(SORTS).map(([k, { label }]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+      </div>
+
+      {/* One set an episode uses that is short of angles (Evoni's mock, 2026-10-07) */}
+      {!loading && hint && (
+        <div className="ss-hint" data-testid="scene-sets-angle-hint">
+          <p><strong>{hint.lead}</strong> {hint.text}</p>
+          <Link className="ss-hint-go" to={`?${new URLSearchParams({ ...Object.fromEntries(searchParams), set: hint.setId, zone: 'angles' }).toString()}`}>Make the angles →</Link>
+        </div>
+      )}
 
 
       {deleting && (
@@ -3799,9 +3827,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       {!loading && focusSetId && !sets.some((s) => s.id === focusSetId) && (
         <p className="scene-sets-focus-missing" data-testid="scene-sets-focus-missing">That scene set was not found.</p>
       )}
-      {!loading && visibleSets.length > 0 && (
+      {/* Sections by type, each with its line (Evoni's mock, 2026-10-07); a chosen
+          type is one section. Another sort than Newest is one list in that order. */}
+      {!loading && visibleSets.length > 0 && (sortBy === 'newest' ? sectionsOf(visibleSets) : [{ type: 'ALL', title: 'Sorted', line: SORTS[sortBy]?.label || '', sets: visibleSets }]).map((sec) => (
+        <section key={sec.type} className={`ss-section ss-section-${sec.type.toLowerCase()}`} aria-labelledby={`ss-section-${sec.type}`}>
+          <h3 id={`ss-section-${sec.type}`} className="ss-section-title"><span className="ss-section-dot" aria-hidden="true" />{sec.title} <span className="ss-section-line">{sec.line}</span></h3>
         <div className="scene-sets-grid">
-          {visibleSets.map(set => (
+          {sec.sets.map(set => (
             <SceneSetCard
               key={set.id}
               set={set}
@@ -3832,10 +3864,12 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onRefresh={fetchSets}
               defaultRole={defaultRoleOf(set)}
               onMakeDefault={handleMakeDefault}
+              hideShow={activeScope === 'show'}
             />
           ))}
         </div>
-      )}
+        </section>
+      ))}
       {!loading && filtered.length > 0 && (
         <div className="scene-sets-pager" data-testid="scene-sets-pager">
           <span>Showing {Math.min(visibleCount, filtered.length)} of {filtered.length}</span>

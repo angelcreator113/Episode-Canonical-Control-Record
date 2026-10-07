@@ -82,7 +82,7 @@ describe('SceneSetsTab: the handoff line', () => {
   test('a link from outside the app shows no handoff', async () => {
     current = SET(true);
     render(<MemoryRouter initialEntries={['/shows/show-1/world?tab=scene-sets&set=set-1&from=https%3A%2F%2Fevil.example']}><SceneSetsTab showId="show-1" /></MemoryRouter>);
-    await screen.findByTestId('scene-sets-back-to-show');
+    await screen.findByRole('heading', { name: 'Scene Sets' });
     expect(screen.queryByTestId('scene-sets-handoff')).toBeNull();
   });
 

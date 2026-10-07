@@ -47,10 +47,12 @@ describe('Scene Sets stylesheet theme', () => {
     expect(css).toMatch(/--ss-parchment: var\(--surface-bg\);\s*--ss-gold: var\(--lala-gold\);\s*--ss-gold-text: var\(--lala-gold-text\);\s*--ss-gold-light: var\(--lala-gold-soft\);\s*--ss-ink: var\(--text-primary\);\s*--ss-muted: var\(--text-secondary\);\s*--ss-border: var\(--lala-parchment-3\);\s*--ss-surface: var\(--surface-bg\);/);
   });
 
-  test('the actions are the primary; gold is never text nor under white', () => {
-    expect(rule('.scene-sets-btn-generate')).toMatch(/background: var\(--primary\);\s*color: var\(--text-inverse\);/);
-    expect(rule('.scene-sets-filter-pill.active')).toMatch(/background: var\(--primary\);\s*color: var\(--text-inverse\);/);
-    expect(rule('.scene-sets-scope-btn.active')).toMatch(/background: var\(--primary\); color: var\(--text-inverse\);/);
+  // The actions moved from the teal primary to lavender with the Producer
+  // Mode look (Evoni's mock, 2026-10-07).
+  test('the actions are lavender; gold is never text nor under white', () => {
+    expect(rule('.scene-sets-btn-generate')).toMatch(/background: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
+    expect(rule('.scene-sets-filter-pill.active')).toMatch(/background: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
+    expect(rule('.scene-sets-scope-btn.active')).toMatch(/background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
     expect(rule('.scene-sets-lightbox-promote:hover')).toMatch(/background: var\(--primary\);\s*border-color: var\(--primary\);\s*color: var\(--text-inverse\);/);
     expect(rule('.scene-sets-angle-regen:hover')).toMatch(/background: var\(--primary\);/);
     expect(rule('.scene-sets-franchise-badge')).toMatch(/background: var\(--lala-gold\);\s*color: var\(--text-primary\);/);

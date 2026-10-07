@@ -44,11 +44,11 @@ describe('SceneSetsTab: the list is scoped on the server', () => {
     expect(screen.getByRole('button', { name: /Shared/ }).textContent).toContain('2');
     // Nine across all shows, though only three were read.
     expect(screen.getByRole('button', { name: /All shows/ }).textContent).toContain('9');
-    expect(document.querySelector('.scene-sets-total-cost').textContent).toContain('2.5 credits');
+    expect(document.querySelector('.ss-tile-credits').textContent).toBe('2.5credits used');
 
     fireEvent.click(screen.getByRole('button', { name: /Shared/ }));
     expect(cards()).toEqual(['s-franchise', 's-shared']);
-    expect(document.querySelector('.scene-sets-total-cost').textContent).toContain('1.5 credits');
+    expect(document.querySelector('.ss-tile-credits').textContent).toBe('1.5credits used');
     // Shared needs no second read: it is in the same scoped read.
     expect(listCalls()).toEqual(['/api/v1/scene-sets?show_id=show-1']);
   });
@@ -59,7 +59,7 @@ describe('SceneSetsTab: the list is scoped on the server', () => {
     fireEvent.click(screen.getByRole('button', { name: /All shows/ }));
     await waitFor(() => expect(cards()).toEqual(['s-franchise', 's-mine', 's-other', 's-shared']));
     expect(listCalls()).toEqual(['/api/v1/scene-sets?show_id=show-1', '/api/v1/scene-sets']);
-    expect(document.querySelector('.scene-sets-total-cost').textContent).toContain('14.0 credits');
+    expect(document.querySelector('.ss-tile-credits').textContent).toBe('14.0credits used');
   });
 
   test('outside a show the read is unscoped', async () => {
