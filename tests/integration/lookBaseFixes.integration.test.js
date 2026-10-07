@@ -185,7 +185,12 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     // A 400 is not retried (a 5xx or no status is, with backoff).
     axios.post.mockImplementation(async () => { throw Object.assign(new Error('fal: prompt rejected'), { response: { status: 400, data: {} } }); });
     await auth(request(app).post(url(v.ev, '/generate'))).send({});
-    await until(async () => (await setRow(v.set)).generation_status === 'failed');
+    // The generator marks the set failed first; the reason is written just
+    // after (markBaseFailed), so wait for both.
+    await until(async () => {
+      const row = await setRow(v.set);
+      return row.generation_status === 'failed' && Boolean(row.base_generation?.last_error);
+    });
     const got = await auth(request(app).get(url(v.ev)));
     expect(got.body.data.scene_set.generation_status).toBe('failed');
     expect(got.body.data.scene_set.error).toContain('fal: prompt rejected');
