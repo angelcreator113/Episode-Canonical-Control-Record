@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeSectionState } from './EpisodeProductionChecklist';
+import { computeSectionState, CHECKLIST_SECTIONS } from './EpisodeProductionChecklist';
 
 const requiredSection = {
   id: 'brief',
@@ -11,13 +11,13 @@ const requiredSection = {
 
 const optionalOnlySection = {
   id: 'social',
-  items: [{ id: 'optional', required: false }],
+  items: [{ id: 'optional', required: false }, { id: 'other', required: false }],
 };
 
-const overlaysSection = {
-  id: 'overlays',
-  unavailableReason: 'Phone missions not deployed yet (phone_missions absent from canon)',
-  items: [{ id: 'overlays_generated', required: false }],
+const unavailableSection = {
+  id: 'future',
+  unavailableReason: 'Not built yet',
+  items: [{ id: 'x', required: false }],
 };
 
 describe('computeSectionState', () => {
@@ -36,21 +36,21 @@ describe('computeSectionState', () => {
     });
   });
 
-  test('optional-only checks yield in progress', () => {
-    expect(computeSectionState(optionalOnlySection, { optional: true })).toEqual({
-      state: 'in_progress',
-      why: '0 of 0 required items done',
-    });
+  // The checklist fixes (2026-10-07): no more "0 of 0 required items done".
+  test('a section with nothing required says so: not set up, in progress, all done', () => {
+    expect(computeSectionState(optionalOnlySection, {})).toEqual({ state: 'needs_setup', why: 'Nothing required; nothing set up yet' });
+    expect(computeSectionState(optionalOnlySection, { optional: true })).toEqual({ state: 'in_progress', why: 'Nothing required' });
+    expect(computeSectionState(optionalOnlySection, { optional: true, other: true })).toEqual({ state: 'complete', why: 'Nothing required; all done' });
   });
 
-  test('overlays is always unavailable', () => {
-    expect(computeSectionState(overlaysSection, {})).toEqual({
-      state: 'unavailable',
-      why: 'Phone missions not deployed yet (phone_missions absent from canon)',
-    });
-    expect(computeSectionState(overlaysSection, { overlays_generated: true })).toEqual({
-      state: 'unavailable',
-      why: 'Phone missions not deployed yet (phone_missions absent from canon)',
-    });
+  test('Lala\'s Phone is a normal section now (it counts phone-screen images, never phone_missions)', () => {
+    const phone = CHECKLIST_SECTIONS.find((s) => s.id === 'overlays');
+    expect(phone.unavailableReason).toBeUndefined();
+    expect(computeSectionState(phone, { overlays_generated: true })).toEqual({ state: 'complete', why: 'Nothing required; all done' });
+    expect(computeSectionState(phone, {}).state).toBe('needs_setup');
+  });
+
+  test('a section can still be marked unavailable', () => {
+    expect(computeSectionState(unavailableSection, { x: true })).toEqual({ state: 'unavailable', why: 'Not built yet' });
   });
 });

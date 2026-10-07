@@ -171,7 +171,8 @@ export default function ProductionCoveragePanel({ episodeId }) {
   const openClip = (beatNumber, beatName, key) => setTarget({ beat_number: beatNumber, beat_name: beatName, performer: PERFORMER[key] });
 
   if (failed) return <div data-testid="coverage-failed" style={{ fontSize: 12, color: PINK_TEXT, marginBottom: 8 }}>Production coverage could not be loaded.</div>;
-  if (!coverage) return null;
+  // An answer without the counts or beats shows nothing rather than blanks (the checklist fixes, 2026-10-07).
+  if (!coverage || !Array.isArray(coverage.beats) || !Number.isFinite(coverage.required)) return null;
   const { required, met, untracked, covered, total, next, beats } = coverage;
   const tab = next ? CONTINUE_TAB[next.indicator] : null;
   const nextIsClip = next && PERFORMER[next.indicator];

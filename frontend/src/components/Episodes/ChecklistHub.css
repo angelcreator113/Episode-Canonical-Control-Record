@@ -87,6 +87,7 @@
   color: var(--lala-lavender-text);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 .ckh-fix:disabled { color: var(--lala-ink-muted); cursor: not-allowed; }
