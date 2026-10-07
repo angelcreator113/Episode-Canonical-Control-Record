@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
 import { tabFromSearch } from '../utils/worldRedirects';
 import StateSummary from '../components/State/StateSummary';
+import useActiveShow from '../hooks/useActiveShow';
 import { AUTO_SNAPSHOT_LABEL, TENSION_LEVELS, snapshotLine } from '../lib/stateSummary';
 import './WorldDashboard.css';
 
@@ -44,6 +45,9 @@ const toneOf = (state) => TENSION_LEVELS[String(state || '').toLowerCase()]?.ton
 
 export default function WorldDashboard({ embedded = false }) {
   const navigate = useNavigate();
+  // A snapshot is saved to the active show's universe (the script writers
+  // read that universe's newest; wiring map fix-list item 17).
+  const { showId } = useActiveShow();
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'state', undefined, 'sub'));
   const [toast, setToast] = useState(null);
   const flash = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
@@ -106,7 +110,7 @@ export default function WorldDashboard({ embedded = false }) {
   const openTensions = () => setTab('tensions');
 
   const saveSnapshot = async () => {
-    try { await createSnapshotApi({ snapshot_label:snapForm.snapshot_label, world_facts:snapForm.world_facts?snapForm.world_facts.split('\n').filter(Boolean):[], active_threads:snapForm.active_threads?snapForm.active_threads.split('\n').filter(Boolean):[] }); flash('Snapshot saved'); setSnapForm({snapshot_label:'',world_facts:'',active_threads:''}); loadSnapshots(); } catch { flash('Failed','error'); }
+    try { await createSnapshotApi({ snapshot_label:snapForm.snapshot_label, ...(showId ? { show_id:showId } : {}), world_facts:snapForm.world_facts?snapForm.world_facts.split('\n').filter(Boolean):[], active_threads:snapForm.active_threads?snapForm.active_threads.split('\n').filter(Boolean):[] }); flash('Snapshot saved'); setSnapForm({snapshot_label:'',world_facts:'',active_threads:''}); loadSnapshots(); } catch { flash('Failed','error'); }
   };
 
   const saveTimelineEvent = async () => {

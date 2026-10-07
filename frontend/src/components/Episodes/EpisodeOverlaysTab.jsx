@@ -16,8 +16,12 @@
  *
  * Evoni's Episode mock (2026-10-06): the tab opens on a preview with "Add an
  * overlay" (from a document, from Lala's Feed, a notification or stat pop),
- * then "Overlays by beat", a row per piece in beat order with Edit or Add
+ * then the episode's overlays, a row per piece with Edit or Add
  * (lib/episodeOverlays). The pieces' own panels follow as Details.
+ *
+ * Kept off beats for now (Evoni, 2026-10-07: "none of the overlays should
+ * be beats for now"): nothing here shows or picks a beat, and making an
+ * overlay no longer places it (episodeBeatPlacement).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -28,17 +32,11 @@ import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
 import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
 import EventDocuments from '../EventPackage/EventDocuments';
-import { overlayRows, beatLabel, pieceBeat, previewPiece } from '../../lib/episodeOverlays';
+import { overlayRows, previewPiece } from '../../lib/episodeOverlays';
 import './EpisodeOverlaysTab.css';
 
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
-
-/** "Beat 5: Reveal", or null. */
-export function beatText(beat) {
-  if (!beat?.number) return null;
-  return `Beat ${beat.number}${beat.name ? `: ${beat.name}` : ''}`;
-}
 
 function StatusPill({ status, testid }) {
   return (
@@ -49,8 +47,6 @@ function StatusPill({ status, testid }) {
 }
 
 function PieceCard({ piece, children }) {
-  const placed = beatText(piece.beat);
-  const expected = beatText(piece.expected_beat);
   const paid = piece.cost?.paid;
   return (
     <article className="eot-piece" data-testid={`eot-piece-${piece.key}`}>
@@ -70,9 +66,6 @@ function PieceCard({ piece, children }) {
           <h3 className="eot-piece-title">{piece.label}</h3>
           <StatusPill status={piece.status} testid={`eot-status-${piece.key}`} />
         </div>
-        <p className="eot-beat" data-testid={`eot-beat-${piece.key}`}>
-          {placed ? `Placed on ${placed}` : `Not placed${expected ? ` (goes on ${expected})` : ''}`}
-        </p>
         {piece.status === 'outdated' && piece.made_for && (
           <p className="eot-note">Made for “{piece.made_for}”.</p>
         )}
@@ -92,15 +85,10 @@ const DOC_STATE = { approved: ['is-approved', 'Approved'], outdated: ['is-draft'
 
 /**
  * The invitation as one of the episode's in-world documents (Evoni's mock,
- * 2026-10-07): its image, its state, where it is on screen, and the Event
- * Package where it is made. Shown first among the event's documents.
+ * 2026-10-07): its image, its state, and the Event Package where it is
+ * made. Shown first among the event's documents.
  */
-// "Beat 5 · Reveal", the mock's words for where a document is on screen.
-const beatWords = (beat) => (beat?.number ? `Beat ${beat.number}${beat.name ? ` · ${beat.name}` : ''}` : null);
-
 function InvitationDocCard({ piece, showId }) {
-  const placed = beatWords(piece.beat);
-  const expected = beatWords(piece.expected_beat);
   const [stateClass, stateLabel] = DOC_STATE[piece.status] || DOC_STATE.not_made;
   const paid = piece.cost?.paid;
   return (
@@ -127,9 +115,6 @@ function InvitationDocCard({ piece, showId }) {
           </Link>
         )}
       </div>
-      <p className="evd-meta" data-testid="eot-beat-invitation">
-        {placed ? `Used: overlay, ${placed}` : expected ? `Planned: overlay, ${expected}` : 'Not on screen yet'}
-      </p>
       {paid && <p className="eot-cost" data-testid="eot-cost-invitation">{paid.action} — est. {formatEstimate(paid.estimate)}</p>}
     </article>
   );
@@ -165,15 +150,14 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const pieces = data?.pieces || [];
   const byKey = Object.fromEntries(pieces.map((p) => [p.key, p]));
   const invitation = byKey.invitation;
-  const library = data?.library || [];
   const event = data?.event || invitation?.event || null;
   const phoneHubPath = showId ? `/shows/${showId}/world?tab=overlays-tab` : '/phone-hub';
   const feedPath = showId ? `/shows/${showId}/world?tab=feed` : null;
-  const rows = overlayRows(pieces, library);
+  const rows = overlayRows(pieces);
   const needed = rows.filter((r) => r.needed).length;
   const shown = previewPiece(pieces, chosen);
   // A row opens its piece (and shows it in the preview); a document row
-  // goes to the documents, a library row to the library.
+  // goes to the documents.
   const openPiece = (key) => {
     setChosen(key);
     if (key === 'invitation') { scrollToId('eot-docs'); return; }
@@ -196,7 +180,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
             )}
             {shown && (
               <span className="eot-stage-tag" data-testid="eot-stage-tag">
-                Preview · {pieceBeat(shown) ? beatLabel(pieceBeat(shown)) : shown.label}
+                Preview · {shown.label}
               </span>
             )}
           </div>
@@ -223,7 +207,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
       {data && (
         <section className="eot-bybeat" aria-labelledby="eot-bybeat-title" data-testid="eot-bybeat">
           <div className="eot-bybeat-head">
-            <h2 id="eot-bybeat-title" className="eot-add-title">Overlays by beat</h2>
+            <h2 id="eot-bybeat-title" className="eot-add-title">This episode&apos;s overlays</h2>
             <span className="eot-bybeat-needed" data-testid="eot-still-needed">
               {needed === 0 ? 'all made' : `${needed} still needed`}
             </span>
@@ -231,10 +215,9 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
           <ul className="eot-rows">
             {rows.map((r) => (
               <li key={r.key} className={`eot-row${r.needed ? ' is-needed' : ''}`} data-testid={`eot-row-${r.key}`}>
-                <span className="eot-row-beat">{beatLabel(r.beat)}</span>
-                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : r.library ? 'lib' : 'title'}`}>{r.kind}</span>
+                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : 'title'}`}>{r.kind}</span>
                 <span className="eot-row-text">{r.text}</span>
-                <button type="button" className="eot-row-action" onClick={() => (r.library ? scrollToId('eot-library') : openPiece(r.key))}>{r.action}</button>
+                <button type="button" className="eot-row-action" onClick={() => openPiece(r.key)}>{r.action}</button>
               </li>
             ))}
           </ul>
@@ -296,13 +279,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
       )}
 
       {data && (
-        <EpisodeLibraryOverlays
-          episodeId={episodeId}
-          showId={data.show_id || showId}
-          beats={data.beats || []}
-          library={library}
-          onChanged={changed}
-        />
+        <EpisodeLibraryOverlays showId={data.show_id || showId} />
       )}
     </div>
   );

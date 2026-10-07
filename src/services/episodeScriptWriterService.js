@@ -19,6 +19,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -227,14 +228,9 @@ async function loadScriptContext(episodeId, showId, models) {
   }
 
   // 9. Lala's world state
-  context.worldState = null;
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT * FROM world_state_snapshots WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId } }
-    );
-    context.worldState = rows?.[0] || null;
-  } catch { /* non-blocking */ }
+  // The newest snapshot of the show's universe (or of none); the old
+  // show_id query named a column the table does not have.
+  context.worldState = await latestWorldSnapshotForShow(sequelize, showId);
 
   // 10. Social profiles + linked character depth — host + guests with real literary depth
   context.socialProfiles = [];

@@ -20,6 +20,18 @@
 
 const { placeOverlayOnFirstScene } = require('./timelinePlacementService');
 
+/*
+ * Off for now (Evoni, 2026-10-07: "none of the overlays should be beats for
+ * now"): making an overlay (the invitation, the title overlay, the
+ * task-list overlay) no longer places it on a beat or on the first scene;
+ * the episode's Overlays tab lists what it has. Placements made before stay
+ * as they are. setOverlaysOnBeats(true) turns placing back on (tests of the
+ * rule use it).
+ */
+let overlaysOnBeats = false;
+const setOverlaysOnBeats = (on) => { overlaysOnBeats = Boolean(on); };
+const isOverlaysOnBeats = () => overlaysOnBeats;
+
 /** The episode's scene_plans row for a canonical beat, or null. */
 async function findEpisodeBeat(sequelize, episodeId, canonicalBeat, logTag = '[episodeBeatPlacement]') {
   if (!canonicalBeat || !episodeId) return null;
@@ -44,13 +56,14 @@ async function findEpisodeBeat(sequelize, episodeId, canonicalBeat, logTag = '[e
  * @param {object} opts
  *   episodeId, assetId, canonicalBeat (a CANONICAL_BEATS entry),
  *   label ('Invitation'), kind, source, duration, zIndex, logTag
- * @returns {{ placement, anchor: 'beat'|'first-scene'|null, beat }}
+ * @returns {{ placement, anchor: 'beat'|'first-scene'|null, beat }} — all
+ *   null while overlays are kept off beats (setOverlaysOnBeats).
  */
 async function placeOverlayOnBeat(models, {
   episodeId, assetId, canonicalBeat, label, kind, source,
   duration = 5, zIndex = 20, logTag = '[episodeBeatPlacement]',
 } = {}) {
-  if (!models?.TimelinePlacement || !episodeId || !assetId) return { placement: null, anchor: null, beat: null };
+  if (!overlaysOnBeats || !models?.TimelinePlacement || !episodeId || !assetId) return { placement: null, anchor: null, beat: null };
   const beat = await findEpisodeBeat(models.sequelize, episodeId, canonicalBeat, logTag);
   const base = { kind, source };
   let defaults;
@@ -92,4 +105,4 @@ async function placeOverlayOnBeat(models, {
   return { placement, anchor: beat ? 'beat' : 'first-scene', beat };
 }
 
-module.exports = { findEpisodeBeat, placeOverlayOnBeat };
+module.exports = { findEpisodeBeat, placeOverlayOnBeat, setOverlaysOnBeats, isOverlaysOnBeats };
