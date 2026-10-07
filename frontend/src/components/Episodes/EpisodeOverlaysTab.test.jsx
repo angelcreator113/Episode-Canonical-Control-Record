@@ -35,9 +35,14 @@ const PIECES = [
     cost: { paid: { action: 'Regenerate the invitation', estimate: EST(0.08) } },
   },
   {
-    key: 'task_list', label: 'Task-list overlay', status: 'not_made', image_url: null, asset_id: null,
-    beat: null, expected_beat: { number: 9, name: 'Reminder/Deadline' }, task_count: 3, list_approved: false,
-    cost: { paid: { action: 'Design the overlay', estimate: EST(0.08) } },
+    key: 'shopping_list_doc', label: 'Shopping list', status: 'approved', image_url: 'https://img/shop.png', asset_id: 'sl',
+    beat: null, document: { type: 'shopping_list', status: 'approved', version: 2 },
+    cost: { free: 'Drawn when the document is approved; costs nothing.' },
+  },
+  {
+    key: 'career_plan_doc', label: 'Career plan', status: 'not_made', image_url: null, asset_id: null,
+    beat: null, document: { type: 'career_plan', status: null, version: null },
+    cost: { free: 'Drawn when the document is approved; costs nothing.' },
   },
 ];
 const OVERLAYS = {
@@ -68,9 +73,6 @@ function routeGet(url) {
       offer: { offered: true, kind: 'redesign', requires_approval: false, estimate: EST(0.04) },
       overlay: null, overlay_offer: { offered: false } });
   }
-  if (url === '/api/v1/episodes/ep-1/task-list-overlay') {
-    return ok({ exists: true, task_count: 3, hash: 'h', approved: false, overlay: null, offer: { offered: false } });
-  }
   return Promise.reject(new Error(`unexpected GET ${url}`));
 }
 
@@ -94,7 +96,9 @@ describe('EpisodeOverlaysTab (P15)', () => {
     expect(screen.getByTestId('eot-status-title_overlay').textContent).toBe('Approved');
     expect(screen.getByTestId('eot-status-framed_card').textContent).toBe('Outdated');
     expect(screen.getByTestId('eot-status-invitation').textContent).toBe('Approved');
-    expect(screen.getByTestId('eot-status-task_list').textContent).toBe('Not made');
+    // The AI task-list overlay is retired (Evoni, 2026-10-07).
+    expect(screen.queryByTestId('eot-piece-task_list')).toBeNull();
+    expect(screen.queryByText(/Task-list overlay|Design task-list overlay/)).toBeNull();
 
     // The invitation is among the in-world documents (Evoni's mock, 2026-10-07).
     expect(within(screen.getByTestId('eot-docs')).getByTestId('eot-doc-invitation')).toBeTruthy();
@@ -106,9 +110,6 @@ describe('EpisodeOverlaysTab (P15)', () => {
     expect(screen.getByTestId('eot-cost-invitation').textContent).toBe('Regenerate the invitation — est. $0.08');
     expect(screen.getByText('Lettering styles and the backing band cost nothing.')).toBeTruthy();
     expect(screen.getByText('Made for “Old Title”.')).toBeTruthy();
-
-    // The task list has no preview yet.
-    expect(within(screen.getByTestId('eot-piece-task_list')).getByText('No preview')).toBeTruthy();
   });
 
   test('actions: the title panel (with costs) and the invitation\'s Event Package link', async () => {
@@ -202,16 +203,19 @@ describe('EpisodeOverlaysTab — the mock\'s preview and the episode\'s overlays
     const card = await screen.findByTestId('eot-bybeat');
     expect(within(card).getByRole('heading', { name: "This episode's overlays" })).toBeTruthy();
     const rows = [...card.querySelectorAll('li')].map((li) => li.getAttribute('data-testid'));
-    expect(rows).toEqual(['eot-row-title_overlay', 'eot-row-framed_card', 'eot-row-invitation', 'eot-row-task_list']);
+    expect(rows).toEqual(['eot-row-title_overlay', 'eot-row-framed_card', 'eot-row-invitation', 'eot-row-shopping_list_doc', 'eot-row-career_plan_doc']);
     expect(within(card).queryByText(/Beat/)).toBeNull();
-    const task = screen.getByTestId('eot-row-task_list');
-    expect(task.className).toContain('is-needed');
-    expect(within(task).getByText('Task list (not made yet)')).toBeTruthy();
-    expect(within(task).getByText('Document')).toBeTruthy();
-    expect(within(task).getByRole('button', { name: 'Add' })).toBeTruthy();
     const invite = screen.getByTestId('eot-row-invitation');
     expect(within(invite).getByRole('button', { name: 'Edit' })).toBeTruthy();
     expect(within(screen.getByTestId('eot-row-framed_card')).getByRole('button', { name: 'Update' })).toBeTruthy();
+    // The documents (Evoni, 2026-10-07): the approved shopping list, the career plan still to make.
+    expect(within(screen.getByTestId('eot-row-shopping_list_doc')).getByText('Shopping list')).toBeTruthy();
+    expect(within(screen.getByTestId('eot-row-shopping_list_doc')).getByRole('button', { name: 'Edit' })).toBeTruthy();
+    const plan = screen.getByTestId('eot-row-career_plan_doc');
+    expect(plan.className).toContain('is-needed');
+    expect(within(plan).getByText('Career plan (not made yet)')).toBeTruthy();
+    expect(within(plan).getByText('Document')).toBeTruthy();
+    expect(within(plan).getByRole('button', { name: 'Add' })).toBeTruthy();
     expect(screen.getByTestId('eot-still-needed').textContent).toBe('2 still needed');
   });
 
@@ -222,6 +226,9 @@ describe('EpisodeOverlaysTab — the mock\'s preview and the episode\'s overlays
     fireEvent.click(within(screen.getByTestId('eot-row-invitation')).getByRole('button', { name: 'Edit' }));
     expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Invitation');
     expect(screen.getByTestId('eot-stage-tag').textContent).toBe('Preview · Invitation');
+    // A document row shows its drawn overlay.
+    fireEvent.click(within(screen.getByTestId('eot-row-shopping_list_doc')).getByRole('button', { name: 'Edit' }));
+    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Shopping list');
   });
 
   test('Add an overlay: from a document, from Lala\'s Feed, a notification or stat pop', async () => {

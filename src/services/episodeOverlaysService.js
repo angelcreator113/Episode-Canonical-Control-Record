@@ -6,28 +6,36 @@
  *
  * Production's Overlays tab lists every on-screen piece the episode owns:
  * the title overlay and the full-screen framed card (P11 as amended), the
- * event's invitation (P10) and the task-list overlay (P14). Each piece
+ * event's invitation (P10) and its shopping list and career plan. The
+ * task-list overlay (P14) is retired (Evoni, 2026-10-07: "retire the ai
+ * made task list overlay"); the shopping list took its place. Each piece
  * carries its preview, its status (approved, outdated, not made), the beat
  * it is placed on, and the cost of its paid action. This service only
  * reads; each piece's actions stay with its own service and route.
  *
  * Status:
  *   - not_made  — no current piece;
- *   - outdated  — made for content that has since changed (the title, the
- *                 task list); the invitation has no saved outdated state;
+ *   - outdated  — made for content that has since changed (the title, a
+ *                 document); the invitation has no saved outdated state;
  *   - approved  — made for the current, approved content.
  * Placed beat: the piece's live timeline_placements row (episodeBeatPlacement
  * writes beat_number/beat_name into its properties); null when not placed.
- * The title overlay goes on Beat 1, the invitation on Beat 5, the task list
- * on Beat 9; the framed card stays unplaced unless placed by hand (Evoni,
- * 2026-09-30).
+ * Overlays are kept off beats for now (episodeBeatPlacement, Evoni
+ * 2026-10-07); placements made before still show.
+ *
+ * The event's shopping list and career plan are pieces too (Evoni,
+ * 2026-10-07: "add the document overlays to the episode's list"): each is
+ * drawn as an image when approved (eventDocumentOverlayService), approved
+ * while its overlay matches the approved version, outdated once edited,
+ * not made until then. Listed only when an event started the episode.
  */
 
 const imageGen = require('./imageGenerationService');
 const { getTitleCardState } = require('./episodeTitleCardService');
 const { TITLE_OVERLAY_BEAT } = require('./episodeTitleOverlayService');
-const { getTaskListOverlayState, estimateTaskListOverlay, TASK_LIST_BEAT } = require('./episodeTaskListOverlayService');
 const { loadEpisodeInvitationOverlay, INVITATION_BEAT } = require('./episodeInvitationOverlayService');
+const { readDocuments } = require('./eventDocumentsService');
+const { overlayState } = require('./eventDocumentOverlayService');
 
 // The invitation's background is generated with these options
 // (invitationGeneratorService callDallE3); its regenerate is priced from them.
@@ -60,16 +68,17 @@ function placedBeat(placement) {
 }
 
 /**
- * The four pieces, from the states each service already returns (pure).
+ * The pieces, from the states each service already returns (pure): the
+ * episode's title overlay, framed card and invitation, then the event's two
+ * documents (documentPieces).
  * @param {object} input
  * @param {object} input.title       — getTitleCardState (with overlay, overlay_offer)
- * @param {object|null} input.taskList — getTaskListOverlayState, or null
  * @param {object|null} input.invitation — loadEpisodeInvitationOverlay, or null
- * @param {object|null} input.event  — the event that started the episode {id, show_id, name}
+ * @param {object|null} input.event  — the event that started the episode {id, show_id, name, canon_consequences}
  * @param {object} input.placements  — { [asset_id]: timeline_placements row }
- * @param {object} input.estimates   — { invitation, taskList } image estimates
+ * @param {object} input.estimates   — { invitation } image estimate
  */
-function overlayPieces({ title, taskList, invitation, event, placements = {}, estimates = {} }) {
+function overlayPieces({ title, invitation, event, placements = {}, estimates = {} }) {
   const beatOf = (assetId) => (assetId ? placedBeat(placements[assetId]) : null);
   const overlay = title?.overlay || null;
   const card = title?.card || null;
@@ -120,25 +129,33 @@ function overlayPieces({ title, taskList, invitation, event, placements = {}, es
     },
   };
 
-  const taskOverlay = taskList?.overlay || null;
-  const taskListPiece = {
-    key: 'task_list',
-    label: 'Task-list overlay',
-    status: pieceStatus(Boolean(taskOverlay?.asset_id), taskOverlay?.outdated),
-    image_url: taskOverlay?.image_url || null,
-    asset_id: taskOverlay?.asset_id || null,
-    beat: beatOf(taskOverlay?.asset_id) || (taskOverlay?.beat?.number ? { number: taskOverlay.beat.number, name: taskOverlay.beat.name || null, anchor: 'beat', label: null } : null),
-    expected_beat: TASK_LIST_BEAT ? { number: TASK_LIST_BEAT.number, name: TASK_LIST_BEAT.name } : null,
-    task_count: taskList?.task_count || 0,
-    list_approved: Boolean(taskList?.approved),
-    cost: {
-      paid: taskList?.offer?.offered
-        ? { action: taskList.offer.kind === 'redesign' ? 'Redesign the overlay' : 'Design the overlay', estimate: taskList.offer.estimate || null }
-        : (taskList?.task_count ? { action: 'Design the overlay', estimate: estimates.taskList || null } : null),
-    },
-  };
+  return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event)];
+}
 
-  return [titleOverlay, framedCard, invitationPiece, taskListPiece];
+const DOCUMENT_PIECES = Object.freeze([
+  { type: 'shopping_list', key: 'shopping_list_doc', label: 'Shopping list' },
+  { type: 'career_plan', key: 'career_plan_doc', label: 'Career plan' },
+]);
+const DOC_STATUS = Object.freeze({ current: 'approved', outdated: 'outdated', not_made: 'not_made' });
+
+/** The event's documents as pieces: made (free) on approval in the Event Package. Pure. */
+function documentPieces(event) {
+  if (!event?.id) return [];
+  const docs = readDocuments(event);
+  return DOCUMENT_PIECES.map(({ type, key, label }) => {
+    const doc = docs[type];
+    return {
+      key,
+      label,
+      status: DOC_STATUS[overlayState(doc)],
+      image_url: doc?.overlay?.url || null,
+      asset_id: doc?.overlay?.asset_id || null,
+      beat: null,
+      document: { type, status: doc?.status || null, version: doc?.version || null },
+      event: { id: event.id, show_id: event.show_id, name: event.name },
+      cost: { free: 'Drawn when the document is approved; costs nothing.' },
+    };
+  });
 }
 
 /**
@@ -162,7 +179,7 @@ async function loadEpisodeRow(sequelize, episodeId) {
 
 async function loadAnchorEvent(sequelize, episodeId) {
   const [event] = await sequelize.query(
-    `SELECT id, show_id, name FROM world_events
+    `SELECT id, show_id, name, canon_consequences FROM world_events
       WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
       ORDER BY updated_at DESC LIMIT 1`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
@@ -207,18 +224,17 @@ async function getEpisodeOverlays(models, episodeId) {
   const { sequelize } = models;
   const ep = await loadEpisodeRow(sequelize, episodeId);
   if (!ep) return null;
-  const [title, taskList, invitation, event] = await Promise.all([
+  const [title, invitation, event] = await Promise.all([
     getTitleCardState(models, episodeId),
-    getTaskListOverlayState(models, episodeId),
     loadEpisodeInvitationOverlay(sequelize, { showId: ep.show_id, episodeId }),
     loadAnchorEvent(sequelize, episodeId),
   ]);
   const placements = await loadPlacements(sequelize, episodeId, [
-    title?.overlay?.asset_id, title?.card?.asset_id, invitation?.id, taskList?.overlay?.asset_id,
+    title?.overlay?.asset_id, title?.card?.asset_id, invitation?.id,
   ]);
   const pieces = overlayPieces({
-    title, taskList, invitation, event, placements,
-    estimates: { invitation: estimateInvitation(), taskList: estimateTaskListOverlay() },
+    title, invitation, event, placements,
+    estimates: { invitation: estimateInvitation() },
   });
   return {
     episode_id: ep.id,
@@ -238,6 +254,7 @@ module.exports = {
   pieceStatus,
   placedBeat,
   overlayPieces,
+  documentPieces,
   titleChip,
   getEpisodeOverlays,
 };

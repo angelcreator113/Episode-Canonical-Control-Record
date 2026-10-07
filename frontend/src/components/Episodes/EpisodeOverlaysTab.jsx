@@ -10,8 +10,9 @@
  *
  * State comes from GET /api/v1/episodes/:id/overlays (episodeOverlaysService).
  * Actions reuse each piece's own panel: EpisodeTitleCard (approve, lettering
- * styles, flourish, framed card), EpisodeTaskListOverlay (approve, design);
- * the invitation is made in its Event Package. The show-wide list is
+ * styles, flourish, framed card); the invitation, shopping list and career
+ * plan are made in In-world documents. The AI task-list overlay is retired
+ * (Evoni, 2026-10-07). The show-wide list is
  * GET /api/v1/ui-overlays/:showId?episode_id= (the Lala's Phone tab's read).
  *
  * Evoni's Episode mock (2026-10-06): the tab opens on a preview with "Add an
@@ -29,10 +30,9 @@ import { Link } from 'react-router-dom';
 import { ImageOff, Layers } from 'lucide-react';
 import { getEpisodeOverlaysApi, STATUS_LABELS } from './EpisodeTitleChip';
 import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
-import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
 import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
 import EventDocuments from '../EventPackage/EventDocuments';
-import { overlayRows, previewPiece } from '../../lib/episodeOverlays';
+import { overlayRows, previewPiece, DOCUMENT_KEYS } from '../../lib/episodeOverlays';
 import './EpisodeOverlaysTab.css';
 
 
@@ -160,7 +160,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   // goes to the documents.
   const openPiece = (key) => {
     setChosen(key);
-    if (key === 'invitation') { scrollToId('eot-docs'); return; }
+    if (DOCUMENT_KEYS.includes(key)) { scrollToId('eot-docs'); return; }
     const el = typeof document !== 'undefined' && document.querySelector(`[data-testid="eot-piece-${key}"]`);
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -255,7 +255,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
           <div className="eot-section-head">
             <div>
               <h2 id="eot-own-title" className="eot-section-title"><Layers size={16} aria-hidden="true" /> This episode only</h2>
-              <p className="eot-section-sub">Made for this episode and used nowhere else: its title and its task list.</p>
+              <p className="eot-section-sub">Made for this episode and used nowhere else: its title.</p>
             </div>
           </div>
           <div className="eot-group" aria-label="Title">
@@ -265,16 +265,6 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
             </div>
             <EpisodeTitleCard episode={episode} showCardImage={false} onChange={changed} />
           </div>
-          {byKey.task_list && (
-            <div className="eot-group" aria-label="Task list">
-              <PieceCard piece={byKey.task_list}>
-                {byKey.task_list.task_count === 0 && (
-                  <p className="eot-note">The episode has no task list yet; it is built on the Assets tab.</p>
-                )}
-              </PieceCard>
-              <EpisodeTaskListOverlay episodeId={episodeId} showPreview={false} onChange={changed} />
-            </div>
-          )}
         </section>
       )}
 

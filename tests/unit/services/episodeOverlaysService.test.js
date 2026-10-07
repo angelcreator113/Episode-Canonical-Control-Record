@@ -24,18 +24,19 @@ describe('episodeOverlaysService (P15)', () => {
     expect(placedBeat({ scene_id: 's1', properties: {} })).toEqual({ number: null, name: null, anchor: 'scene', label: null });
   });
 
-  test('nothing made: four pieces, all not made, with the costs of making them', () => {
+  test('nothing made: every piece not made, with the costs of making them', () => {
     const pieces = overlayPieces({
       title: { approved: false, card: null, offer: { offered: false }, overlay: null, overlay_offer: { offered: false } },
-      taskList: { task_count: 3, approved: false, overlay: null, offer: { offered: false } },
       invitation: null,
       event: { id: 'ev', show_id: 'sh', name: 'Velour Launch' },
-      estimates: { invitation: est(0.08), taskList: est(0.08) },
+      estimates: { invitation: est(0.08) },
     });
+    // The AI task-list overlay is retired (Evoni, 2026-10-07); the shopping list took its place.
     expect(pieces.map((p) => [p.key, p.status])).toEqual([
-      ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'], ['task_list', 'not_made'],
+      ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'],
+      ['shopping_list_doc', 'not_made'], ['career_plan_doc', 'not_made'],
     ]);
-    const [overlay, card, invitation, taskList] = pieces;
+    const [overlay, card, invitation] = pieces;
     expect(overlay.needs_title_approval).toBe(true);
     expect(overlay.cost.paid).toBeNull(); // the flourish is offered once the title is approved
     expect(overlay.cost.free).toMatch(/cost nothing/);
@@ -43,8 +44,6 @@ describe('episodeOverlaysService (P15)', () => {
     expect(invitation.cost.paid).toEqual({ action: 'Generate the invitation', estimate: est(0.08) });
     expect(invitation.expected_beat).toEqual({ number: 5, name: 'Reveal' });
     expect(invitation.event).toEqual({ id: 'ev', show_id: 'sh', name: 'Velour Launch' });
-    expect(taskList.cost.paid).toEqual({ action: 'Design the overlay', estimate: est(0.08) });
-    expect(taskList.expected_beat.number).toBe(9);
     expect(overlay.expected_beat).toEqual({ number: 1, name: 'Opening Ritual' });
     expect(card.expected_beat).toBeUndefined();
     expect(pieces.every((p) => p.beat === null)).toBe(true);
@@ -59,30 +58,22 @@ describe('episodeOverlaysService (P15)', () => {
         overlay: { asset_id: 'ov', designed_for: 'New title', outdated: false, image_url: 'https://x/ov.png' },
         overlay_offer: { offered: true, variants: [], flourish_estimate: est(0.04) },
       },
-      taskList: {
-        task_count: 2, approved: true,
-        overlay: { asset_id: 'tl', outdated: false, image_url: 'https://x/tl.png', beat: { number: 9, name: 'Reminder/Deadline' } },
-        offer: { offered: false },
-      },
       invitation: { id: 'inv', url: 'https://x/inv.png' },
       event: { id: 'ev', show_id: 'sh', name: 'Gala' },
       placements: { inv: { label: 'Invitation — Beat 5: Reveal', properties: { beat_number: 5, beat_name: 'Reveal', anchor: 'beat' } } },
-      estimates: { invitation: est(0.08), taskList: est(0.08) },
+      estimates: { invitation: est(0.08) },
     });
-    const [overlay, card, invitation, taskList] = pieces;
+    const [overlay, card, invitation] = pieces;
     expect(overlay).toMatchObject({ status: 'approved', image_url: 'https://x/ov.png', beat: null, needs_title_approval: false });
     expect(overlay.cost.paid).toEqual({ action: 'Decorative flourish', estimate: est(0.04) });
     expect(card).toMatchObject({ status: 'outdated', made_for: 'Old title' });
     expect(card.cost.paid).toEqual({ action: 'Redesign the card', estimate: est(0.04) });
     expect(invitation).toMatchObject({ status: 'approved', beat: { number: 5, name: 'Reveal', anchor: 'beat' } });
     expect(invitation.cost.paid.action).toBe('Regenerate the invitation');
-    // The task list's beat falls back to its asset metadata when no placement row is read.
-    expect(taskList).toMatchObject({ status: 'approved', beat: { number: 9, name: 'Reminder/Deadline' } });
-    expect(taskList.cost.paid).toEqual({ action: 'Design the overlay', estimate: est(0.08) });
   });
 
   test('no source event: the invitation has no paid action', () => {
-    const [, , invitation] = overlayPieces({ title: {}, taskList: null, invitation: null, event: null });
+    const [, , invitation] = overlayPieces({ title: {}, invitation: null, event: null });
     expect(invitation.cost.paid).toBeNull();
     expect(invitation.event).toBeNull();
   });
@@ -99,5 +90,31 @@ describe('episodeOverlaysService (P15)', () => {
     const e = estimateInvitation();
     expect(e).toHaveProperty('usd');
     expect(e).toHaveProperty('priced');
+  });
+});
+
+// Evoni, 2026-10-07: "add the document overlays to the episode's list".
+describe('documentPieces: the event\'s shopping list and career plan as pieces', () => {
+  const { documentPieces } = require('../../../src/services/episodeOverlaysService');
+  const event = (documents) => ({ id: 'ev', show_id: 'sh', name: 'Velour Launch', canon_consequences: { documents } });
+  const overlay = { asset_id: 'a1', url: 'https://img/shop.png', version: 2 };
+
+  test('none without an event; not made until drafted and approved', () => {
+    expect(documentPieces(null)).toEqual([]);
+    const [shop, plan] = documentPieces(event({}));
+    expect([shop.key, shop.label, shop.status, shop.image_url]).toEqual(['shopping_list_doc', 'Shopping list', 'not_made', null]);
+    expect([plan.key, plan.label, plan.status]).toEqual(['career_plan_doc', 'Career plan', 'not_made']);
+    expect(shop.cost).toEqual({ free: 'Drawn when the document is approved; costs nothing.' });
+    expect(shop.beat).toBeNull();
+    expect(shop.event).toEqual({ id: 'ev', show_id: 'sh', name: 'Velour Launch' });
+  });
+
+  test('approved with its overlay drawn from that version; outdated once edited; canon_consequences may be a string', () => {
+    const [shop] = documentPieces(event({ shopping_list: { status: 'approved', version: 2, overlay } }));
+    expect(shop).toMatchObject({ status: 'approved', image_url: overlay.url, asset_id: 'a1', document: { type: 'shopping_list', status: 'approved', version: 2 } });
+    const edited = { ...event({ shopping_list: { status: 'draft', version: 3, overlay } }) };
+    edited.canon_consequences = JSON.stringify(edited.canon_consequences);
+    const [again] = documentPieces(edited);
+    expect(again).toMatchObject({ status: 'outdated', image_url: overlay.url });
   });
 });

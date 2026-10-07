@@ -440,51 +440,9 @@ router.get('/:id/overlays', validateUUIDParam('id'), requireAuth, async (req, re
   }
 });
 
-// ==================== TASK LIST APPROVAL + TASK-LIST OVERLAY (Task #2395, P14) ====================
-// services/episodeTaskListOverlayService.js holds the rules; these handlers
-// only map its errors (TaskListOverlayError status/code, image budget 429).
-function sendTaskListOverlayError(res, err, where) {
-  const { isBudgetError } = require('../services/imageCostService');
-  console.error(`[EpisodeTaskListOverlay] ${where} failed:`, err.message);
-  const status = isBudgetError(err) ? 429 : (err.status && err.status < 600 ? err.status : 500);
-  return res.status(status).json({ success: false, error: err.message, code: err.code || null });
-}
-
-// Approval and overlay state, with the design/redesign offer and its estimate.
-router.get('/:id/task-list-overlay', validateUUIDParam('id'), requireAuth, async (req, res) => {
-  try {
-    const models = require('../models');
-    const { getTaskListOverlayState } = require('../services/episodeTaskListOverlayService');
-    const data = await getTaskListOverlayState(models, req.params.id);
-    return res.json({ success: true, data });
-  } catch (err) {
-    return sendTaskListOverlayError(res, err, 'GET /:id/task-list-overlay');
-  }
-});
-
-// Approve the task list as it stands. Body { hash? }: the list the person saw.
-router.post('/:id/task-list/approve', validateUUIDParam('id'), requireAuth, async (req, res) => {
-  try {
-    const models = require('../models');
-    const { approveTaskList } = require('../services/episodeTaskListOverlayService');
-    const data = await approveTaskList(models, req.params.id, { expectedHash: req.body?.hash });
-    return res.json({ success: true, data, task_list_overlay_offer: data.offer });
-  } catch (err) {
-    return sendTaskListOverlayError(res, err, 'POST /:id/task-list/approve');
-  }
-});
-
-// Design (or redesign) the task-list overlay for the approved list.
-router.post('/:id/task-list-overlay', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
-  try {
-    const models = require('../models');
-    const { designTaskListOverlay } = require('../services/episodeTaskListOverlayService');
-    const data = await designTaskListOverlay(models, req.params.id);
-    return res.json({ success: true, data });
-  } catch (err) {
-    return sendTaskListOverlayError(res, err, 'POST /:id/task-list-overlay');
-  }
-});
+// The task-list overlay (Task #2395, P14) and its approve step are retired
+// (Evoni, 2026-10-07: "retire the ai made task list overlay"): the event's
+// shopping list, drawn free on approval, is the episode's list overlay now.
 
 // Get single episode
 router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(episodeController.getEpisode));
