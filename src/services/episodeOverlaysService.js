@@ -220,12 +220,29 @@ async function getEpisodeOverlays(models, episodeId) {
     title, taskList, invitation, event, placements,
     estimates: { invitation: estimateInvitation(), taskList: estimateTaskListOverlay() },
   });
+  // The redesigned tab (Evoni, 2026-10-07): the episode's beats for the
+  // picker, the show overlays it places, and the event its documents come
+  // from. Each read is optional: the pieces still list without it.
+  const { listEpisodeBeats, libraryPlacements } = require('./episodeLibraryOverlaysService');
+  const [beats, library] = await Promise.all([
+    listEpisodeBeats(sequelize, episodeId).catch((err) => {
+      console.error('[episodeOverlays] beats read failed:', err.message);
+      return [];
+    }),
+    libraryPlacements(sequelize, { episodeId, showId: ep.show_id }).catch((err) => {
+      console.error('[episodeOverlays] library placements read failed:', err.message);
+      return [];
+    }),
+  ]);
   return {
     episode_id: ep.id,
     show_id: ep.show_id,
     title: { text: ep.title || '', approved: Boolean(title?.approved) },
     pieces,
     title_chip: titleChip(pieces),
+    event: event ? { id: event.id, show_id: event.show_id || ep.show_id, name: event.name || null } : null,
+    beats,
+    library,
   };
 }
 

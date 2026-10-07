@@ -440,6 +440,42 @@ router.get('/:id/overlays', validateUUIDParam('id'), requireAuth, async (req, re
   }
 });
 
+// Show-library overlays in the episode (Evoni, 2026-10-07): a show overlay
+// is used by placing it on one of the episode's beats; the image stays the
+// show's (services/episodeLibraryOverlaysService.js).
+// POST   /:id/overlays/library            Body: { asset_id, beat_number }: place (or move) it.
+// DELETE /:id/overlays/library/:assetId   take it off the episode.
+const sendLibraryOverlayError = (res, err, where) => {
+  const { LibraryOverlayError } = require('../services/episodeLibraryOverlaysService');
+  if (err instanceof LibraryOverlayError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  console.error(`[EpisodeOverlays] ${where} failed:`, err.message);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.post('/:id/overlays/library', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { placeLibraryOverlay } = require('../services/episodeLibraryOverlaysService');
+    const placed = await placeLibraryOverlay(models, {
+      episodeId: req.params.id, assetId: req.body?.asset_id, beatNumber: req.body?.beat_number,
+    });
+    return res.json({ success: true, data: placed });
+  } catch (err) {
+    return sendLibraryOverlayError(res, err, 'POST /:id/overlays/library');
+  }
+});
+
+router.delete('/:id/overlays/library/:assetId', validateUUIDParam('id'), validateUUIDParam('assetId'), requireAuth, async (req, res) => {
+  try {
+    const { sequelize } = require('../models');
+    const { removeLibraryOverlay } = require('../services/episodeLibraryOverlaysService');
+    const removed = await removeLibraryOverlay(sequelize, { episodeId: req.params.id, assetId: req.params.assetId });
+    return res.json({ success: true, data: { removed } });
+  } catch (err) {
+    return sendLibraryOverlayError(res, err, 'DELETE /:id/overlays/library/:assetId');
+  }
+});
+
 // ==================== TASK LIST APPROVAL + TASK-LIST OVERLAY (Task #2395, P14) ====================
 // services/episodeTaskListOverlayService.js holds the rules; these handlers
 // only map its errors (TaskListOverlayError status/code, image budget 429).
