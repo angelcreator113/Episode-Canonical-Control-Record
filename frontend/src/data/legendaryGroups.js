@@ -1,8 +1,8 @@
 /**
  * The fifty legendary roles of the LalaVerse in ten groups (moved out of
  * pages/SocialSystems.jsx, 2026-10-06, so the Society front page can read
- * them too). All are placeholders: a role gets its name through the
- * Character Registry.
+ * them too). All are placeholders: nothing links a role to a character
+ * yet (wiring map, docs/reads/2026-10-06-lalaverse-wiring-map.md §1).
  */
 export const LEGENDARY_GROUPS = [
   { group: 'Fashion Icons', icon: '👗', color: '#d4789a', roles: [

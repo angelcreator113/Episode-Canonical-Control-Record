@@ -43,7 +43,7 @@ const TABS = [
 // read only by Amber's read_world_page tool.
 const READS = {
   archetypes: 'Brain Update writes each archetype into the Show Bible as a Social Archetype card. No generator reads those cards yet: the generators read only Show Bible rules marked for every prompt. The Feed generator picks archetypes from its own built-in list, not from here.',
-  legends: 'The fifty legendary roles are fixed placeholders in code; their names come from the Character Registry. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
+  legends: 'The fifty legendary roles are fixed placeholders in code; nothing in the app links a role to a character yet. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
   rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards. No generator reads those cards yet: the generators read only Show Bible rules marked for every prompt.',
   trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. No generator reads the page or its cards yet.',
 };
@@ -141,7 +141,7 @@ export default function SocialSystems({ embedded = false }) {
         {tab === 'legends' && (
           <div className="ss-panel">
             <h3 className="ss-h3">The 50 legendary influencers</h3>
-            <p className="ss-note">The most powerful cultural figures in the LalaVerse. All placeholders: names are assigned through the Character Registry.</p>
+            <p className="ss-note">The most powerful cultural figures in the LalaVerse. All placeholders: no role is linked to a character yet.</p>
             <div className="ss-chips" role="group" aria-label="Legend groups">
               {LEGENDARY_GROUPS.map((g) => (
                 <button key={g.group} type="button" aria-pressed={openLegend === g.group} className={`ss-chip${openLegend === g.group ? ' is-active' : ''}`} onClick={() => setOpenLegend(g.group)}>

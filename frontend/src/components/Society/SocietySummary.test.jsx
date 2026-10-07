@@ -46,6 +46,7 @@ describe('SocietySummary', () => {
     expect(here.textContent).toContain('Rising');
     expect(api.get).toHaveBeenCalledWith('/api/v1/characters/lala/state?show_id=show-b');
     expect(screen.getByTestId('soc-legends').textContent).toContain('Fashion Icons');
+    expect(screen.getByText(/All are placeholders; no role is linked to a character yet/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Beauty Legends/ }));
     expect(onOpen).toHaveBeenCalledWith('legends', 'Beauty Legends');
   });
