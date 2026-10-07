@@ -521,4 +521,18 @@ describe('EventTermsSection', () => {
     expect(within(screen.getByTestId('terms-restrictions')).getByText('None set')).toBeTruthy();
     expect(screen.getByTestId('terms-compensation-summary').textContent).toBe('Unpaid');
   });
+
+  // Evoni's review, item 6: an empty term is one line; Restrictions' input waits behind + Add.
+  test('empty terms are one-line rows; + Add opens the restriction input', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [] } });
+    renderTerms({ event: { id: 'ev-1' } });
+    await waitFor(() => expect(screen.getByTestId('terms-deliverables').className).toContain('is-empty'));
+    expect(screen.getByTestId('terms-access').className).toContain('is-empty');
+    const restrictions = screen.getByTestId('terms-restrictions');
+    expect(restrictions.className).toContain('is-empty');
+    expect(screen.queryByTestId('terms-restriction-input')).toBeNull();
+    fireEvent.click(screen.getByTestId('terms-restriction-open'));
+    expect(screen.getByTestId('terms-restriction-input')).toBeTruthy();
+    expect(restrictions.className).not.toContain('is-empty');
+  });
 });

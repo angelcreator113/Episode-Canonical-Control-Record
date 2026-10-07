@@ -48,7 +48,8 @@ describe('EventDocuments', () => {
   test('nothing drafted: both cards say so and offer Draft', async () => {
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
-    expect(within(shop).getByText(/Not drafted yet/)).toBeTruthy();
+    // Not drafted: one line, no blank paper (Evoni's review, item 6).
+    expect(shop.className).toContain('is-blank');
     expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Not drafted');
     expect(screen.getByTestId('evd-state-career_plan').textContent).toBe('Not drafted');
     expect(within(shop).getByRole('button', { name: /Draft/ })).toBeTruthy();

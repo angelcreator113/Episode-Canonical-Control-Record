@@ -71,7 +71,7 @@ import {
 import api from '../services/api';
 import { fetchAllSceneSets } from '../lib/fetchAllPages';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
-import { computeEventPackageReadiness, describeMissing, nextPackageStep } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, nextPackageStep } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import EventConceptSection, { hasConcept } from '../components/EventConceptSection';
 import {
@@ -79,7 +79,7 @@ import {
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import { dealLabelFor, describeCompensation } from '../utils/eventTerms';
-import { heroTiles, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
+import { heroTiles, packageBadge, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
@@ -131,6 +131,11 @@ const BASICS_FIELDS = {
   format: { label: 'Format', title: 'Format', column: 'format', input: 'select', options: EVENT_FORMATS },
 };
 const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
+// The Event's fields in page order. One with nothing to show (missing, or
+// waiting on another field) is listed once under "Still to fill" instead of
+// as its own empty row (Evoni's review, item 5).
+const BASICS_PAGE_ORDER = [...BASICS_ORDER, 'category', 'format'];
+const isToFill = (f) => f?.state === 'missing' || f?.state === 'waiting';
 // Readiness items Continue → opens in the Basics dialog (BASICS_FIELDS key).
 const CONTINUE_BASICS = {
   'identity.category': 'category',
@@ -357,6 +362,7 @@ export default function EventPackagePage() {
 
   // Basics dialog (Task #1755): which field is open, and its draft value.
   const [basicsEditing, setBasicsEditing] = useState(null);
+  const [fillRound, setFillRound] = useState(null); // keys Fill in has opened, while it runs
   const [basicsDraft, setBasicsDraft] = useState('');
   const [basicsSaving, setBasicsSaving] = useState(false);
 
@@ -528,8 +534,8 @@ export default function EventPackagePage() {
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
   const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
-  const blockedBy = describeMissing(readiness.blocking);
   const nextStep = nextPackageStep(readiness);
+  const badge = packageBadge({ event, readiness, locked: used });
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics
   // too, set / suggested / missing like the others. The organizer is the
   // linked creator profile, when there is one.
@@ -588,8 +594,17 @@ export default function EventPackagePage() {
     setBasicsSaving(true);
     try {
       await putEvent(body);
-      setBasicsEditing(null);
-      setBasicsDraft('');
+      // Fill in moves on to the next field it has not opened yet.
+      const next = fillRound ? toFill.find((k) => k !== key && !fillRound.includes(k)) : null;
+      if (next) {
+        setFillRound([...fillRound, next]);
+        setBasicsDraft(basics[next]?.value || '');
+        setBasicsEditing(next);
+      } else {
+        setFillRound(null);
+        setBasicsEditing(null);
+        setBasicsDraft('');
+      }
       setToast(successMessage || (value ? `${spec.label} saved` : `${spec.label} cleared`));
       await load();
     } catch (err) {
@@ -611,9 +626,19 @@ export default function EventPackagePage() {
     setBasicsEditing(key);
   };
 
+  // Fill in: opens each field still to fill in turn; a save moves on to the
+  // next one not yet opened this round, Cancel stops.
+  const toFill = BASICS_PAGE_ORDER.filter((key) => isToFill(basics[key]));
+  const startFillIn = () => {
+    if (!toFill.length) return;
+    setFillRound([toFill[0]]);
+    openBasicsEditor(toFill[0]);
+  };
+
   const renderBasicsRow = (key) => {
     const spec = BASICS_FIELDS[key];
     const f = basics[key];
+    if (isToFill(f)) return null;
     const StateIcon = basicsStateIcon(f);
     const hasValue = hasValueState(f.state);
     const clampDescription = key === 'description' && hasValue && String(f.value || '').length > DESCRIPTION_CLAMP_AT;
@@ -621,7 +646,9 @@ export default function EventPackagePage() {
       <div key={key} className={`epp-basic is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
         <dt>
           {spec.label}
-          <span className="epp-basic-state" data-testid={`basics-${key}-state`}><StateIcon size={11} aria-hidden="true" /> {basicsStateLabel(f)}</span>
+          {f.state !== 'set' && (
+            <span className="epp-basic-state" data-testid={`basics-${key}-state`}><StateIcon size={11} aria-hidden="true" /> {basicsStateLabel(f)}</span>
+          )}
         </dt>
         <dd>
           {hasValue && key === 'description' ? (
@@ -1112,7 +1139,7 @@ export default function EventPackagePage() {
           <button className="epp-back" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
             <ArrowLeft size={16} /> Events
           </button>
-          <span className={`epp-status-badge epp-status-${event.status || 'draft'}`}>{fmtLabel(event.status)}</span>
+          <span className={`epp-status-badge epp-status-${badge.state}`} data-testid="package-status">{badge.label}</span>
         </div>
         <HeroTitle context={seasonContext} showId={showId} name={event.name} />
         <ul className="epp-hero-tiles" aria-label="At a glance">
@@ -1150,7 +1177,7 @@ export default function EventPackagePage() {
 
       {/* Readiness at the top (the redesign): a tile per section, and while
           the event is unused, the next step with Continue or Start Episode. */}
-      <section className="epp-strip" data-testid="readiness-strip" aria-label="Readiness">
+      <section className="epp-strip" id="epp-readiness" data-testid="readiness-strip" aria-label="Readiness">
         <div className="epp-strip-head">
           <span className="epp-strip-eyebrow">Readiness</span>
           <strong className="epp-strip-headline">{used ? 'Locked at Start Episode' : readinessHeadline(readiness, moneyWarnings.length)}</strong>
@@ -1236,31 +1263,40 @@ export default function EventPackagePage() {
             </div>
           )}
       </details>
+      {/* The Package's one action, in one place (Evoni's review, item 8):
+          Continue while a gate is missing, then Start Episode only. A
+          recommended item left open is a quiet Review beside it, never a
+          second primary. */}
       {!used && (
-        <div className={`epp-next is-${nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
+        <div className={`epp-next is-${gatesMet ? 'ready' : nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
           <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
-          {nextStep.next ? (
-            <>
-              <span className="epp-next-text">
-                {nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}
-              </span>
-              <button
-                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-                data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
-              >
-                Continue <ArrowRight size={14} aria-hidden="true" />
-              </button>
-            </>
+          <span className="epp-next-text">
+            {nextStep.next
+              ? <>{nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}</>
+              : 'Every section is complete.'}
+          </span>
+          {nextStep.kind === 'warning' && (
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-secondary"
+              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
+            >
+              Review
+            </button>
+          )}
+          {gatesMet ? (
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+              data-testid="start-episode" onClick={requestStartEpisode} disabled={starting}
+            >
+              <PlayCircle size={14} aria-hidden="true" /> {starting ? 'Starting…' : 'Start Episode'}
+            </button>
           ) : (
-            <>
-              <span className="epp-next-text">Every section is complete.</span>
-              <button
-                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-                data-testid="package-continue-start" onClick={requestStartEpisode} disabled={starting}
-              >
-                <PlayCircle size={14} aria-hidden="true" /> Start Episode
-              </button>
-            </>
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
+            >
+              Continue <ArrowRight size={14} aria-hidden="true" />
+            </button>
           )}
         </div>
       )}
@@ -1283,7 +1319,7 @@ export default function EventPackagePage() {
       <div className="epp-sections">
         <section id="epp-sec-identity" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">1.</span> The Event <span className="epp-section-sub">What guests see</span></h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">1.</span> The Event</h2><p className="epp-section-sub">What guests see: the name, when, the dress code, and the invitation.</p></div>
             {!used && !nameSuggestOpen && (
               <button className="epp-btn epp-btn-small" onClick={openNameSuggest}>
                 <Sparkles size={14} /> Suggest names
@@ -1308,10 +1344,38 @@ export default function EventPackagePage() {
               <div data-testid="basics-name"><dt>Name</dt><dd>{event.name}</dd></div>
             )}
             {BASICS_ORDER.map(renderBasicsRow)}
-            <div><dt>Brand</dt><dd>{event.host_brand || 'Not set'}</dd></div>
+            {event.host_brand && <div><dt>Brand</dt><dd>{event.host_brand}</dd></div>}
             {renderBasicsRow('category')}
             {renderBasicsRow('format')}
           </dl>
+
+          {toFill.length > 0 && (
+            <div className="epp-to-fill" data-testid="basics-to-fill">
+              <span className="epp-to-fill-label">Still to fill</span>
+              <ul className="epp-to-fill-list">
+                {toFill.map((key) => {
+                  const f = basics[key];
+                  return (
+                    <li key={key} className={`epp-to-fill-item is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
+                      {used ? BASICS_FIELDS[key].label : (
+                        <button type="button" className="epp-inline-link" onClick={() => openBasicsEditor(key)} disabled={basicsSaving}>
+                          {BASICS_FIELDS[key].label}
+                        </button>
+                      )}
+                      {f.state === 'waiting' && (
+                        <span className="epp-to-fill-note" data-testid={`basics-${key}-state`}>{basicsStateLabel(f)}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {!used && (
+                <button type="button" className="epp-btn epp-btn-small epp-to-fill-go" data-testid="basics-fill-in" onClick={startFillIn} disabled={basicsSaving}>
+                  <Pencil size={13} aria-hidden="true" /> Fill in
+                </button>
+              )}
+            </div>
+          )}
 
           {nameSuggestOpen && (
             <div className="epp-name-suggest">
@@ -1391,7 +1455,7 @@ export default function EventPackagePage() {
 
         <section id="epp-sec-people" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">2.</span> People</h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">2.</span> People</h2><p className="epp-section-sub">Who hosts it and who Lala meets there.</p></div>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openOrganizerPicker} data-testid="change-organizer">
                 <UserPlus size={14} /> Change Organizer
@@ -1584,7 +1648,7 @@ export default function EventPackagePage() {
 
         <section id="epp-sec-place" className="epp-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">3.</span> Place</h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">3.</span> Place</h2><p className="epp-section-sub">Where it happens, and the set the episode films on.</p></div>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={() => setVenuePickerOpen(true)}>
                 <MapPin size={14} /> {venueDate.venueLocationId ? 'Change venue' : 'Choose venue'}
@@ -1662,7 +1726,7 @@ export default function EventPackagePage() {
             package does. */}
         <section id="epp-sec-look" className={`epp-section epp-look-section${outfitPieces.length ? '' : ' no-outfit'}`} data-testid="style-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">4.</span> Lala&apos;s Look</h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">4.</span> Lala&apos;s Look</h2><p className="epp-section-sub">What she wears, from her closet.</p></div>
             <span className={`epp-chip${outfitPieces.length && episodeLook?.state !== 'chosen' ? '' : ' warn'}`} data-testid="style-outfit-summary">
               {lookSummary}
             </span>
@@ -1740,10 +1804,10 @@ export default function EventPackagePage() {
             the reopen panel and the Terms, then the money preview. */}
         <section id="epp-sec-deal" className="epp-section epp-deal" data-testid="deal-section">
         <div className="epp-section-header">
-          <h2 className="epp-section-title">
-            <span className="epp-section-num">5.</span> Deal &amp; Money
-            {dealLabelFor(event) && <span className="epp-section-sub">{dealLabelFor(event)}</span>}
-          </h2>
+          <div className="epp-section-heading">
+            <h2 className="epp-section-title"><span className="epp-section-num">5.</span> Deal &amp; Money</h2>
+            <p className="epp-section-sub">{dealLabelFor(event) ? `${dealLabelFor(event)}: what` : 'What'} Lala earns, pays and agrees to.</p>
+          </div>
           {used && !termsReopen && <span className="epp-chip" data-testid="deal-locked"><Lock size={11} aria-hidden="true" /> Locked at Start Episode</span>}
         </div>
         {dealTiles(moneyPreview) && (
@@ -1823,7 +1887,7 @@ export default function EventPackagePage() {
 
         <section id="epp-sec-stakes" className="epp-section epp-stakes" data-testid="stakes-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">6.</span> Story Stakes</h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">6.</span> Story Stakes</h2><p className="epp-section-sub">What this night means for her story.</p></div>
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openStakesEditor} data-testid="stakes-edit">
                 <Pencil size={14} /> Edit stakes
@@ -1923,7 +1987,7 @@ export default function EventPackagePage() {
             and Approve like it. */}
         <section id="epp-sec-documents" className="epp-section" data-testid="documents-section">
           <div className="epp-section-header">
-            <h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2>
+            <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2><p className="epp-section-sub">The papers the event gives her, drafted from it.</p></div>
           </div>
           <EventDocuments
             showId={showId}
@@ -1940,25 +2004,29 @@ export default function EventPackagePage() {
       </div>
       </div>
 
-      {!used && !gatesMet && (
-        <div className="epp-start-blocked" data-testid="start-blocked">
-          <Lock size={13} aria-hidden="true" /> Start Episode needs: {blockedBy.join(' · ')}
-        </div>
-      )}
-
+      {/* The foot of the page (Evoni's review, item 4): what is still
+          needed, worded exactly as the strip's tiles, each linking to its
+          section; Start Episode itself lives only in the strip. */}
       {!used && (
-        <div className="epp-actions">
+        <div className="epp-actions" data-testid="package-foot">
+          {!gatesMet && (
+            <div className="epp-start-blocked" data-testid="start-blocked">
+              <Lock size={13} aria-hidden="true" /> Still needed to start:
+              {readiness.sections.filter((sec) => !sec.complete && sec.kind === 'blocking').map((sec) => {
+                const tile = readinessTile(sec);
+                return (
+                  <a key={sec.key} className="epp-start-blocked-link" href={`#epp-sec-${sec.key === 'organizer' ? 'people' : sec.key}`} data-testid={`start-blocked-${sec.key}`}>
+                    {tile.text === tile.label ? tile.label : `${tile.label}: ${tile.text}`}
+                  </a>
+                );
+              })}
+            </div>
+          )}
+          <a className="epp-foot-top" href="#epp-readiness" data-testid="package-foot-top">
+            {gatesMet ? 'Start Episode is in Readiness ↑' : 'Back to Readiness ↑'}
+          </a>
           <button className="epp-btn epp-btn-secondary" onClick={openEditor}>
             <Pencil size={16} /> Edit details
-          </button>
-          <button
-            className="epp-btn epp-btn-primary"
-            disabled={!gatesMet || starting}
-            title={gatesMet ? 'Start the episode' : `Start Episode needs: ${blockedBy.join(' · ')}`}
-            data-testid="start-episode"
-            onClick={requestStartEpisode}
-          >
-            <PlayCircle size={16} /> {starting ? 'Starting…' : 'Start Episode'}
           </button>
         </div>
       )}
@@ -2017,7 +2085,7 @@ export default function EventPackagePage() {
         const key = basicsEditing;
         const spec = BASICS_FIELDS[key];
         const f = basics[key];
-        const closeBasics = () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); } };
+        const closeBasics = () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); setFillRound(null); } };
         // A stored value the native date/time input can't show (older
         // free-text rows) falls back to a text input, so it isn't lost.
         const nativeOk = (spec.input === 'date' && (!basicsDraft || ISO_DATE.test(basicsDraft)))

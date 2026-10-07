@@ -8,6 +8,8 @@
  * (computeEventPackageReadiness).
  */
 
+import { computeEventState, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HH_MM = /^(\d{2}):(\d{2})/;
 
@@ -44,9 +46,21 @@ export function heroTiles({ event, venueDate, organizer, projection, dealLabel, 
     { key: 'when', label: 'When', value: date || 'No date', sub: time || (date ? 'No time set' : null), empty: !date },
     { key: 'where', label: 'Where', value: venue || 'No venue', sub: district, empty: !venue },
     { key: 'organizer', label: 'Organizer', value: organizer?.name || 'No organizer', sub: organizer?.handle ? `@${String(organizer.handle).replace(/^@/, '')}` : (organizer?.kind === 'brand' ? 'Brand' : null), empty: !organizer?.name },
-    { key: 'deal', label: 'Deal', value: dealLabel || 'No deal set', sub: pays, empty: !dealLabel },
+    // Pay without terms is "No terms yet", not "No deal set" over "Earns 300 coins".
+    { key: 'deal', label: 'Deal', value: dealLabel || (compensation?.amount > 0 ? 'No terms yet' : 'No deal set'), sub: pays, empty: !dealLabel },
     { key: 'challenge', label: 'Challenge', value: projection?.complete ? projection.label.text : 'Not projected', sub: projection?.complete ? 'projected' : null, empty: !projection?.complete },
   ];
+}
+
+/**
+ * The header badge: the Events queue's state (computeEventState over the
+ * page's own readiness), not the stored world_events.status, which can say
+ * "ready" while the strip lists items needed to start. `locked` (the terms
+ * locked by Start Episode) reads as Used.
+ */
+export function packageBadge({ event, readiness, locked = false }) {
+  const state = locked ? 'used' : computeEventState(event, readiness);
+  return { state, label: EVENT_QUEUE_STATES[state].label };
 }
 
 /** "S1 · E1 · Season 1 · Phase 1: Foundation", or the season when the event is in no slot. */

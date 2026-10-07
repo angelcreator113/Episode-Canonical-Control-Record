@@ -51,6 +51,20 @@ describe('Event Package header', () => {
     expect(screen.getByTestId('hero-challenge').textContent).toMatch(/Challenge(Easy|Medium|Hard|Extreme)projected/);
   });
 
+  test('the badge follows readiness, not the stored status: "ready" with items missing reads Needs Setup', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/events/ev-1') {
+        return { data: { success: true, event: { ...EVENT, status: 'ready', category: null, format: null, event_date: null }, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode: null } };
+      }
+      return { data: { success: true, deliverables: [], locked: false } };
+    });
+    renderPage();
+    const badge = await screen.findByTestId('package-status');
+    expect(badge.textContent).toBe('Needs Setup');
+    expect(badge.className).toContain('epp-status-needs_setup');
+    expect(screen.getByTestId('readiness-strip').textContent).toMatch(/needed to start/);
+  });
+
   test('readiness sits at the top, a tile per section that links to it; the menu dots the sections that need attention', async () => {
     renderPage();
     const strip = await screen.findByTestId('readiness-strip');

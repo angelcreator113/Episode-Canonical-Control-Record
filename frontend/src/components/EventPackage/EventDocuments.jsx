@@ -181,11 +181,12 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
             const state = docState(doc);
             const isBusy = (a) => busy === `${type}:${a}`;
             return (
-              <article key={type} className="evd-card" data-testid={`evd-${type}`}>
+              // Not drafted yet: one line, its title, what it comes from and
+              // Draft (Evoni's review, item 6); the paper appears once drafted.
+              <article key={type} className={`evd-card${doc ? '' : ' is-blank'}`} data-testid={`evd-${type}`}>
                 <h3 className="evd-title">{title}</h3>
                 <p className="evd-from">{from}</p>
                 <div className="evd-stage">
-                  {!doc && <div className="evd-blank">Not drafted yet. Draft it from the event, then edit it in your own words.</div>}
                   {doc && editing === type && (
                     <Editor
                       type={type} doc={doc} saving={isBusy('edit')}
