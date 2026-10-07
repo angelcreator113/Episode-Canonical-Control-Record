@@ -71,7 +71,7 @@ import {
 import api from '../services/api';
 import { fetchAllSceneSets } from '../lib/fetchAllPages';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
-import { computeEventPackageReadiness, describeMissing, nextPackageStep } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, nextPackageStep } from '../utils/eventReadinessSections';
 import { resolveEventBasics, hasValueState, draftStateOf, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import EventConceptSection, { hasConcept } from '../components/EventConceptSection';
 import {
@@ -528,7 +528,6 @@ export default function EventPackagePage() {
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
   const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
-  const blockedBy = describeMissing(readiness.blocking);
   const nextStep = nextPackageStep(readiness);
   const badge = packageBadge({ event, readiness, locked: used });
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics
@@ -1151,7 +1150,7 @@ export default function EventPackagePage() {
 
       {/* Readiness at the top (the redesign): a tile per section, and while
           the event is unused, the next step with Continue or Start Episode. */}
-      <section className="epp-strip" data-testid="readiness-strip" aria-label="Readiness">
+      <section className="epp-strip" id="epp-readiness" data-testid="readiness-strip" aria-label="Readiness">
         <div className="epp-strip-head">
           <span className="epp-strip-eyebrow">Readiness</span>
           <strong className="epp-strip-headline">{used ? 'Locked at Start Episode' : readinessHeadline(readiness, moneyWarnings.length)}</strong>
@@ -1237,31 +1236,40 @@ export default function EventPackagePage() {
             </div>
           )}
       </details>
+      {/* The Package's one action, in one place (Evoni's review, item 8):
+          Continue while a gate is missing, then Start Episode only. A
+          recommended item left open is a quiet Review beside it, never a
+          second primary. */}
       {!used && (
-        <div className={`epp-next is-${nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
+        <div className={`epp-next is-${gatesMet ? 'ready' : nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
           <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
-          {nextStep.next ? (
-            <>
-              <span className="epp-next-text">
-                {nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}
-              </span>
-              <button
-                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-                data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
-              >
-                Continue <ArrowRight size={14} aria-hidden="true" />
-              </button>
-            </>
+          <span className="epp-next-text">
+            {nextStep.next
+              ? <>{nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}</>
+              : 'Every section is complete.'}
+          </span>
+          {nextStep.kind === 'warning' && (
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-secondary"
+              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
+            >
+              Review
+            </button>
+          )}
+          {gatesMet ? (
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+              data-testid="start-episode" onClick={requestStartEpisode} disabled={starting}
+            >
+              <PlayCircle size={14} aria-hidden="true" /> {starting ? 'Starting…' : 'Start Episode'}
+            </button>
           ) : (
-            <>
-              <span className="epp-next-text">Every section is complete.</span>
-              <button
-                type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-                data-testid="package-continue-start" onClick={requestStartEpisode} disabled={starting}
-              >
-                <PlayCircle size={14} aria-hidden="true" /> Start Episode
-              </button>
-            </>
+            <button
+              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
+              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
+            >
+              Continue <ArrowRight size={14} aria-hidden="true" />
+            </button>
           )}
         </div>
       )}
@@ -1941,25 +1949,29 @@ export default function EventPackagePage() {
       </div>
       </div>
 
-      {!used && !gatesMet && (
-        <div className="epp-start-blocked" data-testid="start-blocked">
-          <Lock size={13} aria-hidden="true" /> Start Episode needs: {blockedBy.join(' · ')}
-        </div>
-      )}
-
+      {/* The foot of the page (Evoni's review, item 4): what is still
+          needed, worded exactly as the strip's tiles, each linking to its
+          section; Start Episode itself lives only in the strip. */}
       {!used && (
-        <div className="epp-actions">
+        <div className="epp-actions" data-testid="package-foot">
+          {!gatesMet && (
+            <div className="epp-start-blocked" data-testid="start-blocked">
+              <Lock size={13} aria-hidden="true" /> Still needed to start:
+              {readiness.sections.filter((sec) => !sec.complete && sec.kind === 'blocking').map((sec) => {
+                const tile = readinessTile(sec);
+                return (
+                  <a key={sec.key} className="epp-start-blocked-link" href={`#epp-sec-${sec.key === 'organizer' ? 'people' : sec.key}`} data-testid={`start-blocked-${sec.key}`}>
+                    {tile.text === tile.label ? tile.label : `${tile.label}: ${tile.text}`}
+                  </a>
+                );
+              })}
+            </div>
+          )}
+          <a className="epp-foot-top" href="#epp-readiness" data-testid="package-foot-top">
+            {gatesMet ? 'Start Episode is in Readiness ↑' : 'Back to Readiness ↑'}
+          </a>
           <button className="epp-btn epp-btn-secondary" onClick={openEditor}>
             <Pencil size={16} /> Edit details
-          </button>
-          <button
-            className="epp-btn epp-btn-primary"
-            disabled={!gatesMet || starting}
-            title={gatesMet ? 'Start the episode' : `Start Episode needs: ${blockedBy.join(' · ')}`}
-            data-testid="start-episode"
-            onClick={requestStartEpisode}
-          >
-            <PlayCircle size={16} /> {starting ? 'Starting…' : 'Start Episode'}
           </button>
         </div>
       )}

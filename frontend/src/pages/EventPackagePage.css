@@ -809,10 +809,21 @@
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 16px;
+  flex: 1 1 260px;
   font-size: 12px;
   color: var(--lala-danger);
   overflow-wrap: anywhere;
+}
+.epp-start-blocked-link {
+  color: var(--lala-lavender-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.epp-start-blocked-link:not(:last-child)::after { content: ' ·'; display: inline-block; margin-left: 6px; color: var(--lala-ink-muted); text-decoration: none; }
+.epp-foot-top {
+  font-size: 12px;
+  color: var(--lala-lavender-text);
+  white-space: nowrap;
 }
 .epp-start-confirm .epp-modal-header h3 { display: inline-flex; align-items: center; gap: 6px; color: var(--warning-text); }
 .epp-start-warnings {
@@ -840,6 +851,8 @@
   bottom: 0;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 20px;
   padding: 12px 0;
@@ -1519,7 +1532,9 @@
   .epp-page { padding: 14px 12px 96px; }
   .epp-sections { grid-template-columns: 1fr; }
   .epp-title { font-size: 18px; }
-  .epp-actions { flex-direction: column-reverse; align-items: stretch; }
+  .epp-actions { flex-direction: column; align-items: stretch; }
+  .epp-start-blocked { flex: none; }
+  .epp-foot-top { text-align: center; }
   .epp-btn { justify-content: center; }
   .epp-stakes-summary { grid-template-columns: 1fr; }
   .epp-terms-grid { grid-template-columns: 1fr; }
@@ -1757,7 +1772,7 @@
   color: var(--text-inverse);
 }
 .epp-next-btn.epp-btn-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
-.epp-section { scroll-margin-top: 16px; }
+.epp-section, .epp-strip { scroll-margin-top: 16px; }
 .epp-stakes-field textarea { resize: vertical; font-size: 13px; }
 
 /* Money: Lala's balance, the planned lines and the projection. */
@@ -1783,7 +1798,7 @@
 .epp-money-lines .is-pos { color: var(--primary-text); }
 
 @media (max-width: 480px) {
-  .epp-next-btn.epp-btn-primary { margin-left: 0; width: 100%; justify-content: center; }
+  .epp-next-btn.epp-btn-primary { margin-left: 0; flex: 1 1 auto; justify-content: center; }
 }
 
 /* Recommended looks (episode creation step 3): whole outfits from the
