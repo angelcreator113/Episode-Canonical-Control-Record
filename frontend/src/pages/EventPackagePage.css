@@ -1532,7 +1532,8 @@
   .epp-page { padding: 14px 12px 96px; }
   .epp-sections { grid-template-columns: 1fr; }
   .epp-title { font-size: 18px; }
-  .epp-actions { flex-direction: column; align-items: stretch; }
+  /* The foot is too tall to pin on a phone: it ends the page instead. */
+  .epp-actions { position: static; flex-direction: column; align-items: stretch; }
   .epp-start-blocked { flex: none; }
   .epp-foot-top { text-align: center; }
   .epp-btn { justify-content: center; }
@@ -1922,6 +1923,7 @@
 .epp-toc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .epp-toc a { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink); text-decoration: none; }
 .epp-toc a:hover { background: var(--lala-lavender-soft); }
+.epp-toc a.is-active { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-weight: 600; }
 .epp-toc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lala-lavender-light); }
 .epp-toc a.state-warning .epp-toc-dot { background: var(--warning); }
 .epp-toc a.state-blocking .epp-toc-dot { background: var(--danger); }
@@ -1931,16 +1933,27 @@
   .epp-hero-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .epp-body { grid-template-columns: minmax(0, 1fr); }
   /* On a narrow screen the menu is a row of chips that scrolls sideways. */
-  .epp-toc { position: static; padding: 0; background: none; border: none; }
+  /* Item 9 (Evoni's review): the chip row stays under the header while the
+     sections scroll, on the page's own background, under the app's top
+     bar (Header.jsx publishes --app-header-h). */
+  .epp-toc { position: sticky; top: var(--app-header-h, 0px); z-index: 5; margin: 0 -4px; padding: 8px 4px; background: var(--lala-parchment); border: none; border-radius: 0; box-shadow: 0 6px 8px -8px rgba(44, 44, 44, 0.25); }
   .epp-toc-eyebrow { display: none; }
-  .epp-toc ul { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .epp-toc ul { position: relative; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .epp-toc ul::-webkit-scrollbar { display: none; }
+  .epp-section, .epp-strip { scroll-margin-top: calc(var(--app-header-h, 0px) + 64px); }
   .epp-toc li { flex: none; }
   .epp-toc a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); white-space: nowrap; }
+  .epp-toc a.is-active { border-color: var(--lala-lavender-line); background: var(--lala-lavender-soft); }
 }
 @media (max-width: 640px) {
   .epp-hero { padding: 14px 16px 18px; }
   .epp-hero .epp-title { font-size: 24px; }
-  .epp-hero-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Item 10: on a phone each tile is one line (label, value, then its note). */
+  .epp-hero-tiles { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .epp-hero-tile { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 8px 12px; }
+  .epp-hero-tile-label { flex: 0 0 72px; }
+  .epp-hero-tile strong { flex: 0 1 auto; min-width: 0; }
+  .epp-hero-tile-sub::before { content: '· '; }
   .epp-strip { padding: 14px 16px; }
   .epp-strip-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
