@@ -790,8 +790,14 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
         error: `This scene set is used ${uses.total} time(s). Choose a replacement to move them to, or delete anyway and leave them pointing at a removed set.`,
       });
     }
-    await set.destroy();
-    res.json({ success: true, message: 'Scene set deleted', uses_left: uses });
+    // Deleted anyway: its beats keep pointing at it (the Scenes tab names
+    // them), but episode links no beat uses are dropped (Evoni, 2026-10-07).
+    const { dropRemovedSetLinks } = require('../services/sceneSetUsesService');
+    const linksDropped = await SceneSet.sequelize.transaction(async (transaction) => {
+      await set.destroy({ transaction });
+      return dropRemovedSetLinks(SceneSet.sequelize, { setId: set.id, transaction });
+    });
+    res.json({ success: true, message: 'Scene set deleted', uses_left: uses, links_dropped: linksDropped });
   } catch (err) {
     console.error('Scene Sets DELETE /:id error:', err);
     res.status(500).json({ success: false, error: err.message });

@@ -7,6 +7,12 @@
  * (POST /episodes/:id/move-removed-sets). Shown on the Scenes tab (the
  * Beat Plan re-plans only since S9 d); renders nothing when no removed set
  * is used.
+ *
+ * Only sets a beat still uses are listed (Evoni, 2026-10-07): the bar said
+ * "Some beats point at…" on an episode whose beats all had live scenes,
+ * because other leftovers (an old location link, a scene row) also count
+ * as uses. Those no longer raise it; the location links are dropped on the
+ * server (sceneSetUsesService.dropRemovedSetLinks).
  */
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
@@ -24,7 +30,8 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
     if (!episodeId) return;
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/removed-sets`);
-      setRemoved(Array.isArray(res.data?.data) ? res.data.data : []);
+      const sets = Array.isArray(res.data?.data) ? res.data.data : [];
+      setRemoved(sets.filter((s) => Array.isArray(s.beats) && s.beats.length > 0));
     } catch (err) {
       console.error('[RemovedSets] load failed:', err);
     }

@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -85,11 +85,19 @@ describe('EpisodeScenesTab status (S9 a)', () => {
     expect(screen.queryByTestId('est-issues')).toBeNull();
   });
 
-  test('…also when only a location (no beat) uses a removed set, and every background is ready', async () => {
+  // Evoni, 2026-10-07: the bar shows only when a beat is really affected; a
+  // removed set that only a leftover location uses no longer raises it (the
+  // server drops those links: sceneSetUsesService.dropRemovedSetLinks).
+  test('…but not when only a location (no beat) uses a removed set', async () => {
     READINESS = { ready: 4, total: 4, not_ready: [] };
+    const base = vi.mocked(apiClient.get).getMockImplementation();
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1/removed-sets'
+      ? { data: { data: [{ scene_set_id: 'set-gone', name: "Lala's Closet", beats: [] }] } }
+      : base(url)));
     renderTab();
-    expect(await screen.findByTestId('removed-sets-banner')).toBeTruthy();
     expect((await screen.findByTestId('est-status-images')).textContent).toBe('Backgrounds: All 4 backgrounds ready');
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/removed-sets'));
+    expect(screen.queryByTestId('removed-sets-banner')).toBeNull();
   });
 
   test('nothing to review when every background is ready', async () => {
