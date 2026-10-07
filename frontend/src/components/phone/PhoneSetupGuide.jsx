@@ -122,9 +122,16 @@ export default function PhoneSetupGuide({ progress, collapsed = false, onToggle,
           onClick={onToggle}
         >
           <span className="phone-setup-guide__title">Setup</span>
+          {/* Three parts, filled as Screens, Icons and Links are done (Evoni's mock, 2026-10-07) */}
+          <span className="phone-setup-guide__bar" aria-hidden="true">
+            {[0, 1, 2].map(i => <span key={i} className={`phone-setup-guide__seg${i < doneCount ? ' is-done' : ''}`} />)}
+          </span>
           <span className="phone-setup-guide__summary">
             {complete ? '✓ Screens, icons and links are done' : `${doneCount} of 3 done`}
           </span>
+          {!complete && next && (
+            <span className="phone-setup-guide__next" data-testid="phone-setup-next">· next: {NEXT_TITLES[next.key]}</span>
+          )}
           <ChevronDown size={13} aria-hidden="true" className="phone-setup-guide__chevron" />
         </button>
         {next && onContinue && (

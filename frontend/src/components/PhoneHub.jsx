@@ -21,6 +21,7 @@ import { isMapScreen } from './phone/PhoneMapView';
 import { PHONE_SKINS, getScreenImageStyle } from './phone/phoneStyle';
 import PhoneHubSectionTabs from './PhoneHubSectionTabs';
 import { isIcon, isScreen, getScreenLinks, getIconUrls, resolveZoneIconKey } from '../lib/overlayUtils';
+import { screenCardStatus } from '../lib/phoneHubSummary';
 
 // Screen types are now fully dynamic — defined per-show in the database.
 // The `screens` prop already contains all type data from the API.
@@ -36,41 +37,8 @@ const menuItemStyle = {
   borderBottom: '1px solid #f5f3ee',
 };
 
-// A screen's state in plain words and its one next action (doctrine rule 18,
-// Task #2042), from what the page already computes: whether the screen has an
-// image, the page's screenDiagnostics for it (zone counts and zones with no
-// destination) and how many zones on other screens lead here. Up to three
-// lines, in the order the next action is chosen: image, links, incoming.
-// `next` is 'image', 'links', 'incoming' or null (Ready).
-export function screenCardStatus({ hasImage, diagnostics, isHome = false, incoming = 0 }) {
-  const lines = [];
-  let next = null;
-  const need = (step) => { if (!next) next = step; };
-
-  if (hasImage) lines.push({ key: 'image', text: '✓ Image', warn: false });
-  else { lines.push({ key: 'image', text: '⚠ No image', warn: true }); need('image'); }
-
-  if (hasImage && diagnostics?.counts) {
-    const { tap = 0, icon = 0 } = diagnostics.counts;
-    const total = tap + icon;
-    const noDestination = (diagnostics.missingTarget || 0) + (diagnostics.brokenTarget || 0);
-    if (noDestination > 0) {
-      lines.push({ key: 'links', text: `⚠ ${noDestination} zone${noDestination === 1 ? ' has' : 's have'} no destination`, warn: true });
-      need('links');
-    } else if (total > 0) {
-      lines.push({ key: 'links', text: `${icon} icon${icon === 1 ? '' : 's'} · ${total}/${total} linked`, warn: false });
-    } else {
-      lines.push({ key: 'links', text: 'No zones yet', warn: false });
-    }
-  }
-
-  if (!isHome && incoming === 0) {
-    lines.push({ key: 'incoming', text: '⚠ Nothing links here', warn: true });
-    need('incoming');
-  }
-
-  return { ready: next === null, next, lines };
-}
+// screenCardStatus lives in lib/phoneHubSummary (the header counts by it too).
+export { screenCardStatus };
 
 const CONTINUE_TITLES = {
   image: 'Add an image in Build',
@@ -81,7 +49,6 @@ const CONTINUE_TITLES = {
 const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false, status = null, onContinue }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
-  const accentColor = isIcon ? '#a889c8' : '#B8962E';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -114,8 +81,10 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
       }}
       className="screen-card"
       style={{
-        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        // Selected: white with a lavender edge (Evoni's mock, 2026-10-07; it was filled ink).
+        background: isHidden ? '#f5f3f0' : hasImage || isActive ? '#fff' : '#faf8f5',
+        boxShadow: isActive && !isHidden ? '0 0 0 2px var(--lala-lavender)' : undefined,
+        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? 'var(--lala-lavender)' : hasImage ? '#e8e0d0' : '#f0ece4'}`,
         borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
         cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'visible',
         minHeight: isIcon ? 40 : 'auto', opacity: isHidden ? 0.45 : 1,
@@ -155,8 +124,8 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
         <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.label}</div>
-          {!isIcon && (<div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.desc}</div>)}
+          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.label}</div>
+          {!isIcon && (<div className="screen-card-desc" style={{ fontSize: 8, color: '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.desc}</div>)}
         </div>
       </div>
       {/* Link status badge — shows at a glance whether this card participates
@@ -169,7 +138,7 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           title="The phone opens on this screen"
           style={{
             marginTop: 4, fontSize: 9, fontFamily: "'DM Mono', monospace", fontWeight: 700, letterSpacing: 0.3,
-            color: isActive ? '#F0DFA8' : '#B8962E',
+            color: '#B8962E',
           }}
         >
           ★ HOME
@@ -179,11 +148,11 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           (doctrine rule 18, Task #2042). Icon cards keep their label below. */}
       {screen && !isHidden && !isIcon && status && (
         <div className="screen-card-status" data-testid="screen-card-status">
-          <div className={`screen-card-status__word screen-card-status__word--${status.ready ? 'ready' : 'setup'}${isActive ? ' is-active' : ''}`}>
+          <div className={`screen-card-status__word screen-card-status__word--${status.ready ? 'ready' : 'setup'}`}>
             {status.ready ? 'Ready' : 'Needs setup'}
           </div>
           {status.lines.map(line => (
-            <div key={line.key} className={`screen-card-status__line${line.warn ? ' is-warn' : ''}${isActive ? ' is-active' : ''}`} title={line.text}>
+            <div key={line.key} className={`screen-card-status__line${line.warn ? ' is-warn' : ''}`} title={line.text}>
               {line.text}
             </div>
           ))}
@@ -211,10 +180,10 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
             ? '⚠ No target'
             : '○ Unplaced';
         const color = linked
-          ? (isActive ? 'rgba(255,255,255,0.85)' : '#5a8f3b')
+          ? '#5a8f3b'
           : placed
-            ? (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E')
-            : (isActive ? 'rgba(255,255,255,0.55)' : '#A09889');
+            ? '#B84D2E'
+            : '#A09889';
         return (
           <div
             title={linked
@@ -279,6 +248,14 @@ export default function PhoneHub({
   // Without them a card still shows its image and incoming lines, and no button.
   screenDiagnostics = null,
   onContinue,
+  // Optional node under the phone (Evoni's mock, 2026-10-07): the page's
+  // caption for the shown screen with Edit screen and Play through.
+  deviceFooter = null,
+  // A slot beside the grid for the screen being edited (Evoni's mock,
+  // 2026-10-07): the page portals its panel into detailRef. While it is
+  // open the phone steps aside.
+  detailOpen = false,
+  detailRef = null,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -421,8 +398,10 @@ export default function PhoneHub({
   }, [highlightIconKey, deviceScreen, firstScreen, persistentLinks, iconTypes]);
 
   return (
-    <div className="phone-hub-inner">
-      {/* Phone Device */}
+    <div className={`phone-hub-inner${detailOpen ? ' has-detail' : ''}`}>
+      {/* Phone Device — while a screen's panel is open the grid and the panel
+          share the row instead (Evoni's mock, 2026-10-07). */}
+      {!detailOpen && (
       <div className="phone-hub-device">
       {devicePane || (<>
       <PhoneDevice
@@ -451,6 +430,10 @@ export default function PhoneHub({
           ○ {activeScreen.name} isn't placed on {deviceScreen.name}
         </div>
       )}
+
+      {/* The shown screen's name, what it holds, Edit screen and Play through
+          (Evoni's mock, 2026-10-07); the page builds it. */}
+      {deviceFooter}
 
       {/* "Edit Tap Zones" button removed — the Zones tab in the section bar
           is the canonical entry point now. `onEditZones` prop kept for any
@@ -503,6 +486,7 @@ export default function PhoneHub({
       )}
       </>)}
       </div>
+      )}
 
       {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
           page stays focused on one surface instead of two stacked grids. */}
@@ -597,10 +581,14 @@ export default function PhoneHub({
         )}
       </div>
 
+      {detailOpen && <aside className="phone-hub-detail" aria-label="Screen details" ref={detailRef} />}
+
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
+        .phone-hub-detail { flex: 0 0 380px; min-width: 0; position: sticky; top: 20px; align-self: flex-start; max-height: calc(100vh - 40px); overflow-y: auto; }
+        .phone-hub-inner.has-detail .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 
         .phone-hub-screen-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;
@@ -697,22 +685,19 @@ export default function PhoneHub({
         }
         .screen-card-status__word--ready { color: #5a8f3b; }
         .screen-card-status__word--setup { color: #B84D2E; }
-        .screen-card-status__word.is-active { color: rgba(255,255,255,0.85); }
         .screen-card-status__line {
           font-family: 'DM Mono', monospace; font-size: 9px; line-height: 1.3; color: #6B6557;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
         }
         .screen-card-status__line.is-warn { color: #B84D2E; }
-        .screen-card-status__line.is-active { color: rgba(255,255,255,0.7); }
-        .screen-card-status__line.is-warn.is-active { color: rgba(255,200,150,0.95); }
         .screen-card-continue {
           align-self: flex-start; max-width: 100%; margin-top: 4px; min-height: 28px; padding: 4px 8px;
           font-family: var(--font-ui); font-size: 11px; font-weight: 600;
-          color: var(--lala-gold); background: var(--lala-gold-soft);
-          border: 1px solid var(--lala-gold-line, #B8962E); border-radius: 6px; cursor: pointer;
+          color: var(--lala-lavender-text); background: var(--lala-lavender-soft);
+          border: 1px solid var(--lala-lavender-line); border-radius: 999px; cursor: pointer;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .screen-card-continue:hover { background: var(--lala-gold); color: #fff; }
+        .screen-card-continue:hover { background: var(--lala-lavender); color: var(--text-inverse); }
 
         @media (max-width: 1024px) {
           .phone-hub-inner { gap: 16px; }
@@ -721,6 +706,8 @@ export default function PhoneHub({
         }
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
+          .phone-hub-inner.has-detail { flex-direction: column-reverse; }
+          .phone-hub-detail { flex: none; position: static; max-height: none; overflow: visible; }
           .phone-hub-device { align-items: center; position: static; }
           .phone-hub-frame { width: 220px; }
           .phone-hub-screen-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }

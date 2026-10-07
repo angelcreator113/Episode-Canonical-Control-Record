@@ -774,3 +774,280 @@
   font-family: var(--font-ui);
   color: var(--lala-ink);
 }
+
+/* ── Connect, to Evoni's mock (2026-10-07) ─────────────────────────────
+   One white card: "Tap zones", the screen's name with "N of M linked",
+   a lavender Done; "Pick a screen to wire" over the screens with their
+   tap-zone counts; numbered zone rows in two columns ("1 · name opens
+   [screen]"); a hint naming the screens with no tap zones. The layout
+   tools fold under "Layout tools". These rules override the gold look
+   above. */
+.zones-tab__sidebar-card {
+  background: var(--surface-card, #fff);
+  border-color: var(--lala-lavender-line);
+  border-radius: 18px;
+  padding: 18px 20px;
+}
+
+.zones-tab__sidebar-label {
+  color: var(--accent-dark);
+  letter-spacing: 0.1em;
+}
+
+.zones-tab__sidebar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.zones-tab__sidebar-screen {
+  font-size: 26px;
+}
+
+.zones-linked-pill {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.zones-linked-pill.is-warn {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.zones-tab__pick-label {
+  margin: 4px 0 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.zones-thumbnail,
+.zones-thumbnail__frame,
+.zones-thumbnail__label {
+  width: 92px;
+  max-width: 92px;
+}
+
+.zones-thumbnail__frame {
+  border-radius: 10px;
+}
+
+.zones-thumbnail.active .zones-thumbnail__frame {
+  border-color: var(--accent-dark);
+}
+
+.zones-thumbnail__label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.zones-thumbnail__count {
+  top: -6px;
+  right: -6px;
+  background: var(--accent-dark);
+  box-shadow: none;
+}
+
+.zones-thumbnail__count.is-zero {
+  color: var(--lala-lavender-text);
+  background: var(--lala-lavender-soft);
+}
+
+.zones-tap-tools-fold {
+  margin: 0 0 10px;
+}
+
+.zones-tap-tools-fold > summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  margin-bottom: 8px;
+}
+
+.zones-tap-panel__list {
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  align-items: start;
+}
+
+.zones-tap-row {
+  border-color: var(--lala-lavender-line);
+  border-radius: 14px;
+}
+
+.zones-tap-row.active {
+  border-color: var(--accent-light);
+  background: var(--accent-subtle);
+  box-shadow: none;
+}
+
+.zones-tap-row--inline {
+  grid-template-columns: auto minmax(60px, 0.8fr) auto minmax(116px, 1fr) auto auto;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.zones-tap-row__number {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-dark);
+  color: var(--text-inverse);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.zones-tap-row__label-input {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 4px;
+}
+
+.zones-tap-row__label-input:hover {
+  border-color: var(--lala-lavender-line);
+}
+
+.zones-tap-row__opens {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.zones-tap-row__target-select {
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  font-weight: 600;
+}
+
+.zones-tap-row__label-input:focus,
+.zones-tap-row__target-select:focus {
+  border-color: var(--lala-lavender);
+  box-shadow: 0 0 0 2px var(--lala-lavender-soft);
+}
+
+.zones-tap-row__target-select--warn {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.zones-tap-row__icon {
+  padding-left: 32px;
+}
+
+.zone-number-badge {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  z-index: 2;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent-dark);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.zones-tab__canvas-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.zones-bare-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: 1px solid var(--warning-border);
+  border-radius: 14px;
+  background: var(--warning-bg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.zones-bare-hint p {
+  margin: 0;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.zones-bare-hint__next {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--warning-text);
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .zones-tap-panel__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zones-tap-row--inline {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "num   label  expand delete"
+      "opens target target target";
+  }
+
+  .zones-tap-row__number   { grid-area: num; }
+  .zones-tap-row__opens    { grid-area: opens; justify-self: end; }
+
+  .zones-tab__sidebar-screen {
+    font-size: 22px;
+  }
+}
+
+.zones-unsaved + .zone-editor-done-btn {
+  margin-left: 0;
+}
+
+/* Stacked (tablet and phone): the controls take the column's width rather
+   than their content's, so the screen strip scrolls inside the card
+   instead of pushing Done off the right edge at 375px. */
+@media (max-width: 1024px) {
+  .zones-tab__controls {
+    align-self: stretch;
+    width: 100%;
+  }
+}
+
+.zones-tab__content-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--lala-lavender-line);
+}
+
+.zones-tab__content-panel:empty {
+  display: none;
+}

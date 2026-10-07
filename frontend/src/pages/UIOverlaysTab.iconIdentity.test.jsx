@@ -88,7 +88,7 @@ describe('UIOverlaysTab — asset changes never touch placements (Task #2005)', 
 
   test('Remove BG posts the removal and writes no zone', async () => {
     await openCallEditor();
-    fireEvent.click(await screen.findByRole('button', { name: /Remove BG/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Remove background/ }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/ui-overlays/${SHOW}/remove-bg/a-call`));
     await waitFor(() => expect(listCalls).toBeGreaterThan(1));
     expect(zoneWrites()).toEqual([]);

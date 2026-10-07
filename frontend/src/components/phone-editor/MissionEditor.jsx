@@ -16,7 +16,7 @@ import api from '../../services/api';
 import ConditionRow from './ConditionRow';
 import ActionRow from './ActionRow';
 
-const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
+const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, primary actions (2026-10-07)
 const MONO = "'DM Mono', monospace";
 const PROSE = "'Lora', serif";
 
@@ -65,17 +65,17 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
       >
         {/* Header */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #e8e0d0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Target size={18} color={TOKENS.gold} />
+          <Target size={18} color={TOKENS.lavender} />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: PROSE, fontSize: 17, fontWeight: 700, color: TOKENS.ink }}>Missions</div>
             <div style={{ fontSize: 10, color: '#8a7e65', fontFamily: MONO, letterSpacing: 0.3, marginTop: 2 }}>
-              Read-only observers — watch state, report progress
+              Goals the phone tracks as Lala uses it; none of them changes the phone
             </div>
           </div>
           {editing !== 'new' && (
             <button
               onClick={() => setEditing('new')}
-              style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, border: 'none', borderRadius: 8, background: TOKENS.gold, color: '#fff', cursor: 'pointer', fontFamily: MONO, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, border: 'none', borderRadius: 999, background: TOKENS.lavender, color: '#fff', cursor: 'pointer', fontFamily: MONO, display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <Plus size={14} /> New
             </button>
@@ -119,7 +119,7 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
               {!loading && missions.length === 0 && (
                 <div style={{ padding: 30, textAlign: 'center', color: '#8a7e65', fontFamily: MONO, fontSize: 12, lineHeight: 1.6 }}>
                   No missions yet.<br />
-                  Click <strong>+ New</strong> to create one — missions watch state flags and report progress as players play.
+                  Click <strong>+ New</strong> to add one. Each mission watches the phone's state and shows its progress as the phone is played.
                 </div>
               )}
               {!loading && missions.map(m => (
@@ -355,7 +355,7 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f0ece4', paddingTop: 10, marginTop: 4 }}>
         <button onClick={onCancel} disabled={saving} style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: MONO }}>Cancel</button>
-        <button onClick={save} disabled={saving} style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, border: 'none', borderRadius: 6, background: TOKENS.gold, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontFamily: MONO, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <button onClick={save} disabled={saving} style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, border: 'none', borderRadius: 999, background: TOKENS.lavender, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontFamily: MONO, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <Save size={12} /> {saving ? 'Saving…' : 'Save mission'}
         </button>
       </div>

@@ -69,12 +69,23 @@ describe('ScreenLinkEditor — library icons by key (Task #2014)', () => {
     expect(zone).toMatchObject({ icon_url: null, icon_urls: [] });
   });
 
-  test('a zone with no icon keeps a dashed outline and its label; a zone with one does not', () => {
+  // Connect (embedded) outlines and numbers every zone, icon or not, the
+  // numbers matching the zone rows (Evoni's mock, 2026-10-07).
+  test('in Connect every zone is outlined and numbered; a zone with no icon keeps its label', () => {
     render(<ScreenLinkEditor screen={SCREEN} links={[plain(), plain({ id: 'z2', label: 'Call', icon_overlay_id: 'call_icon', icon_url: CALL.url })]} iconOverlays={[CALL]} onSave={vi.fn()} embedded />);
     expect(canvasZone('z1').style.border).toContain('dashed');
     expect(within(canvasZone('z1')).getByText('Phone')).toBeTruthy();
-    expect(canvasZone('z2').style.border).not.toContain('dashed');
+    expect(canvasZone('z1').querySelector('.zone-number-badge').textContent).toBe('1');
+    expect(canvasZone('z2').style.border).toContain('dashed');
     expect(canvasZone('z2').querySelector('img')).toBeTruthy();
+    expect(canvasZone('z2').querySelector('.zone-number-badge').textContent).toBe('2');
+  });
+
+  test('outside Connect a zone with no icon keeps a dashed outline; a zone with one does not, and none is numbered', () => {
+    render(<ScreenLinkEditor screen={SCREEN} links={[plain(), plain({ id: 'z2', label: 'Call', icon_overlay_id: 'call_icon', icon_url: CALL.url })]} iconOverlays={[CALL]} onSave={vi.fn()} />);
+    expect(canvasZone('z1').style.border).toContain('dashed');
+    expect(canvasZone('z2').style.border).not.toContain('dashed');
+    expect(document.querySelector('.zone-number-badge')).toBeNull();
   });
 
   test('a per-zone upload reads "Custom image"', () => {

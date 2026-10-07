@@ -1,5 +1,5 @@
-/* Section tabs — pill group with gold underline on active, mirrors the
-   editor modal's chapter-marker tab treatment. Kept in a standalone CSS
+/* Section tabs — a white pill bar, the current stage lavender (Evoni's
+   mock, 2026-10-07; it was a gold underline). Kept in a standalone CSS
    file (not inside PhoneHub's inline <style>) so the tabs can render
    even when PhoneHub is unmounted. */
 .phone-hub-section-tabs {
@@ -9,7 +9,6 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  border-bottom: 1px solid var(--lala-parchment-3);
 }
 
 .phone-hub-section-tabs-wrap {
@@ -26,8 +25,14 @@
 .phone-hub-stage-row {
   display: flex;
   align-items: stretch;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  padding: 4px;
+  gap: 2px;
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
 }
 
 .phone-hub-section-tab-group {
@@ -44,18 +49,17 @@
 }
 
 .phone-hub-section-tab {
-  padding: 10px 16px;
-  font-size: var(--text-xs);
-  font-weight: 700;
+  min-height: 40px;
+  padding: 8px 18px;
+  font-size: var(--text-sm, 13px);
+  font-weight: 600;
   font-family: var(--font-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--lala-ink-muted);
+  color: var(--lala-lavender-text);
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -64,16 +68,18 @@
 }
 
 .phone-hub-section-tab:hover {
-  color: var(--lala-ink);
+  background: var(--lala-lavender-soft);
 }
 
-.phone-hub-section-tab.active {
-  color: var(--lala-ink);
-  border-bottom-color: var(--lala-gold);
+/* The stages are one white pill bar; the current stage is lavender (Evoni's mock, 2026-10-07). */
+.phone-hub-section-tab.active,
+.phone-hub-section-tab.active:hover {
+  color: var(--text-inverse);
+  background: var(--lala-lavender);
 }
 
 .phone-hub-section-tab-count {
-  color: var(--lala-gold);
+  color: var(--lala-lavender-text);
   font-weight: 700;
   margin-left: 2px;
 }
@@ -151,8 +157,8 @@
   gap: 2px;
   margin-top: 10px;
   padding: 2px;
-  background: var(--lala-parchment-2);
-  border-radius: var(--lala-radius);
+  background: var(--lala-lavender-soft);
+  border-radius: 999px;
 }
 
 .phone-hub-build-toggle-btn {
@@ -162,10 +168,10 @@
   font-weight: 700;
   font-family: var(--font-ui);
   letter-spacing: 0.04em;
-  color: var(--lala-ink-muted);
+  color: var(--lala-lavender-text);
   background: none;
   border: none;
-  border-radius: var(--lala-radius);
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
 }
