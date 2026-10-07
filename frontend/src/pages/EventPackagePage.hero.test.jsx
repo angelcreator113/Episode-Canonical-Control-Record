@@ -5,7 +5,7 @@
  * jumps to it, and a menu whose dots mark the sections that need attention.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within, act } from '@testing-library/react';
+import { render, screen, within, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -101,7 +101,9 @@ describe('Event Package — On this page follows the scroll', () => {
     try {
       renderPage();
       await screen.findByTestId('package-toc');
-      expect(observed.map((el) => el.id)).toContain('epp-sec-deal');
+      // The observer is attached in an effect that runs after the sections
+      // are in the DOM; wait for it rather than assume it already ran.
+      await waitFor(() => expect(observed.map((el) => el.id)).toContain('epp-sec-deal'));
       expect(screen.getByTestId('toc-deal').getAttribute('aria-current')).toBeNull();
       const deal = observed.find((el) => el.id === 'epp-sec-deal');
       act(() => report([{ isIntersecting: true, target: deal, boundingClientRect: { top: 100 } }]));
