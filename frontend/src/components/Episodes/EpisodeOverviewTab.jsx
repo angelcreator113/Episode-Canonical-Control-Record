@@ -9,6 +9,7 @@ import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
+import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
 import { fromEventItems, nextStep, coinsAfter } from '../../lib/episodeOverview';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
@@ -313,16 +314,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // WorldLocation via venue_location_id; we resolve those to full
   // location objects (name, district, image) for display. Deduped by id
   // so two events at the same venue don't show twice. Falls back to the
-  // event's free-text venue_name when no FK is set.
+  // event's free-text venue_name when no FK is set. Both are read through
+  // resolveEventVenueAndDate, so the automation copy counts as on the Place.
   const eventLocations = (() => {
     const seen = new Map();
     linkedEvents.forEach(ev => {
-      if (ev.venue_location_id) {
-        const loc = worldLocations.find(l => l.id === ev.venue_location_id);
+      const place = resolveEventVenueAndDate(ev);
+      if (place.venueLocationId) {
+        const loc = worldLocations.find(l => l.id === place.venueLocationId);
         if (loc && !seen.has(loc.id)) seen.set(loc.id, { kind: 'location', loc, eventName: ev.name });
-      } else if (ev.venue_name) {
-        const key = `name:${ev.venue_name.toLowerCase()}`;
-        if (!seen.has(key)) seen.set(key, { kind: 'venue_name', name: ev.venue_name, eventName: ev.name });
+      } else if (place.venueName) {
+        const key = `name:${String(place.venueName).toLowerCase()}`;
+        if (!seen.has(key)) seen.set(key, { kind: 'venue_name', name: place.venueName, eventName: ev.name });
       }
     });
     return Array.from(seen.values());
