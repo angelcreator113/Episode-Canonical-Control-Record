@@ -80,14 +80,15 @@ describe('"+ Add" asks what you\'re adding (Task #2024)', () => {
     expect(menu.getByText('What are you adding?')).toBeTruthy();
     const labels = menu.getAllByRole('button').map((b) => b.querySelector('.overlays-add-chooser__label')?.textContent);
     expect(labels).toEqual(['Screen', 'Icon', 'Content Area']);
-    expect(menu.queryByText(/Batch Upload|Upload Frame/)).toBeNull();
+    expect(menu.queryByText(/Upload Frame/)).toBeNull();
   });
 
-  test('Batch Upload and the frame are in "More"', async () => {
+  // Batch upload was removed (Evoni, 2026-10-07, Lala's Phone step 2).
+  test('the frame is in "More"; batch upload is gone', async () => {
     mockApi([HOME, CALLS, CALL]);
     await renderPage();
     const more = openMenu('More');
-    expect(more.getByRole('button', { name: /Batch Upload/ })).toBeTruthy();
+    expect(more.queryByRole('button', { name: /Batch Upload/ })).toBeNull();
     expect(more.getByRole('button', { name: /Upload Frame/ })).toBeTruthy();
   });
 

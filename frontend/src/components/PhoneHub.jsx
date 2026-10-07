@@ -504,7 +504,6 @@ export default function PhoneHub({
             gridFilter={gridFilter}
             showZones={!!onChangeTab}
             showContent={!!onChangeTab}
-            showMissions={!!onChangeTab}
           />
         )}
 

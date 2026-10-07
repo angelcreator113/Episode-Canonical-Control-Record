@@ -25,10 +25,13 @@ function renderRow(props = {}) {
 const stageRow = () => within(document.querySelector('.phone-hub-stage-row'));
 
 describe('PhoneHubSectionTabs — stages (Task #2010)', () => {
-  test('the row reads Build · Connect · Content · Preview · Advanced, not the old tab names', () => {
+  // Advanced ▾ held only show-wide Missions; missions are per episode now
+  // (Evoni, 2026-10-07, Lala's Phone step 2).
+  test('the row reads Build · Connect · Content · Preview, not the old tab names', () => {
     renderRow();
     const labels = stageRow().getAllByRole('button').map(b => b.textContent.trim());
-    expect(labels).toEqual(['Build', 'Connect', 'Content', 'Preview', 'Advanced']);
+    expect(labels).toEqual(['Build', 'Connect', 'Content', 'Preview']);
+    expect(stageRow().queryByText('Advanced')).toBeNull();
     expect(stageRow().queryByText('Zones')).toBeNull();
     expect(stageRow().queryByText('Missions')).toBeNull();
   });
@@ -78,34 +81,8 @@ describe('PhoneHubSectionTabs — stages (Task #2010)', () => {
     expect(screen.queryByRole('group', { name: 'Build' })).toBeNull();
   });
 
-  test('Advanced opens a menu whose Missions opens the missions key and closes the menu', () => {
-    const { onChangeTab } = renderRow();
-    const advanced = stageRow().getByRole('button', { name: 'Advanced' });
-    expect(advanced.getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(advanced);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Missions' }));
-    expect(onChangeTab).toHaveBeenCalledWith('missions');
-    expect(screen.queryByRole('menu')).toBeNull();
-  });
-
-  test('the Advanced menu closes on Escape and on an outside press', () => {
-    renderRow();
-    fireEvent.click(stageRow().getByRole('button', { name: 'Advanced' }));
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('menu')).toBeNull();
-    fireEvent.click(stageRow().getByRole('button', { name: 'Advanced' }));
-    fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole('menu')).toBeNull();
-  });
-
-  test('Advanced is the active stage while missions is open', () => {
-    renderRow({ activeTab: 'missions' });
-    expect(stageRow().getByRole('button', { name: 'Advanced' }).className).toContain('active');
-    expect(stageRow().getByRole('button', { name: 'Build' }).className).not.toContain('active');
-  });
-
   test('stages the parent can\'t show are left out', () => {
-    renderRow({ showPreview: false, showZones: false, showContent: false, showMissions: false });
+    renderRow({ showPreview: false, showZones: false, showContent: false });
     expect(stageRow().getAllByRole('button').map(b => b.textContent.trim())).toEqual(['Build']);
   });
 });

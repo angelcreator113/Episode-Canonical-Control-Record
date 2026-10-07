@@ -7,8 +7,12 @@
  * only watch and report.
  *
  * Usage: mount inside a modal when `open` is true. The host owns open/close
- * state and supplies `showId` + optional `episodeId`. Saving a mission POSTs
- * or PUTs via the host's `api` singleton; this component stays focused on UX.
+ * state and supplies `showId` + `episodeId`. Saving a mission POSTs or PUTs
+ * via the host's `api` singleton; this component stays focused on UX.
+ *
+ * Missions belong to one episode (Evoni, 2026-10-07, Lala's Phone step 2):
+ * there is no show-wide choice. A mission made show-wide before shows as
+ * "all episodes (older)"; saving it from an episode moves it there.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Save, X, Target, CheckCircle, Circle, Edit3, Gift } from 'lucide-react';
@@ -155,7 +159,7 @@ function MissionCard({ mission, onEdit, onDeleted, showId }) {
           )}
           <div style={{ fontSize: 10, color: '#8a7e65', fontFamily: MONO, marginTop: 4 }}>
             {objectives.length} objective{objectives.length === 1 ? '' : 's'}
-            {mission.episode_id ? ' · episode-scoped' : ' · show-wide'}
+            {mission.episode_id ? '' : ' · all episodes (older)'}
             {!mission.is_active && ' · inactive'}
           </div>
         </div>
@@ -172,7 +176,6 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
   const [description, setDescription] = useState(initial?.description || '');
   const [objectives, setObjectives] = useState(initial?.objectives || []);
   const [rewardActions, setRewardActions] = useState(initial?.reward_actions || []);
-  const [scopeToEpisode, setScopeToEpisode] = useState(initial ? Boolean(initial.episode_id) : Boolean(episodeId));
   const [isActive, setIsActive] = useState(initial ? initial.is_active !== false : true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
@@ -209,10 +212,9 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
         return true;
       }),
       is_active: isActive,
-      // An episode's mission keeps its episode when edited from the show's
-      // Phone (no episodeId there); it used to turn show-wide on save
-      // (Evoni, 2026-10-07, Lala's Phone step 1).
-      episode_id: scopeToEpisode ? (episodeId || initial?.episode_id || null) : null,
+      // A mission keeps its episode (Lala's Phone step 1); an older
+      // show-wide one moves to this episode (step 2, Evoni 2026-10-07).
+      episode_id: initial?.episode_id || episodeId || null,
     };
 
     setSaving(true);
@@ -343,12 +345,6 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
 
       {/* Options */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        {episodeId && (
-          <label style={{ fontSize: 11, color: '#666', display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, cursor: 'pointer' }}>
-            <input type="checkbox" checked={scopeToEpisode} onChange={e => setScopeToEpisode(e.target.checked)} />
-            scope to this episode
-          </label>
-        )}
         <label style={{ fontSize: 11, color: '#666', display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, cursor: 'pointer' }}>
           <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
           active

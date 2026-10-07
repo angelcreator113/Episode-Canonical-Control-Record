@@ -78,6 +78,20 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     expect(rows[0].metadata).toMatchObject({ screen_links: ZONES, content_zones: CONTENT, image_fit: FIT, overlay_category: 'phone_app', source: 'custom-upload' });
   });
 
+  it('variants are gone: an upload naming one replaces the main image, an old variant stays', async () => {
+    const old = await asset({ screen_links: ZONES });
+    const variant = await asset({ variant_label: 'Locked', screen_links: [] });
+    const res = await auth(request(app).post(`/api/v1/ui-overlays/${show}/upload/scr_home`))
+      .field('variant_label', 'Night').attach('image', Buffer.from('png'), 'home.png');
+    expect(res.status).toBe(200);
+    const rows = await live();
+    expect(rows.map((r) => r.id)).toContain(variant);
+    expect(rows.map((r) => r.id)).not.toContain(old);
+    const main = rows.find((r) => !r.metadata.variant_label);
+    expect(main.metadata).toMatchObject({ screen_links: ZONES, source: 'custom-upload' });
+    expect(rows.some((r) => r.metadata.variant_label === 'Night')).toBe(false);
+  });
+
   it('generating replaces the main image only: its work carries, a variant stays', async () => {
     await asset({ screen_links: ZONES });
     const variant = await asset({ variant_label: 'Locked', screen_links: [] });

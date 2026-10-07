@@ -8,16 +8,16 @@
  * Zones.
  *
  * The row is organised in stages (doctrine rule 18, Task #2010): Build ·
- * Connect · Content · Preview · Advanced ▾. Stages only regroup the
- * existing activeTab keys, which are unchanged:
+ * Connect · Content · Preview. Stages only regroup the existing activeTab
+ * keys, which are unchanged:
  *   Build    → 'screens', with a Screens | Icons toggle ('icons') under it
  *   Connect  → 'zones'
  *   Content  → 'content'
  *   Preview  → 'preview' (shown only when the parent can render it)
- *   Advanced → a menu holding Missions ('missions')
+ * Advanced ▾ held only show-wide Missions; missions are now made per
+ * episode, in its Lala's Phone tab (Evoni, 2026-10-07), so it is gone.
  */
-import { useEffect, useRef, useState } from 'react';
-import { Hammer, Link2, LayoutTemplate, Play, ChevronDown } from 'lucide-react';
+import { Hammer, Link2, LayoutTemplate, Play } from 'lucide-react';
 import './PhoneHubSectionTabs.css';
 
 // Keys that belong to the Build stage ('placements' is PhoneHub's
@@ -36,26 +36,8 @@ export default function PhoneHubSectionTabs({
   gridFilter = 'all',
   showZones = true,
   showContent = true,
-  showMissions = true,
   showPreview = false,
 }) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const advancedRef = useRef(null);
-
-  useEffect(() => {
-    if (!advancedOpen) return undefined;
-    const onPointer = (e) => { if (advancedRef.current && !advancedRef.current.contains(e.target)) setAdvancedOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setAdvancedOpen(false); };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('touchstart', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('touchstart', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [advancedOpen]);
-
   const stages = [
     { key: 'build', label: 'Build', Icon: Hammer, tab: 'screens', active: BUILD_KEYS.includes(activeTab), show: true },
     { key: 'connect', label: 'Connect', Icon: Link2, tab: 'zones', active: activeTab === 'zones', show: showZones },
@@ -86,31 +68,6 @@ export default function PhoneHubSectionTabs({
               </button>
             ))}
           </div>
-          {showMissions && (
-            <div className="phone-hub-advanced" ref={advancedRef}>
-              <button
-                type="button"
-                onClick={() => setAdvancedOpen(o => !o)}
-                className={`phone-hub-section-tab ${activeTab === 'missions' ? 'active' : ''}`}
-                aria-haspopup="menu"
-                aria-expanded={advancedOpen}
-              >
-                Advanced <ChevronDown size={13} aria-hidden="true" />
-              </button>
-              {advancedOpen && (
-                <div className="phone-hub-advanced-menu" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setAdvancedOpen(false); onChangeTab('missions'); }}
-                    className={`phone-hub-advanced-item ${activeTab === 'missions' ? 'active' : ''}`}
-                  >
-                    Missions
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
         {hiddenCount > 0 && onToggleShowHidden && (
           <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>

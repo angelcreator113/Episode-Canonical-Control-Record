@@ -692,86 +692,6 @@
   color: #B8962E;
 }
 
-/* Variants */
-.editor-variant-pills {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.editor-variant-pill {
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid #e0d9ce;
-  border-radius: 8px;
-  cursor: pointer;
-  min-height: 36px;
-  background: #fff;
-  color: #888;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-.editor-variant-pill.active { background: #B8962E; color: #fff; border-color: #B8962E; }
-.editor-variant-pill.add { border-style: dashed; color: #aaa; font-size: 14px; min-width: 36px; }
-
-.editor-variant-add {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.editor-variant-input {
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid #e0d9ce;
-  border-radius: 6px;
-  font-size: 13px;
-  min-height: 36px;
-  font-family: 'DM Mono', monospace;
-}
-
-.editor-variant-upload-btn {
-  padding: 8px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  border: none;
-  border-radius: var(--lala-radius);
-  min-height: var(--lala-h-inline);
-  background: var(--lala-gold);
-  color: #fff;
-  cursor: pointer;
-  font-family: var(--font-ui);
-}
-.editor-variant-upload-btn:hover:not(:disabled) { background: var(--lala-gold-hover); }
-.editor-variant-upload-btn:disabled {
-  background: var(--lala-parchment-2);
-  color: var(--lala-ink-faint);
-  cursor: not-allowed;
-}
-
-.editor-add-variant-btn {
-  padding: 8px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  border: 1px dashed var(--lala-gold);
-  border-radius: var(--lala-radius);
-  cursor: pointer;
-  background: transparent;
-  color: var(--lala-gold);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--lala-h-inline);
-  font-family: var(--font-ui);
-}
-.editor-add-variant-btn:hover { background: var(--lala-gold-soft); }
-
 .editor-secondary-actions {
   border-top: 1px solid var(--lala-parchment-3);
   padding-top: 16px;
@@ -1436,50 +1356,6 @@
 
 .editor-home-switch.is-home .editor-home-switch__knob {
   transform: translateX(20px);
-}
-
-.editor-variant-tiles {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.editor-variant-tile {
-  width: 56px;
-  aspect-ratio: 9 / 16;
-  padding: 0;
-  overflow: hidden;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: var(--lala-lavender-soft);
-  font-family: var(--font-ui);
-  font-size: 10px;
-  color: var(--lala-lavender-text);
-  cursor: pointer;
-}
-
-.editor-variant-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.editor-variant-tile.active {
-  border-color: var(--accent-dark);
-}
-
-.editor-variant-tile.add {
-  border: 1.5px dashed var(--lala-lavender-line);
-  background: transparent;
-  font-size: 20px;
-}
-
-.editor-variant-hint {
-  margin: 6px 0 0;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  color: var(--text-secondary);
 }
 
 .ph-chip-btn {

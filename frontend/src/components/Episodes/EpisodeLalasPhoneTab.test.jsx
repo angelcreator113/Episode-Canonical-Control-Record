@@ -237,6 +237,23 @@ describe('EpisodeLalasPhoneTab — missions section still works', () => {
     expect(body).toMatchObject({ episode_id: null, is_active: true });
   });
 
+  // No show-level missions (Evoni, 2026-10-07, Lala's Phone step 2): an
+  // older show-wide one says so and can be moved to this episode.
+  test('an older show-wide mission is marked, and Move to this episode gives it this episode', async () => {
+    mockGets();
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    await screen.findByText('Follow Lala');
+    expect(screen.getByText('ALL EPISODES (OLDER)')).toBeTruthy();
+    expect(screen.getByTestId('missions-older').textContent).toBe('1 older, on all episodes');
+    fireEvent.click(screen.getByTestId('mission-move-mis-2'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const [url, body] = vi.mocked(api.put).mock.calls[0];
+    expect(url).toBe('/api/v1/ui-overlays/s-1/missions/mis-2');
+    expect(body).toMatchObject({ name: 'Follow Lala', episode_id: 'ep-1' });
+    await waitFor(() => expect(screen.queryByText('ALL EPISODES (OLDER)')).toBeNull());
+  });
+
   test('Manage missions opens MissionEditor scoped to this episode', async () => {
     mockGets();
     render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
