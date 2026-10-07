@@ -9,6 +9,7 @@ const { requireAuth } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
+const { FK_CATEGORIES, FK_SEVERITIES, AMBER_NOTE_PREFIX } = require('../../services/franchiseKnowledgeValues');
 // Models and universeContext available via db if needed
 
 let buildKnowledgeInjection, getTechContext;
@@ -1151,18 +1152,18 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
         for (const e of (parsed.entries || [])) {
           if (!e.title || !e.content) continue;
           await sequelize.query(
-            `INSERT INTO franchise_knowledge (id, title, content, category, severity, always_inject, source_document, source_version, extracted_by, status, created_at, updated_at)
-             VALUES (gen_random_uuid(), :title, :content, :category, :severity, :always_inject, :source_document, :source_version, :extracted_by, 'pending_review', NOW(), NOW())`,
+            `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, source_document, source_version, extracted_by, review_note, status, created_at, updated_at)
+             VALUES (:title, :content, :category, :severity, :always_inject, :source_document, :source_version, 'conversation_extraction', :review_note, 'pending_review', NOW(), NOW())`,
             {
               replacements: {
                 title: String(e.title).slice(0, 200),
                 content: String(e.content),
-                category: e.category || 'world',
-                severity: e.severity || 'important',
-                always_inject: e.always_inject || false,
+                category: FK_CATEGORIES.includes(e.category) ? e.category : 'world',
+                severity: FK_SEVERITIES.includes(e.severity) ? e.severity : 'important',
+                always_inject: e.always_inject === true,
                 source_document: sourceDoc,
                 source_version: sourceDoc.split('-v')[1] || '1.0',
-                extracted_by: 'amber_push',
+                review_note: `${AMBER_NOTE_PREFIX} pushed from ${pageName}`,
               },
               type: sequelize.QueryTypes.INSERT,
             }
@@ -1282,18 +1283,18 @@ Respond ONLY in valid JSON:
         for (const e of (parsed.entries || [])) {
           if (!e.title || !e.content) continue;
           await sequelize.query(
-            `INSERT INTO franchise_knowledge (id, title, content, category, severity, always_inject, source_document, source_version, extracted_by, status, created_at, updated_at)
-             VALUES (gen_random_uuid(), :title, :content, :category, :severity, :always_inject, :source_document, :source_version, :extracted_by, 'pending_review', NOW(), NOW())`,
+            `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, source_document, source_version, extracted_by, review_note, status, created_at, updated_at)
+             VALUES (:title, :content, :category, :severity, :always_inject, :source_document, :source_version, 'conversation_extraction', :review_note, 'pending_review', NOW(), NOW())`,
             {
               replacements: {
                 title: String(e.title).slice(0, 200),
                 content: String(e.content),
-                category: e.category || 'world',
-                severity: e.severity || 'important',
-                always_inject: e.always_inject || false,
+                category: FK_CATEGORIES.includes(e.category) ? e.category : 'world',
+                severity: FK_SEVERITIES.includes(e.severity) ? e.severity : 'important',
+                always_inject: e.always_inject === true,
                 source_document: sourceDoc,
                 source_version: sourceDoc.split('-v')[1] || '1.0',
-                extracted_by: 'amber_worlddev',
+                review_note: `${AMBER_NOTE_PREFIX} world development`,
               },
               type: sequelize.QueryTypes.INSERT,
             }

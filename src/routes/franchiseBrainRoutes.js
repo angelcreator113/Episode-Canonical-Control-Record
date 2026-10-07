@@ -23,6 +23,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
 const { guardItems, itemOfWarning } = require('../services/guardItems');
+const { AMBER_NOTE_PREFIX } = require('../services/franchiseKnowledgeValues');
 
 const client = new Anthropic();
 
@@ -316,7 +317,12 @@ router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => 
     // Entries Amber has pushed/created
     const amberEntries = await db.FranchiseKnowledge.findAll({
       where: {
-        extracted_by: { [Op.in]: ['amber_push', 'amber_worlddev'] },
+        // Amber writes conversation_extraction rows marked by their
+        // review_note (services/franchiseKnowledgeValues). The names this
+        // matched before, amber_push / amber_worlddev, are not values the
+        // column accepts, so Amber's inserts failed and this query errored.
+        extracted_by: 'conversation_extraction',
+        review_note: { [Op.iLike]: `${AMBER_NOTE_PREFIX}%` },
       },
       order: [['created_at', 'DESC']],
       limit: 50,
