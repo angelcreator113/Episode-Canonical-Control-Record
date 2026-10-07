@@ -49,7 +49,7 @@ import {
 import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
-import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
+import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText, EVENTS_PER_PAGE } from '../utils/eventPagination';
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
@@ -327,6 +327,7 @@ function WorldAdmin() {
   const [editingWardrobeItem, setEditingWardrobeItem] = useState(null);   // item object or null
   const [wardrobeForm, setWardrobeForm] = useState({});
   const [savingWardrobe, setSavingWardrobe] = useState(false);
+  // Add piece; the dialog keeps its own form (components/Wardrobe/AddPieceDialog).
   const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
   const [outfitPickerEvent, setOutfitPickerEvent] = useState(null);
   // Overlay types for the show — fetched once on showId set, refetched
@@ -335,24 +336,7 @@ function WorldAdmin() {
   // is { id, type_key, name, category, generated, ... }; the picker
   // splits them into Phone vs UI buckets via category.
   const [overlayTypes, setOverlayTypes] = useState([]);
-  const [wardrobeUploading, setWardrobeUploading] = useState(false);
-  const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
-  // Inline error banner for the auto-fill button. Replaces the old alert()
-  // which users were dismissing without reading, making failures look silent.
-  const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
-  const [wardrobeUploadBrandIsFictional, setWardrobeUploadBrandIsFictional] = useState(false);
   const [wardrobeEditBrandIsFictional, setWardrobeEditBrandIsFictional] = useState(false);
-  const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
-  const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
-  // Reset the auto-fill error whenever the modal is closed or the file is
-  // swapped out — stale error text against a different image would be confusing.
-  useEffect(() => {
-    if (!showWardrobeUpload || !wardrobeUploadFile) {
-      setWardrobeAutoFillError(null);
-      setWardrobeUploadBrandIsFictional(false);
-    }
-  }, [showWardrobeUpload, wardrobeUploadFile]);
   // Sort order for the wardrobe grid. Mirrors the options previously in
   // WardrobeBrowser so consolidating the upload path doesn't drop UX.
   const [wardrobeSort, setWardrobeSort] = useState('recent'); // recent | name | price_asc | price_desc | most_used | last_used
@@ -5206,7 +5190,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   onChange={e => setWardrobeFilter(e.target.value || 'all')}
                 />
               </label>
-              <button type="button" className="wa-wd-add" onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }}>
+              <button type="button" className="wa-wd-add" onClick={() => setShowWardrobeUpload(true)}>
                 <Plus size={14} aria-hidden="true" /> Add piece
               </button>
               <div className="wa-wd-tools">
@@ -6038,7 +6022,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => setShowWardrobeUpload(true)} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -6054,398 +6038,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             )}
             </div>
 
-            {/* ── Upload Modal ── */}
+            {/* ── Add piece (Evoni, 2026-10-07: "fix and redesign wardrobe add piece") ── */}
             {showWardrobeUpload && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !wardrobeUploading && setShowWardrobeUpload(false)}>
-                <div style={{ background: 'var(--surface-card)', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Add Wardrobe Item</h3>
-                    <button onClick={() => setShowWardrobeUpload(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
-                  </div>
-
-                  {/* Image drop zone */}
-                  <div
-                    style={{ border: '1.5px dashed var(--lala-parchment-3)', borderRadius: 10, background: wardrobeUploadPreview ? 'var(--surface-card)' : 'var(--surface-bg)', marginBottom: 12, cursor: 'pointer', overflow: 'hidden' }}
-                    onClick={() => document.getElementById('wardrobe-upload-input')?.click()}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }}
-                  >
-                    {wardrobeUploadPreview ? (
-                      <div style={{ position: 'relative' }}>
-                        <img src={wardrobeUploadPreview} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'contain', display: 'block', padding: 8 }} />
-                        <button type="button" onClick={e => { e.stopPropagation(); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); }} style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', color: 'var(--text-inverse)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        <div style={{ fontSize: 24, marginBottom: 4 }}>📸</div>
-                        <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Drop image or click to browse</div>
-                      </div>
-                    )}
-                    <input id="wardrobe-upload-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }} />
-                  </div>
-
-                  {/* AI auto-fill — inline error banner sits right above the button
-                      so failures are visible without a modal. Common cause on dev:
-                      ANTHROPIC_API_KEY unset → server returns 503; we annotate that
-                      case so users don't have to dig through network tab. */}
-                  {wardrobeAutoFillError && (
-                    <div style={{ marginBottom: 10, padding: '8px 12px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 6, fontSize: 12, color: 'var(--danger-text)', lineHeight: 1.5 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 2 }}>Auto-fill failed</div>
-                      <div>{wardrobeAutoFillError}</div>
-                      {/ANTHROPIC_API_KEY/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
-                          The dev server is missing an Anthropic API key. Ask an admin to set <code>ANTHROPIC_API_KEY</code> in EC2 .env and restart PM2.
-                        </div>
-                      )}
-                      {/Failed to fetch|NetworkError|ERR_/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
-                          The request didn't reach the server. Usually one of:
-                          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                            <li>Backend not yet running the latest build (ask an admin to check <code>pm2 status</code>)</li>
-                            <li>A stale Service Worker is intercepting — try a hard refresh (<code>Cmd/Ctrl+Shift+R</code>) or DevTools → Application → Service Workers → Unregister</li>
-                            <li>Browser extension blocking the request (disable ad/privacy blockers on this tab)</li>
-                          </ul>
-                        </div>
-                      )}
-                      {/^(413|payload too large)/i.test(wardrobeAutoFillError) && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger-text)' }}>
-                          Image exceeds the server's upload limit. Try a smaller photo (&lt; 5 MB) or crop it down.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {wardrobeUploadFile && (
-                    <button type="button" disabled={wardrobeAnalyzing} onClick={async () => {
-                      setWardrobeAnalyzing(true);
-                      setWardrobeAutoFillError(null);
-                      try {
-                        const fd = new FormData(); fd.append('image', wardrobeUploadFile);
-                        // Pass show context so the server can enrich the prompt with
-                        // recent tier mix + episode event and get gameplay suggestions.
-                        // Without showId it falls back to the basic image-only flow.
-                        if (showId) fd.append('showId', showId);
-                        // Abort after 120s — Claude vision on a large image can take
-                        // 30-60s under load, but anything beyond 2 min means the
-                        // upstream is hung and we should surface that to the user.
-                        // axios's timeout option enforces this; signal kept as belt-and-suspenders.
-                        const ac = new AbortController();
-                        const timeout = setTimeout(() => ac.abort(), 120000);
-                        let res;
-                        try {
-                          res = await api.post('/api/v1/wardrobe-library/analyze-image', fd, {
-                            signal: ac.signal,
-                            timeout: 120000,
-                          });
-                        } finally {
-                          clearTimeout(timeout);
-                        }
-                        // apiClient threw on non-2xx before reaching here, so res.data is the parsed body.
-                        const data = res.data || {};
-                        if (!data.success || !data.data) {
-                          const msg = data.error || 'request failed';
-                          console.error('[Auto-fill] backend rejected:', msg, data);
-                          setWardrobeAutoFillError(msg);
-                          return;
-                        }
-                        const ai = data.data;
-                        setWardrobeUploadBrandIsFictional(!!ai.brand_is_fictional);
-                        const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
-                        // A suggestion with no floor; it fills only an empty price (Task #2347).
-                        const aiPrice = parseAiPrice(ai.price_estimate);
-                        setWardrobeUploadForm(prev => ({
-                          ...prev,
-                          name: ai.name || prev.name,
-                          clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
-                          color: ai.color || prev.color,
-                          brand: ai.brand_guess || prev.brand,
-                          price: fillPrice(prev.price, aiPrice),
-                          description: ai.description || prev.description || '',
-                          season: ai.season || prev.season || '',
-                          occasion: ai.occasion || prev.occasion || '',
-                          tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
-                          tier: ai.tier || prev.tier || '',
-                          character: 'Lala',
-                          // Gameplay — only filled when the server ran gameplay mode
-                          // (i.e. we sent a showId). prev.X preserved so a second
-                          // pass doesn't clobber values the user has tweaked.
-                          ...(data.gameplay ? {
-                            // Coin cost follows the price Evoni set, else the AI's
-                            // coin_cost or price; filled only when empty (Task #2347).
-                            coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice),
-                            acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
-                            lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
-                            // A lock the AI suggests is a piece Lala does not own yet.
-                            ...(prev.lockType === 'none' && ai.lock_type && ai.lock_type !== 'none' ? { isOwned: false } : {}),
-                            eraAlignment: prev.eraAlignment || ai.era_alignment || '',
-                            aestheticTags: prev.aestheticTags || (ai.aesthetic_tags || []).join(', '),
-                            eventTypes: prev.eventTypes || (ai.event_types || []).join(', '),
-                            outfitMatchWeight: prev.outfitMatchWeight || (ai.outfit_match_weight != null ? String(ai.outfit_match_weight) : ''),
-                            lalaReactionOwn: prev.lalaReactionOwn || ai.lala_reaction_own || '',
-                            lalaReactionLocked: prev.lalaReactionLocked || ai.lala_reaction_locked || '',
-                            lalaReactionReject: prev.lalaReactionReject || ai.lala_reaction_reject || '',
-                          } : {}),
-                        }));
-                      } catch (err) {
-                        console.error('[Auto-fill] threw:', err);
-                        // AbortError means our 2-min timeout fired; give that a clear label
-                        // so users don't think "Failed to fetch" means permanent breakage.
-                        if (err.name === 'AbortError') {
-                          setWardrobeAutoFillError('Timed out after 2 minutes — the AI server is slow or overloaded. Try again.');
-                        } else {
-                          setWardrobeAutoFillError(err.message || String(err));
-                        }
-                      } finally {
-                        setWardrobeAnalyzing(false);
-                      }
-                    }} style={{ width: '100%', padding: '8px 0', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', cursor: wardrobeAnalyzing ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: wardrobeAnalyzing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-                      {wardrobeAnalyzing ? '⏳ Analyzing...' : '✨ Auto-fill from image'}
-                    </button>
-                  )}
-
-                  {/* Form fields */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-                      <div>
-                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>brand</label>
-                        <input value={wardrobeUploadForm.brand} onChange={e => { setWardrobeUploadBrandIsFictional(false); setWardrobeUploadForm(p => ({ ...p, brand: e.target.value })); }} placeholder="e.g., Velvet House" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} />
-                        {wardrobeUploadBrandIsFictional && (
-                          <div style={{ marginTop: 4, fontSize: 10, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace" }}>
-                            Fictional brand (auto-filled)
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div>
-                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>category *</label>
-                        {/* Grouped by the five UI slots (Outfit / Shoes / Jewelry /
-                            Accessories / Fragrance) — DB still stores the granular
-                            clothing_category so scoring + filters keep working. */}
-                        <select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
-                          <option value="">Select...</option>
-                          {SLOT_KEYS.map(slot => (
-                            <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
-                              {SLOT_SUBCATEGORIES[slot].map(sub => (
-                                <option key={sub.value} value={sub.value}>{sub.label}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      </div>
-                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-                      <div>
-                        <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>tier</label>
-                        {/* Tier descriptors mirror the old WardrobeBrowser edit form so the
-                            gameplay context is obvious — e.g. "Luxury" isn't just a label,
-                            it signals Designer-tier in-story. */}
-                        <select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
-                          <option value="">Auto</option>
-                          <option value="basic">👟 Basic — Fast Fashion</option>
-                          <option value="mid">👠 Mid — Contemporary</option>
-                          <option value="luxury">💎 Luxury — Designer</option>
-                          <option value="elite">👑 Elite — Haute Couture</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>season</label><select value={wardrobeUploadForm.season || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, season: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}><option value="">Any</option>{['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                      <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>occasion</label><input value={wardrobeUploadForm.occasion || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, occasion: e.target.value }))} placeholder="gala, casual..." style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-                    </div>
-                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} /></div>
-                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-                    {/* Purchase link so creators can source the real-world item later. Backend maps website → purchase_link. */}
-                    <div><label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)' }} /></div>
-
-                    {/* ── Gameplay section ─────────────────────────────────
-                        Fields that drive the in-story unlock/purchase flow. Kept
-                        visually separate from the "what is this thing?" fields
-                        above so creators can scan past if they're just logging
-                        a piece without gameplay intent. */}
-                    <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--surface-bg)', border: '1px solid var(--lala-gold-line)', borderRadius: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>🎮 GAMEPLAY (OPTIONAL)</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>story price (LalaVerse coins)</label>
-                          <input type="number" min="0" step="1" value={wardrobeUploadForm.coinCost || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, coinCost: e.target.value }))} placeholder="e.g., 2400" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>how Lala got it</label>
-                          <select value={wardrobeUploadForm.acquisitionType || 'purchased'} onChange={e => setWardrobeUploadForm(p => ({ ...p, acquisitionType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
-                            {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>lock type</label>
-                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value, isOwned: e.target.value === 'none' }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
-                            <option value="none">None (always available)</option>
-                            <option value="coin">🪙 Coin (pay to unlock)</option>
-                            <option value="reputation">⭐ Reputation gate</option>
-                            <option value="brand_exclusive">🔒 Brand exclusive</option>
-                            <option value="season_drop">📅 Season drop</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>era alignment</label>
-                          <select value={wardrobeUploadForm.eraAlignment || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eraAlignment: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)' }}>
-                            <option value="">Any era</option>
-                            <option value="foundation">Foundation</option>
-                            <option value="glow_up">Glow Up</option>
-                            <option value="luxury">Luxury</option>
-                            <option value="prime">Prime</option>
-                            <option value="legacy">Legacy</option>
-                          </select>
-                        </div>
-                      </div>
-                      {/* Rep requirement only shows when the lock gate asks for it. Keeps the
-                          form compact when it's irrelevant. */}
-                      {wardrobeUploadForm.lockType === 'reputation' && (
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>reputation required</label>
-                          <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                        </div>
-                      )}
-
-                      {/* ── Advanced gameplay (expandable) ─────────────────────
-                          Collapsed by default so creators logging a piece don't see
-                          12 extra inputs. Expand only when the item needs Lala
-                          reaction blurbs, aesthetic/event tag buckets, or the rarer
-                          scoring/gate knobs. */}
-                      <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--lala-gold-line)' }}>
-                        <summary style={{ fontSize: 11, fontWeight: 600, color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
-                          ⋯ advanced gameplay
-                        </summary>
-                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {/* Lala reaction blurbs — what she says about this item in three states. */}
-                          <div>
-                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when she owns it)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionOwn || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionOwn: e.target.value }))} placeholder="e.g., 'My ride-or-die for red carpets'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when locked)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionLocked || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionLocked: e.target.value }))} placeholder="e.g., 'One day...'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when rejected)</label>
-                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionReject || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionReject: e.target.value }))} placeholder="e.g., 'Not the vibe for tonight'" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', resize: 'vertical', boxSizing: 'border-box' }} />
-                          </div>
-                          {/* Tag buckets — distinct from the basic `tags` field above. */}
-                          <div>
-                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>aesthetic tags (CSV)</label>
-                            <input value={wardrobeUploadForm.aestheticTags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, aestheticTags: e.target.value }))} placeholder="romantic, bold, editorial" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>event types (CSV)</label>
-                            <input value={wardrobeUploadForm.eventTypes || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eventTypes: e.target.value }))} placeholder="gala, brunch, meetup" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                          </div>
-                          {/* Numeric knobs — match-weight is 1-10, the rest are natural units. */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                            <div>
-                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>match weight (1-10)</label>
-                              <input type="number" min="1" max="10" step="1" value={wardrobeUploadForm.outfitMatchWeight || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, outfitMatchWeight: e.target.value }))} placeholder="5" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>influence required</label>
-                              <input type="number" min="0" step="1" value={wardrobeUploadForm.influenceRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, influenceRequired: e.target.value }))} placeholder="0" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>unlock ep #</label>
-                              <input type="number" min="1" step="1" value={wardrobeUploadForm.seasonUnlockEpisode || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, seasonUnlockEpisode: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '7px 9px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, background: 'var(--surface-card)', boxSizing: 'border-box' }} />
-                            </div>
-                          </div>
-                          {/* Visibility flags — is_visible defaults true so this only
-                              surfaces for authors who want to hide an item or mark it owned up front. */}
-                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                              <input type="checkbox" checked={!!wardrobeUploadForm.isOwned} onChange={e => setWardrobeUploadForm(p => ({ ...p, isOwned: e.target.checked }))} />
-                              Lala already owns it
-                            </label>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                              <input type="checkbox" checked={wardrobeUploadForm.isVisible !== false} onChange={e => setWardrobeUploadForm(p => ({ ...p, isVisible: e.target.checked }))} />
-                              Visible in closet
-                            </label>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
-                      <input type="checkbox" checked={!!wardrobeUploadForm.isFavorite} onChange={e => setWardrobeUploadForm(p => ({ ...p, isFavorite: e.target.checked }))} />
-                      ♥ Mark as favorite
-                    </label>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--lala-parchment-3)' }}>
-                    <button onClick={() => setShowWardrobeUpload(false)} style={{ padding: '7px 18px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-                    <button disabled={wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory} onClick={async () => {
-                      setWardrobeUploading(true);
-                      const fd = new FormData();
-                      fd.append('image', wardrobeUploadFile);
-                        fd.append('name', wardrobeUploadForm.name);
-                        fd.append('character', wardrobeUploadForm.character || 'Lala');
-                        fd.append('clothingCategory', wardrobeUploadForm.clothingCategory);
-                        if (wardrobeUploadForm.brand) fd.append('brand', wardrobeUploadForm.brand);
-                        if (wardrobeUploadForm.price) fd.append('price', wardrobeUploadForm.price);
-                        if (wardrobeUploadForm.color) fd.append('color', wardrobeUploadForm.color);
-                        if (wardrobeUploadForm.size) fd.append('size', wardrobeUploadForm.size);
-                        if (wardrobeUploadForm.description) fd.append('description', wardrobeUploadForm.description);
-                        if (wardrobeUploadForm.season) fd.append('season', wardrobeUploadForm.season);
-                        if (wardrobeUploadForm.occasion) fd.append('occasion', wardrobeUploadForm.occasion);
-                        if (wardrobeUploadForm.tags) fd.append('tags', wardrobeUploadForm.tags);
-                        if (wardrobeUploadForm.tier) fd.append('tier', wardrobeUploadForm.tier);
-                        if (wardrobeUploadForm.website) fd.append('purchaseLink', wardrobeUploadForm.website);
-                        if (wardrobeUploadForm.isFavorite) fd.append('isFavorite', 'true');
-                        // Gameplay fields — only send when set so the backend keeps model
-                        // defaults (acquisition_type='purchased', lock_type='none', etc.)
-                        // for anything the creator didn't touch.
-                        if (wardrobeUploadForm.coinCost) fd.append('coinCost', wardrobeUploadForm.coinCost);
-                        if (wardrobeUploadForm.acquisitionType && wardrobeUploadForm.acquisitionType !== 'purchased') fd.append('acquisitionType', wardrobeUploadForm.acquisitionType);
-                        if (wardrobeUploadForm.lockType && wardrobeUploadForm.lockType !== 'none') fd.append('lockType', wardrobeUploadForm.lockType);
-                        if (wardrobeUploadForm.eraAlignment) fd.append('eraAlignment', wardrobeUploadForm.eraAlignment);
-                        if (wardrobeUploadForm.reputationRequired) fd.append('reputationRequired', wardrobeUploadForm.reputationRequired);
-                        // Advanced gameplay — CSV tag buckets are sent raw; the
-                        // backend splits them. Numeric knobs only sent when set so
-                        // the model defaults stay intact. `is_visible` defaults
-                        // true server-side, so we only ship it when false.
-                        if (wardrobeUploadForm.aestheticTags) fd.append('aestheticTags', wardrobeUploadForm.aestheticTags);
-                        if (wardrobeUploadForm.eventTypes) fd.append('eventTypes', wardrobeUploadForm.eventTypes);
-                        if (wardrobeUploadForm.outfitMatchWeight) fd.append('outfitMatchWeight', wardrobeUploadForm.outfitMatchWeight);
-                        if (wardrobeUploadForm.influenceRequired) fd.append('influenceRequired', wardrobeUploadForm.influenceRequired);
-                        if (wardrobeUploadForm.seasonUnlockEpisode) fd.append('seasonUnlockEpisode', wardrobeUploadForm.seasonUnlockEpisode);
-                        fd.append('isOwned', wardrobeUploadForm.isOwned ? 'true' : 'false');
-                        if (wardrobeUploadForm.isVisible === false) fd.append('isVisible', 'false');
-                        if (wardrobeUploadForm.lalaReactionOwn) fd.append('lalaReactionOwn', wardrobeUploadForm.lalaReactionOwn);
-                        if (wardrobeUploadForm.lalaReactionLocked) fd.append('lalaReactionLocked', wardrobeUploadForm.lalaReactionLocked);
-                        if (wardrobeUploadForm.lalaReactionReject) fd.append('lalaReactionReject', wardrobeUploadForm.lalaReactionReject);
-                        fd.append('showId', showId);
-                        try {
-                          // Multipart upload pattern v2.14 — pass FormData directly to
-                          // api.post; services/api.js interceptor (lines 21-26) auto-
-                          // strips JSON Content-Type so browser sets multipart boundary.
-                          const data = await uploadWardrobeApi(fd);
-                          setWardrobeItems(prev => [data.data, ...prev]);
-                          // Only track items the server said it started processing —
-                          // an item it never processes must not show a spinner.
-                          if (backgroundRemovalStarted(data) && data.data?.id && !data.data.s3_url_processed) {
-                            wardrobeProcessing.track(data.data.id);
-                          }
-                          setShowWardrobeUpload(false);
-                          setToast('Item uploaded!'); setTimeout(() => setToast(null), 2500);
-                        } catch (httpErr) {
-                          const msg = httpErr.response?.data?.error || httpErr.message || 'Upload failed';
-                          setToast('Upload failed: ' + msg);
-                        }
-                      setWardrobeUploading(false);
-                    }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
-                      {wardrobeUploading ? 'Uploading...' : 'Upload Item'}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <AddPieceDialog
+                showId={showId}
+                onClose={() => setShowWardrobeUpload(false)}
+                onAdded={(item, { photoDropped, response }) => {
+                  if (item) setWardrobeItems(prev => [item, ...prev]);
+                  // Only track items the server said it started processing —
+                  // an item it never processes must not show a spinner.
+                  if (backgroundRemovalStarted(response) && item?.id && !item.s3_url_processed) {
+                    wardrobeProcessing.track(item.id);
+                  }
+                  setShowWardrobeUpload(false);
+                  setToast(photoDropped ? "Added, but the photo didn't upload. Add it from the piece." : 'Added to the closet');
+                  setTimeout(() => setToast(null), photoDropped ? 5000 : 2500);
+                }}
+              />
             )}
 
             {/* ── Create Outfit Set Modal ── */}
