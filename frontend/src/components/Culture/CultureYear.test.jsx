@@ -40,8 +40,15 @@ describe('CultureYear', () => {
     expect(onCreateEvent).toHaveBeenCalledWith(CAL[0]);
     fireEvent.click(screen.getByRole('button', { name: 'See the award →' }));
     expect(onOpen).toHaveBeenCalledWith('awards');
-    expect(api.get).toHaveBeenCalledWith('/api/v1/franchise-brain/entries?category=narrative&status=active');
+    // The show's own memory, not every show's.
+    expect(api.get).toHaveBeenCalledWith('/api/v1/franchise-brain/entries?category=narrative&status=active&show_id=show-b');
     expect((await screen.findByTestId('cy-memory')).textContent).toContain('Episode 1: Pilot — SLAY Result');
+  });
+
+  test('with no show, the memory is read unscoped', async () => {
+    renderIt({ showId: undefined });
+    expect((await screen.findByTestId('cy-memory')).textContent).toContain('Episode 1: Pilot — SLAY Result');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/franchise-brain/entries?category=narrative&status=active');
   });
 
   test('an empty month and an empty memory say so', async () => {
