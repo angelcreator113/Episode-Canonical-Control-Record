@@ -54,7 +54,7 @@ describe('SceneSetsTab: the library', () => {
     await waitFor(() => expect(card('set-2')).toBeTruthy());
     const venue = card('set-2');
     expect(within(venue).getByTestId('scene-set-event-looks-count-set-2').textContent).toContain('2 event looks');
-    expect(within(venue).getByTestId('scene-set-views-set-2').textContent).toContain('0/4 views');
+    expect(within(venue).getByTestId('scene-set-views-set-2').textContent).toContain('0 of 4 angles');
     expect(within(venue).getByTestId('scene-set-status-set-2').textContent).toContain('4 views to generate');
     expect(within(venue).getByTestId('scene-set-open-set-2')).toBeTruthy();
     // The event-look work and approval are in the workspace, not on the card.
@@ -93,7 +93,7 @@ describe('SceneSetsTab: the library', () => {
   test('Other is a filter; a search with no match says so and clears', async () => {
     renderAt();
     await waitFor(() => expect(card('set-1')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Other · \d+$/ }));
     expect(card('set-3')).toBeTruthy();
     expect(card('set-1')).toBeNull();
     fireEvent.change(screen.getByPlaceholderText('Search scene sets...'), { target: { value: 'zzz' } });
@@ -140,11 +140,12 @@ describe('SceneSetsTab: back to the show', () => {
     <MemoryRouter initialEntries={[`/shows/show-1/world${search}`]}><SceneSetsTab showId="show-1" /></MemoryRouter>,
   );
 
-  test('in a show, the page links back to the show by name', async () => {
+  // Inside Producer Mode the shell's own header leads back to the show, so
+  // the page no longer repeats it (Evoni's mock, 2026-10-07).
+  test('in a show, the page adds no second Back to show', async () => {
     renderInShow();
-    const back = await screen.findByTestId('scene-sets-back-to-show');
-    expect(back.getAttribute('href')).toBe('/shows/show-1');
-    await waitFor(() => expect(back.textContent).toBe('← Back to Styling Adventures'));
+    await screen.findByRole('heading', { name: 'Scene Sets' });
+    expect(screen.queryByTestId('scene-sets-back-to-show')).toBeNull();
   });
 
   test('opened from another page, the way back is to that page instead', async () => {
