@@ -349,41 +349,32 @@ router.post('/:showId/generate/:overlayType', requireAuth, async (req, res) => {
     const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
 
-    // Soft-delete existing asset for this overlay type (regeneration)
-    await models.sequelize.query(
-      `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-       AND metadata->>'overlay_type' = :overlayId AND deleted_at IS NULL`,
-      { replacements: { showId, overlayId: overlayType.id } }
-    );
-
+    // Generate first: the old image stays until the new one is saved. Only
+    // the main image is replaced (variants stay), and its tap zones, content
+    // areas, fit and category carry over (uiOverlayAssetReplace; Evoni,
+    // 2026-10-07, Lala's Phone step 1). A failed save is an error, not a
+    // success with no asset.
     const { url, bg_removed, prompt_used } = await generateOverlay(overlayType, showId, { customPrompt });
 
-    // Create Asset via raw SQL
-    let assetId = null;
+    const { replaceOverlayAsset } = require('../services/uiOverlayAssetReplace');
+    let assetId;
+    let carried = [];
     try {
-      const assetUuid = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
-        { replacements: {
-          id: assetUuid,
-          name: `UI Overlay: ${overlayType.name}`,
-          url,
-          showId,
-          metadata: JSON.stringify({
-            source: 'ui-overlay-generator', overlay_type: overlayType.id,
-            overlay_beat: overlayType.beat, overlay_category: overlayType.category,
-            bg_removed, generated_at: new Date().toISOString(),
-            ...(customPrompt ? { custom_prompt: customPrompt } : {}),
-          }),
-        } }
-      );
-      assetId = assetUuid;
+      ({ assetId, carried } = await replaceOverlayAsset(models.sequelize, {
+        showId, overlayId: overlayType.id, assetId: uuidv4(), name: `UI Overlay: ${overlayType.name}`, url,
+        metadata: {
+          source: 'ui-overlay-generator', overlay_type: overlayType.id,
+          overlay_beat: overlayType.beat, overlay_category: overlayType.category,
+          bg_removed, generated_at: new Date().toISOString(),
+          ...(customPrompt ? { custom_prompt: customPrompt } : {}),
+        },
+      }));
     } catch (assetErr) {
-      console.warn('[UIOverlay] Asset save failed:', assetErr.message);
+      console.error('[UIOverlay] generate: saving the new image failed (the old one stays):', assetErr.message);
+      return res.status(500).json({ success: false, error: `The new image was made but could not be saved: ${assetErr.message}` });
     }
 
-    return res.json({ success: true, data: { ...overlayType, url, bg_removed, asset_id: assetId, prompt_used } });
+    return res.json({ success: true, data: { ...overlayType, url, bg_removed, asset_id: assetId, prompt_used, carried } });
   } catch (err) {
     console.error('[UIOverlay] generate failed:', err.message);
     return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
@@ -425,50 +416,30 @@ router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'),
     // Upload to S3 first — if this fails we haven't touched the DB yet.
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
 
-    // Soft-delete the previous asset AND insert the new one in a single
-    // transaction: if the INSERT fails, the tombstone on the previous row is
-    // rolled back so the UI still has a visible asset. Previously a failure
-    // left the old asset soft-deleted with no replacement.
-    let assetId = null;
+    // Replace the previous image (the same variant) and insert the new one
+    // in one transaction, carrying its tap zones, content areas, fit and
+    // category (uiOverlayAssetReplace; Evoni, 2026-10-07, Lala's Phone step
+    // 1). A failure rolls back, so the old image stays, and is an error.
+    const { replaceOverlayAsset } = require('../services/uiOverlayAssetReplace');
+    let assetId;
+    let carried = [];
     try {
-      const assetUuid = uuidv4();
-      await models.sequelize.transaction(async (t) => {
-        if (variantLabel) {
-          await models.sequelize.query(
-            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-             AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
-            { replacements: { showId, overlayId: overlayType.id, variantLabel }, transaction: t }
-          );
-        } else {
-          await models.sequelize.query(
-            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-             AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
-            { replacements: { showId, overlayId: overlayType.id }, transaction: t }
-          );
-        }
-        await models.sequelize.query(
-          `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-           VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
-          { replacements: {
-            id: assetUuid,
-            name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
-            url,
-            showId,
-            metadata: JSON.stringify({
-              source: 'custom-upload', overlay_type: overlayType.id,
-              overlay_beat: overlayType.beat, overlay_category: overlayType.category,
-              uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
-              ...(variantLabel ? { variant_label: variantLabel } : {}),
-            }),
-          }, transaction: t }
-        );
-      });
-      assetId = assetUuid;
+      ({ assetId, carried } = await replaceOverlayAsset(models.sequelize, {
+        showId, overlayId: overlayType.id, variantLabel, assetId: uuidv4(),
+        name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`, url,
+        metadata: {
+          source: 'custom-upload', overlay_type: overlayType.id,
+          overlay_beat: overlayType.beat, overlay_category: overlayType.category,
+          uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
+          ...(variantLabel ? { variant_label: variantLabel } : {}),
+        },
+      }));
     } catch (assetErr) {
-      console.warn('[UIOverlay] Asset save failed:', assetErr.message);
+      console.error('[UIOverlay] upload: saving the new image failed (the old one stays):', assetErr.message);
+      return res.status(500).json({ success: false, error: `The image was uploaded but could not be saved: ${assetErr.message}` });
     }
 
-    return res.json({ success: true, data: { ...overlayType, url, asset_id: assetId, generated: true } });
+    return res.json({ success: true, data: { ...overlayType, url, asset_id: assetId, generated: true, carried } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -634,6 +605,12 @@ router.put('/:showId/style-prefix', requireAuth, async (req, res) => {
 // ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
 
 // PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
+// A save that matched no live image says so (Evoni, 2026-10-07, Lala's Phone
+// step 1): it used to answer success when the image had been replaced or
+// removed meanwhile, and the work was lost without a word.
+const NO_LIVE_IMAGE = "That image was replaced or removed. Reload Lala's Phone and try again.";
+const updatedNothing = (meta) => meta && typeof meta.rowCount === 'number' && meta.rowCount === 0;
+
 router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
@@ -655,10 +632,11 @@ router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
       replacements.name = name;
     }
 
-    await models.sequelize.query(
+    const [, updateMeta] = await models.sequelize.query(
       `UPDATE assets SET ${setClauses.join(', ')} WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
       { replacements }
     );
+    if (updatedNothing(updateMeta)) return res.status(404).json({ success: false, error: NO_LIVE_IMAGE });
 
     return res.json({ success: true, category, name });
   } catch (err) {
@@ -679,7 +657,7 @@ router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'image_fit must be an object or null' });
     }
 
-    await models.sequelize.query(
+    const [, updateMeta] = await models.sequelize.query(
       `UPDATE assets
        SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
            updated_at = NOW()
@@ -690,6 +668,7 @@ router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
         patch: JSON.stringify({ image_fit }),
       } }
     );
+    if (updatedNothing(updateMeta)) return res.status(404).json({ success: false, error: NO_LIVE_IMAGE });
 
     return res.json({ success: true, image_fit });
   } catch (err) {
@@ -720,7 +699,7 @@ router.put('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
     }
 
     // Merge screen_links into existing metadata
-    await models.sequelize.query(
+    const [, updateMeta] = await models.sequelize.query(
       `UPDATE assets
        SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
            updated_at = NOW()
@@ -731,6 +710,7 @@ router.put('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
         patch: JSON.stringify({ screen_links: validatedLinks }),
       } }
     );
+    if (updatedNothing(updateMeta)) return res.status(404).json({ success: false, error: NO_LIVE_IMAGE });
 
     return res.json({ success: true, screen_links: validatedLinks });
   } catch (err) {
@@ -822,7 +802,7 @@ router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'content_zones must be an array' });
     }
 
-    await models.sequelize.query(
+    const [, updateMeta] = await models.sequelize.query(
       `UPDATE assets
        SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
            updated_at = NOW()
@@ -833,6 +813,7 @@ router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
         patch: JSON.stringify({ content_zones }),
       } }
     );
+    if (updatedNothing(updateMeta)) return res.status(404).json({ success: false, error: NO_LIVE_IMAGE });
 
     return res.json({ success: true, content_zones });
   } catch (err) {
