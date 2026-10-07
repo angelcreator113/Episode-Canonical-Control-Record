@@ -24,9 +24,13 @@ const EPISODES = [
 const HISTORY = [
   { id: 'h1', character_key: 'lala', source: 'computed', episode_id: 'ep1', episode_number: 1, deltas_json: { reputation: 3, stress: -2 }, created_at: '2026-10-02T00:00:00Z' },
 ];
-const respond = (over = {}) => vi.mocked(api.get).mockImplementation(async (url) => {
+const respond = (over = {}) => vi.mocked(api.get).mockImplementation(async (url, config) => {
   if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
   if (url.startsWith('/api/v1/episodes')) { if (over.episodesFail) throw new Error('500'); return { data: { data: over.episodes ?? EPISODES, pagination: { total: (over.episodes ?? EPISODES).length } } }; }
+  if (url === '/api/v1/world/show-b/history' && config?.params?.source === 'computed') {
+    if (over.historyFail) throw new Error('500');
+    return { data: { success: true, history: over.computed ?? over.history ?? HISTORY } };
+  }
   if (url === '/api/v1/world/show-b/history') { if (over.historyFail) throw new Error('500'); return { data: { success: true, history: over.history ?? HISTORY } }; }
   return { data: {} };
 });
@@ -47,6 +51,17 @@ beforeEach(() => {
 });
 
 describe('StateSummary', () => {
+  test('an episode completed long ago is still done when the newest 50 rows are all purchases', async () => {
+    const purchases = Array.from({ length: 50 }, (_, i) => ({
+      id: `p${i}`, character_key: 'lala', source: 'wardrobe_purchase', deltas_json: { coins: -10 }, created_at: `2026-10-05T00:${String(i).padStart(2, '0')}:00Z`,
+    }));
+    respond({ history: purchases, computed: HISTORY });
+    renderIt();
+    const eps = await screen.findByTestId('st-episodes');
+    expect(within(eps).getByText('after Complete · Reputation +3 · Stress −2')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-b/history', { params: { source: 'computed', limit: 1000 } });
+  });
+
   test('the baseline, each episode after Complete or not yet, the temperature, the tensions hottest first and what changed', async () => {
     respond();
     const onTakeSnapshot = vi.fn();

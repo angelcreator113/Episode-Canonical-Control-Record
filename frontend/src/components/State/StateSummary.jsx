@@ -40,12 +40,20 @@ export default function StateSummary({ snapshots = null, snapshotsFailed = false
         console.error('[State] the state history could not be read:', err?.response?.status || err?.message);
         return null;
       }),
-    ]).then(([episodes, history]) => { if (live) setData({ episodes, history }); });
+      // Every episode's computed rows, apart from the newest-50 list above,
+      // so a season of purchases and edits cannot push the earliest
+      // episodes out of "after each episode".
+      api.get(`/api/v1/world/${show.id}/history`, { params: { source: 'computed', limit: 1000 } })
+        .then((r) => r.data?.history || []).catch((err) => {
+          console.error('[State] the episodes\' state changes could not be read:', err?.response?.status || err?.message);
+          return null;
+        }),
+    ]).then(([episodes, history, computed]) => { if (live) setData({ episodes, history, computed }); });
     return () => { live = false; };
   }, [loaded, show?.id]);
 
   const snaps = snapshotSummary(snapshots);
-  const eps = data?.episodes ? episodeStates(data.episodes, data.history || []) : null;
+  const eps = data?.episodes ? episodeStates(data.episodes, data.computed || data.history || []) : null;
   const changes = data?.history ? whatChanged(data.history) : null;
   const bars = tensions?.scan ? tensionBars(tensions.pairs) : null;
   const scan = tensions?.scan;
