@@ -11,7 +11,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import EpisodeOverlaysTab, { beatText, showWideOverlays } from './EpisodeOverlaysTab';
+import EpisodeOverlaysTab, { beatText } from './EpisodeOverlaysTab';
 import EpisodeTitleChip from './EpisodeTitleChip';
 
 const EST = (usd) => ({ usd, priced: true, unit: 'image', units: 1, model: 'm' });
@@ -40,8 +40,20 @@ const PIECES = [
     cost: { paid: { action: 'Design the overlay', estimate: EST(0.08) } },
   },
 ];
-const OVERLAYS = { episode_id: 'ep-1', show_id: 'sh-1', title: { text: 'Gala Night', approved: true }, pieces: PIECES, title_chip: { status: 'approved', piece: 'title_overlay' } };
+const OVERLAYS = {
+  episode_id: 'ep-1', show_id: 'sh-1', title: { text: 'Gala Night', approved: true }, pieces: PIECES, title_chip: { status: 'approved', piece: 'title_overlay' },
+  event: { id: 'ev-1', show_id: 'sh-1', name: 'Velvet Gala' },
+  beats: [{ number: 1, name: 'Opening Ritual' }, { number: 5, name: 'Reveal' }, { number: 9, name: 'Reminder/Deadline' }],
+  library: [{ asset_id: 'lt1', name: 'Lower Third', beat: { number: 1, name: 'Opening Ritual' } }],
+};
 
+// The show's overlays (GET /ui-overlays/:showId): only ready production
+// ones are offered from the library.
+const SHOW_LIBRARY = [
+  { id: 'show_title', name: 'Show Title', category: 'production', generated: true, url: 'https://img/title.png', asset_id: 'st1' },
+  { id: 'lower_third', name: 'Lower Third', category: 'production', generated: true, url: 'https://img/lower.png', asset_id: 'lt1' },
+  { id: 'exit_button', name: 'Exit Button', category: 'production', generated: false, url: null, asset_id: null },
+];
 const SHOW_WIDE = [
   { id: 'MailPanel', name: 'Mail Panel', generated: true, is_episode_override: false, url: 'https://img/mail.png', asset_id: 'm1' },
   { id: 'HomeScreen', name: 'Home Screen', generated: true, is_episode_override: true, url: 'https://img/home-ep.png', asset_id: 'h1' },
@@ -51,7 +63,8 @@ const SHOW_WIDE = [
 
 function routeGet(url) {
   if (url === '/api/v1/episodes/ep-1/overlays') return ok(OVERLAYS);
-  if (url.startsWith('/api/v1/ui-overlays/sh-1')) return ok(SHOW_WIDE);
+  if (url.startsWith('/api/v1/ui-overlays/sh-1')) return ok([...SHOW_WIDE.map((o) => ({ ...o, category: 'phone' })), ...SHOW_LIBRARY]);
+  if (url === '/api/v1/world/sh-1/events/ev-1/documents') return ok({ shopping_list: null, career_plan: null });
   if (url === '/api/v1/episodes/ep-1/title-card') {
     return ok({ title: 'Gala Night', approved: true, card: { asset_id: 'card', outdated: true, designed_for: 'Old Title', image_url: 'https://img/card.png' },
       offer: { offered: true, kind: 'redesign', requires_approval: false, estimate: EST(0.04) },
@@ -85,7 +98,9 @@ describe('EpisodeOverlaysTab (P15)', () => {
     expect(screen.getByTestId('eot-status-invitation').textContent).toBe('Approved');
     expect(screen.getByTestId('eot-status-task_list').textContent).toBe('Not made');
 
-    expect(screen.getByTestId('eot-beat-invitation').textContent).toBe('Placed on Beat 5: Reveal');
+    // The invitation is among the in-world documents (Evoni's mock, 2026-10-07).
+    expect(screen.getByTestId('eot-beat-invitation').textContent).toBe('Used: overlay, Beat 5 · Reveal');
+    expect(within(screen.getByTestId('eot-docs')).getByTestId('eot-doc-invitation')).toBeTruthy();
     expect(screen.getByTestId('eot-beat-task_list').textContent).toBe('Not placed (goes on Beat 9: Reminder/Deadline)');
     expect(screen.getByTestId('eot-beat-title_overlay').textContent).toBe('Not placed');
 
@@ -109,12 +124,48 @@ describe('EpisodeOverlaysTab (P15)', () => {
     expect(link.textContent).toMatch(/Change it in the Event Package \(Velvet Gala\)/);
   });
 
-  test('show-wide overlays: read-only, only the show\'s own, with a Phone Hub link', async () => {
+  // Evoni, 2026-10-07: show overlays are used in an episode by placing them on a beat.
+  test('the show library: ready show overlays, where each is, and Use on this beat / Move / Remove', async () => {
+    vi.mocked(api.post).mockReturnValue(ok({}));
+    vi.mocked(api.delete).mockReturnValue(ok({ removed: 1 }));
     renderTab();
-    const items = await screen.findAllByTestId('eot-show-wide-item');
-    expect(items.map((li) => li.textContent)).toEqual(['Mail Panel']);
-    expect(within(screen.getByTestId('eot-show-wide')).queryAllByRole('button')).toHaveLength(0);
-    expect(screen.getByTestId('eot-phone-hub-link').getAttribute('href')).toBe('/shows/sh-1/world?tab=overlays-tab');
+    const lib = await screen.findByTestId('eot-library');
+    await within(lib).findByTestId('eot-lib-show_title');
+    expect(within(lib).queryByTestId('eot-lib-exit_button')).toBeNull();
+    expect(within(lib).queryByTestId('eot-lib-MailPanel')).toBeNull();
+    expect(screen.getByTestId('eot-lib-where-show_title').textContent).toBe('Not in this episode');
+    expect(screen.getByTestId('eot-lib-where-lower_third').textContent).toBe('On Beat 1 · Opening Ritual');
+    expect(screen.getByTestId('eot-library-link').getAttribute('href')).toBe('/shows/sh-1/world?tab=production-overlays');
+
+    fireEvent.change(within(lib).getByLabelText('Beat for Show Title'), { target: { value: '5' } });
+    fireEvent.click(screen.getByTestId('eot-lib-place-show_title'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/overlays/library', { asset_id: 'st1', beat_number: 5 }));
+
+    expect(screen.getByTestId('eot-lib-place-lower_third').textContent).toBe('On this beat');
+    fireEvent.change(within(lib).getByLabelText('Beat for Lower Third'), { target: { value: '9' } });
+    expect(screen.getByTestId('eot-lib-place-lower_third').textContent).toBe('Move here');
+    fireEvent.click(screen.getByTestId('eot-lib-remove-lower_third'));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/episodes/ep-1/overlays/library/lt1'));
+
+    // A placed library overlay is a row by its beat.
+    expect(within(screen.getByTestId('eot-row-lib-lt1')).getByText('Show overlay')).toBeTruthy();
+  });
+
+  test('the in-world documents: the invitation first, then the event\'s documents; none without an event', async () => {
+    renderTab();
+    const docs = await screen.findByTestId('eot-docs');
+    expect(await within(docs).findByTestId('evd-shopping_list')).toBeTruthy();
+    expect(within(docs).getByTestId('evd-career_plan')).toBeTruthy();
+    const cards = [...docs.querySelectorAll('article')].map((a) => a.getAttribute('data-testid'));
+    expect(cards).toEqual(['eot-doc-invitation', 'evd-shopping_list', 'evd-career_plan']);
+  });
+
+  test('without an event: no documents, the invitation says so', async () => {
+    vi.mocked(api.get).mockImplementation((url) => (url === '/api/v1/episodes/ep-1/overlays'
+      ? ok({ ...OVERLAYS, event: null, pieces: PIECES.map((p) => (p.key === 'invitation' ? { ...p, event: null } : p)) })
+      : routeGet(url)));
+    renderTab();
+    expect(await screen.findByTestId('eot-docs-none')).toBeTruthy();
   });
 
   test('an action in a piece\'s panel reloads the tab and tells the page', async () => {
@@ -131,7 +182,6 @@ describe('EpisodeOverlaysTab (P15)', () => {
     expect(beatText(null)).toBeNull();
     expect(beatText({ number: 5, name: 'Reveal' })).toBe('Beat 5: Reveal');
     expect(beatText({ number: 9 })).toBe('Beat 9');
-    expect(showWideOverlays(SHOW_WIDE).map((o) => o.id)).toEqual(['MailPanel']);
   });
 });
 

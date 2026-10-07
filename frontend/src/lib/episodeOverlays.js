@@ -42,7 +42,7 @@ export function pieceNeeded(piece) {
  * overlays that are placed on a beat, by beat (unplaced last, in the
  * pieces' order).
  */
-export function overlayRows(pieces = [], showWide = []) {
+export function overlayRows(pieces = [], library = []) {
   const rows = (pieces || []).filter(Boolean).map((p, i) => {
     const beat = pieceBeat(p);
     const needed = pieceNeeded(p);
@@ -55,21 +55,23 @@ export function overlayRows(pieces = [], showWide = []) {
       text: `${TEXT[p.key] || p.label}${note}`,
       needed,
       action: p.status === 'approved' ? 'Edit' : p.status === 'outdated' ? 'Update' : 'Add',
-      showWide: false,
+      library: false,
     };
   });
-  (showWide || []).forEach((o, i) => {
+  // The show-library overlays the episode places (Evoni, 2026-10-07:
+  // GET /episodes/:id/overlays → library): one row each on its beat.
+  (library || []).forEach((o, i) => {
     const n = typeof o?.beat === 'object' ? o?.beat?.number : o?.beat;
     if (!n) return;
     rows.push({
-      key: `show-${o.asset_id || o.id}`,
+      key: `lib-${o.asset_id || o.id}`,
       order: 100 + i,
-      beat: { number: Number(n), name: null, placed: true },
-      kind: 'Phone Hub',
+      beat: { number: Number(n), name: (typeof o?.beat === 'object' && o.beat.name) || null, placed: true },
+      kind: 'Show overlay',
       text: o.name || o.id,
       needed: false,
-      action: 'Edit',
-      showWide: true,
+      action: 'Change',
+      library: true,
     });
   });
   return rows.sort((a, b) => {

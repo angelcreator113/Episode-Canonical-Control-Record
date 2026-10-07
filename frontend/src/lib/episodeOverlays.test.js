@@ -11,12 +11,12 @@ const PIECES = [
 describe('episodeOverlays (Evoni\'s Episode mock, 2026-10-06)', () => {
   test('rows run by beat, unplaced last, each with its kind, text and action', () => {
     const rows = overlayRows(PIECES, [
-      { id: 'notif', asset_id: 'a-n', name: 'Notification banner', generated: true, beat: 2 },
-      { id: 'hud', name: 'HUD', generated: true },
+      { asset_id: 'a-n', name: 'Lower Third', beat: { number: 2, name: 'Arrival' } },
+      { asset_id: 'a-x', name: 'Not placed', beat: null },
     ]);
     expect(rows.map((r) => [r.key, r.beat?.number ?? null, r.kind, r.action, r.needed])).toEqual([
       ['framed_card', 1, 'Title card', 'Update', true],
-      ['show-a-n', 2, 'Phone Hub', 'Edit', false],
+      ['lib-a-n', 2, 'Show overlay', 'Change', false],
       ['invitation', 5, 'Document', 'Edit', false],
       ['task_list', 9, 'Document', 'Add', true],
       ['title_overlay', null, 'Title', 'Edit', false],

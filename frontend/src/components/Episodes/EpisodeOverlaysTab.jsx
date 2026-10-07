@@ -22,11 +22,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, ImageOff, Layers } from 'lucide-react';
+import { ImageOff, Layers } from 'lucide-react';
 import { getEpisodeOverlaysApi, STATUS_LABELS } from './EpisodeTitleChip';
 import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeTaskListOverlay from './EpisodeTaskListOverlay';
-import { listEpisodePhoneOverlaysApi } from './EpisodeLalasPhoneTab';
+import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
+import EventDocuments from '../EventPackage/EventDocuments';
 import { overlayRows, beatLabel, pieceBeat, previewPiece } from '../../lib/episodeOverlays';
 import './EpisodeOverlaysTab.css';
 
@@ -37,12 +38,6 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
 export function beatText(beat) {
   if (!beat?.number) return null;
   return `Beat ${beat.number}${beat.name ? `: ${beat.name}` : ''}`;
-}
-
-/** The show-wide overlays an episode uses: made, and not the episode's own. */
-export function showWideOverlays(list) {
-  return (list || []).filter((o) => o && o.generated && !o.is_episode_override
-    && !o.is_episode_invitation && !o.is_episode_task_list);
 }
 
 function StatusPill({ status, testid }) {
@@ -93,11 +88,62 @@ function PieceCard({ piece, children }) {
   );
 }
 
+const DOC_STATE = { approved: ['is-approved', 'Approved'], outdated: ['is-draft', 'Outdated'], not_made: ['is-none', 'Not made'] };
+
+/**
+ * The invitation as one of the episode's in-world documents (Evoni's mock,
+ * 2026-10-07): its image, its state, where it is on screen, and the Event
+ * Package where it is made. Shown first among the event's documents.
+ */
+// "Beat 5 · Reveal", the mock's words for where a document is on screen.
+const beatWords = (beat) => (beat?.number ? `Beat ${beat.number}${beat.name ? ` · ${beat.name}` : ''}` : null);
+
+function InvitationDocCard({ piece, showId }) {
+  const placed = beatWords(piece.beat);
+  const expected = beatWords(piece.expected_beat);
+  const [stateClass, stateLabel] = DOC_STATE[piece.status] || DOC_STATE.not_made;
+  const paid = piece.cost?.paid;
+  return (
+    <article className="evd-card eot-doc-invite" data-testid="eot-doc-invitation">
+      <h3 className="evd-title">Invitation</h3>
+      <p className="evd-from">From the event: date, venue, host, dress code, pay</p>
+      <div className="evd-stage">
+        {piece.image_url ? (
+          <span className="eot-invite-frame">
+            <img src={piece.image_url} alt="Invitation preview" className={piece.status === 'outdated' ? 'eot-preview-outdated' : ''} />
+          </span>
+        ) : (
+          <span className="eot-preview-empty"><ImageOff size={18} aria-hidden="true" /> Not made yet</span>
+        )}
+      </div>
+      <div className="evd-actions">
+        <span className={`evd-state ${stateClass}`} data-testid="eot-status-invitation">{stateLabel}</span>
+        {piece.image_url && (
+          <a className="evd-link" href={piece.image_url} target="_blank" rel="noreferrer">View full size</a>
+        )}
+        {piece.event && (
+          <Link className="evd-link" to={`/shows/${piece.event.show_id || showId}/events/${piece.event.id}`} data-testid="eot-invitation-link">
+            {piece.status === 'not_made' ? 'Make it' : 'Change it'} in the Event Package{piece.event.name ? ` (${piece.event.name})` : ''}
+          </Link>
+        )}
+      </div>
+      <p className="evd-meta" data-testid="eot-beat-invitation">
+        {placed ? `Used: overlay, ${placed}` : expected ? `Planned: overlay, ${expected}` : 'Not on screen yet'}
+      </p>
+      {paid && <p className="eot-cost" data-testid="eot-cost-invitation">{paid.action} — est. {formatEstimate(paid.estimate)}</p>}
+    </article>
+  );
+}
+
+const scrollToId = (id) => {
+  const el = typeof document !== 'undefined' && document.getElementById(id);
+  if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const episodeId = episode?.id;
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [showWide, setShowWide] = useState(null);
   const [chosen, setChosen] = useState(null);
 
   const load = useCallback(() => {
@@ -112,18 +158,6 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
 
   useEffect(() => { load(); }, [load, episode?.title]);
 
-  useEffect(() => {
-    if (!showId || !episodeId) return undefined;
-    let cancelled = false;
-    listEpisodePhoneOverlaysApi(showId, episodeId)
-      .then((list) => { if (!cancelled) setShowWide(showWideOverlays(list)); })
-      .catch((err) => {
-        console.error('[EpisodeOverlaysTab] show-wide overlays load failed:', err);
-        if (!cancelled) setShowWide([]);
-      });
-    return () => { cancelled = true; };
-  }, [showId, episodeId]);
-
   // An action in a piece's panel changes the summary and the banner chip.
   const changed = useCallback(() => { load(); onChanged?.(); }, [load, onChanged]);
 
@@ -131,15 +165,18 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const pieces = data?.pieces || [];
   const byKey = Object.fromEntries(pieces.map((p) => [p.key, p]));
   const invitation = byKey.invitation;
+  const library = data?.library || [];
+  const event = data?.event || invitation?.event || null;
   const phoneHubPath = showId ? `/shows/${showId}/world?tab=overlays-tab` : '/phone-hub';
   const feedPath = showId ? `/shows/${showId}/world?tab=feed` : null;
-  const rows = overlayRows(pieces, showWide || []);
+  const rows = overlayRows(pieces, library);
   const needed = rows.filter((r) => r.needed).length;
   const shown = previewPiece(pieces, chosen);
-  // A row (or Add an overlay) opens its piece's panel under Details, and
-  // shows the piece in the preview.
+  // A row opens its piece (and shows it in the preview); a document row
+  // goes to the documents, a library row to the library.
   const openPiece = (key) => {
     setChosen(key);
+    if (key === 'invitation') { scrollToId('eot-docs'); return; }
     const el = typeof document !== 'undefined' && document.querySelector(`[data-testid="eot-piece-${key}"]`);
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -165,8 +202,11 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
           </div>
           <div className="eot-add">
             <h2 className="eot-add-title">Add an overlay</h2>
-            <button type="button" className="eot-add-option is-document" onClick={() => openPiece(byKey.task_list?.status === 'not_made' ? 'task_list' : 'invitation')}>
-              <strong>From a document</strong> <span>the invitation, the shopping list</span>
+            <button type="button" className="eot-add-option is-document" onClick={() => scrollToId('eot-docs')}>
+              <strong>From a document</strong> <span>the invitation, the shopping list, the career plan</span>
+            </button>
+            <button type="button" className="eot-add-option is-library" onClick={() => scrollToId('eot-library')}>
+              <strong>From the show library</strong> <span>the show&apos;s title, lower thirds, buttons</span>
             </button>
             {feedPath && (
               <Link className="eot-add-option is-feed" to={feedPath}>
@@ -192,13 +232,9 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
             {rows.map((r) => (
               <li key={r.key} className={`eot-row${r.needed ? ' is-needed' : ''}`} data-testid={`eot-row-${r.key}`}>
                 <span className="eot-row-beat">{beatLabel(r.beat)}</span>
-                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : r.kind === 'Phone Hub' ? 'hub' : 'title'}`}>{r.kind}</span>
+                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : r.library ? 'lib' : 'title'}`}>{r.kind}</span>
                 <span className="eot-row-text">{r.text}</span>
-                {r.showWide ? (
-                  <Link className="eot-row-action" to={phoneHubPath}>{r.action}</Link>
-                ) : (
-                  <button type="button" className="eot-row-action" onClick={() => openPiece(r.key)}>{r.action}</button>
-                )}
+                <button type="button" className="eot-row-action" onClick={() => (r.library ? scrollToId('eot-library') : openPiece(r.key))}>{r.action}</button>
               </li>
             ))}
           </ul>
@@ -206,69 +242,68 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
       )}
 
       {data && (
-        <>
-          <h3 className="eot-details-title"><Layers size={14} aria-hidden="true" /> Details</h3>
-          <section className="eot-group" aria-label="Title">
+        <section className="eot-section eot-docs" id="eot-docs" aria-labelledby="eot-docs-title" data-testid="eot-docs">
+          <div className="eot-section-head">
+            <div>
+              <h2 id="eot-docs-title" className="eot-section-title">In-world documents</h2>
+              <p className="eot-section-sub">
+                One system, three looks. Each document fills itself from the event and goes through the same steps
+                (Draft, Edit, Redraft, Approve). Approved, the invitation goes on screen at its beat; the shopping list
+                and the career plan go on the episode&apos;s lists.
+              </p>
+            </div>
+          </div>
+          {event ? (
+            <EventDocuments
+              showId={event.show_id || showId}
+              eventId={event.id}
+              event={{ id: event.id, name: event.name }}
+              intro={false}
+              lead={invitation ? <InvitationDocCard piece={invitation} showId={showId} /> : null}
+            />
+          ) : (
+            <p className="eot-note" data-testid="eot-docs-none">No event started this episode, so it has no documents.</p>
+          )}
+        </section>
+      )}
+
+      {data && (
+        <section className="eot-section" aria-labelledby="eot-own-title" data-testid="eot-own">
+          <div className="eot-section-head">
+            <div>
+              <h2 id="eot-own-title" className="eot-section-title"><Layers size={16} aria-hidden="true" /> This episode only</h2>
+              <p className="eot-section-sub">Made for this episode and used nowhere else: its title and its task list.</p>
+            </div>
+          </div>
+          <div className="eot-group" aria-label="Title">
             <div className="eot-pieces">
               {byKey.title_overlay && <PieceCard piece={byKey.title_overlay} />}
               {byKey.framed_card && <PieceCard piece={byKey.framed_card} />}
             </div>
             <EpisodeTitleCard episode={episode} showCardImage={false} onChange={changed} />
-          </section>
-
-          {invitation && (
-            <section className="eot-group" aria-label="Invitation">
-              <PieceCard piece={invitation}>
-                {invitation.event ? (
-                  <Link
-                    className="eot-link"
-                    to={`/shows/${invitation.event.show_id || showId}/events/${invitation.event.id}`}
-                    data-testid="eot-invitation-link"
-                  >
-                    {invitation.status === 'not_made' ? 'Make it' : 'Change it'} in the Event Package
-                    {invitation.event.name ? ` (${invitation.event.name})` : ''} <ExternalLink size={13} aria-hidden="true" />
-                  </Link>
-                ) : (
-                  <p className="eot-note">No event started this episode, so it has no invitation.</p>
-                )}
-              </PieceCard>
-            </section>
-          )}
-
+          </div>
           {byKey.task_list && (
-            <section className="eot-group" aria-label="Task list">
+            <div className="eot-group" aria-label="Task list">
               <PieceCard piece={byKey.task_list}>
                 {byKey.task_list.task_count === 0 && (
                   <p className="eot-note">The episode has no task list yet; it is built on the Assets tab.</p>
                 )}
               </PieceCard>
               <EpisodeTaskListOverlay episodeId={episodeId} showPreview={false} onChange={changed} />
-            </section>
+            </div>
           )}
-        </>
+        </section>
       )}
 
-      <section className="eot-group eot-show-wide" aria-label="Show-wide overlays" data-testid="eot-show-wide">
-        <div className="eot-show-wide-head">
-          <h3 className="eot-piece-title">Show-wide overlays this episode uses</h3>
-          <Link className="eot-link" to={phoneHubPath} data-testid="eot-phone-hub-link">
-            Edit in the Phone Hub <ExternalLink size={13} aria-hidden="true" />
-          </Link>
-        </div>
-        {showWide === null && <p className="eot-loading">Loading…</p>}
-        {showWide && showWide.length === 0 && <p className="eot-note">None yet.</p>}
-        {showWide && showWide.length > 0 && (
-          <ul className="eot-show-wide-list">
-            {showWide.map((o) => (
-              <li key={o.asset_id || o.id} className="eot-show-wide-item" data-testid="eot-show-wide-item">
-                {o.url ? <img src={o.url} alt="" /> : <span className="eot-show-wide-blank" />}
-                <span className="eot-show-wide-name">{o.name || o.id}</span>
-                {o.beat ? <span className="eot-show-wide-beat">Beat {typeof o.beat === 'object' ? o.beat.number : o.beat}</span> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {data && (
+        <EpisodeLibraryOverlays
+          episodeId={episodeId}
+          showId={data.show_id || showId}
+          beats={data.beats || []}
+          library={library}
+          onChanged={changed}
+        />
+      )}
     </div>
   );
 }
