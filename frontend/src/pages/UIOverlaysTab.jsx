@@ -1255,7 +1255,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (category === 'production') {
         setOverlays(prev => prev.filter(o => o.id !== activeScreen.id));
         closePanel();
-        flash('Moved to Audience Overlays');
+        flash('Moved to Overlays');
         return;
       }
       setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);

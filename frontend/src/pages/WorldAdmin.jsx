@@ -252,7 +252,7 @@ const TABS = [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'overlays-tab', label: "Lala's Phone" },
-    { key: 'production-overlays', label: 'Audience Overlays' },
+    { key: 'production-overlays', label: 'Overlays' },
   ]},
   { key: 'characters', Icon: Crown, label: 'Cast & Continuity', subs: [
     { key: 'characters-list', label: "Lala's State & Continuity" },
