@@ -58,4 +58,24 @@ describe('RemovedSetsBanner (D2)', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(container.innerHTML).toBe('');
   });
+
+  // Evoni, 2026-10-07: only sets a beat still uses; leftover links don't raise the bar.
+  test('a removed set no beat uses is not listed; with none left, nothing shows', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/removed-sets') {
+        return { data: { data: [...REMOVED, { scene_set_id: 'gone-house', name: 'Lalas house', beats: [] }] } };
+      }
+      if (url === '/api/v1/scene-sets?show_id=show-1&limit=200&offset=0') return { data: { data: LIBRARY } };
+      return { data: {} };
+    });
+    render(<RemovedSetsBanner episodeId="ep-1" showId="show-1" onMoved={vi.fn()} />);
+    const banner = await screen.findByTestId('removed-sets-banner');
+    expect(within(banner).queryByText(/Lalas house/)).toBeNull();
+    expect(within(banner).getAllByRole('listitem')).toHaveLength(2);
+
+    vi.mocked(api.get).mockImplementation(async () => ({ data: { data: [{ scene_set_id: 'gone-house', name: 'Lalas house', beats: [] }] } }));
+    const { container } = render(<RemovedSetsBanner episodeId="ep-2" showId="show-1" onMoved={vi.fn()} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-2/removed-sets'));
+    expect(container.innerHTML).toBe('');
+  });
 });
