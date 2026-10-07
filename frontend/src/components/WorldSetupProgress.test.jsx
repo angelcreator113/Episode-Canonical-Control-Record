@@ -18,7 +18,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldSetupProgress, { SETUP_STEPS, checkSetup, nextStep } from './WorldSetupProgress';
+import WorldSetupProgress, { SETUP_STEPS, checkSetup, nextStep, stepRoute } from './WorldSetupProgress';
 
 const Where = () => { const l = useLocation(); return <div data-testid="where">{l.pathname}{l.search}</div>; };
 // The section is rendered at /overview so a step's /universe target lands on Where.
@@ -27,6 +27,7 @@ const renderIt = (showId) => render(
     <Routes>
       <Route path="/overview" element={<WorldSetupProgress showId={showId} />} />
       <Route path="/universe" element={<Where />} />
+      <Route path="/shows/:id/world" element={<Where />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -93,6 +94,16 @@ describe('WorldSetupProgress', () => {
     renderIt('show-b');
     fireEvent.click(await screen.findByRole('button', { name: 'Step 5: Locations & Venues (done)' }));
     expect(screen.getByTestId('where').textContent).toBe('/universe?tab=world&sub=locations');
+  });
+
+  test("Create World Events opens the active show's Events library, where its draft events are", async () => {
+    renderIt('show-b');
+    fireEvent.click(await screen.findByRole('button', { name: 'Step 7: Create World Events (done)' }));
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-b/world?tab=events');
+    // With no show yet, it keeps the calendar, where world events are spawned from.
+    const events = SETUP_STEPS.find((s) => s.key === 'events');
+    expect(stepRoute(events, undefined)).toBe('/universe?tab=culture&sub=events');
+    expect(stepRoute(SETUP_STEPS[0], 'show-b')).toBe('/universe?tab=world');
   });
 
   test('an endpoint that could not be reached is "could not check", not "not done"', async () => {

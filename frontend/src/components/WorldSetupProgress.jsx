@@ -60,6 +60,19 @@ export const BRAIN_SOURCES = { infrastructure: 'world_foundation', influencer: '
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/**
+ * Where a step's button goes. Step 7 counts the active show's draft world
+ * events, so it opens that show's Events library, where those events are
+ * listed; it used to open Culture's calendar list, which holds other rows
+ * (wiring map, docs/reads/2026-10-06-lalaverse-wiring-map.md §7, fix-list
+ * item 6). With no show yet it keeps the calendar, where world events are
+ * spawned from.
+ */
+export function stepRoute(step, showId) {
+  if (step?.key === 'events' && showId) return `/shows/${encodeURIComponent(showId)}/world?tab=events`;
+  return step?.route;
+}
+
 /** What a Brain-backed step says: in the Brain, saved, or starter content only. */
 export function brainDetail(cards, sections) {
   const parts = [];
@@ -166,7 +179,7 @@ export default function WorldSetupProgress({ showId }) {
           const detail = result?.details?.[step.key];
           return (
             <li key={step.key} className={`wsp-step wsp-tone-${step.num}${isDone ? ' is-done' : ''}`}>
-              <button type="button" className="wsp-step-btn" onClick={() => navigate(step.route)}
+              <button type="button" className="wsp-step-btn" onClick={() => navigate(stepRoute(step, showId))}
                 aria-label={`Step ${step.num}: ${step.title}${isDone ? ' (done)' : isUnreachable ? ' (could not check)' : ''}`}>
                 <span className="wsp-circle" aria-hidden="true">{isDone ? '✓' : step.num}</span>
                 <span className="wsp-step-text">
@@ -191,7 +204,7 @@ export default function WorldSetupProgress({ showId }) {
             <strong>Next: {next.title}</strong>
             <span>{next.description} It feeds {next.feeds.join(', ')}.</span>
           </div>
-          <button type="button" className="wsp-next-btn" onClick={() => navigate(next.route)}>Start step {next.num}</button>
+          <button type="button" className="wsp-next-btn" onClick={() => navigate(stepRoute(next, showId))}>Start step {next.num}</button>
         </div>
       )}
       {complete && <div className="wsp-next is-complete" data-testid="world-setup-next">Every step is done: the world is set up.</div>}
