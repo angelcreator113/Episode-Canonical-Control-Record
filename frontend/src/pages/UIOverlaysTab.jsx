@@ -1697,6 +1697,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 setNavHistory([]);
                 setFlowAudit(null);
               };
+              // An unnamed zone reads as its icon ("Camera"), else "Zone N".
+              const zoneIconName = (z) => {
+                const ico = z?.icon_overlay_id && iconOverlaysForEditor.find(i => i.id === z.icon_overlay_id);
+                return ico ? String(ico.name || '').replace(/\s+icon$/i, '').trim() : '';
+              };
               // Aggregate zone counts per screen so the thumbnail strip can show a badge.
               const zoneCounts = new Map();
               const screenHealth = new Map();
@@ -1779,14 +1784,25 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         multiSelect={tapMultiSelect}
                         iconGridSnap={tapIconGridSnap}
                       />
+                      <p className="zones-tab__canvas-hint">Drag on the screen to draw a tap zone, or tap it to place an icon</p>
                   </div>
 
                     <div className="zones-tab__controls">
                       <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
                       <div className="zone-editor-header">
                         <div className="zones-tab__sidebar-meta">
-                          <div className="zones-tab__sidebar-label">Zones Workspace</div>
-                          <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                          <div className="zones-tab__sidebar-label">Tap zones</div>
+                          <div className="zones-tab__sidebar-title-row">
+                            <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                            {tapZonesDraft.length > 0 && (() => {
+                              const linked = tapZonesDraft.filter(z => z.target).length;
+                              return (
+                                <span className={`zones-linked-pill${linked < tapZonesDraft.length ? ' is-warn' : ''}`} data-testid="zones-linked-pill">
+                                  {linked} of {tapZonesDraft.length} linked
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                         {tapZonesDirty && (
                           <span className="zones-unsaved" role="status">● Unsaved</span>
@@ -1804,12 +1820,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           phone (Tasks #2014, #2020). Hidden while empty. */}
                       <div ref={setIconSidePanel} className="zones-tab__icon-panel" />
 
+                      <div className="zones-tab__pick-label">Pick a screen to wire</div>
                       <ScreenThumbnailStrip
                         screens={editableScreens}
                         activeId={activeScreen.id}
                         onSelect={switchToScreen}
                         globalFit={globalFit}
                         zoneCounts={zoneCounts}
+                        countOf={(c) => (c.tap || 0) + (c.icon || 0)}
+                        showZero
                         healthByScreen={screenHealth}
                       />
 
@@ -1873,6 +1892,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           </div>
 
                           {tapZonesDraft.length > 0 && (
+                            <details className="zones-tap-tools-fold">
+                            <summary>Layout tools</summary>
                             <div className="zones-tap-tools">
                               {/* ICON mode's layout abilities (Task #2020). They act on
                                   the selection when it holds two or more zones. */}
@@ -1894,6 +1915,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('distribute_vertical')}>Dist V</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('equal_size')}>Equal Size</button>
                             </div>
+                            </details>
                           )}
 
                           {tapZonesDraft.length === 0 ? (
@@ -1911,14 +1933,26 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                 const screenOptions = overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }));
                                 return (
                                   <div key={zone.id} className={`zones-tap-row zones-tap-row--inline ${isSelected ? 'active' : ''}`}>
+                                    {/* The number on the phone's box for this zone */}
+                                    <button
+                                      type="button"
+                                      className="zones-tap-row__number"
+                                      onClick={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      aria-label={`Select zone ${index + 1}`}
+                                    >
+                                      {index + 1}
+                                    </button>
                                     <input
                                       className="zones-tap-row__label-input"
                                       value={zone.label || ''}
                                       onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
                                       onFocus={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
-                                      placeholder={`Zone ${index + 1}`}
+                                      placeholder={zoneIconName(zone) || `Zone ${index + 1}`}
+                                      aria-label={`Zone ${index + 1} name`}
                                     />
+                                    <span className="zones-tap-row__opens" aria-hidden="true">opens</span>
                                     <select
+                                      aria-label={`${zone.label || `Zone ${index + 1}`} opens`}
                                       className={`zones-tap-row__target-select ${hasTarget ? '' : 'zones-tap-row__target-select--warn'}`}
                                       value={zone.target || ''}
                                       onChange={(e) => {
@@ -1926,9 +1960,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                         linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
                                       }}
                                     >
-                                      <option value="">— Opens: nothing —</option>
+                                      <option value="">Nothing yet</option>
                                       {overlays.filter(o => isScreen(o)).map(screen => (
-                                        <option key={screen.id} value={screen.id}>Opens: {screen.name}</option>
+                                        <option key={screen.id} value={screen.id}>{screen.name}</option>
                                       ))}
                                     </select>
                                     <button
@@ -2079,6 +2113,32 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           )}
                         </div>
                       )}
+
+                      {/* Screens with no tap zones yet (Evoni's mock, 2026-10-07):
+                          nothing on them can be tapped. One jump to the first. */}
+                      {(() => {
+                        const bare = editableScreens.filter(sc => {
+                          if (sc.id === activeScreen.id) return tapZonesDraft.length === 0;
+                          const c = zoneCounts.get(sc.id);
+                          return !c || ((c.tap || 0) + (c.icon || 0)) === 0;
+                        });
+                        if (!bare.length) return null;
+                        const next = bare.find(sc => sc.id !== activeScreen.id);
+                        const names = bare.map(sc => sc.name);
+                        return (
+                          <div className="zones-bare-hint" data-testid="zones-bare-hint">
+                            <p>
+                              <strong>{bare.length === 1 ? '1 screen has' : `${bare.length} screens have`} no tap zones yet.</strong>{' '}
+                              Nothing on {names.length === 1 ? 'it' : names.length === 2 ? names.join(' or ') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`} can be tapped.
+                            </p>
+                            {next && (
+                              <button type="button" className="zones-bare-hint__next" onClick={() => switchToScreen(next)}>
+                                Wire {next.name} next →
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Persistent icons inherited from the Home screen —
                           rendered everywhere via PersistentOverlay but only

@@ -967,14 +967,20 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               const noIcon = !resolveZoneIcon(zone, iconOverlays);
               let border = 'none';
               let background = 'transparent';
-              if (!showOutline && !preview && noIcon) {
+              // Connect (embedded): every zone is outlined and numbered, the
+              // numbers matching the zone rows beside the phone (Evoni's
+              // mock, 2026-10-07).
+              if (embedded && !preview && !showOutline) {
+                border = zone.target ? '1.5px dashed #9E4E68' : '1.5px dashed #dc2626'; // --accent-dark
+                background = 'rgba(255,255,255,0.10)';
+              } else if (!showOutline && !preview && noIcon) {
                 border = '1.5px dashed rgba(255,255,255,0.85)';
                 background = 'rgba(0,0,0,0.18)';
               }
               if (showOutline) {
                 if (isSel) {
-                  border = '2px solid #B8962E';
-                  background = 'rgba(184,150,46,0.15)';
+                  border = embedded ? '2px solid #5B4B8A' : '2px solid #B8962E'; // --lala-lavender in Connect
+                  background = embedded ? 'rgba(91,75,138,0.15)' : 'rgba(184,150,46,0.15)';
                 } else if (isHovered) {
                   border = '2px solid rgba(184,150,46,0.7)';
                   background = 'rgba(184,150,46,0.06)';
@@ -995,11 +1001,15 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                 background,
                 cursor: editingDisabled ? (preview && zone.target ? 'pointer' : 'default') : 'move',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                overflow: 'hidden',
+                // The number badge sits on the corner, outside the box.
+                overflow: embedded && !preview ? 'visible' : 'hidden',
                 transition: 'border-color 0.15s, background 0.15s',
               };
             })()}
           >
+            {embedded && !preview && (
+              <span className="zone-number-badge" aria-hidden="true">{i + 1}</span>
+            )}
             {resolveZoneIcon(zone, iconOverlays) ? (
               <img src={resolveZoneIcon(zone, iconOverlays)} alt={zone.label || zone.target} style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (

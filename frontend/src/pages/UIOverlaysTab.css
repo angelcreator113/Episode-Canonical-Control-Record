@@ -314,8 +314,8 @@
   font-size: 12px;
   font-weight: 700;
   border: none;
-  border-radius: 8px;
-  background: #2C2C2C;
+  border-radius: 999px;
+  background: var(--lala-lavender);
   color: #fff;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
@@ -323,10 +323,16 @@
   flex-shrink: 0;
   min-height: 36px;
   transition: background 0.15s;
+  margin-left: auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
 }
 
 .zone-editor-done-btn:hover {
-  background: #444;
+  background: var(--lala-lavender-dark);
 }
 
 /* ── Loading ── */
