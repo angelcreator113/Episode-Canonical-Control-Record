@@ -121,7 +121,7 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
         <section className="soc-card" aria-labelledby="soc-legend-heading">
           <h2 id="soc-legend-heading" className="soc-title">Legends</h2>
           <p className="soc-note">
-            The names everyone in the LalaVerse knows: {plural(roles, 'legendary role')} in {plural(legendGroups.length, 'group')}. All are placeholders until a character in the Character Registry takes the role.
+            The names everyone in the LalaVerse knows: {plural(roles, 'legendary role')} in {plural(legendGroups.length, 'group')}. All are placeholders; no role is linked to a character yet.
           </p>
           <ul className="soc-legends" data-testid="soc-legends">
             {legendGroups.map((g) => (

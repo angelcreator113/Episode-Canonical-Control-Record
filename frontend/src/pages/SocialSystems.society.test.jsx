@@ -44,7 +44,9 @@ describe('Society tab', () => {
   test('Legends & Society carries the Calendar button; Trends carries both', async () => {
     window.history.pushState({}, '', '/universe?tab=society&sub=legends');
     renderAt('/universe?tab=society&sub=legends');
-    expect(screen.getByTestId('society-reads-legends').textContent).toContain('Character Registry');
+    // No code links a legend role to a character (wiring map §1), so the note doesn't promise one.
+    expect(screen.getByTestId('society-reads-legends').textContent).toContain('nothing in the app links a role to a character yet');
+    expect(screen.queryByText(/Character Registry/)).toBeNull();
     await waitFor(() => expect(screen.getByTestId('brain-update-button-calendar').textContent).toBe('🧠 Calendar: Brain Up to Date ✓'));
     expect(screen.queryByTestId('brain-update-button')).toBeNull();
     fireEvent.click(screen.getByText('Trends'));
