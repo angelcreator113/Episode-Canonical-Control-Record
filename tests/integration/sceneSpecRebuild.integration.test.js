@@ -23,7 +23,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
-const { validateSpecCandidate } = require('../../src/services/sceneSpecService');
+const { validateSpecCandidate, SPEC_VERSION } = require('../../src/services/sceneSpecService');
 
 const { sequelize } = models;
 
@@ -35,7 +35,7 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const BASE = 'https://img.example/base.png';
-const OLD = { version: '2.0', zones: [{ id: 'zone-old' }], objects: [{ id: 'lamp' }], camera_contracts: [{ angle: 'WIDE' }], _meta: { base_still_url: BASE, generated_at: '2026-09-01T00:00:00.000Z', source: 'base_image_analysis' } };
+const OLD = { version: SPEC_VERSION, zones: [{ id: 'zone-old' }], objects: [{ id: 'lamp' }], camera_contracts: [{ angle: 'WIDE' }], _meta: { base_still_url: BASE, generated_at: '2026-09-01T00:00:00.000Z', source: 'base_image_analysis' } };
 const GOOD = JSON.stringify({ zones: [{ id: 'zone-new' }], objects: [{ id: 'mirror' }], camera_contracts: [{ angle: 'ESTABLISHING', kind: 'front' }] });
 
 describe('validateSpecCandidate', () => {
