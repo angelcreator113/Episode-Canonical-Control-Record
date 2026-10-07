@@ -92,7 +92,7 @@ function countBy(items, key) {
   }, {});
 }
 
-function EpisodeLalasPhoneTab({ episode, onPreview }) {
+function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
   const showId = episode?.show_id || episode?.showId || episode?.show?.id;
   const episodeId = episode?.id;
 
@@ -301,6 +301,8 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                 <Play size={13} aria-hidden="true" /> Play through
               </button>
             </div>
+            {/* Why Play did not open; it used to fail silently (Evoni, 2026-10-07). */}
+            {previewError && <p className="lalas-phone-error" role="alert" data-testid="lalas-phone-play-error">{previewError}</p>}
           </section>
 
           {/* ── Feed moments persisted for this episode ── */}

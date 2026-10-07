@@ -2,10 +2,10 @@
  * PhonePreviewMode — Full-screen interactive phone simulator overlay
  * ScreenFlowMap — Visual diagram of screen connections
  */
-import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, Fragment } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
-import { isIcon, resolveZoneIcon } from '../lib/overlayUtils';
+import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
@@ -34,7 +34,7 @@ function getLinks(screen) {
  * uses it with playthrough={null}, so nothing is saved.
  */
 export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false }) {
-  const [activeScreen, setActiveScreen] = useState(initialScreen || screens[0] || null);
+  const [activeScreen, setActiveScreen] = useState(initialScreen || screens.find(isScreen) || screens[0] || null);
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
   // A custom frame that fails to load falls back to the built-in frame, as in
@@ -58,6 +58,49 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   // Transient celebration banner — populated when a mission newly completes.
   // Cleared after the banner's display window.
   const [celebrations, setCelebrations] = useState([]);
+
+  // Resume (Evoni, 2026-10-07): the saved state arrives after the phone opens,
+  // so once it does, go to the screen the player was last on. Only once: tap
+  // responses also carry last_screen_id, and navigation handles those.
+  const resumedRef = useRef(false);
+  // The last screen known to the server, and the saved screen being resumed
+  // to (nothing is saved until the phone shows it).
+  const savedScreenRef = useRef(null);
+  const resumeToRef = useRef(null);
+  useEffect(() => {
+    if (resumedRef.current || !playthrough || playthrough.loading) return;
+    resumedRef.current = true;
+    const saved = playthrough.state?.last_screen_id;
+    if (!saved) return;
+    const k = String(saved).toLowerCase();
+    const target = screens.find(s => (s.id || '').toLowerCase() === k) || screens.find(s => (s.name || '').toLowerCase() === k);
+    if (target) { savedScreenRef.current = target.id; resumeToRef.current = target.id; setActiveScreen(target); }
+  }, [playthrough, playthrough?.loading, playthrough?.state, screens]);
+
+  // Player mode remembers every screen landed on (Back, Home and icon taps
+  // included), so a reopened play-through resumes there.
+  const saveScreen = playthrough?.saveScreen;
+  const activeScreenId = activeScreen?.id;
+  useEffect(() => {
+    if (!saveScreen || !activeScreenId || !resumedRef.current) return;
+    if (resumeToRef.current) {
+      if (activeScreenId !== resumeToRef.current) return;
+      resumeToRef.current = null;
+    }
+    if (activeScreenId === savedScreenRef.current) return;
+    savedScreenRef.current = activeScreenId;
+    saveScreen(activeScreenId);
+  }, [saveScreen, activeScreenId]);
+
+  // A refused or failed tap, save or reset is said on the phone, not
+  // swallowed (Evoni, 2026-10-07).
+  const playError = playthrough?.error;
+  const clearPlayError = playthrough?.clearError;
+  useEffect(() => {
+    if (!playError) return;
+    setToasts(prev => [...prev, { id: Date.now(), tone: 'error', text: `Not saved: ${playError}` }]);
+    clearPlayError?.();
+  }, [playError, clearPlayError]);
 
   // Hydrate from playthrough whenever it changes (covers initial load + tap responses).
   useEffect(() => {
@@ -264,7 +307,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   // screen — PhoneHub does this for authors; without it here the player would lose
   // the nav bar / persistent controls once they leave the home screen.
   const homeScreen = useMemo(() => {
-    const generated = screens.filter(s => s.generated && s.url);
+    // Screens only: an icon is never the phone's home (Evoni, 2026-10-07).
+    const generated = screens.filter(s => s.generated && s.url && isScreen(s));
     return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
   const persistentLinks = useMemo(() => {

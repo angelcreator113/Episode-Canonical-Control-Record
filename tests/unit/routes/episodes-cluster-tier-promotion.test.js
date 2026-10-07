@@ -88,7 +88,7 @@ const REQUIRE_AUTH_COUNTS = {
   'scriptParse.js': 4,
   'timelineData.js': 3,
   'wardrobeApproval.js': 5,
-  'phonePlaythroughRoutes.js': 6,
+  'phonePlaythroughRoutes.js': 7,
   'phoneAIRoutes.js': 3,
   'phoneMissionRoutes.js': 5,
   'sceneStudioEpisodeRoutes.js': 6,
@@ -277,14 +277,15 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // (the clip home agreed with step 8);
     // +1 for uiOverlayRoutes.js GET /:showId/usage (the show's Overlays library);
     // -3 for episodes.js task-list overlay routes, retired (Evoni, 2026-10-07).
-    test('CP2 zone contains 278 total requireAuth references across 22 files', () => {
+    test('CP2 zone contains 279 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
     // +1 for episodeBriefRoutes.js POST /:episodeId/setup/resume (audit STATE-01).
-      expect(total).toBe(278);
+    // +1 for phonePlaythroughRoutes.js PUT /screen (Lala's Phone resume, 2026-10-07).
+      expect(total).toBe(279);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {
