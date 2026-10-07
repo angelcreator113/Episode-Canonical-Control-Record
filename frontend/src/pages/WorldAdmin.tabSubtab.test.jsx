@@ -47,7 +47,8 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
   test('?tab=episodes opens Production', async () => {
     renderAt('episodes');
 
-    await waitFor(() => expect(screen.getByText('Gala Night')).toBeTruthy());
+    // Now producing and its board card both name it.
+    await waitFor(() => expect(screen.getAllByText('Gala Night').length).toBeGreaterThan(0));
     expect(isActive('Production')).toBe(true);
     expect(isActive('Results')).toBe(false);
     expect(screen.getByTestId('show-episodes-board')).toBeTruthy();
