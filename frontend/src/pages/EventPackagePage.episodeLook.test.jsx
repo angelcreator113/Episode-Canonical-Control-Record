@@ -6,7 +6,7 @@
  * each piece owned or to buy, with Open Wardrobe. Before, it is the event's.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -90,3 +90,24 @@ describe("Lala's Look after Start Episode", () => {
     expect(within(section).queryByTestId('look-piece-cost-w1')).toBeNull();
   });
 });
+
+// Evoni, 2026-10-07: "show the images instead of just the name".
+describe("Lala's Look shows each piece's picture", () => {
+  test('a piece with an image shows it, named; one without (or whose image fails) shows the shirt', async () => {
+    payload = { event: { ...EVENT, outfit_pieces: [
+      { id: 'p1', name: 'Gold Slip Dress', image_url: 'https://cdn.example/dress.jpg' },
+      { id: 'p2', name: 'Strappy Heels' },
+    ] } };
+    renderPage();
+    const section = await screen.findByTestId('style-section');
+    const img = within(section).getByTestId('look-piece-img-p1');
+    expect(img.getAttribute('src')).toBe('https://cdn.example/dress.jpg');
+    expect(img.getAttribute('alt')).toBe('Gold Slip Dress');
+    expect(within(section).getByTestId('look-piece-p1').textContent).toContain('Gold Slip Dress');
+    expect(within(section).queryByTestId('look-piece-img-p2')).toBeNull();
+    expect(within(section).getByTestId('look-piece-p2').querySelector('svg')).toBeTruthy();
+    fireEvent.error(img);
+    expect(img.hidden).toBe(true);
+  });
+});
+

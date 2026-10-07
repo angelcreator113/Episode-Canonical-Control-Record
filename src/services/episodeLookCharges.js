@@ -123,7 +123,10 @@ function lookCharges(pieces, bought = new Set()) {
  *   state 'chosen'  pieces linked but not locked yet (pending, not rejected);
  *   state 'event'   no links: the outfit saved on the event;
  *   state 'none'    nothing chosen anywhere.
- * Returns { episode_id, state, pieces: [{ id, name, is_owned, coin_cost }] }.
+ * Returns { episode_id, state, pieces: [{ id, name, is_owned, coin_cost, image_url }] }.
+ * image_url is the piece's picture (Evoni, 2026-10-07: show the images, not
+ * just the names): the wardrobe row's thumbnail or image for a linked piece,
+ * the outfit snapshot's image_url for the event's own; null without one.
  */
 async function episodeLook(sequelize, { episodeId, event }) {
   const slim = (p) => ({
@@ -131,11 +134,13 @@ async function episodeLook(sequelize, { episodeId, event }) {
     name: p.name || null,
     is_owned: p.is_owned === true,
     coin_cost: p.coin_cost != null ? (parseFloat(p.coin_cost) || 0) : (p.price != null ? (parseFloat(p.price) || 0) : null),
+    image_url: p.thumbnail_url || p.s3_url_processed || p.s3_url || p.image_url || null,
   });
   let linked = [];
   try {
     linked = await sequelize.query(
-      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, COALESCE(ew.approval_status, 'pending') AS approval_status
+      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url,
+              COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
         WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
           AND COALESCE(ew.approval_status, 'pending') <> 'rejected'
