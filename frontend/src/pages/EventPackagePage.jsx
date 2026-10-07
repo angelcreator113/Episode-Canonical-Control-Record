@@ -79,7 +79,7 @@ import {
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import { dealLabelFor, describeCompensation } from '../utils/eventTerms';
-import { heroTiles, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
+import { heroTiles, packageBadge, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
@@ -530,6 +530,7 @@ export default function EventPackagePage() {
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
   const nextStep = nextPackageStep(readiness);
+  const badge = packageBadge({ event, readiness, locked: used });
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics
   // too, set / suggested / missing like the others. The organizer is the
   // linked creator profile, when there is one.
@@ -1112,7 +1113,7 @@ export default function EventPackagePage() {
           <button className="epp-back" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
             <ArrowLeft size={16} /> Events
           </button>
-          <span className={`epp-status-badge epp-status-${event.status || 'draft'}`}>{fmtLabel(event.status)}</span>
+          <span className={`epp-status-badge epp-status-${badge.state}`} data-testid="package-status">{badge.label}</span>
         </div>
         <HeroTitle context={seasonContext} showId={showId} name={event.name} />
         <ul className="epp-hero-tiles" aria-label="At a glance">

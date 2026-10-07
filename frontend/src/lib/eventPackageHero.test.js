@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { shortDate, shortTime, heroTiles, seasonLine, readinessTile, readinessHeadline, pageNav, dealTiles } from './eventPackageHero';
+import { shortDate, shortTime, heroTiles, packageBadge, seasonLine, readinessTile, readinessHeadline, pageNav, dealTiles } from './eventPackageHero';
 
 describe('Event Package header helpers', () => {
   test('dates and times read short; anything else as stored', () => {
@@ -29,6 +29,23 @@ describe('Event Package header helpers', () => {
     expect(bare.map((t) => [t.value, t.empty])).toEqual([['No date', true], ['No venue', true], ['No organizer', true], ['No deal set', true], ['Not projected', true]]);
     expect(heroTiles({ event: {}, venueDate: {}, organizer: { name: 'Velour', kind: 'brand' }, projection: {}, dealLabel: 'Gifted', compensation: { isPaid: false, amount: 0 } })
       .filter((t) => ['organizer', 'deal'].includes(t.key)).map((t) => t.sub)).toEqual(['Brand', 'Unpaid']);
+  });
+
+  test('pay with no terms says "No terms yet", not "No deal set"', () => {
+    const deal = heroTiles({ event: {}, venueDate: {}, organizer: null, projection: {}, dealLabel: null, compensation: { isPaid: true, amount: 300 } })
+      .find((t) => t.key === 'deal');
+    expect([deal.value, deal.sub, deal.empty]).toEqual(['No terms yet', 'Earns 300 coins', true]);
+  });
+
+  test('the badge is the Events queue state, not the stored status', () => {
+    const missing = { gatesMet: false };
+    const met = { gatesMet: true };
+    const ev = { status: 'ready', host_brand: 'Velour' };
+    expect(packageBadge({ event: ev, readiness: missing })).toEqual({ state: 'needs_setup', label: 'Needs Setup' });
+    expect(packageBadge({ event: ev, readiness: met })).toEqual({ state: 'ready', label: 'Ready' });
+    expect(packageBadge({ event: { status: 'ready' }, readiness: met }).state).toBe('needs_organizer');
+    expect(packageBadge({ event: { status: 'draft', host_brand: 'Velour' }, readiness: met, locked: true })).toEqual({ state: 'used', label: 'Used' });
+    expect(packageBadge({ event: { status: 'declined' }, readiness: met }).label).toBe('Archived');
   });
 
   test('the season line', () => {
