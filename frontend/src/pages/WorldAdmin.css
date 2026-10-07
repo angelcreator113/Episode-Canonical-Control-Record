@@ -581,6 +581,93 @@
 .seb-title { font-weight: 600; color: #1a1a2e; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 
+/* Episodes → Production, to Evoni's mock (2026-10-07): the Now producing
+   card with its five-stage bar and From the event, then the season
+   pipeline (Board / Grid / List). Overrides the plain board above. */
+.show-episodes-board { max-width: none; display: grid; gap: 20px; }
+.seb-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  overflow: hidden; border: 1px solid var(--lala-lavender-line); border-radius: 20px;
+  background: var(--surface-card); box-shadow: 0 6px 24px rgba(91, 75, 138, 0.08);
+  border-left: 6px solid var(--lala-lavender);
+}
+.seb-hero-main { padding: 24px 28px; display: grid; gap: 12px; min-width: 0; }
+.seb-hero-kicker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.seb-chip { padding: 2px 10px; border-radius: 999px; background: var(--lala-parchment-2); color: var(--text-primary); letter-spacing: 0; text-transform: none; font-weight: 600; }
+.seb-hero-title { margin: 0; font-family: var(--font-prose); font-size: 30px; font-weight: 600; line-height: 1.2; color: var(--text-primary); overflow-wrap: anywhere; }
+.seb-hero-blurb { margin: 0; font-size: 15px; line-height: 1.55; color: var(--text-secondary); }
+.seb-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.seb-tags li { padding: 4px 12px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-dark); font-size: 13px; font-weight: 600; }
+.seb-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.seb-stage { display: grid; gap: 6px; min-width: 0; }
+.seb-stage-bar { display: block; height: 5px; border-radius: 999px; background: var(--lala-lavender-soft); }
+.seb-stage.is-done .seb-stage-bar { background: var(--lala-lavender); }
+.seb-stage.is-current .seb-stage-bar { background: var(--accent-dark); }
+.seb-stage-label { font-family: var(--font-ui); font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seb-stage.is-done .seb-stage-label { color: var(--lala-lavender-text); font-weight: 600; }
+.seb-stage.is-current .seb-stage-label { color: var(--accent-dark); font-weight: 700; }
+.seb-hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.seb-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 22px; border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--lala-lavender-text); font-size: 15px; font-weight: 600; text-decoration: none; }
+.seb-btn:hover { background: var(--lala-lavender-soft); }
+.seb-btn-primary { border-color: var(--lala-lavender); background: var(--lala-lavender); color: var(--text-inverse); }
+.seb-btn-primary:hover { background: var(--lala-lavender-dark); }
+.seb-checklist { margin-left: auto; font-size: 13px; color: var(--text-secondary); text-decoration: none; }
+.seb-checklist:hover { color: var(--lala-lavender-text); text-decoration: underline; }
+.seb-hero-event { padding: 24px; display: grid; align-content: start; gap: 6px; background: linear-gradient(160deg, var(--lala-lavender-soft), var(--accent-subtle)); min-width: 0; }
+.seb-event-kicker { font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
+.seb-event-name { margin: 4px 0 2px; font-family: var(--font-prose); font-size: 21px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
+.seb-event-line { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.seb-event-earns { margin: 6px 0 0; font-size: 14px; font-weight: 700; color: var(--lala-lavender-text); }
+.seb-event-needed { margin: 4px 0 0; font-size: 14px; font-weight: 600; color: var(--warning-text); }
+.seb-event-ready { margin: 4px 0 0; font-size: 14px; font-weight: 600; color: var(--success-text); }
+.seb-event-note { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.seb-event-open { margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.seb-event-open:hover { text-decoration: underline; }
+.seb-more-slots { margin-top: 2px; }
+.seb-head { margin-bottom: 0; }
+.seb-head-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.seb-head-title h2 { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.seb-count { font-size: 14px; color: var(--text-secondary); }
+.seb-views { padding: 4px; gap: 2px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); }
+.seb-views button { min-height: 36px; padding: 0 16px; border-radius: 999px; background: transparent; color: var(--lala-lavender-text); font-size: 13px; }
+.seb-views button.active { background: var(--lala-lavender); color: var(--text-inverse); }
+.seb-new { min-height: 44px; padding: 0 20px; border-radius: 999px; background: var(--accent-dark); font-size: 15px; }
+.seb-new:hover { background: var(--accent); }
+.seb-board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+.seb-col { display: flex; flex-direction: column; gap: 10px; min-height: 280px; padding: 12px; border-radius: 16px; background: var(--lala-parchment); border: 1px solid transparent; }
+.seb-col-planning { background: var(--lala-lavender-soft); }
+.seb-col-script { background: var(--accent-subtle); }
+.seb-col.is-over { border-color: var(--lala-lavender); }
+.seb-col-head { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.seb-col-count { font-size: 12px; color: var(--text-secondary); }
+.seb-col-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.seb-card { display: grid; gap: 4px; width: 100%; padding: 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); text-align: left; font: inherit; color: inherit; cursor: grab; box-shadow: 0 2px 8px rgba(91, 75, 138, 0.06); }
+.seb-card:hover { border-color: var(--lala-lavender); }
+.seb-card-code { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+.seb-card-title { font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--text-primary); overflow-wrap: anywhere; }
+.seb-card-bar { display: block; height: 5px; margin-top: 4px; border-radius: 999px; background: var(--lala-lavender-soft); overflow: hidden; }
+.seb-card-bar span { display: block; height: 100%; background: var(--lala-lavender); }
+.seb-card-line { font-size: 12px; color: var(--text-secondary); }
+.seb-card-slot { border-style: dashed; background: transparent; box-shadow: none; cursor: default; }
+.seb-card-slot .seb-card-code { color: var(--lala-lavender-text); }
+.seb-card-intent { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.seb-card-link { justify-self: start; padding: 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent-dark); cursor: pointer; }
+.seb-card-link:hover { text-decoration: underline; }
+.seb-board-hint, .seb-board-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+@media (max-width: 900px) {
+  .seb-hero { grid-template-columns: minmax(0, 1fr); border-left-width: 1px; border-top: 6px solid var(--lala-lavender); }
+  .seb-hero-main { padding: 18px; }
+  .seb-hero-event { padding: 18px; }
+  .seb-hero-title { font-size: 24px; }
+  .seb-checklist { margin-left: 0; flex-basis: 100%; }
+  .seb-board { grid-template-columns: repeat(5, minmax(220px, 82vw)); scroll-snap-type: x proximity; }
+  .seb-col { scroll-snap-align: start; }
+}
+@media (max-width: 480px) {
+  .seb-stage-label { font-size: 10px; }
+  .seb-head-title h2 { font-size: 22px; }
+}
+
 /* Overview: four questions, each with a way to act (ShowOverview). */
 /* Producer Mode → Overview, to Evoni's redesign (2026-10-05): the next-step
    banner, the episode in production with its checklist, and a side column

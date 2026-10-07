@@ -1866,7 +1866,7 @@ The revised event should feel like a completely different experience from the si
 
       {activeTab === 'episodes' && subTab === 'episodes-production' && (
         <div style={S.content}>
-          <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={loadData} />
+          <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={loadData} goTo={goTo} />
         </div>
       )}
 
