@@ -123,7 +123,8 @@ function Overview() {
         // Every piece and episode, not the first 500 and 100 (lib/fetchAllPages).
         fetchClosetWithTotal(api, show.id),
         fetchAllEpisodes(api, show.id),
-        api.get('/api/v1/character-registry/registries?limit=50'),
+        // The show's own registries: its cast, not every show's.
+        api.get(`/api/v1/character-registry/registries?show_id=${encodeURIComponent(show.id)}&limit=100`),
         api.get('/api/v1/calendar/events?event_type=lalaverse_cultural'),
         api.get(`/api/v1/feed-enhanced/${show.id}/trending`),
         api.get('/api/v1/world/tension-scanner'),
@@ -179,7 +180,7 @@ function Overview() {
   const tiles = [
     { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open Season Plan', to: producer('season'), tone: 'overview' },
     { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: producer('events'), tone: 'culture' },
-    { key: 'characters', label: 'Characters', value: counts.characters, note: 'across every registry', link: 'Open Character Registry', to: '/character-registry', tone: 'society' },
+    { key: 'characters', label: 'Characters', value: counts.characters, note: 'in this show’s registries', link: 'Open Character Registry', to: '/character-registry', tone: 'society' },
     { key: 'wardrobe', label: 'Wardrobe', value: counts.wardrobe, link: 'Open Full Closet', to: producer('wardrobe-items'), tone: 'world' },
   ];
 
