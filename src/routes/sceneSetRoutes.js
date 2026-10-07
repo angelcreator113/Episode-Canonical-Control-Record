@@ -673,6 +673,9 @@ router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (
       worldLoc = await WorldLocation.create({
         universe_id: set.universe_id || null,
         name: set.name,
+        // A scene set names no city; the caller may (one of the five DREAM
+        // cities, else none; wiring map, fix-list item 18).
+        city: require('../utils/lalaHome').dreamCityName(req.body?.city),
         description: set.canonical_description || '',
         location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior',
         sensory_details: {

@@ -24,6 +24,7 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const propertyService = require('../services/propertyService');
+const { dreamCityName } = require('../utils/lalaHome');
 
 // Lazy-load models to avoid circular dependency
 let models;
@@ -82,7 +83,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { WorldLocation } = getModels();
-    const { name, description, property_type, style_preset_id, style_guide, universe_id } = req.body;
+    const { name, description, property_type, style_preset_id, style_guide, universe_id, city } = req.body;
 
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
 
@@ -101,6 +102,9 @@ router.post('/', requireAuth, async (req, res) => {
       description: description || `${name} — a luxury property in the LalaVerse`,
       location_type: 'property',
       universe_id: universe_id || null,
+      // One of the five DREAM cities, so the World tab's map places it
+      // (wiring map, fix-list item 18); anything else is no city.
+      city: dreamCityName(city),
       metadata: {
         property_type: property_type || 'penthouse',
         style_guide: mergedGuide,
@@ -199,6 +203,8 @@ router.post('/:id/rooms', requireAuth, async (req, res) => {
       location_type: 'interior',
       parent_location_id: property.id,
       universe_id: property.universe_id,
+      // A room is in its property's city (wiring map, fix-list item 18).
+      city: property.city || null,
     });
 
     // Create associated SceneSet. D2 (Evoni, 2026-10-02): it belongs to the
