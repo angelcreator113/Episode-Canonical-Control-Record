@@ -8,6 +8,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 
 let client = null;
 function getClient() {
@@ -131,14 +132,9 @@ async function generateGroundedScript(episodeId, showId, models) {
   } catch { /* non-blocking */ }
 
   // 6. Load Lala's stats
-  let lalaStats = null;
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT * FROM world_state_snapshots WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId } }
-    );
-    lalaStats = rows?.[0] || null;
-  } catch { /* non-blocking */ }
+  // The newest snapshot of the show's universe (or of none); the old
+  // show_id query named a column the table does not have.
+  const lalaStats = await latestWorldSnapshotForShow(sequelize, showId);
 
   // 7. This episode's season position (§8(ff) A5), snapshotted at Start Episode
   let seasonContext = null;

@@ -39,6 +39,7 @@ const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/
 const models = require('../models');
 const { factsOf, normalizeFacts } = require('../services/worldFacts');
 const { isHighTension } = require('../services/tensionLevels');
+const { universeIdForShow } = require('../services/worldSnapshotForShow');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
@@ -3395,6 +3396,8 @@ router.get('/world/state/snapshots', optionalAuth, async (req, res) => {
   } catch (err) { res.json({ snapshots: [] }); }
 });
 
+const UUID_RE_SNAPSHOT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // POST /world/state/snapshots
 router.post('/world/state/snapshots', requireAuth, async (req, res) => {
   try {
@@ -3405,7 +3408,16 @@ router.post('/world/state/snapshots', requireAuth, async (req, res) => {
     if (facts.error) return res.status(400).json({ error: facts.error });
     const WSS = models.WorldStateSnapshot;
     if (!WSS) return res.status(500).json({ error: 'Model not available' });
-    const snap = await WSS.create({ snapshot_label, book_id, chapter_id, active_threads: active_threads || [], world_facts: facts.facts, character_states: character_states || {}, relationship_states: relationship_states || {}, timeline_position: timeline_position || 0 });
+    // The snapshot is its show's universe's (Evoni, 2026-10-07; wiring map
+    // fix-list item 17): the State tab sends the active show, and the
+    // script writers read the newest snapshot of that universe or of none
+    // (services/worldSnapshotForShow).
+    const { show_id: showId } = req.body;
+    if (showId != null && !UUID_RE_SNAPSHOT.test(String(showId))) {
+      return res.status(400).json({ error: 'show_id must be a show id (UUID)' });
+    }
+    const universeId = await universeIdForShow(sequelize, showId);
+    const snap = await WSS.create({ universe_id: universeId, snapshot_label, book_id, chapter_id, active_threads: active_threads || [], world_facts: facts.facts, character_states: character_states || {}, relationship_states: relationship_states || {}, timeline_position: timeline_position || 0 });
     res.json({ snapshot: snap });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
