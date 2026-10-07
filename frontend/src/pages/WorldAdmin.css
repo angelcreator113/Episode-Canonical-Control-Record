@@ -668,6 +668,16 @@
   .seb-head-title h2 { font-size: 22px; }
 }
 
+/* Episodes → Results heading (2026-10-07). */
+.wa-results-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.wa-results-title { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.wa-results-line { margin: 4px 0 0; font-size: 14px; color: var(--text-secondary); }
+.wa-results-count { font-size: 13px; color: var(--text-secondary); }
+.wa-goals-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.wa-goals-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.wa-goal-btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-goal-btn:hover { background: var(--lala-lavender-soft); }
+
 /* Overview: four questions, each with a way to act (ShowOverview). */
 /* Producer Mode → Overview, to Evoni's redesign (2026-10-05): the next-step
    banner, the episode in production with its checklist, and a side column

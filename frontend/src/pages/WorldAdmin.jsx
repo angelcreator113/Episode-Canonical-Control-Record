@@ -237,6 +237,9 @@ const EVENT_STATUS_CONFIG = {
 // and Insights became Release); Career Goals moved into the Season Plan and
 // the Decision Log into Activity & Decisions. Keys stay as they were so
 // existing ?tab= links keep working.
+// Results: an episode's evaluation in words (evaluation_status is 'computed' once scored, 'accepted' once kept).
+const EVALUATION_LABEL = { accepted: 'Evaluated', computed: 'Scored, not accepted' };
+
 const TABS = [
   { key: 'overview', Icon: Sparkles, label: 'Overview' },
   { key: 'episodes', Icon: CalendarDays, label: 'Episodes', subs: [
@@ -1893,9 +1896,13 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
+          {/* Results in the Producer Mode look (2026-10-07): the title in the prose face with its line. */}
+          <div className="wa-results-head">
+            <div>
+              <h2 className="wa-results-title">Results</h2>
+              <p className="wa-results-line">How each episode turned out: its score, its money and what it changed for Lala.</p>
+            </div>
+            <div className="wa-results-count">{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
 
           {/* Financial Summary */}
@@ -1957,7 +1964,8 @@ The revised event should feel like a completely different experience from the si
                   </div>
                   {tier && <span style={S.tierPill(tier)}>{TIER_EMOJIS[tier]} {tier.toUpperCase()}</span>}
                   {score && <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', margin: '0 8px' }}>{score}</span>}
-                  <span style={S.statusPill(ep.evaluation_status)}>{ep.evaluation_status || 'draft'}</span>
+                  {/* The evaluation in words; it read the raw value, so an episode never evaluated said "draft" whatever its status. */}
+                  <span style={S.statusPill(ep.evaluation_status)}>{EVALUATION_LABEL[ep.evaluation_status] || 'Not evaluated yet'}</span>
                   {deltas && (
                     <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
                       {Object.entries(deltas).filter(([, v]) => typeof v === 'number' && v !== 0).slice(0, 3).map(([k, v]) => (
@@ -4486,17 +4494,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* Career Goals: part of the Season Plan, below the arc. */}
       {activeTab === 'episodes' && subTab === 'season' && (
         <div style={S.content}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={syncGoals} style={S.secBtn}>🔄 Sync from Stats</button>
-              <button onClick={loadSuggestions} style={S.secBtn}>💡 Suggest Events</button>
+          {/* In the Producer Mode look (2026-10-07): the prose title and its line; the tools wrap on a phone. */}
+          <div className="wa-goals-head">
+            <div>
+              <h2 className="wa-results-title">Career Goals</h2>
+              <p className="wa-results-line">What Lala is working toward this season. Each goal tracks one of her stats to a target.</p>
+            </div>
+            <div className="wa-goals-tools">
+              <button onClick={syncGoals} className="wa-goal-btn">Sync from stats</button>
+              <button onClick={loadSuggestions} className="wa-goal-btn">Suggest events</button>
               <button onClick={async () => {
                 try {
                   const res = await api.post(`/api/v1/world/${showId}/goals/seed`, { activate_tier: 1 });
                   if (res.data.success) { setSuccessMsg(`Seeded ${res.data.created} goals! (${res.data.skipped} already existed)`); loadData(); }
                 } catch (err) { setError(err.response?.data?.error || err.message); }
-              }} style={S.secBtn}>🌱 Seed 24 Goals</button>
+              }} className="wa-goal-btn">Seed 24 goals</button>
               <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
             </div>
           </div>
