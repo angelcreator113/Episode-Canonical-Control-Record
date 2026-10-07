@@ -9,7 +9,11 @@ const { PRICE_TIERS, PRICE_RANGES, priceGuideText } = require('../../../src/util
 
 const root = path.join(__dirname, '../../..');
 const routeSrc = fs.readFileSync(path.join(root, 'src/routes/wardrobeLibrary.js'), 'utf8');
+// The Add piece auto-fill moved out of WorldAdmin into lib/wardrobeAddPiece
+// (the Add piece redesign, 2026-10-07); the rules are checked there, and
+// WorldAdmin must still not clamp.
 const adminSrc = fs.readFileSync(path.join(root, 'frontend/src/pages/WorldAdmin.jsx'), 'utf8');
+const addPieceSrc = fs.readFileSync(path.join(root, 'frontend/src/lib/wardrobeAddPiece.js'), 'utf8');
 
 // The prompt's item_type enum, read from the route so the two cannot drift.
 const promptItemTypes = routeSrc.match(/"item_type": "([a-z|]+)"/)[1].split('|');
@@ -51,17 +55,19 @@ describe('the $150 floor is gone (Task #2347)', () => {
     expect((routeSrc.match(/\$\{priceGuide\}\n\nReturn ONLY the JSON\./g) || []).length).toBe(2);
   });
 
-  it('WorldAdmin no longer clamps the AI price to 150.00', () => {
-    expect(/>= 150 \?/.test(adminSrc)).toBe(false);
-    expect(adminSrc.includes("'150.00'")).toBe(false);
+  it('neither WorldAdmin nor the Add piece auto-fill clamps the AI price to 150.00', () => {
+    for (const src of [adminSrc, addPieceSrc]) {
+      expect(/>= 150 \?/.test(src)).toBe(false);
+      expect(src.includes("'150.00'")).toBe(false);
+    }
   });
 
-  it('WorldAdmin suggests the coin cost from the price she set (suggestCoinCost)', () => {
-    expect(adminSrc.includes('coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice)')).toBe(true);
+  it('the Add piece auto-fill suggests the coin cost from the price she set (suggestCoinCost)', () => {
+    expect(addPieceSrc.includes('coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice)')).toBe(true);
   });
 
-  it('WorldAdmin fills the AI price only into an empty price', () => {
-    expect(adminSrc.includes('price: aiPrice || prev.price')).toBe(false);
-    expect(adminSrc.includes('price: fillPrice(prev.price, aiPrice)')).toBe(true);
+  it('the Add piece auto-fill fills the AI price only into an empty price', () => {
+    expect(addPieceSrc.includes('price: aiPrice || prev.price')).toBe(false);
+    expect(addPieceSrc.includes('price: fillPrice(prev.price, aiPrice)')).toBe(true);
   });
 });
