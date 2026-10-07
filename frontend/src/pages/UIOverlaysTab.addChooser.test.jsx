@@ -165,7 +165,7 @@ describe('an icon shows its background state (Task #2024, I3)', () => {
     vi.mocked(api.post).mockImplementation(async (url, ...rest) => { await gate; return realPost(url, ...rest); });
     await openCall();
     expect(bgText()).toBe('Background: Original');
-    fireEvent.click(screen.getByRole('button', { name: /Remove BG/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Remove background/ }));
     await waitFor(() => expect(bgText()).toBe('Background: Removing…'));
     expect(screen.getByRole('button', { name: /Removing…/ }).disabled).toBe(true);
     release();
@@ -188,7 +188,7 @@ describe('an icon shows its background state (Task #2024, I3)', () => {
     });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await openCall();
-    fireEvent.click(screen.getByRole('button', { name: /Remove BG/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Remove background/ }));
     await waitFor(() => expect(bgText()).toBe("Background: Failed — Background removal isn't set up on this server"));
     expect(hasRetry()).toBe(true);
     vi.mocked(api.post).mockImplementation(realPost);
@@ -203,7 +203,7 @@ describe('an icon shows its background state (Task #2024, I3)', () => {
     vi.mocked(api.post).mockRejectedValueOnce(Object.assign(new Error('x'), { response: { status: 500, data: { error: 'remove.bg quota used up' } } }));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await openCall();
-    fireEvent.click(screen.getByRole('button', { name: /Remove BG/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Remove background/ }));
     await waitFor(() => expect(bgText()).toBe('Background: Failed — remove.bg quota used up'));
     expect(hasRetry()).toBe(true);
   });
@@ -211,7 +211,7 @@ describe('an icon shows its background state (Task #2024, I3)', () => {
   test('a success the server doesn\'t confirm reads Failed, not Removed', async () => {
     mockApi([HOME, CALLS, CALL]);
     await openCall();
-    fireEvent.click(screen.getByRole('button', { name: /Remove BG/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Remove background/ }));
     await waitFor(() => expect(bgText()).toBe("Background: Failed — The server didn't report the background as removed"));
     expect(screen.queryByText('Background removed')).toBeNull();
   });
@@ -220,7 +220,7 @@ describe('an icon shows its background state (Task #2024, I3)', () => {
     mockApi([HOME, CALLS, CALL]);
     await renderPage();
     fireEvent.click(screen.getByText('edit-calls'));
-    expect(await screen.findByRole('button', { name: /Remove BG/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Remove background/ })).toBeTruthy();
     expect(screen.queryByTestId('bg-state')).toBeNull();
   });
 });

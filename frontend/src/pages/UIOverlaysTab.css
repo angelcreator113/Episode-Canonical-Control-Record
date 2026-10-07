@@ -29,9 +29,83 @@
   color: #991b1b;
 }
 
-/* ── Header ── */
-.overlays-header {
+/* ── Header card (Evoni's mock, 2026-10-07): the title, its line and three
+   tiles, the tools, and the setup guide inside one soft lavender card. ── */
+.ph-hero {
+  box-sizing: border-box;
+  max-width: 100%;
   margin-bottom: 20px;
+  padding: 20px 24px;
+  background: linear-gradient(120deg, var(--surface-card, #fff) 0%, var(--lala-lavender-soft) 60%, var(--accent-subtle) 100%);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 18px;
+}
+
+.ph-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ph-hero-title {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ph-hero-line {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.ph-hero-tiles {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-hero-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 8px 14px;
+  background: var(--surface-card, #fff);
+  border-radius: 12px;
+}
+
+.ph-hero-tile-value {
+  font-family: var(--font-prose);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--lala-lavender-text);
+}
+
+.ph-hero-tile-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ph-hero-tools {
+  margin-bottom: 14px;
+}
+
+.ph-hero-tools .overlays-header-actions {
+  width: auto;
+  margin-left: auto;
+}
+
+.overlays-header {
+  margin-bottom: 0;
 }
 
 .overlays-header-top {
@@ -240,8 +314,8 @@
   font-size: 12px;
   font-weight: 700;
   border: none;
-  border-radius: 8px;
-  background: #2C2C2C;
+  border-radius: 999px;
+  background: var(--lala-lavender);
   color: #fff;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
@@ -249,10 +323,16 @@
   flex-shrink: 0;
   min-height: 36px;
   transition: background 0.15s;
+  margin-left: auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
 }
 
 .zone-editor-done-btn:hover {
-  background: #444;
+  background: var(--lala-lavender-dark);
 }
 
 /* ── Loading ── */
@@ -891,6 +971,24 @@
 
 /* ── Responsive header ── */
 @media (max-width: 600px) {
+  .ph-hero {
+    padding: 16px;
+  }
+
+  .ph-hero-title {
+    font-size: 24px;
+  }
+
+  .ph-hero-tiles {
+    width: 100%;
+  }
+
+  .ph-hero-tile {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+  }
+
   .overlays-header-top {
     flex-wrap: wrap;
   }
@@ -1068,4 +1166,374 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ── Under the phone (Evoni's mock, 2026-10-07): the shown screen's name,
+   what it holds, Edit screen and Play through. ── */
+.ph-device-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  text-align: center;
+}
+
+.ph-device-name {
+  font-family: var(--font-prose);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.ph-device-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ph-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ph-btn {
+  min-height: 40px;
+  padding: 8px 18px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ph-btn:hover {
+  background: var(--lala-lavender-soft);
+}
+
+.ph-btn--primary {
+  color: var(--text-inverse);
+  background: var(--lala-lavender);
+  border-color: var(--lala-lavender);
+}
+
+.ph-btn--primary:hover {
+  background: var(--lala-lavender-dark);
+}
+
+/* ── The screen panel, docked beside the Build grid (Evoni's mock,
+   2026-10-07). Without the slot it is still the modal above. ── */
+.editor-modal.editor-panel {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  border-radius: 20px;
+  border: 1px solid var(--lala-lavender-line);
+  box-shadow: 0 8px 28px rgba(91, 75, 138, 0.10);
+  animation: none;
+  overflow: visible;
+}
+
+.editor-panel .editor-modal-header {
+  align-items: flex-start;
+  background: linear-gradient(160deg, var(--surface-card, #fff) 0%, var(--accent-subtle) 100%);
+  border-radius: 20px 20px 0 0;
+}
+
+.editor-panel .editor-modal-name {
+  font-family: var(--font-prose);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.editor-panel-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.editor-panel .editor-modal-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-inverse);
+  background: var(--lala-lavender);
+}
+
+.editor-panel-home {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--accent-dark);
+}
+
+.editor-panel-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.editor-panel-status__word {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.editor-panel-status__word.is-ready {
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.editor-panel-status__line {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-panel .editor-modal-tabs {
+  margin: 12px 16px 0;
+  padding: 4px;
+  gap: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+}
+
+.editor-panel .editor-tab {
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--lala-lavender-text);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.editor-panel .editor-tab.active {
+  color: var(--text-primary);
+  background: var(--surface-card, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.editor-panel .editor-section-label {
+  color: var(--accent-dark);
+  letter-spacing: 0.1em;
+}
+
+.editor-panel .editor-type-toggle {
+  padding: 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+}
+
+.editor-panel .editor-type-btn {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lala-lavender-text);
+}
+
+.editor-panel .editor-type-btn.active-screen,
+.editor-panel .editor-type-btn.active-icon,
+.editor-panel .editor-type-btn.active-overlay {
+  color: var(--text-primary);
+  background: var(--surface-card, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.editor-picture-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border-radius: 14px;
+}
+
+.editor-picture-btn.ph-btn--primary {
+  border-color: var(--lala-lavender);
+}
+
+.editor-picture-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.editor-home-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent-subtle);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-home-switch__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-home-switch__text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.editor-home-switch__track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--lala-parchment-3);
+  transition: background 0.15s;
+}
+
+.editor-home-switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+
+.editor-home-switch.is-home .editor-home-switch__track {
+  background: var(--accent-dark);
+}
+
+.editor-home-switch.is-home .editor-home-switch__knob {
+  transform: translateX(20px);
+}
+
+.editor-variant-tiles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editor-variant-tile {
+  width: 56px;
+  aspect-ratio: 9 / 16;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--lala-lavender-soft);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+}
+
+.editor-variant-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.editor-variant-tile.active {
+  border-color: var(--accent-dark);
+}
+
+.editor-variant-tile.add {
+  border: 1.5px dashed var(--lala-lavender-line);
+  background: transparent;
+  font-size: 20px;
+}
+
+.editor-variant-hint {
+  margin: 6px 0 0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ph-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ph-chip-btn:hover {
+  background: var(--lala-lavender-line);
+}
+
+.ph-chip-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.editor-panel .editor-danger-zone {
+  border: 0;
+  padding-top: 0;
+  background: none;
+}
+
+.editor-delete-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
+.editor-delete-link:hover {
+  text-decoration: underline;
+}
+
+.editor-panel .editor-type-btn {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
 }

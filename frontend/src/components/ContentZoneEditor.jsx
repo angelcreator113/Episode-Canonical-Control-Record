@@ -13,6 +13,7 @@
  *   readOnly          — if true, hide editing controls
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
 import ScreenContentRenderer from './ScreenContentRenderer';
@@ -36,6 +37,9 @@ export default function ContentZoneEditor({
   compact = false,
   phoneSkin = 'rosegold',
   customFrameUrl,
+  // Optional DOM node beside the phone (the Content stage's card, Evoni's
+  // mock 2026-10-07): the zone list renders there instead of under the phone.
+  sidePanel = null,
 }) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
@@ -320,18 +324,19 @@ export default function ContentZoneEditor({
       </PhoneFrame>
       </div>
 
-      {/* Zone list + config editor */}
-      {!readOnly && (
+      {/* Zone list + config editor — beside the phone when the page gives a side panel */}
+      {!readOnly && (() => {
+        const list = (
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-              CONTENT ZONES ({localZones.length})
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-lavender-text)', fontFamily: "'DM Mono', monospace" }}>
+              CONTENT AREAS ({localZones.length})
             </span>
             <div style={{ display: 'flex', gap: 4 }}>
               {isDirty && (
                 <button onClick={handleSave} style={{
                   padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none',
-                  borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer',
+                  borderRadius: 999, background: 'var(--lala-lavender)', color: '#fff', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
                 }}>
                   <Save size={12} /> Save
@@ -341,8 +346,8 @@ export default function ContentZoneEditor({
           </div>
 
           {localZones.length === 0 && (
-            <div style={{ fontSize: 11, color: '#999', padding: '12px 0', lineHeight: 1.6 }}>
-              Draw rectangles on the screen to create content zones. Each zone renders live show data (posts, profiles, DMs, etc.) on top of your template.
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '12px 0', lineHeight: 1.6 }}>
+              Drag on the screen to draw a content area. Each one shows live show data (posts, profiles, DMs and more) on top of the screen's picture, and can change per episode.
             </div>
           )}
 
@@ -393,7 +398,9 @@ export default function ContentZoneEditor({
             })}
           </div>
         </div>
-      )}
+        );
+        return sidePanel ? createPortal(list, sidePanel) : list;
+      })()}
     </div>
   );
 }
