@@ -59,7 +59,11 @@ export function formatEstimate(estimate) {
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
 
-export default function EpisodeTitleCard({ episode, showCardImage = true, onChange }) {
+// part (Evoni, 2026-10-07, the Overlays tab as one card per overlay): 'overlay'
+// shows only the title overlay's controls (words, delete, approve, lettering,
+// flourish), 'card' only the full-screen framed card's (approve, design);
+// without it, both, as before.
+export default function EpisodeTitleCard({ episode, showCardImage = true, onChange, part = null }) {
   const episodeId = episode?.id;
   const title = episode?.title || '';
   const [state, setState] = useState(null);
@@ -157,10 +161,12 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
   const { approved, card, offer } = state;
   const outdated = Boolean(card?.outdated);
   const cost = formatEstimate(offer?.estimate);
+  const showOverlay = part !== 'card';
+  const showCard = part !== 'overlay';
 
   return (
-    <div className="etc-panel" data-testid="episode-title-card">
-      {words !== null ? (
+    <div className="etc-panel" data-testid={part ? `episode-title-card-${part}` : 'episode-title-card'}>
+      {!showOverlay ? null : words !== null ? (
         <form className="etc-words" onSubmit={saveWords} data-testid="etc-words-form">
           <label className="etc-words-label" htmlFor={`etc-words-${episodeId}`}>The title&apos;s words</label>
           <input
@@ -199,13 +205,13 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
           </button>
         )}
 
-        {outdated && (
+        {showCard && outdated && (
           <span className="etc-outdated" data-testid="etc-outdated">
             <TriangleAlert size={14} aria-hidden="true" /> Title changed — card outdated
           </span>
         )}
 
-        {offer?.offered && (
+        {showCard && offer?.offered && (
           <button type="button" className="etc-btn etc-btn-primary" onClick={design} disabled={busy !== null}>
             {offer.kind === 'redesign' ? <RefreshCw size={14} aria-hidden="true" /> : <Clapperboard size={14} aria-hidden="true" />}
             {busy === 'design'
@@ -217,7 +223,7 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
         )}
       </div>
 
-      {approved && state.overlay_offer?.offered && (
+      {showOverlay && approved && state.overlay_offer?.offered && (
         <TitleOverlayPanel
           episodeId={episodeId}
           overlay={state.overlay || null}
@@ -226,13 +232,13 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
           onSaved={(overlay) => { setState((st) => ({ ...st, overlay })); onChange?.(); }}
         />
       )}
-      {!approved && state.overlay?.outdated && (
+      {showOverlay && !approved && state.overlay?.outdated && (
         <span className="etc-outdated" data-testid="etc-overlay-outdated">
           <TriangleAlert size={14} aria-hidden="true" /> Title changed — overlay outdated; approve the title to restyle it
         </span>
       )}
 
-      {showCardImage && card?.image_url && (
+      {showCard && showCardImage && card?.image_url && (
         <img
           className={`etc-thumb${outdated ? ' etc-thumb-outdated' : ''}`}
           src={card.image_url}

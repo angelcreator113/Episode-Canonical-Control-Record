@@ -23,16 +23,23 @@
  * Kept off beats for now (Evoni, 2026-10-07: "none of the overlays should
  * be beats for now"): nothing here shows or picks a beat, and making an
  * overlay no longer places it (episodeBeatPlacement).
+ *
+ * Redone as one card per overlay (Evoni's screenshot, 2026-10-07: "we
+ * redesigned episode overlays but i think we need to do it again"): the
+ * Title overlay, the Full-screen framed card, the Invitation, the Shopping
+ * list and the Career plan, each a wide card with its preview on the left
+ * and its status, what it is and its actions on the right; "+ New overlay"
+ * holds the ways to add one; the show-wide overlays follow as chips.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImageOff, Layers } from 'lucide-react';
+import { ImageOff, Plus } from 'lucide-react';
 import { getEpisodeOverlaysApi, STATUS_LABELS } from './EpisodeTitleChip';
 import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
 import EventDocuments from '../EventPackage/EventDocuments';
-import { overlayRows, previewPiece, DOCUMENT_KEYS } from '../../lib/episodeOverlays';
+import { overlayRows } from '../../lib/episodeOverlays';
 import './EpisodeOverlaysTab.css';
 
 
@@ -45,6 +52,12 @@ function StatusPill({ status, testid }) {
     </span>
   );
 }
+
+// What each of the episode's own pieces is, in a line (Evoni's screenshot).
+const PIECE_LINES = {
+  title_overlay: 'The episode title set in real lettering, over the opening.',
+  framed_card: 'The opening title card, full screen in the black-and-gold frame.',
+};
 
 function PieceCard({ piece, children }) {
   const paid = piece.cost?.paid;
@@ -66,6 +79,7 @@ function PieceCard({ piece, children }) {
           <h3 className="eot-piece-title">{piece.label}</h3>
           <StatusPill status={piece.status} testid={`eot-status-${piece.key}`} />
         </div>
+        {PIECE_LINES[piece.key] && <p className="eot-piece-line">{PIECE_LINES[piece.key]}</p>}
         {piece.status === 'outdated' && piece.made_for && (
           <p className="eot-note">Made for “{piece.made_for}”.</p>
         )}
@@ -125,11 +139,53 @@ const scrollToId = (id) => {
   if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+/** "+ New overlay": the ways to add one (Evoni's mock, 2026-10-06), in a menu. */
+function NewOverlayMenu({ feedPath, phoneHubPath }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const go = (id) => { setOpen(false); scrollToId(id); };
+  return (
+    <div className="eot-new" ref={ref}>
+      <button type="button" className="eot-new-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" data-testid="eot-new">
+        <Plus size={14} aria-hidden="true" /> New overlay
+      </button>
+      {open && (
+        <div className="eot-new-menu" role="menu" data-testid="eot-new-menu">
+          <button type="button" role="menuitem" className="eot-add-option is-document" onClick={() => go('eot-docs')}>
+            <strong>From a document</strong> <span>the invitation, the shopping list, the career plan</span>
+          </button>
+          <button type="button" role="menuitem" className="eot-add-option is-library" onClick={() => go('eot-library')}>
+            <strong>From the show library</strong> <span>the show&apos;s title, lower thirds, buttons</span>
+          </button>
+          {feedPath && (
+            <Link role="menuitem" className="eot-add-option is-feed" to={feedPath}>
+              <strong>From Lala&apos;s Feed</strong> <span>a post, comment or friend request</span>
+            </Link>
+          )}
+          <Link role="menuitem" className="eot-add-option is-pop" to={phoneHubPath}>
+            <strong>Notification or stat pop</strong> <span>made in Lala&apos;s Phone</span>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const episodeId = episode?.id;
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [chosen, setChosen] = useState(null);
+  // The title overlay and the framed card each read the title's state; a
+  // change in one remounts both, so neither shows a stale approval.
+  const [titleVersion, setTitleVersion] = useState(0);
 
   const load = useCallback(() => {
     if (!episodeId) return;
@@ -143,8 +199,8 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
 
   useEffect(() => { load(); }, [load, episode?.title]);
 
-  // An action in a piece's panel changes the summary and the banner chip.
-  const changed = useCallback(() => { load(); onChanged?.(); }, [load, onChanged]);
+  // An action on a card changes the summary and the banner chip.
+  const changed = useCallback(() => { load(); setTitleVersion((v) => v + 1); onChanged?.(); }, [load, onChanged]);
 
   if (!episodeId) return null;
   const pieces = data?.pieces || [];
@@ -153,17 +209,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
   const event = data?.event || invitation?.event || null;
   const phoneHubPath = showId ? `/shows/${showId}/world?tab=overlays-tab` : '/phone-hub';
   const feedPath = showId ? `/shows/${showId}/world?tab=feed` : null;
-  const rows = overlayRows(pieces);
-  const needed = rows.filter((r) => r.needed).length;
-  const shown = previewPiece(pieces, chosen);
-  // A row opens its piece (and shows it in the preview); a document row
-  // goes to the documents.
-  const openPiece = (key) => {
-    setChosen(key);
-    if (DOCUMENT_KEYS.includes(key)) { scrollToId('eot-docs'); return; }
-    const el = typeof document !== 'undefined' && document.querySelector(`[data-testid="eot-piece-${key}"]`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const needed = overlayRows(pieces).filter((r) => r.needed).length;
 
   return (
     <div className="eot-tab" data-testid="episode-overlays-tab">
@@ -171,99 +217,42 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
       {!data && !error && <p className="eot-loading">Loading overlays…</p>}
 
       {data && (
-        <section className="eot-stage" aria-label="Preview and add an overlay">
-          <div className="eot-stage-preview" data-testid="eot-stage-preview">
-            {shown ? (
-              <img src={shown.image_url} alt={`Preview: ${shown.label}`} />
-            ) : (
-              <span className="eot-preview-empty"><ImageOff size={18} aria-hidden="true" /> Nothing made yet to preview</span>
-            )}
-            {shown && (
-              <span className="eot-stage-tag" data-testid="eot-stage-tag">
-                Preview · {shown.label}
-              </span>
-            )}
-          </div>
-          <div className="eot-add">
-            <h2 className="eot-add-title">Add an overlay</h2>
-            <button type="button" className="eot-add-option is-document" onClick={() => scrollToId('eot-docs')}>
-              <strong>From a document</strong> <span>the invitation, the shopping list, the career plan</span>
-            </button>
-            <button type="button" className="eot-add-option is-library" onClick={() => scrollToId('eot-library')}>
-              <strong>From the show library</strong> <span>the show&apos;s title, lower thirds, buttons</span>
-            </button>
-            {feedPath && (
-              <Link className="eot-add-option is-feed" to={feedPath}>
-                <strong>From Lala&apos;s Feed</strong> <span>a post, comment or friend request</span>
-              </Link>
-            )}
-            <Link className="eot-add-option is-pop" to={phoneHubPath}>
-              <strong>Notification or stat pop</strong> <span>made in Lala&apos;s Phone</span>
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {data && (
-        <section className="eot-bybeat" aria-labelledby="eot-bybeat-title" data-testid="eot-bybeat">
-          <div className="eot-bybeat-head">
-            <h2 id="eot-bybeat-title" className="eot-add-title">This episode&apos;s overlays</h2>
+        <section className="eot-cards" aria-labelledby="eot-cards-title" data-testid="eot-bybeat">
+          <div className="eot-cards-head">
+            <h2 id="eot-cards-title" className="eot-kicker">This episode&apos;s overlays</h2>
             <span className="eot-bybeat-needed" data-testid="eot-still-needed">
               {needed === 0 ? 'all made' : `${needed} still needed`}
             </span>
+            <span className="eot-grow" />
+            <NewOverlayMenu feedPath={feedPath} phoneHubPath={phoneHubPath} />
           </div>
-          <ul className="eot-rows">
-            {rows.map((r) => (
-              <li key={r.key} className={`eot-row${r.needed ? ' is-needed' : ''}`} data-testid={`eot-row-${r.key}`}>
-                <span className={`eot-kind eot-kind-${r.kind === 'Document' ? 'doc' : 'title'}`}>{r.kind}</span>
-                <span className="eot-row-text">{r.text}</span>
-                <button type="button" className="eot-row-action" onClick={() => openPiece(r.key)}>{r.action}</button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
-      {data && (
-        <section className="eot-section eot-docs" id="eot-docs" aria-labelledby="eot-docs-title" data-testid="eot-docs">
-          <div className="eot-section-head">
-            <div>
-              <h2 id="eot-docs-title" className="eot-section-title">In-world documents</h2>
-              <p className="eot-section-sub">
-                One system, three looks. Each document fills itself from the event and goes through the same steps
-                (Draft, Edit, Redraft, Approve). Approved, each is an overlay image for this episode; the shopping list
-                and the career plan also go on the episode&apos;s lists.
-              </p>
-            </div>
+          <div className="eot-card-list">
+            {byKey.title_overlay && (
+              <PieceCard piece={byKey.title_overlay}>
+                <EpisodeTitleCard key={`overlay-${titleVersion}`} part="overlay" episode={episode} showCardImage={false} onChange={changed} />
+              </PieceCard>
+            )}
+            {byKey.framed_card && (
+              <PieceCard piece={byKey.framed_card}>
+                <EpisodeTitleCard key={`card-${titleVersion}`} part="card" episode={episode} showCardImage={false} onChange={changed} />
+              </PieceCard>
+            )}
           </div>
-          {event ? (
-            <EventDocuments
-              showId={event.show_id || showId}
-              eventId={event.id}
-              event={{ id: event.id, name: event.name }}
-              intro={false}
-              lead={invitation ? <InvitationDocCard piece={invitation} showId={showId} /> : null}
-            />
-          ) : (
-            <p className="eot-note" data-testid="eot-docs-none">No event started this episode, so it has no documents.</p>
-          )}
-        </section>
-      )}
 
-      {data && (
-        <section className="eot-section" aria-labelledby="eot-own-title" data-testid="eot-own">
-          <div className="eot-section-head">
-            <div>
-              <h2 id="eot-own-title" className="eot-section-title"><Layers size={16} aria-hidden="true" /> This episode only</h2>
-              <p className="eot-section-sub">Made for this episode and used nowhere else: its title.</p>
-            </div>
-          </div>
-          <div className="eot-group" aria-label="Title">
-            <div className="eot-pieces">
-              {byKey.title_overlay && <PieceCard piece={byKey.title_overlay} />}
-              {byKey.framed_card && <PieceCard piece={byKey.framed_card} />}
-            </div>
-            <EpisodeTitleCard episode={episode} showCardImage={false} onChange={changed} />
+          <div id="eot-docs" className="eot-docs" data-testid="eot-docs">
+            {event ? (
+              <EventDocuments
+                showId={event.show_id || showId}
+                eventId={event.id}
+                event={{ id: event.id, name: event.name }}
+                intro={false}
+                layout="wide"
+                lead={invitation ? <InvitationDocCard piece={invitation} showId={showId} /> : null}
+              />
+            ) : (
+              <p className="eot-note" data-testid="eot-docs-none">No event started this episode, so it has no invitation, shopping list or career plan.</p>
+            )}
           </div>
         </section>
       )}

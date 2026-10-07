@@ -299,3 +299,102 @@
   .eot-section { padding: 16px; }
 }
 
+
+/* One card per overlay (Evoni's screenshot, 2026-10-07): a wide card each,
+   the preview on the left (16:9, checkerboard behind transparent ones), its
+   name, status, what it is and its actions on the right. The documents use
+   EventDocuments' layout="wide", which matches. Tokens only. */
+.eot-cards { display: flex; flex-direction: column; gap: 16px; }
+.eot-cards-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.eot-tab .eot-kicker {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lala-lavender-text);
+}
+.eot-grow { flex: 1 1 auto; }
+.eot-card-list { display: flex; flex-direction: column; gap: 16px; }
+.eot-card-list .eot-piece {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  padding: 20px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+.eot-card-list .eot-preview { flex: none; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 12px; }
+.eot-card-list .eot-piece-title { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-ink); }
+.eot-piece-line { margin: 2px 0 6px; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.eot-card-list .etc-panel { margin-top: 6px; padding: 0; border: 0; background: transparent; }
+
+/* "+ New overlay" and its menu. */
+.eot-new { position: relative; }
+.eot-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--lala-lavender-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.eot-new-btn:hover { text-decoration: underline; }
+.eot-new-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+  box-shadow: 0 12px 28px rgba(44, 44, 44, 0.14);
+}
+
+/* The show-wide overlays as chips. */
+.eot-lib-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.eot-lib-chip { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); color: inherit; text-decoration: none; }
+.eot-lib-chip:hover { border-color: var(--lala-lavender); }
+.eot-lib-chip .eot-lib-thumb { width: 64px; border-radius: 6px; }
+.eot-lib-chip .eot-lib-name { font-family: var(--font-sans); font-size: 14px; }
+
+@media (max-width: 700px) {
+  .eot-card-list .eot-piece { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .eot-card-list .eot-piece-title { font-size: 20px; }
+  .eot-lib-chips { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The title cards' controls as the screenshot's pills: sans, lavender, the
+   main action filled (EpisodeTitleCard keeps its own look elsewhere). */
+.eot-card-list .etc-panel,
+.eot-card-list .etc-btn,
+.eot-card-list .etc-approved,
+.eot-card-list .etc-outdated { font-family: var(--font-sans); }
+.eot-card-list .etc-btn {
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-weight: 600;
+}
+.eot-card-list .etc-btn:hover:not(:disabled) { background: var(--lala-lavender-soft); border-color: var(--lala-lavender); }
+.eot-card-list .etc-btn-primary { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.eot-card-list .etc-btn-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
+.eot-card-list .etc-btn-danger { border-color: var(--danger-border, var(--danger-text)); color: var(--danger-text); }
+.eot-card-list .etc-approved { font-size: 13px; }
+.eot-card-list .etc-overlay { margin-top: 4px; }

@@ -192,52 +192,43 @@ describe('EpisodeTitleChip (P15)', () => {
 
 // Evoni's Episode mock (2026-10-06): a preview with Add an overlay, then
 // the episode's overlays (no beats for now, 2026-10-07).
-describe('EpisodeOverlaysTab — the mock\'s preview and the episode\'s overlays', () => {
+// Evoni's screenshot (2026-10-07): one wide card per overlay, in order, no
+// beats; "+ New overlay" holds the ways to add one.
+describe('EpisodeOverlaysTab — one card per overlay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.get.mockImplementation(routeGet);
   });
 
-  test('a row per piece with its kind and action, no beat; the rows still needed are counted and dashed', async () => {
+  test('a card per overlay, in order: title, framed card, invitation, shopping list, career plan; no beat', async () => {
     renderTab();
-    const card = await screen.findByTestId('eot-bybeat');
-    expect(within(card).getByRole('heading', { name: "This episode's overlays" })).toBeTruthy();
-    const rows = [...card.querySelectorAll('li')].map((li) => li.getAttribute('data-testid'));
-    expect(rows).toEqual(['eot-row-title_overlay', 'eot-row-framed_card', 'eot-row-invitation', 'eot-row-shopping_list_doc', 'eot-row-career_plan_doc']);
-    expect(within(card).queryByText(/Beat/)).toBeNull();
-    const invite = screen.getByTestId('eot-row-invitation');
-    expect(within(invite).getByRole('button', { name: 'Edit' })).toBeTruthy();
-    expect(within(screen.getByTestId('eot-row-framed_card')).getByRole('button', { name: 'Update' })).toBeTruthy();
-    // The documents (Evoni, 2026-10-07): the approved shopping list, the career plan still to make.
-    expect(within(screen.getByTestId('eot-row-shopping_list_doc')).getByText('Shopping list')).toBeTruthy();
-    expect(within(screen.getByTestId('eot-row-shopping_list_doc')).getByRole('button', { name: 'Edit' })).toBeTruthy();
-    const plan = screen.getByTestId('eot-row-career_plan_doc');
-    expect(plan.className).toContain('is-needed');
-    expect(within(plan).getByText('Career plan (not made yet)')).toBeTruthy();
-    expect(within(plan).getByText('Document')).toBeTruthy();
-    expect(within(plan).getByRole('button', { name: 'Add' })).toBeTruthy();
+    const section = await screen.findByTestId('eot-bybeat');
+    expect(within(section).getByRole('heading', { name: "This episode's overlays" })).toBeTruthy();
+    await within(section).findByTestId('evd-career_plan');
+    const order = [...section.querySelectorAll('[data-testid^="eot-piece-"], [data-testid="eot-doc-invitation"], [data-testid^="evd-shopping_list"], [data-testid^="evd-career_plan"]')]
+      .map((el) => el.getAttribute('data-testid'))
+      .filter((t) => !t.startsWith('evd-') || t === 'evd-shopping_list' || t === 'evd-career_plan');
+    expect(order).toEqual(['eot-piece-title_overlay', 'eot-piece-framed_card', 'eot-doc-invitation', 'evd-shopping_list', 'evd-career_plan']);
+    expect(within(section).queryByText(/Beat \d/)).toBeNull();
+    expect(screen.getByTestId('event-documents').className).toContain('is-wide');
     expect(screen.getByTestId('eot-still-needed').textContent).toBe('2 still needed');
+    // Each title card says what it is, and carries only its own controls.
+    expect(within(screen.getByTestId('eot-piece-title_overlay')).getByText(/real lettering/)).toBeTruthy();
+    expect(await within(screen.getByTestId('eot-piece-framed_card')).findByRole('button', { name: /Redesign title card/ })).toBeTruthy();
+    expect(within(screen.getByTestId('eot-piece-title_overlay')).queryByRole('button', { name: /Redesign title card/ })).toBeNull();
+    expect(await within(screen.getByTestId('eot-piece-title_overlay')).findByTestId('etc-words-edit')).toBeTruthy();
+    expect(within(screen.getByTestId('eot-piece-framed_card')).queryByTestId('etc-words-edit')).toBeNull();
   });
 
-  test('the preview shows a made piece; a row picks what it shows', async () => {
+  test('+ New overlay: from a document, the show library, Lala\'s Feed, a notification or stat pop', async () => {
     renderTab();
-    const preview = await screen.findByTestId('eot-stage-preview');
-    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Title overlay');
-    fireEvent.click(within(screen.getByTestId('eot-row-invitation')).getByRole('button', { name: 'Edit' }));
-    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Invitation');
-    expect(screen.getByTestId('eot-stage-tag').textContent).toBe('Preview · Invitation');
-    // A document row shows its drawn overlay.
-    fireEvent.click(within(screen.getByTestId('eot-row-shopping_list_doc')).getByRole('button', { name: 'Edit' }));
-    expect(within(preview).getByRole('img').getAttribute('alt')).toBe('Preview: Shopping list');
-  });
-
-  test('Add an overlay: from a document, from Lala\'s Feed, a notification or stat pop', async () => {
-    renderTab();
-    await screen.findByTestId('eot-stage-preview');
-    expect(screen.getByRole('heading', { level: 2, name: 'Add an overlay' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /From a document/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /From Lala's Feed/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=feed');
-    expect(screen.getByRole('link', { name: /Notification or stat pop/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=overlays-tab');
+    fireEvent.click(await screen.findByTestId('eot-new'));
+    const menu = screen.getByTestId('eot-new-menu');
+    expect(within(menu).getByRole('menuitem', { name: /From a document/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: /From the show library/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: /From Lala's Feed/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=feed');
+    expect(within(menu).getByRole('menuitem', { name: /Notification or stat pop/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=overlays-tab');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('eot-new-menu')).toBeNull();
   });
 });
-
