@@ -39,11 +39,16 @@ export default function CultureYear({ calendar = [], loading = false, awards = [
 
   useEffect(() => {
     let live = true;
-    api.get('/api/v1/franchise-brain/entries?category=narrative&status=active')
+    // The show's own moments (episode completion writes them with its
+    // show_id); entries written before that carry none and are the
+    // franchise tier's, so every show still sees those.
+    const scoped = showId ? `&show_id=${encodeURIComponent(showId)}` : '';
+    setMemory(null);
+    api.get(`/api/v1/franchise-brain/entries?category=narrative&status=active${scoped}`)
       .then((r) => { if (live) setMemory(memoryMoments(r.data?.data || r.data?.entries || [])); })
       .catch((err) => { console.error('[CultureYear] the cultural memory could not be read:', err?.response?.status || err?.message); if (live) setMemory(false); });
     return () => { live = false; };
-  }, []);
+  }, [showId]);
 
   const months = useMemo(() => yearMonths({ calendar, library: library || [], awards }), [calendar, library, awards]);
   const summary = yearSummary({ calendar, library: library || [] });
