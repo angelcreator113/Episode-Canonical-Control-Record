@@ -36,7 +36,7 @@
 
 .epp-error {
   color: var(--lala-danger);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 13px;
 }
 
@@ -55,7 +55,7 @@
   background: none;
   border: none;
   color: var(--lala-ink-muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 12px;
   cursor: pointer;
   padding: 4px 0;
@@ -72,7 +72,7 @@
 }
 
 .epp-status-badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -207,7 +207,7 @@
   min-width: 0;
 }
 .epp-season-label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 700;
   color: var(--lala-gold-text);
@@ -247,7 +247,7 @@
   margin: 0 0 12px;
 }
 .epp-section-num { color: var(--lala-ink); }
-.epp-section-sub { margin-left: 6px; font-family: var(--font-ui); font-size: 12px; font-weight: 400; color: var(--lala-ink-muted); }
+.epp-section-sub { margin-left: 6px; font-family: var(--font-sans); font-size: 12px; font-weight: 400; color: var(--lala-ink-muted); }
 
 /* Suggest names (Task #1670) */
 .epp-name-suggest {
@@ -424,14 +424,14 @@
 .epp-host-handle {
   font-size: 12px;
   color: var(--lala-ink-muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
 }
 .epp-host-unlinked {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: var(--lala-danger);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
 }
 
 .epp-guest-list {
@@ -517,7 +517,7 @@
 .epp-guest-toggle:disabled { cursor: not-allowed; opacity: 0.55; }
 .epp-guest-toggle-name { min-width: 0; overflow-wrap: anywhere; }
 .epp-guest-list-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; }
-.epp-guest-toggle-state { flex-shrink: 0; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent-dark); }
+.epp-guest-toggle-state { flex-shrink: 0; font-family: var(--font-sans); font-size: 11px; color: var(--accent-dark); }
 
 .epp-invitation-preview {
   width: 100%;
@@ -610,7 +610,7 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   background: var(--lala-parchment-2);
   color: var(--lala-ink-muted);
 }
@@ -664,7 +664,7 @@
   padding: 3px 10px;
   font-size: 11px;
   font-weight: 700;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -724,7 +724,7 @@
   border-top: 1px solid var(--lala-parchment-3);
 }
 .epp-readiness-label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -769,7 +769,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -863,7 +863,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 700;
   border-radius: 6px;
@@ -999,7 +999,7 @@
   padding: 0;
   border: none;
   background: none;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   text-decoration: underline;
@@ -1040,7 +1040,7 @@
   gap: 3px;
   padding: 0 5px;
   border-radius: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -1111,7 +1111,7 @@
 }
 .epp-suggestion-basis {
   flex-basis: 100%;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--lala-ink-muted);
 }
@@ -1177,7 +1177,7 @@
   align-items: center;
   gap: 5px;
   margin-bottom: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -1195,7 +1195,7 @@
 .epp-stake-prose { font-family: 'Lora', Georgia, serif; }
 .epp-stake-lead { font-weight: 600; }
 .epp-stake-projected {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--lala-ink-muted);
 }
@@ -1215,7 +1215,7 @@
   padding: 4px 0;
   border: none;
   background: none;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--lala-gold-text);
   cursor: pointer;
@@ -1238,7 +1238,7 @@
   gap: 3px;
   padding: 0 5px;
   border-radius: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -1295,7 +1295,7 @@
   align-items: center;
   gap: 4px;
   margin-bottom: 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   color: var(--lala-ink-muted);
@@ -1323,7 +1323,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   color: var(--lala-ink);
@@ -1417,7 +1417,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--lala-ink-muted);
 }
@@ -1439,7 +1439,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 2px 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--lala-ink-muted);
 }
@@ -1549,7 +1549,7 @@
    Rows reuse .epp-fields / .epp-basic and step 4's state labels. */
 .epp-concept-subtitle {
   margin: -4px 0 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--lala-ink-muted);
 }
@@ -1564,7 +1564,7 @@
 .epp-concept-chip {
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--lala-ink);
   background: var(--lala-parchment-2);
@@ -1592,7 +1592,7 @@
   align-items: start;
 }
 .epp-concept-brief dt {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--lala-ink-muted);
 }
@@ -1633,7 +1633,7 @@
    and the chosen set's link in Place (read-only after Start Episode). */
 .epp-modal-group-title {
   padding: 8px 12px 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1667,7 +1667,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1696,7 +1696,7 @@
 .evl-empty { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
 .evl-parts { margin: 8px 0 0; display: grid; gap: 8px; }
 .evl-parts > div { min-width: 0; }
-.evl-parts dt { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lala-ink-muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.evl-parts dt { font-family: var(--font-sans); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lala-ink-muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .evl-parts dd { margin: 2px 0 0; font-family: 'Lora', serif; font-size: 14px; overflow-wrap: anywhere; }
 .evl-refs { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; }
 .evl-ref { margin: 0; display: grid; gap: 4px; width: 96px; font-size: 11px; }
@@ -1720,7 +1720,7 @@
 .epp-set-row-main .epp-modal-result { flex: 1; min-width: 0; justify-content: flex-start; }
 .epp-set-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .epp-set-thumb { flex: none; width: 56px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); }
-.epp-set-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--lala-ink-faint); font-family: 'DM Mono', monospace; }
+.epp-set-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--lala-ink-faint); font-family: var(--font-sans); }
 .epp-set-preview-btn { flex: none; }
 .epp-set-angles { display: flex; gap: 8px; overflow-x: auto; padding: 4px 10px 10px; }
 .epp-set-angle { flex: none; margin: 0; width: 88px; display: grid; gap: 2px; font-size: 11px; }
@@ -1753,7 +1753,7 @@
   background: var(--epp-teal-soft);
 }
 .epp-next-count {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -1785,7 +1785,7 @@
   list-style: none;
   margin: 4px 0;
   padding: 0;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 12px;
 }
 .epp-money-lines li {
@@ -1809,7 +1809,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -1835,7 +1835,7 @@
 }
 .epp-look-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .epp-look-label { font-weight: 700; color: var(--lala-ink); }
-.epp-look-match { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--primary-text); font-weight: 700; }
+.epp-look-match { font-family: var(--font-sans); font-size: 11px; color: var(--primary-text); font-weight: 700; }
 .epp-look-pieces { list-style: none; margin: 0; padding: 0; font-size: 13px; color: var(--lala-ink); }
 .epp-look-pieces li { padding: 1px 0; }
 .epp-look-buy { color: var(--accent-dark); font-size: 11px; }
@@ -1872,7 +1872,7 @@
 }
 .epp-guest-rec-main { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .epp-guest-rec-role {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   color: var(--primary-text);
@@ -1888,22 +1888,22 @@
   border-top: 4px solid var(--lala-lavender-light);
 }
 .epp-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.epp-hero-top .epp-back { color: var(--lala-lavender-text); font-family: var(--font-ui); }
-.epp-hero-eyebrow { margin: 0 0 4px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+.epp-hero-top .epp-back { color: var(--lala-lavender-text); font-family: var(--font-sans); }
+.epp-hero-eyebrow { margin: 0 0 4px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; color: var(--accent-dark); }
 .epp-hero .epp-title { margin: 0; font-family: var(--font-prose); font-size: 32px; font-weight: 600; line-height: 1.2; color: var(--lala-ink); overflow-wrap: anywhere; }
 .epp-hero-summary { margin: 6px 0 0; font-size: 14px; color: var(--lala-ink-muted); }
 .epp-hero-summary .epp-season-link { color: var(--lala-lavender-text); }
 .epp-hero-tiles { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .epp-hero-tile { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); min-width: 0; }
 .epp-hero-tile.empty { background: var(--lala-parchment); border-style: dashed; border-color: var(--lala-parchment-3); }
-.epp-hero-tile-label { font-family: var(--font-ui); font-size: 11px; color: var(--lala-ink-muted); }
+.epp-hero-tile-label { font-family: var(--font-sans); font-size: 11px; color: var(--lala-ink-muted); }
 .epp-hero-tile strong { font-size: 15px; color: var(--lala-ink); overflow-wrap: anywhere; }
 .epp-hero-tile.empty strong { font-weight: 500; color: var(--lala-ink-muted); }
 .epp-hero-tile-sub { font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
 
 .epp-strip { margin-bottom: 16px; padding: 16px 20px; border-radius: 18px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
 .epp-strip-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
-.epp-strip-eyebrow { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.epp-strip-eyebrow { font-family: var(--font-sans); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
 .epp-strip-headline { font-size: 15px; color: var(--lala-ink); }
 .epp-strip-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .epp-strip-tile { display: grid; gap: 4px; height: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); border-top: 4px solid var(--lala-lavender); background: var(--lala-surface); text-decoration: none; }
@@ -1918,9 +1918,9 @@
 
 .epp-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; }
 .epp-toc { position: sticky; top: 16px; padding: 14px 16px; border-radius: 16px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
-.epp-toc-eyebrow { display: block; margin-bottom: 8px; font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.epp-toc-eyebrow { display: block; margin-bottom: 8px; font-family: var(--font-sans); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
 .epp-toc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.epp-toc a { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-family: var(--font-ui); font-size: 13px; color: var(--lala-ink); text-decoration: none; }
+.epp-toc a { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink); text-decoration: none; }
 .epp-toc a:hover { background: var(--lala-lavender-soft); }
 .epp-toc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lala-lavender-light); }
 .epp-toc a.state-warning .epp-toc-dot { background: var(--warning); }
@@ -1952,7 +1952,7 @@
 .epp-split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .epp-split.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .epp-split-main, .epp-split-side { min-width: 0; }
-.epp-col-title, .epp-split h3.epp-col-title { display: block; margin: 0 0 8px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--lala-ink-muted); }
+.epp-col-title, .epp-split h3.epp-col-title { display: block; margin: 0 0 8px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--lala-ink-muted); }
 .epp-invite-col { scroll-margin-top: 16px; }
 .epp-people-card { padding: 14px 16px; border-radius: 14px; background: var(--accent-subtle); border: 1px solid var(--accent-light); }
 .epp-people-card .epp-host { margin-bottom: 0; }
@@ -1960,12 +1960,12 @@
 .epp-guests.none { background: var(--warning-bg); border-color: var(--warning-border); }
 .epp-guests-note { display: block; margin-top: 4px; font-style: normal; color: var(--lala-ink); }
 .epp-place-image { order: -1; }
-.epp-chip { padding: 3px 10px; border-radius: 999px; font-family: var(--font-ui); font-size: 11px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.epp-chip { padding: 3px 10px; border-radius: 999px; font-family: var(--font-sans); font-size: 11px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .epp-chip.warn { background: var(--warning-bg); color: var(--warning-text); }
 .epp-look-section.no-outfit { border-color: var(--accent-light); }
 .epp-look-brief { margin: 0; display: grid; gap: 12px; }
 .epp-look-brief > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; }
-.epp-look-brief dt { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.epp-look-brief dt { font-family: var(--font-sans); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
 .epp-look-brief dd { margin: 0; font-size: 14px; color: var(--lala-ink); overflow-wrap: anywhere; }
 .epp-outfit-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border-radius: 14px; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); }
 .epp-outfit-card.empty { align-items: center; text-align: center; background: var(--accent-subtle); border: 1.5px dashed var(--accent-light); color: var(--accent-dark); }
@@ -1990,23 +1990,23 @@
 .epp-deal-tiles { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .epp-deal-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--lala-parchment); border: 1px solid var(--lala-parchment-3); min-width: 0; }
 .epp-deal-tile.tile-earns { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
-.epp-deal-tile span { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.epp-deal-tile span { font-family: var(--font-sans); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
 .epp-deal-tile strong { font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); overflow-wrap: anywhere; }
 .epp-deal-tile small { font-size: 12px; color: var(--lala-ink-muted); }
 .epp-deal .epp-terms { margin: 0; padding: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
-.epp-deal .epp-terms .epp-section-title { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); margin-bottom: 6px; }
+.epp-deal .epp-terms .epp-section-title { font-family: var(--font-sans); font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); margin-bottom: 6px; }
 .epp-deal .epp-reopen { margin: 0 0 12px; }
 .epp-deal-money { margin-top: 16px; }
 .epp-deal-money .epp-stake { padding: 14px 16px; border-radius: 12px; background: var(--lala-parchment); border: 1px solid var(--lala-parchment-3); }
 
 .epp-strip-details { margin-top: 12px; border-top: 1px solid var(--lala-parchment-3); padding-top: 10px; scroll-margin-top: 16px; }
-.epp-strip-details > summary { cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
+.epp-strip-details > summary { cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
 .epp-strip-details[open] > summary { margin-bottom: 10px; }
 
 .epp-concept-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .epp-concept-fold > summary::-webkit-details-marker { display: none; }
 .epp-concept-fold > summary .epp-section-title { margin: 0; }
-.epp-concept-toggle::after { content: 'Show'; font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
+.epp-concept-toggle::after { content: 'Show'; font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); }
 .epp-concept-fold[open] .epp-concept-toggle::after { content: 'Hide'; }
 .epp-concept-fold[open] > summary { margin-bottom: 12px; }
 
@@ -2030,3 +2030,85 @@
    buy, and where the look comes from (the episode's Wardrobe). */
 .epp-outfit-piece-cost { margin-left: 8px; font-size: 11px; color: var(--lala-ink-muted); }
 .epp-look-from { display: block; margin-top: 8px; font-size: 12px; color: var(--lala-ink-muted); }
+
+/* ─── The look, matching today's pages (Evoni's review, 2026-10-07) ───
+   Item 11: prose section titles with a one-line description under each,
+   sans type (no monospace), lavender pills for every action.
+   Item 7: Set, Edit, + Add and the outline buttons read as one lavender
+   style. Item 5: The Event's set fields as plain text; what is still to
+   fill, once. Item 6: an empty term is one line under the filled ones. */
+.epp-page { font-family: var(--font-sans); }
+.epp-section-title { line-height: 1.2; }
+.epp-section-heading { min-width: 0; margin: 0 0 14px; }
+.epp-section-heading .epp-section-title { margin: 0; }
+.epp-section-sub { display: block; margin: 4px 0 0; font-family: var(--font-sans); font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--lala-ink-muted); }
+.epp-deal .epp-terms .epp-section-title { font-size: 15px; color: var(--lala-ink); }
+
+.epp-btn {
+  border-color: var(--lala-lavender-line);
+  border-radius: 999px;
+  color: var(--lala-lavender-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.epp-btn-secondary:hover, .epp-btn:not(.epp-btn-primary):hover:not(:disabled) { border-color: var(--lala-lavender); background: var(--lala-lavender-soft); }
+.epp-btn-small { padding: 5px 12px; font-size: 12px; }
+.epp-inline-link {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--lala-lavender-text);
+}
+.epp-inline-link:hover:not(:disabled) { color: var(--lala-lavender-text); text-decoration: underline; text-underline-offset: 2px; }
+.epp-inline-link:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.epp-fields { gap: 12px; }
+.epp-fields dt { font-family: var(--font-sans); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--lala-ink-muted); }
+.epp-fields dd { font-size: 15px; color: var(--lala-ink); }
+.epp-fields > .epp-basic,
+.epp-fields > .epp-basic.is-set,
+.epp-fields > .epp-basic.is-edited,
+.epp-fields > .epp-basic.is-auto_drafted { padding-left: 0; border-left: none; }
+.epp-fields > .epp-basic.is-suggested { padding-left: 10px; border-left: 3px dashed var(--lala-gold); }
+.epp-basic-value { font-weight: 400; }
+.epp-basic-state { font-size: 11px; font-weight: 600; letter-spacing: 0; }
+
+.epp-to-fill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px dashed var(--lala-lavender-line);
+  border-radius: 12px;
+  background: var(--lala-lavender-soft);
+}
+.epp-to-fill-label { font-size: 13px; font-weight: 600; color: var(--lala-ink); }
+.epp-to-fill-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; margin: 0; padding: 0; list-style: none; flex: 1 1 200px; min-width: 0; }
+.epp-to-fill-item { font-size: 13px; color: var(--lala-ink); }
+.epp-to-fill-item:not(:last-child)::after { content: '·'; margin-left: 6px; color: var(--lala-ink-muted); }
+.epp-to-fill-item .epp-inline-link { margin-left: 0; }
+.epp-to-fill-note { margin-left: 4px; font-size: 12px; color: var(--lala-ink-muted); }
+.epp-to-fill-go { margin-left: auto; }
+
+.epp-term { border-radius: 12px; }
+.epp-term-title { font-size: 13px; font-weight: 600; }
+.epp-term.is-empty {
+  grid-column: 1 / -1;
+  order: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 14px;
+}
+.epp-term.is-empty .epp-term-head { display: contents; }
+.epp-term.is-empty .epp-term-title { order: 0; }
+.epp-term.is-empty > .epp-empty { order: 1; margin-right: auto; }
+.epp-term.is-empty .epp-term-head > :not(.epp-term-title) { order: 2; }
+
+@media (max-width: 480px) {
+  .epp-to-fill-go { margin-left: 0; width: 100%; justify-content: center; }
+}
