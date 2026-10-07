@@ -19,6 +19,7 @@ const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { draftEventConcept } = require('./eventConceptDraftService');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
+const { DREAM_CITIES, isDreamCity, normCity } = require('../utils/lalaHome');
 
 // ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
 // Maps cultural calendar categories to feed profile content categories
@@ -289,8 +290,14 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
   // Parse address parts
   const addressParts = (venueAddress || '').split(',').map(s => s.trim());
   const streetAddress = addressParts[0] || null;
-  const district = addressParts[1] || null;
-  const city = addressParts[2] || null;
+  let district = addressParts[1] || null;
+  let city = addressParts[2] || null;
+  // The city is one of the five DREAM cities, spelled as lalaHome spells
+  // them, or what the address says, or none. It used to default to
+  // 'Nova Prime', which is not a DREAM city (wiring map, fix-list item 13).
+  // "street, Echo Park" names the city where the district would sit.
+  if (!city && isDreamCity(district)) { city = district; district = null; }
+  if (isDreamCity(city)) city = DREAM_CITIES.find((c) => normCity(c) === normCity(city));
 
   // Map category to venue type
   const CATEGORY_VENUE_TYPES = {
@@ -309,7 +316,7 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
       location_type: 'venue',
       street_address: streetAddress,
       district,
-      city: city || 'Nova Prime',
+      city,
       venue_type: venueType,
     });
     console.log(`[EventAutomation] Auto-created venue: ${venueName} (${venueType})`);
