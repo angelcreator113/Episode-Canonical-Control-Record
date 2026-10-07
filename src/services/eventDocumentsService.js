@@ -119,6 +119,9 @@ function nextVersion(prev, type, patch, now = new Date().toISOString()) {
     drafted_at: prev?.drafted_at || null,
     edited_at: prev?.edited_at || null,
     approved_at: null,
+    // The last overlay drawn from it stays, now out of date
+    // (eventDocumentOverlayService.overlayState) until the new version is approved.
+    overlay: prev?.overlay || null,
     ...patch,
     updated_at: now,
     history,
@@ -249,16 +252,42 @@ async function editDocument(models, { showId, eventId, type, items }) {
   return writeDocument(models.sequelize, eventId, type, doc);
 }
 
-/** Approve: the current version, as it is. */
+/**
+ * The approved document drawn as its overlay (Evoni, 2026-10-07: "i want
+ * both the shopping list and career list and invitations as overlays"),
+ * recorded on the document as overlay { asset_id, url, version, made_at }.
+ * Not placed on a beat ("none of the overlays should be beats for now").
+ * A drawing failure leaves the approval as it is.
+ */
+async function withOverlay(models, event, type, doc) {
+  const { makeDocumentOverlay } = require('./eventDocumentOverlayService');
+  try {
+    const deliverables = type === 'career_plan' ? await expectedOfHer(models.sequelize, event.id) : [];
+    const overlay = await makeDocumentOverlay(models, { event, type, doc, deliverables });
+    if (!overlay) return doc;
+    return writeDocument(models.sequelize, event.id, type, { ...doc, overlay });
+  } catch (err) {
+    console.error(`[EventDocuments] ${type} overlay failed (the approval stands):`, err.message);
+    return doc;
+  }
+}
+
+/**
+ * Approve: the current version, as it is, and draw its overlay. Approving
+ * an approved document whose overlay is missing or out of date draws it again.
+ */
 async function approveDocument(models, { showId, eventId, type }) {
   assertType(type);
+  const { overlayState } = require('./eventDocumentOverlayService');
   const event = await loadEvent(models.sequelize, showId, eventId);
   const prev = readDocuments(event)[type];
   if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
-  if (prev.status === 'approved') return prev;
+  if (prev.status === 'approved') {
+    return overlayState(prev) === 'current' ? prev : withOverlay(models, event, type, prev);
+  }
   const now = new Date().toISOString();
-  const doc = { ...prev, status: 'approved', approved_at: now, updated_at: now };
-  return writeDocument(models.sequelize, eventId, type, doc);
+  const doc = await writeDocument(models.sequelize, eventId, type, { ...prev, status: 'approved', approved_at: now, updated_at: now });
+  return withOverlay(models, event, type, doc);
 }
 
 // ─── Start Episode: the approved documents carried into the episode ─────────

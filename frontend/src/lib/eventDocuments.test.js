@@ -1,11 +1,21 @@
 import { describe, test, expect } from 'vitest';
-import { docState, lineOfPiece, shoppingLines, careerSections, documentByline } from './eventDocuments';
+import { docState, docOverlay, lineOfPiece, shoppingLines, careerSections, documentByline } from './eventDocuments';
 
 describe('eventDocuments (Evoni, 2026-10-06)', () => {
   test('the status chip', () => {
     expect(docState(null)).toEqual({ key: 'none', label: 'Not drafted' });
     expect(docState({ status: 'draft' }).label).toBe('Draft');
     expect(docState({ status: 'approved' }).label).toBe('Approved');
+  });
+
+  test('the overlay: made on approval, current while the approved version stands, outdated after an edit', () => {
+    expect(docOverlay(null)).toBeNull();
+    expect(docOverlay({ status: 'draft', version: 1 })).toMatchObject({ key: 'not_made', label: 'Overlay made on approval' });
+    expect(docOverlay({ status: 'approved', version: 1 })).toMatchObject({ key: 'not_made', label: 'No overlay yet' });
+    const overlay = { url: 'https://x/o.png', version: 2 };
+    expect(docOverlay({ status: 'approved', version: 2, overlay })).toMatchObject({ key: 'current', url: overlay.url });
+    expect(docOverlay({ status: 'draft', version: 3, overlay })).toMatchObject({ key: 'outdated', label: 'Overlay out of date until approved' });
+    expect(docOverlay({ status: 'approved', version: 3, overlay }).label).toBe('Overlay out of date');
   });
 
   test('a piece\'s line by its category', () => {

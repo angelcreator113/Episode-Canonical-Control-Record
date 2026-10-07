@@ -66,6 +66,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     for (const show of shows) {
       await run(`DELETE FROM event_deliverables WHERE event_id IN (SELECT id FROM world_events WHERE show_id = :show)`, { show })
         .catch((err) => console.error('cleanup event_deliverables:', err.message));
+      // Approving draws the document's overlay (an assets row).
+      await run(`DELETE FROM assets WHERE show_id = :show AND asset_type = 'DOCUMENT_OVERLAY'`, { show })
+        .catch((err) => console.error('cleanup document overlays:', err.message));
       await run(`DELETE FROM world_events WHERE show_id = :show`, { show });
       await run(`DELETE FROM shows WHERE id = :show`, { show });
     }

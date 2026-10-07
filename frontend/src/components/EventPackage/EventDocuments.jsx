@@ -10,15 +10,20 @@
  * coins, and the total against her balance. The career plan is a lavender
  * card: this event's goals, then her bigger career goals.
  *
+ * Approving one also draws it as an overlay image (Evoni, 2026-10-07:
+ * "i want both the shopping list and career list and invitations as
+ * overlays"); the card shows it, or Make overlay when an approved one has
+ * none. Not placed on a beat.
+ *
  * Data: GET/POST/PUT /world/:showId/events/:eventId/documents
  * (lib/eventDocuments, src/services/eventDocumentsService.js). The
  * invitation keeps its place in 1. The Event.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, Pencil, Plus, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { Check, ExternalLink, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
 import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
-  docState, shoppingLines, careerSections, documentByline,
+  docState, docOverlay, shoppingLines, careerSections, documentByline,
 } from '../../lib/eventDocuments';
 import './EventDocuments.css';
 
@@ -98,6 +103,33 @@ function CareerCard({ doc, deliverables = [] }) {
   );
 }
 
+// The document's overlay: its image, whether it matches the document, and
+// Make overlay (the approve call draws it again) when an approved one has none.
+function OverlayRow({ type, doc, busy, onMake }) {
+  const o = docOverlay(doc);
+  if (!o) return null;
+  const canMake = doc.status === 'approved' && o.key !== 'current';
+  return (
+    <div className={`evd-overlay is-${o.key}`} data-testid={`evd-overlay-${type}`}>
+      <span className="evd-overlay-thumb">
+        {o.url ? <img src={o.url} alt="" /> : <ImageIcon size={16} aria-hidden="true" />}
+      </span>
+      <span className="evd-overlay-text">{o.label}</span>
+      {o.url && o.key === 'current' && (
+        <a className="evd-link" href={o.url} target="_blank" rel="noreferrer">
+          View <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      )}
+      {canMake && (
+        <button type="button" className="evd-link" onClick={onMake} disabled={!!busy} data-testid={`evd-make-overlay-${type}`}>
+          {busy === `${type}:overlay` ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <ImageIcon size={13} aria-hidden="true" />}
+          {o.url ? ' Redraw overlay' : ' Make overlay'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Editor({ type, doc, onCancel, onSave, saving }) {
   const [rows, setRows] = useState(() => (doc?.items || []).map((i) => ({ ...i })));
   const set = (n, patch) => setRows((r) => r.map((x, i) => (i === n ? { ...x, ...patch } : x)));
@@ -173,6 +205,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
         One system, three looks. Each document fills itself from the event, goes through the same steps
         (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
         shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
+        Approving one also draws it as an overlay for the episode.
         The invitation is in <a href="#epp-sec-invitation">1. The Event</a>.
       </p>}
       {error && <p className="evd-error" role="alert">{error}</p>}
@@ -225,6 +258,12 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     </>
                   )}
                 </div>
+                {doc && (
+                  <OverlayRow
+                    type={type} doc={doc} busy={busy}
+                    onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type))}
+                  />
+                )}
                 {doc && (
                   <p className="evd-meta" data-testid={`evd-meta-${type}`}>
                     Version {doc.version}{doc.source === 'edited' ? ' · edited' : ''}
