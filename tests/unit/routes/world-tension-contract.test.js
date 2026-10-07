@@ -22,7 +22,10 @@ const proposal = slice("router.post('/world/create-tension-proposal'", "router.g
 describe('world tension scanner contract', () => {
   test('pairs carry their characters as objects with ids', () => {
     expect(scanner).toMatch(/char_a:\s*\{\s*id:\s*char\.id,\s*name:\s*char\.display_name,\s*world_tag:\s*char\.world_tag\s*\}/);
-    expect(scanner).toMatch(/char_b:\s*\{\s*id:\s*rel\.related_character_id \|\| rel\.target_id,\s*name:/);
+    // The other character's id: the scanner's keys, then World Studio's older
+    // character_id (wiring map fix-list item 10), then target_id.
+    expect(scanner).toMatch(/const otherId = rel\.related_character_id \|\| rel\.character_id \|\| rel\.target_id;/);
+    expect(scanner).toMatch(/char_b:\s*\{\s*id:\s*otherId,\s*name:\s*rel\.related_character_name \|\| rel\.character_name \|\| rel\.target_name\s*\}/);
   });
   test('the scanner and the context summary share one high-tension check', () => {
     expect(SRC).toMatch(/const \{ isHighTension \} = require\('\.\.\/services\/tensionLevels'\)/);

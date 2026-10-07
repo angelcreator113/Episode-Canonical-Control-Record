@@ -32,6 +32,8 @@ jest.mock('../../../src/services/sceneBriefService', () => ({
   briefToPrompt: jest.fn(() => 'A quiet boutique, wide shot'),
 }));
 jest.mock('../../../src/services/sceneSpecService', () => ({
+  // The frame lookup is pure: the real one (2026-10-07, crops only by a spec frame).
+  contractFrame: jest.requireActual('../../../src/services/sceneSpecService').contractFrame,
   buildAngleConstraints: jest.fn(() => 'The counter must appear.'),
   validateAngleAgainstSpec: jest.fn(async () => ({ score: 90, pass: true, missing_required: [], issues: [] })),
   buildSceneSpec: jest.fn(),
