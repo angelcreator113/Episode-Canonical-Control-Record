@@ -8,7 +8,7 @@ import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
-const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
+const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
 const MONO = "'DM Mono', monospace";
 const PROSE = "'Lora', serif";
 const TRANSITION_MS = 300;
@@ -384,8 +384,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const resetStyle = embedded
     ? {
       alignSelf: 'flex-end', marginBottom: 8,
-      background: 'transparent', border: `1px solid ${TOKENS.gold}`, borderRadius: 8,
-      padding: '6px 10px', cursor: 'pointer', color: TOKENS.ink,
+      background: 'transparent', border: `1px solid ${TOKENS.lavender}`, borderRadius: 999,
+      padding: '6px 12px', cursor: 'pointer', color: TOKENS.lavender,
       display: 'flex', alignItems: 'center', gap: 6,
       fontFamily: MONO, fontSize: 11,
     }
@@ -557,7 +557,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         {breadcrumbs.map((name, i) => (
           <Fragment key={i}>
             {i > 0 && <span style={{ color: embedded ? '#A09889' : 'rgba(255,255,255,0.25)' }}>{'>'}</span>}
-            <span style={i === breadcrumbs.length - 1 ? { color: TOKENS.gold, fontWeight: 600 } : {}}>
+            <span style={i === breadcrumbs.length - 1 ? { color: embedded ? TOKENS.lavender : TOKENS.gold, fontWeight: 600 } : {}}>
               {name}
             </span>
           </Fragment>

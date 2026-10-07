@@ -151,9 +151,9 @@
   flex: none;
   padding: 1px 8px;
   background: none;
-  border: 1px solid rgba(184, 150, 46, 0.6);
-  border-radius: 5px;
-  color: var(--lala-gold, #B8962E);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  color: var(--lala-lavender-text);
   font: inherit;
   font-size: 10px;
   cursor: pointer;

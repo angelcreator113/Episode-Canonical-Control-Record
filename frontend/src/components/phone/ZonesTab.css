@@ -1041,3 +1041,13 @@
     width: 100%;
   }
 }
+
+.zones-tab__content-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--lala-lavender-line);
+}
+
+.zones-tab__content-panel:empty {
+  display: none;
+}

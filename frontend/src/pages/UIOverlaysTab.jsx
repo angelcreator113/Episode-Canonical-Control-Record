@@ -223,6 +223,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try { localStorage.setItem('screenLinkEditor.iconGridSnap', tapIconGridSnap ? '1' : '0'); } catch (err) { console.warn('[UIOverlaysTab] localStorage unavailable:', err.message); }
   }, [tapIconGridSnap]);
   const [iconSidePanel, setIconSidePanel] = useState(null);
+  // The Content stage's slot for the content-area list (its card).
+  const [contentSidePanel, setContentSidePanel] = useState(null);
   // The Build stage's slot for the screen panel (PhoneHub's aside).
   const [detailHost, setDetailHost] = useState(null);
   // Which zone row has its advanced panel (conditions + actions) open.
@@ -2290,14 +2292,18 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       phoneSkin={phoneSkin}
                       customFrameUrl={customFrameUrl}
                       compact
+                      sidePanel={contentSidePanel}
                     />
+                    <p className="zones-tab__canvas-hint">Drag on the screen to draw a content area</p>
                   </div>
                   <div className="zones-tab__controls">
                     <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
                       <div className="zone-editor-header">
                         <div className="zones-tab__sidebar-meta">
-                          <div className="zones-tab__sidebar-label">Content</div>
-                          <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                          <div className="zones-tab__sidebar-label">Content areas</div>
+                          <div className="zones-tab__sidebar-title-row">
+                            <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                          </div>
                         </div>
                         <button
                           onClick={() => { setActiveTab('screens'); setNavHistory([]); }}
@@ -2306,13 +2312,17 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <Check size={14} /> Done
                         </button>
                       </div>
+                      <div className="zones-tab__pick-label">Pick a screen</div>
                       <ScreenThumbnailStrip
                         screens={editableScreens}
                         activeId={activeScreen.id}
                         onSelect={switchToScreen}
                         globalFit={globalFit}
                         zoneCounts={contentZoneCounts}
+                        showZero
                       />
+                      {/* The content-area list and its settings render here (ContentZoneEditor's sidePanel) */}
+                      <div ref={setContentSidePanel} className="zones-tab__content-panel" />
                     </div>
                   </div>
                 </div>
