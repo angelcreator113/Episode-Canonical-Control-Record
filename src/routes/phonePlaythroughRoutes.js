@@ -12,6 +12,9 @@
  * Routes:
  *   GET    /            — current state row (creates if missing)
  *   POST   /tap         — apply a zone's actions; returns new state + effects
+ *   PUT    /screen      — remember the screen the player is on (Back, Home
+ *                         and icon taps change it without /tap), so a reopened
+ *                         play-through resumes there (Evoni, 2026-10-07)
  *   POST   /reset       — clear flags + visited + completion
  *   POST   /complete    — mark the playthrough complete (also triggered by
  *                         `complete_episode` action via /tap)
@@ -68,7 +71,9 @@ async function loadScreenZone(models, { showId, zoneId }) {
   );
   for (const row of rows || []) {
     let meta = {};
-    try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+    try { meta = JSON.parse(row.metadata_text || '{}'); } catch (parseErr) {
+      console.error(`[phonePlaythroughRoutes] screen ${row.id} metadata is not JSON, skipped:`, parseErr.message);
+    }
     const links = meta.screen_links || [];
     const match = links.find(l => l.id === zoneId);
     if (match) return { zone: match, screenAssetId: row.id };
@@ -213,6 +218,28 @@ router.post('/tap', requireAuth, async (req, res) => {
     return res.json({ success: true, state: serializeState(state), effects, newly_completed_missions: newlyCompletedMissions });
   } catch (err) {
     console.error('[phonePlaythroughRoutes] tap error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/episodes/:episodeId/phone-state/screen  { screen_id }
+router.put('/screen', requireAuth, async (req, res) => {
+  try {
+    const screenId = typeof req.body?.screen_id === 'string' ? req.body.screen_id.trim() : '';
+    if (!screenId || screenId.length > 255) return res.status(400).json({ success: false, error: 'screen_id is required' });
+    const models = require('../models');
+    const { state, error } = await loadOrCreateState(models, {
+      userId: req.user.id,
+      episodeId: req.params.episodeId,
+    });
+    if (error) return res.status(404).json({ success: false, error });
+    state.last_screen_id = screenId;
+    const visited = Array.isArray(state.visited_screens) ? state.visited_screens : [];
+    if (!visited.includes(screenId)) state.visited_screens = [...visited, screenId];
+    await state.save();
+    return res.json({ success: true, state: serializeState(state) });
+  } catch (err) {
+    console.error('[phonePlaythroughRoutes] screen error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

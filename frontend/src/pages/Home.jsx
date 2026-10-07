@@ -276,7 +276,7 @@ function Home() {
           </div>
           <div className="hp-action-card hp-action-card--rose" onClick={() => navigate('/phone-hub')}>
             <div className="hp-action-icon hp-action-icon--rose">📱</div>
-            <span className="hp-action-label">Phone Hub</span>
+            <span className="hp-action-label">Lala&apos;s Phone</span>
           </div>
         </section>
 

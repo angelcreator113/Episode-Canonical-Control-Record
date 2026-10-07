@@ -5,6 +5,7 @@ import { Play, MessageCircle, ListChecks } from 'lucide-react';
 import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import PhonePreviewMode from '../PhonePreviewMode';
+import { isIcon, isScreen } from '../../lib/overlayUtils';
 import './EpisodeLalasPhoneTab.css';
 
 /**
@@ -36,10 +37,10 @@ import './EpisodeLalasPhoneTab.css';
  * mock's beat and Approved / Draft are not shown.
  */
 
-// Same phone-family split the Phone Hub (UIOverlaysTab) uses: 'phone' is a
-// screen, 'phone_icon' / 'icon' are home-screen icons; anything else is a
-// non-phone UI overlay and is not shown here.
-const ICON_CATEGORIES = new Set(['phone_icon', 'icon']);
+// The phone's one rule for screens and icons (lib/overlayUtils isScreen /
+// isIcon), the same as Producer Mode's: this tab used to count only category
+// 'phone' as a screen, so a screen Producer Mode showed could be missing here
+// (Evoni, 2026-10-07, one system).
 
 // ── Module-scope API helpers (existing routes, unchanged) ──
 
@@ -74,8 +75,8 @@ export function playablePhoneScreens(overlays) {
 }
 
 export function splitPhoneOverlays(overlays) {
-  const phone = (overlays || []).filter(o => o && (o.category || 'phone') === 'phone');
-  const icons = (overlays || []).filter(o => o && ICON_CATEGORIES.has(o.category));
+  const phone = (overlays || []).filter(isScreen);
+  const icons = (overlays || []).filter(isIcon);
   return {
     screens: phone.filter(o => o.generated),
     missingScreens: phone.filter(o => !o.generated),
@@ -92,7 +93,7 @@ function countBy(items, key) {
   }, {});
 }
 
-function EpisodeLalasPhoneTab({ episode, onPreview }) {
+function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
   const showId = episode?.show_id || episode?.showId || episode?.show?.id;
   const episodeId = episode?.id;
 
@@ -183,7 +184,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">
                   No screens yet. Build them in{' '}
-                  {studioPath ? <Link to={studioPath}>Phone Studio</Link> : 'Phone Studio'}.
+                  {studioPath ? <Link to={studioPath}>Producer Mode → Lala&apos;s Phone</Link> : <>Producer Mode → Lala&apos;s Phone</>}.
                 </p>
               ) : (
                 <>
@@ -207,7 +208,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
               )}
             </div>
             <p className="lalas-phone-subtitle">
-              One phone, scoped to this episode. Screens are built in Phone Studio; this episode can have its own version of any of them.
+              One phone, scoped to this episode. Screens are built in Producer Mode → Lala&apos;s Phone; this episode can have its own version of any of them.
             </p>
             {overlaysLoading && <div className="lalas-phone-muted">Loading phone screens…</div>}
             {overlaysError && <div className="lalas-phone-error">Error: {overlaysError}</div>}
@@ -225,7 +226,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                 </div>
                 {screens.length === 0 ? (
                   <div className="lalas-phone-empty">
-                    No phone screens are generated for this show yet. Screens are built in the Phone Hub.
+                    No phone screens are generated for this show yet. Screens are built in Producer Mode → Lala's Phone.
                   </div>
                 ) : (
                   <ul className="lalas-phone-screens">
@@ -301,6 +302,8 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                 <Play size={13} aria-hidden="true" /> Play through
               </button>
             </div>
+            {/* Why Play did not open; it used to fail silently (Evoni, 2026-10-07). */}
+            {previewError && <p className="lalas-phone-error" role="alert" data-testid="lalas-phone-play-error">{previewError}</p>}
           </section>
 
           {/* ── Feed moments persisted for this episode ── */}

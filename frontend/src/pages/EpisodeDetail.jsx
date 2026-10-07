@@ -33,6 +33,7 @@ import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
+import { isScreen } from '../lib/overlayUtils';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -952,7 +953,7 @@ const EpisodeDetail = () => {
             the deferred beat-requirements notice, and missions as a section
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
         {tabKey === 'production.phone' && (
-          <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} />
+          <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} previewError={phone.error} />
         )}
 
         {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
@@ -1131,11 +1132,9 @@ const EpisodeDetail = () => {
         <Suspense fallback={null}>
           <PhonePreviewMode
             screens={phone.overlays}
-            initialScreen={
-              phone.playthrough.state?.last_screen_id
-                ? phone.overlays.find(s => s.id === phone.playthrough.state.last_screen_id)
-                : phone.overlays.find(s => s.is_home) || phone.overlays[0]
-            }
+            // Home, never an icon; the preview resumes on the saved screen
+            // once the play-through is read (Evoni, 2026-10-07).
+            initialScreen={phone.overlays.find(s => s.is_home && isScreen(s)) || phone.overlays.find(isScreen)}
             globalFit={phone.globalFit}
             phoneSkin={phone.skin}
             customFrameUrl={phone.frameUrl}

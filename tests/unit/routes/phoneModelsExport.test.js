@@ -130,4 +130,22 @@ describe('the playthrough no longer takes the not-available branch', () => {
     expect(res.status).toBe(200);
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'u1', episode_id: EP, show_id: SHOW }));
   });
+
+  // Back, Home and icon taps change screens without /tap; PUT /screen saves
+  // them so a reopened play-through resumes there (Evoni, 2026-10-07).
+  test('PUT /screen saves the screen the player is on, once in visited', async () => {
+    jest.spyOn(db.sequelize, 'query').mockResolvedValue([[{ id: EP, show_id: SHOW }]]);
+    const row = { id: 's1', user_id: 'u1', episode_id: EP, show_id: SHOW, state_flags: {}, visited_screens: ['home'], save: jest.fn(async () => {}) };
+    jest.spyOn(db.PhonePlaythroughState, 'findOne').mockResolvedValue(row);
+    const res = await as(request(app).put(`/api/v1/episodes/${EP}/phone-state/screen`)).send({ screen_id: 'chat' });
+    expect(res.status).toBe(200);
+    expect(row.last_screen_id).toBe('chat');
+    expect(row.visited_screens).toEqual(['home', 'chat']);
+    expect(row.save).toHaveBeenCalled();
+    const again = await as(request(app).put(`/api/v1/episodes/${EP}/phone-state/screen`)).send({ screen_id: 'home' });
+    expect(again.status).toBe(200);
+    expect(row.visited_screens).toEqual(['home', 'chat']);
+    const bad = await as(request(app).put(`/api/v1/episodes/${EP}/phone-state/screen`)).send({});
+    expect(bad.status).toBe(400);
+  });
 });

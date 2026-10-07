@@ -628,8 +628,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (!showId || !typeKey) return false;
     const item = freshOverlays.find(o => o.id === typeKey);
     if (!item) return false;
-    const isIcon = item.category === 'phone_icon' || item.category === 'icon';
-    if (!isIcon || !item.asset_id || item.bg_removed) return false;
+    if (!isIcon(item) || !item.asset_id || item.bg_removed) return false;
     try {
       await api.post(`/api/v1/ui-overlays/${showId}/remove-bg/${item.asset_id}`);
       return true;
@@ -800,9 +799,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     // matches what the creator just asked for, otherwise we'd silently upload
     // a new Icon's image to an existing Screen (or vice versa).
     const categoryMatches = (existing, target) => {
-      const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
-      const targetIsIcon = target === 'phone_icon' || target === 'icon';
-      return existingIsIcon === targetIsIcon;
+      return isIcon(existing) === isIcon({ category: target });
     };
     try {
       let newType = null;
@@ -817,7 +814,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           const targetKey = deriveTypeKey(form.name);
           const existing = overlays.find(o => o.id === targetKey || deriveTypeKey(o.name) === targetKey);
           const existingKind = existing
-            ? (existing.category === 'phone_icon' || existing.category === 'icon' ? 'icon' : 'screen')
+            ? (isIcon(existing) ? 'icon' : 'screen')
             : 'item';
           flash(`Name "${form.name}" is already in use by an existing ${existingKind}. Pick a different name, or edit that ${existingKind} from the grid if you meant to replace its image.`, 'error');
           return;
@@ -1010,6 +1007,21 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
+  const [aiZonesBusy, setAiZonesBusy] = useState(false);
+  const requestAiZones = async () => {
+    if (aiZonesBusy) return;
+    setAiZonesBusy(true);
+    try {
+      const count = await linkEditorRef.current?.requestAiZones?.();
+      if (count === 0) flash('AI found no zones to add on this screen', 'error');
+    } catch (err) {
+      // handleRequestAiZones has already said why.
+      console.error('[UIOverlaysTab] AI zones failed:', err?.message);
+    } finally {
+      setAiZonesBusy(false);
+    }
+  };
+
   // Preview stage (Task #2010): the embedded, non-saving Preview phone takes
   // the device's place — no playthrough, nothing saved, as in the Episode
   // tab. It starts on the selected screen when that screen has an image,
@@ -1020,7 +1032,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [previewRun, setPreviewRun] = useState(0);
   const previewStart = (activeScreen && isScreen(activeScreen) && activeScreen.generated && activeScreen.url)
     ? activeScreen
-    : (overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || null);
+    : (overlays.find(o => o.is_home && o.generated && isScreen(o)) || overlays.find(o => o.generated && isScreen(o)) || null);
 
   // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
   // the editor renders an inline Apply/Discard surface and applies on approve.
@@ -1155,9 +1167,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (activeScreen.asset_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
       }
-      const typeField = category === 'phone_icon' ? 'icon'
-        : category === 'production' ? 'overlay'
-        : 'screen';
       // Flipping to 'production' moves the item out of the Phone Hub entirely
       // (it'll show up in the UI Overlays / ProductionOverlaysTab instead), so
       // close the detail panel and drop it from local state rather than leaving
@@ -1168,8 +1177,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         flash('Moved to Overlays');
         return;
       }
-      setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
-      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
+      setActiveScreen(prev => prev ? { ...prev, category } : prev);
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
@@ -1259,7 +1268,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // reference, which clobbers in-flight dropdown edits if we pass a fresh
   // array every render).
   const iconOverlaysForEditor = useMemo(
-    () => overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url),
+    () => overlays.filter(o => isIcon(o) && o.url),
     [overlays]
   );
   // The same for the editor's links (Task #2044). A screen that has never had
@@ -1351,18 +1360,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
       {/* Several shows and none active: choose one first (audit CTX-01). */}
       {!propShowId && !showId && shows.length > 1 && (
-        <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open its Phone Hub" />
+        <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open Lala's Phone" />
       )}
 
       {/* The header card (Evoni's mock, 2026-10-07): the title and its line,
           three tiles counted by the screen cards' own Ready rule
           (lib/phoneHubSummary), and the setup guide inside the card. */}
-      <section className="ph-hero" aria-label="Phone Hub">
+      <section className="ph-hero" aria-label="Lala's Phone">
       <div className="overlays-header">
         <div className="overlays-header-top">
           <div className="ph-hero-main">
             <div className="ph-hero-text">
-              <h2 className="ph-hero-title">Phone Hub</h2>
+              <h2 className="ph-hero-title">Lala&apos;s Phone</h2>
               <p className="ph-hero-line">One phone for the whole show. Episodes pick screens from here.</p>
             </div>
             {/* Show selector — visible when no propShowId so user can switch shows */}
@@ -1770,6 +1779,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                                 onClick={() => linkEditorRef.current?.addDefaultZone?.()}
                               >
                                 Add
+                              </button>
+                              {/* AI "Add zones" (Evoni, 2026-10-07): proposes zones for
+                                  this screen to review before they are added. */}
+                              <button
+                                type="button"
+                                className="zones-tap-panel__btn"
+                                disabled={aiZonesBusy || !activeScreen?.asset_id}
+                                onClick={requestAiZones}
+                                data-testid="zones-ai-add"
+                                title="Let AI propose tap zones for this screen; you review them before they're added"
+                              >
+                                <Sparkles size={12} aria-hidden="true" /> {aiZonesBusy ? 'Thinking…' : 'AI zones'}
                               </button>
                               {tapZonesDirty && (
                                 <button
@@ -2208,7 +2229,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               <div className="editor-modal-header-left">
                 {(() => {
                   const displayUrl = activeScreen.url;
-                  const iconThumb = isIcon(activeScreen) || activeScreen.type === 'icon';
+                  const iconThumb = isIcon(activeScreen);
                   return displayUrl ? (
                     <div className={`editor-modal-thumb ${iconThumb ? 'icon' : 'screen'}`}>
                       <img src={displayUrl} alt="" />
@@ -2241,8 +2262,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   </div>
                   {/* Kind, home and status, as on the screen cards (Evoni's mock, 2026-10-07) */}
                   <div className="editor-panel-chips">
-                    <span className={`editor-modal-badge ${(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'badge-icon' : 'badge-screen'}`}>
-                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'Icon' : 'Screen'}
+                    <span className={`editor-modal-badge ${isIcon(activeScreen) ? 'badge-icon' : 'badge-screen'}`}>
+                      {isIcon(activeScreen) ? 'Icon' : 'Screen'}
                     </span>
                     {isScreen(activeScreen) && activeScreen.is_home && <span className="editor-panel-home">★ Home screen</span>}
                   </div>
@@ -2336,24 +2357,24 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                       <div className="editor-type-toggle">
                         <button
                           onClick={() => handleChangeScreenType('phone')}
-                          className={`editor-type-btn ${activeScreen.category === 'phone' ? 'active-screen' : ''}`}
+                          className={`editor-type-btn ${isScreen(activeScreen) ? 'active-screen' : ''}`}
                         >
                           Screen
                         </button>
                         <button
                           onClick={() => handleChangeScreenType('phone_icon')}
-                          className={`editor-type-btn ${activeScreen.category === 'phone_icon' || activeScreen.category === 'icon' ? 'active-icon' : ''}`}
+                          className={`editor-type-btn ${isIcon(activeScreen) ? 'active-icon' : ''}`}
                         >
                           Icon
                         </button>
                         <button
                           onClick={() => {
-                            if (window.confirm('Move this item to the UI Overlays tab? It will disappear from the Phone Hub.')) {
+                            if (window.confirm("Move this to the show's Overlays? It will leave Lala's Phone.")) {
                               handleChangeScreenType('production');
                             }
                           }}
                           className={`editor-type-btn ${activeScreen.category === 'production' ? 'active-overlay' : ''}`}
-                          title="Move to UI Overlays tab"
+                          title="Move to the show's Overlays"
                         >
                           UI overlay
                         </button>
@@ -2408,7 +2429,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   </div>
 
                   {/* Home Screen Toggle */}
-                  {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
+                  {activeScreen.custom_id && isScreen(activeScreen) && (
                     <div className="editor-section">
                       {/* A switch (Evoni's mock, 2026-10-07; it was a "Set as Home Screen" button) */}
                       <button

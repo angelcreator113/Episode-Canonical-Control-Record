@@ -2766,7 +2766,7 @@ The revised event should feel like a completely different experience from the si
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>{helperText}</div>
                     {types.length === 0 ? (
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0' }}>
-                        No types defined for this category yet — generate them in the UI Overlays tab, or add a custom name below.
+                        No types defined for this category yet — make them in Assets → Lala's Phone or Overlays, or add a custom name below.
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
@@ -5012,12 +5012,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           }
         };
 
-        // Promote a colored-backdrop variant to a phone screen (Asset with
-        // overlay_type='wardrobe_detail'). After creation, switch the user
-        // into the UI Overlays tab so they can draw tap zones and content
-        // zones on the freshly-created screen — we delegate that authoring
-        // entirely to the existing overlay editor rather than reinvent it
-        // on the wardrobe side.
+        // Promote a colored-backdrop variant to a phone screen (its own
+        // ui_overlay_types row, so Lala's Phone lists it; Evoni 2026-10-07).
+        // After creation, switch into Lala's Phone so tap zones and content
+        // areas can be drawn on the new screen.
         const handleSendToPhone = async (item, variant) => {
           if (sendingToPhone) return;
           if (!['pink', 'blue', 'teal'].includes(variant)) {
@@ -5026,20 +5024,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           }
           if (!confirm(
             `Send "${item.name}" (${variant} backdrop) to Lala's phone?\n\n` +
-            `Creates a new phone screen using this variant. You'll be taken to the overlay editor to draw tap zones and content areas on it.`
+            `Makes a phone screen from this backdrop (or replaces the one you sent before). You'll be taken to Lala's Phone to draw tap zones and content areas on it.`
           )) return;
 
           setSendingToPhone(true);
           try {
             const result = await sendWardrobeToPhoneApi(item.id, { variant, showId });
-            // Close lightbox + navigate to the overlay editor tab. The new
-            // Asset will appear in UIOverlaysTab's list automatically via
-            // its existing GET /api/v1/ui-overlays/:showId fetch.
+            // Close the lightbox and open Lala's Phone, which lists the new
+            // screen through GET /api/v1/ui-overlays/:showId.
             setLightboxVariant(null);
             setLightboxItem(null);
             setSubTab('overlays-tab');
             setSearchParams({ tab: 'overlays-tab' });
-            alert(`Sent to phone as "${result.data.name}". Opening overlay editor…`);
+            alert(`Sent to phone as "${result.data.name}". Opening Lala's Phone…`);
           } catch (err) {
             const msg = err.response?.data?.message || err.response?.data?.error || err.message;
             alert(`Send to phone failed: ${msg}`);

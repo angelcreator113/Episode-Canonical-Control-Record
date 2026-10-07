@@ -198,7 +198,7 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
               </Link>
             )}
             <Link className="eot-add-option is-pop" to={phoneHubPath}>
-              <strong>Notification or stat pop</strong> <span>made in the Phone Hub</span>
+              <strong>Notification or stat pop</strong> <span>made in Lala&apos;s Phone</span>
             </Link>
           </div>
         </section>

@@ -31,9 +31,13 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
   let screen = null;
   if (assetId) {
     const [screenRows] = await sequelize.query(
-      `SELECT id, name, description, category, metadata::text AS metadata_text
-       FROM assets
-       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
+      // The screen's description is its type's (ui_overlay_types); assets
+      // have no description column, and selecting one failed every call.
+      `SELECT a.id, a.name, t.description, a.metadata::text AS metadata_text
+       FROM assets a
+       LEFT JOIN ui_overlay_types t
+         ON t.show_id = a.show_id AND t.type_key = a.metadata->>'overlay_type' AND t.deleted_at IS NULL
+       WHERE a.id = :assetId AND a.show_id = :showId AND a.deleted_at IS NULL
        LIMIT 1`,
       { replacements: { assetId, showId } }
     );
@@ -44,8 +48,8 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
       screen = {
         id: row.id,
         name: row.name,
-        description: row.description,
-        category: row.category,
+        description: row.description || null,
+        category: meta.overlay_category || 'phone',
         existing_zones: meta.screen_links || [],
         existing_content_zones: meta.content_zones || [],
       };
@@ -69,11 +73,19 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
      LIMIT 40`,
     { replacements: assetId ? { showId, assetId } : { showId } }
   );
+  // A zone's target is the screen's type key (metadata.overlay_type), the id
+  // Lala's Phone lists screens by; the asset UUID matched no screen, so AI
+  // links came out dead. Only screens are legal targets: icons and the show's
+  // production overlays are not (Evoni, 2026-10-07, one system).
+  const NOT_SCREENS = new Set(['phone_icon', 'icon', 'production']);
   const peers = (peerRows || []).map(r => {
     let meta = {};
-    try { meta = JSON.parse(r.metadata_text || '{}'); } catch { /* noop */ }
-    return { id: r.id, name: r.name, category: meta.overlay_category || 'phone' };
-  });
+    try { meta = JSON.parse(r.metadata_text || '{}'); } catch (parseErr) {
+      console.error(`[phoneContextBuilder] peer ${r.id} metadata is not JSON:`, parseErr.message);
+    }
+    return { id: meta.overlay_type || r.id, name: r.name, category: meta.overlay_category || 'phone', variant: meta.variant_label || null };
+  }).filter(p => !NOT_SCREENS.has(p.category) && !p.variant)
+    .map(({ variant: _variant, ...p }) => p);
 
   // ── Characters — name + role + metadata-driven voice ────────────────────
   const [charRows] = await sequelize.query(
@@ -156,7 +168,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
     const [allAssets] = await sequelize.query(
       `SELECT metadata::text AS metadata_text FROM assets
        WHERE show_id = :showId AND deleted_at IS NULL
-         AND category IN ('phone', 'phone_icon')`,
+         AND asset_type = 'UI_OVERLAY'`,
       { replacements: { showId } }
     );
     for (const a of allAssets || []) {

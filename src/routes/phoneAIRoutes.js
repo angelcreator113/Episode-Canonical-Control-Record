@@ -19,7 +19,7 @@ const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai
 const { buildPhoneContext } = require('../services/phoneContextBuilder');
 const { validateScreenLinks } = require('../services/phoneConditionSchema');
 
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';  // match existing services
+const CLAUDE_MODEL = 'claude-sonnet-4-6';  // the repo's primary model (CLAUDE.md)
 
 const SYSTEM_PROMPT = `You are a show-aware co-creator inside the Lala's Phone editor.
 You extend what the creator has already built — you do not invent a standalone phone.
@@ -52,16 +52,22 @@ Rules:
 - state keys: snake_case, lowercase letters/digits/underscores/dots only.
 - Respond with ONLY the JSON. No prose, no markdown fences.`;
 
-// Size-correction helper — rough, not a replacement for Joi validation.
-function clampZone(z) {
+// Size-correction helper — rough, not a replacement for Joi validation. A
+// zone stays inside the screen (x+w and y+h at most 100), as Connect's Health
+// check expects, and a target that names no screen is left empty for the
+// creator to pick rather than kept as a dead link (Evoni, 2026-10-07).
+function clampZone(z, screenIds = null) {
   const n = (v, def) => (typeof v === 'number' && isFinite(v) ? v : def);
+  const w = Math.max(5, Math.min(100, n(z.w, 20)));
+  const h = Math.max(5, Math.min(100, n(z.h, 15)));
+  const target = typeof z.target === 'string' ? z.target : '';
   return {
     id: `ai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    x: Math.max(0, Math.min(100, n(z.x, 10))),
-    y: Math.max(0, Math.min(100, n(z.y, 10))),
-    w: Math.max(5, Math.min(100, n(z.w, 20))),
-    h: Math.max(5, Math.min(100, n(z.h, 15))),
-    target: typeof z.target === 'string' ? z.target : '',
+    x: Math.max(0, Math.min(100 - w, n(z.x, 10))),
+    y: Math.max(0, Math.min(100 - h, n(z.y, 10))),
+    w,
+    h,
+    target: target && (!screenIds || screenIds.has(target)) ? target : '',
     label: typeof z.label === 'string' ? z.label : '',
     icon_url: null,
     icon_urls: [],
@@ -127,7 +133,8 @@ router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
     catch { return res.status(502).json({ success: false, error: 'Failed to parse AI JSON' }); }
 
     const rawZones = Array.isArray(parsed.zones) ? parsed.zones : [];
-    const clamped = rawZones.slice(0, 8).map(clampZone);
+    const screenIds = new Set((context.peer_screens || []).map(p => p.id));
+    const clamped = rawZones.slice(0, 8).map(z => clampZone(z, screenIds));
 
     // Validate through the SAME schema the PUT route uses — rejects unknown action types
     // and malformed conditions even if Claude hallucinates them.
@@ -266,3 +273,4 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
 });
 
 module.exports = router;
+module.exports.clampZone = clampZone;
