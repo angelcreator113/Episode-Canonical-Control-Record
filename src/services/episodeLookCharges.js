@@ -12,8 +12,11 @@
  *
  *   loadLookPieces   the outfit: the one locked in the episode's styling
  *                    game (its approved episode_wardrobe links) when there
- *                    is one, else the outfit saved on the event, with each
- *                    piece's current ownership (Evoni, 2026-10-05);
+ *                    is one, else the pieces chosen there and not rejected
+ *                    (the look the Wardrobe and the Event Package show;
+ *                    Evoni, 2026-10-07: one rule), else the outfit saved on
+ *                    the event, with each piece's current ownership
+ *                    (Evoni, 2026-10-05);
  *   boughtPieceIds   pieces Lala has already paid for, by any counted
  *                    wardrobe_purchase row of the show (§8(z) Law 4,
  *                    "Purchased things cost money once"; Task #2248);
@@ -32,22 +35,28 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 async function loadLookPieces(sequelize, { episodeId, event, transaction = null }) {
   const tq = transaction ? { transaction } : {};
   let outfitPieces = [];
-  let lockedOutfit = [];
+  let linked = [];
   try {
-    lockedOutfit = await sequelize.query(
+    linked = await sequelize.query(
       `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.tier, w.brand,
-              w.acquisition_type, w.rental_price
+              w.acquisition_type, w.rental_price,
+              COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
         WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
-          AND ew.approval_status = 'approved'
-          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL`,
+          AND COALESCE(ew.approval_status, 'pending') <> 'rejected'
+          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL
+        ORDER BY ew.created_at ASC, w.id ASC`,
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, ...tq }
     );
   } catch (lockedErr) {
-    console.error('[FinancialTx] Could not read the locked outfit for episode', episodeId, lockedErr.message);
+    console.error('[FinancialTx] Could not read the episode\'s outfit for episode', episodeId, lockedErr.message);
   }
+  const lockedOutfit = linked.filter((p) => p.approval_status === 'approved');
+  const strip = ({ approval_status: _status, ...p }) => p;
   if (lockedOutfit.length > 0) {
-    outfitPieces = lockedOutfit;
+    outfitPieces = lockedOutfit.map(strip);
+  } else if (linked.length > 0) {
+    outfitPieces = linked.map(strip);
   } else if (event?.outfit_pieces) {
     outfitPieces = typeof event.outfit_pieces === 'string'
       ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
@@ -128,18 +137,38 @@ function lookCharges(pieces, bought = new Set()) {
  * just the names): the wardrobe row's thumbnail or image for a linked piece,
  * the outfit snapshot's image_url for the event's own; null without one.
  */
-async function episodeLook(sequelize, { episodeId, event }) {
+async function episodeLook(sequelize, { episodeId, event, showId = null }) {
   const slim = (p) => ({
     id: p.id,
     name: p.name || null,
     is_owned: p.is_owned === true,
     coin_cost: p.coin_cost != null ? (parseFloat(p.coin_cost) || 0) : (p.price != null ? (parseFloat(p.price) || 0) : null),
+    acquisition_type: p.acquisition_type || null,
+    rental_price: p.rental_price != null ? (parseFloat(p.rental_price) || 0) : null,
     image_url: p.thumbnail_url || p.s3_url_processed || p.s3_url || p.image_url || null,
   });
+  // Each piece's charge by the rule Finalize charges by (lookCharges): the
+  // Wardrobe and the Event Package used to add up every unowned piece's
+  // coin_cost, so the same look cost three amounts (Evoni, 2026-10-07).
+  const priced = async (state, rows) => {
+    const bought = showId ? await boughtPieceIds(sequelize, { showId, episodeId, pieces: rows }) : new Set();
+    const byPiece = new Map(lookCharges(rows, bought).map((c) => [String(c.piece.id), c]));
+    const pieces = rows.map((p) => {
+      const c = byPiece.get(String(p.id));
+      const acq = p.acquisition_type || 'purchased';
+      const why = c ? null
+        : (acq === 'gifted' || acq === 'borrowed') ? acq
+          : bought.has(String(p.id)) ? 'bought' : p.is_owned ? 'owned' : 'free';
+      return { ...slim(p), charge: c ? { category: c.category, amount: c.amount } : null, free_because: why };
+    });
+    const total = pieces.reduce((sum, p) => sum + (p.charge ? p.charge.amount : 0), 0);
+    return { episode_id: episodeId, state, pieces, total };
+  };
   let linked = [];
   try {
     linked = await sequelize.query(
       `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url,
+              w.acquisition_type, w.rental_price,
               COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
         WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
@@ -152,10 +181,10 @@ async function episodeLook(sequelize, { episodeId, event }) {
     console.error('[EpisodeLook] Could not read the episode\'s look for episode', episodeId, linkErr.message);
   }
   const approved = linked.filter((p) => p.approval_status === 'approved');
-  if (approved.length) return { episode_id: episodeId, state: 'locked', pieces: approved.map(slim) };
-  if (linked.length) return { episode_id: episodeId, state: 'chosen', pieces: linked.map(slim) };
+  if (approved.length) return priced('locked', approved);
+  if (linked.length) return priced('chosen', linked);
   const saved = await loadLookPieces(sequelize, { episodeId, event });
-  return { episode_id: episodeId, state: saved.length ? 'event' : 'none', pieces: saved.map(slim) };
+  return priced(saved.length ? 'event' : 'none', saved);
 }
 
 module.exports = { UUID_RE, loadLookPieces, boughtPieceIds, lookCharges, episodeLook };

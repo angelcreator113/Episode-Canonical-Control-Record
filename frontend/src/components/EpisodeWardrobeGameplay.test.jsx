@@ -243,7 +243,7 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     expect(screen.getByTestId('look-header').textContent).toContain("Lala's look");
     expect(screen.getByTestId('look-header').textContent).toContain('500 coins');
     expect(screen.getByTestId('look-dress-code').textContent).toBe('Dress code: Garden formal');
-    expect(screen.getByTestId('slot-cost-d-draft').textContent).toBe('to buy · 🪙 300');
+    expect(screen.getByTestId('slot-cost-d-draft').textContent).toBe('to buy · 300 coins');
     expect(screen.getByTestId('slot-cost-s1').textContent).toBe('owned');
     expect(screen.getByTestId('look-cost').textContent).toBe('Look costs 🪙 300 · Lala has 500After the look 200');
   });
@@ -943,7 +943,7 @@ describe('EpisodeWardrobeGameplay — the event\'s look', () => {
 
     fireEvent.click(screen.getByTestId('event-look-start'));
     await waitFor(() => expect(screen.getByTestId('slot-cost-ev-gown').textContent).toBe('owned'));
-    expect(screen.getByTestId('slot-cost-ev-heels').textContent).toBe('to buy · 🪙 120');
+    expect(screen.getByTestId('slot-cost-ev-heels').textContent).toBe('to buy · 120 coins');
     // The clutch is no longer in the closet: named, and the look still differs by it.
     expect(await screen.findByText(/Wearing the event's look · not in the closet: Old Clutch/)).toBeTruthy();
     expect(screen.getByTestId('event-look-state').textContent).toBe("The look here differs from the event's: 1 of its 3 pieces not worn.");

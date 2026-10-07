@@ -204,7 +204,9 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     balance,
     rows: posted,
     net,
-    event: event ? { id: event.id, name: event.name } : null,
+    // deal: whether the event has deal terms (Evoni, 2026-10-07: the terms
+    // note spoke of locked deal terms on events that have none).
+    event: event ? { id: event.id, name: event.name, deal: isDealEvent(event) } : null,
     expected: expectedLines(event, costs, deliverables),
     spending,
     lines,
@@ -282,7 +284,10 @@ async function eventMoneyPreview(sequelize, { showId, event, episodeId = null, t
   const spending = episodeId ? await listSpending(sequelize, episodeId, { transaction }) : [];
   const hadSpending = episodeId ? await hadSpendingLines(sequelize, episodeId, { transaction }) : false;
   const { plannedLines, buildMoneyLines, moneyWarnings } = require('./episodeMoneyLines');
-  const plan = plannedLines({ event, costs, deliverables, spending, hadSpending });
+  // The look's to-buy pieces are planned here too, as on the Money tab: the
+  // preview used to leave them out (Evoni, 2026-10-07).
+  const look = await lookPlan(sequelize, { showId, episodeId, event });
+  const plan = plannedLines({ event, costs, deliverables, spending, hadSpending, look: look.charges });
   const { lines, projection } = buildMoneyLines({ plan, rows: [], balance });
   return { balance, lines, projection, warnings: moneyWarnings({ lines, projection, balance }) };
 }

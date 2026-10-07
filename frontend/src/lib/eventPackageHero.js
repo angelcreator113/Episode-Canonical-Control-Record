@@ -128,7 +128,9 @@ export function dealTiles(preview) {
   const earns = counted.filter((l) => l.signed > 0).reduce((n, l) => n + l.signed, 0);
   const pays = counted.filter((l) => l.signed < 0).reduce((n, l) => n - l.signed, 0);
   const covered = (preview.lines || []).filter((l) => l.covered).length;
-  const bonus = (preview.projection?.conditional || []).reduce((n, b) => n + (Number(b.amount) || 0), 0);
+  // The tiers are exclusive (the deal pays one), so the most she can earn
+  // is the best tier, not their sum (Evoni, 2026-10-07).
+  const bonus = (preview.projection?.conditional || []).reduce((n, b) => Math.max(n, Number(b.amount) || 0), 0);
   return [
     { key: 'earns', label: 'Lala earns', value: `${earns.toLocaleString()} coins`, sub: earns ? 'planned income' : 'no planned income' },
     { key: 'pays', label: 'Lala pays', value: `${pays.toLocaleString()} coins`, sub: covered ? `${covered} cost${covered === 1 ? '' : 's'} covered` : (pays ? 'planned costs' : 'no planned costs') },

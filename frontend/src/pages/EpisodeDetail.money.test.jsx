@@ -146,6 +146,17 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
     expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-1/balance');
   });
 
+  // Evoni, 2026-10-07: a balance that could not be read used to make the chip vanish.
+  test('a balance that cannot be read says so on the chip', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/balance') throw new Error('down');
+      return { data: {} };
+    });
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+    expect((await screen.findByTestId('ed-balance-chip')).textContent).toBe('Coins unavailable');
+  });
+
   test('the chip opens Production → Money', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     fireEvent.click(await screen.findByTestId('ed-balance-chip'));

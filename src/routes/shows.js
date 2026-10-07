@@ -1273,25 +1273,40 @@ router.post('/:id/seed-balance', requireAuth, async (req, res) => {
     if (!show) return res.status(404).json({ error: 'Show not found' });
     const force = req.body?.force === true;
     const sequelize = Show.sequelize;
-    if (force) {
-      // Soft-delete any existing seed transactions so getCurrentBalance
-      // doesn't double-count. Uses the same deleted_at convention the
-      // rest of the codebase relies on for paranoid mode.
-      try {
+    const { seedStartingBalance, getStartingBalance } = require('../services/financialTransactionService');
+    const { syncCoinsFromLedger } = require('../services/coinLedgerSync');
+    const { wholeCoins } = require('../utils/wholeCoins');
+    // One transaction (Evoni, 2026-10-07: Money "fix the broken bits"): the
+    // old seed is replaced only if the new one is written, Lala's stored
+    // coins follow the ledger, and a failure is an error. It used to answer
+    // success after a failed seed, delete the seed when the starting balance
+    // was 0, and leave the stored coins on the old number.
+    if (force && !(wholeCoins(await getStartingBalance(sequelize, show.id)) > 0)) {
+      return res.status(400).json({ success: false, error: 'The starting balance is 0, so there is no seed to write. Set the starting balance first.' });
+    }
+    const result = await sequelize.transaction(async (transaction) => {
+      if (force) {
+        // Soft-delete the existing seed so getCurrentBalance doesn't
+        // double-count; the deleted_at convention paranoid mode relies on.
         await sequelize.query(
           `UPDATE financial_transactions
            SET deleted_at = NOW()
            WHERE show_id = :showId AND category = 'seed' AND deleted_at IS NULL`,
-          { replacements: { showId: show.id } }
+          { replacements: { showId: show.id }, transaction }
         );
-      } catch { /* non-blocking */ }
-    }
-    const { seedStartingBalance } = require('../services/financialTransactionService');
-    const result = await seedStartingBalance(sequelize, show.id);
-    return res.json({ success: true, forced: !!force, ...result });
+      }
+      const seeded = await seedStartingBalance(sequelize, show.id, { transaction });
+      await syncCoinsFromLedger(sequelize, show.id, { transaction });
+      return seeded;
+    });
+    const row = result.transaction || result.existing || null;
+    return res.json({
+      success: true, forced: !!force, seeded: result.seeded, reason: result.reason || null,
+      seed: row ? { id: row.id, amount: Number(row.amount) } : null,
+    });
   } catch (err) {
     console.error('POST /shows/:id/seed-balance error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

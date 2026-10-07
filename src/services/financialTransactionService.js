@@ -77,8 +77,11 @@ async function getCurrentBalance(sequelize, showId) {
     // Whole coins (§8(y) Q7), as syncCoinsFromLedger writes them, so every
     // display of Lala's balance shows the same number (Task #2273).
     return wholeCoins(balance);
-  } catch {
-    // Table might not exist yet — try character_state_history fallback
+  } catch (ledgerErr) {
+    // Table might not exist yet — try character_state_history fallback. Said
+    // in the log: the number shown then is not the ledger's (Evoni,
+    // 2026-10-07).
+    console.error('[FinancialTx] getCurrentBalance: the ledger could not be read, using a fallback:', ledgerErr.message);
     try {
       const [state] = await sequelize.query(
         `SELECT state_after_json FROM character_state_history
@@ -88,9 +91,11 @@ async function getCurrentBalance(sequelize, showId) {
       );
       if (state) {
         const json = typeof state.state_after_json === 'string' ? JSON.parse(state.state_after_json) : state.state_after_json;
-        return parseFloat(json?.coins) || 0;
+        return wholeCoins(parseFloat(json?.coins) || 0);
       }
-    } catch { /* fall through */ }
+    } catch (historyErr) {
+      console.error('[FinancialTx] getCurrentBalance: the history fallback failed too:', historyErr.message);
+    }
     return getStartingBalance(sequelize, showId);
   }
 }

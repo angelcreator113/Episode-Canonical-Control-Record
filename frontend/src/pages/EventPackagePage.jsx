@@ -60,7 +60,7 @@
  * and its consequence, with Start Anyway / Go back.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
@@ -101,6 +101,7 @@ import EventVenueLook from '../components/EventPackage/EventVenueLook';
 import ShowMoreToggle from '../components/ShowMoreToggle';
 import { visibleSlice } from '../lib/showMore';
 import EventLookImage from '../components/EventPackage/EventLookImage';
+import { pieceChargeText } from '../lib/lookCharge';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -502,6 +503,19 @@ export default function EventPackagePage() {
       .catch(() => setVenueLocations([]))
       .finally(() => setVenueLocationsLoading(false));
   }, [venuePickerOpen, venueLocations]);
+
+  // A link to a section (#epp-sec-deal from Money's "Open terms in the
+  // event") lands on it once the page has loaded; it used to stay at the top
+  // (Evoni, 2026-10-07).
+  const { hash } = useLocation();
+  const hashScrolledRef = useRef(null);
+  useEffect(() => {
+    if (loading || !hash || !hash.startsWith('#epp-sec-') || hashScrolledRef.current === hash) return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    hashScrolledRef.current = hash;
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [loading, hash]);
 
   // "On this page" marks the section in view (Evoni's review, item 9): on a
   // phone the chip row stays under the header, so this shows where you are
@@ -1790,7 +1804,7 @@ export default function EventPackagePage() {
                         <span className="epp-outfit-piece-name">{piece.name || 'Unnamed piece'}</span>
                         {episodeLook && (
                           <span className="epp-outfit-piece-cost" data-testid={`look-piece-cost-${piece.id || i}`}>
-                            {piece.is_owned ? 'owned' : piece.coin_cost != null ? `to buy · ${Number(piece.coin_cost).toLocaleString()} coins` : 'to buy'}
+                            {pieceChargeText(piece)}
                           </span>
                         )}
                       </li>

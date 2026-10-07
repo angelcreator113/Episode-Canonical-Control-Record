@@ -16,7 +16,7 @@ describe('episodeMoney', () => {
     const rows = estimateRows(deal([reel, entry]));
     expect(rows.map((r) => [r.label, r.source, r.when, r.amountText, r.chip])).toEqual([
       ['Instagram Reel fee', 'Deal · Paid content · Paid by Sable', 'On approval', '+439', 'Pending'],
-      ['Entry / ticket', 'Event cost · comped by the host', 'At Complete', '0', 'Comped 50'],
+      ['Entry / ticket', 'Event cost · comped by the host', 'Not charged', '0', 'Comped 50'],
       ['Performance bonus', 'Deal', 'At Complete', '0', 'None in deal'],
     ]);
   });
@@ -51,11 +51,16 @@ describe('episodeMoney', () => {
     expect(estimateRows(deal([{ ...clutch }], { look: { pieces: 1 } }))[0]).toMatchObject({ chip: 'Posted', source: 'Wardrobe · 1 bought' });
   });
 
-  test('a look not chosen reads Not chosen; one whose pieces are all owned reads All owned; neither counts', () => {
+  test('a look not chosen reads Not chosen; one with nothing to pay reads Nothing to pay (owned, gifted or borrowed); neither counts', () => {
     const notChosen = estimateRows(deal([reel], { look: { pieces: 0 } })).find((r) => r.key === 'look');
     expect(notChosen).toMatchObject({ amountText: '—', chip: 'Not chosen', counts: 0 });
     const owned = estimateRows(deal([reel], { look: { pieces: 2 } })).find((r) => r.key === 'look');
-    expect(owned).toMatchObject({ amountText: '0', chip: 'All owned', source: 'Wardrobe · every piece owned' });
+    expect(owned).toMatchObject({ amountText: '0', chip: 'Nothing to pay', source: 'Wardrobe · nothing to buy or rent' });
     expect(estimateRows(deal([reel])).some((r) => r.key === 'look')).toBe(false); // an API without look: no row
+  });
+
+  test('the terms note is only for an event with deal terms', () => {
+    expect(termsNote({ event: { id: 'e', deal: false }, spending: { editable: true } })).toBeNull();
+    expect(termsNote({ event: { id: 'e', deal: true }, spending: { editable: true } })).toMatch(/still a draft/);
   });
 });

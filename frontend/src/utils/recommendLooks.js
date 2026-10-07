@@ -19,6 +19,7 @@
  * Pure; no I/O.
  */
 import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from '../lib/wardrobeSlots';
+import { lookTotal } from '../lib/lookCharge';
 
 export const VARIETY_MARGIN = 10;
 const LABELS = ['Look A', 'Look B', 'Look C'];
@@ -94,7 +95,9 @@ export function recommendLooks(items, { count = 3 } = {}) {
       match: Math.round(pieces.reduce((s, p) => s + match(p), 0) / pieces.length),
       owned: toBuy.length === 0,
       toBuy,
-      toBuyCost: toBuy.reduce((s, p) => s + (Number(p.coin_cost) || 0), 0),
+      // What Complete would charge for the look (lib/lookCharge: gifted and
+      // borrowed free, a rental at its rental price; Evoni, 2026-10-07).
+      toBuyCost: lookTotal(pieces),
       missing: shoes ? [] : ['shoes'],
     });
   }

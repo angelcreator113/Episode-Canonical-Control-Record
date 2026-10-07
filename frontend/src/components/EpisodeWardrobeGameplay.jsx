@@ -35,6 +35,7 @@ import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
+import { lookTotal, pieceChargeText } from '../lib/lookCharge';
 import '../styles/wardrobe-backdrop.css';
 
 // ─── CONSTANTS ───
@@ -659,10 +660,10 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     return hasBody && hasShoes;
   }, [filledSlots]);
 
-  // Evoni's Episode mock: what the look costs, the pieces Lala does not own yet.
-  const lookCost = useMemo(() => outfitPieces(filledSlots)
-    .filter(({ item: w }) => w && w.is_owned !== true)
-    .reduce((n, { item: w }) => n + (Number(w.coin_cost) || 0), 0), [filledSlots]);
+  // Evoni's Episode mock: what the look costs, by the rule Complete charges
+  // by (lib/lookCharge: gifted and borrowed free, a rental at its rental
+  // price; Evoni, 2026-10-07: one rule for the look's cost).
+  const lookCost = useMemo(() => lookTotal(outfitPieces(filledSlots).map(({ item }) => item).filter(Boolean)), [filledSlots]);
 
   // ─── RENDER ───
   if (loading) {
@@ -884,7 +885,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       {/* Owned, or still to buy (charged at Finalize), as in Evoni's Episode mock. */}
                       {piece && (
                         <span data-testid={`slot-cost-${piece.id}`} style={{ fontSize: 12, color: 'var(--lala-ink-muted)', whiteSpace: 'nowrap' }}>
-                          {piece.is_owned === true ? 'owned' : `to buy · 🪙 ${Number(piece.coin_cost || 0).toLocaleString()}`}
+                          {pieceChargeText(piece)}
                         </span>
                       )}
                       {piece && (

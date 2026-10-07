@@ -298,7 +298,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     const lookEpisodeId = termsLockedBy?.id || event.used_in_episode_id || null;
     if (lookEpisodeId) {
       try {
-        episodeLook = await require('../services/episodeLookCharges').episodeLook(models.sequelize, { episodeId: lookEpisodeId, event });
+        episodeLook = await require('../services/episodeLookCharges').episodeLook(models.sequelize, { episodeId: lookEpisodeId, event, showId: event.show_id || req.params.showId });
       } catch (lookErr) {
         console.error('[WorldEvents] episode look lookup failed:', lookErr.message);
       }

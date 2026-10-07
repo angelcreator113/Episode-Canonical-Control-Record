@@ -101,4 +101,29 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(money.look).toEqual({ pieces: 0 });
     expect(lookLines(money)).toEqual([]);
   });
+
+  // One rule (Evoni, 2026-10-07): a look chosen in the episode's Wardrobe but
+  // not locked is the look the Wardrobe and the Event Package show, so Money
+  // plans it and Finalize charges it, instead of the event's saved outfit.
+  it("a look chosen but not locked is planned and charged, not the event's saved outfit", async () => {
+    const ids = await seed();
+    await run(`INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
+               VALUES (:id, :ep, :w, 'pending', NOW(), NOW())`, { id: uuid(), ep: ids.ep, w: ids.clutch });
+    const before = await getEpisodeMoney(sequelize, { showId: ids.show, episodeId: ids.ep });
+    expect(before.look).toEqual({ pieces: 1 });
+    expect(lookLines(before).map((l) => [l.source.id, l.amount])).toEqual([[ids.clutch, 50]]);
+    await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
+    const bought = await sequelize.query(
+      `SELECT source_id FROM financial_transactions WHERE show_id = :show AND category = 'wardrobe_purchase'`,
+      { replacements: ids, type: sequelize.QueryTypes.SELECT });
+    expect(bought.map((r) => r.source_id)).toEqual([ids.clutch]);
+  });
+
+  it("the Event Package's preview plans the look too", async () => {
+    const { eventMoneyPreview } = require('../../src/services/episodeMoneyService');
+    const ids = await seed();
+    const [event] = await sequelize.query('SELECT * FROM world_events WHERE id = :event', { replacements: ids, type: sequelize.QueryTypes.SELECT });
+    const preview = await eventMoneyPreview(sequelize, { showId: ids.show, event, episodeId: ids.ep });
+    expect(preview.lines.filter((l) => l.look).reduce((sum, l) => sum + l.signed, 0)).toBe(-250);
+  });
 });
