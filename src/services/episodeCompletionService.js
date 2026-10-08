@@ -630,6 +630,11 @@ ${narrativeLines.short || ''}`,
     console.warn('[Franchise Brain] Auto-push failed (non-blocking):', brainErr.message);
   }
 
+  // ── 16b. The world temperature after the episode (Evoni, 2026-10-08) ──
+  // Recorded on every accept, after the accept commits; the State tab shows
+  // the latest reading. Never throws (worldTemperatureService).
+  const { recordTemperatureForShow } = require('./worldTemperatureService');
+  await recordTemperatureForShow(sequelize, showId);
 
   // ── 17. Career goals, measured (Season Arc §8(ff) Q11) ──
   // "replace '+1 to every goal' with each goal set from what it measures.

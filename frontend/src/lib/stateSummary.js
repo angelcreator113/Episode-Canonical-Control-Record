@@ -14,14 +14,13 @@
  *                       not from the newest 50 that "what changed" reads.
  *   snapshots           GET /world/state/snapshots, the world facts saved by
  *                       hand. The list also holds 'temperature_update' rows
- *                       carrying metadata.world_temperature, written only by
- *                       POST /world-temperature/:universeId/snapshot
- *                       (worldTemperatureRoutes → snapshotTemperature),
- *                       which nothing in the app calls yet (wiring map,
- *                       docs/reads/2026-10-06-lalaverse-wiring-map.md §4).
- *                       Those are not shown as snapshots, only the latest
- *                       temperature is.
- *                       Snapshots carry no show_id, so they are the world's.
+ *                       carrying metadata.world_temperature, one written each
+ *                       time an episode is accepted (episodeCompletionService
+ *                       → recordTemperatureForShow → snapshotTemperature;
+ *                       wiring map fix-list item 22). Those are not shown as
+ *                       snapshots, only the latest temperature is.
+ *                       Snapshots carry no show_id: each is its universe's,
+ *                       or the world's when it has none.
  *   tensions            GET /world/tension-scanner: pairs whose relationship
  *                       is Simmering, Unresolved, High or Explosive. The
  *                       scanner reads the current state only, so a tension
