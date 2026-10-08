@@ -37,11 +37,8 @@ const TITLE = 'Book rules test';
   let token;
   let reviewId;
   const showId = crypto.randomUUID();
-  // post_generation_reviews.story_id is an INTEGER and the route saves
-  // parseInt(story_id), so a review saves only for a story id that starts
-  // with a digit; any other story's review is a 500 (a bug outside this
-  // change). This story's id starts with one, so its review saves.
-  const storyId = `1${crypto.randomUUID().slice(1)}`;
+  // A review names its story by the story's UUID (migration 20261008210000).
+  const storyId = crypto.randomUUID();
   const t = {
     franchise: `${TITLE}: franchise law`,
     show: `${TITLE}: a show's own canon`,
