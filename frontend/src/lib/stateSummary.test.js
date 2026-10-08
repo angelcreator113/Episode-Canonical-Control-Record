@@ -20,6 +20,13 @@ describe('stateSummary', () => {
     expect(tensionBars([pair('A', 'B', 'Simmering', { relationship_type: 'unknown' })]).rows[0].relationship).toBeNull();
   });
 
+  test("the Relationships page's volatile and fractured have their own levels, between the older words (fix-list item 23)", () => {
+    const bars = tensionBars([pair('A', 'B', 'simmering'), pair('C', 'D', 'fractured'), pair('E', 'F', 'Explosive'), pair('G', 'H', 'volatile'), pair('I', 'J', 'High')]);
+    expect(bars.rows.map((r) => r.label)).toEqual(['Explosive', 'Volatile', 'High', 'Fractured', 'Simmering']);
+    expect(bars.rows.map((r) => r.level)).toEqual([100, 90, 80, 70, 40]);
+    expect(bars.rows.find((r) => r.label === 'Volatile').tone).toBe('peach');
+  });
+
   test('snapshotSummary keeps the temperature readings out of the snapshots and reads the latest temperature', () => {
     const s = snapshotSummary([
       { id: 't2', snapshot_label: 'temperature_update', created_at: '2026-10-03', metadata: { world_temperature: { value: 64 } } },

@@ -113,13 +113,13 @@ export default function StateSummary({ snapshots = null, snapshotsFailed = false
           <div className="st-head">
             <h2 id="st-ten-heading" className="st-title">Tensions</h2>
             {bars?.total > 0 && <span className="st-sub">{bars.total} between characters</span>}
-            <Link className="st-link" to="/world-studio" title="In World Studio, give two characters a relationship with a tension state">+ Add</Link>
+            <Link className="st-link" to="/relationships" title="On the Relationships page, give two characters a relationship with a tension">+ Add</Link>
           </div>
           {!scan ? <p className="st-note">Scanning the relationships…</p>
             : scan.status === 'scan_failed' ? <p className="st-note">The scan could not run, so this is not “no tension”. The Tensions tab below can rescan.</p>
             : bars.total === 0 ? (
               <p className="st-note" data-testid="st-no-tension">
-                {scan.characters_scanned ? `Nothing simmering among ${scan.characters_scanned} characters.` : 'No characters with relationships to scan yet.'} A relationship set to Simmering, Unresolved, High or Explosive shows here.
+                {scan.characters_scanned ? `Nothing simmering among ${scan.characters_scanned} characters.` : 'No characters with relationships to scan yet.'} A confirmed relationship set to Simmering, Volatile or Fractured on the Relationships page shows here.
               </p>
             ) : (
               <ul className="st-tensions" data-testid="st-tensions">

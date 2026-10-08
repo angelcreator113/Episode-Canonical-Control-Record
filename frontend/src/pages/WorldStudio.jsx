@@ -12,9 +12,10 @@
  * Styling: WorldStudio.css — light theme, pink/blue/lavender palette
  */
 
-import { useState, useEffect, useCallback, lazy, Suspense, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../services/api';
+import { TENSION } from '../components/RelationshipEngine/tokens';
 import './WorldStudio.css';
 
 const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
@@ -128,6 +129,24 @@ function getCompleteness(char) {
 }
 
 /* ── Small helpers ──────────────────────────────────────────────────── */
+
+// Relationships are kept in character_relationships, the table the
+// Relationships page edits (Evoni's ruling, 2026-10-08; wiring map fix-list
+// item 23). The character list carries each character's (relationships);
+// relationship_graph holds only World Studio's older entries, which no
+// longer change.
+export function legacyRelationships(c) {
+  const g = c?.relationship_graph;
+  if (Array.isArray(g)) return g;
+  if (typeof g !== 'string' || !g) return [];
+  try { const parsed = JSON.parse(g); return Array.isArray(parsed) ? parsed : []; }
+  catch (err) { console.warn('[WorldStudio] relationship_graph is not JSON:', err.message); return []; }
+}
+export const relationshipsOfChar = (c) => [...(c?.relationships || []), ...legacyRelationships(c)];
+
+// The Relationships page's own tension states.
+export const TENSION_STATES = Object.keys(TENSION);
+
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(' ');
@@ -669,18 +688,24 @@ export default function WorldStudio() {
   const [currentPage,   setCurrentPage]  = useState(1);
 
   /* ── Relationship modal ────────────────────────────────────────────── */
+  // The form writes character_relationships (fix-list item 23): both
+  // characters must be in World Studio and the Character Registry, so the
+  // other character is chosen, not typed, and the tension uses the
+  // Relationships page's states. A franchise layer, "romantic eligible" and
+  // "knows about transfer" had nowhere to go there, so the form no longer asks.
   const [showAddRel, setShowAddRel] = useState(false);
-  const [relForm,    setRelForm]    = useState({
-    related_character_id: '', related_character_name: '',
-    related_character_source: 'world_characters',
+  const blankRel = {
+    related_character_id: '',
     relationship_type: 'friendship', family_role: '',
     history_summary: '', current_status: 'active',
-    tension_state: 'Stable', romantic_eligible: false,
-    knows_about_transfer: false, series_layer: worldTag,
+    tension_state: 'calm',
     is_blood_relation: false, is_romantic: false,
     conflict_summary: '', knows_about_connection: false,
-  });
+  };
+  const [relForm,    setRelForm]    = useState(blankRel);
   const [savingRel, setSavingRel] = useState(false);
+  // The open character's relationships: { relationships, legacy, in_registry, failed, for }.
+  const [charRels, setCharRels] = useState({ relationships: [], legacy: [], in_registry: true, for: null });
 
   /* ── Per-character scenes (detail tab) ──────────────────────────────── */
   const [charScenes,     setCharScenes]     = useState([]);
@@ -718,6 +743,23 @@ export default function WorldStudio() {
     } catch (e) { console.error(e); }
   }, [worldTag]);
 
+  // Only the latest character's answer is shown, and never another
+  // character's while this one's loads.
+  const relsFor = useRef(null);
+  const loadCharRels = useCallback(async (id) => {
+    relsFor.current = id;
+    setCharRels((prev) => (prev.for === id ? prev : { relationships: [], legacy: [], in_registry: true, for: id }));
+    try {
+      const r = await apiClient.get(`/api/v1/world/characters/${id}/relationships`);
+      if (relsFor.current !== id) return;
+      setCharRels({ relationships: r.data?.relationships || [], legacy: r.data?.legacy || [], in_registry: r.data?.in_registry !== false, for: id });
+    } catch (e) {
+      console.error('[WorldStudio] relationships load failed:', e?.response?.status || e?.message);
+      if (relsFor.current !== id) return;
+      setCharRels({ relationships: [], legacy: [], in_registry: true, failed: true, for: id });
+    }
+  }, []);
+
   const loadCharDetail = useCallback(async (id) => {
     try {
       const r = await fetch(`${API}/world/characters/${id}`);
@@ -725,7 +767,8 @@ export default function WorldStudio() {
       setCharDetail(d.character || null);
       setEditMode(false);
     } catch (e) { console.error(e); }
-  }, []);
+    loadCharRels(id);
+  }, [loadCharRels]);
 
   useEffect(() => {
     loadCharacters(worldTag);
@@ -847,15 +890,16 @@ export default function WorldStudio() {
 
   /* ── Relationship ──────────────────────────────────────────────────── */
   const addRelationship = async () => {
-    if (!selectedChar) return;
+    if (!selectedChar || !relForm.related_character_id) return;
     setSavingRel(true);
     try {
       const r = await apiClient.post(`/api/v1/world/characters/${selectedChar}/relationships`, relForm);
       const d = r.data;
-      if (d.graph) {
+      if (d.relationship) {
         flash('Relationship added');
         setShowAddRel(false);
-        loadCharDetail(selectedChar);
+        loadCharRels(selectedChar);
+        loadCharacters();
       } else flash(d.error || 'Add failed', 'error');
     } catch (e) {
       flash(e.response?.data?.error || e.message, 'error');
@@ -867,7 +911,8 @@ export default function WorldStudio() {
     try {
       await apiClient.delete(`/api/v1/world/characters/${selectedChar}/relationships/${relId}`);
       flash('Relationship removed');
-      loadCharDetail(selectedChar);
+      loadCharRels(selectedChar);
+      loadCharacters();
     } catch (e) {
       flash(e.response?.data?.error || e.message || 'Delete failed', 'error');
     }
@@ -1033,13 +1078,8 @@ export default function WorldStudio() {
   const uniqueTypes = [...new Set(characters.map(c => c.character_type).filter(Boolean))];
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const paged       = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const relGraph    = charDetail ? (() => {
-    try {
-      return typeof charDetail.relationship_graph === 'string'
-        ? JSON.parse(charDetail.relationship_graph || '[]')
-        : (charDetail.relationship_graph || []);
-    } catch { return []; }
-  })() : [];
+  // The open character's relationships: the table's, then any old graph entries.
+  const relGraph    = charDetail ? [...charRels.relationships, ...charRels.legacy] : [];
   const draftCount  = characters.filter(c => c.status === 'draft').length;
 
   /* ── Render ────────────────────────────────────────────────────────── */
@@ -1233,12 +1273,7 @@ export default function WorldStudio() {
                 </div>
               ) : paged.map(c => {
                 const comp = getCompleteness(c);
-                const relCount = (() => {
-                  try {
-                    const g = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
-                    return g.length;
-                  } catch { return 0; }
-                })();
+                const relCount = relationshipsOfChar(c).length;
                 return (
                   <div
                     key={c.id}
@@ -1313,12 +1348,7 @@ export default function WorldStudio() {
                   ? Math.round(characters.reduce((s, c) => s + getCompleteness(c).pct, 0) / characters.length)
                   : 0;
                 const needsWork = characters.filter(c => getCompleteness(c).pct < 50);
-                const withRels = characters.filter(c => {
-                  try {
-                    const g = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
-                    return g.length > 0;
-                  } catch { return false; }
-                });
+                const withRels = characters.filter(c => relationshipsOfChar(c).length > 0);
                 const intimate = characters.filter(c => c.intimate_eligible);
                 // Section-level breakdown
                 const sectionAvgs = {};
@@ -1445,12 +1475,7 @@ export default function WorldStudio() {
                 <>
                   <div className="ws4-dash-label">Relationship Web</div>
                   <div className="ws4-rel-web">
-                    {characters.map(c => {
-                      let rels;
-                      try { rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []); }
-                      catch { rels = []; }
-                      return { ...c, _rels: rels };
-                    }).filter(c => c._rels.length > 0).slice(0, 12).map(c => {
+                    {characters.map(c => ({ ...c, _rels: relationshipsOfChar(c) })).filter(c => c._rels.length > 0).slice(0, 12).map(c => {
                       const rels = c._rels;
                       return (
                         <div key={c.id} className="ws4-rel-web-node" onClick={() => { setSelectedChar(c.id); }}>
@@ -1832,24 +1857,31 @@ export default function WorldStudio() {
                         <div className="ws4-rel-header">
                           <span className="ws4-rel-count">{relGraph.length} relationship{relGraph.length !== 1 ? 's' : ''}</span>
                           <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => {
-                            setRelForm(p => ({ ...p, series_layer: worldTag, related_character_id: '', related_character_name: '', history_summary: '', conflict_summary: '', family_role: '' }));
+                            setRelForm(blankRel);
                             setShowAddRel(true);
                           }}>+ Add</button>
                         </div>
+                        {charRels.failed && <div className="ws4-tab-empty" data-testid="ws-rels-failed">The relationships could not be read. This is not “no relationships”.</div>}
+                        {!charRels.in_registry && (
+                          <div className="ws4-tab-empty" data-testid="ws-rels-no-registry">This character is not in the Character Registry, where relationships are kept. Re-sync it to the registry to add one.</div>
+                        )}
 
                         {relGraph.length === 0 ? (
-                          <div className="ws4-tab-empty">No relationships logged yet.</div>
+                          <div className="ws4-tab-empty">No relationships logged yet. They are kept with the Relationships page’s, so they show there too.</div>
                         ) : relGraph.map((rel, i) => (
-                          <div key={rel.rel_id || i} className="ws4-rel-card">
+                          <div key={rel.rel_id || i} className="ws4-rel-card" data-testid={rel.legacy ? 'ws-rel-legacy' : 'ws-rel'}>
                             <div className="ws4-rel-card-top">
                               <AvatarCircle name={rel.character_name || '?'} size="sm" />
                               <div className="ws4-rel-card-info">
                                 <div className="ws4-rel-card-name">{rel.character_name || '—'}</div>
                                 <div className="ws4-rel-card-badges">
                                   <Badge variant="default">{rel.relationship_type?.replace(/_/g, ' ')}</Badge>
+                                  {rel.tension_state && <Badge variant="type">{rel.tension_state}</Badge>}
                                   {rel.current_status && <Badge variant="draft">{rel.current_status}</Badge>}
                                   {rel.is_romantic && <Badge variant="intimate">♡</Badge>}
                                   {rel.is_blood_relation && <Badge variant="primary">Blood</Badge>}
+                                  {rel.confirmed === false && <Badge variant="draft">Candidate: confirm it on the Relationships page</Badge>}
+                                  {rel.legacy && <Badge variant="archived">Old World Studio entry, no longer edited</Badge>}
                                 </div>
                               </div>
                               {rel.rel_id && (
@@ -2306,18 +2338,17 @@ export default function WorldStudio() {
 
             <div className="ws4-form">
               <div className="ws4-form-row">
-                <label className="ws4-form-label">Character Name</label>
-                <input className="ws4-input" placeholder="Name or describe…" value={relForm.related_character_name} onChange={e => setRelForm(p => ({ ...p, related_character_name: e.target.value }))} />
+                <label className="ws4-form-label" htmlFor="ws-rel-character">Character</label>
+                <select id="ws-rel-character" className="ws4-select" value={relForm.related_character_id}
+                  onChange={e => setRelForm(p => ({ ...p, related_character_id: e.target.value }))}>
+                  <option value="">— Choose a character —</option>
+                  {characters.filter(c => c.id !== selectedChar).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </div>
               <div className="ws4-form-row">
-                <label className="ws4-form-label">Character (if in World Studio)</label>
-                <select className="ws4-select" value={relForm.related_character_id}
-                  onChange={e => {
-                    const char = characters.find(c => c.id === e.target.value);
-                    setRelForm(p => ({ ...p, related_character_id: e.target.value, related_character_name: char ? char.name : p.related_character_name }));
-                  }}>
-                  <option value="">— Select existing —</option>
-                  {characters.filter(c => c.id !== selectedChar).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <label className="ws4-form-label" htmlFor="ws-rel-tension">Tension</label>
+                <select id="ws-rel-tension" className="ws4-select" value={relForm.tension_state} onChange={e => setRelForm(p => ({ ...p, tension_state: e.target.value }))}>
+                  {TENSION_STATES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div className="ws4-form-row">
@@ -2340,27 +2371,14 @@ export default function WorldStudio() {
                 <label className="ws4-form-label">History Summary</label>
                 <textarea className="ws4-textarea" placeholder="What happened between them…" value={relForm.history_summary} onChange={e => setRelForm(p => ({ ...p, history_summary: e.target.value }))} />
               </div>
-              <div className="ws4-form-two-col">
-                <div className="ws4-form-row">
-                  <label className="ws4-form-label">Current Status</label>
-                  <select className="ws4-select" value={relForm.current_status} onChange={e => setRelForm(p => ({ ...p, current_status: e.target.value }))}>
-                    {['active','close','complicated','estranged','ended','unknown'].map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div className="ws4-form-row">
-                  <label className="ws4-form-label">Franchise Layer</label>
-                  <select className="ws4-select" value={relForm.series_layer} onChange={e => setRelForm(p => ({ ...p, series_layer: e.target.value }))}>
-                    <option value="lalaverse">LalaVerse</option>
-                    <option value="book-1">Book 1 · Before Lala</option>
-                    <option value="real_world">Real World</option>
-                    <option value="series_2">Series 2</option>
-                  </select>
-                </div>
+              <div className="ws4-form-row">
+                <label className="ws4-form-label">Current Status</label>
+                <select className="ws4-select" value={relForm.current_status} onChange={e => setRelForm(p => ({ ...p, current_status: e.target.value }))}>
+                  {['active','close','complicated','estranged','ended','unknown'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div className="ws4-checkboxes">
                 {[
-                  ['romantic_eligible','Romantic eligible'],
-                  ['knows_about_transfer','Knows about transfer'],
                   ['is_blood_relation','Blood relation'],
                   ['is_romantic','Romantic'],
                   ['knows_about_connection','Knows about connection'],
@@ -2381,7 +2399,7 @@ export default function WorldStudio() {
               <div />
               <div className="ws4-modal-actions">
                 <button className="ws4-btn ws4-btn-ghost" onClick={() => setShowAddRel(false)}>Cancel</button>
-                <button className="ws4-btn ws4-btn-primary" disabled={savingRel || !relForm.relationship_type} onClick={addRelationship}>
+                <button className="ws4-btn ws4-btn-primary" disabled={savingRel || !relForm.relationship_type || !relForm.related_character_id} onClick={addRelationship}>
                   {savingRel ? 'Saving…' : 'Add Relationship'}
                 </button>
               </div>

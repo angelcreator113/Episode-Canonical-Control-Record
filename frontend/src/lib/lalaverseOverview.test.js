@@ -24,6 +24,13 @@ describe('the LalaVerse Overview helpers', () => {
       { char_a: { name: 'E' }, char_b: {}, tension_state: 'Explosive' },
     ];
     expect(topTension(pairs).char_a.name).toBe('C');
+    // The Relationships page's states rank by heat too (fix-list item 23): volatile above simmering.
+    const table = [
+      { char_a: { name: 'A' }, char_b: { name: 'B' }, tension_state: 'simmering' },
+      { char_a: { name: 'F' }, char_b: { name: 'G' }, tension_state: 'fractured' },
+      { char_a: { name: 'V' }, char_b: { name: 'W' }, tension_state: 'volatile' },
+    ];
+    expect(topTension(table).char_a.name).toBe('V');
   });
 
   test('the ideas come from the data, a trend never claims a direction', () => {
