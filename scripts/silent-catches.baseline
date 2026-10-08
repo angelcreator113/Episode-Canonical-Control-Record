@@ -64,8 +64,6 @@
 1	src/routes/socialProfileRoutes.js	} catch { /* fall through */ }
 2	src/routes/socialProfileRoutes.js	} catch { /* fall through to in-memory */ }
 2	src/routes/socialProfileRoutes.js	} catch { /* non-blocking */ }
-1	src/routes/socialProfileRoutes.js	}).catch(() => []);
-2	src/routes/socialProfileRoutes.js	}).catch(() => null);
 1	src/routes/storyEvaluationRoutes.js	} catch { /* PipelineTracking table may not exist yet */ }
 1	src/routes/storyEvaluationRoutes.js	} catch { /* StoryRevision table may not exist yet */ }
 1	src/routes/storyEvaluationRoutes.js	} catch { /* relationship_events table may not exist yet */ }
