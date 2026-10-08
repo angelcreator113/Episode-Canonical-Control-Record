@@ -136,7 +136,16 @@ describe('UniversePage: the LalaVerse hub', () => {
       if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
       if (url === '/api/v1/world/show-b/events') return { data: { events: [{ id: 'e1', name: 'Studio Session', created_at: '2026-10-03T00:00:00Z' }] } };
       if (url.startsWith('/api/v1/episodes')) return { data: { data: [{ id: 'ep1', episode_number: 1, title: 'Pilot', created_at: '2026-10-01T00:00:00Z' }], pagination: { total: 1 } } };
-      if (url.startsWith('/api/v1/character-registry')) return { data: { registries: [{ characters: [{ id: 1 }, { id: 2 }] }] } };
+      if (url.startsWith('/api/v1/character-registry')) return { data: { registries: [
+        { id: 'reg-b', show_id: 'show-b', characters: [{ id: 'lala', display_name: 'Lala', character_key: 'lala' }, { id: 'sable', display_name: 'Sable' }, { id: 'old1', display_name: 'Diego' }, { id: 'old2', display_name: 'Jade' }] },
+        { id: 'reg-x', show_id: 'show-x', characters: [{ id: 'x1', display_name: 'Other' }] },
+      ] } };
+      if (url.startsWith('/api/v1/social-profiles')) return { data: { profiles: [
+        { id: 7, feed_layer: 'lalaverse', handle: 'sable', registry_character_id: 'sable' },
+        { id: 8, feed_layer: 'lalaverse', handle: 'slowsift', registry_character_id: null },
+        { id: 9, feed_layer: 'real_world', handle: 'celeb', registry_character_id: null },
+      ] } };
+      if (url === '/api/v1/cast/review?registry_id=reg-b') return { data: { characters: [{ id: 'old2', cast_review: 'kept' }] } };
       if (url.startsWith('/api/v1/calendar/events')) return { data: { events: [{ title: 'Fashion Week', start_datetime: '2099-11-03T12:00:00Z' }] } };
       if (url === '/api/v1/feed-enhanced/show-b/trending') return { data: { data: [{ topic: '#velvet', post_count: 3, total_engagement: 9 }] } };
       if (url === '/api/v1/world/tension-scanner') return { data: { status: 'ok', pairs: [] } };
@@ -159,10 +168,14 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(tile('episodes').textContent).toContain('1');
     expect(tile('episodes').getAttribute('href')).toBe('/shows/show-b/world?tab=season');
     expect(tile('events').getAttribute('href')).toBe('/shows/show-b/world?tab=events');
+    // Counted as The cast counts it (Evoni, 2026-10-08): the feed people in
+    // Lala's world, and the show's registry's old-system characters still to
+    // review (Lala, the linked and the kept aside).
     expect(tile('characters').textContent).toContain('2');
-    // The show's cast, not every show's (wiring map, fix-list item 16).
-    expect(tile('characters').textContent).toContain('in this show’s registries');
-    expect(api.get).toHaveBeenCalledWith('/api/v1/character-registry/registries?show_id=show-b&limit=100');
+    expect(tile('characters').textContent).toContain('in Lala’s world');
+    expect(screen.getByTestId('lalaverse-tile-characters-extra').textContent).toBe('1 from the old system to review');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/cast/review?registry_id=reg-b');
+    expect(tile('characters').textContent).toContain('Open The cast');
     expect(tile('characters').getAttribute('href')).toBe('/character-registry');
     expect(tile('wardrobe').getAttribute('href')).toBe('/shows/show-b/world?tab=wardrobe-items');
     expect(screen.getByTestId('lalaverse-idea-culture').textContent).toContain('Fashion Week is coming up in November');
