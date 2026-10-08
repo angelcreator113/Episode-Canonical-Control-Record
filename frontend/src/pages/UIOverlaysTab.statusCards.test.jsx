@@ -66,7 +66,7 @@ const grid = () => within(document.querySelector('.phone-hub-screen-grid'));
 const cardOf = (name) => grid().getByText(name).closest('.screen-card');
 const continueOn = (name) => fireEvent.click(within(cardOf(name)).getByRole('button', { name: /Continue/ }));
 const stage = (name) => within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name });
-const connectScreen = () => document.querySelector('.zones-thumbnail.active .zones-thumbnail__label')?.textContent;
+const connectScreen = () => document.querySelector('.connect-screens__item.is-active .connect-screens__name')?.textContent;
 
 describe('UIOverlaysTab — status cards (Task #2042)', () => {
   test('cards read their state from the page\'s diagnostics', async () => {

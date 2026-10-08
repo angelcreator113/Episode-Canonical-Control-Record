@@ -71,8 +71,8 @@ async function openConnectOn(name) {
   fireEvent.click(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Connect' }));
   await waitFor(() => expect(document.querySelector('.zones-tab__canvas [style*="crosshair"]')).toBeTruthy());
   if (name !== 'Homepage') {
-    const strip = document.querySelector('.zones-thumbnail-strip');
-    fireEvent.click(within(strip).getByText(name).closest('.zones-thumbnail'));
+    const list = document.querySelector('.connect-screens');
+    fireEvent.click(within(list).getByText(name).closest('.connect-screens__item'));
     await waitFor(() => expect(document.querySelector('.zones-tab__sidebar-screen').textContent).toBe(name));
   }
   return document.querySelector('.zones-tab__canvas [style*="crosshair"]');
