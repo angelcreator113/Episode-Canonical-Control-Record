@@ -46,6 +46,9 @@ export default function ContentZoneEditor({
   const [drawStart, setDrawStart] = useState(null);
   const [drawCurrent, setDrawCurrent] = useState(null);
   const [selectedZone, setSelectedZone] = useState(null);
+  // A content area being dragged: { id, start, orig } (phone audit,
+  // 2026-10-07: an area could be drawn but never moved).
+  const [moving, setMoving] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState([]);
@@ -121,7 +124,30 @@ export default function ContentZoneEditor({
     setSelectedZone(null);
   };
 
+  const startMove = (e, zone) => {
+    if (readOnly) return;
+    e.stopPropagation();
+    setSelectedZone(zone.id);
+    if (e.currentTarget.setPointerCapture && e.pointerId !== undefined) {
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { console.error('[ContentZoneEditor] pointer capture failed:', err); }
+    }
+    setMoving({ id: zone.id, start: getRelativePos(e), orig: { x: zone.x, y: zone.y }, moved: false });
+  };
+
   const handlePointerMove = (e) => {
+    if (moving) {
+      const pos = getRelativePos(e);
+      const zone = localZones.find(z => z.id === moving.id);
+      if (!zone) return;
+      const dx = pos.x - moving.start.x;
+      const dy = pos.y - moving.start.y;
+      if (!moving.moved && Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      const x = Math.round(Math.min(Math.max(moving.orig.x + dx, 0), 100 - zone.w) * 10) / 10;
+      const y = Math.round(Math.min(Math.max(moving.orig.y + dy, 0), 100 - zone.h) * 10) / 10;
+      if (!moving.moved) setMoving(m => ({ ...m, moved: true }));
+      updateZone(moving.id, { x, y });
+      return;
+    }
     if (!drawing) return;
     e.preventDefault();
     setDrawCurrent(getRelativePos(e));
@@ -131,6 +157,7 @@ export default function ContentZoneEditor({
     if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
       try { e.target.releasePointerCapture(e.pointerId); } catch {}
     }
+    if (moving) { setMoving(null); return; }
     if (!drawing || !drawStart || !drawCurrent) { setDrawing(false); return; }
     const x = Math.min(drawStart.x, drawCurrent.x);
     const y = Math.min(drawStart.y, drawCurrent.y);
@@ -274,7 +301,9 @@ export default function ContentZoneEditor({
             <div
               key={zone.id}
               data-zone-id={zone.id}
+              data-testid={`content-zone-${zone.id}`}
               onClick={(e) => { e.stopPropagation(); setSelectedZone(zone.id); }}
+              onPointerDown={(e) => startMove(e, zone)}
               style={{
                 position: 'absolute',
                 left: `${zone.x}%`, top: `${zone.y}%`,
@@ -284,7 +313,8 @@ export default function ContentZoneEditor({
                 background: selectedZone === zone.id
                   ? 'rgba(184,150,46,0.15)'
                   : zone.content_type ? 'transparent' : 'rgba(255,255,255,0.05)',
-                cursor: readOnly ? 'default' : 'pointer',
+                cursor: readOnly ? 'default' : (moving?.id === zone.id ? 'grabbing' : 'grab'),
+                touchAction: 'none',
                 display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
                 overflow: 'hidden',
                 zIndex: 5,

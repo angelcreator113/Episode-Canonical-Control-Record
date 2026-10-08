@@ -33,7 +33,7 @@ function getLinks(screen) {
  * Close button, no ESC listener. The runtime is unchanged. The Episode tab
  * uses it with playthrough={null}, so nothing is saved.
  */
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false }) {
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false, showId, episodeId }) {
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens.find(isScreen) || screens[0] || null);
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
@@ -89,7 +89,13 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }
     if (activeScreenId === savedScreenRef.current) return;
     savedScreenRef.current = activeScreenId;
-    saveScreen(activeScreenId);
+    Promise.resolve(saveScreen(activeScreenId)).then((result) => {
+      const toastsIn = result?.effects?.toasts || [];
+      if (toastsIn.length) setToasts(prev => [...prev, ...toastsIn.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+      if (result?.newlyCompleted?.length) {
+        setCelebrations(prev => [...prev, ...result.newlyCompleted.map((m, i) => ({ id: `${m.id}-${Date.now()}-${i}`, name: m.name }))]);
+      }
+    });
   }, [saveScreen, activeScreenId]);
 
   // A refused or failed tap, save or reset is said on the phone, not
@@ -188,7 +194,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       // Player mode — server executes (zone actions + mission rewards). The
       // response already contains any reward-merged effects plus the list of
       // missions that newly completed this tap. useEffect re-hydrates state.
-      const result = await playthrough.tap(zone.id);
+      const result = await playthrough.tap(zone.id, activeScreen?.asset_id || null);
       const effects = result?.effects;
       if (effects?.toasts?.length) {
         setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
@@ -248,7 +254,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     if (rewardResult.effects.completeEpisode) setEpisodeComplete(true);
     const finalNavigate = effects.navigate || rewardResult.effects.navigate;
     if (finalNavigate) navigateTo(finalNavigate, 'left');
-  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate]);
+  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen]);
 
   // Auto-dismiss toasts after 2.5s
   useEffect(() => {
@@ -589,6 +595,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         firstScreen={homeScreen}
         globalFit={globalFit}
         tapLayer={tapLayer}
+        showId={showId}
+        episodeId={episodeId}
       />
 
       {/* Breadcrumb trail. The screen's name is on the device itself, so it

@@ -109,9 +109,18 @@ describe('phoneRuntime', () => {
   });
 
   describe('actionsForZone (implicit navigate default)', () => {
-    it('returns the explicit actions when present', () => {
-      const zone = { target: 'ignored', actions: [{ type: 'show_toast', text: 'Hi' }] };
-      expect(runtime.actionsForZone(zone)).toEqual([{ type: 'show_toast', text: 'Hi' }]);
+    it('runs the explicit actions, then the zone target', () => {
+      const zone = { target: 'home', actions: [{ type: 'show_toast', text: 'Hi' }] };
+      expect(runtime.actionsForZone(zone)).toEqual([{ type: 'show_toast', text: 'Hi' }, { type: 'navigate', target: 'home' }]);
+    });
+
+    it('an explicit navigate action wins over the target', () => {
+      const zone = { target: 'home', actions: [{ type: 'navigate', target: 'feed' }] };
+      expect(runtime.actionsForZone(zone)).toEqual([{ type: 'navigate', target: 'feed' }]);
+    });
+
+    it('explicit actions alone when there is no target', () => {
+      expect(runtime.actionsForZone({ actions: [{ type: 'show_toast', text: 'Hi' }] })).toEqual([{ type: 'show_toast', text: 'Hi' }]);
     });
 
     it('synthesizes navigate action when only target is set (legacy behavior)', () => {

@@ -1573,6 +1573,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                       customFrameUrl={customFrameUrl}
                       playthrough={null}
                       missions={[]}
+                      showId={showId}
                     />
                     <p className="phone-hub-preview-hint">Tap to try it. Nothing here is saved.</p>
                   </div>
@@ -1843,7 +1844,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                                 const conditionCount = Array.isArray(zone.conditions) ? zone.conditions.length : 0;
                                 const actionCount = Array.isArray(zone.actions) ? zone.actions.length : 0;
                                 const advancedCount = conditionCount + actionCount;
-                                const screenOptions = overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }));
+                                const screenOptions = overlays.filter(o => isScreen(o) && o.url).map(o => ({ key: o.id, label: o.name }));
                                 return (
                                   <div key={zone.id} className={`zones-tap-row zones-tap-row--inline ${isSelected ? 'active' : ''}`}>
                                     {/* The number on the phone's box for this zone */}
@@ -2507,7 +2508,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
                   {/* Danger Zone — destructive actions isolated at the bottom with a
                       visible boundary so Delete isn't a one-tap mistake next to Download. */}
-                  {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
+                  {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id || activeScreen.custom) && (
                     <div className="editor-danger-zone">
                       <button type="button" className="editor-delete-link" onClick={handleDelete}>
                         <Trash2 size={13} aria-hidden="true" /> Delete this {isIcon(activeScreen) ? 'icon' : 'screen'}…
@@ -2541,7 +2542,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   screen-links endpoint Tap zones use. */}
               {editorTab === 'placements' && isIcon(activeScreen) && activeScreen?.url && (() => {
                 const iconUrl = activeScreen.url;
-                const screenList = overlays.filter(o => isScreen(o));
+                // Only a screen with an image can hold placements; one without
+                // had no asset, so a placement saved to screen-links/null
+                // (phone audit, 2026-10-07).
+                const screenList = overlays.filter(o => isScreen(o) && o.asset_id);
                 // A zone belongs to this icon when it resolves to the icon's
                 // key, whatever image it last stored (doctrine rule 17).
                 const iconList = overlays.filter(isIcon);
@@ -2653,7 +2657,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                       </label>
                       {unplacedScreens.length === 0 ? (
                         <div style={{ fontSize: 11, color: '#999', padding: '6px 0' }}>
-                          Already placed on every screen.
+                          Already placed on every screen with an image.
                         </div>
                       ) : (
                         <select
