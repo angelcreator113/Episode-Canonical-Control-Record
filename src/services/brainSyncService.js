@@ -19,6 +19,14 @@
  * keyed (seeders, document ingestion, the old Push to Brain) are counted as
  * legacy and never touched.
  *
+ * A card's words belong to its page; its always_inject ("In every prompt"),
+ * scope and show_id belong to the Show Bible, which may set them on a synced
+ * card (routes/franchiseBrainRoutes.js PATCH). A new card starts out of every
+ * prompt, in the franchise tier. A changed card's new entry keeps the marks
+ * of the entry it supersedes: they used to reset, so a card marked for every
+ * prompt dropped out the next time its page changed (Evoni's ruling, card by
+ * card, 2026-10-08; wiring map fix-list item 24).
+ *
  * Reads and writes franchise_knowledge only.
  */
 
@@ -54,7 +62,7 @@ function manifestFor(source) {
 async function readState(sequelize, manifest, transaction) {
   const prefix = `${manifest.SOURCE}:`;
   const [active] = await sequelize.query(
-    `SELECT id, source_key, source_hash, title, content, updated_at
+    `SELECT id, source_key, source_hash, title, content, updated_at, always_inject, scope, show_id
        FROM franchise_knowledge
       WHERE source_key IS NOT NULL AND LEFT(source_key, LENGTH(:prefix)) = :prefix
         AND status = 'active' AND deleted_at IS NULL
@@ -79,7 +87,10 @@ function diff(manifest, pageData, state) {
     const entry = byKey.get(card.source_key);
     if (!entry) added.push({ ...card, source_hash: hash });
     else if (entry.source_hash !== hash) {
-      changed.push({ ...card, source_hash: hash, entry_id: entry.id, before: { title: entry.title, content: entry.content } });
+      changed.push({
+        ...card, source_hash: hash, entry_id: entry.id, before: { title: entry.title, content: entry.content },
+        keep: { always_inject: !!entry.always_inject, scope: entry.scope || 'franchise', show_id: entry.show_id || null },
+      });
     } else unchanged.push({ source_key: card.source_key, title: card.title, entry_id: entry.id });
   }
   const keys = new Set(cards.map((c) => c.source_key));
@@ -134,15 +145,17 @@ async function applySync(sequelize, source, pageData, fingerprint) {
     const plan = diff(manifest, pageData, await readState(sequelize, manifest, transaction));
     if (plan.fingerprint !== fingerprint) throw new SyncError(409, 'The page or the Brain changed since this review. Review the update again.');
 
-    const insert = async (card) => {
+    // A new card is out of every prompt, franchise-wide; a changed card keeps its entry's marks.
+    const insert = async (card, marks = { always_inject: false, scope: 'franchise', show_id: null }) => {
       const [[row]] = await sequelize.query(
         `INSERT INTO franchise_knowledge
-           (title, content, category, severity, applies_to, always_inject, source_document, source_version,
+           (title, content, category, severity, applies_to, always_inject, scope, show_id, source_document, source_version,
             source_key, source_hash, extracted_by, status, created_at, updated_at)
-         VALUES (:title, :content, :category, :severity, '[]'::jsonb, false, :doc, '1.0',
+         VALUES (:title, :content, :category, :severity, '[]'::jsonb, :always_inject, :scope, :show_id, :doc, '1.0',
             :key, :hash, 'system', 'active', NOW(), NOW())
          RETURNING id`,
         { replacements: { title: card.title, content: card.content, category: card.category, severity: card.severity,
+          always_inject: marks.always_inject, scope: marks.scope, show_id: marks.show_id,
           doc: manifest.SOURCE_DOCUMENT, key: card.source_key, hash: card.source_hash }, transaction });
       return row.id;
     };
@@ -152,7 +165,7 @@ async function applySync(sequelize, source, pageData, fingerprint) {
       await sequelize.query(
         `UPDATE franchise_knowledge SET status = 'superseded', updated_at = NOW() WHERE id = :id`,
         { replacements: { id: card.entry_id }, transaction });
-      const id = await insert(card);
+      const id = await insert(card, card.keep);
       await sequelize.query(
         'UPDATE franchise_knowledge SET superseded_by = :id WHERE id = :old',
         { replacements: { id, old: card.entry_id }, transaction });

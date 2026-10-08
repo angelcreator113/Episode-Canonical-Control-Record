@@ -56,6 +56,10 @@ export default function ShowBiblePage({ embedded = false }) {
   const [scopeFilter, setScopeFilter] = useState('all'); // all | franchise | show
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  // A synced card (source_key) is managed by its page: its words, category
+  // and severity are edited there. Here, its scope and "In every prompt"
+  // (wiring map fix-list item 24). Holds the page's name, or null.
+  const [editingManaged, setEditingManaged] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [guardText, setGuardText] = useState('');
@@ -91,10 +95,12 @@ export default function ShowBiblePage({ embedded = false }) {
     setSaving(true);
     try {
       // Scope is stored, never inferred (2026-10-04): a show entry carries the active show's id.
-      const body = { ...form, show_id: form.scope === 'show' ? (show?.id ?? null) : null };
+      const marks = { always_inject: form.always_inject, scope: form.scope, show_id: form.scope === 'show' ? (show?.id ?? null) : null };
+      // A synced card takes only what the Show Bible owns; its words are its page's (the route refuses them, 409).
+      const body = editingId && editingManaged ? marks : { ...form, ...marks };
       if (editingId) { await api.patch(`/api/v1/franchise-brain/entries/${editingId}`, body); showToast('Updated'); }
       else { await api.post('/api/v1/franchise-brain/entries', body); showToast('Created'); }
-      setShowForm(false); setEditingId(null); setForm(EMPTY_FORM);
+      setShowForm(false); setEditingId(null); setEditingManaged(null); setForm(EMPTY_FORM);
       loadEntries();
     } catch (err) { showToast(err.response?.data?.error || 'Save failed', 'error'); }
     finally { setSaving(false); }
@@ -121,10 +127,11 @@ export default function ShowBiblePage({ embedded = false }) {
     showToast(failed ? `${pending.length - failed} activated, ${failed} could not be` : `${pending.length} entries activated`, failed ? 'error' : 'success');
   };
 
-  const startNew = () => { setEditingId(null); setForm(EMPTY_FORM); setShowForm(true); };
+  const startNew = () => { setEditingId(null); setEditingManaged(null); setForm(EMPTY_FORM); setShowForm(true); };
   // "+ Add a rule" on the front page: a new entry already marked always-inject.
   const startRule = () => {
     setEditingId(null);
+    setEditingManaged(null);
     setForm({ ...EMPTY_FORM, severity: 'critical', always_inject: true });
     setShowForm(true);
   };
@@ -135,6 +142,8 @@ export default function ShowBiblePage({ embedded = false }) {
 
   const startEdit = (entry) => {
     setEditingId(entry.id);
+    const src = entrySource(entry, docNames);
+    setEditingManaged(entry.source_key ? (src.kind === 'page' ? `the ${src.label} page` : 'its source page') : null);
     setForm({ title: entry.title, content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content, null, 2), category: entry.category || 'franchise_law', severity: entry.severity || 'important', always_inject: entry.always_inject || false, scope: getScope(entry) });
     setShowForm(true);
   };
@@ -516,13 +525,18 @@ export default function ShowBiblePage({ embedded = false }) {
         <div className="sbp-modal-backdrop" onClick={() => setShowForm(false)}>
           <div className="sbp-modal" role="dialog" aria-modal="true" aria-labelledby="sbp-form-title" onClick={(e) => e.stopPropagation()}>
             <h3 id="sbp-form-title" className="sbp-h3">{editingId ? 'Edit entry' : 'New entry'}</h3>
-            <label className="sbp-field">Title<input className="sbp-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Entry title..." /></label>
+            {editingId && editingManaged && (
+              <p className="sbp-note" data-testid="sbp-managed-note">
+                Its words, category and severity come from {editingManaged}: change them there, then review its Brain Update. Here you choose its scope and whether it goes in every AI prompt, and Brain Update keeps both when it updates the card.
+              </p>
+            )}
+            <label className="sbp-field">Title<input className="sbp-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Entry title..." readOnly={Boolean(editingManaged)} /></label>
             <div className="sbp-field-row">
-              <label className="sbp-field">Category<select className="sbp-input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
+              <label className="sbp-field">Category<select className="sbp-input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} disabled={Boolean(editingManaged)}>{CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
               <label className="sbp-field">Scope<select aria-label="Scope" className="sbp-input" value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}><option value="franchise">Franchise (every show)</option><option value="show">{show?.name ? `Show · ${show.name}` : 'Show'}</option></select></label>
-              <label className="sbp-field">Severity<select className="sbp-input" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}><option value="critical">Critical</option><option value="important">Important</option><option value="context">Context</option></select></label>
+              <label className="sbp-field">Severity<select className="sbp-input" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} disabled={Boolean(editingManaged)}><option value="critical">Critical</option><option value="important">Important</option><option value="context">Context</option></select></label>
             </div>
-            <label className="sbp-field">Content<textarea className="sbp-input sbp-textarea" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={8} placeholder="Entry content..." /></label>
+            <label className="sbp-field">Content<textarea className="sbp-input sbp-textarea" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={8} placeholder="Entry content..." readOnly={Boolean(editingManaged)} /></label>
             <label className="sbp-check"><input type="checkbox" checked={form.always_inject} onChange={(e) => setForm({ ...form, always_inject: e.target.checked })} /> Put it in every AI prompt (always inject)</label>
             <div className="sbp-modal-actions">
               <button type="button" className="sbp-btn is-ghost" onClick={() => setShowForm(false)}>Cancel</button>

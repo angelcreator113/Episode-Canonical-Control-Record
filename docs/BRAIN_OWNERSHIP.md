@@ -179,9 +179,13 @@ takes did not change (wiring map fix-list item 25; which cards count is item 24)
 | Amber `develop_world` | `selectRules`: the page's own `source_document`, the first 30; and category franchise_law, the first 10. Amber is sent no show. |
 
 So "Used By" (step 6 of the redesign) is new backend work: each reader would select by the
-entry's declared consumers instead of by `critical OR always_inject`. Until then, a synced
-card that is `important` and not `always_inject` (§8) is stored and reviewed, but no
-generator reads it.
+entry's declared consumers instead of by `critical OR always_inject`. Until then, synced
+cards reach the generators card by card (Evoni's ruling, 2026-10-08; wiring map fix-list
+item 24). A card starts `important` and not `always_inject` (§8), so no generator reads it.
+Marking it "Put it in every AI prompt" in the Show Bible puts it in every generator. The
+edit form sends a synced card only its scope and that mark, because its words stay its page's.
+Brain Update keeps the mark, the scope and the show when it replaces the card after its
+page changes (`brainSyncService` `applySync`; `brainCardMarks.integration.test.js`).
 
 ---
 
@@ -295,3 +299,8 @@ Brain landing page, and the other pages.
 - Unchanged from step 1: synced cards are `important` and not `always_inject`, so no
   generator reads them yet. The seeded laws for each source are counted as legacy and
   left alone (R2).
+- 2026-10-08 (fix-list item 24, card by card): a card marked "In every prompt" in the Show
+  Bible keeps the mark, its scope and its show when Brain Update replaces it. The
+  replacement used to be written with `always_inject` false and the default scope. The Show
+  Bible's edit form sends a synced card only those three fields; it sent the whole entry,
+  which the route refuses, so a synced card could not be marked at all.
