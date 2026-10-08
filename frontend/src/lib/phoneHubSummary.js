@@ -95,3 +95,71 @@ export function screenCaption(screen, diagnostics) {
   if (!tap && !icon) return 'No tap zones yet';
   return [tap ? plural(tap, 'tap zone') : null, icon ? plural(icon, 'icon') : null].filter(Boolean).join(' · ');
 }
+
+/**
+ * The Map stage (Evoni's mockup, 2026-10-08: "How Lala moves through her
+ * phone"): every tap out of the home screen, and what the phone can't do.
+ * Pure; works on the screens with an image.
+ *
+ *   home        the home screen, or null
+ *   taps        one per home zone with a destination, in zone order:
+ *               { zoneId, label, targetKey, target (screen or null),
+ *                 onward (how many screens it leads on to),
+ *                 state: 'onward' | 'dead' | 'missing' }
+ *   deadEnds    screens Lala can reach but not leave by a tap: no zone
+ *               leads anywhere and no pinned home icon shows there
+ *   unreachable screens nothing leads to from home (home itself aside)
+ *   openedTwice on one screen, two or more zones open the same screen:
+ *               { screen, target, labels }
+ *
+ * `icons` names a zone placed from an icon ("Camera") when it has no label.
+ */
+export function phoneFlowMap(overlays, icons = []) {
+  const list = overlays || [];
+  const screens = list.filter((o) => isScreen(o) && o.generated && o.url);
+  const byId = new Map(screens.map((s) => [s.id, s]));
+  const home = homeScreenOf(list);
+  const empty = { home: null, taps: [], deadEnds: [], unreachable: [], openedTwice: [] };
+  if (!home) return empty;
+
+  const iconName = (z) => {
+    const ico = z?.icon_overlay_id && (icons || []).find((i) => i.id === z.icon_overlay_id);
+    return ico ? String(ico.name || '').replace(/\s*icon$/i, '') : '';
+  };
+  const labelOf = (z, i) => (z?.label || '').trim() || iconName(z) || `Zone ${i + 1}`;
+  const targetsOf = (s) => getScreenLinks(s).map((z) => z?.target).filter((t) => t && byId.has(t) && t !== s.id);
+  // A pinned home icon shows on every other screen, so it is a way out.
+  const pinnedOut = getScreenLinks(home).some((z) => z?.persistent && z?.target && byId.has(z.target));
+
+  const taps = getScreenLinks(home)
+    .map((z, i) => ({ z, i }))
+    .filter(({ z }) => z?.target)
+    .map(({ z, i }) => {
+      const target = byId.get(z.target) || null;
+      const onward = target ? new Set(targetsOf(target)).size : 0;
+      const state = !target ? 'missing' : (onward > 0 || (pinnedOut && target.id !== home.id)) ? 'onward' : 'dead';
+      return { zoneId: z.id, label: labelOf(z, i), targetKey: z.target, target, onward, state };
+    });
+
+  const reached = new Set([home.id]);
+  const queue = [home.id];
+  while (queue.length) {
+    const id = queue.shift();
+    targetsOf(byId.get(id)).forEach((t) => { if (!reached.has(t)) { reached.add(t); queue.push(t); } });
+  }
+
+  const deadEnds = screens.filter((s) => s.id !== home.id && reached.has(s.id) && targetsOf(s).length === 0 && !pinnedOut);
+  const unreachable = screens.filter((s) => !reached.has(s.id));
+
+  const openedTwice = [];
+  screens.forEach((s) => {
+    const byTarget = new Map();
+    getScreenLinks(s).forEach((z, i) => {
+      if (!z?.target || !byId.has(z.target)) return;
+      byTarget.set(z.target, [...(byTarget.get(z.target) || []), labelOf(z, i)]);
+    });
+    byTarget.forEach((labels, t) => { if (labels.length > 1) openedTwice.push({ screen: s, target: byId.get(t), labels }); });
+  });
+
+  return { home, taps, deadEnds, unreachable, openedTwice };
+}

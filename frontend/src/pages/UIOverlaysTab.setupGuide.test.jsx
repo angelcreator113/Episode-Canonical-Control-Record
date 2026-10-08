@@ -67,16 +67,22 @@ async function renderPage(items) {
 }
 const guide = () => document.querySelector('.phone-setup-guide');
 const line = (key) => guide().querySelector(`[data-line="${key}"]`)?.textContent.replace(/Run$/, '').trim();
+// The guide is one line (its next step) until opened (Evoni's mockup,
+// 2026-10-08); the line-by-line tests open it first.
+const openGuide = () => {
+  if (!guide().querySelector('.phone-setup-guide__lines')) fireEvent.click(within(guide()).getByRole('button', { name: /Setup/ }));
+};
 const continueSetup = () => fireEvent.click(within(guide()).getByRole('button', { name: /Continue setup/ }));
 const stage = (name) => within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name });
 const connectScreen = () => document.querySelector('.zones-thumbnail.active .zones-thumbnail__label')?.textContent;
 
 describe('UIOverlaysTab — setup guide (Task #2053)', () => {
-  test('sits between the toolbar and the stage row, with counts from the page', async () => {
+  test('sits between the header bar and the phone, with counts from the page', async () => {
     await renderPage([HOME, CALLS, MAIL, DMS, CALL, MAIL_ICON]);
     const layout = document.querySelector('.phone-hub-layout');
     expect(document.querySelector('.overlays-header').compareDocumentPosition(guide()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(guide().compareDocumentPosition(layout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    openGuide();
     expect(line('screens')).toBe('⚠Screens: 3 with an image of 4');
     expect(line('icons')).toBe('⚠Icons: 1 placed of 2');
     expect(line('links')).toBe('⚠Links: 1 of 2 zones have a destination');
@@ -102,6 +108,7 @@ describe('UIOverlaysTab — setup guide (Task #2053)', () => {
 
   test('then Icons: Continue opens Connect on the home screen', async () => {
     await renderPage([MAIL, CALLS, HOME_LINKED, CALL, MAIL_ICON]);
+    openGuide();
     expect(line('links')).toBe('✓Links: 1 of 1 zone has a destination');
     continueSetup();
     await waitFor(() => expect(stage('Connect').getAttribute('aria-current')).toBe('page'));
@@ -110,14 +117,17 @@ describe('UIOverlaysTab — setup guide (Task #2053)', () => {
 
   test('no screens yet: Continue opens "+ Add" ▸ Screen', async () => {
     await renderPage([]);
+    openGuide();
     expect(line('screens')).toBe('⚠Screens: none yet');
     continueSetup();
     expect(await screen.findByRole('button', { name: 'Create Screen' })).toBeTruthy();
   });
 
-  test('starts open while setup is unfinished, collapsed once it is complete', async () => {
+  test('starts as one line with its next step and Continue; complete, it says so', async () => {
     await renderPage([HOME, CALLS, DMS, CALL]);
-    expect(guide().querySelector('.phone-setup-guide__lines')).toBeTruthy();
+    expect(guide().querySelector('.phone-setup-guide__lines')).toBeNull();
+    expect(within(guide()).getByTestId('phone-setup-next').textContent).toBe('· next: add the next screen image');
+    expect(within(guide()).getByRole('button', { name: /Continue setup/ })).toBeTruthy();
     cleanup();
     await renderPage([HOME_LINKED, CALLS, CALL]);
     expect(within(guide()).getByText('✓ Screens, icons and links are done')).toBeTruthy();
@@ -141,13 +151,14 @@ describe('UIOverlaysTab — setup guide (Task #2053)', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await renderPage([HOME, CALLS, DMS, CALL]);
     fireEvent.click(within(guide()).getByRole('button', { name: /Setup/ }));
-    expect(guide().querySelector('.phone-setup-guide__lines')).toBeNull();
+    expect(guide().querySelector('.phone-setup-guide__lines')).toBeTruthy();
   });
 
   test('Preview\'s Run runs the flow test from the home screen', async () => {
     const orphan = screenOf({ id: 'orphan', name: 'orphan', url: 'https://x/o.png', asset_id: 'a-o' });
     const dead = { ...HOME_LINKED, screen_links: [...HOME_LINKED.screen_links, zone('z-dead', { x: 60, target: 'gone', label: 'Gone' })] };
     await renderPage([dead, CALLS, orphan, CALL]);
+    openGuide();
     fireEvent.click(within(guide()).getByRole('button', { name: 'Run' }));
     await waitFor(() => expect(line('preview')).toBe('·Preview: 1 dead link, 1 screen not reached in the last flow test'));
     expect(within(guide()).queryByRole('button', { name: 'Run' })).toBeNull();

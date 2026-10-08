@@ -16,8 +16,13 @@
  *   Preview  → 'preview' (shown only when the parent can render it)
  * Advanced ▾ held only show-wide Missions; missions are now made per
  * episode, in its Lala's Phone tab (Evoni, 2026-10-07), so it is gone.
+ *
+ * Map → 'map' comes first when `showMap` (Evoni's mockup, 2026-10-08). With
+ * `part="stages"` only the stage row renders (Lala's Phone puts it in its
+ * header bar); with `part="build"` only Build's Screens | Icons toggle and
+ * "Show removed" render. Without `part`, both, as before.
  */
-import { Hammer, Link2, LayoutTemplate, Play } from 'lucide-react';
+import { Hammer, Link2, LayoutTemplate, Play, Map as MapIcon } from 'lucide-react';
 import './PhoneHubSectionTabs.css';
 
 // Keys that belong to the Build stage ('placements' is PhoneHub's
@@ -37,8 +42,11 @@ export default function PhoneHubSectionTabs({
   showZones = true,
   showContent = true,
   showPreview = false,
+  showMap = false,
+  part,
 }) {
   const stages = [
+    { key: 'map', label: 'Map', Icon: MapIcon, tab: 'map', active: activeTab === 'map', show: showMap },
     { key: 'build', label: 'Build', Icon: Hammer, tab: 'screens', active: BUILD_KEYS.includes(activeTab), show: true },
     { key: 'connect', label: 'Connect', Icon: Link2, tab: 'zones', active: activeTab === 'zones', show: showZones },
     { key: 'content', label: 'Content', Icon: LayoutTemplate, tab: 'content', active: activeTab === 'content', show: showContent },
@@ -47,8 +55,12 @@ export default function PhoneHubSectionTabs({
   const buildActive = BUILD_KEYS.includes(activeTab);
   const showIconsToggle = (gridFilter === 'all' || gridFilter === 'icon') && iconCount > 0;
 
+  const showStages = part !== 'build';
+  const showBuild = part !== 'stages';
+
   return (
-    <div className="phone-hub-section-tabs-wrap">
+    <div className={`phone-hub-section-tabs-wrap${part ? ` phone-hub-section-tabs-wrap--${part}` : ''}`}>
+      {showStages && (
       <div className="phone-hub-section-tabs">
         <div className="phone-hub-stage-row">
           <div className="phone-hub-section-tab-group">
@@ -69,13 +81,14 @@ export default function PhoneHubSectionTabs({
             ))}
           </div>
         </div>
-        {hiddenCount > 0 && onToggleShowHidden && (
+        {!part && hiddenCount > 0 && onToggleShowHidden && (
           <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
             {showHidden ? 'Hide removed' : `Show removed (${hiddenCount})`}
           </button>
         )}
       </div>
-      {buildActive && (
+      )}
+      {showBuild && buildActive && (
         <div className="phone-hub-build-toggle" role="group" aria-label="Build">
           <button
             type="button"
@@ -93,6 +106,11 @@ export default function PhoneHubSectionTabs({
               aria-pressed={activeTab === 'icons'}
             >
               Icons <span className="phone-hub-section-tab-count">· {iconCount}</span>
+            </button>
+          )}
+          {part === 'build' && hiddenCount > 0 && onToggleShowHidden && (
+            <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
+              {showHidden ? 'Hide removed' : `Show removed (${hiddenCount})`}
             </button>
           )}
         </div>
