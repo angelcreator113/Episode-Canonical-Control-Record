@@ -35,7 +35,10 @@ describe('Episode Distribution theme', () => {
     expect(css).toMatch(/\.episode-distribution-tab \.btn-remove-thumb\s*\{[^}]*background: var\(--danger\);/);
     expect(css).toMatch(/\.episode-distribution-tab \.btn-remove-thumb:hover\s*\{\s*background: var\(--danger-text\);/);
     expect(css).toMatch(/\.episode-distribution-tab \.form-select:focus\s*\{\s*outline: none;\s*border-color: var\(--primary\);/);
-    expect(jsx).toMatch(/border: '1px solid var\(--lala-gold\)', background: 'var\(--surface-bg\)', color: 'var\(--lala-gold-text\)'/);
+    // The Results redesign (2026-10-08): the tab's primary is the lavender
+    // and Generate is a lavender outline, as on the Summary.
+    expect(css).toMatch(/\.episode-distribution-tab \{\s*--primary: var\(--lala-lavender\);/);
+    expect(css).toMatch(/\.episode-distribution-tab \.btn-generate \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
   });
 
   test('statuses and the toggle read the token families', () => {
