@@ -35,7 +35,7 @@ describe('Society tab', () => {
     const note = screen.getByTestId('society-reads-archetypes').textContent;
     expect(note).toContain('own built-in list');
     expect(note).toContain('No generator reads those cards yet');
-    // The page has no editor and no generator reads the cards, so it claims neither.
+    // The copy never claims a generator reads the cards, and has no old "Edit them here" line.
     expect(screen.queryByText(/script writers|Edit them here/)).toBeNull();
     await waitFor(() => expect(screen.getByTestId('brain-update-button').textContent).toBe('🧠 Brain Up to Date ✓'));
     expect(screen.queryByTestId('brain-update-button-calendar')).toBeNull();

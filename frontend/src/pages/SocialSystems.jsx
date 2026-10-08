@@ -16,10 +16,20 @@
  * archetypes counted, what is trending, Lala on the career ladder, the
  * legends), and the whole page is in the hub's design (SocialSystems.css,
  * tokens only; a list item's own color from the data is only its accent).
+ *
+ * The lists edit (components/PageEdit/ListEditor; wiring map fix-list item
+ * 21): "Edit lists" in the header gives every saved item Edit and Remove
+ * and every list "+ Add", and a save writes the list to its own page:
+ * influencer_systems for the archetypes, rules and trend stages,
+ * cultural_calendar for the celebrity tiers, famous characters, gossip
+ * outlets, algorithm forces and drama mechanics. Until now the page held an
+ * EditItemModal nothing opened, whose save would have written every list,
+ * the calendar's too, into influencer_systems. The fifty legendary roles
+ * are fixed in code and are not edited here.
  */
 import { useState } from 'react';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, PageEditContext } from '../components/EditItemModal';
+import useListEditor, { EditListsToggle, ItemActions, AddToList } from '../components/PageEdit/ListEditor';
 import BrainUpdate from '../components/BrainUpdate';
 import SocietySummary from '../components/Society/SocietySummary';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
@@ -51,28 +61,34 @@ const READS = {
 // A list item's own color (from the data files) as its accent only.
 const accent = (color) => (color ? { '--item': color } : undefined);
 
-/** A row of stages joined by arrows (the trend engines). */
-function Stages({ items, meta }) {
+/** A row of stages joined by arrows (the trend engines); actions(s, i) is the item's edit controls. */
+function Stages({ items, meta, actions = () => null }) {
   return (
     <ol className="ss-stages">
-      {items.map((s) => (
-        <li key={s.stage} className="ss-stage" style={accent(s.color)}>
+      {items.map((s, i) => (
+        <li key={`${i}-${s.stage}`} className="ss-stage" style={accent(s.color)}>
           <span className="ss-stage-num">{s.stage}</span>
           <strong>{s.name}</strong>
           <span className="ss-meta">{meta(s)}</span>
           {s.story && <span className="ss-quote">{s.story}</span>}
+          {actions(s, i)}
         </li>
       ))}
     </ol>
   );
 }
 
+const SYSTEMS = 'influencer_systems';
+const CALENDAR = 'cultural_calendar';
+
 export default function SocialSystems({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'archetypes', undefined, 'sub'));
-  const [editItem, setEditItem] = useState(null);
-  const { data: isData, updateItem: isUpdate, addItem: isAdd, removeItem: isRemove, saving: isSaving, loaded: isLoaded } = usePageData('influencer_systems', INFLUENCER_DEFAULTS);
-  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
+  const systemsPage = usePageData(SYSTEMS, INFLUENCER_DEFAULTS);
+  const calendarPage = usePageData(CALENDAR, CALENDAR_DEFAULTS);
+  const { data: isData, saving: isSaving, loaded: isLoaded } = systemsPage;
+  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = calendarPage;
+  const lists = useListEditor({ [SYSTEMS]: systemsPage, [CALENDAR]: calendarPage });
   const [openLegend, setOpenLegend] = useState('Fashion Icons');
   const [expandedArch, setExpandedArch] = useState(null);
 
@@ -80,8 +96,18 @@ export default function SocialSystems({ embedded = false }) {
   // The front page's legend chips open a group on the Legends tab.
   const openFromSummary = (key, group) => { setTab(key); if (group) setOpenLegend(group); };
 
+  // A saved list: its items (the page's edits, else the defaults), each
+  // item's Edit and Remove, and the list's "+ Add", while editing.
+  const dataOf = (page) => (page === SYSTEMS ? isData : ccData);
+  const listOf = (page, key, defaults) => dataOf(page)[key] || defaults;
+  const actions = (page, key, i, item, name, what) => (lists.editing ? (
+    <ItemActions name={name || what} onEdit={() => lists.edit(page, key, i, item, what)} onRemove={() => lists.remove(page, key, i, name)} />
+  ) : null);
+  const adder = (page, key, defaults, what) => (lists.editing ? (
+    <AddToList what={what} onAdd={() => lists.add(page, key, listOf(page, key, defaults), what)} />
+  ) : null);
+
   return (
-    <PageEditContext.Provider value={{ data: tab === 'legends' ? { ...isData, ...ccData, LEGENDARY_GROUPS } : isData, setEditItem, removeItem: isRemove }}>
     <div className={`ss${embedded ? ' is-embedded' : ''}`}>
       {embedded && <SocietySummary legendGroups={LEGENDARY_GROUPS} onOpen={openFromSummary} />}
 
@@ -95,6 +121,7 @@ export default function SocialSystems({ embedded = false }) {
           </div>
           <div className="ss-head-actions">
             {saving && <span className="ss-saving">Saving…</span>}
+            <EditListsToggle editing={lists.editing} onToggle={() => lists.setEditing(!lists.editing)} />
             {/* The Brain Update for the data the open sub-tab shows */}
             {(tab === 'archetypes' || tab === 'rules' || tab === 'trends') && <BrainUpdate source="social_systems" data={isData} ready={isLoaded} />}
             {(tab === 'legends' || tab === 'trends') && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
@@ -113,10 +140,10 @@ export default function SocialSystems({ embedded = false }) {
           <div className="ss-panel">
             <p className="ss-note">Every major creator tends to fall into one of these patterns. The tension between two archetypes in the same person is often the story. Open one for its effect on the audience and what it does in the story.</p>
             <ul className="ss-grid">
-              {(isData.ARCHETYPES || ARCHETYPES).map((a) => {
+              {listOf(SYSTEMS, 'ARCHETYPES', ARCHETYPES).map((a, i) => {
                 const open = expandedArch === a.num;
                 return (
-                  <li key={a.num} className={`ss-card ss-accent-top${open ? ' is-open' : ''}`} style={accent(a.color)}>
+                  <li key={`${i}-${a.num}`} className={`ss-card ss-accent-top${open ? ' is-open' : ''}`} style={accent(a.color)}>
                     <button type="button" className="ss-card-btn" aria-expanded={open} onClick={() => setExpandedArch(open ? null : a.num)}>
                       <span className="ss-card-top"><span className="ss-num">{a.num}</span><span aria-hidden="true">{a.icon}</span></span>
                       <strong className="ss-card-title">{a.name}</strong>
@@ -130,10 +157,12 @@ export default function SocialSystems({ embedded = false }) {
                         <p className="ss-quote">{a.narrative}</p>
                       </div>
                     )}
+                    {actions(SYSTEMS, 'ARCHETYPES', i, a, a.name, 'archetype')}
                   </li>
                 );
               })}
             </ul>
+            {adder(SYSTEMS, 'ARCHETYPES', ARCHETYPES, 'archetype')}
           </div>
         )}
 
@@ -163,37 +192,43 @@ export default function SocialSystems({ embedded = false }) {
 
             <h3 className="ss-h3">Celebrity hierarchy</h3>
             <ul className="ss-grid ss-grid-sm">
-              {(ccData.CELEBRITY_HIERARCHY || CELEBRITY_HIERARCHY).map((h) => (
-                <li key={h.tier} className="ss-card ss-accent-top" style={accent(h.color)}>
+              {listOf(CALENDAR, 'CELEBRITY_HIERARCHY', CELEBRITY_HIERARCHY).map((h, i) => (
+                <li key={`${i}-${h.tier}`} className="ss-card ss-accent-top" style={accent(h.color)}>
                   <span className="ss-card-top"><span className="ss-num">Tier {h.tier}</span><span className="ss-meta">{h.followers}</span></span>
                   <strong className="ss-card-title">{h.name}</strong>
                   <span className="ss-card-text">{h.desc}</span>
+                  {actions(CALENDAR, 'CELEBRITY_HIERARCHY', i, h, h.name, 'celebrity tier')}
                 </li>
               ))}
             </ul>
+            {adder(CALENDAR, 'CELEBRITY_HIERARCHY', CELEBRITY_HIERARCHY, 'celebrity tier')}
 
             <h3 className="ss-h3">The 25 most famous</h3>
             <ul className="ss-grid ss-grid-sm">
-              {(ccData.FAMOUS_CHARACTERS || FAMOUS_CHARACTERS).map((c) => (
-                <li key={c.rank} className="ss-card ss-accent-top" style={accent(c.color)}>
+              {listOf(CALENDAR, 'FAMOUS_CHARACTERS', FAMOUS_CHARACTERS).map((c, i) => (
+                <li key={`${i}-${c.rank}`} className="ss-card ss-accent-top" style={accent(c.color)}>
                   <span className="ss-card-top"><span className="ss-num">#{c.rank}</span><span aria-hidden="true">{c.icon}</span></span>
                   <strong className="ss-card-title">{c.title}</strong>
                   <span className="ss-card-text">{c.role}</span>
+                  {actions(CALENDAR, 'FAMOUS_CHARACTERS', i, c, c.title, 'famous character')}
                 </li>
               ))}
             </ul>
+            {adder(CALENDAR, 'FAMOUS_CHARACTERS', FAMOUS_CHARACTERS, 'famous character')}
 
             <h3 className="ss-h3">Gossip media networks</h3>
             <ul className="ss-grid">
-              {(ccData.GOSSIP_MEDIA || GOSSIP_MEDIA).map((m) => (
-                <li key={m.name} className="ss-card ss-accent-top" style={accent(m.color?.text)}>
+              {listOf(CALENDAR, 'GOSSIP_MEDIA', GOSSIP_MEDIA).map((m, i) => (
+                <li key={`${i}-${m.name}`} className="ss-card ss-accent-top" style={accent(m.color?.text)}>
                   <strong className="ss-card-title">{m.name}</strong>
                   <span className="ss-meta">{[m.focus, m.style].filter(Boolean).join(' · ')}</span>
                   <span className="ss-card-text">{m.covers}</span>
                   <span className="ss-quote">{m.power}</span>
+                  {actions(CALENDAR, 'GOSSIP_MEDIA', i, m, m.name, 'gossip outlet')}
                 </li>
               ))}
             </ul>
+            {adder(CALENDAR, 'GOSSIP_MEDIA', GOSSIP_MEDIA, 'gossip outlet')}
           </div>
         )}
 
@@ -202,8 +237,8 @@ export default function SocialSystems({ embedded = false }) {
           <div className="ss-panel">
             <h3 className="ss-h3">Relationship types</h3>
             <ul className="ss-list">
-              {(isData.RELATIONSHIP_TYPES || RELATIONSHIP_TYPES).map((r) => (
-                <li key={r.type} className="ss-row ss-accent-left" style={accent(r.color)}>
+              {listOf(SYSTEMS, 'RELATIONSHIP_TYPES', RELATIONSHIP_TYPES).map((r, i) => (
+                <li key={`${i}-${r.type}`} className="ss-row ss-accent-left" style={accent(r.color)}>
                   <strong className="ss-card-title"><span aria-hidden="true">{r.icon}</span> {r.type}</strong>
                   <div className="ss-three">
                     <div><span className="ss-label">Looks like</span><p>{r.looksLike}</p></div>
@@ -211,46 +246,54 @@ export default function SocialSystems({ embedded = false }) {
                     <div><span className="ss-label">Breaks</span><p>{r.breaks}</p></div>
                   </div>
                   {r.storyBreaks && <span className="ss-quote">{r.storyBreaks}</span>}
+                  {actions(SYSTEMS, 'RELATIONSHIP_TYPES', i, r, r.type, 'relationship type')}
                 </li>
               ))}
             </ul>
+            {adder(SYSTEMS, 'RELATIONSHIP_TYPES', RELATIONSHIP_TYPES, 'relationship type')}
 
             <h3 className="ss-h3">Creator economy</h3>
             <ul className="ss-grid ss-grid-sm">
-              {(isData.ECONOMY_STREAMS || ECONOMY_STREAMS).map((e) => (
-                <li key={e.stream} className="ss-card ss-accent-top" style={accent(e.color)}>
+              {listOf(SYSTEMS, 'ECONOMY_STREAMS', ECONOMY_STREAMS).map((e, i) => (
+                <li key={`${i}-${e.stream}`} className="ss-card ss-accent-top" style={accent(e.color)}>
                   <span aria-hidden="true" className="ss-icon">{e.icon}</span>
                   <strong className="ss-card-title">{e.stream}</strong>
                   <span className="ss-card-text">{e.what}</span>
                   <span className="ss-meta">{e.who}</span>
                   {e.narrative && <span className="ss-quote">{e.narrative}</span>}
+                  {actions(SYSTEMS, 'ECONOMY_STREAMS', i, e, e.stream, 'economy stream')}
                 </li>
               ))}
             </ul>
+            {adder(SYSTEMS, 'ECONOMY_STREAMS', ECONOMY_STREAMS, 'economy stream')}
 
             <h3 className="ss-h3">Influence forces</h3>
             <ul className="ss-grid">
-              {(isData.INFLUENCE_FORCES || INFLUENCE_FORCES).map((f) => (
-                <li key={f.force} className="ss-card ss-accent-top" style={accent(f.color)}>
+              {listOf(SYSTEMS, 'INFLUENCE_FORCES', INFLUENCE_FORCES).map((f, i) => (
+                <li key={`${i}-${f.force}`} className="ss-card ss-accent-top" style={accent(f.color)}>
                   <span aria-hidden="true" className="ss-icon">{f.icon}</span>
                   <strong className="ss-card-title">{f.force}</strong>
                   <span className="ss-card-text">{f.definition}</span>
                   <span className="ss-built"><span className="ss-label">Built by</span> {f.built}</span>
                   <span className="ss-destroyed"><span className="ss-label">Destroyed by</span> {f.destroys}</span>
+                  {actions(SYSTEMS, 'INFLUENCE_FORCES', i, f, f.force, 'influence force')}
                 </li>
               ))}
             </ul>
+            {adder(SYSTEMS, 'INFLUENCE_FORCES', INFLUENCE_FORCES, 'influence force')}
 
             <h3 className="ss-h3">Legacy signals</h3>
             <ul className="ss-list">
-              {(isData.LEGACY_SIGNALS || LEGACY_SIGNALS).map((l) => (
-                <li key={l.signal} className="ss-row ss-accent-left" style={accent(l.color)}>
+              {listOf(SYSTEMS, 'LEGACY_SIGNALS', LEGACY_SIGNALS).map((l, i) => (
+                <li key={`${i}-${l.signal}`} className="ss-row ss-accent-left" style={accent(l.color)}>
                   <strong className="ss-card-title"><span aria-hidden="true">{l.icon}</span> {l.signal}</strong>
                   <span className="ss-card-text">{l.looksLike}</span>
                   {l.story && <span className="ss-quote">{l.story}</span>}
+                  {actions(SYSTEMS, 'LEGACY_SIGNALS', i, l, l.signal, 'legacy signal')}
                 </li>
               ))}
             </ul>
+            {adder(SYSTEMS, 'LEGACY_SIGNALS', LEGACY_SIGNALS, 'legacy signal')}
           </div>
         )}
 
@@ -258,54 +301,63 @@ export default function SocialSystems({ embedded = false }) {
         {tab === 'trends' && (
           <div className="ss-panel">
             <h3 className="ss-h3">Fashion trend engine · 5 stages</h3>
-            <Stages items={isData.FASHION_TREND_STAGES || FASHION_TREND_STAGES} meta={(s) => s.who} />
+            <Stages items={listOf(SYSTEMS, 'FASHION_TREND_STAGES', FASHION_TREND_STAGES)} meta={(s) => s.who}
+              actions={(s, i) => actions(SYSTEMS, 'FASHION_TREND_STAGES', i, s, s.name, 'fashion stage')} />
+            {adder(SYSTEMS, 'FASHION_TREND_STAGES', FASHION_TREND_STAGES, 'fashion stage')}
             <h3 className="ss-h3">Beauty trend engine · 4 stages</h3>
-            <Stages items={isData.BEAUTY_TREND_STAGES || BEAUTY_TREND_STAGES} meta={(s) => s.where} />
+            <Stages items={listOf(SYSTEMS, 'BEAUTY_TREND_STAGES', BEAUTY_TREND_STAGES)} meta={(s) => s.where}
+              actions={(s, i) => actions(SYSTEMS, 'BEAUTY_TREND_STAGES', i, s, s.name, 'beauty stage')} />
+            {adder(SYSTEMS, 'BEAUTY_TREND_STAGES', BEAUTY_TREND_STAGES, 'beauty stage')}
 
             <h3 className="ss-h3">Momentum waves</h3>
             <ul className="ss-list">
-              {(isData.MOMENTUM_WAVES || MOMENTUM_WAVES).map((m) => (
-                <li key={m.event} className="ss-row ss-accent-left" style={accent(m.color)}>
+              {listOf(SYSTEMS, 'MOMENTUM_WAVES', MOMENTUM_WAVES).map((m, i) => (
+                <li key={`${i}-${m.event}`} className="ss-row ss-accent-left" style={accent(m.color)}>
                   <span className="ss-card-top"><strong><span aria-hidden="true">{m.icon}</span> {m.event}</strong><span className="ss-meta">{m.duration}</span></span>
                   <span className="ss-card-text">{m.feedEffect}</span>
                   {m.permanent && <span className="ss-quote">{m.permanent}</span>}
+                  {actions(SYSTEMS, 'MOMENTUM_WAVES', i, m, m.event, 'momentum wave')}
                 </li>
               ))}
             </ul>
+            {adder(SYSTEMS, 'MOMENTUM_WAVES', MOMENTUM_WAVES, 'momentum wave')}
 
             <h3 className="ss-h3">Algorithm &amp; drama</h3>
             <div className="ss-two">
               <div>
                 <span className="ss-label">Algorithm forces</span>
                 <ul className="ss-list">
-                  {(ccData.ALGORITHM_FORCES || ALGORITHM_FORCES).map((f) => (
-                    <li key={f.name} className="ss-row ss-accent-left" style={accent(f.color)}>
+                  {listOf(CALENDAR, 'ALGORITHM_FORCES', ALGORITHM_FORCES).map((f, i) => (
+                    <li key={`${i}-${f.name}`} className="ss-row ss-accent-left" style={accent(f.color)}>
                       <strong><span aria-hidden="true">{f.icon}</span> {f.name}</strong>
                       <span className="ss-meta">{f.measuredBy}</span>
                       {f.storyHook && <span className="ss-quote">{f.storyHook}</span>}
+                      {actions(CALENDAR, 'ALGORITHM_FORCES', i, f, f.name, 'algorithm force')}
                     </li>
                   ))}
                 </ul>
+                {adder(CALENDAR, 'ALGORITHM_FORCES', ALGORITHM_FORCES, 'algorithm force')}
               </div>
               <div>
                 <span className="ss-label">Drama mechanics</span>
                 <ul className="ss-list">
-                  {(ccData.DRAMA_MECHANICS || DRAMA_MECHANICS).map((d) => (
-                    <li key={d.type} className="ss-row ss-accent-left" style={accent(d.color)}>
+                  {listOf(CALENDAR, 'DRAMA_MECHANICS', DRAMA_MECHANICS).map((d, i) => (
+                    <li key={`${i}-${d.type}`} className="ss-row ss-accent-left" style={accent(d.color)}>
                       <strong><span aria-hidden="true">{d.icon}</span> {d.type}</strong>
                       <span className="ss-meta">{d.trigger}</span>
                       {d.storyThread && <span className="ss-quote">{d.storyThread}</span>}
+                      {actions(CALENDAR, 'DRAMA_MECHANICS', i, d, d.type, 'drama mechanic')}
                     </li>
                   ))}
                 </ul>
+                {adder(CALENDAR, 'DRAMA_MECHANICS', DRAMA_MECHANICS, 'drama mechanic')}
               </div>
             </div>
           </div>
         )}
       </section>
 
-      {editItem && <EditItemModal item={editItem.item} title={`Edit ${editItem.key}`} onSave={(updated) => { if (editItem.index === -1) isAdd(editItem.key, updated); else isUpdate(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} />}
+      {lists.modal}
     </div>
-    </PageEditContext.Provider>
   );
 }
