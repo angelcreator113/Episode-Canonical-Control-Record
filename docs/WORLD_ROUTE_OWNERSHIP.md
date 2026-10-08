@@ -99,6 +99,7 @@ is deleted (`utils/worldRedirects.js` `WORLD_REDIRECTS`, rendered by `App`).
 | `/show-bible`, `/world-foundation`, `/social-systems`, `/culture-events`, `/world-dashboard` (2026-10-04) | the hub tab (`bible`, `world`, `society`, `culture`, `state`), carrying the route's old `?tab=` as `&sub=` |
 | `/universe/knowledge`, `/intelligence/show-brain`, `/show-brain` · `/intelligence/franchise-brain`, `/franchise-brain` | `/universe?tab=bible&sub=knowledge` · `/universe?tab=bible&sub=decisions` |
 | `/world` | `/universe?tab=state` |
+| `/universe/world-state`, `/universe/tensions` (2026-10-08) | `/universe?tab=state&sub=state` · `/universe?tab=state&sub=tensions`. Their page, `WorldStateTensions`, was a second copy of the State tab that still read the tension scanner's pre-2026-10-04 contract (every pair nameless, Propose Scene refused); it is deleted |
 
 ## 3. Three calendars, named distinctly
 
