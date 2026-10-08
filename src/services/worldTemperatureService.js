@@ -337,7 +337,8 @@ function buildActiveTensions(threads, relationships) {
 // ─── SNAPSHOT WRITER ─────────────────────────────────────────────────────────
 
 /**
- * Persist current temperature to WorldStateSnapshot after episode accept.
+ * Persist current temperature to WorldStateSnapshot after episode accept
+ * (recordTemperatureForShow, below, is the caller).
  * Uses universe_id (not show_id). Uses snapshot_label (not snapshot_type).
  */
 async function snapshotTemperature(universeId, temperature, models) {
@@ -371,9 +372,49 @@ async function snapshotTemperature(universeId, temperature, models) {
   }
 }
 
+// ─── ON EPISODE ACCEPT ────────────────────────────────────────────────────────
+
+/**
+ * Record the world temperature after a show's episode is accepted (Evoni,
+ * 2026-10-08: "record it on episode accept"; wiring map,
+ * docs/reads/2026-10-06-lalaverse-wiring-map.md §4, fix-list item 22).
+ * Nothing called snapshotTemperature or its route before, so the State
+ * tab's temperature never had a reading.
+ *
+ * The reading is the show's universe's (shows.universe_id); a show with no
+ * universe records the world's (universe_id null), as a snapshot with no
+ * universe is the world's (services/worldSnapshotForShow). Relationships
+ * count when they are between the show's cast: the characters of the
+ * show's registries (character_registries.show_id).
+ *
+ * Returns the reading, or null when it could not be taken. Never throws:
+ * the episode is accepted whether or not the reading is.
+ */
+async function recordTemperatureForShow(sequelize, showId, models = require('../models')) {
+  try {
+    const [[show]] = await sequelize.query(
+      'SELECT universe_id FROM shows WHERE id = :showId', { replacements: { showId } });
+    const universeId = show?.universe_id || null;
+    const [cast] = await sequelize.query(
+      `SELECT rc.id FROM registry_characters rc
+         JOIN character_registries cr ON cr.id = rc.registry_id
+        WHERE cr.show_id = :showId AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL`,
+      { replacements: { showId } });
+    const reading = await computeWorldTemperature(universeId, models, { characterIds: cast.map((c) => c.id) });
+    await snapshotTemperature(universeId, reading.temperature, models);
+    return reading;
+  } catch (err) {
+    // A warning, as for completion's other after-commit steps (the Brain
+    // push, the snapshot write above): the episode is accepted either way.
+    console.warn('[WorldTemp] the temperature after the episode could not be recorded (non-blocking):', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   computeWorldTemperature,
   snapshotTemperature,
+  recordTemperatureForShow,
   computeTrajectory,
   getTemperatureLabel,
   TEMPERATURE_LABELS,
