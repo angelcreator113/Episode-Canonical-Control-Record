@@ -7,7 +7,9 @@
  * badge is ink on gold; the toast, guard and generate error read text
  * tokens on their surfaces. Evoni's Episode mock (2026-10-05) makes the
  * page's actions lavender and adds the script's card and the side panel
- * (EpisodeScriptPage.css).
+ * (EpisodeScriptPage.css). The Script tab restyle (2026-10-08) moved the
+ * tab's inline styles into EpisodeScriptPage.css classes; the same pairs
+ * are checked there.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -39,23 +41,32 @@ describe('Episode Script theme', () => {
 
   test('every action is lavender (the mock) and gold is never under white nor text', () => {
     expect(stripTaskRefs(page)).not.toMatch(HEX);
-    expect(jsx).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>Save</);
-    expect(jsx).toMatch(/background: beat\.approved \? 'var\(--lala-gold-soft\)' : 'var\(--lala-lavender\)', color: beat\.approved \? 'var\(--lala-gold-text\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: saved \? 'var\(--success-bg\)' : 'var\(--lala-lavender\)', color: saved \? 'var\(--success-text\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--lala-lavender\)'/);
-    expect(jsx).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>💾 Save Final Script/);
+    // Save, Save now, Generate, Save Final Script and Approve & lock are
+    // the lavender primary; saved reads success; Unlock is gold text on
+    // the gold tint; the approved chip is ink on gold.
+    expect(page).toMatch(/\.esp-btn-primary \{[^}]*background: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
+    expect(page).toMatch(/\.esp-btn-primary\.is-saved \{ background: var\(--success-bg\); color: var\(--success-text\); \}/);
+    expect(page).toMatch(/\.esp-lock-btn \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
+    expect(page).toMatch(/\.esp-lock-btn\.is-locked \{ background: var\(--lala-gold-soft\); color: var\(--lala-gold-text\);/);
+    expect(page).toMatch(/\.esp-chip-approved \{[^}]*background: var\(--lala-gold\); color: var\(--text-primary\);/);
+    for (const label of ["'Save'", '💾 Save now', 'Generate Script', '💾 Save Final Script']) {
+      expect(jsx).toMatch(new RegExp(`className=\\{?[\`"]esp-btn-primary[^>]*>[^<]*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    }
     expect(page).toMatch(/\.esp-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
-    expect(jsx).toMatch(/background: 'var\(--lala-gold\)', color: 'var\(--text-primary\)'[^}]*\}\}>🔒 APPROVED/);
-    expect(jsx).not.toMatch(/(?<![-\w])color: 'var\(--lala-gold-text\)'[^}]*background: 'var\(--gray-900\)'/);
+    expect(page).not.toMatch(/color: var\(--lala-gold-text\)[^}]*background: var\(--gray-900\)/);
+    // No inline colour left in the tab but the two act/speaker variables.
+    expect((jsx.match(/style=\{\{/g) || []).length).toBe(2);
     expect(css).toMatch(/\.btn-save\s*\{[^}]*background: var\(--primary\);/);
     expect(css).toMatch(/\.preview-character\s*\{[^}]*color: var\(--primary-text\);/);
   });
 
   test('the toast, guard result and generate error read text tokens on their surfaces', () => {
-    expect(jsx).toMatch(/background: toast\.type === 'error' \? 'var\(--danger-bg\)' : 'var\(--success-bg\)', color: toast\.type === 'error' \? 'var\(--danger-text\)' : 'var\(--success-text\)'/);
-    expect(jsx).toMatch(/color: guardResult\.violations\?\.length > 0 \? 'var\(--danger-text\)' : 'var\(--success-text\)'/);
-    expect(jsx).toMatch(/background: 'var\(--danger-bg\)', color: 'var\(--danger-text\)', border: '1px solid var\(--danger-border\)'/);
-    expect(jsx).toMatch(/background: 'var\(--accent-subtle\)', border: '1px solid var\(--accent\)', color: 'var\(--text-primary\)'/);
+    expect(page).toMatch(/\.esp-toast\.is-error \{ background: var\(--danger-bg\); color: var\(--danger-text\);/);
+    expect(page).toMatch(/\.esp-toast\.is-success \{ background: var\(--success-bg\); color: var\(--success-text\);/);
+    expect(page).toMatch(/\.esp-guard\.is-bad \.esp-guard-title \{ color: var\(--danger-text\); \}/);
+    expect(page).toMatch(/\.esp-guard\.is-ok \.esp-guard-title \{ color: var\(--success-text\); \}/);
+    expect(page).toMatch(/\.esp-error \{[^}]*background: var\(--danger-bg\); color: var\(--danger-text\); border: 1px solid var\(--danger-border\);/);
+    expect(page).toMatch(/\.esp-unsaved-banner \{[^}]*background: var\(--accent-subtle\); border: 1px solid var\(--accent\); color: var\(--text-primary\);/);
   });
 
   test('every text pair the tab draws holds 4.5:1 or better', () => {
@@ -84,6 +95,11 @@ describe('Episode Script theme', () => {
       ['--lala-ink-muted', '--surface-card'],
       ['--accent-dark', '--accent-subtle'],
       ['--lala-ink', '--accent-subtle'],
+      // The restyle: ink and muted ink on the gold tint and the lavender tint.
+      ['--lala-ink', '--lala-gold-soft'],
+      ['--lala-ink-muted', '--lala-gold-soft'],
+      ['--lala-ink', '--lala-lavender-soft'],
+      ['--lala-gold-text', '--lala-gold-soft'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
