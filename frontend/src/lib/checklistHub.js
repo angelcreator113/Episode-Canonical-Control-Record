@@ -61,7 +61,8 @@ export const SECTION_GUIDE = {
   scene: { text: 'Where each beat happens. Starts from the event’s venue.', open: { label: 'Open Scenes', tab: 'scenes' } },
   wardrobe: { text: "Lala's closet and her look for the event. Beat 8 needs it.", open: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   overlays: { text: 'Screens Lala looks at during the episode.', open: { label: 'Open Phone', tab: 'phone' } },
-  social: { text: 'The social checklist and the episode title.', open: { label: 'Open Overlays', tab: 'overlays' } },
+  onscreen: { text: 'What sits on top of the video: the title overlay and the overlays placed on the timeline.', open: { label: 'Open Overlays', tab: 'overlays' } },
+  social: { text: 'The social checklist and the episode title.', open: { label: 'Open Assets', tab: 'assets' } },
   intelligence: { text: "Lala's state and the Show Brain the script reads.", open: null },
 };
 

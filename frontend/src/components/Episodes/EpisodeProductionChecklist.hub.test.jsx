@@ -40,7 +40,7 @@ describe('Checklist hub', () => {
     renderHub();
     const summary = await screen.findByTestId('checklist-summary');
     await screen.findByTestId('episode-timeline-row-environment');
-    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 21$/);
+    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 23$/);
   });
 
   test('the timeline: a cell per beat per row, and Lala\'s look on Beat 8', async () => {
@@ -52,6 +52,24 @@ describe('Checklist hub', () => {
     expect(await states('interface')).toEqual(['unused', 'ready']);
     expect(await states('look')).toEqual(['unused', 'missing']);
     expect(screen.getByTestId('episode-timeline-open').getAttribute('href')).toBe('/episodes/ep-1/timeline');
+  });
+
+  test('the Overlays card: the title overlay and placed overlays, opening Production → Overlays', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/timeline/placements') return { data: { data: [{ id: 'p1' }] } };
+      return { data: {} };
+    });
+    const onOpenTab = vi.fn();
+    render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala', title_overlay_asset_id: null }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
+    const card = await screen.findByTestId('checklist-section-onscreen');
+    expect(card.textContent).toContain('Overlays');
+    await within(card).findByText('In progress');
+    expect(within(card).getByText('Title overlay made')).toBeTruthy();
+    expect(within(card).getByText('Overlays placed on the video')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Open Overlays' }));
+    expect(onOpenTab).toHaveBeenCalledWith('overlays');
+    // Social & Content now opens Assets, where its social tasks are.
+    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Assets' })).toBeTruthy();
   });
 
   test('a complete card says so and opens where it is worked on', async () => {

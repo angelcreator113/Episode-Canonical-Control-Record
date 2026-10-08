@@ -758,15 +758,15 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
       {/* ═══ TODO CHECKLIST (collapsible) ═══ */}
       {todoCompletion && (
-        <details open style={{ marginBottom: 12, background: todoCompletion.allDone ? 'var(--success-bg)' : 'var(--lala-parchment)', border: `1px solid ${todoCompletion.allDone ? 'var(--success-border)' : 'var(--lala-gold)'}`, borderRadius: 10, overflow: 'hidden' }}>
-          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--lala-ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <details open style={{ ...W.listCard, ...(todoCompletion.allDone ? W.listCardDone : null) }}>
+          <summary style={W.listSummary}>
             {/* The episode's wardrobe list, named for where it comes from (2026-10-07). */}
             <span data-testid="look-list-title">
               {shoppingListSource(todoList?.tasks).fromDocument ? 'Shopping list' : 'Getting ready'} — {todoCompletion.done}/{todoCompletion.total}
             </span>
-            {todoCompletion.allDone && <span style={{ color: 'var(--success-text)', fontSize: 11 }}>✓ Ready!</span>}
+            {todoCompletion.allDone && <span style={{ color: 'var(--success-text)', fontSize: 13 }}>✓ Ready!</span>}
           </summary>
-          <div style={{ padding: '0 16px 10px' }}>
+          <div style={{ padding: '0 18px 12px' }}>
             <p style={W.listSource} data-testid="look-list-source">
               {shoppingListSource(todoList?.tasks).fromDocument
                 ? "From the event's approved shopping list."
@@ -774,12 +774,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               {packagePath && <> <a href={packagePath} style={W.inlineLink}>Open the Event Package</a></>}
             </p>
             {todoCompletion.tasks.map(t => (
-              <div key={t.slot} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: t.completed ? 0.6 : 1 }}>
-                <div style={{ width: 16, height: 16, borderRadius: 3, border: t.completed ? 'none' : '1.5px solid var(--lala-gold)', background: t.completed ? 'var(--success)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {t.completed && <span style={{ color: 'var(--text-inverse)', fontSize: 10, fontWeight: 700 }}>✓</span>}
+              <div key={t.slot} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', opacity: t.completed ? 0.6 : 1 }}>
+                <div style={{ width: 18, height: 18, borderRadius: 5, border: t.completed ? 'none' : '1.5px solid var(--lala-lavender)', background: t.completed ? 'var(--success-text)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {t.completed && <span style={{ color: 'var(--text-inverse)', fontSize: 11, fontWeight: 700 }}>✓</span>}
                 </div>
-                <span style={{ fontSize: 12, color: t.completed ? 'var(--lala-ink-muted)' : 'var(--lala-ink)', textDecoration: t.completed ? 'line-through' : 'none' }}>{t.label}</span>
-                {!t.required && <span style={{ fontSize: 9, color: 'var(--lala-gold-text)' }}>optional</span>}
+                <span style={{ fontSize: 14, color: t.completed ? 'var(--lala-ink-muted)' : 'var(--lala-ink)', textDecoration: t.completed ? 'line-through' : 'none' }}>{t.label}</span>
+                {!t.required && <span style={W.optionalTag}>optional</span>}
               </div>
             ))}
           </div>
@@ -818,7 +818,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             {/* Confidence */}
             <div style={W.confidenceCard} aria-busy={score.status === 'loading'} data-score-status={score.status}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>Outfit Synergy</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--lala-ink)' }}>Outfit Synergy</span>
                 <span data-testid="synergy-score" style={{ fontSize: 18, fontWeight: 800, color: synergy ? synergy.confidence.color : 'var(--lala-ink-muted)', opacity: score.status === 'loading' ? 0.5 : 1 }}>
                   {synergy ? `${synergy.confidence.emoji || ''} ${synergy.total}` : (score.status === 'loading' ? '…' : '—')}
                 </span>
@@ -826,7 +826,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               <div style={W.synergyBar}>
                 <div style={{ height: '100%', width: `${synergy ? synergy.total : 0}%`, borderRadius: 4, background: synergy ? synergy.confidence.color : 'transparent', transition: 'width 0.5s' }} />
               </div>
-              <div data-testid="lala-line" style={{ fontSize: 11, fontStyle: 'italic', color: synergy ? synergy.confidence.color : 'var(--lala-ink-muted)', marginTop: 5 }}>
+              <div data-testid="lala-line" style={{ fontSize: 13, fontStyle: 'italic', color: synergy ? synergy.confidence.color : 'var(--lala-ink-muted)', marginTop: 5 }}>
                 {synergy && synergy.confidence.lala ? `"${synergy.confidence.lala}"` : scoreMessage}
               </div>
               {synergy && synergy.total > 0 && (
@@ -857,8 +857,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   onClick={() => (!item || multi) && setActiveSlot(slot.key)}
                   style={{
                     ...W.slotCard,
-                    border: isActive ? '2px solid var(--lala-lavender)' : item ? '1px solid var(--lala-parchment-3)' : '1px dashed var(--lala-lavender-line)',
-                    background: item ? 'var(--lala-parchment)' : isActive ? 'var(--lala-lavender-soft)' : 'var(--surface-card)',
+                    border: isActive ? '2px solid var(--lala-lavender)' : '1px solid var(--lala-lavender-line)',
+                    background: isActive ? 'var(--lala-lavender-soft)' : 'var(--surface-card)',
                     cursor: item && !multi ? 'default' : 'pointer',
                   }}>
                   {(multi && pieces.length > 0 ? pieces : [item]).map((piece, pi) => (
@@ -870,16 +870,16 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {pi === 0 && (
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-ink)' }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lala-ink)' }}>
                             {slot.label}
-                            {slot.required && !piece && <span style={{ color: 'var(--danger-text)', fontSize: 9 }}> *</span>}
-                            {multi && pieces.length > 1 && <span style={{ color: 'var(--lala-ink-muted)', fontSize: 10, fontWeight: 400 }}> · {pieces.length} pieces</span>}
+                            {slot.required && !piece && <span style={{ color: 'var(--danger-text)', fontSize: 12 }}> *</span>}
+                            {multi && pieces.length > 1 && <span style={{ color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 400 }}> · {pieces.length} pieces</span>}
                           </div>
                         )}
                         {piece ? (
-                          <div style={{ fontSize: 13, color: 'var(--lala-ink)', fontWeight: 700 }}>{piece.name}</div>
+                          <div style={{ fontSize: 14, color: 'var(--lala-ink)', fontWeight: 700 }}>{piece.name}</div>
                         ) : (
-                          <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>{slot.desc}</div>
+                          <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{slot.desc}</div>
                         )}
                       </div>
                       {/* Owned, or still to buy (charged at Finalize), as in Evoni's Episode mock. */}
@@ -897,11 +897,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   {item && !multi && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                       <span style={W.miniTier(item.tier)}>{TIER_STYLES[item.tier]?.emoji} {item.tier}</span>
-                      {item.match_score != null && <span style={{ fontSize: 9, color: 'var(--lala-ink-muted)' }}>Match: {item.match_score}</span>}
+                      {item.match_score != null && <span style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>Match: {item.match_score}</span>}
                     </div>
                   )}
                   {multi && item && (
-                    <div style={{ fontSize: 10, color: 'var(--lala-lavender-text)', marginTop: 4 }}>+ Add another</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-lavender-text)', marginTop: 4 }}>+ Add another</div>
                   )}
                 </div>
               );
@@ -917,7 +917,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               {confirming ? '⏳ Locking...' : canLock ? '🔒 Lock Outfit' : '⚠️ Fill required slots'}
             </button>
             {!canLock && (
-              <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)', textAlign: 'center' }}>
                 Need {stillNeeded(filledSlots)}
               </div>
             )}
@@ -930,7 +930,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           {/* ──── RIGHT: BROWSE ──── */}
           <div style={W.browsePanel}>
             {/* Browse mode tabs */}
-            <div style={{ display: 'flex', gap: 0, marginBottom: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: 'var(--lala-lavender-soft)', border: '1px solid var(--lala-lavender-line)', borderRadius: 999, padding: 4 }}>
               {[
                 { key: 'pool', label: 'For This Event' },
                 { key: 'closet', label: 'Full Closet' },
@@ -943,7 +943,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   if (m.key === 'closet') setActiveSlot(ALL_GROUP.key);
                   if (m.key !== 'pool' && (m.key !== browseMode || closetItems.length === 0)) loadCloset();
                 }}
-                  style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? 'var(--surface-card)' : 'transparent', color: browseMode === m.key ? 'var(--lala-lavender-text)' : 'var(--lala-ink-muted)', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  aria-pressed={browseMode === m.key}
+                  style={{ flex: 1, padding: '8px 0', border: 'none', borderRadius: 999, fontSize: 14, fontWeight: browseMode === m.key ? 700 : 500, background: browseMode === m.key ? 'var(--surface-card)' : 'transparent', color: browseMode === m.key ? 'var(--lala-lavender-text)' : 'var(--lala-ink-muted)', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(74,59,122,0.15)' : 'none' }}>
                   {m.label}
                 </button>
               ))}
@@ -953,7 +954,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             {browseMode === 'search' && (
               <input type="text" placeholder="Search by name, brand, or tag..." value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
+                aria-label="Search the closet"
+                style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--lala-lavender-line)', borderRadius: 10, fontSize: 14, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
             )}
 
             {closetError && browseMode !== 'pool' && (
@@ -991,7 +993,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     style={{ ...W.slotSwitch, background: activeSlot === s.key ? 'var(--lala-lavender)' : 'var(--lala-parchment-2)', color: activeSlot === s.key ? 'var(--text-inverse)' : 'var(--lala-ink-muted)' }}>
                     {s.icon}
                     {/* W3: each group's piece count in the closet. */}
-                    {browseMode !== 'pool' && <span style={{ fontSize: 9, marginLeft: 2 }}>{closetGroupCounts[s.key] || 0}</span>}
+                    {browseMode !== 'pool' && <span style={{ fontSize: 11, marginLeft: 2 }}>{closetGroupCounts[s.key] || 0}</span>}
                   </button>
                 ))}
               </div>
@@ -1009,7 +1011,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lala-ink)' }}>{set.name}</div>
-                        <div data-testid={`matching-set-cost-${set.id}`} style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>
+                        <div data-testid={`matching-set-cost-${set.id}`} style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>
                           {`${set.pieces.length} pieces · `}
                           {price.cost > 0 ? `🪙 ${price.cost.toLocaleString()} to buy · Lala has ${Number(coins).toLocaleString()}` : 'all Lala\'s'}
                           {price.notForSale.length > 0 && ` · ${price.notForSale.length} not for sale`}
@@ -1023,8 +1025,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       {set.pieces.map(p => (
                         <div key={p.id} title={p.name} style={{ width: 56, textAlign: 'center', opacity: p.can_select ? 1 : 0.45 }}>
                           <GarmentImage item={p} fallback={CAT_ICONS[p.clothing_category] || '👕'} size={48} />
-                          <div style={{ fontSize: 9, color: 'var(--lala-ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                          <div style={{ fontSize: 9, color: 'var(--lala-ink-muted)' }}>{p.is_owned === true ? 'owned' : price.toBuy.includes(p) ? `🪙 ${Number(p.coin_cost) || 0}` : 'not for sale'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--lala-ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>{p.is_owned === true ? 'owned' : price.toBuy.includes(p) ? `🪙 ${Number(p.coin_cost) || 0}` : 'not for sale'}</div>
                         </div>
                       ))}
                     </div>
@@ -1066,21 +1068,21 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lala-ink)', marginBottom: 1 }}>{item.name}</div>
                     {/* Only what the piece has: no "— · —" (the wardrobe fixes, 2026-10-07). */}
-                    {pieceDetails(item) && <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>{pieceDetails(item)}</div>}
+                    {pieceDetails(item) && <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>{pieceDetails(item)}</div>}
                     {item.outfit_set_id && (
-                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 10, color: 'var(--lala-lavender-text)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <div data-testid={`closet-set-${item.id}`} style={{ fontSize: 12, color: 'var(--lala-lavender-text)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{`🔗 ${item.outfit_set_name || 'Matching set'}`}</span>
                         {browseMode === 'pool' && (
                           <button type="button" data-testid={`wear-set-${item.id}`}
                             onClick={(e) => { e.stopPropagation(); wearSetOf(item); }}
-                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                            style={{ padding: '2px 8px', border: 'none', borderRadius: 5, background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                             Wear the set
                           </button>
                         )}
                       </div>
                     )}
                     {browseMode !== 'pool' && (
-                      <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 10, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>
+                      <div data-testid={`closet-category-${item.id}`} style={{ fontSize: 12, color: 'var(--lala-ink-muted)', marginBottom: 4 }}>
                         {`${item.clothing_category || 'no category'} · ${[...SLOT_DEFS, OTHER_GROUP].find(g => g.key === closetGroupFor(item.clothing_category))?.label || 'Other'}`}
                       </div>
                     )}
@@ -1093,9 +1095,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       <div style={{ flex: 1, height: 3, background: 'var(--lala-parchment-2)', borderRadius: 2 }}>
                         <div style={{ height: '100%', width: `${Math.min(100, (item.match_score / 60) * 100)}%`, borderRadius: 2, background: item.match_score >= 40 ? 'var(--success)' : item.match_score >= 20 ? 'var(--warning)' : 'var(--danger)' }} />
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 700 }}>{item.match_score}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{item.match_score}</span>
                     </div>
-                    <div style={{ fontSize: 9, marginTop: 3, fontWeight: 600,
+                    <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600,
                       color: isUsed ? 'var(--lala-lavender-text)' : item.can_select ? 'var(--success-text)' : item.can_purchase ? 'var(--warning)' : 'var(--danger)' }}>
                       {isUsed ? '✓ In outfit'
                         : item.can_select ? (item.can_purchase ? `✅ Tap to equip · 🪙 ${item.coin_cost} on Lock` : '✅ Tap to equip')
@@ -1135,12 +1137,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lala-ink)' }}>{ep.episode_title || 'Untitled'}</div>
-                  <div style={{ fontSize: 10, color: 'var(--lala-ink-muted)' }}>
+                  <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>
                     {ep.event_name && <span>{ep.event_name} · </span>}
                     {ep.items.length} pieces · {ep.items.map(i => i.name).slice(0, 3).join(', ')}{ep.items.length > 3 ? '...' : ''}
                   </div>
                 </div>
-                {ep.prestige && <span style={{ fontSize: 10, color: 'var(--lala-gold-text)', fontWeight: 600 }}>⭐{ep.prestige}</span>}
+                {ep.prestige && <span style={{ fontSize: 12, color: 'var(--lala-gold-text)', fontWeight: 600 }}>⭐{ep.prestige}</span>}
               </div>
             ))}
           </div>
@@ -1172,7 +1174,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               </div>
             </div>
             <div style={{ padding: 12, background: 'var(--warning-bg)', borderRadius: 10, marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--lala-lavender-text)', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lala-lavender-text)', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
               <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--lala-ink-muted)' }}>"{inspecting.lala_reaction}"</div>
             </div>
             {inspecting.can_select && (
@@ -1200,7 +1202,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
 // ─── STYLES ───
 const W = {
-  container: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+  // The page's own font (it was the system stack, unlike the rest of the episode).
+  container: { fontFamily: 'inherit' },
   loadingBox: { textAlign: 'center', padding: 60 },
   errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 8, color: 'var(--danger-text)', fontSize: 13, marginBottom: 10 },
   successBanner: { padding: '10px 16px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 8, color: 'var(--success-text)', fontSize: 13, marginBottom: 10, fontWeight: 600 },
@@ -1221,14 +1224,20 @@ const W = {
   eventLookThumb: { display: 'grid', placeItems: 'center', flex: 'none', width: 40, height: 40, overflow: 'hidden', borderRadius: 8, background: 'var(--surface-card)', fontSize: 18 },
   eventLookName: { display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--lala-ink)', overflowWrap: 'anywhere' },
   eventLookMeta: { display: 'block', fontSize: 11, color: 'var(--lala-lavender-text)' },
-  listSource: { margin: '0 0 6px', fontSize: 12, lineHeight: 1.45, color: 'var(--lala-ink-muted)' },
+  // The lavender look (2026-10-08): the episode's wardrobe list is a
+  // lavender card, as the rest of the page (it was parchment with a gold edge).
+  listCard: { marginBottom: 12, background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 14, overflow: 'hidden' },
+  listCardDone: { background: 'var(--success-bg)', borderColor: 'var(--success-border)' },
+  listSummary: { padding: '12px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer', color: 'var(--lala-ink)', display: 'flex', alignItems: 'center', gap: 8 },
+  optionalTag: { padding: '1px 8px', borderRadius: 999, background: 'var(--lala-lavender-soft)', color: 'var(--lala-lavender-text)', fontSize: 11, fontWeight: 600 },
+  listSource: { margin: '0 0 6px', fontSize: 13, lineHeight: 1.45, color: 'var(--lala-ink-muted)' },
   inlineLink: { fontWeight: 600, color: 'var(--lala-lavender-text)' },
-  eventLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: 'var(--accent-dark)', marginBottom: 2 },
+  eventLabel: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: 'var(--accent-dark)', marginBottom: 2 },
   eventName: { fontSize: 13, color: 'var(--lala-ink-muted)' },
   eventTags: { display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 },
   eventTag: { padding: '2px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)' },
   lockedBanner: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: 'var(--success-bg)', border: '2px solid var(--success-border)', borderRadius: 12, marginBottom: 12 },
-  unlockBtn: { marginLeft: 'auto', padding: '6px 14px', background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: 'var(--lala-ink-muted)' },
+  unlockBtn: { marginLeft: 'auto', padding: '7px 16px', background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: 'var(--lala-lavender-text)' },
   // flexWrap: at 375px the browse panel drops under the slots (Task #2377).
   mainLayout: { display: 'flex', flexWrap: 'wrap', gap: 16, minHeight: 480 },
   // The slots column is 250px beside the browse panel and the full width
@@ -1236,26 +1245,26 @@ const W = {
   // stayed 250px and left half the screen empty). The browse panel's large
   // grow weight keeps the slots at about 250px when the two share a row.
   slotsPanel: { flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: 6 },
-  confidenceCard: { padding: 12, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 12, marginBottom: 2 },
+  confidenceCard: { padding: 14, background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 14, marginBottom: 2 },
   synergyBar: { height: 6, background: 'var(--lala-parchment-2)', borderRadius: 3, overflow: 'hidden' },
-  synBadge: { padding: '1px 5px', background: 'var(--lala-lavender-soft)', borderRadius: 3, fontSize: 8, color: 'var(--lala-lavender-text)', fontWeight: 600 },
+  synBadge: { padding: '1px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)', fontWeight: 600 },
   costBar: { display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 4, padding: '10px 12px', borderRadius: 10, background: 'var(--lala-lavender-soft)', color: 'var(--lala-ink)', fontSize: 13 },
-  slotCard: { padding: '8px 12px', borderRadius: 10, transition: 'all 0.15s' },
+  slotCard: { padding: '10px 12px', borderRadius: 12, transition: 'all 0.15s' },
   removeBtn: { width: 22, height: 22, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  miniTier: (tier) => ({ padding: '1px 5px', borderRadius: 3, fontSize: 8, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
-  lockBtn: { padding: '11px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
+  miniTier: (tier) => ({ padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
+  lockBtn: { padding: '11px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
   browsePanel: { flex: '999 1 280px', minWidth: 0 },
   browseHeader: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   slotSwitch: { width: 30, height: 30, borderRadius: 7, border: 'none', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   browseGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 },
   browseCard: { padding: 12, borderRadius: 12, background: 'var(--surface-card)', transition: 'all 0.15s' },
-  rolePill: { padding: '1px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700 },
-  tierPill: { padding: '1px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' },
-  tagPill: { padding: '1px 4px', background: 'var(--lala-parchment-2)', borderRadius: 3, fontSize: 8, color: 'var(--lala-ink-muted)' },
+  rolePill: { padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 },
+  tierPill: { padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' },
+  tagPill: { padding: '1px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)' },
   overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
   modal: { background: 'var(--surface-card)', borderRadius: 18, padding: 22, maxWidth: 420, width: '100%', position: 'relative', maxHeight: '80vh', overflowY: 'auto' },
   modalClose: { position: 'absolute', top: 12, right: 12, background: 'var(--lala-parchment-2)', border: 'none', width: 28, height: 28, borderRadius: '50%', fontSize: 13, cursor: 'pointer', color: 'var(--lala-ink-muted)' },
-  reasonPill: { padding: '2px 6px', background: 'var(--lala-lavender-soft)', borderRadius: 4, fontSize: 9, color: 'var(--lala-lavender-text)', fontWeight: 600 },
+  reasonPill: { padding: '2px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)', fontWeight: 600 },
   modalSelectBtn: { width: '100%', padding: '11px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
   modalBuyBtn: { width: '100%', padding: '9px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8, color: 'var(--warning-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 6 },
 };

@@ -72,6 +72,18 @@ export const CHECKLIST_SECTIONS = [
       { id: 'overlays_generated', label: 'Phone screens generated',   required: false },
     ],
   },
+  // What sits on top of the video (the Checklist's Overlays card,
+  // 2026-10-08): the title overlay and the overlays placed on the
+  // timeline, worked on in Production → Overlays. Neither blocks the script.
+  {
+    id: 'onscreen',
+    icon: '🎞️',
+    label: 'Overlays',
+    items: [
+      { id: 'title_overlay',     label: 'Title overlay made',          required: false },
+      { id: 'overlays_placed',   label: 'Overlays placed on the video', required: false },
+    ],
+  },
   {
     id: 'social',
     icon: '📱',
@@ -344,6 +356,16 @@ export async function loadProductionChecks(episode, showId) {
       results.social_checklist = (data?.data?.length || 0) > 0;
     } catch {
       results.social_checklist = false;
+    }
+
+    // ── Check the Overlays card: the title overlay, and overlays placed on the video ──
+    results.title_overlay = !!episode.title_overlay_asset_id;
+    try {
+      const { data } = await api.get(`/api/v1/episodes/${episode.id}/timeline/placements`);
+      results.overlays_placed = (data?.data?.length || 0) > 0;
+    } catch (err) {
+      console.error('[Checklist] overlay placements read failed:', err.response?.status || err.message);
+      results.overlays_placed = false;
     }
 
     // ── Check Episode Title (AI-generated vs default) ──
