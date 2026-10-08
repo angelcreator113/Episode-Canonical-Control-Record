@@ -17,43 +17,38 @@ const jsx = readFileSync(resolve(__dirname, 'EpisodeTodoList.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
+// The Assets redesign (2026-10-08): the list's styles moved to
+// EpisodeAssetsTab.css (.etl-*). The wardrobe list keeps the gold accent,
+// the career list takes the lavender; actions are the lavender.
+const css = readFileSync(resolve(__dirname, 'EpisodeAssetsTab.css'), 'utf8');
+
 describe('Episode Todo list theme', () => {
-  test('the component carries no color literal and no gradient; the only rgba is the modal scrim', () => {
+  test('the list carries no color literal and no gradient', () => {
     expect(stripTaskRefs(jsx)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
-    expect(jsx.match(/rgba\(/g)).toHaveLength(1);
-    expect(jsx).toMatch(/background: 'rgba\(0,0,0,0\.7\)'/);
+    expect(css).toMatch(/\.etl-modal \{[^}]*background: rgba\(0, 0, 0, 0\.7\);/);
   });
 
-  test('the two lists read the gold and teal families, text through their text twins', () => {
-    expect(jsx).toMatch(/const GOLD = 'var\(--lala-gold\)';\s*const GOLD_TEXT = 'var\(--lala-gold-text\)';\s*const TEAL = 'var\(--primary\)';\s*const TEAL_TEXT = 'var\(--primary-text\)';/);
-    expect(jsx).toMatch(/wardrobe: \{ edge: GOLD, text: GOLD_TEXT, soft: 'var\(--lala-gold-soft\)', line: 'var\(--lala-gold-line\)', check: 'var\(--text-primary\)' \}/);
-    expect(jsx).toMatch(/career: \{ edge: TEAL, text: TEAL_TEXT, soft: 'var\(--primary-subtle\)', line: 'var\(--primary-light\)', check: 'var\(--text-inverse\)' \}/);
-    // No label is drawn in a fill color.
-    expect(jsx).not.toMatch(/color: (?:GOLD|TEAL)\b/);
-    expect(jsx).not.toMatch(/color: list\.edge/);
-    expect(jsx).toMatch(/color: isWardrobe \? GOLD_TEXT : 'var\(--text-secondary\)'/);
-    expect(jsx).toMatch(/color: !isWardrobe \? TEAL_TEXT : 'var\(--text-secondary\)'/);
-    expect(jsx).toMatch(/color: GOLD_TEXT, fontWeight: 500 \}\}>optional/);
+  test('each list has its accent; gold is never text', () => {
+    expect(css).toMatch(/\.etl\.is-wardrobe \{ --list-edge: var\(--lala-gold\); --list-text: var\(--lala-gold-text\); --list-soft: var\(--lala-gold-soft\); --list-line: var\(--lala-gold-line\); --list-check: var\(--text-primary\); \}/);
+    expect(css).toMatch(/\.etl\.is-career \{ --list-edge: var\(--lala-lavender\);[^}]*--list-check: var\(--text-inverse\); \}/);
+    expect(css).toMatch(/\.etl-tag\.is-optional \{ color: var\(--list-text\); \}/);
+    expect(css).toMatch(/\.etl-tab\.is-on\.is-wardrobe \{[^}]*color: var\(--lala-gold-text\);/);
+    expect(css).not.toMatch(/(?<![-\w])color: var\(--(?:lala-gold|list-edge)\)/);
   });
 
-  test('Generate, Lock and Done are the primary; the check squares hold ink on gold and white on teal', () => {
-    expect(jsx).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--primary\)',\s*color: generating \? 'var\(--text-secondary\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: generatingCareer \? 'var\(--lala-parchment-2\)' : 'var\(--primary\)',\s*color: generatingCareer \? 'var\(--text-secondary\)' : 'var\(--text-inverse\)'/);
-    expect(jsx).toMatch(/background: 'var\(--primary\)', color: 'var\(--text-inverse\)', border: 'none',/);
-    expect(jsx).toMatch(/background: 'var\(--primary\)', color: 'var\(--text-inverse\)',\s*border: 'none', borderRadius: 8, padding: '10px 0'/);
-    expect(jsx).toMatch(/background: excluded \? 'transparent' : list\.edge,/);
-    expect(jsx).toMatch(/color: list\.check, fontSize: 11/);
-    expect(jsx).not.toMatch(/background: GOLD, color: 'var\(--text-inverse\)'/);
-  });
-
-  test('completion and errors read the success and danger families', () => {
-    expect(jsx).toMatch(/background: completion\.all_required_done && isWardrobe \? 'var\(--success-bg\)' : list\.soft/);
-    expect(jsx).toMatch(/background: 'var\(--success-bg\)', color: 'var\(--success-text\)', borderRadius: 4, fontWeight: 700 \}\}>LOCKED/);
-    expect(jsx).toMatch(/background: completion\.all_required_done \? 'var\(--success\)' : GOLD,/);
-    expect(jsx).toMatch(/background: task\.completed \? 'var\(--success-text\)' : 'transparent'/);
-    expect(jsx).toMatch(/background: excluded \? 'var\(--surface-bg\)' : task\.completed \? 'var\(--success-bg\)' : 'transparent'/);
-    expect(jsx.match(/background: 'var\(--danger-bg\)', color: 'var\(--danger-text\)'/g)).toHaveLength(2);
+  test('Generate, Lock and Done are the lavender; checks and completion read the success family', () => {
+    expect(css).toMatch(/\.etl-btn-primary \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
+    expect(jsx).toMatch(/className="etl-btn-primary" onClick=\{handleGenerate\}/);
+    expect(jsx).toMatch(/className="etl-btn-primary" onClick=\{handleLock\}/);
+    expect(jsx).toMatch(/className="etl-btn-primary is-wide"[^\n]*>Done<\/button>/);
+    expect(css).toMatch(/\.etl-toggle \{[^}]*background: var\(--list-edge\); color: var\(--list-check\);/);
+    expect(css).toMatch(/\.etl-check\.is-done \{ border: none; background: var\(--success-text\); color: var\(--text-inverse\); \}/);
+    expect(css).toMatch(/\.etl-task\.is-done \{ background: var\(--success-bg\); \}/);
+    expect(css).toMatch(/\.etl-head\.is-done \{ background: var\(--success-bg\); \}/);
+    expect(css).toMatch(/\.etl-progress\.is-done span \{ background: var\(--success\); \}/);
+    expect(css).toMatch(/\.etl-locked \{[^}]*background: var\(--success-bg\); color: var\(--success-text\);/);
+    expect(css).toMatch(/\.etl-error \{[^}]*background: var\(--danger-bg\); color: var\(--danger-text\);/);
   });
 
   test('every text pair the list draws holds 4.5:1 or better', () => {
@@ -74,6 +69,12 @@ describe('Episode Todo list theme', () => {
       ['--text-secondary', '--surface-bg'],
       ['--text-secondary', '--lala-parchment-2'],
       ['--danger-text', '--danger-bg'],
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-ink', '--surface-card'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--lala-ink-muted', '--success-bg'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
