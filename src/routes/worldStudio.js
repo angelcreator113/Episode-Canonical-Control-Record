@@ -40,8 +40,15 @@ const models = require('../models');
 const { factsOf, normalizeFacts } = require('../services/worldFacts');
 const { isHighTension } = require('../services/tensionLevels');
 const { universeIdForShow } = require('../services/worldSnapshotForShow');
-const { dreamCityName } = require('../utils/lalaHome');
+const { DREAM_CITIES, dreamCityName } = require('../utils/lalaHome');
+const { worldCharacterCity, registryRelationshipStatus } = require('../utils/registryDemographics');
 const sequelize = models.sequelize;
+
+// A world character's location: a LalaVerse character's names its DREAM
+// city, which the registry files it under (utils/registryDemographics).
+const worldLocationHint = (worldTag, wCfg) => (worldTag === 'book-1'
+  ? `where they exist in ${wCfg.title}`
+  : `which of the five DREAM cities they live in (${DREAM_CITIES.join(', ')}), and where in it`);
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
 async function claude(system, user, maxTokens = 4000) {
@@ -482,8 +489,13 @@ For intimate_eligible characters: write intimate_style, intimate_dynamic, and wh
 /**
  * Create a registry_characters entry from a world_character,
  * then cross-link both records.
+ *
+ * The registry's city and relationship status are ENUMs, so each gets a
+ * value they accept (utils/registryDemographics), and the registry has no
+ * sexuality column (the world character keeps it). Either failed the
+ * insert, and the four re-syncs below, for nearly every character.
  */
-async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalaverse', protagonistName = null) {
+async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalaverse', protagonistName = null, transaction = null) {
   const rcId = uuidv4();
   const charKey = (c.name || 'char').toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 80) + '_' + worldCharId.substring(0, 8);
   const roleType = ROLE_MAP[c.character_type] || 'special';
@@ -497,7 +509,7 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         personality_matrix, aesthetic_dna, career_status,
         relationships_map, voice_signature, story_presence,
         evolution_tracking, extra_fields, name_options,
-        gender, pronouns, age, sexuality, relationship_status, hometown, current_city,
+        gender, pronouns, age, relationship_status, hometown, current_city,
         physical_presence,
         world_character_id, sort_order, created_at, updated_at)
      VALUES
@@ -508,7 +520,7 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         :personality_matrix, :aesthetic_dna, :career_status,
         :relationships_map, :voice_signature, :story_presence,
         :evolution_tracking, :extra_fields, :name_options,
-        :gender, :pronouns, :age, :sexuality, :relationship_status, :hometown, :current_city,
+        :gender, :pronouns, :age, :relationship_status, :hometown, :current_city,
         :physical_presence,
         :world_char_id, 0, NOW(), NOW())`,
     {
@@ -602,10 +614,9 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         gender: c.gender || null,
         pronouns: derivePronouns(c.gender),
         age: parseAgeRange(c.age_range),
-        sexuality: c.sexuality || null,
-        relationship_status: c.relationship_status || null,
+        relationship_status: registryRelationshipStatus(c.relationship_status),
         hometown: c.origin_story || null,
-        current_city: c.world_location || null,
+        current_city: worldCharacterCity(worldTag, c.world_location),
         physical_presence: c.aesthetic || null,
         world_char_id: worldCharId,
       },
@@ -613,10 +624,13 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
     }
   );
 
-  // Update world_characters with the cross-link
+  // Update world_characters with the cross-link. On confirm the world
+  // character is still in the confirm's transaction, so the link is
+  // written there: outside it the new row is not yet visible, and the
+  // update changed nothing.
   await sequelize.query(
     `UPDATE world_characters SET registry_character_id = :rcId WHERE id = :wcId`,
-    { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE }
+    { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE, ...(transaction ? { transaction } : {}) }
   );
 
   // Auto-seed a relationship candidate linking this character to the protagonist
@@ -946,7 +960,7 @@ Return JSON only:
       "gender": "male|female|non_binary|agender — explicit gender for relationship compatibility",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
-      "world_location": "where they exist in ${wCfg.title}",
+      "world_location": "${worldLocationHint(world_tag, wCfg)}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
       "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
       "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
@@ -1212,7 +1226,7 @@ router.put('/world/characters/:id', requireAuth, async (req, res) => {
             career_status = :career_status, relationships_map = :relationships_map,
             voice_signature = :voice_signature, story_presence = :story_presence,
             evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
-            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            gender = :gender, pronouns = :pronouns, age = :age,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
             physical_presence = :physical_presence,
@@ -1301,10 +1315,9 @@ router.put('/world/characters/:id', requireAuth, async (req, res) => {
               gender: char.gender || null,
               pronouns: derivePronouns(char.gender),
               age: parseAgeRange(char.age_range),
-              sexuality: char.sexuality || null,
-              relationship_status: char.relationship_status || null,
+              relationship_status: registryRelationshipStatus(char.relationship_status),
               hometown: char.origin_story || null,
-              current_city: char.world_location || null,
+              current_city: worldCharacterCity(char.world_tag, char.world_location),
               physical_presence: char.aesthetic || null,
             },
             type: sequelize.QueryTypes.UPDATE,
@@ -1480,7 +1493,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
             career_status = :career_status, relationships_map = :relationships_map,
             voice_signature = :voice_signature, story_presence = :story_presence,
             evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
-            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            gender = :gender, pronouns = :pronouns, age = :age,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
             physical_presence = :physical_presence,
@@ -1569,10 +1582,9 @@ Return JSON only — an object with ONLY the missing field keys and their values
               gender: updated.gender || null,
               pronouns: derivePronouns(updated.gender),
               age: parseAgeRange(updated.age_range),
-              sexuality: updated.sexuality || null,
-              relationship_status: updated.relationship_status || null,
+              relationship_status: registryRelationshipStatus(updated.relationship_status),
               hometown: updated.origin_story || null,
-              current_city: updated.world_location || null,
+              current_city: worldCharacterCity(updated.world_tag, updated.world_location),
               physical_presence: updated.aesthetic || null,
             },
             type: sequelize.QueryTypes.UPDATE,
@@ -1619,7 +1631,7 @@ router.post('/world/characters/:id/re-sync', requireAuth, async (req, res) => {
         career_status = :career_status, relationships_map = :relationships_map,
         voice_signature = :voice_signature, story_presence = :story_presence,
         evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
-        gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+        gender = :gender, pronouns = :pronouns, age = :age,
         relationship_status = :relationship_status,
         hometown = :hometown, current_city = :current_city,
         physical_presence = :physical_presence,
@@ -1708,10 +1720,9 @@ router.post('/world/characters/:id/re-sync', requireAuth, async (req, res) => {
           gender: char.gender || null,
           pronouns: derivePronouns(char.gender),
           age: parseAgeRange(char.age_range),
-          sexuality: char.sexuality || null,
-          relationship_status: char.relationship_status || null,
+          relationship_status: registryRelationshipStatus(char.relationship_status),
           hometown: char.origin_story || null,
-          current_city: char.world_location || null,
+          current_city: worldCharacterCity(char.world_tag, char.world_location),
           physical_presence: char.aesthetic || null,
         },
         type: sequelize.QueryTypes.UPDATE,
@@ -1764,7 +1775,7 @@ router.post('/world/characters/bulk-re-sync', requireAuth, async (req, res) => {
             career_status = :career_status, relationships_map = :relationships_map,
             voice_signature = :voice_signature, story_presence = :story_presence,
             evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
-            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            gender = :gender, pronouns = :pronouns, age = :age,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
             physical_presence = :physical_presence,
@@ -1853,10 +1864,9 @@ router.post('/world/characters/bulk-re-sync', requireAuth, async (req, res) => {
               gender: char.gender || null,
               pronouns: derivePronouns(char.gender),
               age: parseAgeRange(char.age_range),
-              sexuality: char.sexuality || null,
-              relationship_status: char.relationship_status || null,
+              relationship_status: registryRelationshipStatus(char.relationship_status),
               hometown: char.origin_story || null,
-              current_city: char.world_location || null,
+              current_city: worldCharacterCity(char.world_tag, char.world_location),
               physical_presence: char.aesthetic || null,
             },
             type: sequelize.QueryTypes.UPDATE,
@@ -2596,7 +2606,7 @@ Return JSON only:
       "gender": "male|female|non_binary|agender — explicit gender for relationship compatibility",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
-      "world_location": "where they exist in ${wCfg.title}",
+      "world_location": "${worldLocationHint(world_tag, wCfg)}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant|friend|coworker",
       "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
       "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
@@ -2815,7 +2825,7 @@ router.post('/world/generate-ecosystem-confirm', requireAuth, async (req, res) =
       // Sync to canonical registry (pass protagonist name for correct lookup)
       let rcId = null;
       try {
-        rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
+        rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist, t);
       } catch (syncErr) {
         console.error(`syncToRegistry failed for ${c.name}:`, syncErr.message);
         // Non-fatal: character is still created in world_characters, registry link can be retried via re-sync
