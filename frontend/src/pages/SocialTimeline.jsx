@@ -67,7 +67,7 @@ const MOMENTUM_ACTIONS = [
 ];
 
 const INFLUENCE_CLUSTERS = [
-  { cluster: 'Fashion',         members: 'Designers, stylists, fashion influencers, photographers, runway models',          dynamics: 'Hierarchy obsession. Tier matters. Velvet City access is the currency.',                  cross: 'Contaminates beauty, entertainment, fitness.' },
+  { cluster: 'Fashion',         members: 'Designers, stylists, fashion influencers, photographers, runway models',          dynamics: 'Hierarchy obsession. Tier matters. Dazzle District access is the currency.',                  cross: 'Contaminates beauty, entertainment, fitness.' },
   { cluster: 'Beauty',          members: 'Makeup artists, skincare creators, beauty founders, salon owners',                dynamics: 'Product loyalty is tribal. The Glow Gazette review is the arbiter.',                      cross: 'Contaminates fashion, wellness, entertainment.' },
   { cluster: 'Entertainment',   members: 'Musicians, comedians, actors turned creators, nightlife',                         dynamics: 'Virality is the metric. Being funny matters more than being polished.',                   cross: 'Contaminates fashion, dance, meme culture.' },
   { cluster: 'Creator Economy', members: 'Entrepreneurs, course creators, digital product sellers, business influencers',   dynamics: 'Income transparency culture. Proof of earnings is content.',                              cross: 'Contaminates every cluster.' },
@@ -92,7 +92,7 @@ const CULTURAL_MEMORY = [
 
 const CROSS_INDUSTRY = [
   { origin: 'Fashion',             influences: 'Beauty, Fitness, Entertainment',  example: 'A runway aesthetic from the Atelier Circuit becomes the makeup trend of the season.' },
-  { origin: 'Beauty',              influences: 'Fashion, Wellness, Fitness',      example: 'A skincare ingredient goes from the Glow Institute to wellness. Everywhere in 30 days.' },
+  { origin: 'Beauty',              influences: 'Fashion, Wellness, Fitness',      example: 'A skincare ingredient goes from the Radiance Institute to wellness. Everywhere in 30 days.' },
   { origin: 'Music / Entertainment', influences: 'Fashion, Dance, Meme culture', example: 'A music video starts a fashion trend. The outfit becomes a Halloween costume. The lyric becomes a caption.' },
   { origin: 'Creator Economy',     influences: 'All clusters',                   example: 'Income transparency starts in entrepreneurship and spreads to every cluster.' },
   { origin: 'Wellness',            influences: 'Beauty, Entertainment, Fashion',  example: 'A rest culture moment makes burnout content go viral. Fashion responds with comfort aesthetic.' }
