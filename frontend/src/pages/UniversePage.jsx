@@ -127,7 +127,8 @@ function Overview() {
         api.get(`/api/v1/character-registry/registries?show_id=${encodeURIComponent(show.id)}&limit=100`),
         api.get('/api/v1/calendar/events?event_type=lalaverse_cultural'),
         api.get(`/api/v1/feed-enhanced/${show.id}/trending`),
-        api.get('/api/v1/world/tension-scanner'),
+        // The show's tensions: pairs in its registries or in one with no show yet.
+        api.get(`/api/v1/world/tension-scanner?show_id=${encodeURIComponent(show.id)}`),
         // The novel's books (Before Lala), every one: they are not per show.
         api.get('/api/v1/storyteller/books'),
       ]);

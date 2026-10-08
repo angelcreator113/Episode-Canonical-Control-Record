@@ -5,7 +5,8 @@
  * Propose Scene sends the pair itself (it sent char_a_id / char_b_id, which
  * the route never read, so it was refused 400) and lands on Story
  * Evaluation with the proposal; and the three empties are told apart: the
- * scan failed, nothing to scan, nothing simmering.
+ * scan failed, nothing to scan, nothing simmering. Since 2026-10-08 the
+ * scan is the active show's (?show_id=).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -67,6 +68,20 @@ describe('State tab: the Tensions contracts', () => {
     scanner({ status: 'ok', pairs: [], count: 0, characters_scanned: 7 });
     renderAt('/universe?tab=state&sub=tensions');
     expect((await screen.findByTestId('tensions-none')).textContent).toContain('No high-tension pairs among 7 characters');
+  });
+
+  test("the scan is the active show's: it waits for the shows, then sends the show's id", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: [{ id: 'show-b', name: 'Styling Adventures' }] } };
+      if (url.includes('tension-scanner')) return { data: { status: 'ok', pairs: [PAIR], count: 1, characters_scanned: 5 } };
+      return { data: { snapshots: [], events: [] } };
+    });
+    renderAt('/universe?tab=state&sub=tensions');
+    const panel = await screen.findByTestId('wd-tensions-panel');
+    expect((await within(panel).findByText(/Lala/)).textContent).toContain('Nia Vale');
+    // One scan, the show's (Evoni's ruling, 2026-10-08): none ran before the shows were in.
+    const scans = vi.mocked(api.get).mock.calls.map(([url]) => url).filter((url) => url.includes('tension-scanner'));
+    expect(scans).toEqual(['/api/v1/world/tension-scanner?show_id=show-b']);
   });
 
   test("a refused proposal shows the route's reason", async () => {
