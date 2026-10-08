@@ -69,9 +69,13 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
       attributes: ['id', 'handle', 'display_name', 'creator_name', 'platform', 'vibe_sentence',
                    'archetype', 'posting_voice', 'follow_motivation', 'follow_emotion',
                    'lala_relevance_score', 'celebrity_tier', 'content_category',
-                   'follower_tier', 'aesthetic_dna', 'career_pressure', 'registry_character_id'],
+                   'follower_tier', 'aesthetic_dna', 'career_pressure'],
       order: [['lala_relevance_score', 'DESC']],
       limit: 20,
+      // The profile's character: the registry entry whose feed_profile_id
+      // it is (ruling C3). The join through social_profiles.
+      // registry_character_id compared an integer to a UUID and failed, so
+      // this read found no profiles at all.
       include: models.RegistryCharacter ? [{
         model: models.RegistryCharacter,
         as: 'registryCharacter',

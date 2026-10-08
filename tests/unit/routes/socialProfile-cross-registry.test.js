@@ -7,7 +7,9 @@
 // docs/reads/2026-10-06-lalaverse-wiring-map.md §6 finding 6b, fix-list
 // item 7). Now: the registry named, else the show's newest registry, else
 // the newest registry; a character already under the key is linked, unless
-// another profile holds it.
+// another profile holds it. The link is the registry entry's
+// feed_profile_id, the one link (Evoni's ruling C3; 2026-10-08): nothing
+// writes social_profiles.registry_character_id.
 
 jest.mock('../../../src/middleware/auth', () => ({
   requireAuth: (req, res, next) => next(),
@@ -25,26 +27,31 @@ function crossHandler() {
 
 const SHOW_A = '11111111-1111-1111-1111-111111111111';
 
+const updatable = (row) => Object.assign(row, { async update(v) { Object.assign(this, v); return this; } });
+
 function fakeDb({ registries = [], characters = [] } = {}) {
-  const profile = {
+  const profile = updatable({
     id: 7, handle: '@Sable.Studio', display_name: 'Studio by Sable', platform: 'instagram', status: 'finalized',
-    registry_character_id: null,
-    async update(v) { Object.assign(this, v); return this; },
-  };
+  });
   const created = [];
+  const rows = characters.map(updatable);
   const db = {
     created,
     profile,
+    characters: rows,
     SocialProfile: { findByPk: async () => profile },
     CharacterRegistry: {
       findOne: async ({ where } = {}) => {
-        const rows = registries.filter((r) => !where || r.show_id === where.show_id);
-        return rows.sort((a, b) => b.created_at - a.created_at)[0] || null;
+        const regs = registries.filter((r) => !where || r.show_id === where.show_id);
+        return regs.sort((a, b) => b.created_at - a.created_at)[0] || null;
       },
     },
     RegistryCharacter: {
-      findOne: async ({ where }) => characters.find((c) => c.registry_id === where.registry_id && c.character_key === where.character_key) || null,
-      create: async (v) => { const row = { id: `rc-${created.length + 1}`, ...v }; created.push(row); return row; },
+      // By the link (feed_profile_id) or by registry and key.
+      findOne: async ({ where }) => ('feed_profile_id' in where
+        ? rows.find((c) => c.feed_profile_id === where.feed_profile_id)
+        : rows.find((c) => c.registry_id === where.registry_id && c.character_key === where.character_key)) || null,
+      create: async (v) => { const row = updatable({ id: `rc-${created.length + 1}`, ...v }); created.push(row); rows.push(row); return row; },
     },
     WorldTimelineEvent: { create: async () => ({}) },
   };
@@ -72,8 +79,8 @@ describe('POST /:id/cross registry character', () => {
     const db = fakeDb({ registries: REGISTRIES });
     const { out } = await cross(db, { show_id: SHOW_A });
     expect(db.created).toHaveLength(1);
-    expect(db.created[0]).toMatchObject({ registry_id: 'reg-new-a', character_key: 'sable_studio', display_name: 'Studio by Sable' });
-    expect(db.profile.registry_character_id).toBe('rc-1');
+    expect(db.created[0]).toMatchObject({ registry_id: 'reg-new-a', character_key: 'sable_studio', display_name: 'Studio by Sable', feed_profile_id: 7 });
+    expect(db.profile).not.toHaveProperty('registry_character_id');
     expect(db.profile.status).toBe('crossed');
     expect(out).toMatchObject({ crossed: true, registry_note: null });
   });
@@ -94,13 +101,14 @@ describe('POST /:id/cross registry character', () => {
     let db = fakeDb({ registries: REGISTRIES, characters: [{ id: 'rc-existing', registry_id: 'reg-new-a', character_key: 'sable_studio', feed_profile_id: null }] });
     let r = await cross(db, { show_id: SHOW_A });
     expect(db.created).toHaveLength(0);
-    expect(db.profile.registry_character_id).toBe('rc-existing');
+    expect(db.characters[0].feed_profile_id).toBe(7);
     expect(r.out.registry_character.id).toBe('rc-existing');
 
     db = fakeDb({ registries: REGISTRIES, characters: [{ id: 'rc-other', registry_id: 'reg-new-a', character_key: 'sable_studio', feed_profile_id: 99 }] });
     r = await cross(db, { show_id: SHOW_A });
     expect(db.created).toHaveLength(0);
-    expect(db.profile.registry_character_id).toBeNull();
+    expect(db.characters[0].feed_profile_id).toBe(99);
+    expect(r.out.registry_character).toBeNull();
     expect(r.out.registry_note).toMatch(/linked to another profile/);
     expect(db.profile.status).toBe('crossed');
   });
@@ -112,11 +120,11 @@ describe('POST /:id/cross registry character', () => {
     expect(out).toMatchObject({ crossed: true, registry_character: null, registry_note: 'No character registry to add this profile to yet.' });
   });
 
-  test('a profile already linked keeps its character', async () => {
-    const db = fakeDb({ registries: REGISTRIES });
-    db.profile.registry_character_id = 'rc-kept';
-    await cross(db, { show_id: SHOW_A });
+  test('a profile already linked (a registry entry\'s feed_profile_id) keeps its character', async () => {
+    const db = fakeDb({ registries: REGISTRIES, characters: [{ id: 'rc-kept', registry_id: 'reg-old-a', character_key: 'kept', feed_profile_id: 7 }] });
+    const { out } = await cross(db, { show_id: SHOW_A });
     expect(db.created).toHaveLength(0);
-    expect(db.profile.registry_character_id).toBe('rc-kept');
+    expect(out.registry_character.id).toBe('rc-kept');
+    expect(db.profile.status).toBe('crossed');
   });
 });

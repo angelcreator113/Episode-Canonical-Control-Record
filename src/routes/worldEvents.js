@@ -30,6 +30,7 @@ const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../util
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { withRegistryLinks } = require('../utils/registryLink');
 const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
 const { cleanEventName } = require('../utils/cleanEventName');
 const { draftEventConcept } = require('../services/eventConceptDraftService');
@@ -203,8 +204,14 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     const startedFromId = event.canon_consequences?.automation?.started_from_profile_id;
     if (startedFromId && models.SocialProfile) {
       startedFromProfile = await models.SocialProfile.findByPk(startedFromId, {
-        attributes: ['id', 'handle', 'display_name', 'platform', 'registry_character_id'],
+        attributes: ['id', 'handle', 'display_name', 'platform'],
       }).catch((e) => { console.error('[WorldEvents] started-from profile lookup failed:', e.message); return null; });
+      // Its registry_character_id, read from the registry entry (ruling C3),
+      // for the Event Package's organizer choice.
+      if (startedFromProfile) {
+        [startedFromProfile] = await withRegistryLinks(models, [startedFromProfile])
+          .catch((e) => { console.error('[WorldEvents] started-from registry link lookup failed:', e.message); return [startedFromProfile.toJSON()]; });
+      }
     }
 
     // Place — the linked scene set's name
@@ -310,7 +317,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       episodeLook,
       placeLocked,
       sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
-      startedFromProfile: startedFromProfile ? startedFromProfile.toJSON() : null,
+      startedFromProfile: startedFromProfile || null,
       sceneSet: sceneSet ? sceneSet.toJSON() : null,
       venueLocation,
       invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
@@ -2930,7 +2937,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     if (!models?.SocialProfile) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const profile = await models.SocialProfile.findByPk(profile_id, {
-      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score', 'aesthetic_dna', 'city', 'frequent_venues'],
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'lala_relevance_score', 'aesthetic_dna', 'city', 'frequent_venues'],
     });
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 

@@ -227,11 +227,10 @@ router.post('/confirm-feed', async (req, res) => {
       follower_count_approx: feed_proposal.follower_range || 'micro',
       status:          'generated',
       auto_generated:  true,
-      // Both directions of the link, and the layer, as registry create's
-      // autoCreateFeedProfile writes them (the profile used to carry no
-      // registry_character_id and always took the default layer: wiring map,
-      // docs/reads/2026-10-06-lalaverse-wiring-map.md §6 finding 6a).
-      registry_character_id: character.id,
+      // The layer asked for (it always took the default: wiring map,
+      // docs/reads/2026-10-06-lalaverse-wiring-map.md §6 finding 6a). The
+      // link is the character's feed_profile_id, set below: one link, on
+      // the registry entry (ruling C3; utils/registryLink).
       feed_layer:      layer,
       society_archetype: society ? society.name : null,
     });

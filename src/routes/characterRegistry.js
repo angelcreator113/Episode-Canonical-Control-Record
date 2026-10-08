@@ -13,7 +13,6 @@ const { requireAuth, userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { hideAuthorOnlyFieldsFromNonAdmins } = require('../middleware/authorOnlyFields');
 const { Op } = require('sequelize');
-const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
 let createFollowProfileFromDNA;
 try {
   ({ createFollowProfileFromDNA } = require('../services/characterFollowService'));
@@ -305,22 +304,12 @@ router.post('/registries/:id/characters', requireAuth, async (req, res) => {
       living_context: req.body.living_context || {},
     });
 
-    // Auto-create Feed profile from registry character
-    const feedLayer = req.body.feed_layer || 'real_world';
+    // No Feed profile here (Evoni's ruling, 2026-10-08, "Only by proposal"):
+    // a character gets one when its Feed proposal is confirmed
+    // (characterGenerationRoutes POST /confirm-feed). This route used to
+    // call feedAutoGeneration's autoCreateFeedProfile, whose insert always
+    // failed on the INTEGER social_profiles.registry_character_id column.
     const db = getModels();
-    let feedResult = { feedProfile: null, skipped: false };
-    try {
-      feedResult = await autoCreateFeedProfile(db, character, feedLayer, {
-        city: req.body.city || null,
-        platform: req.body.platform_primary || null,
-        vibe_sentence: req.body.vibe_sentence || null,
-      });
-      if (feedResult.feedProfile) {
-        await character.update({ feed_profile_id: feedResult.feedProfile.id });
-      }
-    } catch (feedErr) {
-      console.error('[CharacterRegistry] Feed auto-create failed (non-blocking):', feedErr.message);
-    }
 
     // Auto-generate follow profile from character DNA (non-blocking)
     let followProfileResult = null;
@@ -336,15 +325,7 @@ router.post('/registries/:id/characters', requireAuth, async (req, res) => {
     return res.status(201).json({
       success: true,
       character,
-      feedProfile: feedResult.feedProfile || null,
-      feedProfileSkipped: feedResult.skipped || false,
       followProfile: followProfileResult,
-      ...(feedResult.skipped && {
-        feedSkipReason: feedResult.reason,
-        feedCap: feedResult.cap,
-        feedCurrent: feedResult.current,
-        message: `Feed cap reached (${feedResult.current}/${feedResult.cap}). Registry character saved. Create Feed profile manually when space is available.`,
-      }),
     });
   } catch (err) {
     console.error('[CharacterRegistry] POST characters error:', err);

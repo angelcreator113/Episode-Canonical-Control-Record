@@ -439,7 +439,7 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
   try {
     const chars = await db.RegistryCharacter.findAll({
       where: { registry_id: registryId, character_key: characterKeys },
-      attributes: ['id', 'character_key', 'display_name'],
+      attributes: ['id', 'character_key', 'display_name', 'feed_profile_id'],
     });
     if (!chars.length) return '';
 
@@ -531,12 +531,16 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
       }
     } catch { /* relationship_events table may not exist yet */ }
 
-    // Load social profiles linked to characters in scene (parasocial context)
+    // Load social profiles linked to characters in scene (parasocial
+    // context): each character's feed_profile_id, the one link (ruling C3).
+    // The lookup by social_profiles.registry_character_id put UUIDs to an
+    // INTEGER column and failed.
     let socialSection = '';
     try {
-      const socialProfiles = await db.SocialProfile.findAll({
-        where: { registry_character_id: charIds, status: { [db.Sequelize.Op.in]: ['crossed', 'finalized'] } },
-        attributes: ['handle', 'platform', 'parasocial_function', 'emotional_activation', 'current_trajectory', 'registry_character_id'],
+      const linkedProfileIds = chars.map(c => c.feed_profile_id).filter(id => id != null);
+      const socialProfiles = !linkedProfileIds.length ? [] : await db.SocialProfile.findAll({
+        where: { id: linkedProfileIds, status: { [db.Sequelize.Op.in]: ['crossed', 'finalized'] } },
+        attributes: ['handle', 'platform', 'parasocial_function', 'emotional_activation', 'current_trajectory'],
         limit: 5,
       });
       if (socialProfiles.length) {
@@ -1026,18 +1030,22 @@ async function loadSocialFeedContext(characterKeys, registryId) {
   try {
     const chars = await db.RegistryCharacter.findAll({
       where: { registry_id: registryId, character_key: characterKeys },
-      attributes: ['id', 'character_key', 'display_name'],
+      attributes: ['id', 'character_key', 'display_name', 'feed_profile_id'],
     });
     if (!chars.length) return '';
-    const charIds = chars.map(c => c.id);
-    const charMap = {};
-    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+    // Each character's profile is its feed_profile_id, the one link (ruling
+    // C3); the lookup by social_profiles.registry_character_id put UUIDs to
+    // an INTEGER column and failed.
+    const nameByProfile = {};
+    chars.forEach(c => { if (c.feed_profile_id != null) nameByProfile[c.feed_profile_id] = c.display_name || c.character_key; });
+    const linkedProfileIds = Object.keys(nameByProfile).map(Number);
+    if (!linkedProfileIds.length) return '';
 
     // Load social profiles (full field set for deep generation context)
     const profiles = await db.SocialProfile.findAll({
-      where: { registry_character_id: charIds },
+      where: { id: linkedProfileIds },
       attributes: [
-        'id', 'registry_character_id', 'handle', 'platform', 'display_name', 'vibe_sentence',
+        'id', 'handle', 'platform', 'display_name', 'vibe_sentence',
         'follower_tier', 'follower_count_approx', 'post_frequency', 'engagement_rate', 'platform_metrics',
         'content_persona', 'posting_voice', 'comment_energy', 'archetype',
         'adult_content_present', 'adult_content_type', 'adult_content_framing',
@@ -1070,7 +1078,7 @@ async function loadSocialFeedContext(characterKeys, registryId) {
 
     // Profile context (full depth)
     profiles.forEach(p => {
-      const name = charMap[p.registry_character_id] || '?';
+      const name = nameByProfile[p.id] || '?';
       const parts = [`${name} — @${p.handle} (${p.platform})`];
       if (p.vibe_sentence) parts.push(`  Vibe: ${p.vibe_sentence}`);
       if (p.follower_tier) parts.push(`  Reach: ${p.follower_tier}${p.follower_count_approx ? ` (~${p.follower_count_approx})` : ''}`);
