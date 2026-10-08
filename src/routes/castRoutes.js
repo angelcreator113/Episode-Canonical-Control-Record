@@ -12,6 +12,8 @@
  *   PUT    /api/v1/cast/characters/:id/feed-profile { feed_profile_id }: Match to feed person
  *   POST   /api/v1/cast/characters/:id/restore      bring an archived character back
  *   DELETE /api/v1/cast/characters/:id/permanent    delete an archived one for good
+ *   GET    /api/v1/cast/characters/:id/appearances  where the character shows up (the
+ *                                                  character page's "Where they show up")
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -207,6 +209,96 @@ router.delete('/characters/:id/permanent', requireAuth, async (req, res) => {
     return res.json({ success: true, id: character.id, deleted: true });
   } catch (err) {
     console.error('[Cast] DELETE /characters/:id/permanent error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Where a character shows up, through its feed profile: the events it
+ * hosts or is a guest of (with their episodes and Lala's goals about it),
+ * its home place, and its posts. A character with no feed profile shows up
+ * nowhere yet.
+ */
+router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const { RegistryCharacter, sequelize } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id, { attributes: ['id', 'feed_profile_id'] });
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const profileId = character.feed_profile_id;
+    if (profileId == null) return res.json({ success: true, linked: false, events: [], episodes: [], place: null, feed: null });
+
+    const [events] = await sequelize.query(`
+      WITH mine AS (
+        SELECT we.*,
+               CASE WHEN COALESCE(we.source_profile_id,
+                      CASE WHEN we.canon_consequences->'automation'->>'host_profile_id' ~ '^[0-9]+$'
+                           THEN (we.canon_consequences->'automation'->>'host_profile_id')::int END) = :pid
+                    THEN 'host' ELSE 'guest' END AS role
+          FROM world_events we
+         WHERE we.deleted_at IS NULL AND (
+               COALESCE(we.source_profile_id,
+                 CASE WHEN we.canon_consequences->'automation'->>'host_profile_id' ~ '^[0-9]+$'
+                      THEN (we.canon_consequences->'automation'->>'host_profile_id')::int END) = :pid
+            OR EXISTS (
+                 SELECT 1 FROM jsonb_array_elements(
+                   CASE WHEN jsonb_typeof(we.canon_consequences->'automation'->'guest_profiles') = 'array'
+                        THEN we.canon_consequences->'automation'->'guest_profiles' ELSE '[]'::jsonb END) g
+                  WHERE COALESCE(g->>'profile_id', g->>'id') = :pidText))
+      )
+      SELECT m.id, m.show_id, m.name, m.role, m.event_date, m.event_time, m.venue_name, m.venue_location_id,
+             m.is_paid, m.payment_amount, m.canon_consequences->'automation'->'relationship_goals' AS goals,
+             e.id AS episode_id, e.episode_number, e.title AS episode_title
+        FROM mine m
+        LEFT JOIN LATERAL (
+          SELECT ep.id, ep.episode_number, ep.title FROM episodes ep
+           WHERE ep.deleted_at IS NULL AND (ep.id = m.used_in_episode_id
+              OR ep.id IN (SELECT eb.episode_id FROM episode_briefs eb WHERE eb.event_id = m.id AND eb.deleted_at IS NULL))
+           ORDER BY ep.episode_number NULLS LAST LIMIT 1
+        ) e ON true
+       ORDER BY e.episode_number NULLS LAST, m.created_at`,
+    { replacements: { pid: profileId, pidText: String(profileId) } });
+
+    const [[profile]] = await sequelize.query(
+      'SELECT id, home_location_id, lala_relationship FROM social_profiles WHERE id = :pid',
+      { replacements: { pid: profileId } });
+    let place = null;
+    if (profile && profile.home_location_id) {
+      const [[loc]] = await sequelize.query(`
+        SELECT wl.id, wl.name,
+               (SELECT COUNT(*)::int FROM social_profiles sp WHERE sp.home_location_id = wl.id) AS residents,
+               (SELECT COUNT(*)::int FROM scene_sets ss WHERE ss.world_location_id = wl.id AND ss.deleted_at IS NULL) AS scene_sets
+          FROM world_locations wl WHERE wl.id = :loc`, { replacements: { loc: profile.home_location_id } });
+      place = loc || null;
+    }
+    const [[posts]] = await sequelize.query(
+      'SELECT COUNT(*)::int AS n FROM feed_posts WHERE social_profile_id = :pid AND deleted_at IS NULL',
+      { replacements: { pid: profileId } });
+
+    const episodes = [];
+    const seen = new Set();
+    for (const ev of events) {
+      if (ev.episode_id && !seen.has(ev.episode_id)) {
+        seen.add(ev.episode_id);
+        episodes.push({ id: ev.episode_id, episode_number: ev.episode_number, title: ev.episode_title });
+      }
+    }
+    return res.json({
+      success: true,
+      linked: true,
+      events: events.map((ev) => ({
+        id: ev.id, show_id: ev.show_id, name: ev.name, role: ev.role, event_date: ev.event_date, event_time: ev.event_time,
+        venue_name: ev.venue_name, venue_location_id: ev.venue_location_id,
+        is_paid: Boolean(ev.is_paid), payment_amount: ev.payment_amount,
+        goals: Array.isArray(ev.goals) ? ev.goals.filter((g) => g && g.label).map((g) => ({ slot: g.slot || null, label: g.label })) : [],
+        episode: ev.episode_id ? { id: ev.episode_id, episode_number: ev.episode_number, title: ev.episode_title } : null,
+      })),
+      episodes,
+      place,
+      feed: { posts: posts ? posts.n : 0, lala_relationship: profile ? profile.lala_relationship : null },
+    });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/appearances error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
