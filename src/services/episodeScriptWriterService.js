@@ -161,7 +161,11 @@ async function loadScriptContext(episodeId, showId, models) {
     console.error('[ScriptWriter] financial context failed (non-blocking):', err.message);
   }
 
-  // 5. Wardrobe for this episode
+  // 5. Wardrobe for this episode: the outfit locked on the Wardrobe tab,
+  // as GET /wardrobe/outfit/:episode_id reads it (routes/wardrobe.js) and
+  // the Script page's "What the script will use" shows it. A pending link
+  // (a library assign awaiting approval) is not the locked outfit, and an
+  // attachment travels with its parent piece (Evoni, 2026-10-08).
   context.wardrobe = [];
   try {
     const [rows] = await sequelize.query(
@@ -171,7 +175,10 @@ async function loadScriptContext(episodeId, showId, models) {
               w.s3_url_processed, w.thumbnail_url
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
-       WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
+       WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
+         AND ew.approval_status = 'approved'
+         AND w.parent_item_id IS NULL
+       ORDER BY ew.created_at ASC`,
       { replacements: { episodeId } }
     );
     context.wardrobe = rows || [];
