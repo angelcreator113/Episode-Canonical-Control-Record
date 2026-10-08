@@ -813,11 +813,13 @@ async function generateEpisodeScript(episodeId, showId, models) {
 
   // Also save to episode.script_content for backwards compat
   try {
+    const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+    const current = await models.Episode.findByPk(episodeId, { attributes: ['id', 'script_content', 'script_locked_beats'] });
     await models.Episode.update(
-      { script_content: scriptText },
+      { script_content: scriptKeepingLocks(current, scriptText).script },
       { where: { id: episodeId } }
     );
-  } catch { /* non-blocking */ }
+  } catch (err) { console.error('[ScriptWriter] Could not copy the script to the episode (non-blocking):', err.message); }
 
   // Track which franchise laws were injected
   if (context.franchiseLawIds?.length > 0 && models.FranchiseKnowledge) {

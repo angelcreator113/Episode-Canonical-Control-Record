@@ -64,6 +64,20 @@
 .esp-link { font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
 .esp-link:hover { text-decoration: underline; }
 
+/* Reordering (drag and drop, and the Up/Down buttons for touch). */
+.esp-order-hint { margin: 0 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+.esp-unsaved { color: var(--accent-dark); font-weight: 600; }
+.esp-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 28px; margin-left: -8px; border-radius: 6px; color: var(--lala-ink-muted); cursor: grab; touch-action: none; }
+.esp-grip:hover { background: var(--lala-parchment-2); color: var(--lala-ink); }
+.esp-grip:active { cursor: grabbing; }
+.esp-grip.is-locked { cursor: default; }
+.esp-grip.is-locked:hover { background: none; }
+.esp-move { display: inline-flex; gap: 6px; }
+.esp-move-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-move-btn:disabled { opacity: 0.4; cursor: default; }
+.esp-drop-before { box-shadow: 0 -3px 0 0 var(--lala-gold) !important; }
+.esp-drop-after { box-shadow: 0 3px 0 0 var(--lala-gold) !important; }
+
 @media (max-width: 900px) {
   .esp { grid-template-columns: minmax(0, 1fr); }
 }

@@ -518,7 +518,12 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 
     const { generateGroundedScript } = require('../services/groundedScriptGeneratorService');
     const models = require('../models');
-    const script = await generateGroundedScript(episodeId, showId, models);
+    const generated = await generateGroundedScript(episodeId, showId, models);
+    // Locked beats (utils/scriptBeatLocks.js): Regenerate rewrites only the
+    // unlocked beats; each locked one comes back word for word.
+    const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+    const locks = scriptKeepingLocks(episodeForGuard, generated);
+    const script = locks.script;
 
     // Audit GATE-03 (2026-10-03): saving is part of success. A script that
     // was generated but not saved comes back saying so (success false,
@@ -549,6 +554,7 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     }
     const body = {
       success: saved, saved, script, episodeId,
+      locked_kept: locks.kept,
       beats: check.beats.map(({ number, name }) => ({ number, name })),
       beat_check: { complete: check.complete, missing: check.missing, unknown: check.unknown, out_of_order: check.outOfOrder },
     };
