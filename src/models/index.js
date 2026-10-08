@@ -2044,6 +2044,9 @@ module.exports.EditMap = EditMap;
 module.exports.CharacterProfile = CharacterProfile;
 module.exports.CharacterTherapyProfile = CharacterTherapyProfile;
 module.exports.FranchiseTechKnowledge = FranchiseTechKnowledge;
+// Defined above but never exported, so db.BrainDocument was undefined and
+// ingest-document skipped its document row (wiring map fix-list item 19).
+module.exports.BrainDocument = BrainDocument;
 module.exports.SessionBrief = SessionBrief;
 module.exports.PostGenerationReview = PostGenerationReview;
 module.exports.WritingRhythm = WritingRhythm;
