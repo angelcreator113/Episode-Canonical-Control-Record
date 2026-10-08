@@ -30,6 +30,8 @@ import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
 import PhoneMapStage from '../components/phone/PhoneMapStage';
 import ConnectScreenList from '../components/phone/ConnectScreenList';
+import ContentAreaPicker from '../components/phone/ContentAreaPicker';
+import { HOME_GRID, getGridSlot, snapZoneToGrid } from '../components/phone/homeGrid';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 import { activeShowId, rememberShow } from '../utils/activeShow';
@@ -298,7 +300,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // { state: 'failed', reason }. Original / Removed come from bg_removed
   // (Task #2024); nothing here is stored.
   const [bgAttempts, setBgAttempts] = useState({});
-  const [contentAreaPick, setContentAreaPick] = useState(false);  // "+ Add" ▸ Content Area
+  const [contentAreaPick, setContentAreaPick] = useState(false);
+  // The kind picked in Content's "Add an area", waiting for the next drawn
+  // area (Evoni's mockup, 2026-10-08); cleared on another screen or stage.
+  const [armedContent, setArmedContent] = useState(null);
+  useEffect(() => { setArmedContent(null); }, [activeScreen?.id, activeTab]);  // "+ Add" ▸ Content Area
 
   // Reloading or closing the page with unsaved zones or content areas asks
   // first (phone audit, 2026-10-07).
@@ -1076,6 +1082,46 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     else flash(`Back zone added to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}`);
   };
 
+  // The Icons stage (Evoni's mockup, 2026-10-08): put an icon on a screen —
+  // where it was dropped on the phone (snapped to the home grid), or the
+  // first free spot of that grid for "Place it". `screen` is the screen the
+  // phone shows, else the home screen. A taken spot is said, not stacked.
+  const handlePlaceIcon = async (icon, at, screen) => {
+    const target = screen || homeScreenOf(overlays);
+    const name = String(icon?.name || '').replace(/\s*icon$/i, '').trim() || 'Icon';
+    if (!icon || !showId) return;
+    if (!target?.asset_id) { flash('Give the home screen an image first, then place icons on it.', 'error'); return; }
+    const current = overlays.find(o => o.id === target.id) || target;
+    const links = getScreenLinks(current);
+    const size = { w: HOME_GRID.width, h: HOME_GRID.height };
+    const overlaps = (a) => links.some(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+    let spot = null;
+    if (at) {
+      const snapped = snapZoneToGrid({ x: at.x - size.w / 2, y: at.y - size.h / 2, ...size });
+      if (overlaps(snapped)) { flash('That spot is taken. Drop it on an empty spot.', 'error'); return; }
+      spot = snapped;
+    } else {
+      for (let i = 0; i < HOME_GRID.columns * 6 && !spot; i += 1) {
+        const slot = { ...getGridSlot(i), ...size };
+        if (!overlaps(slot)) spot = slot;
+      }
+      if (!spot) { flash(`No empty spot on ${target.name}. Make room in Connect.`, 'error'); return; }
+    }
+    const base = { id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, x: spot.x, y: spot.y, w: size.w, h: size.h, target: '' };
+    const zone = { ...base, ...pickZoneLibraryIcon(base, icon, overlays.filter(isIcon)) };
+    const next = [...links, zone];
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: next });
+      const withLinks = (o) => ({ ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } });
+      setOverlays(prev => prev.map(o => (o.id === target.id ? withLinks(o) : o)));
+      setActiveScreen(prev => (prev?.id === target.id ? withLinks(prev) : prev));
+      flash(`Placed ${name} on ${target.name}`);
+    } catch (err) {
+      console.error('[UIOverlaysTab] placing an icon failed:', err);
+      flash(err.response?.data?.error || err.message, 'error');
+    }
+  };
+
   // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
   // each target screen as an independent new zone. Each copy gets a fresh id so
   // they can be repositioned / edited per screen without affecting the original.
@@ -1718,6 +1764,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 customFrameUrl={customFrameUrl}
                 globalFit={globalFit}
                 onEditZones={afterSave(() => setActiveTab('zones'))}
+                onPlaceIcon={handlePlaceIcon}
+                onNewIcon={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }}
+                iconsLastStep={setupProgress.next?.key === 'icons'}
                 // Preview shows the screen list beside the embedded phone.
                 activeTab={previewing ? 'screens' : activeTab}
                 onChangeTab={afterSave(setActiveTab)}
@@ -2343,6 +2392,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               const content = (s.content_zones || s.metadata?.content_zones || []).length;
               contentZoneCounts.set(s.id, { tap: 0, icon: 0, content });
             });
+            const activeContentZones = activeScreen.content_zones || activeScreen.metadata?.content_zones || NO_ZONES;
+            const otherContentScreens = editableScreens
+              .filter(sc => sc.id !== activeScreen.id && (contentZoneCounts.get(sc.id)?.content || 0) > 0)
+              .map(sc => ({ screen: sc, count: contentZoneCounts.get(sc.id).content }));
             return (
               <div className="phone-hub-zones-panel">
                 <div className="zones-tab">
@@ -2361,14 +2414,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                       customFrameUrl={customFrameUrl}
                       compact
                       sidePanel={contentSidePanel}
+                      armedType={armedContent}
+                      onArmedUsed={() => setArmedContent(null)}
                     />
-                    <p className="zones-tab__canvas-hint">Drag on the screen to draw a content area</p>
+                    <p className="zones-tab__canvas-hint">
+                      {armedContent ? `Drag on the screen to place the ${armedContent.label}` : 'Drag on the screen to draw a content area'}
+                    </p>
                   </div>
                   <div className="zones-tab__controls">
                     <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
                       <div className="zone-editor-header">
                         <div className="zones-tab__sidebar-meta">
-                          <div className="zones-tab__sidebar-label">Content areas</div>
+                          <div className="zones-tab__sidebar-label">Live content</div>
                           <div className="zones-tab__sidebar-title-row">
                             <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
                           </div>
@@ -2380,6 +2437,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                           <Check size={14} /> Done
                         </button>
                       </div>
+                      {/* "Add an area" (Evoni's mockup, 2026-10-08): the next
+                          area drawn on the phone gets the picked kind. */}
+                      <ContentAreaPicker
+                        zones={activeContentZones}
+                        armedKey={armedContent?.key || null}
+                        onArm={setArmedContent}
+                        otherScreens={otherContentScreens}
+                        onPickScreen={switchToScreen}
+                      />
                       <div className="zones-tab__pick-label">Pick a screen</div>
                       <ScreenThumbnailStrip
                         screens={editableScreens}

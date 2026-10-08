@@ -151,7 +151,7 @@ describe('PhoneHub screen cards (Task #2042)', () => {
   test('icon cards keep their own label and get no status', () => {
     const { container } = hub({ tab: 'icons' });
     const call = card(container.querySelector('.phone-hub-icon-grid'), 'Call');
-    expect(within(call).getByText('✓ 1 screen')).toBeTruthy();
+    expect(within(call).getByText('on Homepage')).toBeTruthy();
     expect(call.querySelector('[data-testid="screen-card-status"]')).toBeNull();
   });
 

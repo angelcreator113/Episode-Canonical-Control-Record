@@ -3,8 +3,9 @@
  *
  * Written against main before any source change. Screen cards show their
  * name; the home screen's card reads "★ HOME" (is_home, else the first
- * generated screen); icon cards read "✓ N screen(s)", "⚠ No target" or
- * "○ Unplaced". The status lines added by doctrine rule 18 sit beside these,
+ * generated screen); icon cards read "on <screen>" (or "on N screens"),
+ * "⚠ No target" or "Unplaced" (the mockup's words, Evoni 2026-10-08). The
+ * status lines added by doctrine rule 18 sit beside these,
  * so every assertion here holds before and after.
  */
 
@@ -79,8 +80,8 @@ describe('PhoneHub cards — pinned before status cards (Task #2042)', () => {
   test('icon cards read placed with a target, placed without one, or unplaced', () => {
     const { container } = hub([HOME, CALLS, DMS, CALL, MAIL, CAMERA], 'icons');
     const grid = container.querySelector('.phone-hub-icon-grid');
-    expect(within(cardFor(grid, 'Call')).getByText('✓ 1 screen')).toBeTruthy();
+    expect(within(cardFor(grid, 'Call')).getByText('on Homepage')).toBeTruthy();
     expect(within(cardFor(grid, 'Mail')).getByText('⚠ No target')).toBeTruthy();
-    expect(within(cardFor(grid, 'Camera')).getByText('○ Unplaced')).toBeTruthy();
+    expect(within(cardFor(grid, 'Camera')).getByText('Unplaced')).toBeTruthy();
   });
 });
