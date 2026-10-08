@@ -1,16 +1,23 @@
 /**
- * CharacterRegistryPage — Clean character hub
+ * CharacterRegistryPage — The cast (Evoni's mock, 2026-10-08)
  *
- * Browse a registry's characters in a grid (the active show's by default;
- * audit IA-05: a chosen registry, never the first one the API returned),
- * quick create into it, click to view profile.
- * Replaces the 5,750-line monolith with a focused, maintainable page.
+ * Lala; the people in her world, who are her LalaVerse feed profiles, each
+ * linked to a character; and the characters left from the old system,
+ * waiting for Evoni's call (lib/theCast). Works in a chosen registry (the
+ * active show's by default; audit IA-05: never the first one the API
+ * returned); quick create goes into it.
+ *
+ * The old system's Archive is the registry's soft delete. Keep, Match to
+ * feed person, the Kept and Archived tabs and episode counts need routes
+ * that don't exist yet and come next; they show disabled, not pretend.
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
+import { findLala, feedPeople, oldSystem, sameNames, sameNameNote } from '../lib/theCast';
+import './TheCast.css';
 
 const ROLE_CONFIG = {
   protagonist: { color: '#B8962E', bg: '#FAF7F0', icon: '👑', label: 'Protagonist' },
@@ -21,12 +28,8 @@ const ROLE_CONFIG = {
   special: { color: '#ec4899', bg: '#fdf2f8', icon: '✦', label: 'Special' },
 };
 
-const DEPTH_CONFIG = {
-  sparked: { color: '#f59e0b', label: 'Sparked', pct: 25 },
-  breathing: { color: '#6366f1', label: 'Breathing', pct: 50 },
-  active: { color: '#16a34a', label: 'Active', pct: 75 },
-  alive: { color: '#B8962E', label: 'Alive', pct: 100 },
-};
+const ROLE_LABEL = Object.fromEntries(Object.entries(ROLE_CONFIG).map(([k, v]) => [k, v.label]));
+const NEXT = 'Comes next: this needs a route the registry does not have yet.';
 
 
 /**
@@ -66,8 +69,9 @@ export default function CharacterRegistryPage() {
   const [registryId, setRegistryId] = useState(null);
   const [createRegistryId, setCreateRegistryId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [profiles, setProfiles] = useState([]);
+  const [picked, setPicked] = useState(() => new Set());
+  const [archiving, setArchiving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
   const [creating, setCreating] = useState(false);
@@ -75,7 +79,7 @@ export default function CharacterRegistryPage() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  useEffect(() => { loadCharacters(); }, []);
+  useEffect(() => { loadCharacters(); loadProfiles(); }, []);
 
   // The Feed's "Registry →" link names a character: open its profile.
   const linkedCharacterId = searchParams.get('character');
@@ -92,6 +96,14 @@ export default function CharacterRegistryPage() {
       setAllCharacters(regs.flatMap(r => (r.characters || []).map(c => ({ ...c, registry_id: r.id, registry_name: r.title }))));
     } catch (err) { console.error('[CharacterRegistryPage] registries load failed:', err); setAllCharacters([]); }
     finally { setLoading(false); }
+  };
+
+  // Lala's world: the LalaVerse feed profiles, each with its linked character.
+  const loadProfiles = async () => {
+    try {
+      const res = await api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100');
+      setProfiles(res.data?.profiles || []);
+    } catch (err) { console.error('[CharacterRegistryPage] feed profiles load failed:', err); setProfiles([]); }
   };
 
   // Once the registries and the active show are known, settle the registry
@@ -133,101 +145,148 @@ export default function CharacterRegistryPage() {
     finally { setCreating(false); }
   };
 
-  const filtered = characters.filter(c => {
-    if (roleFilter !== 'all' && c.role_type !== roleFilter) return false;
-    if (search && !(c.display_name || '').toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const lala = findLala(characters);
+  const people = feedPeople(profiles, allCharacters);
+  const old = oldSystem(characters, profiles, lala);
+  const twins = sameNames(old);
+  const protagonists = characters.filter((c) => c.role_type === 'protagonist').length;
+  const pickedOld = old.filter((c) => picked.has(c.id));
+  const togglePick = (id) => setPicked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
-  const roleCounts = {};
-  characters.forEach(c => { roleCounts[c.role_type] = (roleCounts[c.role_type] || 0) + 1; });
+  // Archive is the registry's soft delete; bringing one back is not on this page yet, so ask first.
+  const archive = async (chars) => {
+    if (!chars.length) return;
+    const names = chars.length === 1 ? chars[0].display_name : `${chars.length} characters`;
+    if (!window.confirm(`Archive ${names}? They leave the pickers. Bringing them back isn't on this page yet.`)) return;
+    setArchiving(true);
+    try {
+      if (chars.length === 1) await api.delete(`/api/v1/character-registry/characters/${chars[0].id}`);
+      else await api.post('/api/v1/character-registry/characters/bulk-delete', { ids: chars.map((c) => c.id) });
+      setPicked(new Set());
+      showToast(`Archived ${names}`);
+      loadCharacters();
+    } catch (err) {
+      console.error('[CharacterRegistryPage] archive failed:', err);
+      showToast('Archive failed: ' + (err.response?.data?.error || err.message));
+    } finally { setArchiving(false); }
+  };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading characters...</div>;
+  if (loading) return <div className="cast-loading">Loading the cast…</div>;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
-      {toast && <div role="status" style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: '#EAF5F3', color: '#2F7F76', border: '1px solid #2F7F76', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast}</div>}
+    <div className="cast">
+      {toast && <div role="status" className="cast-toast">{toast}</div>}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Characters</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }} data-testid="registry-count">
+      <header className="cast-card cast-head">
+        <div className="cast-head-text">
+          <h1 className="cast-title">The cast</h1>
+          <p className="cast-lede">The people in Lala's world are her feed profiles. Everyone else here is from the old system and waits for your call.</p>
+          <p className="cast-note" data-testid="registry-count">
             {characters.length} character{characters.length !== 1 ? 's' : ''}{registry ? ` in ${registry.title}` : registries.length > 1 ? ` across ${registries.length} registries` : ''}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="cast-stats">
+          <div className="cast-stat is-lavender"><strong>{people.length}</strong><span>feed people</span></div>
+          <div className="cast-stat is-gold"><strong>{old.length}</strong><span>old to review</span></div>
+        </div>
+        <div className="cast-head-actions">
           {registries.length > 1 && (
-            <select aria-label="Registry" data-testid="registry-select" value={registryId || ''} onChange={(e) => selectRegistry(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${registryId ? '#2F7F76' : '#C06E87'}`, fontSize: 12, background: '#fff', color: '#2C2C2C' }}>
+            <select aria-label="Registry" data-testid="registry-select" className="cast-select" value={registryId || ''} onChange={(e) => selectRegistry(e.target.value)}>
               <option value="">All registries</option>
               {registries.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
             </select>
           )}
-          <button onClick={openCreate} data-testid="new-character" style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New Character</button>
+          <button type="button" onClick={openCreate} data-testid="new-character" className="cast-btn-primary">+ New character</button>
         </div>
-      </div>
+      </header>
 
-      {/* Role Filter + Search */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={() => setRoleFilter('all')} style={{ padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: roleFilter === 'all' ? '#1a1a2e' : '#f1f5f9', color: roleFilter === 'all' ? '#fff' : '#64748b', border: 'none' }}>All ({characters.length})</button>
-          {Object.entries(ROLE_CONFIG).map(([key, cfg]) => (
-            <button key={key} onClick={() => setRoleFilter(roleFilter === key ? 'all' : key)} style={{
-              padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              background: roleFilter === key ? cfg.bg : '#f8f8f8', color: roleFilter === key ? cfg.color : '#94a3b8',
-              border: `1px solid ${roleFilter === key ? cfg.color + '40' : 'transparent'}`,
-            }}>{cfg.icon} {cfg.label} ({roleCounts[key] || 0})</button>
-          ))}
-        </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, outline: 'none', flex: '0 1 250px' }} />
-      </div>
-
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
-          <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e' }}>{search ? 'No characters found' : 'No characters yet'}</h3>
-          {!search && <button onClick={openCreate} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 8 }}>+ Create Character</button>}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-          {filtered.map(char => {
-            const role = ROLE_CONFIG[char.role_type] || ROLE_CONFIG.pressure;
-            const depth = DEPTH_CONFIG[char.depth_level] || null;
-            return (
-              <div key={char.id} onClick={() => navigate(`/character/${char.id}`)} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}>
-                <div style={{ height: 4, background: role.color }} />
-                <div style={{ padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: role.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{char.icon || role.icon}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{char.display_name}</div>
-                      {char.subtitle && <div style={{ fontSize: 11, color: '#94a3b8' }}>{char.subtitle}</div>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <span style={{ padding: '2px 8px', background: role.bg, borderRadius: 4, fontSize: 9, fontWeight: 700, color: role.color }}>{role.icon} {role.label}</span>
-                    {char.status !== 'draft' && <span style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 9, color: '#64748b' }}>{char.status}</span>}
-                  </div>
-                  {char.core_belief && <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', lineHeight: 1.4, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>"{char.core_belief}"</div>}
-                  {depth && (
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
-                        <span style={{ color: depth.color, fontWeight: 600 }}>{depth.label}</span>
-                        <span style={{ color: '#94a3b8' }}>{depth.pct}%</span>
-                      </div>
-                      <div style={{ height: 3, background: '#f1f5f9', borderRadius: 2 }}><div style={{ height: '100%', width: `${depth.pct}%`, background: depth.color, borderRadius: 2 }} /></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Lala */}
+      {lala && (
+        <section className="cast-card cast-lala" aria-label="Lala" data-testid="cast-lala">
+          <div className="cast-avatar is-lala" aria-hidden="true">{(lala.display_name || 'L').charAt(0)}</div>
+          <div className="cast-lala-text">
+            <div className="cast-kicker">Protagonist</div>
+            <h2 className="cast-lala-name">{lala.display_name}</h2>
+            <p className="cast-note">{people.length} {people.length === 1 ? 'person' : 'people'} in her world</p>
+          </div>
+          {lala.role_type !== 'protagonist' && (
+            <p className="cast-lala-warn" data-testid="cast-lala-role">
+              <strong>Role says "{ROLE_LABEL[lala.role_type] || lala.role_type}".</strong> Lala should be the show's one Protagonist; that filter shows {protagonists} today.
+            </p>
+          )}
+          <button type="button" className="cast-btn-lavender" onClick={() => navigate(`/character/${lala.id}`)}>Open Lala</button>
+        </section>
       )}
+
+      {/* Lala's world */}
+      <section className="cast-world" aria-labelledby="cast-world-heading">
+        <div className="cast-section-head">
+          <h2 id="cast-world-heading" className="cast-h2">Lala's world</h2>
+          <span className="cast-note">{people.length} feed {people.length === 1 ? 'person' : 'people'}, each one a character</span>
+          <Link to="/feed" className="cast-link">Open in Lala's Feed</Link>
+        </div>
+        {people.length === 0 ? (
+          <p className="cast-note">No LalaVerse feed profiles yet. They are made in Lala's Feed.</p>
+        ) : (
+          <ul className="cast-people" data-testid="cast-people">
+            {people.map((p) => (
+              <li key={p.id}>
+                <Link className="cast-person" to={p.characterId ? `/character/${p.characterId}` : '/feed'}>
+                  <span className="cast-avatar" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+                  <span className="cast-person-text">
+                    <strong>{p.name}</strong>
+                    {p.handle && <span>@{p.handle.replace(/^@/, '')}</span>}
+                  </span>
+                  <span className="cast-chips">
+                    {p.archetype && <span className="cast-chip is-lavender">{p.archetype}</span>}
+                    {!p.characterId && <span className="cast-chip is-gold">No character yet</span>}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* From the old system */}
+      <section className="cast-card cast-old" aria-labelledby="cast-old-heading">
+        <div className="cast-section-head">
+          <h2 id="cast-old-heading" className="cast-h2">From the old system</h2>
+          <span className="cast-note">{old.length} character{old.length !== 1 ? 's' : ''}</span>
+          <div className="cast-tabs" role="group" aria-label="Old-system characters">
+            <button type="button" className="cast-tab is-on" aria-pressed="true">To review</button>
+            <button type="button" className="cast-tab" disabled title={NEXT}>Kept</button>
+            <button type="button" className="cast-tab" disabled title={NEXT}>Archived</button>
+          </div>
+        </div>
+        {old.length === 0 ? (
+          <p className="cast-note">Nothing left to review.</p>
+        ) : (<>
+          <div className="cast-bulk">
+            <p><strong>Not used any more?</strong> Select them and archive in one go. Archived characters leave the pickers.</p>
+            <button type="button" className="cast-btn-primary" disabled={!pickedOld.length || archiving} onClick={() => archive(pickedOld)}>
+              Archive selected{pickedOld.length ? ` (${pickedOld.length})` : ''}
+            </button>
+          </div>
+          <ul className="cast-rows" data-testid="cast-old">
+            {old.map((c) => (
+              <li key={c.id} className="cast-row">
+                <input type="checkbox" className="cast-check" aria-label={`Select ${c.display_name}`} checked={picked.has(c.id)} onChange={() => togglePick(c.id)} />
+                <button type="button" className="cast-row-name" onClick={() => navigate(`/character/${c.id}`)}><span>{c.display_name}</span></button>
+                <span className={`cast-role is-${c.role_type || 'pressure'}`}>{ROLE_LABEL[c.role_type] || 'Pressure'}</span>
+                <span className="cast-row-note">{twins[c.id] ? <span className="cast-twin">{sameNameNote(twins[c.id], c.display_name)}</span> : null}</span>
+                <span className="cast-row-actions">
+                  <button type="button" className="cast-btn-soft" disabled title={NEXT}>Match to feed person</button>
+                  <button type="button" className="cast-btn-soft" disabled title={NEXT}>Keep</button>
+                  <button type="button" className="cast-btn-archive" disabled={archiving} onClick={() => archive([c])}>Archive</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>)}
+        <p className="cast-note">Keep, Match to feed person and the Kept and Archived tabs come next.</p>
+      </section>
 
       {/* Create Modal */}
       {showCreate && (
