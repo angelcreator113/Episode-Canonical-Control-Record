@@ -77,6 +77,19 @@ function clampZone(z, screenIds = null) {
 }
 
 // POST /api/v1/ui-overlays/:showId/ai/add-zones
+// The creator's hint, trimmed and capped (phone audit, 2026-10-07: any
+// length went into the prompt).
+const HINT_MAX = 500;
+function hintText(hint) {
+  return typeof hint === 'string' ? hint.trim().slice(0, HINT_MAX) : '';
+}
+
+// Out of AI budget (aiCostTracker sets status 429) is a 429 the page can
+// say plainly, not a 500.
+function aiErrorStatus(err) {
+  return err?.status === 429 ? 429 : 500;
+}
+
 // Body: { asset_id, prompt_hint?, episode_id? }
 // Returns: { success, proposal: { zones: [...] }, context_summary: { ... } }
 router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
@@ -111,7 +124,7 @@ router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
       context.state_keys_in_use.length
         ? `State keys already in use (PREFER reusing these over inventing new ones): ${context.state_keys_in_use.join(', ')}`
         : null,
-      prompt_hint ? `Creator hint: ${prompt_hint}` : null,
+      hintText(prompt_hint) ? `Creator hint: ${hintText(prompt_hint)}` : null,
     ].filter(Boolean).join('\n');
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -154,7 +167,7 @@ router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error('[phoneAIRoutes] add-zones error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(aiErrorStatus(err)).json({ success: false, error: err.message });
   }
 });
 
@@ -227,7 +240,7 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
         : null,
       `Zone content_type: ${zone.content_type}`,
       `Current content_config: ${JSON.stringify(zone.content_config || {})}`,
-      prompt_hint ? `Creator hint: ${prompt_hint}` : null,
+      hintText(prompt_hint) ? `Creator hint: ${hintText(prompt_hint)}` : null,
     ].filter(Boolean).join('\n');
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -268,7 +281,7 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
     });
   } catch (err) {
     console.error('[phoneAIRoutes] fill-content-zone error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(aiErrorStatus(err)).json({ success: false, error: err.message });
   }
 });
 

@@ -91,7 +91,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
   const [charRows] = await sequelize.query(
     `SELECT id, name, display_name, role, metadata::text AS metadata_text
      FROM characters
-     WHERE show_id = :showId AND deleted_at IS NULL
+     WHERE show_id = :showId
      ORDER BY
        CASE WHEN role = 'protagonist' THEN 0
             WHEN role = 'antagonist'  THEN 1
@@ -100,7 +100,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
        name ASC
      LIMIT 12`,
     { replacements: { showId } }
-  ).catch(() => [[]]);
+  ).catch((err) => { console.error('[phoneContextBuilder] characters query failed:', err.message); return [[]]; });
 
   const characters = (charRows || []).map(r => {
     let meta = {};
@@ -123,7 +123,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
       `SELECT id, episode_number, title, description
        FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { episodeId } }
-    ).catch(() => [[]]);
+    ).catch((err) => { console.error('[phoneContextBuilder] episode query failed:', err.message); return [[]]; });
     episode = epRows?.[0] || null;
 
     // Recent beats across all scenes in this episode — gives the AI a sense of
@@ -132,11 +132,11 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
       `SELECT b.id, b.beat_type, b.label, b.payload::text AS payload_text, b.start_time
        FROM beats b
        JOIN scenes s ON s.id = b.scene_id
-       WHERE s.episode_id = :episodeId AND s.deleted_at IS NULL AND b.deleted_at IS NULL
+       WHERE s.episode_id = :episodeId AND s.deleted_at IS NULL
        ORDER BY b.start_time DESC NULLS LAST
        LIMIT 8`,
       { replacements: { episodeId } }
-    ).catch(() => [[]]);
+    ).catch((err) => { console.error('[phoneContextBuilder] beats query failed:', err.message); return [[]]; });
     beats = (beatRows || []).map(r => {
       let payload = {};
       try { payload = JSON.parse(r.payload_text || '{}'); } catch { /* noop */ }

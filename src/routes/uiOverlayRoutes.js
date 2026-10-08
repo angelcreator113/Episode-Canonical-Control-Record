@@ -100,7 +100,10 @@ router.get('/:showId', requireAuth, async (req, res) => {
         existing = all;
       }
     } catch (queryErr) {
+      // A failed read is an error, not a phone with no images (phone audit,
+      // 2026-10-07): an empty list invited regenerating every screen.
       console.error('[UIOverlay] Asset query failed:', queryErr.message);
+      return res.status(500).json({ success: false, error: `Could not read the phone's images: ${queryErr.message}` });
     }
 
     // Map all overlay types to show which are generated vs missing
@@ -382,7 +385,11 @@ router.post('/:showId/generate/:overlayType', requireAuth, async (req, res) => {
     // areas, fit and category carry over (uiOverlayAssetReplace; Evoni,
     // 2026-10-07, Lala's Phone step 1). A failed save is an error, not a
     // success with no asset.
-    const { url, bg_removed, prompt_used } = await generateOverlay(overlayType, showId, { customPrompt });
+    // The show's style, as Generate all uses (phone audit, 2026-10-07: one
+    // screen was drawn in the default style).
+    const { getStylePrefix } = require('../services/uiOverlayService');
+    const stylePrefix = await getStylePrefix(showId, models);
+    const { url, bg_removed, prompt_used } = await generateOverlay(overlayType, showId, { customPrompt, stylePrefix });
 
     const { replaceOverlayAsset } = require('../services/uiOverlayAssetReplace');
     let assetId;
@@ -833,6 +840,30 @@ router.post('/:showId/screen-links/:assetId/icon', requireAuth, upload.single('i
 
 // ── CONTENT ZONES (Live data rendering on templates) ────────────────────────
 
+// Content areas are checked like tap zones (phone audit, 2026-10-07: any
+// shape was stored): an id, a box inside the screen, and conditions in the
+// shared grammar. Returns the first problem in plain words, or null.
+const CONTENT_ZONES_MAX = 40;
+function contentZonesProblem(zones) {
+  const { conditionsArraySchema } = require('../services/phoneConditionSchema');
+  if (zones.length > CONTENT_ZONES_MAX) return `A screen holds at most ${CONTENT_ZONES_MAX} content areas.`;
+  for (let i = 0; i < zones.length; i += 1) {
+    const z = zones[i];
+    const n = i + 1;
+    if (!z || typeof z !== 'object' || Array.isArray(z)) return `Content area ${n} is not an area.`;
+    if (typeof z.id !== 'string' || !z.id || z.id.length > 80) return `Content area ${n} has no id.`;
+    for (const k of ['x', 'y', 'w', 'h']) {
+      if (typeof z[k] !== 'number' || !Number.isFinite(z[k]) || z[k] < 0 || z[k] > 100) return `Content area ${n}: ${k} must be a number from 0 to 100.`;
+    }
+    if (z.content_type != null && (typeof z.content_type !== 'string' || z.content_type.length > 60)) return `Content area ${n} has an unknown kind.`;
+    if (z.conditions !== undefined) {
+      const { error } = conditionsArraySchema.validate(z.conditions);
+      if (error) return `Content area ${n}: ${/key" is not allowed to be empty|key" is required/.test(error.message) ? 'a condition needs a key (or remove it)' : error.message}`;
+    }
+  }
+  return null;
+}
+
 // PUT /api/v1/ui-overlays/:showId/content-zones/:assetId — save content zones for an overlay
 router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
   try {
@@ -842,6 +873,8 @@ router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
     if (!Array.isArray(content_zones)) {
       return res.status(400).json({ success: false, error: 'content_zones must be an array' });
     }
+    const invalid = contentZonesProblem(content_zones);
+    if (invalid) return res.status(400).json({ success: false, error: invalid });
 
     const [, updateMeta] = await models.sequelize.query(
       `UPDATE assets
@@ -937,14 +970,6 @@ router.post('/:showId/types', requireAuth, async (req, res) => {
     // Generate type_key from name if not provided
     const key = type_key || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
 
-    // If marking as home, unset any existing home screen for this show
-    if (is_home) {
-      await models.sequelize.query(
-        `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL`,
-        { replacements: { showId } }
-      );
-    }
-
     // Check for duplicate key
     const [existing] = await models.sequelize.query(
       `SELECT id FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL`,
@@ -954,7 +979,17 @@ router.post('/:showId/types', requireAuth, async (req, res) => {
       return res.status(409).json({ success: false, error: `Overlay type "${key}" already exists` });
     }
 
+    // If marking as home, unset any existing home screen for this show — after
+    // the duplicate check, and with the insert, so a refused or failed create
+    // never leaves the show without a home (phone audit, 2026-10-07).
     const id = uuidv4();
+    await models.sequelize.transaction(async (transaction) => {
+    if (is_home) {
+      await models.sequelize.query(
+        `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL`,
+        { replacements: { showId }, transaction }
+      );
+    }
     await models.sequelize.query(
       `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, opens_screen, is_home, created_at, updated_at)
        VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, :opensScreen, :isHome, NOW(), NOW())`,
@@ -967,8 +1002,9 @@ router.post('/:showId/types', requireAuth, async (req, res) => {
         sortOrder: req.body.sort_order || 100,
         opensScreen: opens_screen || null,
         isHome: !!is_home,
-      } }
+      }, transaction }
     );
+    });
 
     return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt: effectivePrompt, opens_screen: opens_screen || null } });
   } catch (err) {
@@ -1038,27 +1074,60 @@ router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
     const models = require('../models');
     const showId = req.params.showId;
 
-    // Get the type_key before deleting (needed for orphan cleanup)
-    const [rows] = await models.sequelize.query(
-      `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL RETURNING id, type_key`,
-      { replacements: { typeId: req.params.typeId, showId } }
-    );
-    if (!rows?.length) {
-      return res.status(404).json({ success: false, error: 'Overlay type not found' });
-    }
+    // One transaction (phone audit, 2026-10-07): the type, its images (show
+    // and episode versions), icons' opens_screen to it, and every zone on the
+    // show's screens that led to it. The page used to clean up zones itself,
+    // without waiting, from a stale copy, and the images stayed behind.
+    const result = await models.sequelize.transaction(async (transaction) => {
+      const [rows] = await models.sequelize.query(
+        `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL RETURNING id, type_key`,
+        { replacements: { typeId: req.params.typeId, showId }, transaction }
+      );
+      if (!rows?.length) return null;
+      const deletedKey = rows[0].type_key;
+      if (!deletedKey) return { zonesRemoved: 0 };
 
-    // Clean up stale opens_screen references pointing to the deleted type
-    const deletedKey = rows[0].type_key;
-    if (deletedKey) {
       await models.sequelize.query(
         `UPDATE ui_overlay_types SET opens_screen = NULL, updated_at = NOW()
          WHERE show_id = :showId AND opens_screen = :deletedKey AND deleted_at IS NULL`,
-        { replacements: { showId, deletedKey } }
+        { replacements: { showId, deletedKey }, transaction }
       );
-    }
+      await models.sequelize.query(
+        `UPDATE assets SET deleted_at = NOW(), updated_at = NOW()
+         WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
+           AND metadata->>'overlay_type' = :deletedKey`,
+        { replacements: { showId, deletedKey }, transaction }
+      );
+      const [screens] = await models.sequelize.query(
+        `SELECT id, metadata::text AS metadata_text FROM assets
+         WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
+         FOR UPDATE`,
+        { replacements: { showId }, transaction }
+      );
+      let zonesRemoved = 0;
+      for (const screen of screens || []) {
+        let meta;
+        try { meta = JSON.parse(screen.metadata_text || '{}'); } catch (parseErr) {
+          console.error(`[UIOverlay] type delete: screen ${screen.id} metadata is not JSON, skipped:`, parseErr.message);
+          continue;
+        }
+        const links = Array.isArray(meta.screen_links) ? meta.screen_links : [];
+        const kept = links.filter(l => l?.target !== deletedKey);
+        if (kept.length === links.length) continue;
+        zonesRemoved += links.length - kept.length;
+        meta.screen_links = kept;
+        await models.sequelize.query(
+          `UPDATE assets SET metadata = CAST(:metadata AS jsonb), updated_at = NOW() WHERE id = :id`,
+          { replacements: { id: screen.id, metadata: JSON.stringify(meta) }, transaction }
+        );
+      }
+      return { deletedKey, zonesRemoved };
+    });
+    if (!result) return res.status(404).json({ success: false, error: 'Overlay type not found' });
 
-    return res.json({ success: true });
+    return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[UIOverlay] type delete error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
