@@ -147,12 +147,14 @@ export default function ShowBiblePage({ embedded = false }) {
   // scene_brief (the page sent scene_text and was refused with 400) and
   // answers { status, passed, warnings, rules_checked, message } with status
   // 'passed' | 'issues' | 'check_failed'; a check that could not run is never
-  // shown as a pass (2026-10-04).
+  // shown as a pass (2026-10-04). With an active show it sends show_id, so
+  // the brief is checked against the franchise's rules and that show's,
+  // never another show's (wiring map fix-list item 25).
   const handleGuard = async () => {
     setGuarding(true); setGuardResult(null);
     const characters_in_scene = guardCharacters.split(',').map((s) => s.trim()).filter(Boolean);
     try {
-      const r = await api.post('/api/v1/franchise-brain/guard', { scene_brief: guardText, characters_in_scene });
+      const r = await api.post('/api/v1/franchise-brain/guard', { scene_brief: guardText, characters_in_scene, ...(show?.id ? { show_id: show.id } : {}) });
       setGuardResult(r.data);
     } catch (err) {
       setGuardResult({ status: 'check_failed', passed: false, warnings: [], message: err.response?.data?.error || 'The check could not run' });

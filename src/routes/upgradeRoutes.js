@@ -25,6 +25,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
+const { selectRules } = require('../services/brainRules');
 
 const client = new Anthropic();
 
@@ -173,10 +174,10 @@ router.post('/reviews/post-generation', requireAuth, aiRateLimiter, async (req, 
     const approvedText = story.evaluation_result?.approved_version || story.story_a || '';
     if (!approvedText) return res.status(400).json({ error: 'No approved text to review' });
 
-    // Get all active franchise laws + critical entries
-    const laws = await db.FranchiseKnowledge.findAll({
-      where: { status: 'active', severity: { [Op.in]: ['critical'] } },
-    });
+    // Every active critical entry, in the shared order (services/brainRules;
+    // wiring map fix-list item 25): it came in whatever order Postgres
+    // returned. A story has no show, so every show's.
+    const laws = await selectRules(db.FranchiseKnowledge, { where: { severity: 'critical' } });
 
     const reviewPrompt = `You are the Post-Generation Review agent for Prime Studios. Read this approved scene and check it against the franchise laws. Your job is to catch what slipped through — subtle drift, tone violations, character contradictions that feel almost right but aren't.
 

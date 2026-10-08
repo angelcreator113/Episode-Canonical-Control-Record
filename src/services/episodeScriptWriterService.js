@@ -832,14 +832,14 @@ async function generateEpisodeScript(episodeId, showId, models) {
     }
   }
 
-  // Auto-run franchise guard on generated script
+  // Auto-run franchise guard on generated script: the first 100 active
+  // entries in the show's scope and the shared order (services/brainRules;
+  // wiring map fix-list item 25). It took whichever 100 Postgres returned,
+  // from every show.
   let guardResult = null;
   try {
-    const guardEntries = await models.FranchiseKnowledge.findAll({
-      where: { status: 'active' },
-      attributes: ['id', 'title', 'content', 'severity'],
-      limit: 100,
-    });
+    const { selectRules } = require('./brainRules');
+    const guardEntries = await selectRules(models.FranchiseKnowledge, { showId, limit: 100 });
 
     if (guardEntries.length > 0 && scriptText.length > 100) {
       const Anthropic = require('@anthropic-ai/sdk');

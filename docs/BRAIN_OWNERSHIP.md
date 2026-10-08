@@ -156,20 +156,27 @@ Found by reading, not yet run:
 ## 4. Who reads the Brain, and through which filter
 
 There is no routing today. A reader gets entries by status and a severity / always-inject
-filter, never by what the entry is about:
+filter, never by what the entry is about. Since 2026-10-08 every reader selects through
+`services/brainRules.js` (`selectInjectedRules`, `loadBrainContext`, or `selectRules`, which
+applies the same show scope and the same order, severity then id, to the reader's own
+filter); a reader that is sent no show reads every show's entries. Which entries each reader
+takes did not change (wiring map fix-list item 25; which cards count is item 24):
 
 | Reader | Filter |
 |---|---|
-| Amber (`buildKnowledgeInjection`), franchise guard | active AND (critical OR always_inject), no limit |
+| Franchise guard (`POST /franchise-brain/guard`) | `selectRules`: active AND (critical OR always_inject), no limit, in the scope of the body's `show_id` (the Show Bible's Guard tab and Canon guard send the active show). It read every show's, unordered. |
+| Amber (`buildKnowledgeInjection`) | `selectRules`: active AND (critical OR always_inject), no limit; Amber is sent no show, so every show's; each use counted (`recordRuleUse`). It was ordered by severity and category. |
 | Episode script writer (`loadScriptContext`), grounded script generator | `selectInjectedRules` (`services/brainRules.js`, 2026-10-04): active AND always_inject, in the show's scope (franchise, the show's own, show entries not yet assigned), ordered severity then id, the first 50; the used and omitted rules are recorded on the script (`context_snapshot.brain_rules`) and shown on the script writer page |
-| Rewrite line | active AND always_inject, limit 30, unordered (not yet on the selector) |
+| Episode script writer's auto-guard (`generateEpisodeScript`) | `selectRules`: any active, in the show's scope, the first 100. It took the first 100 Postgres returned, every show's. |
+| Rewrite line (`POST /episode-brief/:episodeId/rewrite-line`) | `selectInjectedRules` in the scope of the body's `showId` (the Script tab sends it), the first 30, voice and character rules first. It was unordered, every show's. |
 | Event generator (`buildEventPrompt`) | `loadBrainContext` (`services/brainRules.js`, 2026-10-06): `selectInjectedRules` in the show's scope, the first 25, full text up to 600 characters a rule; each use counted (`recordRuleUse`: `injection_count`, `last_injected_at`). It was active AND always_inject, limit 10, cut to 200 characters, no show scope. |
 | Feed posts (`generateEpisodeFeedPosts`), seasonal events (`generateSeasonalEvents`), LalaVerse profile sparks and profiles (`feedScheduler`, POST `/social-profiles/generate` and `/:id/regenerate`) | `loadBrainContext`, the first 25, each use counted. LalaVerse only: JustAWoman's Feed (Book 1, `real_world`) is the real world and gets no LalaVerse rules. These read nothing before 2026-10-06. |
 | Comment drafts (`draftReactions`), post redrafts (`redraftPost`), event concept drafts (`draftEventConcept`, when the caller passes models and the show), Feed-to-event venues (`generateUniqueVenue`) | `loadBrainContext`, the first 15 (venues 10), each use counted. These read nothing before 2026-10-06. |
-| Memories engine (`loadFranchiseKnowledge`) | any active, by severity, limit 15 (the critical laws fill it) |
-| Story evaluation (`loadFranchiseConstraints`) | active AND (critical OR always_inject), limit 20, then `applies_to` against the scene's characters. This is the only reader of `applies_to`. |
-| Tier franchise guard | active AND category in (franchise_law, locked_decision, character, narrative) |
-| Post-generation review | active AND critical |
+| Memories engine (`loadFranchiseKnowledge`) | `selectRules`: any active, the first 15 (the critical laws fill it). WriteMode has no show. It took the newest within a severity. |
+| Story evaluation (`loadFranchiseConstraints`) | `selectRules`: active AND (critical OR always_inject), the first 20, then `applies_to` against the scene's characters. This is the only reader of `applies_to`. A story has no show. |
+| Tier franchise guard (`POST /tier/franchise-guard-check`) | `selectRules`: active AND category in (franchise_law, locked_decision, character, narrative); each use counted. A story has no show. |
+| Post-generation review (`POST /reviews/post-generation`) | `selectRules`: active AND critical. A story has no show. |
+| Amber `develop_world` | `selectRules`: the page's own `source_document`, the first 30; and category franchise_law, the first 10. Amber is sent no show. |
 
 So "Used By" (step 6 of the redesign) is new backend work: each reader would select by the
 entry's declared consumers instead of by `critical OR always_inject`. Until then, a synced

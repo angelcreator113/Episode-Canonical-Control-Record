@@ -24,6 +24,7 @@ const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 const { factsOf } = require('../services/worldFacts');
+const { selectRules, RULE_ATTRIBUTES, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -607,17 +608,13 @@ async function loadTherapyProfiles(characterKeys, registryId) {
 // ── Helper: load franchise knowledge (critical narrative rules) ───────────
 async function loadFranchiseConstraints(characterKeys) {
   try {
-    // Load critical + always-inject franchise knowledge
-    const rules = await db.FranchiseKnowledge.findAll({
-      where: {
-        status: 'active',
-        [db.Sequelize.Op.or]: [
-          { severity: 'critical' },
-          { always_inject: true },
-        ],
-      },
-      attributes: ['title', 'content', 'category', 'severity', 'applies_to'],
-      order: [['severity', 'ASC']], // critical first
+    // The first 20 critical and always-inject entries, critical first, in
+    // the shared order (services/brainRules; wiring map fix-list item 25):
+    // within a severity it took whichever 20 Postgres returned. A story
+    // has no show, so every show's.
+    const rules = await selectRules(db.FranchiseKnowledge, {
+      where: CRITICAL_OR_ALWAYS_INJECT,
+      attributes: [...RULE_ATTRIBUTES, 'applies_to'],
       limit: 20,
     });
     if (!rules.length) return '';

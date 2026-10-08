@@ -21,30 +21,70 @@
  * Returns { rules, used, omitted, eligible, limit }: rules are the full
  * rows for the prompt; used and omitted are { id, title, severity,
  * category } for the record and the screen.
+ *
+ * Every other reader (2026-10-08): the franchise guard, the script
+ * writer's guard, the tier guard, the post-generation review, story
+ * evaluation, line rewrites, WriteMode and Amber each read
+ * franchise_knowledge with their own findAll, with no show scope (a show
+ * was checked against another show's canon) and in whatever order
+ * Postgres returned, so a limit cut a different set each time (wiring map,
+ * docs/reads/2026-10-06-lalaverse-wiring-map.md, fix-list item 25).
+ * selectRules gives each of them this scope and this order. Which entries
+ * a reader takes (its `where`) stays the reader's own: which cards count
+ * is fix-list item 24, Evoni's call.
  */
 
 const { Op } = require('sequelize');
 
 const SEVERITY_RANK = { critical: 0, important: 1, context: 2 };
 const DEFAULT_LIMIT = 50;
+const RULE_ATTRIBUTES = ['id', 'title', 'content', 'category', 'severity', 'scope', 'show_id'];
+
+/** The entries the guard, story evaluation and Amber take: the critical rules and the always-inject ones. */
+const CRITICAL_OR_ALWAYS_INJECT = Object.freeze({ [Op.or]: [{ severity: 'critical' }, { always_inject: true }] });
 
 const summary = (r) => ({ id: r.id, title: r.title, severity: r.severity, category: r.category });
+const plain = (row) => (typeof row?.toJSON === 'function' ? row.toJSON() : row);
 
 function orderRules(rows) {
   return [...rows].sort((a, b) =>
     (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9) || a.id - b.id);
 }
 
+/** Active, the reader's own `where`, and with a show its scope: show_id null (franchise, or a show entry not yet assigned) or the show's. */
+function scopedWhere(where = {}, showId = null) {
+  const scoped = { ...where, status: 'active' };
+  if (!showId) return scoped;
+  const scope = [{ show_id: null }, { show_id: showId }];
+  if (scoped[Op.or]) scoped[Op.and] = [...(scoped[Op.and] || []), { [Op.or]: scope }];
+  else scoped[Op.or] = scope;
+  return scoped;
+}
+
+/**
+ * The entries one reader takes: active, its `where`, in scope for the show
+ * (every entry when no show is given), severity first then id, the first
+ * `limit` (all of them with none). Plain rows with `attributes`; none
+ * without a model.
+ */
+async function selectRules(FranchiseKnowledge, { showId = null, where = {}, limit = null, attributes = RULE_ATTRIBUTES } = {}) {
+  if (!FranchiseKnowledge) return [];
+  const rows = await FranchiseKnowledge.findAll({
+    where: scopedWhere(where, showId),
+    attributes,
+    // The severity ENUM is declared critical, important, context, so the
+    // database orders as SEVERITY_RANK does and its limit cuts the same set.
+    order: [['severity', 'ASC'], ['id', 'ASC']],
+    ...(limit ? { limit } : {}),
+  });
+  const ordered = orderRules(rows.map(plain));
+  return limit ? ordered.slice(0, limit) : ordered;
+}
+
 async function selectInjectedRules(FranchiseKnowledge, { showId = null, limit = DEFAULT_LIMIT } = {}) {
   const empty = { rules: [], used: [], omitted: [], eligible: 0, limit };
   if (!FranchiseKnowledge) return empty;
-  const where = { status: 'active', always_inject: true };
-  if (showId) where[Op.or] = [{ show_id: null }, { show_id: showId }];
-  const rows = await FranchiseKnowledge.findAll({
-    where,
-    attributes: ['id', 'title', 'content', 'category', 'severity', 'scope', 'show_id'],
-  }).then((list) => list.map((l) => (typeof l.toJSON === 'function' ? l.toJSON() : l)));
-  const ordered = orderRules(rows);
+  const ordered = await selectRules(FranchiseKnowledge, { showId, where: { always_inject: true } });
   const rules = ordered.slice(0, limit);
   return {
     rules,
@@ -131,4 +171,5 @@ async function recordRuleUse(sequelize, ids, label = 'generator') {
 module.exports = {
   selectInjectedRules, brainRulesRecord, orderRules, DEFAULT_LIMIT, SEVERITY_RANK,
   GENERATOR_LIMIT, RULE_CHARS, ruleText, rulesPromptBlock, loadBrainContext, recordRuleUse,
+  selectRules, scopedWhere, RULE_ATTRIBUTES, CRITICAL_OR_ALWAYS_INJECT,
 };
