@@ -3,6 +3,7 @@
 // Tab in the Universe page, story-side cluster
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '';
@@ -67,6 +68,29 @@ const SCENE_TYPE_COLORS = {
   lala_seed:            C.gold,
   general:              C.textFaint,
 };
+
+/**
+ * The story a review read (GET /reviews/unacknowledged names it): its title,
+ * and its chapter once the write-back has put it in the book. Before that
+ * the story is still in Story Evaluation.
+ */
+function ReviewedStory({ story }) {
+  const written = story?.book_id && story?.chapter_id;
+  return (
+    <div data-testid="review-story" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
+      <span style={{ fontSize: '14px', fontWeight: '600', color: C.text }}>{story?.title || 'Untitled story'}</span>
+      {written ? (
+        <Link to={`/write/${story.book_id}/${story.chapter_id}`} style={{ fontSize: '12px', color: C.accent }}>
+          Open {story.chapter_title ? `“${story.chapter_title}”` : 'the chapter'} →
+        </Link>
+      ) : (
+        <span style={{ fontSize: '12px', color: C.textFaint }}>
+          Not written back yet: <Link to="/story-evaluation" style={{ color: C.accent }}>Story Evaluation →</Link>
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function StoryDashboard({ bookId, registryId }) {
   const [arc, setArc] = useState(null);
@@ -282,9 +306,10 @@ export default function StoryDashboard({ bookId, registryId }) {
         <Section label="Franchise Violations — Needs Your Attention">
           {pendingReviews.map(review => (
             <div key={review.id} style={{ background: C.surface, border: `1px solid ${C.red}33`, borderTop: `2px solid ${C.red}`, borderRadius: '2px', padding: '16px', marginBottom: '10px' }}>
-              <div style={{ fontSize: '12px', color: C.red, fontWeight: '600', marginBottom: '10px' }}>
+              <div style={{ fontSize: '12px', color: C.red, fontWeight: '600', marginBottom: '6px' }}>
                 {review.violations?.length} violation{review.violations?.length > 1 ? 's' : ''} detected
               </div>
+              <ReviewedStory story={review.story} />
               {(review.violations || []).slice(0, 2).map((v, i) => (
                 <div key={i} style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: i < review.violations.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                   <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '3px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{v.law_violated}</div>

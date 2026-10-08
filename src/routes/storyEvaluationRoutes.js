@@ -23,6 +23,7 @@ const db = require('../models');
 const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
+const { reviewInBackground } = require('../services/postGenerationReview');
 const { factsOf } = require('../services/worldFacts');
 const { selectRules, RULE_ATTRIBUTES, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
 
@@ -1380,6 +1381,11 @@ router.post('/evaluate-stories', requireAuth, aiRateLimiter, async (req, res) =>
         step_evaluate: { completed_at: new Date(), winner: evaluation.winner, score: evaluation.scores },
       });
     } catch { /* PipelineTracking table may not exist yet */ }
+
+    // The post-generation review reads the final text in the background
+    // (services/postGenerationReview; Evoni's ruling, 2026-10-08). A failed
+    // review waits on the Story Dashboard until the author acknowledges it.
+    if (story.text) reviewInBackground(db, story.id);
 
     // Token usage for evaluation
     const evalTokenUsage = {
