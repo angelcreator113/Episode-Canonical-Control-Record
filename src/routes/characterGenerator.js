@@ -16,6 +16,8 @@ const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { DREAM_CITY_KEYS } = require('../utils/feedCities');
+const { registryCity } = require('../utils/registryDemographics');
 
 // ─── Role type definitions (registry role types) ─────────────────────────────
 const ROLE_TYPES = ['pressure', 'mirror', 'support', 'shadow', 'special'];
@@ -158,7 +160,8 @@ async function buildDemographicSnapshot(db) {
       'unset': total - ages.length,
     };
 
-    const CITIES = ['nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row'];
+    // The five DREAM cities (utils/feedCities), as current_city stores them.
+    const CITIES = DREAM_CITY_KEYS;
     const cityCount = {};
     CITIES.forEach(c => { cityCount[c] = chars.filter(ch => ch.current_city === c).length; });
 
@@ -277,8 +280,8 @@ Every character must be assigned to exactly one layer:
 
 Layer determines current_city options:
 - real-world characters: current_city = "outside_lalaverse"
-- lalaverse characters: current_city must be one of the 5 canon city ENUMs:
-    nova_prime | velour_city | the_drift | solenne | cascade_row
+- lalaverse characters: current_city must be one of the 5 DREAM cities:
+    ${DREAM_CITY_KEYS.join(' | ')}
 - series-2 characters: same city ENUMs as lalaverse
 
 DO NOT assign a character to a "book" or "timeline."
@@ -684,7 +687,7 @@ DEMOGRAPHIC HINTS:
 For each seed, include a demographic_hint object:
 {
   age_range: '18-22' | '23-27' | '28-32' | '33-38' | '39-45',
-  city_hint: one of nova_prime, velour_city, the_drift, solenne, cascade_row,
+  city_hint: one of ${DREAM_CITY_KEYS.join(', ')},
   class_origin_hint: one of destitute, working_poor, working_class, lower_middle, middle, upper_middle, wealthy,
   family_hint: brief (e.g. 'raised by grandmother', 'single parent, oldest of 4')
 }
@@ -705,7 +708,7 @@ Return ONLY valid JSON — no preamble, no markdown:
       "why_this_world": "one sentence — why they belong in this world specifically",
       "demographic_hint": {
         "age_range": "23-27",
-        "city_hint": "nova_prime",
+        "city_hint": "dazzle_district",
         "class_origin_hint": "working_class",
         "family_hint": "brief family note"
       }
@@ -977,7 +980,7 @@ router.post('/commit', requireAuth, async (req, res) => {
       nationality: c.nationality || null,
       first_language: c.first_language || null,
       hometown: c.hometown || null,
-      current_city: c.current_city || null,
+      current_city: registryCity(c.current_city),
       city_migration_history: c.city_migration_history || null,
       class_origin: c.class_origin || null,
       current_class: c.current_class || null,

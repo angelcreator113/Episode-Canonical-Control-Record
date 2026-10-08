@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense, Fragment } fr
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../services/api';
 import { TENSION } from '../components/RelationshipEngine/tokens';
+import { DREAM_CITIES } from '../data/dreamCities';
 import './WorldStudio.css';
 
 const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
@@ -386,14 +387,18 @@ function DepthPanel({ registryCharId, onRefresh }) {
 /* ═══════════════════════════════════════════════════════════════════════
    DEMOGRAPHICS PANEL
 ═══════════════════════════════════════════════════════════════════════ */
+// A registry character's city: one of the five DREAM cities, or outside
+// the LalaVerse (registry_characters.current_city).
+export const CITY_LABELS = {
+  ...Object.fromEntries(DREAM_CITIES.map((d) => [d.key, d.name])),
+  outside_lalaverse: 'Outside LalaVerse',
+  unknown: 'Unknown',
+};
+
 function DemographicsPanel({ charDetail }) {
   if (!charDetail) return null;
 
   const c = charDetail;
-  const cityLabels = {
-    nova_prime: 'Nova Prime', velour_city: 'Velour City', the_drift: 'The Drift',
-    solenne: 'Solenne', cascade_row: 'Cascade Row', outside_lalaverse: 'Outside LalaVerse',
-  };
   const mobilityIcon = { ascending: '↑', descending: '↓', stable: '→', volatile: '⇅' };
 
   return (
@@ -413,7 +418,7 @@ function DemographicsPanel({ charDetail }) {
           <SectionLabel color="blue">Geography</SectionLabel>
           <div className="ws4-demo-grid">
             {c.hometown && <FieldCard label="Hometown" value={c.hometown} />}
-            {c.current_city && <FieldCard label="Current City" value={cityLabels[c.current_city] || c.current_city} />}
+            {c.current_city && <FieldCard label="Current City" value={CITY_LABELS[c.current_city] || c.current_city} />}
             {c.city_migration_history && <FieldCard label="Migration History" value={c.city_migration_history} />}
           </div>
         </>
