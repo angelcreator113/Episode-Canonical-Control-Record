@@ -459,10 +459,14 @@ router.get('/status/:showId', requireAuth, async (req, res) => {
     const completedSteps = steps.filter((s) => s.complete).length;
     const readyToWrite = hasProtagonist && hasBook && totalCharCount >= 2;
 
+    // A protagonist and the core cast are made in the Character Registry,
+    // the cast list (navigation ruling C4). /character-generator has had no
+    // route since #1544 (its page went in #896), so its links landed on the
+    // home page.
     let nextAction = null;
     if (!hasUniverse)       nextAction = { label: 'Create your universe',    route: '/setup',              priority: 'critical' };
-    else if (!hasProtagonist) nextAction = { label: 'Set up your protagonist', route: '/character-generator', priority: 'critical' };
-    else if (castCount < 3) nextAction = { label: 'Generate your core cast',  route: '/character-generator', priority: 'high' };
+    else if (!hasProtagonist) nextAction = { label: 'Set up your protagonist', route: '/character-registry',  priority: 'critical' };
+    else if (castCount < 3) nextAction = { label: 'Generate your core cast',  route: '/character-registry',  priority: 'high' };
     else if (!hasBook)      nextAction = { label: 'Create your first book',   route: '/storyteller',         priority: 'high' };
     else                    nextAction = { label: 'Write Chapter 1',          route: '/storyteller',         priority: 'normal' };
 
@@ -536,8 +540,9 @@ router.post('/session-state', requireAuth, async (req, res) => {
         const hasBook = books.length > 0;
         const castCount = allChars.filter((c) => c.role_type !== 'special').length;
         readyToWrite = hasProtagonist && hasBook && castCount >= 2;
-        if (!hasProtagonist)       statusNextAction = { label: 'Set up your protagonist',  route: '/character-generator', priority: 'critical' };
-        else if (castCount < 3)    statusNextAction = { label: 'Generate your core cast',   route: '/character-generator', priority: 'high' };
+        // The cast list, as in GET /status.
+        if (!hasProtagonist)       statusNextAction = { label: 'Set up your protagonist',  route: '/character-registry',  priority: 'critical' };
+        else if (castCount < 3)    statusNextAction = { label: 'Generate your core cast',   route: '/character-registry',  priority: 'high' };
         else if (!hasBook)         statusNextAction = { label: 'Create your first book',    route: '/storyteller',         priority: 'high' };
         else                       statusNextAction = { label: 'Write Chapter 1',           route: '/storyteller',         priority: 'normal' };
       } catch (e) {

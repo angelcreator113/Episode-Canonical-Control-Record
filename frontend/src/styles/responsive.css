@@ -1429,12 +1429,6 @@
     grid-template-columns: 1fr !important;
   }
 
-  /* ── CharacterGenerator ── */
-  .cg-traits-grid,
-  .cg-grid {
-    grid-template-columns: 1fr !important;
-  }
-
   /* ── WardrobeAnalytics ── */
   .charts-row {
     grid-template-columns: 1fr !important;
@@ -1465,11 +1459,6 @@
 
   /* ── EpisodeDetail ── */
   .ed-scenes-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── CharacterGenerator seed cards ── */
-  .cg-seeds-grid {
     grid-template-columns: 1fr !important;
   }
 
@@ -1622,12 +1611,6 @@
   /* ── SettingsPage grids ── */
   .settings-theme-grid,
   .settings-font-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── CharacterGenerator traits ── */
-  .cg-traits-grid,
-  .cg-step-grid {
     grid-template-columns: 1fr !important;
   }
 
