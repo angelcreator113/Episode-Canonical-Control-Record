@@ -148,7 +148,7 @@ describe('UniversePage: the LalaVerse hub', () => {
       if (url === '/api/v1/cast/review?registry_id=reg-b') return { data: { characters: [{ id: 'old2', cast_review: 'kept' }] } };
       if (url.startsWith('/api/v1/calendar/events')) return { data: { events: [{ title: 'Fashion Week', start_datetime: '2099-11-03T12:00:00Z' }] } };
       if (url === '/api/v1/feed-enhanced/show-b/trending') return { data: { data: [{ topic: '#velvet', post_count: 3, total_engagement: 9 }] } };
-      if (url === '/api/v1/world/tension-scanner') return { data: { status: 'ok', pairs: [] } };
+      if (url === '/api/v1/world/tension-scanner?show_id=show-b') return { data: { status: 'ok', pairs: [] } };
       if (url === '/api/v1/storyteller/books') return { data: { success: true, books: [{ id: 'b1', title: 'Before Lala', status: 'draft', chapter_count: 2, line_count: 10, approved_count: 4, last_chapter_title: 'The Studio' }] } };
       return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
     });
@@ -181,6 +181,9 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByTestId('lalaverse-idea-culture').textContent).toContain('Fashion Week is coming up in November');
     expect(screen.getByTestId('lalaverse-idea-society').textContent).toContain('#velvet is trending');
     expect(screen.getByTestId('lalaverse-idea-state').textContent).toBe('From StateNo tensions between characters yet.');
+    // The show's tensions, not every show's (Evoni's ruling, 2026-10-08).
+    expect(api.get).toHaveBeenCalledWith('/api/v1/world/tension-scanner?show_id=show-b');
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/world/tension-scanner');
     expect(screen.getByTestId('lalaverse-lately').textContent).toContain('Studio Session added to the Events library');
     expect(screen.getByTestId('lalaverse-lately').textContent).toContain('Episode 1 created: Pilot');
     // The Overview keeps its orientation strip under the banner.
@@ -190,7 +193,7 @@ describe('UniversePage: the LalaVerse hub', () => {
   test('a show with no description says so instead of inventing one; a failed scan is not "no tensions"', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/shows') return { data: { success: true, data: [{ id: 'show-b', name: 'Styling Adventures' }] } };
-      if (url === '/api/v1/world/tension-scanner') return { data: { status: 'scan_failed', pairs: [] } };
+      if (url === '/api/v1/world/tension-scanner?show_id=show-b') return { data: { status: 'scan_failed', pairs: [] } };
       return { data: { data: [], events: [], registries: [], books: [], locations: [] } };
     });
     renderAt('/universe');

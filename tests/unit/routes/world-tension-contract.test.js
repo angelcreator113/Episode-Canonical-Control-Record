@@ -15,6 +15,12 @@
 // Relationships page edits, and no longer World Studio's relationship_graph
 // (Evoni's ruling, wiring map fix-list item 23); the pairs are registry
 // characters. Behaviour: tests/integration/worldStudioTension.integration.test.js.
+//
+// ?show_id= keeps a show's pairs: both characters in its registries or in
+// one with no show yet (inShow; Evoni's ruling, 2026-10-08), for the
+// scanner and /world/tension-check alike; the context summary stays
+// unscoped (the book Story Engine reads it). Behaviour:
+// tests/integration/tensionScannerShow.integration.test.js.
 
 const fs = require('fs');
 const path = require('path');
@@ -24,11 +30,12 @@ const slice = (from, to) => SRC.slice(SRC.indexOf(from), SRC.indexOf(to, SRC.ind
 const scanner = slice("router.get('/world/tension-scanner'", "router.post('/world/create-story-task'");
 const proposal = slice("router.post('/world/create-tension-proposal'", "router.get('/world/context-summary'");
 const summary = slice("router.get('/world/context-summary'", 'WORLD MAP');
-const confirmed = slice('const confirmedRelationships = (req) => Q(req,', '/** Every relationship of one registry character');
+const confirmed = slice('const confirmedRelationships = (req, { showId = null } = {}) => Q(req,', '/** Every relationship of one registry character');
+const tensionCheck = slice("router.get('/world/tension-check'", "router.post('/world/scenes/generate'");
 
 describe('world tension scanner contract', () => {
   test('the pairs are confirmed character_relationships rows, never the World Studio graph', () => {
-    expect(scanner).toMatch(/const rows = await confirmedRelationships\(req\);/);
+    expect(scanner).toMatch(/const rows = await confirmedRelationships\(req, \{ showId \}\);/);
     expect(scanner).not.toMatch(/relationship_graph/);
     expect(confirmed).toMatch(/FROM character_relationships cr/);
     expect(confirmed).toMatch(/WHERE cr\.confirmed = true AND cr\.deleted_at IS NULL/);
@@ -46,6 +53,15 @@ describe('world tension scanner contract', () => {
     expect(summary).not.toMatch(/relationship_graph/);
     // No caller keeps its own list again.
     expect(SRC).not.toMatch(/\['Simmering', 'Explosive'/);
+  });
+  test('?show_id= keeps the show\'s pairs: both characters, by their registry\'s show or none', () => {
+    expect(SRC).toMatch(/const inShow = \(alias\) => `EXISTS \(SELECT 1 FROM character_registries reg\s+WHERE reg\.id = \$\{alias\}\.registry_id AND \(reg\.show_id = :showId OR reg\.show_id IS NULL\)\)`;/);
+    expect(confirmed).toMatch(/\$\{showId \? `AND \$\{inShow\('ra'\)\} AND \$\{inShow\('rb'\)\}` : ''\}/);
+    expect(scanner).toMatch(/const \{ showId, error \} = showIdOf\(req\);\s+if \(error\) return res\.status\(400\)\.json\(\{ error \}\);/);
+    expect(tensionCheck).toMatch(/const \{ showId, error \} = showIdOf\(req\);\s+if \(error\) return res\.status\(400\)\.json\(\{ error \}\);/);
+    expect(tensionCheck).toMatch(/AND \$\{inShow\('rc'\)\} AND \$\{inShow\('other'\)\}/);
+    // The context summary counts every show's.
+    expect(summary).not.toMatch(/showIdOf|inShow/);
   });
   test('a scan says whether it ran, and a failed one is logged, not an empty list', () => {
     expect(scanner).toMatch(/res\.json\(\{\s*status:\s*'ok',\s*pairs,\s*count:\s*pairs\.length,\s*characters_scanned:\s*characters\.size\s*\}\)/);
