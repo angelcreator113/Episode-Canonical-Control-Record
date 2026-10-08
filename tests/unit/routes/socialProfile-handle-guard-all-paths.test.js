@@ -6,7 +6,6 @@
 //   bulk generate        generateSingleProfile  → skipped, reported, never update()
 //   /confirm-feed        characterGenerationRoutes → 409
 //   feed scheduler       generateAndSaveProfile → skipped (null), logged
-//   feed auto-generation autoCreateFeedProfile  → skipped, logged
 //   PUT / PATCH /:id     socialProfileRoutes    → 409 (own id excluded)
 //
 // Mocked, no database, no AI call. The SocialProfile is an in-memory fake
@@ -45,7 +44,6 @@ const { generateSingleProfile } = require('../../../src/routes/socialProfileBulk
 const charGenRouter = require('../../../src/routes/characterGenerationRoutes');
 const profileRouter = require('../../../src/routes/socialProfileRoutes');
 const feedScheduler = require('../../../src/services/feedScheduler');
-const { autoCreateFeedProfile } = require('../../../src/services/feedAutoGeneration');
 
 const sequelize = new Sequelize('postgres://u:p@127.0.0.1:1/unused', { logging: false });
 const RealSocialProfile = require('../../../src/models/SocialProfile')(sequelize, DataTypes);
@@ -220,25 +218,28 @@ describe('POST /character-generation/confirm-feed — Task #1893', () => {
     expect(SocialProfile.untouched()).toBe(true);
   });
 
-  // Wiring map §6 finding 6a, fix-list item 8: the profile links back to its
-  // character, and the layer is the one asked for (else the default).
-  it('the created profile points back at its character and carries the layer asked for', async () => {
+  // Wiring map §6 finding 6a, fix-list item 8: the layer is the one asked
+  // for (else the default). The link is the character's feed_profile_id,
+  // the one link (Evoni's ruling C3, 2026-10-08): the profile carries none.
+  it('the character links to the created profile, which carries the layer asked for', async () => {
     const SocialProfile = fakeSocialProfile([LIVE], { rawAttributes });
     const character = { id: 'c1', update: jest.fn().mockResolvedValue(undefined) };
     const app = mountCharGen(SocialProfile, character);
 
     await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
       .send({ character_id: 'c1', feed_layer: 'lalaverse', feed_proposal: { handle: '@new_one', platform: 'tiktok' } });
-    expect(SocialProfile.create.mock.calls[0][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'lalaverse' });
-    expect(character.update).toHaveBeenCalledWith(expect.objectContaining({ feed_profile_id: expect.anything() }));
+    expect(SocialProfile.create.mock.calls[0][0]).toMatchObject({ feed_layer: 'lalaverse' });
+    expect(SocialProfile.create.mock.calls[0][0]).not.toHaveProperty('registry_character_id');
+    const created = await SocialProfile.create.mock.results[0].value;
+    expect(character.update).toHaveBeenCalledWith(expect.objectContaining({ feed_profile_id: created.id }));
 
     await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
       .send({ character_id: 'c1', feed_proposal: { handle: '@new_two', platform: 'tiktok', feed_layer: 'lalaverse' } });
-    expect(SocialProfile.create.mock.calls[1][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'lalaverse' });
+    expect(SocialProfile.create.mock.calls[1][0]).toMatchObject({ feed_layer: 'lalaverse' });
 
     await request(app).post('/cg/confirm-feed').set('x-test-user', '1')
       .send({ character_id: 'c1', feed_layer: 'nonsense', feed_proposal: { handle: '@new_three', platform: 'tiktok' } });
-    expect(SocialProfile.create.mock.calls[2][0]).toMatchObject({ registry_character_id: 'c1', feed_layer: 'real_world' });
+    expect(SocialProfile.create.mock.calls[2][0]).toMatchObject({ feed_layer: 'real_world' });
   });
 });
 
@@ -277,23 +278,7 @@ describe('feedScheduler.generateAndSaveProfile — Task #1893', () => {
   });
 });
 
-// ── 4. Feed auto-generation ──────────────────────────────────────────────────
-describe('feedAutoGeneration.autoCreateFeedProfile — Task #1893', () => {
-  it.each(COLLISIONS)('skips a %s and logs it', async (_label, row, handle, platform) => {
-    const SocialProfile = fakeSocialProfile([row], { rawAttributes });
-    const db = { SocialProfile };
-    const character = { id: 'c9', role_type: 'support', selected_name: 'New Person' };
-
-    const result = await autoCreateFeedProfile(db, character, 'real_world', { handle, platform });
-
-    expect(result).toMatchObject({ feedProfile: null, skipped: true, reason: 'handle_taken', holder_id: row.id });
-    expect(SocialProfile.create).not.toHaveBeenCalled();
-    expect(SocialProfile.untouched()).toBe(true);
-    expect(warned()).toContain(`(id ${row.id})`);
-  });
-});
-
-// ── 5. PUT / PATCH /:id renames ─────────────────────────────────────────────
+// ── 4. PUT / PATCH /:id renames ─────────────────────────────────────────────
 describe('PUT and PATCH /social-profiles/:id renames — Task #1893', () => {
   const SELF = { id: 30, handle: '@my_own_handle', platform: 'tiktok', is_justawoman_record: false, deletedAt: null };
 

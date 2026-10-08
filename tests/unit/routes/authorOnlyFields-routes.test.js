@@ -37,7 +37,6 @@ jest.mock('../../../src/models', () => ({
   },
   CharacterRegistry: { findByPk: jest.fn(async () => mockRegistry), findOne: jest.fn(async () => mockRegistry) },
 }));
-jest.mock('../../../src/services/feedAutoGeneration', () => ({ autoCreateFeedProfile: jest.fn() }));
 jest.mock('../../../src/services/characterGenerationService', () => ({
   generateFullCharacter: jest.fn(),
   calculateDepthLevel: () => 'active',

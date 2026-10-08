@@ -7,8 +7,8 @@
 // Task #1851 moved it here so every path that writes AI-generated (or
 // generated-then-confirmed) fields into social_profiles uses one helper:
 // socialProfileRoutes (POST /generate, /:id/regenerate), socialProfileBulkRoutes
-// (generateSingleProfile), characterGenerationRoutes (/confirm-feed),
-// feedScheduler (generateAndSaveProfile) and feedAutoGeneration.
+// (generateSingleProfile), characterGenerationRoutes (/confirm-feed) and
+// feedScheduler (generateAndSaveProfile).
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── ENUM validation helpers ──────────────────────────────────────────────────

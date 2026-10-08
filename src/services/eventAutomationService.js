@@ -20,6 +20,7 @@ const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDef
 const { draftEventConcept } = require('./eventConceptDraftService');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
 const { DREAM_CITIES, isDreamCity, normCity } = require('../utils/lalaHome');
+const { linkedCharacter } = require('../utils/registryLink');
 
 // ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
 // Maps cultural calendar categories to feed profile content categories
@@ -144,7 +145,7 @@ async function findHostProfile(calendarEvent, models, options = {}) {
       limit: 20,
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
         'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
-        'registry_character_id', 'revenue_streams', 'celebrity_tier', 'platform',
+        'revenue_streams', 'celebrity_tier', 'platform',
         'city', 'frequent_venues'],
     });
   } catch {
@@ -155,7 +156,7 @@ async function findHostProfile(calendarEvent, models, options = {}) {
       limit: 20,
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
         'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
-        'registry_character_id', 'revenue_streams', 'city', 'frequent_venues'],
+        'revenue_streams', 'city', 'frequent_venues'],
     });
   }
 
@@ -722,7 +723,8 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       host_profile_id: host?.id || null,
       host_handle: host?.handle || null,
       host_display_name: hostName,
-      host_registry_character_id: host?.registry_character_id || null,
+      // The host's character: the registry entry linked to it (ruling C3).
+      host_registry_character_id: host ? ((await linkedCharacter(models, host.id, ['id']))?.id || null) : null,
       host_brand: null,
       ...(partnerships.length > 0 ? { brand_partnerships: partnerships } : {}),
       venue_location_id: venue?.id || null,
