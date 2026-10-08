@@ -178,7 +178,7 @@ item 25; which cards count is item 24):
 | Memories engine (`loadFranchiseKnowledge`) | `selectRules`, franchise tier only: any active, the first 15 (the critical laws fill it). WriteMode is the book's. It took the newest within a severity, from every show. |
 | Story evaluation (`loadFranchiseConstraints`) | `selectRules`, franchise tier only: active AND (critical OR always_inject), the first 20, then `applies_to` against the scene's characters, an always-inject rule passing it. This is the only reader of `applies_to`. A story is the book's. It never selected `always_inject`, so the filter dropped every rule whose `applies_to` names systems (`story_engine`), as the seeded laws' do. |
 | Tier franchise guard (`POST /tier/franchise-guard-check`) | `selectRules`, franchise tier only: active AND category in (franchise_law, locked_decision, character, narrative); each use counted. A story is the book's. |
-| Post-generation review (`POST /reviews/post-generation`) | `selectRules`, franchise tier only: active AND critical. A story is the book's. |
+| Post-generation review (`reviewStory`, `services/postGenerationReview.js`: run in the background after Evaluate, and on demand by `POST /reviews/post-generation`) | `selectRules`, franchise tier only: active AND critical. A story is the book's. |
 | Amber `develop_world` | `selectRules`: the page's own `source_document`, the first 30; and category franchise_law, the first 10. Amber is sent no show. |
 
 So "Used By" (step 6 of the redesign) is new backend work: each reader would select by the

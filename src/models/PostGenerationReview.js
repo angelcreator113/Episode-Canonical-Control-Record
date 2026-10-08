@@ -7,7 +7,9 @@ module.exports = (sequelize, DataTypes) => {
   }
   PostGenerationReview.init({
     id:                        { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    story_id:                  { type: DataTypes.INTEGER, allowNull: false },
+    // The story reviewed (migration 20261008210000: it was an INTEGER, which
+    // could not hold a story's UUID).
+    story_id:                  { type: DataTypes.UUID, allowNull: false, references: { model: 'storyteller_stories', key: 'id' } },
     approved_version_reviewed: { type: DataTypes.TEXT, allowNull: false },
     violations:                { type: DataTypes.JSONB, defaultValue: [] },
     warnings:                  { type: DataTypes.JSONB, defaultValue: [] },
@@ -19,6 +21,8 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     sequelize, modelName: 'PostGenerationReview',
     tableName: 'post_generation_reviews', underscored: true,
+    // A story's newer review supersedes its older ones (services/postGenerationReview).
+    paranoid: true,
   });
   return PostGenerationReview;
 };

@@ -28,6 +28,9 @@ const brief = read('src', 'routes', 'episodeBriefRoutes.js');
 const engine = read('src', 'routes', 'memories', 'engine.js');
 const tier = read('src', 'routes', 'tierFeatures.js');
 const upgrade = read('src', 'routes', 'upgradeRoutes.js');
+// The post-generation review's own service (2026-10-08): Evaluate and the
+// route both run it.
+const review = read('src', 'services', 'postGenerationReview.js');
 const brain = read('src', 'routes', 'franchiseBrainRoutes.js');
 const amber = read('src', 'routes', 'memories', 'assistant.js');
 
@@ -70,13 +73,14 @@ describe('Show Bible readers select through brainRules', () => {
   // The book's readers take the franchise tier only (Evoni's ruling,
   // 2026-10-08); story evaluation reads always_inject for its filter.
   test('WriteMode, story evaluation, the tier guard and the post-generation review: the franchise tier only', () => {
-    for (const src of [engine, story, tier, upgrade]) expect(src).not.toMatch(/FranchiseKnowledge\.findAll\(/);
+    for (const src of [engine, story, tier, upgrade, review]) expect(src).not.toMatch(/FranchiseKnowledge\.findAll\(/);
     expect(engine).toMatch(/selectRules\(FranchiseKnowledge, \{ franchiseOnly: true, limit: 15 \}\)/);
     expect(story).toMatch(/franchiseOnly: true,\s*where: CRITICAL_OR_ALWAYS_INJECT,\s*attributes: \[\.\.\.RULE_ATTRIBUTES, 'applies_to', 'always_inject'\],\s*limit: 20,/);
     expect(tier).toMatch(/selectRules\(db\.FranchiseKnowledge, \{\s*franchiseOnly: true,\s*where: \{ category: \['franchise_law', 'locked_decision', 'character', 'narrative'\] \},\s*\}\)/);
     expect(tier).toMatch(/recordRuleUse\(db\.sequelize, laws\.map\(l => l\.id\), 'franchise-guard-check'\)/);
     expect(tier).not.toMatch(/law\.update\(/);
-    expect(upgrade).toMatch(/selectRules\(db\.FranchiseKnowledge, \{ franchiseOnly: true, where: \{ severity: 'critical' \} \}\)/);
+    expect(review).toMatch(/selectRules\(db\.FranchiseKnowledge, \{ franchiseOnly: true, where: \{ severity: 'critical' \} \}\)/);
+    expect(upgrade).toMatch(/const result = await reviewStory\(db, String\(story_id\)\);/);
   });
 
   test('Amber still reads every show\'s', () => {

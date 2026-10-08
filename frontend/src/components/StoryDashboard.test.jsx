@@ -11,7 +11,10 @@
  * has it).
  */
 
+import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: {
@@ -25,7 +28,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import apiClient from '../services/api';
-import {
+import StoryDashboard, {
   postArcStageApi,
   listRegistryCharactersApi,
   listSceneProposalsApi,
@@ -93,5 +96,44 @@ describe('StoryDashboard — Track 6 CP10 module-scope helpers', () => {
       vi.mocked(apiClient.post).mockRejectedValue(new Error('forbidden'));
       await expect(acknowledgeReviewApi('r-1')).rejects.toThrow('forbidden');
     });
+  });
+});
+
+// Since 2026-10-08 Evaluate runs the post-generation review, and
+// GET /reviews/unacknowledged names each review's story: its title, and its
+// chapter and book once written back.
+describe('StoryDashboard — each failed review names its story', () => {
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('the story, its chapter once written back, and Acknowledge', async () => {
+    const violation = (law) => ({ law_violated: law, offending_line: 'A line.', why_it_violates: 'Why.' });
+    const reviews = [
+      { id: 7, passed: false, violations: [violation('Lala does not know her origin')],
+        story: { id: 's-1', title: 'The Studio at Dawn', book_id: 'b-1', chapter_id: 'c-3', chapter_title: 'Chapter Three' } },
+      { id: 8, passed: false, violations: [violation('David is never the obstacle')],
+        story: { id: 's-2', title: 'Late Edit', book_id: null, chapter_id: null, chapter_title: null } },
+      { id: 9, passed: true, violations: [], story: { id: 's-3', title: 'A Clean Scene' } },
+    ];
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (
+      url.endsWith('/reviews/unacknowledged') ? { data: { reviews, count: 3 } } : { data: { flags: [] } }));
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { ok: true } });
+    render(<MemoryRouter><StoryDashboard /></MemoryRouter>);
+
+    const stories = await screen.findAllByTestId('review-story');
+    expect(stories).toHaveLength(2);
+    expect(within(stories[0]).getByText('The Studio at Dawn')).toBeTruthy();
+    expect(within(stories[0]).getByRole('link', { name: 'Open “Chapter Three” →' }).getAttribute('href')).toBe('/write/b-1/c-3');
+    expect(within(stories[1]).getByText('Late Edit')).toBeTruthy();
+    expect(stories[1].textContent).toContain('Not written back yet');
+    expect(within(stories[1]).getByRole('link', { name: 'Story Evaluation →' }).getAttribute('href')).toBe('/story-evaluation');
+    // A review that passed is not listed.
+    expect(screen.queryByText('A Clean Scene')).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Acknowledge & Move On' })[0]);
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(expect.stringMatching(/\/reviews\/7\/acknowledge$/)));
+    await waitFor(() => expect(screen.getAllByTestId('review-story')).toHaveLength(1));
+    expect(screen.queryByText('The Studio at Dawn')).toBeNull();
   });
 });
