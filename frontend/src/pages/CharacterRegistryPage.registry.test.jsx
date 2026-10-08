@@ -4,6 +4,8 @@
  * quick create goes into that registry, never the first one the API
  * returned; a name already in it is refused with a way to open the
  * existing character; the Feed's "Registry →" link opens the character.
+ * The cast (2026-10-08): Lala, her world (LalaVerse feed profiles linked
+ * to characters) and the old system, with Archive.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -115,5 +117,71 @@ describe('CharacterRegistryPage: the chosen registry', () => {
   test('?character= from the Feed opens that character', async () => {
     renderAt('/character-registry?view=world&character=c3');
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/character/c3'));
+  });
+});
+
+const CAST_REGISTRY = {
+  id: 'reg-sal', title: 'SAL Cast', show_id: 'show-b', characters: [
+    { id: 'lala', display_name: 'Lala', character_key: 'lala', role_type: 'special' },
+    { id: 'sable', display_name: 'STUDIO BY SABLE', character_key: 'studio_by_sable', role_type: 'support' },
+    { id: 'j1', display_name: 'Jade (Business Coach)', character_key: 'jade_coach', role_type: 'shadow' },
+    { id: 'j2', display_name: 'Jade', character_key: 'jade', role_type: 'shadow' },
+  ],
+};
+const CAST_PROFILES = [{ id: 7, feed_layer: 'lalaverse', handle: 'studiobysable', display_name: 'STUDIO BY SABLE', society_archetype: 'the_peer', registry_character_id: 'sable' }];
+
+describe('CharacterRegistryPage: the cast', () => {
+  beforeEach(() => {
+    rememberShow('show-b');
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: [CAST_REGISTRY] } };
+      if (url.startsWith('/api/v1/social-profiles')) return { data: { profiles: CAST_PROFILES } };
+      return { data: {} };
+    });
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+  });
+
+  test('Lala, her world and the old system, each in its place', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('cast-people')).toBeTruthy());
+    expect(screen.getByTestId('cast-lala').textContent).toContain('Lala');
+    expect(screen.getByTestId('cast-lala-role').textContent).toContain('Role says "Special"');
+    expect(screen.getByTestId('cast-lala-role').textContent).toContain('that filter shows 0 today');
+    const people = screen.getByTestId('cast-people');
+    expect(people.textContent).toContain('STUDIO BY SABLE');
+    expect(people.textContent).toContain('@studiobysable');
+    expect(people.textContent).toContain('The peer');
+    expect(people.querySelector('a').getAttribute('href')).toBe('/character/sable');
+    const old = screen.getByTestId('cast-old');
+    expect(old.textContent).not.toContain('STUDIO BY SABLE');
+    expect(old.textContent).not.toMatch(/^Lala/);
+    expect(old.textContent.match(/Two "Jade"s/g)).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Kept' }).disabled).toBe(true);
+    expect(screen.getAllByRole('button', { name: 'Keep' })[0].disabled).toBe(true);
+    expect(screen.getAllByRole('button', { name: 'Match to feed person' })[0].disabled).toBe(true);
+  });
+
+  test('Archive asks first, then soft-deletes; Archive selected sends the chosen ones', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('cast-old')).toBeTruthy());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Archive' })[0]);
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/character-registry/characters/j2'));
+    expect(confirm.mock.calls[0][0]).toContain('Archive Jade?');
+    fireEvent.click(screen.getByLabelText('Select Jade'));
+    fireEvent.click(screen.getByLabelText('Select Jade (Business Coach)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive selected (2)' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/bulk-delete', { ids: ['j2', 'j1'] }));
+    confirm.mockRestore();
+  });
+
+  test('a no to the question archives nothing', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('cast-old')).toBeTruthy());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Archive' })[0]);
+    expect(api.delete).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });
