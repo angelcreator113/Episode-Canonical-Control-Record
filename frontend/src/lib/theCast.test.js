@@ -1,6 +1,6 @@
 /** The cast's sorting: Lala, her world (LalaVerse feed profiles), and the old system. */
 import { describe, test, expect } from 'vitest';
-import { findLala, feedPeople, oldSystem, sameNames, sameNameNote, archetypeLabel } from './theCast';
+import { findLala, feedPeople, oldSystem, sameNames, sameNameNote, archetypeLabel, castCounts } from './theCast';
 
 const CHARS = [
   { id: 'l', display_name: 'Lala', character_key: 'lala', role_type: 'special' },
@@ -43,5 +43,23 @@ describe('the cast', () => {
 
   test('no archetype reads as none', () => {
     expect(archetypeLabel({})).toBeNull();
+  });
+});
+
+describe('castCounts: the Characters tile counts as The cast does', () => {
+  const REGS = [
+    { id: 'r1', show_id: 's1', characters: [{ id: 'l', display_name: 'Lala', character_key: 'lala' }, { id: 's', display_name: 'Sable' }, { id: 'd', display_name: 'Diego' }, { id: 'k', display_name: 'Kim' }] },
+    { id: 'r2', show_id: 's2', characters: [{ id: 'o', display_name: 'Other' }] },
+  ];
+  const PROFS = [{ id: 1, feed_layer: 'lalaverse', registry_character_id: 's' }, { id: 2, feed_layer: 'lalaverse' }, { id: 3, feed_layer: 'real_world' }];
+
+  test("the show's registry: feed people, and its old system less the kept", () => {
+    expect(castCounts({ registries: REGS, profiles: PROFS, showId: 's1' })).toEqual({ people: 2, toReview: 2, registryId: 'r1' });
+    expect(castCounts({ registries: REGS, profiles: PROFS, showId: 's1', review: { byId: { k: { cast_review: 'kept' } } } }).toReview).toBe(1);
+  });
+
+  test('the only registry when none is the show\'s; none chosen among several', () => {
+    expect(castCounts({ registries: [{ ...REGS[0], show_id: null }], profiles: PROFS, showId: 's9' }).registryId).toBe('r1');
+    expect(castCounts({ registries: REGS, profiles: PROFS, showId: 's9' })).toEqual({ people: 2, toReview: null, registryId: null });
   });
 });

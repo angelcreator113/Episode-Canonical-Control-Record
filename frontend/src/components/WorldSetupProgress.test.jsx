@@ -160,4 +160,41 @@ describe('WorldSetupProgress', () => {
     expect(screen.getByTestId('world-setup-unreachable').textContent).toContain('2 steps could not be checked');
     spy.mockRestore();
   });
+
+  test('Culture & Events is done by calendar events, saved Culture lists or Brain cards; starter content alone is not', async () => {
+    const withCalendar = (events, page, brainCards) => vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('calendar/events')) return { data: { events } };
+      if (url.includes('page-content/cultural_calendar')) return { data: page };
+      if (url.includes('franchise-brain/sync/status')) return { data: { success: true, data: { cultural_calendar: { cards: brainCards, legacy: 0 } } } };
+      return REAL(url);
+    });
+    withCalendar([], { AWARD_SHOWS: [{ name: 'The Glow Awards' }], GOSSIP_MEDIA: [] }, 0);
+    let r = await checkSetup('show-b');
+    expect(r.done.calendar).toBe(true);
+    expect(r.details.calendar).toBe('Saved · 1 list');
+    withCalendar([], {}, 3);
+    r = await checkSetup('show-b');
+    expect(r.done.calendar).toBe(true);
+    expect(r.details.calendar).toBe('In the Brain · 3 cards');
+    withCalendar([{ id: 1 }], { AWARD_SHOWS: [{ name: 'x' }] }, 2);
+    r = await checkSetup('show-b');
+    expect(r.details.calendar).toBe('1 cultural calendar event · In the Brain · 2 cards · Saved · 1 list');
+    withCalendar([], {}, 0);
+    r = await checkSetup('show-b');
+    expect(r.done.calendar).toBe(false);
+    expect(r.details.calendar).toBe('No calendar events or saved lists yet');
+  });
+
+  test('saved Culture lists still count when the calendar cannot be read', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('calendar/events')) throw Object.assign(new Error('boom'), { response: { status: 500 } });
+      if (url.includes('page-content/cultural_calendar')) return { data: { AWARD_SHOWS: [{ name: 'x' }] } };
+      return REAL(url);
+    });
+    const r = await checkSetup('show-b');
+    expect(r.unreachable).not.toContain('calendar');
+    expect(r.done.calendar).toBe(true);
+    spy.mockRestore();
+  });
 });
