@@ -1,12 +1,13 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs } from '../../lib/episodeScript';
+import { moveBeat, moveLine, dropIndex } from '../../lib/scriptBeatOrder';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -55,6 +56,7 @@ export function parseScriptIntoBeats(scriptText, lockedBeats = []) {
   const locked = new Set(lockedBeats);
   if (/##\s*BEAT:/i.test(scriptText)) {
     const sections = scriptText.split(/(?=##\s*BEAT:)/i).filter(s => BEAT_HEADER_START.test(s));
+    const seen = new Map();
     return sections.map((section, i) => {
       const lines = section.split('\n').filter(l => l.trim());
       const header = lines[0] || '';
@@ -64,14 +66,16 @@ export function parseScriptIntoBeats(scriptText, lockedBeats = []) {
       const canon = numbered >= 1 && numbered <= BEAT_NAMES.length ? BEAT_NAMES[numbered - 1] : null;
       const info = canon || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: 'var(--text-secondary)' };
       const number = canon ? canon.number : i + 1;
-      return { id: `beat-${i}`, number, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: locked.has(number), raw: section };
+      // The id follows the beat, not its place, so a moved beat stays open.
+      const n = (seen.get(number) || 0) + 1; seen.set(number, n);
+      return { id: n === 1 ? `beat-${number}` : `beat-${number}-${n}`, number, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: locked.has(number), raw: section };
     });
   }
   const lines = scriptText.split('\n').filter(l => l.trim());
   const per = Math.max(1, Math.ceil(lines.length / 14));
   return BEAT_NAMES.map((b, i) => {
     const bl = lines.slice(i * per, (i + 1) * per);
-    return { id: `beat-${i}`, ...b, rawLabel: b.name, lines: bl, approved: locked.has(b.number), raw: bl.join('\n') };
+    return { id: `beat-${b.number}`, ...b, rawLabel: b.name, lines: bl, approved: locked.has(b.number), raw: bl.join('\n') };
   }).filter(b => b.lines.length > 0);
 }
 
@@ -85,8 +89,9 @@ function parseLine(line) {
   return { type: 'narration', text: t };
 }
 
-function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked }) {
+function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag }) {
   const [editing, setEditing] = useState(false);
+  const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
   const lineStr = typeof line === 'string' ? line : '';
   const parsed = parseLine(lineStr);
@@ -99,12 +104,28 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
         <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
         <button onClick={() => setEditing(false)} style={{ background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+        {/* Moving without dragging (touch screens, keyboards). */}
+        <span className="esp-move" style={{ marginLeft: 'auto' }}>
+          <button type="button" className="esp-move-btn" aria-label="Move line up" disabled={lineIndex === 0} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex - 1); setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn" aria-label="Move line down" disabled={lineIndex >= lineCount - 1} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex + 1); setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
+        </span>
       </div>
     </div>
   );
 
   return (
-    <div className={locked ? 'script-line-locked' : 'script-line-hover'} data-testid="script-line" style={{ padding: '5px 8px', borderRadius: 6, cursor: locked ? 'default' : 'pointer' }} onClick={locked ? undefined : () => { setEditText(lineStr); setEditing(true); }}>
+    <div
+      className={`${locked ? 'script-line-locked' : 'script-line-hover'}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
+      data-testid="script-line"
+      draggable={!locked}
+      onDragStart={locked ? undefined : (e) => { e.stopPropagation(); drag.start(e, { kind: 'line', beatId, from: lineIndex }); }}
+      onDragEnd={() => drag.end()}
+      onDragOver={(e) => { const d = drag.current(); if (locked || d?.kind !== 'line' || d.beatId !== beatId) return; e.preventDefault(); e.stopPropagation(); setDropAt(drag.half(e)); }}
+      onDragLeave={() => setDropAt(null)}
+      onDrop={(e) => { const d = drag.current(); setDropAt(null); if (locked || d?.kind !== 'line' || d.beatId !== beatId) return; e.preventDefault(); e.stopPropagation(); onMoveLine(beatId, d.from, dropIndex(d.from, lineIndex, drag.half(e) === 'after')); drag.end(); }}
+      style={{ padding: '5px 8px', borderRadius: 6, cursor: locked ? 'default' : 'pointer' }}
+      onClick={locked ? undefined : () => { setEditText(lineStr); setEditing(true); }}
+    >
       {parsed.type === 'dialogue' && (
         <div>
           <span style={{ fontWeight: 700, fontSize: 12, color: sc[parsed.speaker] || 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 8 }}>{parsed.speaker}</span>
@@ -118,11 +139,35 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
   );
 }
 
-function BeatSection({ beat, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
+  const cardRef = useRef(null);
+  const [dropAt, setDropAt] = useState(null);
+  const visibleLines = beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length;
   return (
-    <div data-testid={`script-beat-${beat.number}`} data-locked={beat.approved ? 'true' : 'false'} style={{ background: 'var(--surface-card)', border: `1px solid ${beat.approved ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`, borderLeft: `4px solid ${beat.color}`, borderRadius: 12, marginBottom: 10, overflow: 'hidden', boxShadow: beat.approved ? '0 2px 8px rgba(184, 150, 46, 0.15)' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div
+      ref={cardRef}
+      data-testid={`script-beat-${beat.number}`}
+      data-locked={beat.approved ? 'true' : 'false'}
+      className={dropAt ? `esp-beat esp-drop-${dropAt}` : 'esp-beat'}
+      onDragOver={(e) => { if (drag.current()?.kind !== 'beat') return; e.preventDefault(); setDropAt(drag.half(e)); }}
+      onDragLeave={() => setDropAt(null)}
+      onDrop={(e) => { const d = drag.current(); setDropAt(null); if (d?.kind !== 'beat') return; e.preventDefault(); onMoveBeat(d.from, dropIndex(d.from, index, drag.half(e) === 'after')); drag.end(); }}
+      style={{ background: 'var(--surface-card)', border: `1px solid ${beat.approved ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`, borderLeft: `4px solid ${beat.color}`, borderRadius: 12, marginBottom: 10, overflow: 'hidden', boxShadow: beat.approved ? '0 2px 8px rgba(184, 150, 46, 0.15)' : '0 1px 3px rgba(0,0,0,0.04)' }}>
       <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer', background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--surface-card)' }}>
+        {beat.approved
+          ? <span className="esp-grip is-locked" aria-hidden="true" />
+          : (
+            <span
+              className="esp-grip"
+              data-testid={`script-drag-${beat.number}`}
+              draggable
+              title="Drag to move this beat. It keeps its number and name."
+              onClick={e => e.stopPropagation()}
+              onDragStart={(e) => { if (cardRef.current) e.dataTransfer?.setDragImage?.(cardRef.current, 24, 24); drag.start(e, { kind: 'beat', from: index }); }}
+              onDragEnd={() => drag.end()}
+            ><GripVertical size={16} aria-hidden="true" /></span>
+          )}
         <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: beat.color + '18', color: beat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{beat.number}</div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -132,16 +177,22 @@ function BeatSection({ beat, scenePlan, expanded, onToggle, onApprove, onEdit, o
           </div>
           {scene?.scene_set_name && <div onClick={(e) => { e.stopPropagation(); onOpenMap(); }} style={{ fontSize: 11, color: 'var(--primary-text)', marginTop: 2, cursor: 'pointer' }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
         </div>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length} lines</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{visibleLines} line{visibleLines === 1 ? '' : 's'}</span>
         <span style={{ fontSize: 12, color: 'var(--text-faint)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
       </div>
       {expanded && (
         <div style={{ padding: '4px 18px 16px' }}>
           {scene?.scene_context && <div style={{ background: 'var(--primary-subtle)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: 'var(--primary-text)', lineHeight: 1.5, fontStyle: 'italic' }}>🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div style={{ background: 'var(--lala-gold-soft)', borderRadius: 8, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: 'var(--lala-gold-text)' }}>✦ {scene.emotional_intent}</div>}
-          <div>{beat.lines.map((line, i) => <ScriptLine key={i} line={line} beatId={beat.id} lineIndex={i} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} />)}</div>
+          <div>{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} />)}</div>
           <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-            {beat.approved && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Locked: unlock to edit it or let Regenerate rewrite it.</span>}
+            {beat.approved && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Locked: unlock to edit it, move it, or let Regenerate rewrite it.</span>}
+            {!beat.approved && (
+              <span className="esp-move" style={{ marginRight: 'auto' }}>
+                <button type="button" className="esp-move-btn" aria-label="Move beat up" data-testid={`script-beat-up-${beat.number}`} disabled={index === 0} onClick={e => { e.stopPropagation(); onMoveBeat(index, index - 1); }}><ArrowUp size={14} aria-hidden="true" /> Up</button>
+                <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
+              </span>
+            )}
             <button type="button" data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--lala-lavender)', color: beat.approved ? 'var(--lala-gold-text)' : 'var(--text-inverse)', border: beat.approved ? '1px solid var(--lala-gold)' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: locking ? 'wait' : 'pointer' }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>
         </div>
@@ -160,7 +211,8 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [lockedBeats, setLockedBeats] = useState(() => (Array.isArray(episode?.script_locked_beats) ? episode.script_locked_beats : []));
   const [locking, setLocking] = useState(false);
   const [beats, setBeats] = useState([]);
-  const [expandedBeat, setExpandedBeat] = useState('beat-0');
+  // undefined: nothing chosen yet, so the first beat is open.
+  const [expandedBeat, setExpandedBeat] = useState(undefined);
   const [scenePlan, setScenePlan] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -209,6 +261,34 @@ export default function EpisodeScriptTab({ episode, show }) {
   }, [episodeId]);
 
   useEffect(() => { if (scriptText) setBeats(parseScriptIntoBeats(scriptText, lockedBeats)); }, [scriptText, lockedBeats]);
+
+  // One drag at a time: a beat (by position) or a line inside one beat.
+  const dragRef = useRef(null);
+  const drag = {
+    start: (e, item) => { dragRef.current = item; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.kind); } },
+    end: () => { dragRef.current = null; },
+    current: () => dragRef.current,
+    // Top half of the target: before it; bottom half: after it.
+    half: (e) => { const r = e.currentTarget.getBoundingClientRect(); return Number.isFinite(e.clientY) && r.height > 0 && e.clientY > r.top + r.height / 2 ? 'after' : 'before'; },
+  };
+
+  // Reordering edits the script on the page; Save keeps it. A locked beat
+  // doesn't move itself, and its lines don't move (src/lib/scriptBeatOrder.js).
+  const handleMoveBeat = (from, to) => {
+    if (beats[from]?.approved) return;
+    const next = moveBeat(scriptText, from, to);
+    if (next === scriptText) return;
+    // The open beat stays open where it lands (the default open beat is
+    // whichever is first, so it is pinned before the order changes).
+    if (expandedBeat === undefined) setExpandedBeat(beats[0]?.id ?? null);
+    setScriptText(next); setDevScript(next);
+  };
+  const handleMoveLine = (beatId, from, to) => {
+    const at = beats.findIndex(b => b.id === beatId);
+    if (at < 0 || beats[at].approved) return;
+    const next = moveLine(scriptText, at, from, to);
+    if (next !== scriptText) { setScriptText(next); setDevScript(next); }
+  };
 
   const flash = (msg, type, ms = 3000) => { setToast({ msg, type }); setTimeout(() => setToast(null), ms); };
 
@@ -356,7 +436,7 @@ export default function EpisodeScriptTab({ episode, show }) {
         <div className="esp-head-text">
           <h2 className="esp-title">Script</h2>
           <p className="esp-sub">
-            {hasScript ? <>{beats.length} beats · {approvedCount} approved{allApproved && <span className="esp-complete"> · Complete</span>}</> : 'Not generated yet'}
+            {hasScript ? <>{beats.length} beats · {approvedCount} approved{allApproved && <span className="esp-complete"> · Complete</span>}{scriptText !== savedScript && <span className="esp-unsaved" data-testid="script-dirty"> · Unsaved changes</span>}</> : 'Not generated yet'}
           </p>
         </div>
         {hasScript ? (
@@ -388,7 +468,11 @@ export default function EpisodeScriptTab({ episode, show }) {
 
       {!developerMode && (hasScript ? (
         <div>
-          {beats.map(beat => <BeatSection key={beat.id} beat={beat} scenePlan={scenePlan} expanded={expandedBeat === beat.id} onToggle={() => setExpandedBeat(expandedBeat === beat.id ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} />)}
+          {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
+          {beats.map((beat, index) => {
+            const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
+            return <BeatSection key={beat.id} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} />;
+          })}
           {/* Franchise Guard Results */}
           {guardResult && (
             <div style={{
