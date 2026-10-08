@@ -1,15 +1,13 @@
 // ============================================================================
-// UNIT TEST — the Feed paths a database test cannot reach give a LalaVerse
-// profile its Society archetype (fix-list item 26; Evoni's ruling,
-// 2026-10-08: "Feed also uses your 15")
+// UNIT TEST — confirm-feed and bulk generate give a LalaVerse profile its
+// Society archetype (fix-list item 26; Evoni's ruling, 2026-10-08: "Feed
+// also uses your 15")
 // ============================================================================
-// A registry character's profile (autoCreateFeedProfile) and a confirmed
-// proposal (POST /character-generation/confirm-feed) write
-// social_profiles.registry_character_id, a registry id (UUID), into a column
-// that is INTEGER in the migrations and in canon
-// (docs/CHARACTER_REGISTRY_READ.md §2.1), so neither insert succeeds on a
-// migrated database. Bulk generate is here too: its AI chooses from the list.
+// A confirmed proposal (POST /character-generation/confirm-feed) gets the
+// least used; bulk generate's AI chooses from the list.
 // tests/integration/societyArchetypesFeed.integration.test.js has the rest.
+// (The registry create's auto Feed profile is gone: "Only by proposal",
+// 2026-10-08.)
 //
 // Mocked, no database, no AI call. The counts make "The Archivist" the
 // least used of the default fifteen, so the least-used pick is known.
@@ -31,7 +29,6 @@ const mockModels = {};
 jest.mock('../../../src/models', () => mockModels);
 
 const { DEFAULT_ARCHETYPES } = require('../../../src/services/societyArchetypes');
-const { autoCreateFeedProfile } = require('../../../src/services/feedAutoGeneration');
 const { generateSingleProfile } = require('../../../src/routes/socialProfileBulkRoutes');
 const charGenRouter = require('../../../src/routes/characterGenerationRoutes');
 
@@ -57,24 +54,6 @@ function models() {
 }
 
 beforeEach(() => mockCreate.mockReset());
-
-describe('a registry character\'s Feed profile', () => {
-  const character = { id: 'rc-1', role_type: 'support', selected_name: 'Nia Vale', display_name: 'Nia Vale' };
-
-  test('LalaVerse: the least used archetype', async () => {
-    const db = models();
-    const { feedProfile } = await autoCreateFeedProfile(db, character, 'lalaverse', { handle: '@niavale' });
-    expect(feedProfile.society_archetype).toBe(LEAST);
-    expect(db.SocialProfile.create.mock.calls[0][0].society_archetype).toBe(LEAST);
-  });
-
-  test('real world: none, and the list is not read', async () => {
-    const db = models();
-    const { feedProfile } = await autoCreateFeedProfile(db, character, 'real_world', { handle: '@niavale' });
-    expect(feedProfile.society_archetype).toBeNull();
-    expect(db.PageContent.findOne).not.toHaveBeenCalled();
-  });
-});
 
 describe('POST /character-generation/confirm-feed', () => {
   const confirm = (db, body) => {

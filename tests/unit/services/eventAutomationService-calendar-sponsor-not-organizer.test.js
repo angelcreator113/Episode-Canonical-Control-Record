@@ -44,7 +44,7 @@ const cal = (extra = {}) => ({ id: 'cal-1', title: 'Fashion Week', cultural_cate
 
 const baseHost = () => ({
   id: 42, handle: 'hosty', display_name: 'Hosty', content_category: 'fashion', archetype: 'soft_life',
-  follower_tier: 'macro', lala_relevance_score: 5, registry_character_id: 'rc-7', platform: 'instagram',
+  follower_tier: 'macro', lala_relevance_score: 5, platform: 'instagram',
   brand_partnerships: [], city: null, frequent_venues: [],
 });
 
@@ -58,9 +58,12 @@ function modelsWith(host, { createFails = false } = {}) {
   const query = jest.fn(async () => [[]]);
   let call = 0;
   const findAll = jest.fn(async () => (call++ === 0 && host ? [host] : []));
+  // The host's registry character: the registry entry that links to it
+  // (registry_characters.feed_profile_id, the one link; ruling C3).
+  const findLink = jest.fn(async ({ where }) => (host && where.feed_profile_id === host.id ? { id: 'rc-7' } : null));
   return {
     create, query,
-    models: { WorldEvent: { create }, SocialProfile: { findAll }, sequelize: { query } },
+    models: { WorldEvent: { create }, SocialProfile: { findAll }, RegistryCharacter: { findOne: findLink }, sequelize: { query } },
   };
 }
 

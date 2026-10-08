@@ -2,8 +2,9 @@
 // Task #1851 — every path that writes generated (or generated-then-confirmed)
 // fields into social_profiles fits strings to their declared column lengths
 // and sanitizes enums through one shared helper (src/utils/fitToModel.js):
-// bulk generateSingleProfile, /confirm-feed, feedScheduler and
-// feedAutoGeneration. Mocked, no database, no AI call: the Anthropic SDK is a
+// bulk generateSingleProfile, /confirm-feed and feedScheduler (the registry
+// create's auto Feed profile is gone: Evoni's ruling, 2026-10-08, "Only by
+// proposal"). Mocked, no database, no AI call: the Anthropic SDK is a
 // jest mock and the lengths come from the real SocialProfile model's
 // rawAttributes (the Sequelize instance is never connected).
 // ============================================================================
@@ -35,7 +36,6 @@ const fitToModel = require('../../../src/utils/fitToModel');
 const bulkRouter = require('../../../src/routes/socialProfileBulkRoutes');
 const charGenRouter = require('../../../src/routes/characterGenerationRoutes');
 const feedScheduler = require('../../../src/services/feedScheduler');
-const { autoCreateFeedProfile } = require('../../../src/services/feedAutoGeneration');
 
 const sequelize = new Sequelize('postgres://u:p@127.0.0.1:1/unused', { logging: false });
 const RealSocialProfile = require('../../../src/models/SocialProfile')(sequelize, DataTypes);
@@ -238,24 +238,5 @@ describe('feedScheduler.generateAndSaveProfile', () => {
     expect(warns[0]).toContain('feed-scheduler');
     expect(warns[0]).toContain(`display_name (${LONG_NAME.length} > 200)`);
     expect(warns[0]).toContain('age_range (');
-  });
-});
-
-describe('feedAutoGeneration.autoCreateFeedProfile', () => {
-  it('fits the registry display_name and warns by field name', async () => {
-    const db = { SocialProfile: socialProfileModel() };
-    const character = { id: 'c1', role_type: 'support', selected_name: LONG_NAME };
-
-    const { feedProfile, skipped } = await autoCreateFeedProfile(db, character, 'real_world', { handle: '@glow' });
-
-    expect(skipped).toBe(false);
-    expect(feedProfile.id).toBe(42);
-    const record = db.SocialProfile.create.mock.calls[0][0];
-    expect(Array.from(record.display_name).length).toBeLessThanOrEqual(200);
-    expect(LONG_NAME.startsWith(record.display_name)).toBe(true);
-    const warns = truncWarns();
-    expect(warns).toHaveLength(1);
-    expect(warns[0]).toContain('feed-auto-generation');
-    expect(warns[0]).toContain(`display_name (${LONG_NAME.length} > 200)`);
   });
 });

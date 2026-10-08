@@ -12,7 +12,12 @@
  *
  * Generates a `social_leverage` narrative summary that explains
  * WHY this character has power in story terms.
+ *
+ * The profile's character is the registry entry whose feed_profile_id is
+ * the profile (ruling C3, utils/registryLink).
  */
+
+const { linkedCharacter } = require('../utils/registryLink');
 
 // ─── SOCIAL LEVERAGE GENERATOR ──────────────────────────────────────────────
 // Produces a narrative sentence about the character's social power
@@ -94,25 +99,24 @@ function generateSocialLeverage(profile) {
 async function syncProfileToRegistry(profile, models) {
   const p = profile.toJSON ? profile.toJSON() : profile;
 
-  if (!p.registry_character_id) {
-    return { synced: false, reason: 'No linked registry character' };
-  }
-
   const { RegistryCharacter } = models;
   if (!RegistryCharacter) {
     return { synced: false, reason: 'RegistryCharacter model not loaded' };
   }
 
-  const character = await RegistryCharacter.findByPk(p.registry_character_id);
+  // The one link is the registry entry's feed_profile_id (ruling C3).
+  const character = await linkedCharacter(models, p.id);
   if (!character) {
-    return { synced: false, reason: `Character ${p.registry_character_id} not found` };
+    return { synced: false, reason: 'No linked registry character' };
   }
 
   // Build update payload
+  // No platform_primary: the registry's is how the character appears
+  // (lalaverse_main, multi_platform, live_first, archive_heavy, unknown), not
+  // the profile's platform; writing "instagram" there failed every sync.
   const updates = {
     feed_profile_id: p.id,
     social_presence: true,
-    platform_primary: p.platform,
     follower_tier: p.follower_tier,
     celebrity_tier: p.celebrity_tier || 'accessible',
     platform_presences: p.platform_presences || {},
@@ -149,7 +153,6 @@ async function syncProfileToRegistry(profile, models) {
     const safeUpdates = {
       feed_profile_id: updates.feed_profile_id,
       social_presence: true,
-      platform_primary: updates.platform_primary,
       follower_tier: updates.follower_tier,
     };
     try {
@@ -175,14 +178,23 @@ async function syncAllLinkedProfiles(models) {
   const { SocialProfile } = models;
   if (!SocialProfile) return { synced: 0 };
 
+  // The profiles a registry entry links to (feed_profile_id; ruling C3).
+  const { Op } = require('sequelize');
+  const linkedIds = models.RegistryCharacter
+    ? (await models.RegistryCharacter.findAll({
+      where: { feed_profile_id: { [Op.ne]: null } }, attributes: ['feed_profile_id'], raw: true,
+    })).map((r) => r.feed_profile_id)
+    : [];
+  if (!linkedIds.length) return { synced: 0, total: 0 };
+
   const linked = await SocialProfile.findAll({
     where: {
-      registry_character_id: { [require('sequelize').Op.ne]: null },
-      status: { [require('sequelize').Op.in]: ['finalized', 'generated', 'crossed'] },
+      id: { [Op.in]: [...new Set(linkedIds)] },
+      status: { [Op.in]: ['finalized', 'generated', 'crossed'] },
     },
     attributes: [
       'id', 'handle', 'platform', 'display_name', 'content_category', 'archetype',
-      'follower_tier', 'registry_character_id', 'content_persona', 'real_signal',
+      'follower_tier', 'content_persona', 'real_signal',
       'celebrity_tier', 'platform_presences', 'public_persona', 'private_reality',
       'primary_income_source', 'income_breakdown', 'monthly_earnings_range',
       'clout_score', 'drama_magnet', 'brand_partnerships', 'controversy_history',

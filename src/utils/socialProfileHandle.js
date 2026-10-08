@@ -21,7 +21,6 @@
 //   src/routes/socialProfileBulkRoutes.js  generateSingleProfile (bulk generate)
 //   src/routes/characterGenerationRoutes.js POST /confirm-feed
 //   src/services/feedScheduler.js          generateAndSaveProfile
-//   src/services/feedAutoGeneration.js     autoCreateFeedProfile
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normaliseHandle(handle) {

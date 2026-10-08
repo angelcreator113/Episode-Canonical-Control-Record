@@ -4,10 +4,12 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class SocialProfile extends Model {
     static associate(models) {
+      // Ruling C3: one link, on the registry entry (feed_profile_id).
       if (models.RegistryCharacter) {
-        SocialProfile.belongsTo(models.RegistryCharacter, {
-          foreignKey: 'registry_character_id',
+        SocialProfile.hasOne(models.RegistryCharacter, {
+          foreignKey: 'feed_profile_id',
           as: 'registryCharacter',
+          constraints: false,
         });
       }
       if (models.SocialProfileRelationship) {
@@ -61,7 +63,9 @@ module.exports = (sequelize, DataTypes) => {
     crossing_trigger:      { type: DataTypes.TEXT, allowNull: true },
     crossing_mechanism:    { type: DataTypes.TEXT, allowNull: true },
     crossed_at:            { type: DataTypes.DATE, allowNull: true },
-    registry_character_id: { type: DataTypes.UUID, allowNull: true },
+    // No registry_character_id: the one link to a registry character is on
+    // the registry entry, registry_characters.feed_profile_id (ruling C3;
+    // utils/registryLink). The table's INTEGER column of that name is unused.
 
     // ── Enhanced dataset fields ──────────────────────────────────────────────
     post_frequency:        { type: DataTypes.STRING(100), allowNull: true },   // e.g. "3-4x/day", "weekly drops"

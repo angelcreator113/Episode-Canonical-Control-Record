@@ -59,8 +59,11 @@ EVALUATE/ACCEPT → AFTERMATH → NEXT EVENT
 
 A `SocialProfile` row (the Feed). Supplies `handle`, `display_name`,
 `content_category`, `archetype`, `follower_tier`, `brand_partnerships`,
-`aesthetic_dna`, and (per `src/routes/worldEvents.js:1996`) an optional
-`registry_character_id` link into the Character Registry.
+`aesthetic_dna`. Its Character Registry character, when it has one, is the
+registry entry whose `feed_profile_id` is the profile: one link, on the
+registry entry (Evoni's ruling C3; `src/utils/registryLink.js`,
+`linkedCharacter`). `social_profiles.registry_character_id` is not the link
+and is not read (2026-10-08).
 
 ### EVENT
 

@@ -451,8 +451,11 @@ async function syncFeedProfileFromRegistry(characterId, updatedFields, models) {
     }
     if (!Object.keys(relevantUpdate).length) return;
 
+    // The character's profile is its feed_profile_id, the one link (C3).
+    const character = await models.RegistryCharacter.findByPk(characterId, { attributes: ['feed_profile_id'] });
+    if (!character?.feed_profile_id) return;
     await models.SocialProfile.update(relevantUpdate, {
-      where: { registry_character_id: characterId },
+      where: { id: character.feed_profile_id },
     });
 
     console.log(`[registrySync] Feed profile synced for character ${characterId}:`, Object.keys(relevantUpdate));

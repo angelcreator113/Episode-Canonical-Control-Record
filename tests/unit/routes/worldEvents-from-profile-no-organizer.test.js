@@ -18,6 +18,7 @@ const request = require('supertest');
 const mockCreate = jest.fn();
 const mockQuery = jest.fn();
 const mockFindProfile = jest.fn();
+const mockFindLinks = jest.fn(async () => []);
 let mockProfile;
 const baseProfile = () => ({
   id: 42, handle: 'hosty', display_name: 'Hosty', content_category: 'fashion',
@@ -32,6 +33,8 @@ jest.mock('../../../src/models', () => ({
     findAll: jest.fn(async () => []),
   },
   WorldEvent: { create: (...a) => mockCreate(...a) },
+  // The one link to a registry character is on the registry entry (C3).
+  RegistryCharacter: { findAll: (...a) => mockFindLinks(...a) },
 }));
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: jest.fn() } })));
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
@@ -135,10 +138,14 @@ describe('GET /world/:showId/events/:eventId — startedFromProfile', () => {
   test('returns the starting creator for an event started from the Feed', async () => {
     mockQuery.mockResolvedValueOnce([[row({ started_from_profile_id: 42 })]]);
     mockFindProfile.mockImplementation(async (id, opts) => ({ toJSON: () => ({ id, handle: 'hosty', display_name: 'Hosty', attrs: opts.attributes }) }));
+    // The registry entry that links to profile 42 (registry_characters.feed_profile_id).
+    mockFindLinks.mockResolvedValueOnce([{ id: 'rc-9', feed_profile_id: 42 }]);
     const res = await request(app).get('/api/v1/world/show-1/events/ev-1');
     expect(res.status).toBe(200);
-    expect(res.body.startedFromProfile).toMatchObject({ id: 42, handle: 'hosty', display_name: 'Hosty' });
-    expect(res.body.startedFromProfile.attrs).toEqual(expect.arrayContaining(['id', 'handle', 'display_name', 'registry_character_id']));
+    expect(res.body.startedFromProfile).toMatchObject({ id: 42, handle: 'hosty', display_name: 'Hosty', registry_character_id: 'rc-9' });
+    expect(res.body.startedFromProfile.attrs).toEqual(expect.arrayContaining(['id', 'handle', 'display_name']));
+    expect(res.body.startedFromProfile.attrs).not.toContain('registry_character_id');
+    expect(mockFindLinks.mock.calls[0][0].where).toEqual({ feed_profile_id: [42] });
     expect(res.body.sourceProfile).toBeNull();
   });
 

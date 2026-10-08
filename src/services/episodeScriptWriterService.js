@@ -19,6 +19,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -254,10 +255,13 @@ async function loadScriptContext(episodeId, showId, models) {
     );
     const profileIds = [eventCreatorOrganizer(context.event)?.profileId, ...promptGuests.map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
+      // Each guest's character is the registry entry linked to the profile
+      // (ruling C3, utils/registryLink), the newest should two be. The join
+      // on sp.registry_character_id compared an integer to a UUID and failed.
       const [rows] = await sequelize.query(
         `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,
                 sp.posting_voice, sp.content_persona, sp.lala_relevance_score, sp.celebrity_tier,
-                sp.follow_motivation, sp.follow_emotion, sp.registry_character_id,
+                sp.follow_motivation, sp.follow_emotion, rc.id AS registry_character_id,
                 rc.display_name as char_name, rc.core_belief, rc.pressure_type, rc.pressure_quote,
                 rc.role_type, rc.role_label, rc.appearance_mode, rc.depth_level,
                 rc.personality, rc.description as char_description,
@@ -266,7 +270,7 @@ async function loadScriptContext(episodeId, showId, models) {
                 rc.therapy_primary_defense, rc.therapy_emotional_state,
                 rc.signature_trait, rc.emotional_baseline
          FROM social_profiles sp
-         LEFT JOIN registry_characters rc ON rc.id = sp.registry_character_id
+         ${LINKED_CHARACTER_JOIN}
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
         { replacements: { ids: profileIds } }
       );
