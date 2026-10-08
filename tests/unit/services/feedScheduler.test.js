@@ -455,11 +455,13 @@ describe('feedScheduler', () => {
       expect(spark.career_pressure).toBeUndefined();
     });
 
-    it('should choose a valid lalaverse city', () => {
-      const validCities = ['nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row'];
-      const spark = scheduler.generateCreatorSpark('lalaverse');
-
-      expect(validCities).toContain(spark.city);
+    it('should choose one of the five DREAM cities', () => {
+      // The old five (nova_prime, velour_city, the_drift, solenne,
+      // cascade_row) were renamed in July (utils/feedCities).
+      const dreamCities = ['dazzle_district', 'radiance_row', 'echo_park', 'ascent_tower', 'maverick_harbor'];
+      for (let i = 0; i < 25; i++) {
+        expect(dreamCities).toContain(scheduler.generateCreatorSpark('lalaverse').city);
+      }
     });
 
     it('should produce a non-empty vibe_sentence', () => {

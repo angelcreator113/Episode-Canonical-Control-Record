@@ -18,6 +18,7 @@
 /* eslint-disable no-console */
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
+const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity, randomFeedCity } = require('../utils/feedCities');
 const {
   loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
   assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
@@ -167,15 +168,11 @@ function parseAIJsonArray(text) {
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
 const MAX_HISTORY = 50;
 
-const LALAVERSE_CITIES = ['nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row'];
-
-const CITY_CULTURE = {
-  nova_prime:   'High fashion, aspirational, image-first. Polished curators dominate. Brand deals are currency.',
-  velour_city:  'Music, nightlife, culture. Chaos creators and community builders. Authenticity is the brand.',
-  the_drift:    'Underground, countercultural, anti-algorithm. Messy transparents and watchers. Fame is suspicious.',
-  solenne:      'Luxury, slow content, soft life. Soft life archetype and overnight rises. Aesthetics over metrics.',
-  cascade_row:  'Commerce, hustle, explicitly paid. Industry peers and cautionary tales. ROI is the language.',
-};
+// The five DREAM cities (utils/feedCities). This offered the old five
+// (nova_prime, velour_city, the_drift, solenne, cascade_row) after the July
+// unification renamed them, so the profiles it made carried old names.
+const LALAVERSE_CITIES = DREAM_CITY_KEYS;
+const CITY_CULTURE = DREAM_CITY_CULTURE;
 
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'twitter', 'onlyfans'];
 const ARCHETYPES = [
@@ -293,7 +290,7 @@ function generateCreatorSpark(layer) {
 
   const spark = { handle, platform, vibe_sentence, archetype, follower_tier: tier };
   if (layer === 'lalaverse') {
-    spark.city = LALAVERSE_CITIES[Math.floor(Math.random() * LALAVERSE_CITIES.length)];
+    spark.city = randomFeedCity();
     spark.lala_relationship = ['direct', 'competitive', 'aware', 'mutual_unaware'][Math.floor(Math.random() * 4)];
     spark.career_pressure = ['ahead', 'level', 'behind', 'different_lane'][Math.floor(Math.random() * 4)];
   }
@@ -422,7 +419,7 @@ Return a JSON array of exactly ${count} objects:
       "drama_hint": "optional controversy or tension",
       "aesthetic_hint": "visual style keywords",
       "revenue_hint": "how they make money"
-    }${layer === 'lalaverse' ? ',\n    "city": "nova_prime",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}${societyPicks.length ? ',\n    "society_archetype": "this spark\'s name from SOCIETY ARCHETYPES"' : ''}
+    }${layer === 'lalaverse' ? ',\n    "city": "dazzle_district",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}${societyPicks.length ? ',\n    "society_archetype": "this spark\'s name from SOCIETY ARCHETYPES"' : ''}
   }
 ]
 
@@ -448,6 +445,14 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   if (!Array.isArray(sparks) || sparks.length === 0) {
     throw new Error('AI returned no sparks');
+  }
+
+  // A LalaVerse spark's city is a DREAM city: an old name the AI gives is
+  // read as July's mapping does, anything else gets one at random.
+  if (layer === 'lalaverse') {
+    sparks.forEach((s) => {
+      if (s && typeof s === 'object') s.city = feedCity(s.city) || randomFeedCity();
+    });
   }
 
   // A spark keeps the AI's archetype when it is on the list, else the one
@@ -609,6 +614,10 @@ async function generateAndSaveProfile(db, spark, layer) {
     brain = await loadBrainContext(db, { showId, label: 'FeedScheduler' });
   }
 
+  // A LalaVerse profile's city is a DREAM city (an old name read as July's
+  // mapping does; utils/feedCities). A spark with none still gets none.
+  const city = layer === 'lalaverse' && spark.city ? feedCity(spark.city) : null;
+
   // A LalaVerse profile's Society archetype (fix-list item 26): its spark's,
   // else the least used.
   let society = null;
@@ -627,7 +636,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
+${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
 - Creators exist across MULTIPLE platforms with DIFFERENT personas on each
@@ -790,7 +799,7 @@ Return ONLY valid JSON with these fields:
     collab_style:          generated.collab_style,
     influencer_tier_detail:generated.influencer_tier_detail,
     feed_layer:            layer,
-    city:                  layer === 'lalaverse' ? (spark.city || null) : null,
+    city:                  layer === 'lalaverse' ? city : null,
     lala_relationship:     layer === 'lalaverse' ? (spark.lala_relationship || 'mutual_unaware') : null,
     career_pressure:       layer === 'lalaverse' ? (spark.career_pressure || 'level') : null,
     is_justawoman_record:  false,

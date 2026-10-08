@@ -38,6 +38,7 @@ const {
   warnTruncated,
   logValueTooLong,
 } = require('../utils/fitToModel');
+const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity } = require('../utils/feedCities');
 
 // ── Feed caps ─────────────────────────────────────────────────────────────────
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
@@ -70,20 +71,9 @@ function guardJustAWomanRecord(req, res, next) {
 }
 
 // ── LalaVerse city culture ───────────────────────────────────────────────────
-const CITY_CULTURE = {
-  // DREAM cities (unified)
-  dazzle_district: 'Fashion capital of the LalaVerse. Couture houses, runway shows, designer studios. Polished curators dominate. Every sidewalk is a runway. Brand deals are currency.',
-  radiance_row:    'Beauty & wellness heartland. Skincare labs, salons, beauty schools, product launches. Experimental, aesthetic, transformation culture. Reinvention is the local religion.',
-  echo_park:       'Entertainment & nightlife hub. Music studios, comedy clubs, creator houses, viral content. Chaotic, loud, viral culture. Something happens here that becomes a meme by morning.',
-  ascent_tower:    'Tech & innovation district. Digital platforms, creator economy tools, startup incubators. Futuristic, ambitious. The city building the tools everyone else uses.',
-  maverick_harbor: 'Creator economy & counter-culture. Content houses, podcast networks, collab spaces, underground scenes. Collaborative, entrepreneurial, anti-algorithm. Fame is suspicious here.',
-  // Legacy (for any un-migrated profiles)
-  nova_prime:   'High fashion, aspirational, image-first. Polished curators dominate. Brand deals are currency.',
-  velour_city:  'Music, nightlife, culture. Chaos creators and community builders. Authenticity is the brand.',
-  the_drift:    'Underground, countercultural, anti-algorithm. Messy transparents and watchers. Fame is suspicious.',
-  solenne:      'Luxury, slow content, soft life. Soft life archetype and overnight rises. Aesthetics over metrics.',
-  cascade_row:  'Commerce, hustle, explicitly paid. Industry peers and cautionary tales. ROI is the language.',
-};
+// The five DREAM cities (utils/feedCities). A profile that still has an old
+// city is read as its DREAM city (feedCity), so the old texts are gone.
+const CITY_CULTURE = DREAM_CITY_CULTURE;
 
 // ── Generation prompt ─────────────────────────────────────────────────────────
 function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext, advancedContext) {
@@ -340,6 +330,12 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   if (layer === 'lalaverse' && !city) {
     return res.status(400).json({ error: 'city is required for LalaVerse Feed profiles' });
   }
+  // A DREAM city; an old name is read as the July unification mapped it
+  // (utils/feedCities). Anything else would fail the column's ENUM.
+  const lalaCity = layer === 'lalaverse' ? feedCity(city) : null;
+  if (layer === 'lalaverse' && !lalaCity) {
+    return res.status(400).json({ error: `city must be one of the DREAM cities: ${DREAM_CITY_KEYS.join(', ')}` });
+  }
 
   const db = req.app.locals.db || require('../models');
   let attempted = null;
@@ -365,9 +361,9 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
 
     // Build prompt — inject LalaVerse city culture context when applicable
     let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
-    if (layer === 'lalaverse' && city) {
+    if (layer === 'lalaverse' && lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}
+This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${CITY_CULTURE[lalaCity] || ''}
 Generate a profile that feels native to that city's creator culture.
 Lala's relationship to this creator: ${lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${career_pressure || 'level'}.
@@ -471,7 +467,7 @@ Lala does not know she was built. The world she lives in feels complete and self
       influencer_tier_detail:generated.influencer_tier_detail,
       // LalaVerse layer fields
       feed_layer:            layer,
-      city:                  layer === 'lalaverse' ? city : null,
+      city:                  layer === 'lalaverse' ? lalaCity : null,
       lala_relationship:     layer === 'lalaverse' ? (lala_relationship || 'mutual_unaware') : null,
       career_pressure:       layer === 'lalaverse' ? (career_pressure || 'level') : null,
     });
@@ -493,10 +489,10 @@ Lala does not know she was built. The world she lives in feels complete and self
     }
 
     // Auto-assign home location from city (DREAM map integration)
-    if (layer === 'lalaverse' && city && db.WorldLocation) {
+    if (layer === 'lalaverse' && lalaCity && db.WorldLocation) {
       try {
         const { Op } = require('sequelize');
-        const cityName = (city || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const cityName = lalaCity.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const displayName = profile.display_name || profile.handle || 'Creator';
         const category = profile.content_category || '';
 
@@ -1910,9 +1906,11 @@ router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord
 
     const layer = profile.feed_layer || 'real_world';
     let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
-    if (layer === 'lalaverse' && profile.city) {
+    // An old city reads as its DREAM city (utils/feedCities).
+    const lalaCity = layer === 'lalaverse' ? feedCity(profile.city) : null;
+    if (lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${(profile.city || '').replace(/_/g, ' ')} — ${CITY_CULTURE[profile.city] || ''}
+This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${CITY_CULTURE[lalaCity] || ''}
 Generate a profile that feels native to that city's creator culture.
 Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
