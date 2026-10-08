@@ -19,11 +19,10 @@ const multer  = require('multer');
 const path    = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const { buildGenerationPrompt, autoAssignAllFollowers } = require('./socialProfileRoutes');
+const { buildGenerationPrompt, autoAssignAllFollowers, autoLinkRelationships } = require('./socialProfileRoutes');
+const { generatedProfileFields } = require('../utils/generatedProfileFields');
+const { assignHomeLocation } = require('../services/feedHomeLocation');
 const {
-  VALID_ARCHETYPES,
-  VALID_TRAJECTORIES,
-  sanitizeEnum,
   fitRecordToModel,
   warnTruncated,
   logValueTooLong,
@@ -186,10 +185,11 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
   }
 
-  // Sanitize ENUM fields and fit every string to its column (Task #1851) so
-  // an AI variation or an over-long value cannot fail the insert.
-  const safeArchetype = sanitizeEnum(profile.archetype, VALID_ARCHETYPES, 'polished_curator');
-  const safeTrajectory = sanitizeEnum(profile.current_trajectory, VALID_TRAJECTORIES, 'rising');
+  // The fields /generate saves from the same prompt, ENUMs sanitized
+  // (utils/generatedProfileFields); every string is fitted to its column
+  // below (Task #1851), so an AI variation or an over-long value cannot fail
+  // the insert.
+  const fields = generatedProfileFields(profile);
   // A LalaVerse creator's DREAM city: its own, else the AI's pick, else one
   // at random (utils/feedCities).
   const city = lalaverse ? (feedCity(creator.city) || feedCity(profile.city) || randomFeedCity()) : null;
@@ -205,32 +205,9 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   if (canSave) {
     const { fitted: defaults, truncated } = fitRecordToModel(db.SocialProfile, {
       vibe_sentence: creator.vibe_sentence,
-      display_name: profile.display_name,
-      archetype: safeArchetype,
+      ...fields,
       society_archetype: society ? society.name : null,
-      content_persona: profile.content_persona,
-      real_signal: profile.real_signal,
-      posting_voice: profile.posting_voice,
-      comment_energy: profile.comment_energy,
-      follower_count_approx: profile.follower_count_approx,
-      parasocial_function: profile.parasocial_function,
-      emotional_activation: profile.emotional_activation,
-      watch_reason: profile.watch_reason,
-      what_it_costs_her: profile.what_it_costs_her,
-      current_trajectory: safeTrajectory,
-      trajectory_detail: profile.trajectory_detail,
-      lala_relevance_score: profile.lala_relevance_score,
-      lala_relevance_reason: profile.lala_relevance_reason,
-      pinned_post: profile.pinned_post,
-      sample_captions: profile.sample_captions,
-      sample_comments: profile.sample_comments,
-      adult_content_present: profile.adult_content_present || false,
-      adult_content_type: profile.adult_content_type,
-      adult_content_framing: profile.adult_content_framing,
-      crossing_trigger: profile.crossing_trigger,
-      crossing_mechanism: profile.crossing_mechanism,
-      book_relevance: profile.book_relevance,
-      moment_log: profile.moment_log || [],
+      generation_model: 'claude-sonnet-4-6',
       full_profile: profile,
       status: 'generated',
       series_id: seriesId || null,
@@ -269,6 +246,26 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
         platform: creator.platform,
       });
     }
+
+    // Its known associates linked to the profiles that exist, as /generate
+    // links them.
+    if (saved && db.SocialProfileRelationship && fields.known_associates?.length) {
+      try {
+        await autoLinkRelationships(db, saved, fields.known_associates);
+      } catch (linkErr) {
+        console.warn(`[bulk-generate] associates for @${creator.handle}:`, linkErr?.message);
+      }
+    }
+
+    // A LalaVerse creator's place on the DREAM map, as /generate gives one
+    // (services/feedHomeLocation).
+    if (saved && lalaverse && city) {
+      try {
+        await assignHomeLocation(db, saved, city);
+      } catch (locErr) {
+        console.warn(`[bulk-generate] home location for @${creator.handle}:`, locErr?.message);
+      }
+    }
   }
 
   return {
@@ -277,7 +274,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     status: 'success',
     profile_id: saved?.id || null,
     lala_score: profile.lala_relevance_score || 0,
-    archetype: saved ? safeArchetype : (profile.archetype || null),
+    archetype: saved ? fields.archetype : (profile.archetype || null),
   };
 }
 
