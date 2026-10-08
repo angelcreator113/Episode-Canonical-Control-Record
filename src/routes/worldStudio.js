@@ -1055,7 +1055,8 @@ Return JSON only:
         attracted_to: c.attracted_to || null,
         how_they_love: c.how_they_love || null,
         desire_they_wont_admit: c.desire_they_wont_admit || null,
-        relationship_graph: c.relationship_graph || [],
+        // No relationship_graph: relationships are kept in
+        // character_relationships (fix-list item 23), seeded below.
         family_layer: c.family_layer || null,
         origin_story: c.origin_story || null,
         public_persona: c.public_persona || null,
@@ -2808,7 +2809,8 @@ router.post('/world/generate-ecosystem-confirm', requireAuth, async (req, res) =
         attracted_to: c.attracted_to || null,
         how_they_love: c.how_they_love || null,
         desire_they_wont_admit: c.desire_they_wont_admit || null,
-        relationship_graph: c.relationship_graph || [],
+        // No relationship_graph: relationships are kept in
+        // character_relationships (fix-list item 23), seeded below.
         family_layer: c.family_layer || null,
         origin_story: c.origin_story || null,
         public_persona: c.public_persona || null,
