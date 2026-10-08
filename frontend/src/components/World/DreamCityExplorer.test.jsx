@@ -1,6 +1,8 @@
 /**
  * The World tab's city explorer (the mock, 2026-10-06): pick a city, see
  * its venues, schools and companies; "+ Add" starts a location there.
+ * One map (2026-10-08): the picker is the map passed in as renderMap
+ * (the illustrated DREAM map), plus a row of city chips for a phone.
  */
 import React from 'react';
 import { vi, describe, test, expect } from 'vitest';
@@ -17,7 +19,7 @@ const renderIt = (props = {}) => render(
 );
 
 describe('DreamCityExplorer', () => {
-  test('five city buttons, the first chosen, each with its count of places', () => {
+  test('five city chips, the first chosen, each with its count of places', () => {
     renderIt();
     const buttons = screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.hasAttribute('aria-pressed'));
     expect(buttons.map((b) => b.querySelector('.dce-name').textContent)).toEqual(DREAM_CITIES.map((c) => c.name));
@@ -47,5 +49,20 @@ describe('DreamCityExplorer', () => {
     expect(screen.getByTestId('dce-venues-empty').textContent).toContain('No places in Radiance Row yet');
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
     expect(onAddVenue).toHaveBeenCalledWith('Radiance Row');
+  });
+
+  test('the map passed in is the picker: it is told the chosen city and can change it', () => {
+    const renderMap = vi.fn((key, pick) => (
+      <div data-testid="the-map" data-city={key}>
+        <span role="button" tabIndex={0} onClick={() => pick('echo_park')}>Map: Echo Park</span>
+      </div>
+    ));
+    renderIt({ renderMap });
+    expect(screen.getByTestId('the-map').getAttribute('data-city')).toBe('dazzle_district');
+    expect(document.querySelector('.dce-bubble')).toBeNull();
+    fireEvent.click(screen.getByText('Map: Echo Park'));
+    expect(screen.getByTestId('the-map').getAttribute('data-city')).toBe('echo_park');
+    expect(screen.getByTestId('dce-city').textContent).toContain('Echo Park');
+    expect(screen.getByTestId('dce-venues').textContent).toContain("STUDIO BY SABLE's Studio");
   });
 });

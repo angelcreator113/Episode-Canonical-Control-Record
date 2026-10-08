@@ -10,9 +10,14 @@
  *   onSelectLocation(loc) — callback when a location pin is clicked
  *   lalaPosition    — { locationId } for Lala's current position
  *   mapImageUrl     — custom map image URL (optional, falls back to default)
+ *   selectedCity, onSelectCity(key) — the LalaVerse hub's World tab picks
+ *                     its city here (one map, 2026-10-08): the chosen city
+ *                     is controlled and its cards sit beside the map, so the
+ *                     map's own dark city panel stays closed
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import apiClient from '../services/api';
+import { placeCity, inCity } from '../lib/dreamCityExplorer';
 
 // File-local helpers — world map city positions persistence.
 export const getMapPositionsApi = () =>
@@ -102,6 +107,8 @@ export default function DreamMap({
   onSelectLocation,
   lalaPosition,
   mapImageUrl,
+  selectedCity,
+  onSelectCity,
 }) {
   const containerRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -109,7 +116,12 @@ export default function DreamMap({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredCity, setHoveredCity] = useState(null);
   const [hoveredPin, setHoveredPin] = useState(null);
-  const [activeCity, setActiveCity] = useState(null);
+  const [ownCity, setOwnCity] = useState(null);
+  const controlled = typeof onSelectCity === 'function';
+  const activeCity = controlled ? selectedCity : ownCity;
+  // Controlled, a click picks the city (the cards beside always show one);
+  // on its own the map toggles its city panel.
+  const pickCity = (key) => (controlled ? onSelectCity(key) : setOwnCity((cur) => (cur === key ? null : key)));
 
   // ── Edit mode: drag cities to reposition ──
   const [editMode, setEditMode] = useState(false);
@@ -169,15 +181,17 @@ export default function DreamMap({
     setPositionsDirty(true);
   }, []);
 
-  // Group locations by city
+  // Group locations by city, as the hub's city cards count them
+  // (lib/dreamCityExplorer): a room is in its parent's city; a city row is
+  // not one of its own places.
   const locationsByCity = useMemo(() => {
     const map = {};
     DREAM_CITIES.forEach(c => { map[c.key] = []; });
+    const byId = new Map(locations.filter(Boolean).map(l => [String(l.id), l]));
     locations.forEach(loc => {
-      const cityKey = (loc.city || '').toLowerCase().replace(/ /g, '_');
-      const match = DREAM_CITIES.find(c =>
-        c.key === cityKey || c.name.toLowerCase() === (loc.city || '').toLowerCase()
-      );
+      if (!loc || loc.location_type === 'city') return;
+      const where = placeCity(loc, byId);
+      const match = DREAM_CITIES.find(c => inCity(where, c));
       if (match) map[match.key].push(loc);
     });
     return map;
@@ -295,6 +309,15 @@ export default function DreamMap({
                 {/* City zone circle */}
                 <div
                   data-zone={city.key}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isActive}
+                  aria-label={`${city.name}: ${cityLocs.length} ${cityLocs.length === 1 ? 'place' : 'places'}`}
+                  onKeyDown={(e) => {
+                    if (editMode || (e.key !== 'Enter' && e.key !== ' ')) return;
+                    e.preventDefault();
+                    pickCity(city.key);
+                  }}
                   style={{
                     position: 'absolute',
                     left: `${pos.x}%`, top: `${pos.y}%`,
@@ -316,7 +339,7 @@ export default function DreamMap({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (editMode) return;
-                    setActiveCity(isActive ? null : city.key);
+                    pickCity(city.key);
                   }}
                 >
                   <span style={{ fontSize: isActive ? 22 : 18 }}>{city.icon}</span>
@@ -584,7 +607,7 @@ export default function DreamMap({
         </div>
 
         {/* City sidebar — shown when a city is active */}
-        {activeCity && (() => {
+        {activeCity && !controlled && (() => {
           const city = DREAM_CITIES.find(c => c.key === activeCity);
           const cityLocs = locationsByCity[activeCity] || [];
           const profCount = profilesByCity[activeCity] || 0;
@@ -605,7 +628,7 @@ export default function DreamMap({
                     {city.name}
                   </div>
                 </div>
-                <button onClick={() => setActiveCity(null)} style={{
+                <button onClick={() => setOwnCity(null)} style={{
                   background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6,
                   color: '#999', fontSize: 14, cursor: 'pointer', width: 28, height: 28,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
