@@ -1092,7 +1092,39 @@ router.get('/world/characters', optionalAuth, async (req, res) => {
        ${where} ORDER BY wc.character_type, wc.name`,
       { replacements: rep }
     );
-    res.json({ characters, count: characters.length });
+    // Each character's relationships, from character_relationships through
+    // its registry twin (fix-list item 23; relName is in the RELATIONSHIPS
+    // section below), for World Studio's counts and its Relationship Web:
+    // [{ character_name, relationship_type, confirmed }].
+    // A read that fails leaves the list as it was, without them.
+    const twins = [...new Set(characters.map((c) => c.registry_character_id).filter(Boolean))];
+    const byTwin = new Map();
+    if (twins.length) {
+      try {
+        const rows = await Q(req,
+          `SELECT cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.confirmed,
+                  ${relName('ra')} AS a_name, ${relName('rb')} AS b_name
+             FROM character_relationships cr
+             JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
+             JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
+            WHERE cr.deleted_at IS NULL AND (cr.character_id_a IN (:twins) OR cr.character_id_b IN (:twins))
+            ORDER BY cr.created_at ASC`,
+          { replacements: { twins } }
+        );
+        for (const r of rows) {
+          for (const [me, other] of [[r.character_id_a, r.b_name], [r.character_id_b, r.a_name]]) {
+            if (!byTwin.has(me)) byTwin.set(me, []);
+            byTwin.get(me).push({ character_name: other, relationship_type: r.relationship_type, confirmed: !!r.confirmed });
+          }
+        }
+      } catch (relErr) {
+        console.error('[world-studio] character list: the relationships could not be read:', relErr?.message);
+      }
+    }
+    res.json({
+      characters: characters.map((c) => ({ ...c, relationships: byTwin.get(c.registry_character_id) || [] })),
+      count: characters.length,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1134,10 +1166,14 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
 // PUT /world/characters/:id
 router.put('/world/characters/:id', requireAuth, async (req, res) => {
   try {
+    // relationship_graph is not among them: relationships are kept in
+    // character_relationships (fix-list item 23). The editor sends the whole
+    // character back, so each save rewrote the graph, and could restore an
+    // entry removed since the editor opened.
     const fields = ['name','age_range','occupation','world_location','sexuality','aesthetic','signature','surface_want','real_want',
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
       'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status',
-      'attracted_to','how_they_love','desire_they_wont_admit','relationship_graph',
+      'attracted_to','how_they_love','desire_they_wont_admit',
       'family_layer','origin_story','public_persona','private_reality',
       'gender','ethnicity','species','is_alive','death_date','death_cause','death_impact',
       'character_type','intimate_eligible','relationship_status','committed_to','moral_code','fidelity_pattern',
@@ -2973,195 +3009,205 @@ router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// RELATIONSHIP GRAPH CRUD  (inline JSONB + extended table)
+// RELATIONSHIPS — character_relationships, through each world character's
+// registry twin (world_characters.registry_character_id)
 // ══════════════════════════════════════════════════════════════════════════════
+// Relationships live in one place: character_relationships, the table the
+// Relationships page edits (Evoni's ruling, 2026-10-08; wiring map,
+// docs/reads/2026-10-06-lalaverse-wiring-map.md §4, fix-list item 23). World
+// Studio kept two more: relationship_graph on the character, which only this
+// form wrote (always Stable, as the form had no tension), and a copy in
+// character_relationships_extended. Neither is written any more. A
+// character's old graph entries are still listed, marked legacy, and can be
+// removed, not edited.
 
-// GET /world/characters/:id/relationships
+const relName = (alias) => `COALESCE(NULLIF(${alias}.selected_name, ''), NULLIF(${alias}.display_name, ''), ${alias}.character_key, '?')`;
+
+/** The confirmed relationships, both characters named as the Relationships page names them. */
+const confirmedRelationships = (req) => Q(req,
+  `SELECT cr.id, cr.relationship_type, cr.tension_state, cr.conflict_summary, cr.situation, cr.is_romantic,
+          ra.id AS a_id, ${relName('ra')} AS a_name, wa.world_tag AS a_world_tag,
+          rb.id AS b_id, ${relName('rb')} AS b_name
+     FROM character_relationships cr
+     JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
+     JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
+     LEFT JOIN world_characters wa ON wa.id = ra.world_character_id
+    WHERE cr.confirmed = true AND cr.deleted_at IS NULL
+    ORDER BY a_name ASC, b_name ASC`
+);
+
+/** Every relationship of one registry character, confirmed or a candidate, the other character named, oldest first. */
+const relationshipsOf = (req, rcId) => Q(req,
+  `SELECT cr.*, other.id AS other_id, ${relName('other')} AS other_name, other.world_character_id AS other_world_id
+     FROM character_relationships cr
+     JOIN registry_characters other
+       ON other.id = CASE WHEN cr.character_id_a = :rc THEN cr.character_id_b ELSE cr.character_id_a END
+      AND other.deleted_at IS NULL
+    WHERE (cr.character_id_a = :rc OR cr.character_id_b = :rc) AND cr.deleted_at IS NULL
+    ORDER BY cr.created_at ASC`,
+  { replacements: { rc: rcId } }
+);
+
+/** A world character with its registry twin's id (null when it has none, or the twin was deleted). */
+async function withRegistryTwin(req, id) {
+  const [char] = await Q(req,
+    `SELECT wc.id, wc.name, wc.relationship_graph, rc.id AS registry_character_id
+       FROM world_characters wc
+       LEFT JOIN registry_characters rc ON rc.id = wc.registry_character_id AND rc.deleted_at IS NULL
+      WHERE wc.id = :id`,
+    { replacements: { id } }
+  );
+  return char || null;
+}
+
+/** A character_relationships row as World Studio's relationship card reads it. */
+const relationshipCard = (r) => ({
+  rel_id: r.id,
+  related_character_id: r.other_world_id || null,
+  registry_character_id: r.other_id,
+  character_name: r.other_name,
+  relationship_type: r.relationship_type,
+  tension_state: r.tension_state,
+  current_status: r.status,
+  family_role: r.family_role,
+  history_summary: r.situation || '',
+  conflict_summary: r.conflict_summary || '',
+  is_romantic: !!r.is_romantic,
+  is_blood_relation: !!r.is_blood_relation,
+  knows_about_connection: !!r.knows_about_connection,
+  notes: r.notes || '',
+  confirmed: !!r.confirmed,
+});
+
+// World Studio's form fields and the character_relationships columns they fill.
+const RELATIONSHIP_COLUMNS = {
+  relationship_type: 'relationship_type', tension_state: 'tension_state', current_status: 'status',
+  family_role: 'family_role', history_summary: 'situation', conflict_summary: 'conflict_summary', notes: 'notes',
+  is_romantic: 'is_romantic', is_blood_relation: 'is_blood_relation', knows_about_connection: 'knows_about_connection',
+};
+const FLAG_FIELDS = new Set(['is_romantic', 'is_blood_relation', 'knows_about_connection']);
+// The Relationships page writes status capitalised ('Active').
+const statusWord = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : 'Active');
+const columnValue = (field, value) => {
+  if (FLAG_FIELDS.has(field)) return !!value;
+  if (field === 'current_status') return statusWord(value);
+  return value === '' || value === undefined ? null : value;
+};
+
+// GET /world/characters/:id/relationships — { relationships, legacy, in_registry }
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
   try {
-    const [char] = await Q(req,
-      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
-      { replacements: { id: req.params.id } }
-    );
+    const char = await withRegistryTwin(req, req.params.id);
     if (!char) return res.status(404).json({ error: 'Not found' });
-
-    // Also fetch from extended table
-    let extended = [];
-    try {
-      extended = await Q(req,
-        `SELECT * FROM character_relationships_extended
-         WHERE character_id = :id ORDER BY created_at DESC`,
-        { replacements: { id: req.params.id } }
-      );
-    } catch (err) { console.warn('[world-studio] extended relationships query error:', err?.message); }
-
-    res.json({
-      relationship_graph: safeJson(char.relationship_graph),
-      extended,
-    });
+    const relationships = char.registry_character_id
+      ? (await relationshipsOf(req, char.registry_character_id)).map(relationshipCard)
+      : [];
+    const legacy = safeJson(char.relationship_graph).map((r) => ({ ...r, legacy: true }));
+    res.json({ relationships, legacy, in_registry: !!char.registry_character_id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /world/characters/:id/relationships
+// POST /world/characters/:id/relationships — one confirmed character_relationships
+// row between the two characters' registry twins
 router.post('/world/characters/:id/relationships', requireAuth, async (req, res) => {
   try {
-    const [char] = await Q(req,
-      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
-      { replacements: { id: req.params.id } }
-    );
+    const char = await withRegistryTwin(req, req.params.id);
     if (!char) return res.status(404).json({ error: 'Not found' });
+    const { related_character_id } = req.body;
+    if (!related_character_id) return res.status(400).json({ error: 'Choose the World Studio character this one is related to (related_character_id).' });
+    if (related_character_id === char.id) return res.status(400).json({ error: 'A character cannot have a relationship with themselves.' });
+    const other = await withRegistryTwin(req, related_character_id);
+    if (!other) return res.status(404).json({ error: 'The related character is not in World Studio.' });
+    const unregistered = [char, other].find((c) => !c.registry_character_id);
+    if (unregistered) {
+      return res.status(409).json({ error: `${unregistered.name} is not in the Character Registry, where relationships are kept. Re-sync them to the registry, then add the relationship.` });
+    }
 
-    const {
-      related_character_id, related_character_name, related_character_source,
-      relationship_type, family_role, history_summary, current_status,
-      tension_state, romantic_eligible, knows_about_transfer, series_layer, notes,
-      conflict_summary, is_romantic,
-    } = req.body;
-
-    const relId = uuidv4();
-
-    // 1. Write to extended table
-    try {
-      await sequelize.query(
-        `INSERT INTO character_relationships_extended
-         (id, character_id, related_character_id, related_character_name,
-          related_character_source, relationship_type, family_role,
-          history_summary, current_status, tension_state,
-          romantic_eligible, knows_about_transfer, series_layer, notes,
-          created_at, updated_at)
-         VALUES
-         (:id, :cid, :rid, :rname, :rsource, :rtype, :frole,
-          :history, :cstatus, :tension,
-          :romantic, :transfer, :layer, :notes,
-          NOW(), NOW())`,
-        {
-          replacements: {
-            id: relId, cid: req.params.id,
-            rid: related_character_id || null,
-            rname: related_character_name || null,
-            rsource: related_character_source || 'world_characters',
-            rtype: relationship_type || null,
-            frole: family_role || null,
-            history: history_summary || null,
-            cstatus: current_status || 'active',
-            tension: tension_state || 'Stable',
-            romantic: !!romantic_eligible,
-            transfer: !!knows_about_transfer,
-            layer: series_layer || null,
-            notes: notes || null,
-          },
-          type: sequelize.QueryTypes.INSERT,
-        }
-      );
-    } catch (e) { console.error('extended table write failed:', e.message); }
-
-    // 2. Append to JSONB graph on world_characters
-    const graph = safeJson(char.relationship_graph);
-    // The tension scanner (GET /world/tension-scanner) reads related_character_*
-    // and tension_state; World Studio's relationship card reads character_*.
-    // This entry carried only character_* and no tension, so a relationship
-    // added here never showed as a tension (wiring map,
-    // docs/reads/2026-10-06-lalaverse-wiring-map.md §4 finding 4a, fix-list
-    // item 10). It now carries both.
-    graph.push({
-      rel_id: relId,
-      related_character_id: related_character_id || null,
-      related_character_name: related_character_name || '',
-      character_id: related_character_id || null,
-      character_name: related_character_name || '',
-      tension_state: tension_state || 'Stable',
-      conflict_summary: conflict_summary || '',
-      is_romantic: !!is_romantic,
-      relationship_type: relationship_type || '',
-      family_role: family_role || null,
-      history_summary: history_summary || '',
-      current_status: current_status || 'active',
-      knows_about_transfer: !!knows_about_transfer,
-      notes: notes || '',
-    });
-    await sequelize.query(
-      `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
-      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+    const relationshipType = req.body.relationship_type || 'Connection';
+    const [existing] = await Q(req,
+      `SELECT id FROM character_relationships
+        WHERE relationship_type = :type AND deleted_at IS NULL
+          AND ((character_id_a = :a AND character_id_b = :b) OR (character_id_a = :b AND character_id_b = :a))
+        LIMIT 1`,
+      { replacements: { type: relationshipType, a: char.registry_character_id, b: other.registry_character_id } }
     );
+    if (existing) {
+      return res.status(409).json({ error: `${char.name} and ${other.name} already have a ${relationshipType} relationship. Change it on the Relationships page.`, relationship_id: existing.id });
+    }
 
-    res.json({ relationship: { id: relId }, graph });
+    const id = uuidv4();
+    const fields = Object.keys(RELATIONSHIP_COLUMNS).filter((f) => f !== 'relationship_type');
+    const values = Object.fromEntries(fields.map((f) => [f, columnValue(f, req.body[f])]));
+    if (!values.tension_state) values.tension_state = 'calm';
+    await sequelize.query(
+      `INSERT INTO character_relationships
+         (id, character_id_a, character_id_b, relationship_type, connection_mode, lala_connection, confirmed,
+          ${fields.map((f) => RELATIONSHIP_COLUMNS[f]).join(', ')}, created_at, updated_at)
+       VALUES
+         (:id, :a, :b, :relationship_type, 'IRL', 'none', true,
+          ${fields.map((f) => `:${f}`).join(', ')}, NOW(), NOW())`,
+      { replacements: { id, a: char.registry_character_id, b: other.registry_character_id, relationship_type: relationshipType, ...values } }
+    );
+    const created = (await relationshipsOf(req, char.registry_character_id)).find((r) => r.id === id);
+    res.status(201).json({ relationship: relationshipCard(created) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /world/characters/:id/relationships/:relId
+// PUT /world/characters/:id/relationships/:relId — change a relationship of this character
 router.put('/world/characters/:id/relationships/:relId', requireAuth, async (req, res) => {
   try {
-    const [char] = await Q(req,
-      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
-      { replacements: { id: req.params.id } }
-    );
+    const char = await withRegistryTwin(req, req.params.id);
     if (!char) return res.status(404).json({ error: 'Not found' });
-
-    // Update extended table row
-    const extFields = [
-      'related_character_name', 'relationship_type', 'family_role',
-      'history_summary', 'current_status', 'tension_state',
-      'romantic_eligible', 'knows_about_transfer', 'series_layer', 'notes',
-    ];
-    const updates = [];
-    const rep = { relId: req.params.relId, cid: req.params.id };
-    extFields.forEach(f => {
-      if (req.body[f] !== undefined) { updates.push(`${f} = :${f}`); rep[f] = req.body[f]; }
-    });
-    if (updates.length) {
-      updates.push('updated_at = NOW()');
-      try {
-        await sequelize.query(
-          `UPDATE character_relationships_extended SET ${updates.join(', ')} WHERE id = :relId AND character_id = :cid`,
-          { replacements: rep, type: sequelize.QueryTypes.UPDATE }
-        );
-      } catch (err) { console.warn('[world-studio] extended relationship update error:', err?.message); }
+    const mine = char.registry_character_id
+      && (await relationshipsOf(req, char.registry_character_id)).find((r) => r.id === req.params.relId);
+    if (!mine) {
+      const legacy = safeJson(char.relationship_graph).some((r) => r.rel_id === req.params.relId);
+      if (legacy) return res.status(409).json({ error: "This relationship is in World Studio's old graph, which no longer changes. Add it again to keep it, then remove the old one." });
+      return res.status(404).json({ error: 'Relationship not found' });
     }
-
-    // Update JSONB graph
-    const graph = safeJson(char.relationship_graph);
-    const idx = graph.findIndex(r => r.rel_id === req.params.relId);
-    if (idx !== -1) {
-      graph[idx] = { ...graph[idx], ...req.body };
-      // Keep the scanner's and the card's name keys in step.
-      if (req.body.related_character_name !== undefined) graph[idx].character_name = req.body.related_character_name;
-      else if (req.body.character_name !== undefined) graph[idx].related_character_name = req.body.character_name;
+    const fields = Object.keys(RELATIONSHIP_COLUMNS).filter((f) => req.body[f] !== undefined);
+    if (fields.length) {
       await sequelize.query(
-        `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
-        { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+        `UPDATE character_relationships
+            SET ${fields.map((f) => `${RELATIONSHIP_COLUMNS[f]} = :${f}`).join(', ')}, updated_at = NOW()
+          WHERE id = :relId`,
+        { replacements: { relId: mine.id, ...Object.fromEntries(fields.map((f) => [f, columnValue(f, req.body[f])])) } }
       );
     }
-
-    res.json({ updated: true, graph });
+    const updated = (await relationshipsOf(req, char.registry_character_id)).find((r) => r.id === mine.id);
+    res.json({ updated: fields.length > 0, relationship: relationshipCard(updated) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /world/characters/:id/relationships/:relId
+// DELETE /world/characters/:id/relationships/:relId — a relationship of this
+// character, or one of its old graph entries
 router.delete('/world/characters/:id/relationships/:relId', requireAuth, async (req, res) => {
   try {
-    const [char] = await Q(req,
-      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
-      { replacements: { id: req.params.id } }
-    );
+    const char = await withRegistryTwin(req, req.params.id);
     if (!char) return res.status(404).json({ error: 'Not found' });
-
-    // Remove from extended table
+    const mine = char.registry_character_id
+      && (await relationshipsOf(req, char.registry_character_id)).find((r) => r.id === req.params.relId);
+    if (mine) {
+      // As the Relationships page deletes (routes/relationships.js).
+      await sequelize.query('DELETE FROM character_relationships WHERE id = :id', { replacements: { id: mine.id } });
+      return res.json({ deleted: true });
+    }
+    const graph = safeJson(char.relationship_graph);
+    if (!graph.some((r) => r.rel_id === req.params.relId)) return res.status(404).json({ error: 'Relationship not found' });
+    // Removing an old entry is the one change the graph still takes; its
+    // copy in character_relationships_extended goes with it.
     try {
       await sequelize.query(
         `DELETE FROM character_relationships_extended WHERE id = :relId AND character_id = :cid`,
-        { replacements: { relId: req.params.relId, cid: req.params.id }, type: sequelize.QueryTypes.DELETE }
+        { replacements: { relId: req.params.relId, cid: char.id } }
       );
     } catch (err) { console.warn('[world-studio] extended relationship delete error:', err?.message); }
-
-    // Remove from JSONB graph
-    const graph = safeJson(char.relationship_graph).filter(r => r.rel_id !== req.params.relId);
     await sequelize.query(
       `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
-      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+      { replacements: { graph: JSON.stringify(graph.filter((r) => r.rel_id !== req.params.relId)), id: char.id } }
     );
-
-    res.json({ deleted: true, graph });
+    res.json({ deleted: true, legacy: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3535,39 +3581,28 @@ router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
 // char_a: { id, name, world_tag } and char_b: { id, name }, so the ids survive
 // into the proposal. A failed scan says so (it used to answer an empty list,
 // indistinguishable from "no tension").
+//
+// Since 2026-10-08 (fix-list item 23) the pairs are the confirmed
+// character_relationships rows whose tension is high (services/
+// tensionLevels), the ids are registry character ids, relationship_id names
+// the row, and characters_scanned counts the characters in a confirmed
+// relationship. A candidate the Relationships page has not confirmed is not
+// a tension yet.
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
   try {
-    // world_characters has name, not display_name: selecting display_name
-    // failed on every migrated database, so every scan was scan_failed.
-    const rows = await Q(req,
-      `SELECT c.id, c.name AS display_name, c.character_type, c.status, c.relationship_graph, c.world_tag
-       FROM world_characters c WHERE c.status = 'active'
-       ORDER BY c.name ASC`
-    );
-    const pairs = [];
-    const seen = new Set();
-    for (const char of rows) {
-      const graph = safeJson(char.relationship_graph);
-      for (const rel of graph) {
-        const tension = rel.tension_state || rel.tension_level || 'Stable';
-        if (!isHighTension(tension)) continue;
-        // Older World Studio entries carry character_id / character_name only.
-        const otherId = rel.related_character_id || rel.character_id || rel.target_id;
-        const pairKey = [char.id, otherId].sort().join('|');
-        if (seen.has(pairKey)) continue;
-        seen.add(pairKey);
-        pairs.push({
-          char_a: { id: char.id, name: char.display_name, world_tag: char.world_tag },
-          char_b: { id: otherId, name: rel.related_character_name || rel.character_name || rel.target_name },
-          tension_state: tension,
-          relationship_type: rel.relationship_type || 'unknown',
-          conflict_summary: rel.conflict_summary || rel.history_summary || '',
-          romantic: !!rel.is_romantic,
-        });
-      }
-    }
-    res.json({ status: 'ok', pairs, count: pairs.length, characters_scanned: rows.length });
+    const rows = await confirmedRelationships(req);
+    const characters = new Set(rows.flatMap((r) => [r.a_id, r.b_id]));
+    const pairs = rows.filter((r) => isHighTension(r.tension_state)).map((r) => ({
+      relationship_id: r.id,
+      char_a: { id: r.a_id, name: r.a_name, world_tag: r.a_world_tag || null },
+      char_b: { id: r.b_id, name: r.b_name },
+      tension_state: r.tension_state,
+      relationship_type: r.relationship_type || 'unknown',
+      conflict_summary: r.conflict_summary || r.situation || '',
+      romantic: !!r.is_romantic,
+    }));
+    res.json({ status: 'ok', pairs, count: pairs.length, characters_scanned: characters.size });
   } catch (err) {
     console.error('[world-studio] tension scan failed:', err?.message);
     res.json({ status: 'scan_failed', pairs: [], count: 0, characters_scanned: 0, error: err?.message || 'scan failed' });
@@ -3581,13 +3616,26 @@ router.post('/world/create-story-task', requireAuth, async (req, res) => {
     if (!character_id) return res.status(400).json({ error: 'character_id required' });
     const [char] = await Q(req,
       // world_characters has name, and no character_key (the slug below falls back to the name).
-      `SELECT id, name AS display_name, character_type, world_tag, surface_want, real_want, arc_role, origin_story, relationship_graph, how_they_meet, dynamic
+      `SELECT id, name AS display_name, character_type, world_tag, surface_want, real_want, arc_role, origin_story, relationship_graph, how_they_meet, dynamic, registry_character_id
        FROM world_characters WHERE id = :id`,
       { replacements: { id: character_id } }
     );
     if (!char) return res.status(404).json({ error: 'Character not found' });
-    const graph = safeJson(char.relationship_graph);
-    const keyRels = graph.slice(0, 3).map(r => `${r.related_character_name || r.character_name || 'unknown'} (${r.relationship_type || 'connected'})`).join(', ');
+    // The character's confirmed relationships (fix-list item 23); World
+    // Studio's old graph entries only for a character with none there, or
+    // when the table cannot be read.
+    let confirmed = [];
+    if (char.registry_character_id) {
+      try {
+        confirmed = (await relationshipsOf(req, char.registry_character_id)).filter((r) => r.confirmed);
+      } catch (relErr) {
+        console.error('[world-studio] create-story-task: the relationships could not be read:', relErr?.message);
+      }
+    }
+    const keyRels = (confirmed.length
+      ? confirmed.map((r) => ({ name: r.other_name, type: r.relationship_type }))
+      : safeJson(char.relationship_graph).map((r) => ({ name: r.related_character_name || r.character_name, type: r.relationship_type })))
+      .slice(0, 3).map((r) => `${r.name || 'unknown'} (${r.type || 'connected'})`).join(', ');
     const task = {
       title: `${char.display_name} — ${char.arc_role || char.character_type || 'Character'} Arc`,
       description: [char.origin_story, char.how_they_meet, char.dynamic].filter(Boolean).join(' ').slice(0, 500),
@@ -3662,20 +3710,13 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
       if (ST) activeThreadCount = await ST.count({ where: { status: 'active' } });
     } catch (err) { console.warn('[world-studio] thread count error:', err?.message); }
 
-    // Tension pair count
+    // Tension pair count: the scanner's pairs, one row a pair (fix-list item 23)
     let tensionCount = 0;
     try {
-      const chars = await Q(req, `SELECT relationship_graph FROM world_characters WHERE status = 'active'`);
-      for (const c of chars) {
-        const graph = safeJson(c.relationship_graph);
-        for (const r of graph) {
-          const t = r.tension_state || r.tension_level || 'Stable';
-          if (isHighTension(t)) tensionCount++;
-        }
-      }
+      tensionCount = (await confirmedRelationships(req)).filter((r) => isHighTension(r.tension_state)).length;
     } catch (err) { console.warn('[world-studio] tension count error:', err?.message); }
 
-    res.json({ facts, threads, snapshotLabel, locations, activeThreadCount, tensionCount: Math.floor(tensionCount / 2) });
+    res.json({ facts, threads, snapshotLabel, locations, activeThreadCount, tensionCount });
   } catch (err) { res.json({ facts: [], threads: [], locations: [], activeThreadCount: 0, tensionCount: 0 }); }
 });
 

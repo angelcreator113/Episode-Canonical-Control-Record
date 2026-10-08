@@ -37,6 +37,18 @@ slugs Story Evaluation reads. Before, the page read `char_a_name` (never returne
 scan failed, nothing to scan, nothing simmering (`WorldDashboard.tensions.test.jsx`,
 `tests/unit/routes/world-tension-contract.test.js`).
 
+Relationships are kept in one place since 2026-10-08: `character_relationships`, the table
+the Relationships page (`/relationships`, `routes/relationships.js`) edits (Evoni's ruling,
+wiring map fix-list item 23). The scanner and the context summary's tension count read its
+confirmed rows (high: simmering, volatile, fractured, and the older unresolved, high and
+explosive; `services/tensionLevels`), so pair ids are registry character ids. World Studio's
+relationship form (`POST /world/characters/:id/relationships`) writes a confirmed row between
+the two characters' registry twins (`world_characters.registry_character_id`), refusing a
+character that has none; its GET lists the table's rows and, marked legacy, the character's
+old `relationship_graph` entries, which can be removed but no longer change.
+`character_relationships_extended` is no longer written. The State tab's Tensions "+ Add"
+opens the Relationships page (`worldStudioTension.integration.test.js`).
+
 The State tab's snapshots store `world_facts` as a list of facts (strings, or `{ fact }`;
 `services/worldFacts.js`, migration `20261004140000`, 2026-10-04). The temperature service
 used to write an object (`{ worldTemperature, temperatureUpdatedAt }`) into its own

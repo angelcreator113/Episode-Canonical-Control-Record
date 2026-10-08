@@ -21,8 +21,11 @@
  *                       snapshots, only the latest temperature is.
  *                       Snapshots carry no show_id: each is its universe's,
  *                       or the world's when it has none.
- *   tensions            GET /world/tension-scanner: pairs whose relationship
- *                       is Simmering, Unresolved, High or Explosive. The
+ *   tensions            GET /world/tension-scanner: the confirmed
+ *                       relationships on the Relationships page
+ *                       (character_relationships, fix-list item 23) that are
+ *                       Simmering, Volatile or Fractured, or carry World
+ *                       Studio's older Unresolved, High or Explosive. The
  *                       scanner reads the current state only, so a tension
  *                       has a level, never a direction (no "cooling").
  *   what changed        the same ledger, newest first.
@@ -31,7 +34,9 @@
 /** Hottest first; the level is the bar's length, the tone its color. */
 export const TENSION_LEVELS = {
   explosive: { label: 'Explosive', level: 100, tone: 'peach' },
+  volatile: { label: 'Volatile', level: 90, tone: 'peach' },
   high: { label: 'High', level: 80, tone: 'pink' },
+  fractured: { label: 'Fractured', level: 70, tone: 'pink' },
   unresolved: { label: 'Unresolved', level: 60, tone: 'gold' },
   simmering: { label: 'Simmering', level: 40, tone: 'blue' },
 };

@@ -261,7 +261,7 @@ export default function WorldDashboard({ embedded = false }) {
                 ))}
                 {/* Three different empties: the scan failed, nothing to scan, nothing simmering */}
                 {tensionPairs.length===0 && tensionScan?.status === 'scan_failed' && <div data-testid="tensions-scan-failed" className="wd-warn">The scan could not run{tensionScan.error ? `: ${tensionScan.error}` : ''}. This is not "no tension". Rescan, or check the server log.</div>}
-                {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned === 0 && <div data-testid="tensions-no-data" className="wd-empty is-wide">No active characters with relationship data to scan. Add relationships in the Character Registry first.</div>}
+                {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned === 0 && <div data-testid="tensions-no-data" className="wd-empty is-wide">No confirmed relationships to scan yet. Add them, with a tension, on the Relationships page.</div>}
                 {tensionPairs.length===0 && tensionScan?.status === 'ok' && tensionScan.characters_scanned > 0 && <div data-testid="tensions-none" className="wd-empty is-wide">No high-tension pairs among {tensionScan.characters_scanned} characters.</div>}
               </div>
             )}

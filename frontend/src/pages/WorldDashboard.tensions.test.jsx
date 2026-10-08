@@ -61,7 +61,8 @@ describe('State tab: the Tensions contracts', () => {
   test('nothing to scan and nothing simmering are told apart', async () => {
     scanner({ status: 'ok', pairs: [], count: 0, characters_scanned: 0 });
     const { unmount } = renderAt('/universe?tab=state&sub=tensions');
-    expect((await screen.findByTestId('tensions-no-data')).textContent).toContain('No active characters with relationship data');
+    // The scanner reads the Relationships page's table (fix-list item 23).
+    expect((await screen.findByTestId('tensions-no-data')).textContent).toContain('No confirmed relationships to scan yet. Add them, with a tension, on the Relationships page.');
     unmount();
     scanner({ status: 'ok', pairs: [], count: 0, characters_scanned: 7 });
     renderAt('/universe?tab=state&sub=tensions');
