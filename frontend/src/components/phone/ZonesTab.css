@@ -1051,3 +1051,53 @@
 .zones-tab__content-panel:empty {
   display: none;
 }
+
+/* Connect in three columns (Evoni's mockup, 2026-10-08): the screen list,
+   the phone, the zones. Below 900px the list sits above, each group
+   scrolling sideways. */
+.phone-hub-zones-panel--3col {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  overflow-x: visible;
+}
+@media (max-width: 900px) {
+  .phone-hub-zones-panel--3col { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
+
+/* The dead-ends banner, with its one fix. */
+.zones-dead-ends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  background: var(--lala-danger-soft);
+  border-radius: 12px;
+  color: var(--lala-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.zones-dead-ends p { margin: 0; flex: 1 1 220px; min-width: 0; }
+.zones-dead-ends__fix {
+  min-height: 36px;
+  padding: 6px 14px;
+  background: var(--lala-surface, #fff);
+  border: 1px solid var(--lala-danger);
+  border-radius: 999px;
+  color: var(--lala-danger);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zones-dead-ends__fix:disabled { opacity: 0.6; cursor: wait; }
+
+/* "Things to check" (Evoni's mockup, 2026-10-08): a soft amber box while
+   there is something to check, red when a zone is broken. */
+.zones-health--warn { background: var(--lala-gold-soft); border-color: var(--lala-gold-line); }
+.zones-health--error { background: var(--lala-danger-soft); border-color: var(--lala-danger); }
+.zones-health--warn .zones-health__label { color: var(--lala-gold-text); }
+.zones-health--error .zones-health__label { color: var(--lala-danger); }

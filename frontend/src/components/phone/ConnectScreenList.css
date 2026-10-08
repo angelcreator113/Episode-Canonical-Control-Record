@@ -1,0 +1,55 @@
+/* ConnectScreenList — Connect's left column (Evoni's mockup, 2026-10-08).
+   A column on a wide screen; on a narrow one each group scrolls sideways so
+   the phone stays near the top. */
+
+.connect-screens {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px 12px;
+  background: var(--lala-surface, #fff);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 16px;
+  align-self: start;
+}
+
+.connect-screens__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 4px 10px; }
+.connect-screens__title { font-family: 'Lora', serif; font-size: 16px; font-weight: 700; color: var(--lala-ink); }
+.connect-screens__count { font-family: inherit; font-size: 12px; font-weight: 400; color: var(--lala-ink-muted); margin-left: 4px; }
+.connect-screens__add {
+  min-height: 32px; padding: 4px 8px;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text);
+}
+
+.connect-screens__group + .connect-screens__group { margin-top: 12px; }
+.connect-screens__group-title {
+  margin: 0 4px 6px;
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--lala-ink-muted);
+}
+.is-danger .connect-screens__group-title { color: var(--lala-danger); }
+.is-warn .connect-screens__group-title { color: var(--lala-gold-text); }
+
+.connect-screens__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.connect-screens__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 52px; padding: 6px;
+  background: none; border: 1px solid transparent; border-radius: 10px;
+  cursor: pointer; text-align: left; font: inherit; color: var(--lala-ink);
+}
+.connect-screens__item:hover { background: var(--lala-lavender-soft); }
+.connect-screens__item.is-active { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
+
+.connect-screens__thumb { flex: none; width: 28px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--lala-pink-soft); }
+.connect-screens__text { display: flex; flex-direction: column; min-width: 0; }
+.connect-screens__name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.connect-screens__line { font-size: 11px; color: var(--lala-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.is-danger .connect-screens__line { color: var(--lala-danger); }
+.is-warn .connect-screens__line { color: var(--lala-gold-text); }
+
+@media (max-width: 900px) {
+  .connect-screens { padding: 10px; }
+  .connect-screens__list { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .connect-screens__list > li { flex: none; width: 150px; }
+}

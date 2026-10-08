@@ -29,6 +29,7 @@ import ToolbarMenu from '../components/phone/ToolbarMenu';
 import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
 import PhoneMapStage from '../components/phone/PhoneMapStage';
+import ConnectScreenList from '../components/phone/ConnectScreenList';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 import { activeShowId, rememberShow } from '../utils/activeShow';
@@ -1044,6 +1045,37 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     await handleSaveLinks(source.map(z => (ids.has(z.id) ? moveZoneInside(z) : z)));
   };
 
+  // "Add back buttons to all N" (Evoni's mockup, 2026-10-08): each dead-end
+  // screen gets a Back zone, top left, that opens the home screen. Asks
+  // first; each screen is saved on its own and failures are named.
+  const [addingBack, setAddingBack] = useState(false);
+  const handleAddBackButtons = async (deadEnds, home) => {
+    const targets = (deadEnds || []).filter(sc => sc.asset_id);
+    if (!showId || !home || !targets.length) return;
+    if (!window.confirm(`Add a Back zone (top left, opens ${home.name}) to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}?`)) return;
+    setAddingBack(true);
+    const failed = [];
+    for (const sc of targets) {
+      const current = overlays.find(o => o.id === sc.id) || sc;
+      const next = [...getScreenLinks(current), {
+        id: `link-back-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        x: 4, y: 5, w: 18, h: 6, label: 'Back', target: home.id,
+      }];
+      try {
+        await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${sc.asset_id}`, { screen_links: next });
+        const withLinks = (o) => ({ ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } });
+        setOverlays(prev => prev.map(o => (o.id === sc.id ? withLinks(o) : o)));
+        setActiveScreen(prev => (prev?.id === sc.id ? withLinks(prev) : prev));
+      } catch (err) {
+        console.error('[UIOverlaysTab] adding a Back zone failed on', sc.name, err);
+        failed.push(sc.name);
+      }
+    }
+    setAddingBack(false);
+    if (failed.length) flash(`Back zones added, except on: ${failed.join(', ')}`, 'error');
+    else flash(`Back zone added to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}`);
+  };
+
   // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
   // each target screen as an independent new zone. Each copy gets a fresh id so
   // they can be repositioned / edited per screen without affecting the original.
@@ -1750,24 +1782,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 const ico = z?.icon_overlay_id && iconOverlaysForEditor.find(i => i.id === z.icon_overlay_id);
                 return ico ? String(ico.name || '').replace(/\s+icon$/i, '').trim() : '';
               };
-              // Aggregate zone counts per screen so the thumbnail strip can show a badge.
-              const zoneCounts = new Map();
-              const screenHealth = new Map();
-              editableScreens.forEach(s => {
-                const diag = screenDiagnostics.get(s.id);
-                if (diag?.counts) {
-                  zoneCounts.set(s.id, diag.counts);
-                  screenHealth.set(s.id, {
-                    severity: diag.severity,
-                    issueCount: diag.issueCount,
-                  });
-                  return;
-                }
-                const tap = (s.screen_links || s.metadata?.screen_links || []).length;
-                const content = (s.content_zones || s.metadata?.content_zones || []).length;
-                zoneCounts.set(s.id, { tap, icon: 0, content });
-                screenHealth.set(s.id, { severity: 'ok', issueCount: 0 });
-              });
               const activeHealth = screenDiagnostics.get(activeScreen.id) || {
                 issues: [],
                 issueItems: [],
@@ -1802,8 +1816,24 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               // The Flow Test starts where the player does, at home (phone
               // audit, 2026-10-07: it started from the screen being edited).
               const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, (homeScreenOf(overlays) || activeScreen).id));
+              // "Things to check" also names zones on this screen that open
+              // the same screen (Evoni's mockup, 2026-10-08).
+              const twiceHere = flowMap.openedTwice.filter(o => o.screen.id === activeScreen.id);
+              const checkCount = activeHealth.issueCount + twiceHere.length;
+              const homeForConnect = homeScreenOf(overlays);
               return (
-                <div className="phone-hub-zones-panel">
+                <div className="phone-hub-zones-panel phone-hub-zones-panel--3col">
+                  {/* Left: the screens, the ones that need something first
+                      (Evoni's mockup, 2026-10-08). */}
+                  <ConnectScreenList
+                    screens={editableScreens.filter(sc => !hiddenScreens.includes(sc.id))}
+                    activeId={activeScreen.id}
+                    diagnostics={screenDiagnostics}
+                    flowMap={flowMap}
+                    homeId={homeForConnect?.id}
+                    onSelect={switchToScreen}
+                    onAdd={() => { setCreateMode('phone'); setShowCreateModal(true); }}
+                  />
                                   <div className="zones-tab">
                     <div className="zones-tab__canvas">
                     <ScreenLinkEditor
@@ -1874,27 +1904,26 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                           phone (Tasks #2014, #2020). Hidden while empty. */}
                       <div ref={setIconSidePanel} className="zones-tab__icon-panel" />
 
-                      <div className="zones-tab__pick-label">Pick a screen to wire</div>
-                      <ScreenThumbnailStrip
-                        screens={editableScreens}
-                        activeId={activeScreen.id}
-                        onSelect={switchToScreen}
-                        globalFit={globalFit}
-                        zoneCounts={zoneCounts}
-                        countOf={(c) => (c.tap || 0) + (c.icon || 0)}
-                        showZero
-                        healthByScreen={screenHealth}
-                      />
-
-                      <div className={`zones-health zones-health--${activeHealth.severity}`}>
+                      {/* The screen list (left) picks the screen now; the
+                          thumbnail strip is gone (Evoni's mockup, 2026-10-08). */}
+                      <div className={`zones-health zones-health--${checkCount > 0 && activeHealth.severity === 'ok' ? 'warn' : activeHealth.severity}`} data-testid="zones-checks">
                         <div className="zones-health__header">
-                          <span className="zones-health__label">Screen Health</span>
-                          <span className={`zones-health__badge zones-health__badge--${activeHealth.severity}`}>
-                            {activeHealth.issueCount > 0 ? `${activeHealth.issueCount} issue${activeHealth.issueCount > 1 ? 's' : ''}` : 'Ready'}
-                          </span>
+                          <span className="zones-health__label">{checkCount > 0 ? `${checkCount} thing${checkCount === 1 ? '' : 's'} to check` : 'Things to check'}</span>
+                          {checkCount === 0 && <span className="zones-health__badge zones-health__badge--ok">Ready</span>}
                         </div>
-                        {activeHealth.issueCount > 0 ? (
+                        {checkCount > 0 ? (
                           <ul className="zones-health__list">
+                            {twiceHere.map((o) => (
+                              <li key={`twice-${o.target.id}`}>
+                                <button
+                                  type="button"
+                                  className="zones-health__jump"
+                                  onClick={() => linkEditorRef.current?.setSelectedZone?.(o.zoneIds[1] || o.zoneIds[0])}
+                                >
+                                  {o.labels.slice(0, -1).join(', ')} and {o.labels[o.labels.length - 1]} both open {o.target.name}. Is that on purpose?
+                                </button>
+                              </li>
+                            ))}
                             {(activeHealth.issueItems || []).slice(0, 3).map((issue) => (
                               <li key={issue.id} className={issue.fix ? 'zones-health__item--fixable' : undefined}>
                                 <button
@@ -1917,7 +1946,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                             ))}
                           </ul>
                         ) : (
-                          <div className="zones-health__ok">No blockers found for this screen.</div>
+                          <div className="zones-health__ok">Nothing to check on this screen.</div>
                         )}
                       </div>
 
@@ -2188,31 +2217,20 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         </div>
                       )}
 
-                      {/* Screens with no tap zones yet (Evoni's mock, 2026-10-07):
-                          nothing on them can be tapped. One jump to the first. */}
-                      {(() => {
-                        const bare = editableScreens.filter(sc => {
-                          if (sc.id === activeScreen.id) return tapZonesDraft.length === 0;
-                          const c = zoneCounts.get(sc.id);
-                          return !c || ((c.tap || 0) + (c.icon || 0)) === 0;
-                        });
-                        if (!bare.length) return null;
-                        const next = bare.find(sc => sc.id !== activeScreen.id);
-                        const names = bare.map(sc => sc.name);
-                        return (
-                          <div className="zones-bare-hint" data-testid="zones-bare-hint">
-                            <p>
-                              <strong>{bare.length === 1 ? '1 screen has' : `${bare.length} screens have`} no tap zones yet.</strong>{' '}
-                              Nothing on {names.length === 1 ? 'it' : names.length === 2 ? names.join(' or ') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`} can be tapped.
-                            </p>
-                            {next && (
-                              <button type="button" className="zones-bare-hint__next" onClick={() => switchToScreen(next)}>
-                                Wire {next.name} next →
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      {/* Dead ends (Evoni's mockup, 2026-10-08): screens Lala
+                          can open but not tap back out of, with one action that
+                          gives each a Back zone to the home screen. */}
+                      {flowMap.deadEnds.length > 0 && homeForConnect && (
+                        <div className="zones-dead-ends" data-testid="zones-dead-ends">
+                          <p>
+                            <strong>{flowMap.deadEnds.length === 1 ? '1 screen is a dead end.' : `${flowMap.deadEnds.length} screens are dead ends.`}</strong>{' '}
+                            Lala can open {flowMap.deadEnds.length === 1 ? 'it' : 'them'} but can&apos;t tap back out. A &ldquo;back&rdquo; zone on each fixes it.
+                          </p>
+                          <button type="button" className="zones-dead-ends__fix" onClick={afterSave(() => handleAddBackButtons(flowMap.deadEnds, homeForConnect))} disabled={addingBack}>
+                            {addingBack ? 'Adding…' : `Add back buttons to ${flowMap.deadEnds.length === 1 ? 'it' : `all ${flowMap.deadEnds.length}`}`}
+                          </button>
+                        </div>
+                      )}
 
                       {/* Persistent icons inherited from the Home screen —
                           rendered everywhere via PersistentOverlay but only

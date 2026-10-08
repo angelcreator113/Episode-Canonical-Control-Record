@@ -110,7 +110,7 @@ export function screenCaption(screen, diagnostics) {
  *               leads anywhere and no pinned home icon shows there
  *   unreachable screens nothing leads to from home (home itself aside)
  *   openedTwice on one screen, two or more zones open the same screen:
- *               { screen, target, labels }
+ *               { screen, target, labels, zoneIds }
  *
  * `icons` names a zone placed from an icon ("Camera") when it has no label.
  */
@@ -156,9 +156,11 @@ export function phoneFlowMap(overlays, icons = []) {
     const byTarget = new Map();
     getScreenLinks(s).forEach((z, i) => {
       if (!z?.target || !byId.has(z.target)) return;
-      byTarget.set(z.target, [...(byTarget.get(z.target) || []), labelOf(z, i)]);
+      byTarget.set(z.target, [...(byTarget.get(z.target) || []), { label: labelOf(z, i), id: z.id }]);
     });
-    byTarget.forEach((labels, t) => { if (labels.length > 1) openedTwice.push({ screen: s, target: byId.get(t), labels }); });
+    byTarget.forEach((zs, t) => {
+      if (zs.length > 1) openedTwice.push({ screen: s, target: byId.get(t), labels: zs.map(z => z.label), zoneIds: zs.map(z => z.id) });
+    });
   });
 
   return { home, taps, deadEnds, unreachable, openedTwice };

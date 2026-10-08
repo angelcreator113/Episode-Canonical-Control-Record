@@ -34,7 +34,7 @@ test('two zones on one screen opening the same screen are named', () => {
     S('home', [Z('z1', 'closet', { label: 'wallet' }), Z('z2', 'closet', { label: 'closet' })], { is_home: true }),
     S('closet', [Z('z3', 'home')]),
   ]);
-  expect(map.openedTwice).toEqual([{ screen: expect.objectContaining({ id: 'home' }), target: expect.objectContaining({ id: 'closet' }), labels: ['wallet', 'closet'] }]);
+  expect(map.openedTwice).toEqual([{ screen: expect.objectContaining({ id: 'home' }), target: expect.objectContaining({ id: 'closet' }), labels: ['wallet', 'closet'], zoneIds: ['z1', 'z2'] }]);
 });
 
 test('a pinned home icon is a way out of every screen, so nothing is a dead end', () => {
