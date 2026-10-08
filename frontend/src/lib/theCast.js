@@ -74,3 +74,36 @@ export function sameNameNote(n, name) {
   const first = String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
   return `${NUMBER_WORDS[n] || n} "${first}"s`;
 }
+
+/**
+ * Which registry the page works in (audit IA-05, 2026-10-03): the one the
+ * URL names (?registry=), else the active show's, else the only one; null
+ * is "all registries", a read-only view. Quick create never falls back to
+ * the first registry the API returned.
+ */
+export function chooseRegistry(registries, { urlRegistryId = null, showId = null } = {}) {
+  if (!registries?.length) return null;
+  const byUrl = urlRegistryId && registries.find((r) => String(r.id) === String(urlRegistryId));
+  if (byUrl) return byUrl.id;
+  const byShow = showId && registries.find((r) => String(r.show_id || '') === String(showId));
+  if (byShow) return byShow.id;
+  return registries.length === 1 ? registries[0].id : null;
+}
+
+/**
+ * The cast's two numbers, as the Characters page shows them (the LalaVerse
+ * Overview's Characters tile, Evoni 2026-10-08: "Match The cast"): the
+ * people in Lala's world, and the old-system characters still to review in
+ * the registry the page would open on (kept ones aside, when the review
+ * is known). `toReview` is null when no registry would be chosen.
+ */
+export function castCounts({ registries, profiles, showId, review }) {
+  const all = (registries || []).flatMap((r) => (r.characters || []).map((c) => ({ ...c, registry_id: r.id })));
+  const registryId = chooseRegistry(registries, { showId });
+  const people = feedPeople(profiles, all).length;
+  if (!registryId) return { people, toReview: null, registryId: null };
+  const characters = all.filter((c) => c.registry_id === registryId);
+  const old = oldSystem(characters, profiles, findLala(characters));
+  const kept = (c) => review?.byId?.[c.id]?.cast_review === 'kept';
+  return { people, toReview: old.filter((c) => !kept(c)).length, registryId };
+}

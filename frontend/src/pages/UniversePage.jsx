@@ -29,6 +29,7 @@ import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../lib/closetGrouping';
 import { worldIdeas, latelyItems, bookSummary } from '../lib/lalaverseOverview';
+import { castCounts } from '../lib/theCast';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 import ShowBiblePage from './ShowBiblePage';
@@ -118,28 +119,43 @@ function Overview() {
   const load = useCallback(async () => {
     if (!show) { setData(null); return; }
     try {
-      const [eventsRes, wardrobeRes, episodesRes, charsRes, calendarRes, trendingRes, tensionRes, booksRes] = await Promise.allSettled([
+      const [eventsRes, wardrobeRes, episodesRes, charsRes, calendarRes, trendingRes, tensionRes, booksRes, profilesRes] = await Promise.allSettled([
         api.get(`/api/v1/world/${show.id}/events`),
         // Every piece and episode, not the first 500 and 100 (lib/fetchAllPages).
         fetchClosetWithTotal(api, show.id),
         fetchAllEpisodes(api, show.id),
-        // The show's own registries: its cast, not every show's.
-        api.get(`/api/v1/character-registry/registries?show_id=${encodeURIComponent(show.id)}&limit=100`),
+        // The cast, counted as the Characters page (The cast) counts it:
+        // every registry, the one it would open on, and the feed people.
+        api.get('/api/v1/character-registry/registries?limit=100'),
         api.get('/api/v1/calendar/events?event_type=lalaverse_cultural'),
         api.get(`/api/v1/feed-enhanced/${show.id}/trending`),
         // The show's tensions: pairs in its registries or in one with no show yet.
         api.get(`/api/v1/world/tension-scanner?show_id=${encodeURIComponent(show.id)}`),
         // The novel's books (Before Lala), every one: they are not per show.
         api.get('/api/v1/storyteller/books'),
+        api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100'),
       ]);
       const ok = (r) => r.status === 'fulfilled';
-      for (const [name, r] of [['events', eventsRes], ['closet', wardrobeRes], ['episodes', episodesRes], ['registries', charsRes], ['calendar', calendarRes], ['trending', trendingRes], ['tensions', tensionRes], ['books', booksRes]]) {
+      for (const [name, r] of [['events', eventsRes], ['closet', wardrobeRes], ['episodes', episodesRes], ['registries', charsRes], ['calendar', calendarRes], ['trending', trendingRes], ['tensions', tensionRes], ['books', booksRes], ['feed people', profilesRes]]) {
         if (!ok(r)) console.error(`[LalaVerse] the ${name} could not be read:`, r.reason?.response?.status || r.reason?.message);
       }
 
       const events = ok(eventsRes) ? (eventsRes.value.data?.events || []) : [];
       const episodes = ok(episodesRes) ? (episodesRes.value.items || []) : [];
       const registries = ok(charsRes) ? (charsRes.value.data?.registries || []) : [];
+      const profiles = ok(profilesRes) ? (profilesRes.value.data?.profiles || []) : [];
+      let cast = null;
+      if (ok(charsRes) && ok(profilesRes)) {
+        cast = castCounts({ registries, profiles, showId: show.id });
+        // The kept ones are reviewed, not "to review" (GET /api/v1/cast/review).
+        if (cast.registryId) {
+          try {
+            const rev = await api.get(`/api/v1/cast/review?registry_id=${cast.registryId}`);
+            const byId = Object.fromEntries((rev.data?.characters || []).map((c) => [c.id, c]));
+            cast = castCounts({ registries, profiles, showId: show.id, review: { byId } });
+          } catch (err) { console.error('[LalaVerse] the cast review could not be read:', err?.response?.status || err?.message); }
+        }
+      }
       const tensionBody = ok(tensionRes) ? tensionRes.value.data : null;
       const ideaFailures = [
         !ok(calendarRes) && 'culture',
@@ -151,7 +167,8 @@ function Overview() {
         counts: {
           episodes: ok(episodesRes) ? episodes.length : null,
           events: ok(eventsRes) ? events.length : null,
-          characters: ok(charsRes) ? registries.flatMap((r) => r.characters || []).length : null,
+          characters: cast ? cast.people : null,
+          oldToReview: cast ? cast.toReview : null,
           wardrobe: ok(wardrobeRes) ? (wardrobeRes.value.items || []).length : null,
         },
         ideas: worldIdeas({
@@ -181,7 +198,9 @@ function Overview() {
   const tiles = [
     { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open Season Plan', to: producer('season'), tone: 'overview' },
     { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: producer('events'), tone: 'culture' },
-    { key: 'characters', label: 'Characters', value: counts.characters, note: 'in this show’s registries', link: 'Open Character Registry', to: '/character-registry', tone: 'society' },
+    { key: 'characters', label: 'Characters', value: counts.characters, note: 'in Lala’s world',
+      extra: counts.oldToReview > 0 ? `${counts.oldToReview.toLocaleString()} from the old system to review` : null,
+      link: 'Open The cast', to: '/character-registry', tone: 'society' },
     { key: 'wardrobe', label: 'Wardrobe', value: counts.wardrobe, link: 'Open Full Closet', to: producer('wardrobe-items'), tone: 'world' },
   ];
 
@@ -199,6 +218,7 @@ function Overview() {
               <span className="lvh-tile-label">{t.label}{t.note && <span className="lvh-tile-note"> · {t.note}</span>}</span>
               <span className="lvh-tile-value">{t.value == null ? '—' : t.value.toLocaleString()}</span>
               {t.value == null && <span className="lvh-tile-note">Could not be counted just now</span>}
+              {t.value != null && t.extra && <span className="lvh-tile-note" data-testid={`lalaverse-tile-${t.key}-extra`}>{t.extra}</span>}
               <span className="lvh-tile-link">{t.link} →</span>
             </Link>
           ))}
