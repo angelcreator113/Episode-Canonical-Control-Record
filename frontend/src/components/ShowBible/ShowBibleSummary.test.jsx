@@ -82,6 +82,18 @@ describe('ShowBibleSummary', () => {
     spy.mockRestore();
   });
 
+  // Wiring map fix-list item 25 (2026-10-08): the guard read every show's
+  // rules, so a show was checked against another show's canon.
+  test("the check sends the show, so its episodes are checked against the franchise's rules and this show's", async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'passed', rules_checked: 9, warnings: [] } });
+    renderIt();
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }));
+    await screen.findByTestId('canon-guard-count');
+    const [, body] = vi.mocked(api.post).mock.calls[0];
+    expect(body.show_id).toBe('show-b');
+    expect(body.items).toHaveLength(2);
+  });
+
   test('a guard that answers check_failed is not a pass either', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'check_failed', warnings: [], rules_checked: 3 } });
     renderIt();

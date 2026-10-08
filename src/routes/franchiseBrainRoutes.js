@@ -24,6 +24,7 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const { guardItems, itemOfWarning } = require('../services/guardItems');
 const { AMBER_NOTE_PREFIX } = require('../services/franchiseKnowledgeValues');
+const { selectRules, recordRuleUse, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
 
 const client = new Anthropic();
 
@@ -542,6 +543,11 @@ router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
 // checked in one call, and each warning names the item it is about (item:
 // key, or null when the verdict names none the request sent). Nothing is
 // stored. The route is AI-backed, so it carries aiRateLimiter.
+//
+// Show scope (wiring map fix-list item 25, 2026-10-08): the body may carry
+// show_id, the show being checked; the laws are then the franchise tier,
+// that show's and show entries not yet assigned (services/brainRules
+// selectRules), never another show's. Without it, every show's, as before.
 // ─────────────────────────────────────────────────────────────────────────────
 const guardResult = (status, warnings, rules_checked, message) =>
   ({ status, passed: status === 'passed', warnings, rules_checked, message });
@@ -556,17 +562,13 @@ router.post('/franchise-brain/guard', requireAuth, aiRateLimiter, async (req, re
   if (!scene_brief && !items) {
     return res.status(400).json({ error: 'scene_brief or items is required' });
   }
+  const showId = req.body.show_id || null;
+  if (showId !== null && !isShowId(showId)) {
+    return res.status(400).json({ error: 'show_id must be a show id (UUID)' });
+  }
 
   try {
-    const laws = await db.FranchiseKnowledge.findAll({
-      where: {
-        status: 'active',
-        [Op.or]: [
-          { severity: 'critical' },
-          { always_inject: true },
-        ],
-      },
-    });
+    const laws = await selectRules(db.FranchiseKnowledge, { showId, where: CRITICAL_OR_ALWAYS_INJECT });
 
     if (laws.length === 0) {
       return res.json(guardResult('passed', [], 0, 'No active laws to check against'));
@@ -673,29 +675,14 @@ router.get('/multi-product/all', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 async function buildKnowledgeInjection() {
   try {
-    // Get all critical + always_inject entries
-    const entries = await db.FranchiseKnowledge.findAll({
-      where: {
-        status: 'active',
-        [Op.or]: [
-          { severity: 'critical' },
-          { always_inject: true },
-        ],
-      },
-      order: [['severity', 'ASC'], ['category', 'ASC']],
-    });
+    // Every critical and always-inject entry, in the shared order
+    // (services/brainRules; wiring map fix-list item 25). Amber is sent no
+    // show, so every show's.
+    const entries = await selectRules(db.FranchiseKnowledge, { where: CRITICAL_OR_ALWAYS_INJECT });
 
     if (entries.length === 0) return '';
 
-    // Update injection counts
-    const ids = entries.map(e => e.id);
-    await db.FranchiseKnowledge.update(
-      {
-        injection_count: db.sequelize.literal('injection_count + 1'),
-        last_injected_at: new Date(),
-      },
-      { where: { id: { [Op.in]: ids } } }
-    );
+    await recordRuleUse(db.sequelize, entries.map(e => e.id), 'Amber');
 
     const sections = entries.map(e =>
       `[${e.category.toUpperCase()} — ${e.severity}] ${e.title}\n${e.content}`

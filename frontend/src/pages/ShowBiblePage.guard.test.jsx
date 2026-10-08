@@ -74,4 +74,18 @@ describe('Show Bible: the Guard contract', () => {
     await check('x');
     expect(await screen.findByTestId('guard-result-passed')).toBeTruthy();
   });
+
+  // Wiring map fix-list item 25 (2026-10-08): the route read every show's
+  // rules; with the active show's id it reads the franchise's and that show's.
+  test("with an active show it sends show_id, so the brief is checked against that show's rules, not another's", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/shows'
+      ? { data: { data: [{ id: 'show-uuid-a', name: 'Styling Adventures' }] } }
+      : { data: { data: [] } }));
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'passed', passed: true, warnings: [], rules_checked: 9, message: 'No franchise risk found against 9 rules' } });
+    renderAt('/universe?tab=bible&sub=guard');
+    await screen.findByText('This show');
+    fireEvent.change(screen.getByLabelText('Scene brief'), { target: { value: 'Lala arrives at the gala alone.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Check Scene/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/franchise-brain/guard', { scene_brief: 'Lala arrives at the gala alone.', characters_in_scene: [], show_id: 'show-uuid-a' }));
+  });
 });

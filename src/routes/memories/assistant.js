@@ -10,6 +10,7 @@ const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { FK_CATEGORIES, FK_SEVERITIES, AMBER_NOTE_PREFIX } = require('../../services/franchiseKnowledgeValues');
+const { selectRules } = require('../../services/brainRules');
 // Models and universeContext available via db if needed
 
 let buildKnowledgeInjection, getTechContext;
@@ -1202,12 +1203,11 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
-        const existingBrain = await sequelize.query(
-          `SELECT title, content FROM franchise_knowledge
-           WHERE source_document = :src AND status = 'active'
-           ORDER BY severity ASC LIMIT 30`,
-          { replacements: { src: sourceDoc }, type: sequelize.QueryTypes.SELECT }
-        );
+        // The page's own entries and (below) the franchise laws, each in the
+        // shared order, severity then id (services/brainRules; wiring map
+        // fix-list item 25): within a severity they came as Postgres
+        // returned them. Amber is sent no show, so every show's.
+        const existingBrain = await selectRules(db.FranchiseKnowledge, { where: { source_document: sourceDoc }, limit: 30 });
 
         let existingContext = '';
         if (existingPage.length > 0) {
@@ -1223,12 +1223,7 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
         }
 
         // Load franchise laws for guardrails
-        const laws = await sequelize.query(
-          `SELECT title, content FROM franchise_knowledge
-           WHERE category = 'franchise_law' AND status = 'active'
-           ORDER BY severity ASC LIMIT 10`,
-          { type: sequelize.QueryTypes.SELECT }
-        );
+        const laws = await selectRules(db.FranchiseKnowledge, { where: { category: 'franchise_law' }, limit: 10 });
         const lawsContext = laws.length > 0
           ? '\nFRANCHISE LAWS (never violate):\n' + laws.map(l => `- ${l.title}: ${l.content.slice(0, 200)}`).join('\n')
           : '';

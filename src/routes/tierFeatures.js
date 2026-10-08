@@ -39,6 +39,7 @@ const anthropic = new Anthropic();
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { selectRules, recordRuleUse } = require('../services/brainRules');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TIER 1.1 — ENHANCED MEMORY INJECTION (already in storyEvaluationRoutes)
@@ -555,10 +556,11 @@ router.post('/franchise-guard-check', requireAuth, aiRateLimiter, async (req, re
     const { story_id, scene_text } = req.body;
     if (!scene_text) return res.status(400).json({ error: 'scene_text required' });
 
-    // Load all active franchise laws
-    const laws = await db.FranchiseKnowledge.findAll({
-      where: { status: 'active', category: ['franchise_law', 'locked_decision', 'character', 'narrative'] },
-      order: [['severity', 'ASC']], // critical first
+    // Every active law of these categories, critical first, in the shared
+    // order (services/brainRules; wiring map fix-list item 25). A story has
+    // no show, so every show's.
+    const laws = await selectRules(db.FranchiseKnowledge, {
+      where: { category: ['franchise_law', 'locked_decision', 'character', 'narrative'] },
     });
 
     if (!laws.length) {
@@ -583,13 +585,8 @@ router.post('/franchise-guard-check', requireAuth, aiRateLimiter, async (req, re
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     const result = JSON.parse(raw);
 
-    // Update injection counts
-    for (const law of laws) {
-      await law.update({
-        injection_count: (law.injection_count || 0) + 1,
-        last_injected_at: new Date(),
-      });
-    }
+    // Update injection counts, in one statement (it was one update a law)
+    await recordRuleUse(db.sequelize, laws.map(l => l.id), 'franchise-guard-check');
 
     // Save to story if provided
     if (story_id) {

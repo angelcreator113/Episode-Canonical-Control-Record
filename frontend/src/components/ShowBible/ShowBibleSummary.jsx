@@ -6,8 +6,10 @@
  *
  * Canon guard (Evoni's ruling: "Check on request"): nothing runs on load.
  * "Check now" reads the show's episodes and events and sends them to the
- * franchise guard (POST /franchise-brain/guard { items }) in batches of at
- * most 25, one AI call a batch, and lists what disagrees with the Bible.
+ * franchise guard (POST /franchise-brain/guard { items, show_id }) in
+ * batches of at most 25, one AI call a batch, and lists what disagrees with
+ * the Bible: the franchise's rules and this show's, never another show's
+ * (wiring map fix-list item 25).
  * Results live only on this screen; nothing is stored. A batch that could
  * not be checked says so: it is never shown as a pass.
  */
@@ -51,7 +53,7 @@ function CanonGuard({ show }) {
     for (let i = 0; i < batches.length; i += 1) {
       setState({ phase: 'checking', done: i, of: batches.length });
       try {
-        const r = await api.post('/api/v1/franchise-brain/guard', { items: batches[i].map(({ key, label, brief }) => ({ key, label, brief })) });
+        const r = await api.post('/api/v1/franchise-brain/guard', { items: batches[i].map(({ key, label, brief }) => ({ key, label, brief })), show_id: show.id });
         if (r.data?.status === 'check_failed') failed += batches[i].length;
         results.push({ items: batches[i], result: r.data });
       } catch (err) {

@@ -2249,11 +2249,13 @@ async function loadFranchiseKnowledge(_characterKey) {
     const { FranchiseKnowledge } = require('../../models');
     if (!FranchiseKnowledge) return null;
 
-    const entries = await FranchiseKnowledge.findAll({
-      where: { status: 'active' },
-      order: [['severity', 'ASC'], ['created_at', 'DESC']],
-      limit: 15,
-    });
+    // The first 15 active entries in the shared order, severity then id
+    // (services/brainRules; wiring map fix-list item 25): it took the
+    // newest within a severity, and a seeder's rows share one created_at,
+    // so ties fell as Postgres returned them. WriteMode has no show, so
+    // every show's.
+    const { selectRules } = require('../../services/brainRules');
+    const entries = await selectRules(FranchiseKnowledge, { limit: 15 });
     if (!entries.length) return null;
 
     const lines = entries.map(e => {

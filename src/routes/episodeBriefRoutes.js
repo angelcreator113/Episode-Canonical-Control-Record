@@ -14,6 +14,9 @@ const { EpisodeBrief, ScenePlan, Episode, SceneSet } = models;
 const { generateScenePlan, getScenePlanForScriptGenerator } = require('../services/scenePlannerService');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { missingFeedMomentBeats, retryMissingFeedMoments } = require('../services/feedMomentSaveService');
+const { selectInjectedRules } = require('../services/brainRules');
+
+const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── GET / CREATE BRIEF ────────────────────────────────────────────────────────
 
@@ -564,8 +567,13 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 
 router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
   try {
-    const { line, speaker, beatName, beatContext, showId: _showId } = req.body;
+    const { line, speaker, beatName, beatContext } = req.body;
+    // The show being written (the Script tab sends it), so the rules are its
+    // own and the franchise's, never another show's (wiring map fix-list
+    // item 25).
+    const showId = req.body.showId || null;
     if (!line) return res.status(400).json({ error: 'line is required' });
+    if (showId !== null && !SHOW_ID_RE.test(String(showId))) return res.status(400).json({ error: 'showId must be a show id (UUID)' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
     // Load voice DNA from Show Brain
@@ -573,10 +581,10 @@ router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, 
     let voiceLaws = '';
     try {
       if (models.FranchiseKnowledge) {
-        const laws = await models.FranchiseKnowledge.findAll({
-          where: { status: 'active', always_inject: true },
-          attributes: ['title', 'content', 'category'], limit: 30,
-        });
+        // The first 30 always-inject rules in the show's scope and the
+        // shared order (services/brainRules): it took whichever 30 Postgres
+        // returned, from every show.
+        const { rules: laws } = await selectInjectedRules(models.FranchiseKnowledge, { showId, limit: 30 });
         // For line rewrites, prioritize voice/character rules but include all
         const voiceFirst = laws.sort((a, b) => {
           const aVoice = /voice|lala|jawihp|character/i.test(a.title) ? 0 : 1;
