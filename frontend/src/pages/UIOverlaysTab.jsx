@@ -30,6 +30,7 @@ import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
 import PhoneMapStage from '../components/phone/PhoneMapStage';
 import ConnectScreenList from '../components/phone/ConnectScreenList';
+import { HOME_GRID, getGridSlot, snapZoneToGrid } from '../components/phone/homeGrid';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 import { activeShowId, rememberShow } from '../utils/activeShow';
@@ -1076,6 +1077,46 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     else flash(`Back zone added to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}`);
   };
 
+  // The Icons stage (Evoni's mockup, 2026-10-08): put an icon on a screen —
+  // where it was dropped on the phone (snapped to the home grid), or the
+  // first free spot of that grid for "Place it". `screen` is the screen the
+  // phone shows, else the home screen. A taken spot is said, not stacked.
+  const handlePlaceIcon = async (icon, at, screen) => {
+    const target = screen || homeScreenOf(overlays);
+    const name = String(icon?.name || '').replace(/\s*icon$/i, '').trim() || 'Icon';
+    if (!icon || !showId) return;
+    if (!target?.asset_id) { flash('Give the home screen an image first, then place icons on it.', 'error'); return; }
+    const current = overlays.find(o => o.id === target.id) || target;
+    const links = getScreenLinks(current);
+    const size = { w: HOME_GRID.width, h: HOME_GRID.height };
+    const overlaps = (a) => links.some(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+    let spot = null;
+    if (at) {
+      const snapped = snapZoneToGrid({ x: at.x - size.w / 2, y: at.y - size.h / 2, ...size });
+      if (overlaps(snapped)) { flash('That spot is taken. Drop it on an empty spot.', 'error'); return; }
+      spot = snapped;
+    } else {
+      for (let i = 0; i < HOME_GRID.columns * 6 && !spot; i += 1) {
+        const slot = { ...getGridSlot(i), ...size };
+        if (!overlaps(slot)) spot = slot;
+      }
+      if (!spot) { flash(`No empty spot on ${target.name}. Make room in Connect.`, 'error'); return; }
+    }
+    const base = { id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, x: spot.x, y: spot.y, w: size.w, h: size.h, target: '' };
+    const zone = { ...base, ...pickZoneLibraryIcon(base, icon, overlays.filter(isIcon)) };
+    const next = [...links, zone];
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: next });
+      const withLinks = (o) => ({ ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } });
+      setOverlays(prev => prev.map(o => (o.id === target.id ? withLinks(o) : o)));
+      setActiveScreen(prev => (prev?.id === target.id ? withLinks(prev) : prev));
+      flash(`Placed ${name} on ${target.name}`);
+    } catch (err) {
+      console.error('[UIOverlaysTab] placing an icon failed:', err);
+      flash(err.response?.data?.error || err.message, 'error');
+    }
+  };
+
   // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
   // each target screen as an independent new zone. Each copy gets a fresh id so
   // they can be repositioned / edited per screen without affecting the original.
@@ -1718,6 +1759,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 customFrameUrl={customFrameUrl}
                 globalFit={globalFit}
                 onEditZones={afterSave(() => setActiveTab('zones'))}
+                onPlaceIcon={handlePlaceIcon}
+                onNewIcon={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }}
+                iconsLastStep={setupProgress.next?.key === 'icons'}
                 // Preview shows the screen list beside the embedded phone.
                 activeTab={previewing ? 'screens' : activeTab}
                 onChangeTab={afterSave(setActiveTab)}

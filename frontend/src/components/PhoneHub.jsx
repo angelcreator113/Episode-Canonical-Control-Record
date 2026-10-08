@@ -46,7 +46,7 @@ const CONTINUE_TITLES = {
   incoming: 'Link to this screen from the home screen in Connect',
 };
 
-const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false, status = null, onContinue }) {
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false, status = null, onContinue, placedOn = null, draggableIcon = false }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -79,7 +79,10 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           (onEditScreen || onSelectScreen)(target);
         }
       }}
-      className="screen-card"
+      className={`screen-card${isIcon && screen && !isHidden && !(linkCount > 0) ? ' is-unplaced' : ''}`}
+      draggable={draggableIcon || undefined}
+      onDragStart={draggableIcon ? (e) => { e.dataTransfer.setData('application/x-lala-icon', screen.id); e.dataTransfer.effectAllowed = 'copy'; } : undefined}
+      data-testid={isIcon && screen ? `icon-card-${screen.id}` : undefined}
       style={{
         // Selected: white with a lavender edge (Evoni's mock, 2026-10-07; it was filled ink).
         background: isHidden ? '#f5f3f0' : hasImage || isActive ? '#fff' : '#faf8f5',
@@ -175,16 +178,18 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
         // of those placements has a target. Placed-but-no-target = unlinked.
         const placed = linkCount > 0;
         const linked = placed && hasTargetedPlacement;
+        // Where it is, in the mockup's words (Evoni, 2026-10-08): "on
+        // Homepage" when on one screen, else "on N screens"; "Unplaced".
         const label = linked
-          ? `✓ ${linkCount} screen${linkCount === 1 ? '' : 's'}`
+          ? (linkCount === 1 && placedOn ? `on ${placedOn}` : `on ${linkCount} screen${linkCount === 1 ? '' : 's'}`)
           : placed
             ? '⚠ No target'
-            : '○ Unplaced';
+            : 'Unplaced';
         const color = linked
-          ? '#5a8f3b'
+          ? 'var(--lala-teal-dark)'
           : placed
-            ? '#B84D2E'
-            : '#A09889';
+            ? 'var(--lala-danger)'
+            : 'var(--lala-gold-text)';
         return (
           <div
             title={linked
@@ -257,6 +262,14 @@ export default function PhoneHub({
   // open the phone steps aside.
   detailOpen = false,
   detailRef = null,
+  // The Icons stage (Evoni's mockup, 2026-10-08): onPlaceIcon(icon, at,
+  // screen) puts an icon on a screen — `at` ({ x, y } in %, from a drop on
+  // the phone) or null for the first free spot; `screen` the one the phone
+  // shows, or null for the home screen. onNewIcon opens "+ Add ▸ Icon".
+  // iconsLastStep: placing icons is the setup's last step.
+  onPlaceIcon,
+  onNewIcon,
+  iconsLastStep = false,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -384,7 +397,7 @@ export default function PhoneHub({
     });
     // Freeze to plain values to keep memo outputs stable
     const iconOut = new Map();
-    iconLinkByKey.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, hasTargetedPlacement: v.hasTargetedPlacement }));
+    iconLinkByKey.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, screenIds: [...v.screens], hasTargetedPlacement: v.hasTargetedPlacement }));
     return { iconLinkByKey: iconOut, screenReachById };
   }, [screenTypes, iconTypes]);
 
@@ -398,6 +411,30 @@ export default function PhoneHub({
     return [...own, ...persistent].filter(l => resolveZoneIconKey(l, iconTypes) === highlightIconKey).length;
   }, [highlightIconKey, deviceScreen, firstScreen, persistentLinks, iconTypes]);
 
+  // The device, drawn bare, or inside the Icons stage's drop target.
+  const deviceEl = (
+    <PhoneDevice
+      skin={skin}
+      customFrameUrl={customFrameUrl}
+      useCustomFrame={useCustomFrame}
+      onCustomFrameError={() => setFrameError(true)}
+      phoneScreen={deviceScreen}
+      activeScreen={deviceScreen}
+      firstScreen={firstScreen}
+      persistentLinks={persistentLinks}
+      icons={iconTypes}
+      highlightIconKey={highlightIconKey}
+      globalFit={globalFit}
+      // While an icon is selected, Back must return to the screen the device
+      // showed, not to the icon, so that screen goes along as the origin.
+      onNavigate={onNavigate && iconSelected && deviceScreen
+        ? (target) => onNavigate(target, deviceScreen.id)
+        : onNavigate}
+      navigationHistory={navigationHistory}
+      onBack={onBack}
+    />
+  );
+
   return (
     <div className={`phone-hub-inner${detailOpen ? ' has-detail' : ''}`}>
       {/* Phone Device — while a screen's panel is open the grid and the panel
@@ -405,26 +442,34 @@ export default function PhoneHub({
       {!detailOpen && (
       <div className="phone-hub-device">
       {devicePane || (<>
-      <PhoneDevice
-        skin={skin}
-        customFrameUrl={customFrameUrl}
-        useCustomFrame={useCustomFrame}
-        onCustomFrameError={() => setFrameError(true)}
-        phoneScreen={deviceScreen}
-        activeScreen={deviceScreen}
-        firstScreen={firstScreen}
-        persistentLinks={persistentLinks}
-        icons={iconTypes}
-        highlightIconKey={highlightIconKey}
-        globalFit={globalFit}
-        // While an icon is selected, Back must return to the screen the device
-        // showed, not to the icon, so that screen goes along as the origin.
-        onNavigate={onNavigate && iconSelected && deviceScreen
-          ? (target) => onNavigate(target, deviceScreen.id)
-          : onNavigate}
-        navigationHistory={navigationHistory}
-        onBack={onBack}
-      />
+      {/* Icons stage: an icon card dropped on the phone is placed where it
+          lands, on the screen the phone shows (Evoni's mockup, 2026-10-08).
+          Elsewhere the device is drawn as before, with no wrapper. */}
+      {gridSection === 'icons' && onPlaceIcon ? (
+        <div
+          className="phone-hub-drop"
+          onDragOver={(e) => { if (e.dataTransfer?.types?.includes('application/x-lala-icon')) e.preventDefault(); }}
+          onDrop={(e) => {
+            const id = e.dataTransfer?.getData('application/x-lala-icon');
+            const icon = id && iconTypes.find(i => i.id === id);
+            // The screen area is the screen image's parent (PhoneFrame).
+            const shot = e.currentTarget.querySelector('.phone-hub-frame img:not([alt="Phone frame"])');
+            const area = shot?.parentElement;
+            if (!icon || !area) return;
+            e.preventDefault();
+            const r = area.getBoundingClientRect();
+            const x = ((e.clientX - r.left) / r.width) * 100;
+            const y = ((e.clientY - r.top) / r.height) * 100;
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+            onPlaceIcon(icon, { x, y }, deviceScreen && isScreen(deviceScreen) ? deviceScreen : null);
+          }}
+        >
+          {deviceEl}
+        </div>
+      ) : deviceEl}
+      {gridSection === 'icons' && onPlaceIcon && (
+        <div className="phone-hub-drop-hint">Drag an icon onto an empty spot</div>
+      )}
 
       {highlightIconKey && deviceScreen && highlightedHere === 0 && (
         <div className="phone-hub-not-placed" style={{ marginTop: 8, fontSize: 11, textAlign: 'center', color: 'var(--lala-ink-muted)', fontFamily: 'var(--font-ui)' }}>
@@ -524,13 +569,43 @@ export default function PhoneHub({
           </div>
         )}
 
-        {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
-          <div className="phone-hub-icon-grid">
-            {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={iconLinkByKey.get(s.id)?.screenCount || 0} hasTargetedPlacement={!!iconLinkByKey.get(s.id)?.hasTargetedPlacement} />
-            ))}
-          </div>
-        )}
+        {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && (() => {
+          const shownIcons = iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id));
+          const unplaced = shownIcons.filter(s => s.url && !hiddenScreens.includes(s.id) && !(iconLinkByKey.get(s.id)?.screenCount > 0));
+          const nameOf = (s) => String(s.name || '').replace(/\s*icon$/i, '');
+          return (
+            <>
+              {/* The next icon to place (Evoni's mockup, 2026-10-08). */}
+              {onPlaceIcon && unplaced.length > 0 && (
+                <div className="phone-hub-icon-next" data-testid="icon-next">
+                  {unplaced[0].url && <img src={unplaced[0].url} alt="" />}
+                  <p>
+                    <strong>{iconsLastStep ? 'Last setup step: place' : 'Place'} the {nameOf(unplaced[0])} icon.</strong>{' '}
+                    It isn&apos;t on any screen yet, so Lala can&apos;t open {nameOf(unplaced[0]).toLowerCase()}.
+                    {unplaced.length > 1 ? ` ${unplaced.length - 1} more after it.` : ''}
+                  </p>
+                  <button type="button" onClick={() => onPlaceIcon(unplaced[0], null, null)}>Place it</button>
+                </div>
+              )}
+              {iconTypes.length > 0 && (
+                <div className="phone-hub-icon-grid">
+                  {shownIcons.map(s => {
+                    const link = iconLinkByKey.get(s.id);
+                    const onlyOn = link?.screenIds?.length === 1 ? screenTypes.find(sc => sc.id === link.screenIds[0])?.name : null;
+                    return (
+                      <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={link?.screenCount || 0} hasTargetedPlacement={!!link?.hasTargetedPlacement} placedOn={onlyOn} draggableIcon={!!onPlaceIcon && !!s.url} />
+                    );
+                  })}
+                </div>
+              )}
+              {onNewIcon && (
+                <div className="phone-hub-icon-actions">
+                  <button type="button" onClick={onNewIcon}>+ New icon</button>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Placements: each icon gets a card; within the card, a list of the
             screens it currently appears on. Clicking a screen chip navigates to
@@ -596,6 +671,26 @@ export default function PhoneHub({
         .phone-hub-icon-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;
         }
+        /* The Icons stage (Evoni's mockup, 2026-10-08). */
+        .screen-card.is-unplaced { border: 1.5px dashed var(--lala-gold) !important; background: var(--lala-gold-soft) !important; }
+        .phone-hub-icon-next {
+          display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+          margin-bottom: 12px; padding: 12px 14px;
+          background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line); border-radius: 14px;
+          font-size: 13px; line-height: 1.45; color: var(--lala-ink);
+        }
+        .phone-hub-icon-next img { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; flex: none; }
+        .phone-hub-icon-next p { margin: 0; flex: 1 1 200px; min-width: 0; }
+        .phone-hub-icon-next button {
+          min-height: 36px; padding: 6px 16px; border: 0; border-radius: 999px;
+          background: var(--lala-pink-dark); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .phone-hub-icon-actions { display: flex; gap: 8px; margin-top: 12px; }
+        .phone-hub-icon-actions button {
+          min-height: 36px; padding: 6px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 999px;
+          background: var(--lala-surface, #fff); color: var(--lala-lavender-text); font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .phone-hub-drop-hint { margin-top: 8px; font-size: 11px; text-align: center; color: var(--lala-ink-muted); }
 
         /* Placements view — one card per icon, stacked vertically. Inside each
            card, a row of screen chips showing where that icon appears. */

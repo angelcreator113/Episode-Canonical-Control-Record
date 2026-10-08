@@ -53,19 +53,19 @@ describe('PhoneHub — placements stand for their icon (Task #2005)', () => {
     const { container } = renderHub({ id: 'z1', x: 10, y: 20, w: 15, h: 10, target: 'calls', label: 'Call', icon_url: OLD_URL, icon_overlay_id: 'call_icon' });
     const device = container.querySelector('.phone-hub-device');
     expect(within(device).getByTitle('Call').querySelector('img').getAttribute('src')).toBe(NEW_URL);
-    expect(screen.getByText('✓ 1 screen')).toBeTruthy();
-    expect(screen.queryByText('○ Unplaced')).toBeNull();
+    expect(screen.getByText('on Homepage')).toBeTruthy();
+    expect(screen.queryByText('Unplaced')).toBeNull();
   });
 
   test('a legacy placement whose address is the icon\'s current image counts as placed', () => {
     renderHub({ id: 'z2', x: 10, y: 20, w: 15, h: 10, target: 'calls', label: 'Call', icon_url: NEW_URL });
-    expect(screen.getByText('✓ 1 screen')).toBeTruthy();
+    expect(screen.getByText('on Homepage')).toBeTruthy();
   });
 
   test('a legacy placement left stale by an earlier image change keeps its old image and does not count', () => {
     const { container } = renderHub({ id: 'z3', x: 10, y: 20, w: 15, h: 10, target: 'calls', label: 'Call', icon_url: OLD_URL });
     const device = container.querySelector('.phone-hub-device');
     expect(within(device).getByTitle('Call').querySelector('img').getAttribute('src')).toBe(OLD_URL);
-    expect(screen.getByText('○ Unplaced')).toBeTruthy();
+    expect(screen.getByText('Unplaced')).toBeTruthy();
   });
 });
