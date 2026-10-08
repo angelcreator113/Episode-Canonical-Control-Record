@@ -34,7 +34,8 @@ describe('Society tab', () => {
     renderAt('/universe?tab=society');
     const note = screen.getByTestId('society-reads-archetypes').textContent;
     expect(note).toContain('own built-in list');
-    expect(note).toContain('No generator reads those cards yet');
+    // Card by card (fix-list item 24): a card reaches the generators when marked in the Show Bible.
+    expect(note).toContain('A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.');
     // The copy never claims a generator reads the cards, and has no old "Edit them here" line.
     expect(screen.queryByText(/script writers|Edit them here/)).toBeNull();
     await waitFor(() => expect(screen.getByTestId('brain-update-button').textContent).toBe('🧠 Brain Up to Date ✓'));
@@ -61,7 +62,7 @@ describe('Society tab', () => {
     window.history.pushState({}, '', '/universe?tab=society&sub=rules');
     renderAt('/universe?tab=society&sub=rules');
     const note = screen.getByTestId('society-reads-rules').textContent;
-    expect(note).toContain('No generator reads those cards yet');
+    expect(note).toContain('A card reaches the generators only when you mark it “In every prompt” in the Show Bible');
     expect(note).not.toMatch(/script writers|event generator|Amber read/);
   });
 });
