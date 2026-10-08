@@ -13,7 +13,9 @@ const { requireAuth, userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { hideAuthorOnlyFieldsFromNonAdmins } = require('../middleware/authorOnlyFields');
 const { Op } = require('sequelize');
-const { REGISTRY_CITY_KEYS, registryCity } = require('../utils/registryDemographics');
+const {
+  REGISTRY_CITY_KEYS, REGISTRY_ENUMS, registryCity, registryValue, registryChoices,
+} = require('../utils/registryDemographics');
 let createFollowProfileFromDNA;
 try {
   ({ createFollowProfileFromDNA } = require('../services/characterFollowService'));
@@ -1387,7 +1389,7 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
       ethnicity: '"ethnicity": "their ethnic background"',
       hometown: '"hometown": "where they grew up"',
       current_city: `"current_city": "ENUM — must be one of: ${REGISTRY_CITY_KEYS.join(', ')}"`,
-      class_origin: '"class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown"',
+      class_origin: `"class_origin": "ENUM — must be one of: ${registryChoices('class_origin')}"`,
       pronouns: '"pronouns": "e.g. she/her, he/him, they/them"',
       nationality: '"nationality": "their country of origin or citizenship"',
     };
@@ -1444,11 +1446,6 @@ ${allFieldsToFill}
     }
 
     // Apply each generated demographics field
-    const ENUM_VALUES = {
-      current_city: REGISTRY_CITY_KEYS,
-      class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
-      current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
-    };
     for (const field of demoFields) {
       const val = generated[field];
       if (val !== null && val !== undefined && val !== '') {
@@ -1457,10 +1454,11 @@ ${allFieldsToFill}
           const parsed = parseInt(val, 10);
           if (!isNaN(parsed)) proposed[field] = parsed;
         } else if (typeof val === 'string') {
-          // An old city reads as its DREAM city (utils/registryDemographics).
-          const value = field === 'current_city' ? (registryCity(val) || val) : val;
-          // Validate enum fields — skip if value not in allowed set
-          if (ENUM_VALUES[field] && !ENUM_VALUES[field].includes(value)) {
+          // An ENUM field takes the registry's value (an old word or city
+          // read as it means, utils/registryDemographics); one it cannot
+          // read is skipped.
+          const value = REGISTRY_ENUMS[field] ? registryValue(field, val) : val;
+          if (!value) {
             console.warn(`[Backfill] Skipping invalid enum value for ${field}: "${val}"`);
             continue;
           }
@@ -1661,8 +1659,8 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
         schema: `{
   "gender": "their gender identity",
   "pronouns": "their pronouns",
-  "age": "their age as a number or range",
-  "birth_year": "inferred birth year",
+  "age": "their age, a whole number",
+  "birth_year": "inferred birth year, a whole number",
   "ethnicity": "their ethnic background",
   "cultural_background": "their cultural context",
   "nationality": "their nationality",
@@ -1670,28 +1668,42 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
   "hometown": "where they grew up",
   "current_city": "ENUM — must be one of: ${REGISTRY_CITY_KEYS.join(', ')}",
   "city_migration_history": "how they got from hometown to current city",
-  "class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
-  "current_class": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
-  "class_mobility_direction": "upward, downward, or stable",
-  "family_structure": "nuclear, single parent, extended, chosen, etc.",
+  "class_origin": "ENUM — must be one of: ${registryChoices('class_origin')}",
+  "current_class": "ENUM — must be one of: ${registryChoices('current_class')}",
+  "class_mobility_direction": "ENUM — must be one of: ${registryChoices('class_mobility_direction')}",
+  "family_structure": "ENUM — must be one of: ${registryChoices('family_structure')}",
   "parents_status": "together, divorced, deceased, estranged, etc.",
-  "sibling_position": "eldest, middle, youngest, only child",
-  "sibling_count": "number of siblings",
-  "relationship_status": "single, married, divorced, complicated, etc.",
+  "sibling_position": "ENUM — must be one of: ${registryChoices('sibling_position')}",
+  "sibling_count": "number of siblings, a whole number",
+  "relationship_status": "ENUM — must be one of: ${registryChoices('relationship_status')}",
   "has_children": false,
   "children_ages": "",
   "education_experience": "their educational background",
   "career_history": "career trajectory before current role",
   "physical_presence": "how they take up space — what people notice before they speak",
   "demographic_voice_signature": "how their demographics shape their speech",
-  "platform_primary": "their main social media platform (Instagram, Twitter, TikTok, etc.)",
-  "follower_tier": "nano, micro, mid-tier, macro, mega"
+  "platform_primary": "ENUM, how they are present online, not a platform name — must be one of: ${registryChoices('platform_primary')}",
+  "follower_tier": "ENUM — must be one of: ${registryChoices('follower_tier')}"
 }`,
         apply: (generated) => {
-          const DEMO_ENUMS = {
-            current_city: REGISTRY_CITY_KEYS,
-            class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
-            current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
+          // What each column takes: an ENUM the registry's value (an old
+          // word or city read as it means, utils/registryDemographics), an
+          // integer a whole number, has_children a yes or no. A value a
+          // column cannot take is skipped, as it would fail the whole save.
+          const INTEGER_FIELDS = ['age', 'birth_year', 'sibling_count'];
+          const columnValue = (f, v) => {
+            if (REGISTRY_ENUMS[f]) return registryValue(f, v);
+            if (INTEGER_FIELDS.includes(f)) {
+              const n = parseInt(v, 10);
+              return Number.isNaN(n) ? null : n;
+            }
+            if (f === 'has_children') {
+              if (typeof v === 'boolean') return v;
+              const yes = /^(true|yes)$/i.test(String(v).trim());
+              const no = /^(false|no)$/i.test(String(v).trim());
+              return yes ? true : (no ? false : null);
+            }
+            return v;
           };
           const fields = ['gender','pronouns','age','birth_year','ethnicity','cultural_background',
             'nationality','first_language','hometown','current_city','city_migration_history',
@@ -1702,9 +1714,11 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
           const updated = [];
           for (const f of fields) {
             if (generated[f] !== null && generated[f] !== undefined && generated[f] !== '') {
-              // An old city reads as its DREAM city (utils/registryDemographics).
-              const value = f === 'current_city' ? (registryCity(generated[f]) || generated[f]) : generated[f];
-              if (DEMO_ENUMS[f] && !DEMO_ENUMS[f].includes(value)) continue;
+              const value = columnValue(f, generated[f]);
+              if (value === null) {
+                console.warn(`[generate-section] Skipping a value ${f} does not take: ${JSON.stringify(generated[f])}`);
+                continue;
+              }
               character[f] = value;
               updated.push(f);
             }

@@ -17,7 +17,7 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { DREAM_CITY_KEYS } = require('../utils/feedCities');
-const { registryCity } = require('../utils/registryDemographics');
+const { REGISTRY_ENUMS, registryValue, registryChoices, fitRegistryEnums } = require('../utils/registryDemographics');
 
 // ─── Role type definitions (registry role types) ─────────────────────────────
 const ROLE_TYPES = ['pressure', 'mirror', 'support', 'shadow', 'special'];
@@ -165,14 +165,13 @@ async function buildDemographicSnapshot(db) {
     const cityCount = {};
     CITIES.forEach(c => { cityCount[c] = chars.filter(ch => ch.current_city === c).length; });
 
-    const CLASS_VALUES = ['destitute', 'working_poor', 'working_class', 'lower_middle', 'middle', 'upper_middle', 'wealthy'];
+    // Counted by the registry's own values (utils/registryDemographics): a
+    // value off its lists was never stored, so counting one always gave 0.
     const classCount = {};
-    CLASS_VALUES.forEach(c => { classCount[c] = chars.filter(ch => ch.class_origin === c).length; });
+    REGISTRY_ENUMS.class_origin.forEach(c => { classCount[c] = chars.filter(ch => ch.class_origin === c).length; });
 
-    const FAMILY_VALUES = ['two_parent_stable', 'two_parent_volatile', 'single_parent',
-      'raised_by_relatives', 'foster', 'blended', 'effectively_alone', 'chosen_family'];
     const familyCount = {};
-    FAMILY_VALUES.forEach(f => { familyCount[f] = chars.filter(c => c.family_structure === f).length; });
+    REGISTRY_ENUMS.family_structure.forEach(f => { familyCount[f] = chars.filter(c => c.family_structure === f).length; });
 
     // Detect gaps
     const gaps = [];
@@ -182,12 +181,10 @@ async function buildDemographicSnapshot(db) {
     CITIES.forEach(c => {
       if (cityCount[c] === 0) gaps.push(`No characters in ${c.replace(/_/g, ' ')} — assign at least one`);
     });
-    if (classCount['destitute'] === 0 && classCount['working_poor'] === 0) {
-      gaps.push('No characters from destitute or working_poor origin');
-    }
+    if (classCount['poverty'] === 0) gaps.push('No characters from a poverty origin');
     if (classCount['wealthy'] === 0) gaps.push('No wealthy origin characters');
-    if (familyCount['single_parent'] === 0) gaps.push('No characters raised by single parent');
-    if (familyCount['foster'] === 0) gaps.push('No fostered characters');
+    if (familyCount['single_mother'] + familyCount['single_father'] === 0) gaps.push('No characters raised by a single parent');
+    if (familyCount['foster_or_adopted'] === 0) gaps.push('No fostered or adopted characters');
     if (familyCount['effectively_alone'] === 0) gaps.push('No characters who were effectively alone');
 
     return { total, ageRanges, cityCount, classCount, familyCount, gaps };
@@ -203,13 +200,13 @@ function checkDemographicCoherence(characters) {
 
   const list = Array.isArray(characters) ? characters : [characters];
   list.forEach((c, i) => {
-    const classOrigin = c.class_origin;
+    const classOrigin = registryValue('class_origin', c.class_origin);
     const moneyPattern = c.money_behavior_pattern;
-    const familyStruct = c.family_structure;
+    const familyStruct = registryValue('family_structure', c.family_structure);
     const age = c.age;
     const yearsPosting = c.years_posting;
 
-    if (['destitute', 'working_poor'].includes(classOrigin) && moneyPattern === 'performs_wealth') {
+    if (classOrigin === 'poverty' && moneyPattern === 'performs_wealth') {
       warnings.push({
         character_index: i,
         name: c.name,
@@ -356,20 +353,16 @@ ${gapsText}
 - city_migration_history  One sentence. Where they came from, when, why.
 
 **Class**
-- class_origin     ENUM: destitute | working_poor | working_class |
-                    lower_middle | middle | upper_middle | wealthy
+- class_origin     ENUM: ${registryChoices('class_origin', ' | ')}
 - current_class    ENUM: same options as class_origin.
-- class_mobility_direction  ENUM: ascending | descending | stable | volatile
+- class_mobility_direction  ENUM: ${registryChoices('class_mobility_direction', ' | ')}
 
 **Family**
-- family_structure ENUM: two_parent_stable | two_parent_volatile |
-                    single_parent | raised_by_relatives | foster |
-                    blended | effectively_alone | chosen_family
+- family_structure ENUM: ${registryChoices('family_structure', ' | ')}
 - parents_status   One sentence. Alive, absent, deceased, estranged.
-- sibling_position ENUM: only | oldest | middle | youngest
+- sibling_position ENUM: ${registryChoices('sibling_position', ' | ')}
 - sibling_count    Integer. 0 if only child.
-- relationship_status  Current: single | dating | partnered | married |
-                        separated | divorced | widowed | complicated
+- relationship_status  Current: ${registryChoices('relationship_status', ' | ')}
 - has_children     Boolean.
 - children_ages    Array of integers if has_children. Empty array if not.
 
@@ -383,8 +376,9 @@ ${gapsText}
 - demographic_voice_signature  How she actually talks. Rhythm, vocabulary, register shifts.
 
 **Online Presence**
-- platform_primary  ENUM: instagram | tiktok | youtube | twitter
-- follower_tier     ENUM: ghost | micro | mid | macro | mega
+- platform_primary  ENUM, how she is present online (not a platform name):
+                    ${registryChoices('platform_primary', ' | ')}
+- follower_tier     ENUM: ${registryChoices('follower_tier', ' | ')}
 
 ---
 
@@ -430,7 +424,7 @@ The intimate profile contains:
 
 These combinations require intentional narrative justification:
 
-- class_origin: destitute or working_poor + money_behavior_pattern: performs_wealth
+- class_origin: poverty + money_behavior_pattern: performs_wealth
   → Coherent if the wound is visibility or belonging. Flag otherwise.
 
 - class_origin: wealthy + money_behavior_pattern: hoarder
@@ -688,7 +682,7 @@ For each seed, include a demographic_hint object:
 {
   age_range: '18-22' | '23-27' | '28-32' | '33-38' | '39-45',
   city_hint: one of ${DREAM_CITY_KEYS.join(', ')},
-  class_origin_hint: one of destitute, working_poor, working_class, lower_middle, middle, upper_middle, wealthy,
+  class_origin_hint: one of ${registryChoices('class_origin')},
   family_hint: brief (e.g. 'raised by grandmother', 'single parent, oldest of 4')
 }
 Do not suggest the same age_range or city for more than 2 seeds in a batch.
@@ -980,7 +974,7 @@ router.post('/commit', requireAuth, async (req, res) => {
       nationality: c.nationality || null,
       first_language: c.first_language || null,
       hometown: c.hometown || null,
-      current_city: registryCity(c.current_city),
+      current_city: c.current_city || null,
       city_migration_history: c.city_migration_history || null,
       class_origin: c.class_origin || null,
       current_class: c.current_class || null,
@@ -1004,7 +998,16 @@ router.post('/commit', requireAuth, async (req, res) => {
       intimate_eligible: intimateEligible,
     };
 
-    const newChar = await db.RegistryCharacter.create(characterData);
+    // Each demographic ENUM as the registry stores it (an old word read as
+    // it means, an old city as July mapped it); a value it cannot read is
+    // left empty and reported, so it no longer fails the whole commit
+    // (utils/registryDemographics).
+    const { fitted, skipped } = fitRegistryEnums(characterData);
+    if (skipped.length) {
+      console.warn(`[commit] ${rawName}: values the registry does not take, left empty:`, skipped.map((x) => `${x.field}=${JSON.stringify(x.value)}`).join(', '));
+    }
+
+    const newChar = await db.RegistryCharacter.create(fitted);
 
     // Also create world_characters entry for lalaverse/series-2 layer characters
     let worldCharId = null;
@@ -1086,6 +1089,7 @@ router.post('/commit', requireAuth, async (req, res) => {
       layer: c.layer,
       role_type: roleType,
       registry_role: registryRole,
+      skipped_values: skipped,
       message: `${rawName} committed to registry as draft.`,
     });
   } catch (err) {
