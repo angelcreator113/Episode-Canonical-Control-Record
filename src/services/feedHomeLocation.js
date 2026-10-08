@@ -11,6 +11,7 @@
  */
 
 const { Op } = require('sequelize');
+const { feedCity } = require('../utils/feedCities');
 
 // The venue a creator works from, by content category.
 const CREATOR_VENUE_MAP = {
@@ -82,4 +83,43 @@ async function assignHomeLocation(db, profile, city) {
   return homeLoc;
 }
 
-module.exports = { assignHomeLocation, CREATOR_VENUE_MAP };
+/**
+ * Gives each LalaVerse creator with a DREAM city and no home its place on
+ * the DREAM map: the one-time backfill (scripts/backfill-feed-homes.js) for
+ * the creators the Feed scheduler and bulk import made before they called
+ * assignHomeLocation. Only a creator with no home_location_id is touched,
+ * so a second run does nothing. `dryRun` lists them and writes nothing;
+ * `ids` and `limit` narrow the run.
+ */
+async function backfillHomeLocations(db, { dryRun = false, ids = null, limit = null } = {}) {
+  const where = { feed_layer: 'lalaverse', city: { [Op.ne]: null }, home_location_id: null };
+  if (ids?.length) where.id = { [Op.in]: ids };
+  const total = await db.SocialProfile.count({ where });
+  const profiles = await db.SocialProfile.findAll({ where, order: [['id', 'ASC']], ...(limit ? { limit } : {}) });
+
+  const results = [];
+  for (const profile of profiles) {
+    const row = { id: profile.id, handle: profile.handle, city: profile.city };
+    const city = feedCity(profile.city);
+    if (!city) {
+      results.push({ ...row, status: 'not_a_dream_city' });
+      continue;
+    }
+    if (dryRun) {
+      results.push({ ...row, status: 'would_assign' });
+      continue;
+    }
+    try {
+      const home = await assignHomeLocation(db, profile, city);
+      results.push(home
+        ? { ...row, status: 'assigned', home_location_id: home.id, home_name: home.name }
+        : { ...row, status: 'no_venue' });
+    } catch (err) {
+      console.error(`[feedHomeLocation] backfill: no home for ${profile.handle}:`, err?.message);
+      results.push({ ...row, status: 'failed', error: err?.message });
+    }
+  }
+  return { total, results };
+}
+
+module.exports = { assignHomeLocation, backfillHomeLocations, CREATOR_VENUE_MAP };
