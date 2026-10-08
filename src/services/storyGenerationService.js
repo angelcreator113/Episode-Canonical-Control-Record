@@ -13,6 +13,7 @@
 const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -92,6 +93,9 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     // §6) — g.profile_id is preferred, g.id is the fallback.
     const profileIds = [eventCreatorOrganizer(event)?.profileId, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
+      // Each guest's character is the registry entry linked to the profile
+      // (ruling C3, utils/registryLink), the newest should two be. The join
+      // on sp.registry_character_id compared an integer to a UUID and failed.
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
                 rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
@@ -100,7 +104,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
                 rc.mask_persona, rc.truth_persona, rc.therapy_primary_defense,
                 rc.signature_trait, rc.character_archetype
          FROM social_profiles sp
-         LEFT JOIN registry_characters rc ON rc.id = sp.registry_character_id
+         ${LINKED_CHARACTER_JOIN}
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
         { replacements: { ids: profileIds } }
       );

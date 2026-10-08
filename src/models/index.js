@@ -718,10 +718,6 @@ CharacterRelationship.hasMany(RelationshipEvent, {
 if (SocialProfile && SocialProfile.associate) {
   SocialProfile.associate(requiredModels);
 }
-RegistryCharacter.hasMany(SocialProfile, {
-  foreignKey: 'registry_character_id',
-  as: 'socialProfiles',
-});
 
 // Amber Diagnostic Engine associations
 if (AmberFinding && AmberFinding.associate) {

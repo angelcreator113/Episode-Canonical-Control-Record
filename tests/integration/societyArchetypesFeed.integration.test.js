@@ -10,12 +10,9 @@
  * list is this test's own, one archetype long so every pick is known, and
  * the list there before is put back afterwards.
  *
- * A registry character's profile and a confirmed proposal are not here:
- * they write social_profiles.registry_character_id, a registry id (UUID),
- * and the column is INTEGER in the migrations and in canon
- * (docs/CHARACTER_REGISTRY_READ.md §2.1), so neither insert succeeds on a
- * migrated database. Their archetype is pinned by
- * tests/unit/services/societyArchetypes.paths.test.js.
+ * A confirmed proposal's archetype is pinned by
+ * tests/unit/services/societyArchetypes.paths.test.js, and its link to the
+ * character by tests/integration/registryOneLink.integration.test.js.
  */
 jest.unmock('uuid');
 

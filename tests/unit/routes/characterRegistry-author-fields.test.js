@@ -12,7 +12,6 @@ const mockCharacter = { save: jest.fn().mockResolvedValue(undefined) };
 jest.mock('../../../src/models', () => ({
   RegistryCharacter: { findByPk: jest.fn(async () => mockCharacter) },
 }));
-jest.mock('../../../src/services/feedAutoGeneration', () => ({ autoCreateFeedProfile: jest.fn() }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
   return {

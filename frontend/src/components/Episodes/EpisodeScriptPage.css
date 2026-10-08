@@ -64,12 +64,138 @@
 .esp-link { font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
 .esp-link:hover { text-decoration: underline; }
 
+/* Primary actions: lavender (the mock). */
+.esp-btn-primary {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--lala-lavender);
+  color: var(--text-inverse);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.esp-btn-primary:hover { filter: brightness(0.95); }
+.esp-btn-primary:disabled { cursor: not-allowed; opacity: 0.6; }
+.esp-btn-primary.is-saved { background: var(--success-bg); color: var(--success-text); }
+.esp-btn-primary.is-large { padding: 11px 22px; font-size: 15px; flex-shrink: 0; }
+.esp-btn-primary.is-small, .esp-btn.is-small { padding: 6px 14px; border-radius: 8px; font-size: 12px; }
+
+/* Messages. */
+.esp-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: min(420px, calc(100vw - 32px)); padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg, 0 4px 16px rgba(0, 0, 0, 0.12)); }
+.esp-toast.is-error { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
+.esp-toast.is-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+.esp-unsaved-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--accent-subtle); border: 1px solid var(--accent); color: var(--text-primary); font-size: 13px; }
+.esp-unsaved-banner-text { flex: 1 1 240px; min-width: 0; }
+.esp-error { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); font-size: 13px; }
+.esp-unsaved { color: var(--accent-dark); font-weight: 600; }
+.esp-order-hint, .esp-raw-note { margin: 0 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+
+/* Raw editor. */
+.esp-raw { display: block; box-sizing: border-box; width: 100%; margin-bottom: 24px; padding: 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); color: var(--lala-ink); font-family: var(--font-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
+.esp-raw:focus { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+
+/* A beat: a card with its act colour down the left edge. */
+.esp-beat {
+  margin-bottom: 10px;
+  border: 1px solid var(--lala-lavender-line);
+  border-left: 4px solid var(--beat-color, var(--lala-lavender));
+  border-radius: 14px;
+  background: var(--surface-card);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+.esp-beat.is-open { box-shadow: 0 2px 10px rgba(74, 59, 122, 0.08); }
+.esp-beat.is-locked { border-color: var(--lala-gold-line); border-left-color: var(--beat-color, var(--lala-gold)); }
+.esp-beat-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
+.esp-beat.is-locked .esp-beat-head { background: var(--lala-gold-soft); }
+.esp-beat-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
+.esp-beat-num {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: color-mix(in srgb, var(--beat-color, var(--lala-lavender)) 12%, transparent);
+  color: var(--beat-color, var(--lala-lavender-text));
+  font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
+}
+.esp-beat-title { flex: 1; min-width: 0; }
+.esp-beat-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.esp-beat-icon { font-size: 16px; }
+.esp-beat-name { font-size: 15px; font-weight: 700; color: var(--lala-ink); }
+.esp-chip-approved { padding: 1px 8px; border-radius: 10px; background: var(--lala-gold); color: var(--text-primary); font-family: 'DM Mono', var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
+.esp-beat-scene { display: block; margin-top: 2px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 12px; text-align: left; cursor: pointer; }
+.esp-beat-scene:hover { text-decoration: underline; }
+.esp-beat-count { font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); white-space: nowrap; }
+.esp-beat-chev { font-size: 11px; color: var(--lala-ink-muted); transition: transform 0.2s; }
+.esp-beat.is-open .esp-beat-chev { transform: rotate(180deg); }
+.esp-beat-body { padding: 4px 18px 16px; border-top: 1px solid var(--lala-lavender-line); }
+.esp-beat.is-locked .esp-beat-body { border-top-color: var(--lala-gold-line); }
+.esp-beat-context { margin: 12px 0; padding: 8px 12px; border-radius: 8px; background: var(--primary-subtle); color: var(--primary-text); font-size: 12px; font-style: italic; line-height: 1.5; }
+.esp-beat-intent { margin: 0 0 12px; padding: 6px 12px; border-radius: 8px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 12px; }
+.esp-lines { padding-top: 8px; }
+.esp-beat-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.esp-beat-foot .esp-move { margin-right: auto; }
+.esp-beat-locked-note { font-size: 12px; color: var(--lala-ink-muted); }
+.esp-lock-btn { padding: 7px 18px; border: none; border-radius: 8px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 12px; font-weight: 700; cursor: pointer; }
+.esp-lock-btn.is-locked { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold); }
+.esp-lock-btn:disabled { cursor: wait; opacity: 0.7; }
+
+/* A line: speaker in small caps, the words in the prose face. */
+.esp-line { padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.esp-line:hover { background: var(--lala-lavender-soft); }
+.esp-line.is-locked { cursor: default; }
+.esp-line.is-locked:hover { background: none; }
+.esp-line-speaker { margin-right: 8px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--speaker, var(--text-primary)); }
+.esp-line-text { font-family: var(--font-prose); font-size: 15px; line-height: 1.65; color: var(--lala-ink); }
+.esp-line-action { font-family: var(--font-prose); font-size: 14px; font-style: italic; color: var(--lala-ink-muted); }
+.esp-rewrite { margin-left: 8px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 11px; font-weight: 600; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.esp-line:hover .esp-rewrite, .esp-rewrite:focus-visible { opacity: 1; }
+@media (hover: none) { .esp-rewrite { opacity: 1; } }
+.esp-line-edit { padding: 6px 0; }
+.esp-line-input { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1.5px solid var(--lala-lavender); border-radius: 8px; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
+.esp-line-edit-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.esp-move--end { margin-left: auto; }
+
+/* Reordering (drag and drop, and the Up/Down buttons for touch). */
+.esp-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 28px; margin-left: -8px; border-radius: 6px; color: var(--lala-ink-muted); cursor: grab; touch-action: none; }
+.esp-grip:hover { background: var(--lala-parchment-2); color: var(--lala-ink); }
+.esp-grip:active { cursor: grabbing; }
+.esp-grip.is-locked { cursor: default; }
+.esp-grip.is-locked:hover { background: none; }
+.esp-move { display: inline-flex; gap: 6px; }
+.esp-move-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-move-btn:disabled { opacity: 0.4; cursor: default; }
+.esp-drop-before { box-shadow: 0 -3px 0 0 var(--lala-gold) !important; }
+.esp-drop-after { box-shadow: 0 3px 0 0 var(--lala-gold) !important; }
+
+/* Franchise guard, and the all-approved card. */
+.esp-guard { margin-top: 16px; padding: 14px 18px; border-radius: 14px; }
+.esp-guard.is-bad { background: var(--danger-bg); border: 1px solid var(--danger-border); }
+.esp-guard.is-ok { background: var(--success-bg); border: 1px solid var(--success-border); }
+.esp-guard-title { margin-bottom: 6px; font-size: 14px; font-weight: 700; }
+.esp-guard.is-bad .esp-guard-title { color: var(--danger-text); }
+.esp-guard.is-ok .esp-guard-title { color: var(--success-text); }
+.esp-guard-count { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--lala-ink-muted); }
+.esp-guard-item { margin-bottom: 4px; padding: 6px 10px; border: 1px solid var(--danger-border); border-radius: 8px; background: var(--surface-card); color: var(--danger-text); font-size: 12px; }
+.esp-done { margin-top: 16px; padding: 20px 24px; border: 1px solid var(--success-border); border-radius: 14px; background: var(--success-bg); text-align: center; }
+.esp-done-text { margin: 0 0 12px; font-size: 15px; font-weight: 700; color: var(--success-text); }
+
+/* The DREAM map. */
+.esp-map-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.7); }
+.esp-map { position: relative; width: 90vw; max-width: 1200px; max-height: 85vh; overflow: hidden; border-radius: 16px; background: var(--gray-900); }
+.esp-map-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(0, 0, 0, 0.4); }
+.esp-map-title { font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--lala-gold); }
+.esp-map-close { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: var(--text-inverse); font-size: 18px; cursor: pointer; }
+.esp-map-loading { padding: 40px; text-align: center; color: var(--lala-parchment-3); }
+
 @media (max-width: 900px) {
   .esp { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
   .esp-head { flex-direction: column; align-items: stretch; }
   .esp-head > button { width: 100%; }
+  .esp-beat-head { padding: 12px 12px 12px 14px; gap: 8px; }
+  .esp-beat-body { padding: 4px 12px 14px; }
+  .esp-line { padding: 6px 4px; }
 }
 /* responsive.css sizes every h3 on small screens with !important; the
    panel's small caps and the empty card's title keep their size. */

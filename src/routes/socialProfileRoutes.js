@@ -290,6 +290,7 @@ const {
   loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype,
   societyArchetypeLine, societyArchetypeMenu,
 } = require('../services/societyArchetypes');
+const { linkedCharacter, withRegistryLinks } = require('../utils/registryLink');
 
 // PUT/PATCH /:id rename guard (Task #1893). When the body carries a handle,
 // refuse it with 400 unless it is a non-empty string, and with 409 when another
@@ -1392,7 +1393,8 @@ router.get('/', optionalAuth, async (req, res) => {
     const nativeTotal = Object.values(counts).reduce((a, b) => a + b, 0);
 
     return res.json({
-      profiles: rows,
+      // Each with registry_character_id, read from its registry entry (C3).
+      profiles: await withRegistryLinks(db, rows),
       pagination: {
         page: pageNum,
         limit: pageSize,
@@ -1697,10 +1699,12 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
     // named, else the show's newest registry, else the newest registry. The
     // guard used to require registry_id, which the page never sends, so no
     // Cross ever made a character (wiring map §6 finding 6b, fix-list item 7,
-    // docs/reads/2026-10-06-lalaverse-wiring-map.md).
-    let registryCharacter = null;
+    // docs/reads/2026-10-06-lalaverse-wiring-map.md). The link is the
+    // registry entry's feed_profile_id (ruling C3; utils/registryLink): a
+    // profile already linked keeps its character.
+    let registryCharacter = await linkedCharacter(db, profile.id);
     let registryNote = null;
-    if (!profile.registry_character_id) {
+    if (!registryCharacter) {
       const newest = { order: [['created_at', 'DESC']] };
       // show_id is a UUID column; anything else is ignored, not a 500.
       const showId = typeof show_id === 'string' && /^[0-9a-f-]{36}$/i.test(show_id) ? show_id : null;
@@ -1720,11 +1724,11 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
         if (existing && existing.feed_profile_id && String(existing.feed_profile_id) !== String(profile.id)) {
           registryNote = `The registry already has a character "${charKey}" linked to another profile; none was created.`;
         } else if (existing) {
-          registryCharacter = existing;
-          await profile.update({ registry_character_id: existing.id });
+          registryCharacter = await existing.update({ feed_profile_id: profile.id });
         } else registryCharacter = await db.RegistryCharacter.create({
           registry_id: targetRegistry,
           character_key: charKey,
+          feed_profile_id: profile.id,
           display_name: profile.display_name || profile.handle,
           icon: '\uD83D\uDCF1',
           role_type: 'pressure',
@@ -1741,12 +1745,6 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
             follower_tier: profile.follower_tier,
           },
         });
-
-        if (registryCharacter && !profile.registry_character_id) {
-          await profile.update({
-            registry_character_id: registryCharacter.id,
-          });
-        }
       }
     }
 
@@ -1770,7 +1768,7 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
 
     // Sync social intelligence into registry character
     let syncResult = null;
-    if (profile.registry_character_id) {
+    if (registryCharacter) {
       try {
         const registrySync = require('../services/registrySyncService');
         const refreshed = await db.SocialProfile.findByPk(profile.id);
@@ -1827,13 +1825,12 @@ router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
 
     await profile.update(updates);
 
-    // Live sync to registry character if linked
-    if (profile.registry_character_id) {
-      try {
-        const registrySync = require('../services/registrySyncService');
-        await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
-      } catch { /* non-blocking */ }
-    }
+    // Live sync to the registry character, when one is linked (the sync
+    // reads the registry entry's link itself; ruling C3).
+    try {
+      const registrySync = require('../services/registrySyncService');
+      await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
+    } catch { /* non-blocking */ }
 
     return res.json({ profile });
   } catch (err) {
@@ -1874,13 +1871,11 @@ router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
 
     await profile.update(updates);
 
-    // Live sync to registry if linked
-    if (profile.registry_character_id) {
-      try {
-        const registrySync = require('../services/registrySyncService');
-        await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
-      } catch { /* non-blocking */ }
-    }
+    // Live sync to the registry, when linked (the sync reads the link; C3)
+    try {
+      const registrySync = require('../services/registrySyncService');
+      await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
+    } catch { /* non-blocking */ }
 
     return res.json({ profile });
   } catch (err) {
@@ -3072,7 +3067,9 @@ router.get('/:id', optionalAuth, async (req, res) => {
       }] : [],
     });
     if (!profile) return res.status(404).json({ error: 'Not found' });
-    return res.json({ profile });
+    // registry_character_id, read from the registry entry (ruling C3).
+    const [linked] = await withRegistryLinks(db, [profile]);
+    return res.json({ profile: linked });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
