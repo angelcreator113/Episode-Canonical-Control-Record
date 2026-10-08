@@ -16,7 +16,7 @@
  *   GET    /world/batches                — list generation batches
  *
  * Intimate Scene routes:
- *   GET    /world/tension-check          — check all relationships for scene triggers
+ *   GET    /world/tension-check          — check all relationships for scene triggers (?show_id=)
  *   POST   /world/scenes/generate        — generate intimate scene for character pair
  *   GET    /world/scenes                 — list scenes (?character_id= ?status=)
  *   GET    /world/scenes/:sceneId        — single scene detail
@@ -1981,6 +1981,13 @@ router.get('/world/batches', optionalAuth, async (req, res) => {
 // GET /world/tension-check — scan all active world character relationships for scene triggers
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-check', optionalAuth, async (req, res) => {
+  // ?show_id= keeps the show's, by the scanner's rule (inShow): a
+  // relationship whose two characters are in the show's registries or in
+  // one with no show yet, and a one-night candidate unless its registry
+  // entry is another show's.
+  const { showId, error } = showIdOf(req);
+  if (error) return res.status(400).json({ error });
+  const bind = showId ? { replacements: { showId } } : undefined;
   try {
     // Characters eligible for intimate scenes with non-calm tension
     // Join through registry_characters since character_relationships references registry IDs
@@ -1994,26 +2001,31 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
         ON (cr.character_id_a = rc.id OR cr.character_id_b = rc.id)
         AND cr.confirmed = true
         AND cr.tension_state IN ('simmering', 'volatile', 'fractured')
+      ${showId ? `LEFT JOIN registry_characters other
+        ON other.id = CASE WHEN cr.character_id_a = rc.id THEN cr.character_id_b ELSE cr.character_id_a END` : ''}
       WHERE wc.intimate_eligible = true
         AND wc.status = 'active'
         AND cr.id IS NOT NULL
+        ${showId ? `AND ${inShow('rc')} AND ${inShow('other')}` : ''}
       ORDER BY
         CASE cr.tension_state
           WHEN 'volatile' THEN 1
           WHEN 'simmering' THEN 2
           WHEN 'fractured' THEN 3
         END
-    `).catch(e => { console.warn('[world-studio] tension-check query error:', e?.message); return []; });
+    `, bind).catch(e => { console.warn('[world-studio] tension-check query error:', e?.message); return []; });
 
     // Also include intimate-eligible characters without relationship records
     // who haven't had a scene yet (one-night-stand candidates)
+    const twin = 'SELECT 1 FROM registry_characters twin WHERE twin.world_character_id = wc.id AND twin.deleted_at IS NULL';
     const oneNightCandidates = await Q(req, `
       SELECT wc.* FROM world_characters wc
       WHERE wc.character_type = 'one_night_stand'
         AND wc.status = 'active'
         AND wc.intimate_eligible = true
         AND NOT EXISTS (SELECT 1 FROM intimate_scenes WHERE character_a_id = wc.id OR character_b_id = wc.id)
-    `).catch(e => { console.warn('[world-studio] one-night candidates query error:', e?.message); return []; });
+        ${showId ? `AND (NOT EXISTS (${twin}) OR EXISTS (${twin} AND ${inShow('twin')}))` : ''}
+    `, bind).catch(e => { console.warn('[world-studio] one-night candidates query error:', e?.message); return []; });
 
     res.json({
       triggered,
@@ -3035,8 +3047,23 @@ router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
 
 const relName = (alias) => `COALESCE(NULLIF(${alias}.selected_name, ''), NULLIF(${alias}.display_name, ''), ${alias}.character_key, '?')`;
 
-/** The confirmed relationships, both characters named as the Relationships page names them. */
-const confirmedRelationships = (req) => Q(req,
+// A registry character is a show's when its registry is that show's, or
+// has no show yet. World Studio files its registries by world, not show,
+// so a cast with no show stays in every show's view, and another show's
+// own cast stays out (Evoni's ruling, 2026-10-08). `alias` is the
+// registry_characters alias; the query binds :showId.
+const inShow = (alias) => `EXISTS (SELECT 1 FROM character_registries reg
+  WHERE reg.id = ${alias}.registry_id AND (reg.show_id = :showId OR reg.show_id IS NULL))`;
+
+/** A request's ?show_id=: { showId } (null when absent), or { error } when it is not a show id. */
+function showIdOf(req) {
+  const value = req.query.show_id;
+  if (value === undefined || value === '') return { showId: null };
+  return UUID_RE_SNAPSHOT.test(String(value)) ? { showId: String(value) } : { error: 'show_id must be a show id (UUID)' };
+}
+
+/** The confirmed relationships, both characters named as the Relationships page names them; with showId, the show's (inShow). */
+const confirmedRelationships = (req, { showId = null } = {}) => Q(req,
   `SELECT cr.id, cr.relationship_type, cr.tension_state, cr.conflict_summary, cr.situation, cr.is_romantic,
           ra.id AS a_id, ${relName('ra')} AS a_name, wa.world_tag AS a_world_tag,
           rb.id AS b_id, ${relName('rb')} AS b_name
@@ -3045,7 +3072,9 @@ const confirmedRelationships = (req) => Q(req,
      JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
      LEFT JOIN world_characters wa ON wa.id = ra.world_character_id
     WHERE cr.confirmed = true AND cr.deleted_at IS NULL
-    ORDER BY a_name ASC, b_name ASC`
+      ${showId ? `AND ${inShow('ra')} AND ${inShow('rb')}` : ''}
+    ORDER BY a_name ASC, b_name ASC`,
+  showId ? { replacements: { showId } } : undefined
 );
 
 /** Every relationship of one registry character, confirmed or a candidate, the other character named, oldest first. */
@@ -3600,10 +3629,16 @@ router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
 // the row, and characters_scanned counts the characters in a confirmed
 // relationship. A candidate the Relationships page has not confirmed is not
 // a tension yet.
+//
+// ?show_id= keeps the show's pairs: both characters in the show's
+// registries, or in one with no show yet (inShow; Evoni's ruling,
+// 2026-10-08). The State tab and the hub's Overview send the active show.
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
+  const { showId, error } = showIdOf(req);
+  if (error) return res.status(400).json({ error });
   try {
-    const rows = await confirmedRelationships(req);
+    const rows = await confirmedRelationships(req, { showId });
     const characters = new Set(rows.flatMap((r) => [r.a_id, r.b_id]));
     const pairs = rows.filter((r) => isHighTension(r.tension_state)).map((r) => ({
       relationship_id: r.id,

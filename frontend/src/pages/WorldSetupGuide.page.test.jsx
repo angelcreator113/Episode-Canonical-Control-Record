@@ -41,7 +41,7 @@ describe('World Setup Guide', () => {
     expect(screen.getByTestId('guide-detail-influencer').textContent).toBe('In the Brain · 14 cards');
     expect(screen.getByTestId('guide-detail-memory').textContent).toBe('Starter content only, not in the Brain yet');
     expect(screen.getByTestId('guide-detail-feed').textContent).toBe('13 profiles');
-    expect(screen.getByTestId('guide-detail-calendar').textContent).toBe('0 cultural calendar events');
+    expect(screen.getByTestId('guide-detail-calendar').textContent).toBe('No calendar events or saved lists yet');
     const urls = vi.mocked(api.get).mock.calls.map((c) => c[0]);
     expect(urls.some((u) => u.includes('/world/show-a/events?status=draft'))).toBe(true);
   });

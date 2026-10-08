@@ -81,6 +81,15 @@ export function brainDetail(cards, sections) {
   return parts.length ? parts.join(' · ') : 'Starter content only, not in the Brain yet';
 }
 
+/** What step 3 says: its calendar events, Brain cards and saved lists, or that it has none. */
+export function calendarDetail(events, cards, sections) {
+  const parts = [];
+  if (events > 0) parts.push(plural(events, 'cultural calendar event'));
+  if (cards > 0) parts.push(`In the Brain · ${plural(cards, 'card')}`);
+  if (sections > 0) parts.push(`Saved · ${plural(sections, 'list')}`);
+  return parts.length ? parts.join(' · ') : 'No calendar events or saved lists yet';
+}
+
 /**
  * The seven checks; `showId` is the active show for the events check.
  * Returns { done: { key: boolean }, counts: { key: number }, unreachable: [key] }.
@@ -120,6 +129,22 @@ export async function checkSetup(showId) {
     const cards = (Number(brain[source]?.cards) || 0) + (Number(brain[source]?.legacy) || 0);
     done[key] = cards > 0 || sections > 0;
     details[key] = brainDetail(cards, sections);
+  }
+
+  // Step 3 (Evoni, 2026-10-08: "Calendar, awards or Brain"): the cultural
+  // calendar's events, or the Culture lists saved on the page (award shows,
+  // media; starter content is not saved), or the Culture cards in the Brain.
+  const calendarPage = await safeFetch(`${API}/page-content/cultural_calendar`);
+  const calendarSections = calendarPage ? usableSections(calendarPage) : 0;
+  const calendarCards = brain ? (Number(brain.cultural_calendar?.cards) || 0) + (Number(brain.cultural_calendar?.legacy) || 0) : 0;
+  const calendarEvents = unreachable.includes('calendar') ? 0 : counts.calendar || 0;
+  if (calendarSections > 0 || calendarCards > 0) {
+    const i = unreachable.indexOf('calendar');
+    if (i >= 0) unreachable.splice(i, 1);
+  }
+  if (!unreachable.includes('calendar')) {
+    done.calendar = calendarEvents > 0 || calendarSections > 0 || calendarCards > 0;
+    details.calendar = calendarDetail(calendarEvents, calendarCards, calendarSections);
   }
   return { done, counts, unreachable, details };
 }
