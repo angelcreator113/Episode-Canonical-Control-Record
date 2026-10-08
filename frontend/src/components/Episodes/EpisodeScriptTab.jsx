@@ -239,6 +239,8 @@ export default function EpisodeScriptTab({ episode, show }) {
   // brief's source event, as the Overview reads them.
   const [brief, setBrief] = useState(null);
   const [source, setSource] = useState(null);
+  // The outfit locked on the Wardrobe tab, which the script writer reads (null: could not be read).
+  const [outfit, setOutfit] = useState([]);
 
   // Load map data when map is opened
   useEffect(() => {
@@ -262,6 +264,9 @@ export default function EpisodeScriptTab({ episode, show }) {
           .catch((err) => console.error('[EpisodeScript] source event load failed:', err));
       }
     }).catch((err) => console.error('[EpisodeScript] brief load failed:', err));
+    api.get(`/api/v1/wardrobe/outfit/${episodeId}`)
+      .then((res) => setOutfit(res.data?.items || []))
+      .catch((err) => { console.error('[EpisodeScript] locked outfit load failed:', err); setOutfit(null); });
     api.get(`/api/v1/episode-brief/${episodeId}/plan`).then(res => {
       setScenePlan((res.data?.data || []).map(p => ({ ...p, scene_set_name: p.sceneSet?.name || null, scene_context: p.scene_context || p.sceneSet?.script_context || null })));
     }).catch(() => {});
@@ -424,7 +429,7 @@ export default function EpisodeScriptTab({ episode, show }) {
   const plan = source?.event
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
     : null;
-  const inputs = scriptInputs({ brief, plan });
+  const inputs = scriptInputs({ brief, plan, outfit });
 
   return (
     <div className="esp">
@@ -517,7 +522,9 @@ export default function EpisodeScriptTab({ episode, show }) {
           {inputs.map((i) => (
             <li key={i.key} className={i.ok ? 'is-ok' : 'is-gap'} data-testid={`script-uses-${i.key}`} data-ok={i.ok ? 'true' : 'false'}>
               <span className="esp-dot" aria-hidden="true" />
-              <span><strong>{i.label}</strong> {i.detail}</span>
+              <span><strong>{i.label}</strong> {i.detail}
+                {i.fix === 'wardrobe' && !i.ok && <> · <Link className="esp-link" to="?tab=wardrobe">Open Wardrobe</Link></>}
+              </span>
             </li>
           ))}
         </ul>
