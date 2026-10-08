@@ -37,7 +37,7 @@ export const SECTIONS = [
   { key: 'canon_rules', label: 'Canon Rules', icon: '📜', desc: 'What cannot be changed' },
   { key: 'season_1', label: 'Season 1', icon: '📺', desc: 'Season-specific rules' },
   { key: 'cultural_system', label: 'Culture & Events', icon: '🎭', desc: 'Cultural calendar, trends, legends' },
-  { key: 'influencer_systems', label: 'Influencer Systems', icon: '⭐', desc: 'Archetypes, tiers, rules of the Feed' },
+  { key: 'influencer_systems', label: 'Social Systems', icon: '⭐', desc: 'Archetypes, tiers, rules of the Feed' },
   { key: 'world_infrastructure', label: 'World Foundation', icon: '🏙️', desc: 'DREAM cities, universities, corporations' },
   { key: 'social_timeline', label: 'Social Timeline', icon: '🕒', desc: 'How the Feed shows and spreads' },
   { key: 'social_personality', label: 'Social Personality', icon: '🗣️', desc: 'How characters behave online' },
