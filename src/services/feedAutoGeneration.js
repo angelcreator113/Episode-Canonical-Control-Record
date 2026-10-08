@@ -14,6 +14,7 @@ const {
 } = require('../utils/feedProfileUtils');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 const { findHandleHolder, handleTakenMessage } = require('../utils/socialProfileHandle');
+const { assignSocietyArchetype } = require('./societyArchetypes');
 
 const LALAVERSE_CAP = 200;
 const REAL_WORLD_CAP = 443;
@@ -51,6 +52,8 @@ async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
 
   const isLalaverse = feedLayer === 'lalaverse';
   const roleType = character.role_type || 'support';
+  // A LalaVerse profile's Society archetype, the least used (fix-list item 26).
+  const society = isLalaverse ? await assignSocietyArchetype(db) : null;
 
   // Every string fitted to its column (Task #1851): registry names and
   // opts overrides are not bounded by the social_profiles VARCHAR lengths.
@@ -66,6 +69,7 @@ async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
     vibe_sentence:  opts.vibe_sentence || `${character.selected_name || character.display_name} — auto-generated from registry`,
     follower_tier:  opts.follower_tier || inferFollowerTier(roleType),
     archetype:      inferArchetypeFromRole(roleType),
+    society_archetype: society ? society.name : null,
     current_state:  'rising',
     status:         'generated',
 

@@ -34,6 +34,9 @@ const {
   findHandleHolder,
   handleTakenMessage,
 } = require('../utils/socialProfileHandle');
+const {
+  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype, societyArchetypeMenu,
+} = require('../services/societyArchetypes');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -115,7 +118,12 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     }
   }
 
-  const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
+  // A LalaVerse creator gets the Society archetype that fits it best, from
+  // Evoni's list (fix-list item 26).
+  const lalaverse = feedLayer === 'lalaverse';
+  const societyList = lalaverse ? await loadSocietyArchetypes(db) : [];
+  const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext)
+    + societyArchetypeMenu(societyList);
   // Keep the timer handle and clear it once the race settles (Task #1859),
   // so no 120s timer outlives its profile and holds the event loop open.
   let timeoutHandle;
@@ -152,6 +160,10 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // an AI variation or an over-long value cannot fail the insert.
   const safeArchetype = sanitizeEnum(profile.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(profile.current_trajectory, VALID_TRAJECTORIES, 'rising');
+  // The AI's Society archetype when it is on the list, else the least used.
+  const society = lalaverse
+    ? (matchSocietyArchetype(societyList, profile.society_archetype) || await assignSocietyArchetype(db, societyList))
+    : null;
 
   // Save to DB — a plain create. The old findOrCreate reused an existing
   // (handle, platform) row and overwrote its fields (Task #1893); a retry of
@@ -162,6 +174,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
       vibe_sentence: creator.vibe_sentence,
       display_name: profile.display_name,
       archetype: safeArchetype,
+      society_archetype: society ? society.name : null,
       content_persona: profile.content_persona,
       real_signal: profile.real_signal,
       posting_voice: profile.posting_voice,

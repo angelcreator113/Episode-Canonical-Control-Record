@@ -7,6 +7,9 @@
  *                    archetype; Evoni's ruling: "The 10 profile archetypes")
  *                    with how many LalaVerse profiles carry each, from
  *                    GET /social-profiles/analytics/composition.
+ *   societyArchetypeCounts  the Society tab's fifteen (social_profiles.
+ *                    society_archetype, 2026-10-08), from the same, for the
+ *                    Archetypes sub-tab.
  *   trendBars        the Feed's trending topics (GET /feed-enhanced/:showId/
  *                    trending), most posts first, each as a share of the
  *                    biggest. The data counts posts and engagement only, so
@@ -26,6 +29,31 @@ export function archetypeCounts(composition) {
   const other = Object.entries(counts).filter(([k]) => !known.has(k)).reduce((n, [, v]) => n + (Number(v) || 0), 0);
   const total = rows.reduce((n, r) => n + r.count, 0) + other;
   return { rows: [...rows].sort((a, b) => b.count - a.count), total, other };
+}
+
+// A Society archetype's name as src/services/societyArchetypes.js compares
+// it: case, a leading "The", punctuation.
+const nameKey = (v) => (typeof v === 'string' ? v : '').trim().toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * The Society tab's archetypes (the list the page shows, Evoni's edits
+ * included; fix-list item 26) with how many LalaVerse profiles carry each,
+ * from the same composition: { count(name), unset, other }. unset is the
+ * profiles made before they had one; other, names no longer on the list.
+ */
+export function societyArchetypeCounts(composition, list) {
+  const used = new Map();
+  for (const [name, n] of Object.entries(composition?.society_archetypes || {})) {
+    const key = nameKey(name);
+    if (key) used.set(key, (used.get(key) || 0) + (Number(n) || 0));
+  }
+  const listed = new Set((list || []).map((a) => nameKey(a?.name)).filter(Boolean));
+  const other = [...used].filter(([key]) => !listed.has(key)).reduce((n, [, v]) => n + v, 0);
+  return {
+    count: (name) => used.get(nameKey(name)) || 0,
+    unset: Number(composition?.society_archetype_unset) || 0,
+    other,
+  };
 }
 
 /** Trending topics as bars: [{ topic, posts, engagement, share }], most posts first. */

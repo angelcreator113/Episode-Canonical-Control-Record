@@ -8,8 +8,14 @@
  * Systems button (influencer_systems) on Archetypes and Social Rules, the
  * Calendar button (cultural_calendar: celebrity tiers, famous characters,
  * gossip outlets, algorithm forces, drama mechanics) on Legends & Society,
- * both on Trends. The Feed generator keeps its own built-in archetype
- * list and reads nothing from this page (src/services/feedScheduler.js).
+ * both on Trends.
+ *
+ * 2026-10-08 (wiring map fix-list item 26; Evoni's ruling, "Feed also
+ * uses your 15"): each new LalaVerse Feed profile also gets one of this
+ * page's archetypes, the saved list or the defaults
+ * (src/services/societyArchetypes.js), beside the Feed's own ten, and each
+ * archetype card counts the profiles that have it (the Feed's composition,
+ * lib/societySummary societyArchetypeCounts).
  *
  * 2026-10-06, to the LalaVerse mock: in the hub the tabs sit under the
  * Society front page (components/Society/SocietySummary: the Feed's
@@ -27,8 +33,10 @@
  * the calendar's too, into influencer_systems. The fifty legendary roles
  * are fixed in code and are not edited here.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import api from '../services/api';
 import usePageData from '../hooks/usePageData';
+import { societyArchetypeCounts } from '../lib/societySummary';
 import useListEditor, { EditListsToggle, ItemActions, AddToList } from '../components/PageEdit/ListEditor';
 import BrainUpdate from '../components/BrainUpdate';
 import SocietySummary from '../components/Society/SocietySummary';
@@ -51,9 +59,10 @@ const TABS = [
 // (src/services/brainRules.js) takes only rules marked for every prompt.
 // A synced card starts unmarked; Evoni marks one in the Show Bible, card by
 // card, and Brain Update keeps the mark (fix-list item 24, 2026-10-08). The
-// page's saved edits are read only by Amber's read_world_page tool.
+// page's saved edits are read by Amber's read_world_page tool, and the
+// archetypes by the Feed (fix-list item 26, 2026-10-08).
 const READS = {
-  archetypes: 'Brain Update writes each archetype into the Show Bible as a Social Archetype card. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card. The Feed generator picks archetypes from its own built-in list, not from here.',
+  archetypes: 'Each new LalaVerse Feed profile gets one of these archetypes, your edits included, beside the Feed\'s own ten; each card counts the profiles that have it. Brain Update writes each archetype into the Show Bible as a Social Archetype card. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
   legends: 'The fifty legendary roles are fixed placeholders in code; nothing in the app links a role to a character yet. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
   rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
   trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. No generator reads the page itself. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
@@ -61,6 +70,18 @@ const READS = {
 
 // A list item's own color (from the data files) as its accent only.
 const accent = (color) => (color ? { '--item': color } : undefined);
+
+const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
+/** What the archetype cards' counts are, or why there are none. */
+function feedNote(feed, counted) {
+  if (feed === null) return 'Counting the LalaVerse Feed…';
+  if (!counted) return 'The LalaVerse Feed could not be counted just now.';
+  const parts = ['Each card counts the LalaVerse Feed profiles that have it.'];
+  if (counted.unset) parts.push(`${plural(counted.unset, 'profile')} ${counted.unset === 1 ? 'has' : 'have'} none yet: made before the Feed used these. Regenerating a profile gives it one.`);
+  if (counted.other) parts.push(`${plural(counted.other, 'profile')} ${counted.other === 1 ? 'carries' : 'carry'} an archetype no longer in this list.`);
+  return parts.join(' ');
+}
 
 /** A row of stages joined by arrows (the trend engines); actions(s, i) is the item's edit controls. */
 function Stages({ items, meta, actions = () => null }) {
@@ -92,6 +113,21 @@ export default function SocialSystems({ embedded = false }) {
   const lists = useListEditor({ [SYSTEMS]: systemsPage, [CALENDAR]: calendarPage });
   const [openLegend, setOpenLegend] = useState('Fashion Icons');
   const [expandedArch, setExpandedArch] = useState(null);
+  // The LalaVerse Feed's composition, read once the Archetypes tab opens:
+  // null while reading, false if the read failed.
+  const [feed, setFeed] = useState(null);
+
+  useEffect(() => {
+    if (tab !== 'archetypes' || feed !== null) return undefined;
+    let live = true;
+    api.get('/api/v1/social-profiles/analytics/composition?feed_layer=lalaverse')
+      .then((r) => { if (live) setFeed(r.data || {}); })
+      .catch((err) => {
+        console.error('[Society] the Feed profiles could not be counted:', err?.response?.status || err?.message);
+        if (live) setFeed(false);
+      });
+    return () => { live = false; };
+  }, [tab, feed]);
 
   const saving = isSaving || ccSaving;
   // The front page's legend chips open a group on the Legends tab.
@@ -107,6 +143,8 @@ export default function SocialSystems({ embedded = false }) {
   const adder = (page, key, defaults, what) => (lists.editing ? (
     <AddToList what={what} onAdd={() => lists.add(page, key, listOf(page, key, defaults), what)} />
   ) : null);
+  const archetypes = listOf(SYSTEMS, 'ARCHETYPES', ARCHETYPES);
+  const counted = feed ? societyArchetypeCounts(feed, archetypes) : null;
 
   return (
     <div className={`ss${embedded ? ' is-embedded' : ''}`}>
@@ -140,8 +178,9 @@ export default function SocialSystems({ embedded = false }) {
         {tab === 'archetypes' && (
           <div className="ss-panel">
             <p className="ss-note">Every major creator tends to fall into one of these patterns. The tension between two archetypes in the same person is often the story. Open one for its effect on the audience and what it does in the story.</p>
+            <p className="ss-note" data-testid="ss-arch-feed">{feedNote(feed, counted)}</p>
             <ul className="ss-grid">
-              {listOf(SYSTEMS, 'ARCHETYPES', ARCHETYPES).map((a, i) => {
+              {archetypes.map((a, i) => {
                 const open = expandedArch === a.num;
                 return (
                   <li key={`${i}-${a.num}`} className={`ss-card ss-accent-top${open ? ' is-open' : ''}`} style={accent(a.color)}>
@@ -149,6 +188,7 @@ export default function SocialSystems({ embedded = false }) {
                       <span className="ss-card-top"><span className="ss-num">{a.num}</span><span aria-hidden="true">{a.icon}</span></span>
                       <strong className="ss-card-title">{a.name}</strong>
                       <span className="ss-card-text">{a.content}</span>
+                      {counted && <span className="ss-chip-mini ss-arch-count" data-testid="ss-arch-count">{counted.count(a.name).toLocaleString()} in the Feed</span>}
                     </button>
                     {open && (
                       <div className="ss-card-more">

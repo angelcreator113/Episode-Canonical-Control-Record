@@ -296,6 +296,10 @@ function checkRateLimit(req, res) {
 // scheduler, feed auto-generation) applies the same rule.
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
+const {
+  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype,
+  societyArchetypeLine, societyArchetypeMenu,
+} = require('../services/societyArchetypes');
 
 // PUT/PATCH /:id rename guard (Task #1893). When the body carries a handle,
 // refuse it with 400 unless it is a non-empty string, and with 409 when another
@@ -370,6 +374,10 @@ Career position relative to Lala: ${career_pressure || 'level'}.
 Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
     }
+    // A LalaVerse creator gets the Society archetype that fits this spark
+    // best, from Evoni's list (fix-list item 26).
+    const societyList = layer === 'lalaverse' ? await loadSocietyArchetypes(db) : [];
+    prompt += societyArchetypeMenu(societyList);
     // A LalaVerse creator follows the Show Bible (2026-10-06); a real-world
     // (JustAWoman's Feed) one does not.
     const brain = layer === 'lalaverse'
@@ -400,6 +408,10 @@ Lala does not know she was built. The world she lives in feels complete and self
     const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
     const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
     const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+    // The AI's Society archetype when it is on the list, else the least used.
+    const society = layer === 'lalaverse'
+      ? (matchSocietyArchetype(societyList, generated.society_archetype) || await assignSocietyArchetype(db, societyList))
+      : null;
 
     // Save as draft — every string fitted to its column (Task #1844)
     const { fitted: createRecord, truncated } = fitRecordToModel(db.SocialProfile, {
@@ -417,6 +429,7 @@ Lala does not know she was built. The world she lives in feels complete and self
       follower_count_approx: generated.follower_count_approx,
       content_category:      generated.content_category,
       archetype:             safeArchetype,
+      society_archetype:     society ? society.name : null,
       content_persona:       generated.content_persona,
       real_signal:           generated.real_signal,
       posting_voice:         generated.posting_voice,
@@ -1904,6 +1917,13 @@ Generate a profile that feels native to that city's creator culture.
 Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }
+    // The Society archetype (fix-list item 26): a profile keeps the one it
+    // has; a LalaVerse profile made before gets the one that fits it best.
+    const societyList = layer === 'lalaverse' ? await loadSocietyArchetypes(db) : [];
+    const keptSociety = layer === 'lalaverse' && profile.society_archetype
+      ? (matchSocietyArchetype(societyList, profile.society_archetype) || { name: profile.society_archetype })
+      : null;
+    prompt += keptSociety ? societyArchetypeLine(keptSociety) : societyArchetypeMenu(societyList);
     const brain = layer === 'lalaverse'
       ? await loadBrainContext(db, { showId: profile.show_id || null, label: 'SocialProfiles' })
       : { block: null, ids: [] };
@@ -1932,6 +1952,9 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
     const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
     const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+    const society = keptSociety || (layer === 'lalaverse'
+      ? (matchSocietyArchetype(societyList, generated.society_archetype) || await assignSocietyArchetype(db, societyList))
+      : null);
 
     // Every string fitted to its column before the write (Task #1844)
     const { fitted: updateRecord, truncated } = fitRecordToModel(db.SocialProfile, {
@@ -1943,6 +1966,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       follower_count_approx: generated.follower_count_approx,
       content_category: generated.content_category,
       archetype: safeArchetype,
+      society_archetype: society ? society.name : (profile.society_archetype || null),
       content_persona: generated.content_persona,
       real_signal: generated.real_signal,
       posting_voice: generated.posting_voice,
@@ -2631,6 +2655,14 @@ router.get('/analytics/composition', requireAuth, async (req, res) => {
       limit: 10, raw: true,
     });
 
+    // The Society tab's archetypes, by name (fix-list item 26). Profiles
+    // made before the Feed used them have none; they are counted apart.
+    const societyRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['society_archetype', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['society_archetype'], raw: true,
+    });
+
     const toMap = rows => rows.reduce((m, r) => { m[r[Object.keys(r)[0]]] = parseInt(r.count, 10); return m; }, {});
 
     return res.json({
@@ -2645,6 +2677,8 @@ router.get('/analytics/composition', requireAuth, async (req, res) => {
       adult_content: { adult: adultCount, clean: totalCount - adultCount, ratio: totalCount > 0 ? (adultCount / totalCount * 100).toFixed(1) + '%' : '0%' },
       cities: toMap(cityRows),
       geographic_clusters: geoRows.map(r => ({ cluster: r.geographic_cluster, count: parseInt(r.count, 10) })),
+      society_archetypes: toMap(societyRows.filter(r => r.society_archetype)),
+      society_archetype_unset: societyRows.filter(r => !r.society_archetype).reduce((n, r) => n + parseInt(r.count, 10), 0),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
