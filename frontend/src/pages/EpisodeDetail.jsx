@@ -1149,6 +1149,8 @@ const EpisodeDetail = () => {
             customFrameUrl={phone.frameUrl}
             playthrough={phone.playthrough}
             missions={phone.missions}
+            showId={episode?.show_id || episode?.showId}
+            episodeId={episodeId}
             onClose={phone.stop}
           />
         </Suspense>

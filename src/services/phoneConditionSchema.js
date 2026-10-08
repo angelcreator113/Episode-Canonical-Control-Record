@@ -26,8 +26,12 @@ const CONDITION_OPS = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'exists', 'not_exi
  * A single condition. `key` is a free-form state flag name; v1 accepts anything that
  * matches a loose identifier. PR3 will introduce a registry with autocomplete.
  */
+// `visited:<screen id>` is the one prefixed key (phoneRuntime evaluates it);
+// screen ids are UUIDs, so the suffix allows hyphens.
+const CONDITION_KEY = /^(?:[a-z][a-z0-9_.]*|visited:[a-z0-9_.-]+)$/i;
+
 const conditionSchema = Joi.object({
-  key: Joi.string().trim().min(1).max(80).pattern(/^[a-z][a-z0-9_.]*$/i).required(),
+  key: Joi.string().trim().min(1).max(80).pattern(CONDITION_KEY).required(),
   op: Joi.string().valid(...CONDITION_OPS).required(),
   // `value` is optional for `exists`/`not_exists`; otherwise any JSON primitive.
   value: Joi.alternatives(Joi.boolean(), Joi.number(), Joi.string().max(500), Joi.valid(null)),
@@ -146,7 +150,7 @@ const missionPayloadSchema = Joi.object({
   name: Joi.string().trim().min(1).max(200).required(),
   description: Joi.string().trim().max(2000).allow('', null),
   icon_url: Joi.string().trim().max(500).allow('', null),
-  start_condition: conditionsArraySchema.optional(),
+  start_condition: conditionsArraySchema.allow(null).optional(),
   objectives: Joi.array().items(objectiveSchema).max(12).default([]),
   // Rewards reuse the zone-action allowlist — same validator, same schema,
   // same server-side guarantees. Defaults to an empty array so existing

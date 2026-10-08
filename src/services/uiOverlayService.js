@@ -205,14 +205,18 @@ async function generateOverlay(overlayType, showId, options = {}) {
 
 // ── REMOVE BACKGROUND FROM EXISTING ASSET ───────────────────────────────────
 
-async function removeBackgroundFromAsset(assetId, models) {
+// Scoped to the show's own overlay images (phone audit, 2026-10-07): it
+// looked the asset up by id alone, so any asset id could be rewritten.
+async function removeBackgroundFromAsset(assetId, models, { showId } = {}) {
   if (!process.env.REMOVEBG_API_KEY) {
     throw new Error('REMOVEBG_API_KEY not configured');
   }
+  if (!showId) throw new Error('showId is required');
 
   const [rows] = await models.sequelize.query(
-    `SELECT id, s3_url_raw, s3_url_processed, metadata FROM assets WHERE id = :assetId AND deleted_at IS NULL`,
-    { replacements: { assetId } }
+    `SELECT id, s3_url_raw, s3_url_processed, metadata FROM assets
+     WHERE id = :assetId AND show_id = :showId AND asset_type = 'UI_OVERLAY' AND deleted_at IS NULL`,
+    { replacements: { assetId, showId } }
   );
   if (!rows?.length) throw new Error('Asset not found');
 
@@ -229,8 +233,7 @@ async function removeBackgroundFromAsset(assetId, models) {
 
   const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
   const overlayType = meta.overlay_type || 'unknown';
-  const showIdFromMeta = meta.show_id || 'unknown';
-  const s3Key = `ui-overlays/${showIdFromMeta}/${overlayType}-nobg-${Date.now()}.png`;
+  const s3Key = `ui-overlays/${showId}/${overlayType}-nobg-${Date.now()}.png`;
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
     ContentType: 'image/png', CacheControl: 'max-age=31536000',
@@ -241,8 +244,8 @@ async function removeBackgroundFromAsset(assetId, models) {
   meta.bg_removed_at = new Date().toISOString();
   await models.sequelize.query(
     `UPDATE assets SET s3_url_processed = :newUrl, metadata = CAST(:metadata AS jsonb), updated_at = NOW()
-     WHERE id = :assetId`,
-    { replacements: { newUrl, metadata: JSON.stringify(meta), assetId } }
+     WHERE id = :assetId AND show_id = :showId`,
+    { replacements: { newUrl, metadata: JSON.stringify(meta), assetId, showId } }
   );
 
   return { url: newUrl, bg_removed: true };
@@ -251,7 +254,7 @@ async function removeBackgroundFromAsset(assetId, models) {
 // ── UPLOAD CUSTOM OVERLAY ───────────────────────────────────────────────────
 
 async function uploadOverlayToS3(buffer, overlayTypeId, showId, contentType) {
-  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : contentType === 'image/gif' ? 'gif' : 'jpg';
   const s3Key = `ui-overlays/${showId}/${overlayTypeId}-custom-${Date.now()}.${ext}`;
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET, Key: s3Key, Body: buffer,

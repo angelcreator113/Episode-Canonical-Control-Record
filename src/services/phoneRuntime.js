@@ -151,9 +151,15 @@ function filterContentItems(items, context) {
  * actions array (matches pre-conditions behavior). Call on tap, not on save.
  */
 function actionsForZone(zone) {
-  if (Array.isArray(zone.actions) && zone.actions.length > 0) return zone.actions;
-  if (zone.target) return [{ type: 'navigate', target: zone.target }];
-  return [];
+  const actions = Array.isArray(zone.actions) ? zone.actions : [];
+  // The zone's target still applies when it has actions (phone audit,
+  // 2026-10-07): the editor shows the target next to the actions, so a toast
+  // added to a zone must not stop it navigating. An explicit navigate action
+  // wins over the target.
+  if (zone.target && !actions.some(a => a?.type === 'navigate')) {
+    return [...actions, { type: 'navigate', target: zone.target }];
+  }
+  return actions;
 }
 
 module.exports = {

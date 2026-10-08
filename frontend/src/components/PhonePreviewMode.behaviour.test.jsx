@@ -105,7 +105,7 @@ describe('PhonePreviewMode behaviour (Task #1990)', () => {
     };
     renderPreview({ playthrough });
     fireEvent.click(screen.getByTitle('Messages'));
-    expect(playthrough.tap).toHaveBeenCalledWith('z-dm');
+    expect(playthrough.tap).toHaveBeenCalledWith('z-dm', null);
     await screen.findByAltText('DMs');
   });
 

@@ -19,16 +19,21 @@ import { Plus, Trash2, Save, X, Target, CheckCircle, Circle, Edit3, Gift } from 
 import api from '../../services/api';
 import ConditionRow from './ConditionRow';
 import ActionRow from './ActionRow';
+import { isScreen } from '../../lib/overlayUtils';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, primary actions (2026-10-07)
 const MONO = "'DM Mono', monospace";
 const PROSE = "'Lora', serif";
+const NO_SCREENS = [];
 
 export default function MissionEditor({ open, showId, episodeId, onClose }) {
   const [missions, setMissions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null); // null | 'new' | <missionId>
+  // The show's screens, for a navigate reward's "go to" list (phone audit,
+  // 2026-10-07: the list was empty, so a navigate reward could not be set).
+  const [screenOptions, setScreenOptions] = useState(NO_SCREENS);
 
   const reload = useCallback(async () => {
     if (!showId) return;
@@ -46,6 +51,19 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
   }, [showId, episodeId]);
 
   useEffect(() => { if (open) reload(); }, [open, reload]);
+
+  useEffect(() => {
+    if (!open || !showId) return undefined;
+    let cancelled = false;
+    api.get(`/api/v1/ui-overlays/${showId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res.data?.data) ? res.data.data : [];
+        setScreenOptions(list.filter(o => isScreen(o) && o.generated).map(o => ({ key: o.id, label: o.name })));
+      })
+      .catch((e) => { console.error('[MissionEditor] screens load failed:', e); });
+    return () => { cancelled = true; };
+  }, [open, showId]);
 
   if (!open) return null;
 
@@ -102,6 +120,7 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
               initial={null}
               showId={showId}
               episodeId={episodeId}
+              screenOptions={screenOptions}
               onSaved={async () => { setEditing(null); await reload(); }}
               onCancel={() => setEditing(null)}
             />
@@ -112,6 +131,7 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
               initial={missions.find(m => m.id === editing)}
               showId={showId}
               episodeId={episodeId}
+              screenOptions={screenOptions}
               onSaved={async () => { setEditing(null); await reload(); }}
               onCancel={() => setEditing(null)}
             />
@@ -127,7 +147,7 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
                 </div>
               )}
               {!loading && missions.map(m => (
-                <MissionCard key={m.id} mission={m} onEdit={() => setEditing(m.id)} onDeleted={reload} showId={showId} />
+                <MissionCard key={m.id} mission={m} onEdit={() => setEditing(m.id)} onDeleted={reload} onError={setError} showId={showId} />
               ))}
             </>
           )}
@@ -138,7 +158,7 @@ export default function MissionEditor({ open, showId, episodeId, onClose }) {
 }
 
 // ── Mission card ────────────────────────────────────────────────────────────
-function MissionCard({ mission, onEdit, onDeleted, showId }) {
+function MissionCard({ mission, onEdit, onDeleted, onError, showId }) {
   const [deleting, setDeleting] = useState(false);
   const handleDelete = async () => {
     if (!confirm(`Delete mission "${mission.name}"?`)) return;
@@ -146,6 +166,9 @@ function MissionCard({ mission, onEdit, onDeleted, showId }) {
     try {
       await api.delete(`/api/v1/ui-overlays/${showId}/missions/${mission.id}`);
       onDeleted();
+    } catch (e) {
+      console.error('[MissionEditor] delete failed:', e);
+      onError?.(`Not deleted: ${e.response?.data?.error || e.message}`);
     } finally { setDeleting(false); }
   };
   const objectives = mission.objectives || [];
@@ -171,7 +194,7 @@ function MissionCard({ mission, onEdit, onDeleted, showId }) {
 }
 
 // ── Create / edit form ───────────────────────────────────────────────────────
-function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
+function MissionForm({ initial, showId, episodeId, screenOptions = NO_SCREENS, onSaved, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [objectives, setObjectives] = useState(initial?.objectives || []);
@@ -190,28 +213,35 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
   const save = async () => {
     setErr(null);
     if (!name.trim()) { setErr('Name is required'); return; }
-    // Each objective needs at least one condition row with a key.
+    // An unfinished objective or reward is said, not dropped on save (phone
+    // audit, 2026-10-07): each objective needs a label and a condition with a
+    // key; each reward needs its field.
     const cleanObjs = objectives.map(o => ({
       id: o.id,
       label: (o.label || '').trim(),
       condition: (o.condition || []).filter(c => c.key && c.op),
-    })).filter(o => o.label && o.condition.length > 0);
+    }));
+    const badObj = cleanObjs.findIndex(o => !o.label || o.condition.length === 0);
+    if (badObj >= 0) { setErr(`Objective ${badObj + 1} needs a label and a condition with a key, or remove it.`); return; }
+    const rewardMissing = (a) => {
+      if (a.type === 'navigate') return a.target ? null : 'a screen to go to';
+      if (a.type === 'set_state') return a.key ? null : 'a state key';
+      if (a.type === 'show_toast') return (a.text || '').trim() ? null : 'the toast text';
+      return null;
+    };
+    const badReward = rewardActions.findIndex(a => rewardMissing(a));
+    if (badReward >= 0) { setErr(`Reward ${badReward + 1} needs ${rewardMissing(rewardActions[badReward])}, or remove it.`); return; }
 
     const payload = {
       name: name.trim(),
       description: description.trim() || null,
       objectives: cleanObjs,
-      // Drop actions whose required fields are still empty (e.g. navigate
-      // without a target) before sending — the server's Joi schema would
-      // reject them anyway and we'd rather not trip the error banner.
-      reward_actions: rewardActions.filter(a => {
-        if (!a.type) return false;
-        if (a.type === 'navigate') return Boolean(a.target);
-        if (a.type === 'set_state') return Boolean(a.key);
-        if (a.type === 'show_toast') return Boolean((a.text || '').trim());
-        return true;
-      }),
+      reward_actions: rewardActions,
       is_active: isActive,
+      // Kept as they are: the form doesn't edit them, and leaving them out
+      // reset the order to 0 (phone audit, 2026-10-07).
+      display_order: initial?.display_order || 0,
+      ...(initial?.start_condition ? { start_condition: initial.start_condition } : {}),
       // A mission keeps its episode (Lala's Phone step 1); an older
       // show-wide one moves to this episode (step 2, Evoni 2026-10-07).
       episode_id: initial?.episode_id || episodeId || null,
@@ -331,7 +361,7 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
           <div key={ai} style={{ marginBottom: 6 }}>
             <ActionRow
               action={a}
-              screenOptions={[]} /* MissionEditor isn't scoped to a screen list; navigate rewards use raw ids for now */
+              screenOptions={screenOptions}
               onChange={(next) => {
                 const arr = [...rewardActions];
                 arr[ai] = next;

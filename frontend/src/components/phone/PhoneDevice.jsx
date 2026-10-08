@@ -17,6 +17,8 @@
  *                        playthrough, back, home). Rendered on every screen,
  *                        generated or not.
  *   episodeId          — passed to ScreenContentRenderer.
+ *   showId             — the show, for content zones when the screen does
+ *                        not carry its own show_id.
  *   contentInteractive — passed to ScreenContentRenderer as `interactive`.
  *
  * `icons` (Task #2005, doctrine rule 17) is the show's icon overlays. A tap
@@ -137,6 +139,7 @@ export default function PhoneDevice({
   onBack,
   tapLayer,
   episodeId,
+  showId,
   contentInteractive = false,
   icons = [],
   highlightIconKey = null,
@@ -157,7 +160,7 @@ export default function PhoneDevice({
             {isMapScreen(phoneScreen) ? (
               <div style={{ position: 'absolute', inset: 0 }}>
                 <PhoneMapView
-                  showId={activeScreen.show_id}
+                  showId={activeScreen.show_id || showId}
                   fallbackImageUrl={phoneScreen.url}
                 />
               </div>
@@ -170,7 +173,7 @@ export default function PhoneDevice({
             )}
             <ScreenContentRenderer
               zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-              showId={activeScreen.show_id}
+              showId={activeScreen.show_id || showId}
               screenMeta={activeScreen.metadata}
               interactive={contentInteractive}
               episodeId={episodeId}
