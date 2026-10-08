@@ -37,6 +37,8 @@ const {
 const {
   loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype, societyArchetypeMenu,
 } = require('../services/societyArchetypes');
+const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
+const { DREAM_CITY_CULTURE, feedCity, randomFeedCity } = require('../utils/feedCities');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -104,6 +106,28 @@ function skippedResult(creator, reason) {
   return { handle: creator.handle, platform: creator.platform, status: 'skipped', reason };
 }
 
+// A LalaVerse creator, as /generate writes one: native to its DREAM city's
+// creator culture, in Lala's world, which knows nothing of JustAWoman. A
+// bulk creator brings no city, so the AI picks the one its content fits.
+const LALA_RELATIONSHIPS = ['direct', 'aware', 'one_sided', 'mutual_unaware', 'competitive'];
+const CAREER_PRESSURES = ['ahead', 'level', 'behind', 'different_lane'];
+const relationshipOf = (creator) => (LALA_RELATIONSHIPS.includes(creator.lala_relationship) ? creator.lala_relationship : 'mutual_unaware');
+const careerOf = (creator) => (CAREER_PRESSURES.includes(creator.career_pressure) ? creator.career_pressure : 'level');
+
+function lalaverseContext(creator) {
+  const city = feedCity(creator.city);
+  const cityLines = city
+    ? `This creator lives in ${city.replace(/_/g, ' ')} — ${DREAM_CITY_CULTURE[city]}`
+    : `This creator lives in one of the five DREAM cities. Pick the one their content fits, and return its key as "city":\n${Object.entries(DREAM_CITY_CULTURE).map(([key, culture]) => `- ${key}: ${culture}`).join('\n')}`;
+  return `\n\nLALAVERSE CONTEXT:
+${cityLines}
+Generate a profile that feels native to that city's creator culture.
+Lala's relationship to this creator: ${relationshipOf(creator)}.
+Career position relative to Lala: ${careerOf(creator)}.
+Do not reference JustAWoman or the real world in any generated content.
+Lala does not know she was built. The world she lives in feels complete and self-contained.`;
+}
+
 async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey, feedLayer }) {
   const canSave = !!(db && db.SocialProfile);
 
@@ -122,8 +146,13 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // Evoni's list (fix-list item 26).
   const lalaverse = feedLayer === 'lalaverse';
   const societyList = lalaverse ? await loadSocietyArchetypes(db) : [];
+  // A LalaVerse creator follows the Show Bible, as /generate's does; a
+  // real-world (JustAWoman's Feed) one does not.
+  const brain = lalaverse ? await loadBrainContext(db, { label: 'bulk-generate' }) : { block: null, ids: [] };
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext)
-    + societyArchetypeMenu(societyList);
+    + (lalaverse ? lalaverseContext(creator) : '')
+    + societyArchetypeMenu(societyList)
+    + (brain.block ? `\n${brain.block}` : '');
   // Keep the timer handle and clear it once the race settles (Task #1859),
   // so no 120s timer outlives its profile and holds the event loop open.
   let timeoutHandle;
@@ -142,6 +171,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   } finally {
     clearTimeout(timeoutHandle);
   }
+  await recordRuleUse(db?.sequelize, brain.ids, 'bulk-generate');
 
   const text = aiRes.content[0].text;
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
@@ -160,6 +190,9 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // an AI variation or an over-long value cannot fail the insert.
   const safeArchetype = sanitizeEnum(profile.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(profile.current_trajectory, VALID_TRAJECTORIES, 'rising');
+  // A LalaVerse creator's DREAM city: its own, else the AI's pick, else one
+  // at random (utils/feedCities).
+  const city = lalaverse ? (feedCity(creator.city) || feedCity(profile.city) || randomFeedCity()) : null;
   // The AI's Society archetype when it is on the list, else the least used.
   const society = lalaverse
     ? (matchSocietyArchetype(societyList, profile.society_archetype) || await assignSocietyArchetype(db, societyList))
@@ -202,6 +235,9 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
       status: 'generated',
       series_id: seriesId || null,
       feed_layer: feedLayer || 'real_world',
+      city,
+      lala_relationship: lalaverse ? relationshipOf(creator) : null,
+      career_pressure: lalaverse ? careerOf(creator) : null,
     });
     const { fitted: identity, truncated: identityTruncated } = fitRecordToModel(db.SocialProfile, {
       handle: creator.handle, platform: creator.platform,
