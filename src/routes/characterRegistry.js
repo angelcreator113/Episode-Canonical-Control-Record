@@ -13,6 +13,7 @@ const { requireAuth, userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { hideAuthorOnlyFieldsFromNonAdmins } = require('../middleware/authorOnlyFields');
 const { Op } = require('sequelize');
+const { REGISTRY_CITY_KEYS, registryCity } = require('../utils/registryDemographics');
 let createFollowProfileFromDNA;
 try {
   ({ createFollowProfileFromDNA } = require('../services/characterFollowService'));
@@ -239,6 +240,14 @@ router.post('/registries/:id/characters', requireAuth, async (req, res) => {
       personality_matrix, extra_fields, sort_order,
     } = req.body;
 
+    // current_city: a DREAM city (an old name reads as July mapped it),
+    // outside_lalaverse or unknown; the column refuses anything else
+    // (utils/registryDemographics).
+    const currentCity = registryCity(req.body.current_city);
+    if (req.body.current_city && !currentCity) {
+      return res.status(400).json({ success: false, error: `current_city must be one of: ${REGISTRY_CITY_KEYS.join(', ')}` });
+    }
+
     const count = await RegistryCharacter.count({ where: { registry_id: registry.id } });
 
     const character = await RegistryCharacter.create({
@@ -276,7 +285,7 @@ router.post('/registries/:id/characters', requireAuth, async (req, res) => {
       first_language: req.body.first_language || null,
       cultural_background: req.body.cultural_background || null,
       hometown: req.body.hometown || null,
-      current_city: req.body.current_city || null,
+      current_city: currentCity,
       relationship_status: req.body.relationship_status || null,
 
       // Essence profile
@@ -678,6 +687,11 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
         return res.status(400).json({ success: false, error: `${field} must be one of: ${vals.join(', ')}` });
       }
     }
+    // current_city, as on create; empty clears it.
+    const currentCity = registryCity(req.body.current_city);
+    if (req.body.current_city && !currentCity) {
+      return res.status(400).json({ success: false, error: `current_city must be one of: ${REGISTRY_CITY_KEYS.join(', ')}` });
+    }
 
     // Bounds check on numeric fields
     const BOUNDS = { de_body_currency: [0, 100], de_body_control: [0, 100], de_body_comfort: [0, 100], de_luck_interpretation: [0, 100], de_change_capacity_score: [0, 100], de_joy_current_access: [0, 100], wound_depth: [0, 10] };
@@ -696,6 +710,7 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     const filteredAllowed = isAuthor ? allowed : allowed.filter(f => !AUTHOR_ONLY.includes(f));
 
     filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
+    if (req.body.current_city !== undefined) character.current_city = currentCity;
     await character.save();
 
     return res.json({ success: true, character });
@@ -1371,7 +1386,7 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
       age: '"age": "their current age as a number"',
       ethnicity: '"ethnicity": "their ethnic background"',
       hometown: '"hometown": "where they grew up"',
-      current_city: '"current_city": "ENUM — must be one of: nova_prime, velour_city, the_drift, solenne, cascade_row, outside_lalaverse, unknown"',
+      current_city: `"current_city": "ENUM — must be one of: ${REGISTRY_CITY_KEYS.join(', ')}"`,
       class_origin: '"class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown"',
       pronouns: '"pronouns": "e.g. she/her, he/him, they/them"',
       nationality: '"nationality": "their country of origin or citizenship"',
@@ -1430,7 +1445,7 @@ ${allFieldsToFill}
 
     // Apply each generated demographics field
     const ENUM_VALUES = {
-      current_city: ['nova_prime','velour_city','the_drift','solenne','cascade_row','outside_lalaverse','unknown'],
+      current_city: REGISTRY_CITY_KEYS,
       class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
       current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
     };
@@ -1442,12 +1457,14 @@ ${allFieldsToFill}
           const parsed = parseInt(val, 10);
           if (!isNaN(parsed)) proposed[field] = parsed;
         } else if (typeof val === 'string') {
+          // An old city reads as its DREAM city (utils/registryDemographics).
+          const value = field === 'current_city' ? (registryCity(val) || val) : val;
           // Validate enum fields — skip if value not in allowed set
-          if (ENUM_VALUES[field] && !ENUM_VALUES[field].includes(val)) {
+          if (ENUM_VALUES[field] && !ENUM_VALUES[field].includes(value)) {
             console.warn(`[Backfill] Skipping invalid enum value for ${field}: "${val}"`);
             continue;
           }
-          proposed[field] = val;
+          proposed[field] = value;
         }
       }
     }
@@ -1651,7 +1668,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
   "nationality": "their nationality",
   "first_language": "their first language",
   "hometown": "where they grew up",
-  "current_city": "ENUM — must be one of: nova_prime, velour_city, the_drift, solenne, cascade_row, outside_lalaverse, unknown",
+  "current_city": "ENUM — must be one of: ${REGISTRY_CITY_KEYS.join(', ')}",
   "city_migration_history": "how they got from hometown to current city",
   "class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
   "current_class": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
@@ -1672,7 +1689,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
 }`,
         apply: (generated) => {
           const DEMO_ENUMS = {
-            current_city: ['nova_prime','velour_city','the_drift','solenne','cascade_row','outside_lalaverse','unknown'],
+            current_city: REGISTRY_CITY_KEYS,
             class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
             current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
           };
@@ -1685,8 +1702,10 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
           const updated = [];
           for (const f of fields) {
             if (generated[f] !== null && generated[f] !== undefined && generated[f] !== '') {
-              if (DEMO_ENUMS[f] && !DEMO_ENUMS[f].includes(generated[f])) continue;
-              character[f] = generated[f];
+              // An old city reads as its DREAM city (utils/registryDemographics).
+              const value = f === 'current_city' ? (registryCity(generated[f]) || generated[f]) : generated[f];
+              if (DEMO_ENUMS[f] && !DEMO_ENUMS[f].includes(value)) continue;
+              character[f] = value;
               updated.push(f);
             }
           }
