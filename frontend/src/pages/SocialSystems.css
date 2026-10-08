@@ -72,6 +72,8 @@
 }
 .ss-chip.is-active { background: var(--danger-bg); border-color: var(--danger); color: var(--danger-text); font-weight: 800; }
 .ss-chip-mini { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); }
+/* An archetype card's count of the LalaVerse Feed profiles that have it */
+.ss-arch-count { align-self: flex-start; margin-top: 4px; }
 
 /* ── Trend stages ── */
 .ss-stages { list-style: none; margin: 0 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; counter-reset: stage; }

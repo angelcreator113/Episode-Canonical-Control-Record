@@ -1,8 +1,8 @@
 /**
  * The Society tab after the per-tab fix (2026-10-04): each sub-tab says who
  * reads its lists (Brain Update writes them into the Show Bible, but no
- * generator reads those cards yet, wiring map §8, 2026-10-06; the Feed
- * generator keeps its own archetype list) and carries
+ * generator reads those cards yet, wiring map §8, 2026-10-06; since
+ * 2026-10-08 each new LalaVerse Feed profile gets one of the archetypes) and carries
  * the Brain Update button for the data it shows: Social Systems on
  * Archetypes and Social Rules, Calendar on Legends & Society, both on Trends.
  */
@@ -29,11 +29,13 @@ beforeEach(() => {
 });
 
 describe('Society tab', () => {
-  test('Archetypes says the Feed generator does not read it, and carries the Social Systems button only', async () => {
+  test('Archetypes says each new LalaVerse Feed profile gets one, and carries the Social Systems button only', async () => {
     window.history.pushState({}, '', '/universe?tab=society');
     renderAt('/universe?tab=society');
     const note = screen.getByTestId('society-reads-archetypes').textContent;
-    expect(note).toContain('own built-in list');
+    // Fix-list item 26 (2026-10-08): the Feed also uses these, Evoni's edits included.
+    expect(note).toContain('Each new LalaVerse Feed profile gets one of these archetypes, your edits included, beside the Feed\'s own ten');
+    expect(note).not.toContain('own built-in list');
     // Card by card (fix-list item 24): a card reaches the generators when marked in the Show Bible.
     expect(note).toContain('A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.');
     // The copy never claims a generator reads the cards, and has no old "Edit them here" line.
