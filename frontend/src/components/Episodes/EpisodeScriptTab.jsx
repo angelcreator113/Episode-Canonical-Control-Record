@@ -99,13 +99,13 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
   const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
 
   if (editing) return (
-    <div style={{ padding: '6px 0' }}>
-      <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} style={{ width: '100%', padding: '8px 12px', border: '1.5px solid var(--primary)', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }} style={{ background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
-        <button onClick={() => setEditing(false)} style={{ background: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+    <div className="esp-line-edit">
+      <textarea className="esp-line-input" value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} aria-label="Edit line" />
+      <div className="esp-line-edit-actions">
+        <button type="button" className="esp-btn-primary is-small" onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }}>Save</button>
+        <button type="button" className="esp-btn is-small" onClick={() => setEditing(false)}>Cancel</button>
         {/* Moving without dragging (touch screens, keyboards). */}
-        <span className="esp-move" style={{ marginLeft: 'auto' }}>
+        <span className="esp-move esp-move--end">
           <button type="button" className="esp-move-btn" aria-label="Move line up" disabled={lineIndex === 0} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex - 1); setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
           <button type="button" className="esp-move-btn" aria-label="Move line down" disabled={lineIndex >= lineCount - 1} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex + 1); setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
         </span>
@@ -115,7 +115,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
 
   return (
     <div
-      className={`${locked ? 'script-line-locked' : 'script-line-hover'}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
+      className={`esp-line${locked ? ' is-locked' : ''}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
       data-testid="script-line"
       draggable={!locked}
       onDragStart={locked ? undefined : (e) => { e.stopPropagation(); drag.start(e, { kind: 'line', beatId, from: lineIndex }); }}
@@ -123,18 +123,17 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
       onDragOver={(e) => { const d = drag.current(); if (locked || d?.kind !== 'line' || d.beatId !== beatId) return; e.preventDefault(); e.stopPropagation(); setDropAt(drag.half(e)); }}
       onDragLeave={() => setDropAt(null)}
       onDrop={(e) => { const d = drag.current(); setDropAt(null); if (locked || d?.kind !== 'line' || d.beatId !== beatId) return; e.preventDefault(); e.stopPropagation(); onMoveLine(beatId, d.from, dropIndex(d.from, lineIndex, drag.half(e) === 'after')); drag.end(); }}
-      style={{ padding: '5px 8px', borderRadius: 6, cursor: locked ? 'default' : 'pointer' }}
       onClick={locked ? undefined : () => { setEditText(lineStr); setEditing(true); }}
     >
       {parsed.type === 'dialogue' && (
-        <div>
-          <span style={{ fontWeight: 700, fontSize: 12, color: sc[parsed.speaker] || 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 8 }}>{parsed.speaker}</span>
-          <span style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>"{parsed.text}"</span>
-          {!locked && <button onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting} className="rewrite-btn" style={{ marginLeft: 8, opacity: 0, background: 'none', border: 'none', fontSize: 10, color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 600 }}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
+        <div className="esp-line-dialogue">
+          <span className="esp-line-speaker" style={{ '--speaker': sc[parsed.speaker] || 'var(--text-primary)' }}>{parsed.speaker}</span>
+          <span className="esp-line-text">"{parsed.text}"</span>
+          {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
-      {parsed.type === 'action' && <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{parsed.text}</div>}
-      {parsed.type === 'narration' && <div style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>{parsed.text}</div>}
+      {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
+      {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
     </div>
   );
 }
@@ -149,12 +148,20 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       ref={cardRef}
       data-testid={`script-beat-${beat.number}`}
       data-locked={beat.approved ? 'true' : 'false'}
-      className={dropAt ? `esp-beat esp-drop-${dropAt}` : 'esp-beat'}
+      className={`esp-beat${beat.approved ? ' is-locked' : ''}${expanded ? ' is-open' : ''}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
+      style={{ '--beat-color': beat.color }}
       onDragOver={(e) => { if (drag.current()?.kind !== 'beat') return; e.preventDefault(); setDropAt(drag.half(e)); }}
       onDragLeave={() => setDropAt(null)}
       onDrop={(e) => { const d = drag.current(); setDropAt(null); if (d?.kind !== 'beat') return; e.preventDefault(); onMoveBeat(d.from, dropIndex(d.from, index, drag.half(e) === 'after')); drag.end(); }}
-      style={{ background: 'var(--surface-card)', border: `1px solid ${beat.approved ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`, borderLeft: `4px solid ${beat.color}`, borderRadius: 12, marginBottom: 10, overflow: 'hidden', boxShadow: beat.approved ? '0 2px 8px rgba(184, 150, 46, 0.15)' : '0 1px 3px rgba(0,0,0,0.04)' }}>
-      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer', background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--surface-card)' }}>
+    >
+      <div
+        className="esp-beat-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onToggle(); } }}
+      >
         {beat.approved
           ? <span className="esp-grip is-locked" aria-hidden="true" />
           : (
@@ -168,32 +175,32 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
               onDragEnd={() => drag.end()}
             ><GripVertical size={16} aria-hidden="true" /></span>
           )}
-        <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: beat.color + '18', color: beat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{beat.number}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 16 }}>{beat.icon}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{beat.name}</span>
-            {beat.approved && <span title="Approved beats are locked: they can't be edited, and Regenerate keeps them as they are." style={{ background: 'var(--lala-gold)', color: 'var(--text-primary)', padding: '1px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>🔒 APPROVED</span>}
+        <span className="esp-beat-num">{beat.number}</span>
+        <div className="esp-beat-title">
+          <div className="esp-beat-name-row">
+            <span className="esp-beat-icon" aria-hidden="true">{beat.icon}</span>
+            <span className="esp-beat-name">{beat.name}</span>
+            {beat.approved && <span className="esp-chip-approved" title="Approved beats are locked: they can't be edited, and Regenerate keeps them as they are.">🔒 APPROVED</span>}
           </div>
-          {scene?.scene_set_name && <div onClick={(e) => { e.stopPropagation(); onOpenMap(); }} style={{ fontSize: 11, color: 'var(--primary-text)', marginTop: 2, cursor: 'pointer' }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
+          {scene?.scene_set_name && <button type="button" className="esp-beat-scene" onClick={(e) => { e.stopPropagation(); onOpenMap(); }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</button>}
         </div>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{visibleLines} line{visibleLines === 1 ? '' : 's'}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-faint)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+        <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}</span>
+        <span className="esp-beat-chev" aria-hidden="true">▼</span>
       </div>
       {expanded && (
-        <div style={{ padding: '4px 18px 16px' }}>
-          {scene?.scene_context && <div style={{ background: 'var(--primary-subtle)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: 'var(--primary-text)', lineHeight: 1.5, fontStyle: 'italic' }}>🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
-          {scene?.emotional_intent && <div style={{ background: 'var(--lala-gold-soft)', borderRadius: 8, padding: '6px 12px', marginBottom: 12, fontSize: 11, color: 'var(--lala-gold-text)' }}>✦ {scene.emotional_intent}</div>}
-          <div>{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} />)}</div>
-          <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-            {beat.approved && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Locked: unlock to edit it, move it, or let Regenerate rewrite it.</span>}
+        <div className="esp-beat-body">
+          {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
+          {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
+          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} />)}</div>
+          <div className="esp-beat-foot">
+            {beat.approved && <span className="esp-beat-locked-note">Locked: unlock to edit it, move it, or let Regenerate rewrite it.</span>}
             {!beat.approved && (
-              <span className="esp-move" style={{ marginRight: 'auto' }}>
+              <span className="esp-move">
                 <button type="button" className="esp-move-btn" aria-label="Move beat up" data-testid={`script-beat-up-${beat.number}`} disabled={index === 0} onClick={e => { e.stopPropagation(); onMoveBeat(index, index - 1); }}><ArrowUp size={14} aria-hidden="true" /> Up</button>
                 <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
-            <button type="button" data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }} style={{ background: beat.approved ? 'var(--lala-gold-soft)' : 'var(--lala-lavender)', color: beat.approved ? 'var(--lala-gold-text)' : 'var(--text-inverse)', border: beat.approved ? '1px solid var(--lala-gold)' : 'none', borderRadius: 8, padding: '7px 18px', fontSize: 12, fontWeight: 700, cursor: locking ? 'wait' : 'pointer' }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
+            <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>
         </div>
       )}
@@ -422,13 +429,12 @@ export default function EpisodeScriptTab({ episode, show }) {
   return (
     <div className="esp">
     <div className="esp-main">
-      <style>{`.script-line-hover:hover{background:var(--primary-subtle)}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
-      {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)', color: toast.type === 'error' ? 'var(--danger-text)' : 'var(--success-text)', border: `1px solid ${toast.type === 'error' ? 'var(--danger-border)' : 'var(--success-border)'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
+      {toast && <div className={`esp-toast is-${toast.type === 'error' ? 'error' : 'success'}`} role="status">{toast.msg}</div>}
 
       {unsaved && (
-        <div data-testid="script-unsaved" role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'var(--accent-subtle)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontSize: 13 }}>
-          <span style={{ flex: '1 1 240px', minWidth: 0 }}><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
-          <button type="button" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+        <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
+          <span className="esp-unsaved-banner-text"><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
         </div>
       )}
       {/* The script's card (Evoni's Episode mock): its state, and its actions. */}
@@ -449,22 +455,18 @@ export default function EpisodeScriptTab({ episode, show }) {
               if (!window.confirm(ask)) return;
               handleGenerate(approvedCount > 0);
             }} disabled={generating}>{generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
-            <button type="button" onClick={handleSave} disabled={saving} style={{ background: saved ? 'var(--success-bg)' : 'var(--lala-lavender)', color: saved ? 'var(--success-text)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '9px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
+            <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
-          <button type="button" onClick={handleGenerate} disabled={generating} style={{
-            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-lavender)',
-            color: generating ? 'var(--text-faint)' : 'var(--text-inverse)', border: 'none', borderRadius: 10, padding: '11px 22px',
-            fontSize: 15, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', flexShrink: 0,
-          }}>
+          <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
             {generating ? 'Generating the 14 beats…' : 'Generate Script'}
           </button>
         )}
       </section>
-      {genError && <div role="alert" style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
+      {genError && <div className="esp-error" role="alert">{genError}</div>}
 
-      {hasScript && developerMode && approvedCount > 0 && <p data-testid="script-raw-locked-note" style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)' }}>🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
-      {hasScript && developerMode && <textarea value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} style={{ width: '100%', padding: 16, fontFamily: 'monospace', fontSize: 13, border: '1px solid var(--lala-parchment-3)', borderRadius: 10, resize: 'vertical', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box', marginBottom: 24 }} />}
+      {hasScript && developerMode && approvedCount > 0 && <p className="esp-raw-note" data-testid="script-raw-locked-note">🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
+      {hasScript && developerMode && <textarea className="esp-raw" aria-label="Raw script" value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} />}
 
       {!developerMode && (hasScript ? (
         <div>
@@ -475,17 +477,13 @@ export default function EpisodeScriptTab({ episode, show }) {
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
-            <div style={{
-              marginTop: 16, borderRadius: 10, padding: '14px 18px',
-              background: guardResult.violations?.length > 0 ? 'var(--danger-bg)' : 'var(--success-bg)',
-              border: `1px solid ${guardResult.violations?.length > 0 ? 'var(--danger-border)' : 'var(--success-border)'}`,
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: guardResult.violations?.length > 0 ? 'var(--danger-text)' : 'var(--success-text)', marginBottom: 6 }}>
+            <div className={`esp-guard ${guardResult.violations?.length > 0 ? 'is-bad' : 'is-ok'}`}>
+              <div className="esp-guard-title">
                 {guardResult.violations?.length > 0 ? `🛡️ ${guardResult.violations.length} franchise violation(s)` : '🛡️ Passed franchise guard'}
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 8 }}>({guardResult.rules_checked || '?'} rules checked)</span>
+                <span className="esp-guard-count">({guardResult.rules_checked || '?'} rules checked)</span>
               </div>
               {guardResult.violations?.map((v, i) => (
-                <div key={i} style={{ padding: '6px 10px', background: 'var(--surface-card)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: 'var(--danger-text)', border: '1px solid var(--danger-border)' }}>
+                <div key={i} className="esp-guard-item">
                   <strong>{v.rule}:</strong> {v.explanation}
                 </div>
               ))}
@@ -493,9 +491,9 @@ export default function EpisodeScriptTab({ episode, show }) {
           )}
 
           {allApproved && (
-            <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
-              <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--success-text)' }}>✦ All beats approved — script is ready</p>
-              <button onClick={handleSave} style={{ background: 'var(--lala-lavender)', color: 'var(--text-inverse)', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💾 Save Final Script</button>
+            <div className="esp-done">
+              <p className="esp-done-text">✦ All beats approved — script is ready</p>
+              <button type="button" className="esp-btn-primary" onClick={handleSave}>💾 Save Final Script</button>
             </div>
           )}
         </div>
@@ -534,13 +532,13 @@ export default function EpisodeScriptTab({ episode, show }) {
 
       {/* DREAM Map Modal */}
       {showMap && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMap(false)}>
-          <div style={{ width: '90vw', maxWidth: 1200, maxHeight: '85vh', background: 'var(--gray-900)', borderRadius: 16, overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.4)' }}>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, color: 'var(--lala-gold)', letterSpacing: 2 }}>DREAM MAP</span>
-              <button onClick={() => setShowMap(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: 'var(--surface-card)', fontSize: 16, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>x</button>
+        <div className="esp-map-backdrop" onClick={() => setShowMap(false)}>
+          <div className="esp-map" role="dialog" aria-label="DREAM Map" onClick={e => e.stopPropagation()}>
+            <div className="esp-map-bar">
+              <span className="esp-map-title">DREAM MAP</span>
+              <button type="button" className="esp-map-close" aria-label="Close map" onClick={() => setShowMap(false)}>×</button>
             </div>
-            <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'var(--lala-parchment-3)' }}>Loading map...</div>}>
+            <Suspense fallback={<div className="esp-map-loading">Loading map...</div>}>
               <DreamMap locations={mapLocations} mapImageUrl={mapImageUrl} />
             </Suspense>
           </div>
