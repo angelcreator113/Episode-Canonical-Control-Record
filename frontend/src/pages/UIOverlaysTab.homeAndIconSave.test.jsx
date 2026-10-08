@@ -121,7 +121,7 @@ describe('UIOverlaysTab — ICON placements are saved like TAP zones (Task #2016
   test('switching screens saves them', async () => {
     await renderPage();
     await placeCallInIconMode();
-    fireEvent.click(within(document.querySelector('.zones-thumbnail-strip')).getByText('calls list'));
+    fireEvent.click(within(document.querySelector('.connect-screens')).getByText('calls list'));
     await waitFor(() => expect(linkWrites()).toHaveLength(1));
     expectCallSavedOnHome();
   });

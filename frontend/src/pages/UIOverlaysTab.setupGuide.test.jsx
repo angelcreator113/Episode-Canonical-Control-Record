@@ -74,7 +74,7 @@ const openGuide = () => {
 };
 const continueSetup = () => fireEvent.click(within(guide()).getByRole('button', { name: /Continue setup/ }));
 const stage = (name) => within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name });
-const connectScreen = () => document.querySelector('.zones-thumbnail.active .zones-thumbnail__label')?.textContent;
+const connectScreen = () => document.querySelector('.connect-screens__item.is-active .connect-screens__name')?.textContent;
 
 describe('UIOverlaysTab — setup guide (Task #2053)', () => {
   test('sits between the header bar and the phone, with counts from the page', async () => {
