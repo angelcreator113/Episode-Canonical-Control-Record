@@ -15,7 +15,6 @@ Asset	s3_url_no_bg	missing-column
 AssetLabel	-	no-table
 AudioClip	-	no-table
 Beat	-	no-table
-BrainDocument	-	no-table
 CharacterClip	-	no-table
 CharacterProfile	deleted_at	paranoid-no-deleted_at
 CompositionAsset	-	no-table
