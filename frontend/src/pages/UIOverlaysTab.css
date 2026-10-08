@@ -29,79 +29,91 @@
   color: #991b1b;
 }
 
-/* ── Header card (Evoni's mock, 2026-10-07): the title, its line and three
-   tiles, the tools, and the setup guide inside one soft lavender card. ── */
-.ph-hero {
+/* ── Header bar (Evoni's mockup, 2026-10-08): the name and its chips on the
+   left, the stages on the right, the tools under them; one soft lavender
+   bar. At 375px the parts stack. ── */
+.ph-bar {
   box-sizing: border-box;
   max-width: 100%;
-  margin-bottom: 20px;
-  padding: 20px 24px;
+  margin-bottom: 14px;
+  padding: 14px 20px;
   background: linear-gradient(120deg, var(--surface-card, #fff) 0%, var(--lala-lavender-soft) 60%, var(--accent-subtle) 100%);
   border: 1px solid var(--lala-lavender-line);
   border-radius: 18px;
 }
 
-.ph-hero-main {
+.ph-bar__row {
   display: flex;
-  align-items: center;
-  gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
   min-width: 0;
 }
 
-.ph-hero-title {
+.ph-bar__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
+.ph-bar__title {
   margin: 0;
   font-family: var(--font-prose);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.ph-hero-line {
-  margin: 4px 0 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.ph-hero-tiles {
-  display: flex;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ph-hero-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 64px;
-  padding: 8px 14px;
-  background: var(--surface-card, #fff);
-  border-radius: 12px;
-}
-
-.ph-hero-tile-value {
-  font-family: var(--font-prose);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.15;
-  color: var(--lala-lavender-text);
-}
-
-.ph-hero-tile-label {
-  font-size: 11px;
-  color: var(--text-secondary);
   white-space: nowrap;
 }
 
-.ph-hero-tools {
-  margin-bottom: 14px;
+.ph-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
 }
 
-.ph-hero-tools .overlays-header-actions {
+.ph-bar__chip {
+  min-height: 30px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--lala-lavender-text);
+  background: var(--surface-card, #fff);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ph-bar__chip:hover { border-color: var(--lala-lavender-line); }
+.ph-bar__chip.is-good { color: var(--lala-teal-dark); }
+.ph-bar__chip.is-warn { color: var(--lala-gold-text); }
+.ph-bar__chip.is-danger { color: var(--lala-danger); }
+
+.ph-bar .phone-hub-section-tabs-wrap--stages { margin: 0; min-width: 0; max-width: 100%; }
+
+.ph-bar__tools {
+  margin: 8px 0 0;
+  padding: 0;
+}
+.ph-bar__tools .toolbar-menu > button,
+.ph-bar__tools .overlays-header-btn { min-height: 32px; }
+
+.ph-bar__tools .overlays-header-actions {
   width: auto;
   margin-left: auto;
+}
+
+@media (max-width: 560px) {
+  .ph-bar { padding: 12px 14px; }
+  .ph-bar__title { font-size: 22px; }
+  .ph-bar__row { flex-direction: column; align-items: stretch; }
 }
 
 .overlays-header {

@@ -20,14 +20,16 @@ vi.mock('../services/api', () => ({
 }));
 
 const KEYS = ['screens', 'icons', 'zones', 'content'];
+// The stages render once, in the header bar; the Build toggle copy
+// (part="build", Evoni's mockup 2026-10-08) is left out of the stub.
 vi.mock('../components/PhoneHubSectionTabs', () => ({
-  default: ({ activeTab, onChangeTab }) => (
+  default: ({ activeTab, onChangeTab, part }) => (part === 'build' ? null : (
     <div data-testid="tab-row" data-active={activeTab}>
       {['screens', 'icons', 'zones', 'content'].map((k) => (
         <button key={k} type="button" onClick={() => onChangeTab(k)}>{`tab-${k}`}</button>
       ))}
     </div>
-  ),
+  )),
 }));
 
 let hubProps = null;
