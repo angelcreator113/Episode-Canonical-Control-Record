@@ -27,6 +27,8 @@ const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenes
 const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
 const EpisodeOverlaysTab = lazy(() => import('../components/Episodes/EpisodeOverlaysTab'));
 const EpisodeResultsSummary = lazy(() => import('../components/Episodes/EpisodeResultsSummary'));
+const EpisodeResultsEvaluation = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsEvaluation })));
+const EpisodeResultsStory = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsStory })));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
@@ -898,57 +900,9 @@ const EpisodeDetail = () => {
           <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab} />
         )}
 
-        {/* Story Tab — links to Stories page */}
+        {/* Results → Story: the episode as prose (EpisodeResultsPages). */}
         {tabKey === 'results.story' && (
-          <div style={{ maxWidth: 800, margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Episode Stories</h2>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={async (e) => {
-                  const btn = e.currentTarget; btn.disabled = true; btn.textContent = '⏳ Generating...';
-                  try {
-                    const sid = episode?.show_id || episode?.showId;
-                    await api.post(`/api/v1/world/${sid}/episodes/${episode.id}/generate-story`, { format: 'short_story' });
-                    btn.textContent = '✓ Generated — open Stories'; setTimeout(() => { btn.textContent = '✦ Generate Short Story'; btn.disabled = false; }, 2000);
-                  } catch { btn.textContent = 'Failed'; btn.disabled = false; }
-                }} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                  ✦ Generate Short Story
-                </button>
-                <button onClick={() => window.location.href = '/stories'} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                  ✍️ Open Stories Library
-                </button>
-              </div>
-            </div>
-            <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>✍️</div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 16, color: 'var(--text-primary)' }}>Generate Stories</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto 16px' }}>
-                Transform this episode into prose — short story, social fiction, snippet, or recap.
-                Each format tells the same story differently.
-              </p>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                {[
-                  { format: 'short_story', icon: '📖', label: 'Short Story', desc: '2-3K words' },
-                  { format: 'social_fiction', icon: '📱', label: 'Social Fiction', desc: 'Posts & DMs' },
-                  { format: 'snippet', icon: '✂️', label: 'Snippet', desc: '400-600 words' },
-                  { format: 'recap', icon: '🔄', label: 'Recap', desc: 'Casual retelling' },
-                ].map(f => (
-                  <button key={f.format} onClick={async (e) => {
-                    const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent; btn.textContent = '⏳...';
-                    try {
-                      const sid = episode?.show_id || episode?.showId;
-                      await api.post(`/api/v1/world/${sid}/episodes/${episode.id}/generate-story`, { format: f.format });
-                      btn.textContent = '✓'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
-                    } catch { btn.textContent = '✗'; btn.disabled = false; }
-                  }} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-bg)', cursor: 'pointer', textAlign: 'center', minWidth: 120 }}>
-                    <div style={{ fontSize: 20, marginBottom: 4 }}>{f.icon}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>{f.label}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{f.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <EpisodeResultsStory episode={episode} />
         )}
 
         {/* Distribution Tab */}
@@ -989,138 +943,10 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Evaluation Tab */}
-        {tabKey === 'results.evaluation' && (() => {
-          const evalJson = episode.evaluation_json
-            ? (typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json)
-            : null;
-
-          const TIER_STYLES = {
-            slay: { color: 'var(--lala-gold-text)', bg: 'var(--lala-gold-soft)', emoji: '👑', label: 'SLAY' },
-            pass: { color: 'var(--success-text)', bg: 'var(--success-bg)', emoji: '✨', label: 'PASS' },
-            safe: { color: 'var(--warning-text)', bg: 'var(--warning-bg)', emoji: '😐', label: 'SAFE' },
-            fail: { color: 'var(--danger-text)', bg: 'var(--danger-bg)', emoji: '💔', label: 'FAIL' },
-          };
-
-          if (!evalJson) {
-            return (
-              <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center', padding: 40 }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>👑</div>
-                <h3 style={{ margin: '0 0 8px', fontSize: 18, color: 'var(--text-primary)' }}>Not Evaluated Yet</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-                  Complete this episode from the event panel to evaluate it.
-                  Evaluation scores outfit match, event performance, social tasks, and financials.
-                </p>
-              </div>
-            );
-          }
-
-          const tier = TIER_STYLES[evalJson.tier_final] || TIER_STYLES.safe;
-          const breakdown = evalJson.breakdown || {};
-          const deltas = evalJson.stat_deltas || {};
-          const narrative = evalJson.narrative_lines || {};
-          const socialBonuses = evalJson.social_task_bonuses?.detail || {};
-          const wardrobeBonuses = evalJson.wardrobe_bonuses?.detail || {};
-          const financials = evalJson.financial_summary || {};
-
-          return (
-            <div style={{ maxWidth: 800, margin: '0 auto' }}>
-              {/* Tier Banner */}
-              <div style={{ background: tier.bg, border: `2px solid ${tier.color}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16, textAlign: 'center' }}>
-                <div style={{ fontSize: 48 }}>{tier.emoji}</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: tier.color }}>{tier.label}</div>
-                <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--text-primary)', margin: '4px 0' }}>{evalJson.score}/100</div>
-                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '8px 0 0', fontStyle: 'italic' }}>
-                  {narrative.short || narrative.dramatic || ''}
-                </p>
-              </div>
-
-              {/* Score Breakdown */}
-              <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '16px 20px', marginBottom: 12 }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Score Breakdown</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {Object.entries(breakdown).map(([key, entry]) => (
-                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{entry.detail}</span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: entry.value >= 0 ? 'var(--success-text)' : 'var(--danger-text)', minWidth: 40, textAlign: 'right' }}>
-                          {entry.value >= 0 ? '+' : ''}{entry.value}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: '1px solid var(--lala-parchment-2)', paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Total</span>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: tier.color }}>{evalJson.score}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stat Deltas */}
-              <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '16px 20px', marginBottom: 12 }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Character Stat Changes</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-                  {[
-                    { key: 'coins', label: 'Coins', icon: '🪙' },
-                    { key: 'reputation', label: 'Reputation', icon: '⭐' },
-                    { key: 'brand_trust', label: 'Brand Trust', icon: '🤝' },
-                    { key: 'influence', label: 'Influence', icon: '📣' },
-                    { key: 'stress', label: 'Stress', icon: '😰' },
-                  ].map(stat => {
-                    const val = deltas[stat.key] || 0;
-                    const isGood = stat.key === 'stress' ? val < 0 : val > 0;
-                    const isBad = stat.key === 'stress' ? val > 0 : val < 0;
-                    return (
-                      <div key={stat.key} style={{ textAlign: 'center', padding: '8px 0', borderRadius: 8, background: isGood ? 'var(--success-bg)' : isBad ? 'var(--danger-bg)' : 'var(--lala-parchment-2)' }}>
-                        <div style={{ fontSize: 16 }}>{stat.icon}</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: isGood ? 'var(--success-text)' : isBad ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
-                          {val > 0 ? '+' : ''}{val}
-                        </div>
-                        <div style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{stat.label}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Social + Wardrobe + Financial Context */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                {socialBonuses.total > 0 && (
-                  <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>📱 Social Tasks</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary-text)' }}>{socialBonuses.completed}/{socialBonuses.total}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                      {socialBonuses.completion_rate}% complete
-                      {socialBonuses.all_required_done && <span style={{ color: 'var(--success-text)' }}> · All required done</span>}
-                    </div>
-                  </div>
-                )}
-                {wardrobeBonuses.brands?.length > 0 && (
-                  <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>👗 Outfit</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      Brands: {wardrobeBonuses.brands.join(', ')}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-                      Tier gap: {wardrobeBonuses.tier_gap > 0 ? 'overdressed' : wardrobeBonuses.tier_gap < 0 ? 'underdressed' : 'perfect match'}
-                    </div>
-                  </div>
-                )}
-                {financials.total_income > 0 || financials.total_expenses > 0 ? (
-                  <div style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>💰 Financials</div>
-                    <div style={{ fontSize: 11, color: 'var(--success-text)' }}>+{financials.total_income || 0} income</div>
-                    <div style={{ fontSize: 11, color: 'var(--danger-text)' }}>-{financials.total_expenses || 0} expenses</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: (financials.total_income || 0) - (financials.total_expenses || 0) >= 0 ? 'var(--success-text)' : 'var(--danger-text)', marginTop: 2 }}>
-                      Net: {(financials.total_income || 0) - (financials.total_expenses || 0) >= 0 ? '+' : ''}{(financials.total_income || 0) - (financials.total_expenses || 0)}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })()}
+        {/* Results → Evaluation: the score and what it changed (EpisodeResultsPages). */}
+        {tabKey === 'results.evaluation' && (
+          <EpisodeResultsEvaluation episode={episode} />
+        )}
         </Suspense>
       </div>
 

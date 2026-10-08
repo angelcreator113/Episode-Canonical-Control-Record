@@ -44,7 +44,50 @@
 .ers-share-box { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; }
 .ers-share-box.is-pink { border-color: var(--accent-subtle); }
 
+/* Evaluation and Story (the Results redesign, 2026-10-08), in the Summary's card language. */
+.ers-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.ers-grid.is-three { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.ers-verdict { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; padding: 20px 24px; border: 1px solid var(--tier-color); border-radius: 14px; background: var(--tier-bg); }
+.ers-verdict-emoji { font-size: 44px; line-height: 1; }
+.ers-verdict-text { min-width: 0; }
+.ers-verdict-tier { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tier-color); }
+.ers-verdict-score { font-family: var(--font-prose); font-size: 40px; font-weight: 700; line-height: 1.1; color: var(--lala-ink); }
+.ers-verdict-score span { font-size: 20px; color: var(--lala-ink-muted); }
+.ers-verdict-line { margin: 6px 0 0; font-family: var(--font-prose); font-size: 16px; font-style: italic; color: var(--lala-ink); }
+.ers-row-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ers-cap { text-transform: capitalize; }
+.ers-rows strong.is-up { color: var(--success-text); }
+.ers-rows strong.is-down { color: var(--danger-text); }
+.ers-deltas { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); gap: 8px; }
+.ers-delta { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 10px; background: var(--lala-parchment-2); }
+.ers-delta.is-good { background: var(--success-bg); }
+.ers-delta.is-bad { background: var(--danger-bg); }
+.ers-delta-icon { font-size: 16px; }
+.ers-delta-value { font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--lala-ink-muted); }
+.ers-delta.is-good .ers-delta-value { color: var(--success-text); }
+.ers-delta.is-bad .ers-delta-value { color: var(--danger-text); }
+.ers-delta-label { font-size: 11px; font-weight: 600; color: var(--lala-ink-muted); text-align: center; }
+.ers-big { font-family: var(--font-prose); font-size: 28px; font-weight: 700; color: var(--lala-lavender-text); }
+.ers-text { margin: 0 0 6px; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.ers-good { color: var(--success-text); }
+.ers-error { margin: 10px 0 0; font-size: 13px; color: var(--danger-text); }
+.ers-note svg { display: inline-block; vertical-align: -2px; margin-right: 4px; color: var(--lala-lavender-text); }
+.ers-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 24px; border: 1px dashed var(--lala-gold-line); border-radius: 14px; background: var(--surface-card); text-align: center; }
+.ers-empty-icon { color: var(--lala-lavender-light); }
+.ers .ers-empty-title { margin: 0; font-family: var(--font-prose); font-size: 20px !important; font-weight: 600; color: var(--lala-ink); }
+.ers-formats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 14px 0 12px; }
+.ers-format { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); color: var(--lala-lavender-text); text-align: left; cursor: pointer; }
+.ers-format:hover:not(:disabled) { background: var(--lala-lavender-soft); }
+.ers-format:disabled { cursor: wait; opacity: 0.7; }
+.ers-format.is-done { border-color: var(--success-border); }
+.ers-format.is-failed { border-color: var(--danger-border); }
+.ers-format-label { font-size: 15px; font-weight: 700; color: var(--lala-ink); }
+.ers-format-desc { font-size: 13px; color: var(--lala-ink-muted); }
+.ers-format.is-done .ers-format-desc { color: var(--success-text); }
+.ers-format.is-failed .ers-format-desc { color: var(--danger-text); }
+
 @media (max-width: 760px) {
+  .ers-verdict { flex-direction: column; text-align: center; }
   .ers-grid, .ers-share-row { grid-template-columns: minmax(0, 1fr); }
   .ers-teaser { flex-direction: column; align-items: stretch; }
   .ers-btn { margin-left: 0; }

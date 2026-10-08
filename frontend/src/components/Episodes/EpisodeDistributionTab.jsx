@@ -79,6 +79,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
   const [distributionData, setDistributionData] = useState({});
   const [selectedPlatform, setSelectedPlatform] = useState('youtube');
   const [hasChanges, setHasChanges] = useState(false);
+  const [generating, setGenerating] = useState(false);
   
   useEffect(() => {
     loadDistributionData();
@@ -194,19 +195,19 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
       {/* Header */}
       <div className="distribution-header">
         <div className="header-left">
-          <h2>🚀 Distribution</h2>
-          <p className="header-subtitle">Per-platform publishing metadata</p>
+          <h2>Distribution</h2>
+          <p className="header-subtitle">What each platform shows: titles, descriptions, tags and schedule</p>
         </div>
         <div className="header-actions">
           {hasChanges && (
             <span className="unsaved-indicator">● Unsaved changes</span>
           )}
           <button
+            type="button"
             className="btn-generate"
-            onClick={async (e) => {
-              const btn = e.currentTarget;
-              btn.disabled = true;
-              btn.textContent = '⏳ Generating...';
+            disabled={generating}
+            onClick={async () => {
+              setGenerating(true);
               try {
                 const showId = episode?.show_id || episode?.showId;
                 const data = await generateEpisodeDistributionApi(showId, episode.id, {});
@@ -228,13 +229,15 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
                 } else {
                   alert(data.error || 'Generation failed');
                 }
-              } catch (err) { alert('Failed: ' + err.message); }
-              btn.disabled = false;
-              btn.textContent = '✨ Generate from Episode';
+              } catch (err) {
+                console.error('[Distribution] generate failed:', err);
+                alert('Failed: ' + err.message);
+              } finally {
+                setGenerating(false);
+              }
             }}
-            style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
           >
-            ✨ Generate from Episode
+            {generating ? '⏳ Generating…' : '✨ Generate from Episode'}
           </button>
           <button
             className="btn-save"
@@ -257,9 +260,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
               key={p.id}
               className={`platform-card ${selectedPlatform === p.id ? 'active' : ''} ${enabled ? 'enabled' : ''}`}
               onClick={() => setSelectedPlatform(p.id)}
-              style={{
-                borderColor: selectedPlatform === p.id ? p.color : 'var(--lala-parchment-3)'
-              }}
+              aria-pressed={selectedPlatform === p.id}
             >
               <div className="platform-icon" style={{ color: p.color }}>
                 {p.icon}

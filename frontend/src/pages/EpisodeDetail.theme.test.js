@@ -70,10 +70,12 @@ describe('Episode shell theme', () => {
   });
 
   test('the evaluation verdicts read text tokens on their surfaces', () => {
-    expect(jsx).toMatch(/slay: \{ color: 'var\(--lala-gold-text\)', bg: 'var\(--lala-gold-soft\)'/);
-    expect(jsx).toMatch(/pass: \{ color: 'var\(--success-text\)', bg: 'var\(--success-bg\)'/);
-    expect(jsx).toMatch(/safe: \{ color: 'var\(--warning-text\)', bg: 'var\(--warning-bg\)'/);
-    expect(jsx).toMatch(/fail: \{ color: 'var\(--danger-text\)', bg: 'var\(--danger-bg\)'/);
+    // Results → Evaluation moved to EpisodeResultsPages (the Results redesign, 2026-10-08).
+    const results = readFileSync(resolve(__dirname, '../components/Episodes/EpisodeResultsPages.jsx'), 'utf8');
+    expect(results).toMatch(/slay: \{ color: 'var\(--lala-gold-text\)', bg: 'var\(--lala-gold-soft\)'/);
+    expect(results).toMatch(/pass: \{ color: 'var\(--success-text\)', bg: 'var\(--success-bg\)'/);
+    expect(results).toMatch(/safe: \{ color: 'var\(--warning-text\)', bg: 'var\(--warning-bg\)'/);
+    expect(results).toMatch(/fail: \{ color: 'var\(--danger-text\)', bg: 'var\(--danger-bg\)'/);
   });
 
   test('every text pair the shell draws holds 4.5:1 or better', () => {
