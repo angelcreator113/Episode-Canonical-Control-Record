@@ -2252,10 +2252,11 @@ async function loadFranchiseKnowledge(_characterKey) {
     // The first 15 active entries in the shared order, severity then id
     // (services/brainRules; wiring map fix-list item 25): it took the
     // newest within a severity, and a seeder's rows share one created_at,
-    // so ties fell as Postgres returned them. WriteMode has no show, so
-    // every show's.
+    // so ties fell as Postgres returned them. WriteMode is the book's, so
+    // the franchise tier only, never a show's own canon (Evoni's ruling,
+    // 2026-10-08).
     const { selectRules } = require('../../services/brainRules');
-    const entries = await selectRules(FranchiseKnowledge, { limit: 15 });
+    const entries = await selectRules(FranchiseKnowledge, { franchiseOnly: true, limit: 15 });
     if (!entries.length) return null;
 
     const lines = entries.map(e => {
@@ -5572,3 +5573,4 @@ module.exports.loadWriteModeContext = loadWriteModeContext;
 module.exports.buildWriteModeContextBlock = buildWriteModeContextBlock;
 module.exports.buildArcGenerationContext = buildArcGenerationContext;
 module.exports.loadCharacterRelationships = loadCharacterRelationships;
+module.exports.loadFranchiseKnowledge = loadFranchiseKnowledge;

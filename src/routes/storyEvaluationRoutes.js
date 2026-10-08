@@ -610,11 +610,16 @@ async function loadFranchiseConstraints(characterKeys) {
   try {
     // The first 20 critical and always-inject entries, critical first, in
     // the shared order (services/brainRules; wiring map fix-list item 25):
-    // within a severity it took whichever 20 Postgres returned. A story
-    // has no show, so every show's.
+    // within a severity it took whichever 20 Postgres returned. A story is
+    // the book's, so the franchise tier only, never a show's own canon
+    // (Evoni's ruling, 2026-10-08). always_inject is read so the filter
+    // below keeps an always-inject rule: it was never selected, so the
+    // filter dropped every rule whose applies_to names systems
+    // ('story_engine'), as the seeded laws' do, not characters.
     const rules = await selectRules(db.FranchiseKnowledge, {
+      franchiseOnly: true,
       where: CRITICAL_OR_ALWAYS_INJECT,
-      attributes: [...RULE_ATTRIBUTES, 'applies_to'],
+      attributes: [...RULE_ATTRIBUTES, 'applies_to', 'always_inject'],
       limit: 20,
     });
     if (!rules.length) return '';
@@ -1763,3 +1768,4 @@ Only include characters and dimensions where the scene reveals something new.`,
 });
 
 module.exports = router;
+module.exports.loadFranchiseConstraints = loadFranchiseConstraints;

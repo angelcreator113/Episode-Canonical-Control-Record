@@ -49,6 +49,18 @@ describe('selectRules', () => {
     expect(scopedWhere(CRITICAL_OR_ALWAYS_INJECT, null)).toEqual({ status: 'active', [Op.or]: CRITICAL_OR_ALWAYS_INJECT[Op.or] });
   });
 
+  // The book's readers (Evoni's ruling, 2026-10-08): the franchise tier
+  // alone, never a show's own canon, even if a show were given.
+  test('franchiseOnly takes the franchise tier alone, and keeps the reader\'s own filter', async () => {
+    const model = makeModel([]);
+    await selectRules(model, { franchiseOnly: true, showId: 'show-a', where: CRITICAL_OR_ALWAYS_INJECT });
+    const { where } = model.findAll.mock.calls[0][0];
+    expect(where).toMatchObject({ scope: 'franchise', status: 'active' });
+    expect(where[Op.or]).toEqual([{ severity: 'critical' }, { always_inject: true }]);
+    expect(where[Op.and]).toBeUndefined();
+    expect(Object.keys(CRITICAL_OR_ALWAYS_INJECT)).toEqual([]);
+  });
+
   test('orders severity then id whatever order the rows arrive in, and the database is asked for the same order', async () => {
     const rows = [row(5, 'context'), row(3, 'critical'), row(9, 'important'), row(1, 'important'), row(7, 'critical')];
     const a = await selectRules(makeModel(rows));
