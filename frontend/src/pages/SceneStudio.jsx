@@ -3,7 +3,7 @@
  *
  * Extracted from WorldStudio.jsx to run as its own route at /scene-studio.
  * Features:
- *  - Tension scanner (scans all active relationships for scene triggers)
+ *  - Tension scanner (the active show's high-tension pairs, from /world/tension-check)
  *  - Scene generator with type/location picker
  *  - Full scene reader with 3-beat display (approach/scene/aftermath)
  *  - Approve → write to StoryTeller
@@ -15,6 +15,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import apiClient from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -26,7 +27,10 @@ const API = '/api/v1';
 export const listCharactersApi = () => apiClient.get(`${API}/world/characters`);
 export const listScenesApi = (status) =>
   apiClient.get(status && status !== 'all' ? `${API}/world/scenes?status=${status}` : `${API}/world/scenes`);
-export const getTensionCheckApi = () => apiClient.get(`${API}/world/tension-check`);
+// With a show, that show's pairs (routes/worldStudio.js inShow; Evoni's ruling, 2026-10-08).
+export const getTensionCheckApi = (showId) => apiClient.get(showId
+  ? `${API}/world/tension-check?show_id=${encodeURIComponent(showId)}`
+  : `${API}/world/tension-check`);
 export const generateSceneApi = (payload) =>
   apiClient.post(`${API}/world/scenes/generate`, payload);
 export const approveSceneApi = (sceneId) =>
@@ -49,6 +53,8 @@ function SectionLabel({ children, color = '' }) {
 export default function SceneStudio() {
   const navigate = useNavigate();
   const location = useLocation();
+  // The scan is the active show's (Evoni's ruling, 2026-10-08).
+  const { showId, loaded: showsLoaded } = useActiveShow();
 
   /* ── Characters (for dropdowns) ─────────────────────────────────── */
   const [characters, setCharacters] = useState([]);
@@ -82,14 +88,20 @@ export default function SceneStudio() {
     } catch { setScenes([]); }
   }, [filterStatus]);
 
+  // tension-check's pairs: two characters, each with their world id, the
+  // generator's (it answered only single characters, so the scan found none).
   const loadTensionPairs = useCallback(async () => {
     try {
-      const r = await getTensionCheckApi();
+      const r = await getTensionCheckApi(showId);
       const pairs = r.data?.pairs || [];
       setTensionPairs(pairs);
-      flash(`Found ${pairs.length} tension triggers`);
-    } catch { setTensionPairs([]); }
-  }, [flash]);
+      flash(`Found ${pairs.length} tension pair${pairs.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      console.error('[scene-studio] tension scan failed:', e);
+      setTensionPairs([]);
+      flash(e.response?.data?.error || 'The tension scan failed', 'error');
+    }
+  }, [flash, showId]);
 
   useEffect(() => {
     loadCharacters();
@@ -214,14 +226,14 @@ export default function SceneStudio() {
 
           {/* Tension scanner */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <button className="ws4-btn ws4-btn-outline" onClick={loadTensionPairs}>Scan Tension</button>
+            <button className="ws4-btn ws4-btn-outline" onClick={loadTensionPairs} disabled={!showsLoaded}>Scan Tension</button>
             <span style={{ fontSize: 12, color: '#999' }}>{tensionPairs.length} pair(s) found</span>
           </div>
 
           {tensionPairs.length > 0 && (
             <div className="ws4-tension-grid" style={{ marginBottom: 20 }}>
-              {tensionPairs.map((p, i) => (
-                <div key={i} className="ws4-tension-card">
+              {tensionPairs.map((p) => (
+                <div key={p.relationship_id} className="ws4-tension-card">
                   <div className="ws4-tension-names">{p.character_a_name} ↔ {p.character_b_name}</div>
                   <div className="ws4-tension-badges">
                     <Badge variant="intimate">{p.tension_state}</Badge>

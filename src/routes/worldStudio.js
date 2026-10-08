@@ -16,7 +16,7 @@
  *   GET    /world/batches                — list generation batches
  *
  * Intimate Scene routes:
- *   GET    /world/tension-check          — check all relationships for scene triggers (?show_id=)
+ *   GET    /world/tension-check          — scene triggers and Scene Studio's pairs (?show_id=)
  *   POST   /world/scenes/generate        — generate intimate scene for character pair
  *   GET    /world/scenes                 — list scenes (?character_id= ?status=)
  *   GET    /world/scenes/:sceneId        — single scene detail
@@ -1994,7 +1994,8 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
     const triggered = await Q(req, `
       SELECT wc.*,
              cr.tension_state, cr.situation, cr.relationship_type, cr.connection_mode,
-             cr.id AS relationship_id
+             cr.id AS relationship_id,
+             CASE WHEN cr.character_id_a = rc.id THEN 'a' ELSE 'b' END AS side
       FROM world_characters wc
       JOIN registry_characters rc ON rc.world_character_id = wc.id AND rc.deleted_at IS NULL
       LEFT JOIN character_relationships cr
@@ -2028,15 +2029,44 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
     `, bind).catch(e => { console.warn('[world-studio] one-night candidates query error:', e?.message); return []; });
 
     res.json({
+      pairs: tensionPairs(triggered),
       triggered,
       one_night_candidates: oneNightCandidates,
       trigger_count: triggered.length + oneNightCandidates.length,
     });
   } catch (err) {
     console.error('tension-check error:', err);
-    res.json({ triggered: [], one_night_candidates: [], trigger_count: 0 });
+    res.json({ pairs: [], triggered: [], one_night_candidates: [], trigger_count: 0 });
   }
 });
+
+/**
+ * Scene Studio's pairs, from tension-check's triggered rows: a relationship
+ * both of whose characters were triggered (active and intimate-eligible),
+ * once, in the relationship's order and the rows' (volatile first). The ids
+ * are the world characters' ids, which the scene generator takes. Scene
+ * Studio read `pairs`, which tension-check never answered, so its scan
+ * always found none.
+ */
+function tensionPairs(triggered) {
+  const byRelationship = new Map();
+  for (const row of triggered) {
+    const sides = byRelationship.get(row.relationship_id) || {};
+    sides[row.side] = row;
+    byRelationship.set(row.relationship_id, sides);
+  }
+  const pairs = [];
+  for (const [relationshipId, { a, b }] of byRelationship) {
+    if (!a || !b || a.id === b.id) continue;
+    pairs.push({
+      relationship_id: relationshipId,
+      character_a_id: a.id, character_a_name: a.name,
+      character_b_id: b.id, character_b_name: b.name,
+      tension_state: a.tension_state, relationship_type: a.relationship_type, situation: a.situation || null,
+    });
+  }
+  return pairs;
+}
 
 // POST /world/scenes/generate — generate intimate scene
 router.post('/world/scenes/generate', requireAuth, async (req, res) => {
