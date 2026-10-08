@@ -172,6 +172,9 @@ const TITLE = 'Readers test';
     expect(after[titles.archived]).toBe(before[titles.archived]);
   });
 
+  // The tier guard reads the franchise tier only (Evoni's ruling,
+  // 2026-10-08, the item 25 follow-up), so a show's entries are not
+  // checked and not counted.
   it('the tier guard still counts each law it checked, in one statement', async () => {
     mockCreate.mockResolvedValue(reply('{"violations": [], "score": 100, "summary": "Clean."}'));
     const before = await counts();
@@ -180,10 +183,8 @@ const TITLE = 'Readers test';
     expect(res.status).toBe(200);
     expect(res.body.score).toBe(100);
     const after = await counts();
-    for (const t of [titles.franchise, titles.showA, titles.showB, titles.unassigned, titles.card, titles.alwaysImportant]) {
-      expect(after[t]).toBe(before[t] + 1);
-    }
-    expect(after[titles.archived]).toBe(before[titles.archived]);
+    for (const t of [titles.franchise, titles.card, titles.alwaysImportant]) expect(after[t]).toBe(before[t] + 1);
+    for (const t of [titles.showA, titles.showB, titles.unassigned, titles.archived]) expect(after[t]).toBe(before[t]);
   });
 
   it('the database orders severity as the Bible ranks it, so a limit cuts the same set', async () => {
