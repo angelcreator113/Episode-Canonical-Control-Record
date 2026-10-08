@@ -151,6 +151,14 @@ module.exports = (sequelize) => {
         field: 'script_content',
         comment: 'JSON stringified script data with dialogue blocks',
       },
+      // Locked script beats (utils/scriptBeatLocks.js): the beat numbers
+      // approved on the Script tab. Server-owned: only PUT
+      // /episodes/:id/script-locks writes it.
+      script_locked_beats: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Locked beat numbers, e.g. [2, 5]; whole-script writers keep these beats word for word',
+      },
       evaluation_json: {
         type: DataTypes.JSONB,
         allowNull: true,
