@@ -53,6 +53,14 @@ describe('mergeInvitationIntoOverlayStatus', () => {
     expect(out[1]).toMatchObject({ id: 'InviteLetterOverlay', category: 'phone', generated: true, asset_id: 'inv-2', lifecycle: 'per_episode', is_episode_invitation: true });
   });
 
+  // Phone audit (Evoni, 2026-10-07): the invitation replaced the screen's
+  // zones with nothing, so its Back zone vanished in the episode.
+  test("keeps the show invitation screen's zones, content areas and fit", () => {
+    const zoned = { ...types[1], screen_links: [{ id: 'z-back', target: 'mail_panel' }], content_zones: [{ id: 'c1' }], image_fit: { scale: 1.1 } };
+    const out = mergeInvitationIntoOverlayStatus([types[0], zoned], invitation);
+    expect(out[1]).toMatchObject({ url: 'https://x/inv2.png', screen_links: zoned.screen_links, content_zones: zoned.content_zones, image_fit: zoned.image_fit });
+  });
+
   test('no invitation leaves the list as it is', () => {
     expect(mergeInvitationIntoOverlayStatus(types, null)).toBe(types);
   });
