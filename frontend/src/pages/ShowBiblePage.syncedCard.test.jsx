@@ -51,7 +51,7 @@ describe('Show Bible: marking a synced card (fix-list item 24)', () => {
   test("a synced card's words are its page's, read-only; Save sends only the mark, the scope and the show", async () => {
     const dialog = await openEntry('The Connector — Social Archetype');
     // Named as the card's source chip names its page.
-    expect(within(dialog).getByTestId('sbp-managed-note').textContent).toContain('come from the Influencer Systems page');
+    expect(within(dialog).getByTestId('sbp-managed-note').textContent).toContain('come from the Social Systems page');
     expect(within(dialog).getByDisplayValue('The Connector — Social Archetype').readOnly).toBe(true);
     expect(within(dialog).getByText(/Collaborations/, { selector: 'textarea' }).readOnly).toBe(true);
     for (const select of within(dialog).getAllByRole('combobox').filter((el) => el.getAttribute('aria-label') !== 'Scope')) {
