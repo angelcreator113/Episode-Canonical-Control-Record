@@ -39,6 +39,8 @@ const {
   logValueTooLong,
 } = require('../utils/fitToModel');
 const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity } = require('../utils/feedCities');
+const { generatedProfileFields } = require('../utils/generatedProfileFields');
+const { assignHomeLocation } = require('../services/feedHomeLocation');
 
 // ── Feed caps ─────────────────────────────────────────────────────────────────
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
@@ -284,7 +286,7 @@ function checkRateLimit(req, res) {
 // without the leading @ — is taken. The check lives in one shared module so
 // every create/rename path (this file, bulk generate, /confirm-feed, the feed
 // scheduler, feed auto-generation) applies the same rule.
-const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
+const { findHandleHolder, handleTakenBody, normaliseHandle, escapeLike } = require('../utils/socialProfileHandle');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const {
   loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype,
@@ -401,10 +403,6 @@ Lala does not know she was built. The world she lives in feels complete and self
       return res.status(500).json({ error: 'Profile generation failed to parse. Try again.' });
     }
 
-    // Sanitize ENUM fields to prevent DB insert failures from AI variations
-    const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
-    const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
-    const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
     // The AI's Society archetype when it is on the list, else the least used.
     const society = layer === 'lalaverse'
       ? (matchSocietyArchetype(societyList, generated.society_archetype) || await assignSocietyArchetype(db, societyList))
@@ -419,53 +417,10 @@ Lala does not know she was built. The world she lives in feels complete and self
       status:          'generated',
       generation_model: 'claude-sonnet-4-6',
       full_profile:    generated,
-      // Flatten key fields for querying
-      display_name:          generated.display_name,
-      creator_name:          generated.creator_name || null,
-      follower_tier:         safeFollowerTier,
-      follower_count_approx: generated.follower_count_approx,
-      content_category:      generated.content_category,
-      archetype:             safeArchetype,
+      // Flatten key fields for querying (utils/generatedProfileFields;
+      // bulk import saves the same)
+      ...generatedProfileFields(generated),
       society_archetype:     society ? society.name : null,
-      content_persona:       generated.content_persona,
-      real_signal:           generated.real_signal,
-      posting_voice:         generated.posting_voice,
-      comment_energy:        generated.comment_energy,
-      adult_content_present: generated.adult_content_present || false,
-      adult_content_type:    generated.adult_content_type,
-      adult_content_framing: generated.adult_content_framing,
-      parasocial_function:   generated.parasocial_function,
-      emotional_activation:  generated.emotional_activation,
-      watch_reason:          generated.watch_reason,
-      what_it_costs_her:     generated.what_it_costs_her,
-      current_trajectory:    safeTrajectory,
-      trajectory_detail:     generated.trajectory_detail,
-      moment_log:            generated.moment_log || [],
-      sample_captions:       generated.sample_captions || [],
-      sample_comments:       generated.sample_comments || [],
-      pinned_post:           generated.pinned_post,
-      lala_relevance_score:  generated.lala_relevance_score || 0,
-      lala_relevance_reason: generated.lala_relevance_reason,
-      book_relevance:        generated.book_relevance || [],
-      world_exists:          generated.world_exists || false,
-      crossing_trigger:      generated.crossing_trigger,
-      crossing_mechanism:    generated.crossing_mechanism,
-      // Enhanced fields
-      post_frequency:        generated.post_frequency,
-      engagement_rate:       generated.engagement_rate,
-      platform_metrics:      generated.platform_metrics || {},
-      geographic_base:       generated.geographic_base,
-      geographic_cluster:    generated.geographic_cluster,
-      age_range:             generated.age_range,
-      relationship_status:   generated.relationship_status,
-      known_associates:      generated.known_associates || [],
-      revenue_streams:       generated.revenue_streams || [],
-      brand_partnerships:    generated.brand_partnerships || [],
-      audience_demographics: generated.audience_demographics || {},
-      aesthetic_dna:         generated.aesthetic_dna || {},
-      controversy_history:   generated.controversy_history || [],
-      collab_style:          generated.collab_style,
-      influencer_tier_detail:generated.influencer_tier_detail,
       // LalaVerse layer fields
       feed_layer:            layer,
       city:                  layer === 'lalaverse' ? lalaCity : null,
@@ -489,65 +444,11 @@ Lala does not know she was built. The world she lives in feels complete and self
       await autoLinkRelationships(db, profile, generated.known_associates);
     }
 
-    // Auto-assign home location from city (DREAM map integration)
-    if (layer === 'lalaverse' && lalaCity && db.WorldLocation) {
+    // Auto-assign home location from city (DREAM map integration;
+    // services/feedHomeLocation, which bulk import calls too)
+    if (layer === 'lalaverse' && lalaCity) {
       try {
-        const { Op } = require('sequelize');
-        const cityName = lalaCity.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        const displayName = profile.display_name || profile.handle || 'Creator';
-        const category = profile.content_category || '';
-
-        // Map archetype/category to venue type they'd own or work from
-        const CREATOR_VENUE_MAP = {
-          fashion: { type: 'boutique', label: 'Showroom' },
-          beauty: { type: 'salon', label: 'Studio' },
-          music: { type: 'recording_studio', label: 'Studio' },
-          entertainment: { type: 'recording_studio', label: 'Studio' },
-          fitness: { type: 'gym', label: 'Gym' },
-          food: { type: 'restaurant', label: 'Kitchen' },
-          lifestyle: { type: 'cafe', label: 'Space' },
-          tech: { type: 'coworking', label: 'Lab' },
-          art: { type: 'gallery', label: 'Gallery' },
-        };
-        const venueInfo = CREATOR_VENUE_MAP[category] || CREATOR_VENUE_MAP[category?.split('/')[0]] || { type: 'other', label: 'Studio' };
-        const slug = `${(displayName).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${venueInfo.label.toLowerCase()}`;
-
-        // Create their signature venue — this is where they work and host
-        let homeLoc = await db.WorldLocation.create({
-          name: `${displayName}'s ${venueInfo.label}`,
-          slug,
-          location_type: 'venue',
-          venue_type: venueInfo.type,
-          city: cityName,
-          description: `${displayName}'s signature ${venueInfo.label.toLowerCase()} in ${cityName}. Where they create, host, and build their brand.`,
-          narrative_role: 'sanctuary',
-        }).catch(() => null);
-
-        // Fallback if slug conflict
-        if (!homeLoc) {
-          homeLoc = await db.WorldLocation.findOne({
-            where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'venue' },
-            order: db.sequelize.random(),
-          }).catch(() => null);
-        }
-        if (homeLoc) {
-          await profile.update({ home_location_id: homeLoc.id });
-        }
-
-        // Pick up to 3 existing venues in their city as frequent hangouts
-        const cityVenues = await db.WorldLocation.findAll({
-          where: {
-            city: { [Op.iLike]: `%${cityName}%` },
-            location_type: 'venue',
-            ...(homeLoc ? { id: { [Op.ne]: homeLoc.id } } : {}),
-          },
-          order: db.sequelize.random(),
-          limit: 3,
-        }).catch(() => []);
-        if (cityVenues.length > 0 || homeLoc) {
-          const venueIds = [...(homeLoc ? [homeLoc.id] : []), ...cityVenues.map(v => v.id)];
-          await profile.update({ frequent_venues: venueIds });
-        }
+        await assignHomeLocation(db, profile, lalaCity);
       } catch (locErr) {
         console.warn('[socialProfiles] auto-location assignment:', locErr?.message);
       }
@@ -1195,12 +1096,15 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
   for (const assoc of knownAssociates) {
     try {
       if (!assoc.handle) continue;
-      const normalizedHandle = assoc.handle.startsWith('@') ? assoc.handle : `@${assoc.handle}`;
+      const withAt = normaliseHandle(assoc.handle);
 
-      // Find existing profile with this handle
+      // Find the existing profile with this handle, matched as the handle
+      // check matches (utils/socialProfileHandle): case-insensitive, with or
+      // without its leading @ (bulk import saves it without), and an _ in a
+      // handle is not a LIKE wildcard.
       const target = await db.SocialProfile.findOne({
         where: {
-          handle: { [Op.iLike]: normalizedHandle },
+          [Op.or]: [withAt, withAt.slice(1)].filter(Boolean).map((f) => ({ handle: { [Op.iLike]: escapeLike(f) } })),
           id: { [Op.ne]: profile.id },
         },
       });
