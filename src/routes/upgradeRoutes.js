@@ -176,8 +176,9 @@ router.post('/reviews/post-generation', requireAuth, aiRateLimiter, async (req, 
 
     // Every active critical entry, in the shared order (services/brainRules;
     // wiring map fix-list item 25): it came in whatever order Postgres
-    // returned. A story has no show, so every show's.
-    const laws = await selectRules(db.FranchiseKnowledge, { where: { severity: 'critical' } });
+    // returned. A story is the book's, so the franchise tier only, never a
+    // show's own canon (Evoni's ruling, 2026-10-08).
+    const laws = await selectRules(db.FranchiseKnowledge, { franchiseOnly: true, where: { severity: 'critical' } });
 
     const reviewPrompt = `You are the Post-Generation Review agent for Prime Studios. Read this approved scene and check it against the franchise laws. Your job is to catch what slipped through — subtle drift, tone violations, character contradictions that feel almost right but aren't.
 

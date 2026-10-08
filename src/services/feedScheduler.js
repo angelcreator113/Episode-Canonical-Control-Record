@@ -18,6 +18,10 @@
 /* eslint-disable no-console */
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
+const {
+  loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
+  assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
+} = require('./societyArchetypes');
 
 // The Show Bible for one generation, or none (JustAWoman's Feed is the real world).
 const NO_BRAIN = Object.freeze({ block: null, ids: [] });
@@ -367,11 +371,20 @@ ${arc.narrative_debt?.length > 0 ? `NARRATIVE WEIGHT: ${arc.narrative_debt.map(d
   // (Book 1) is the real world, so it gets none of the LalaVerse's rules.
   const brain = layer === 'lalaverse' ? await loadBrainContext(db, { showId: sparkShowId, label: 'FeedScheduler' }) : NO_BRAIN;
 
+  // Each LalaVerse spark is built around one of the Society tab's
+  // archetypes, the least used first (fix-list item 26).
+  let societyList = [];
+  let societyPicks = [];
+  if (layer === 'lalaverse') {
+    societyList = await loadSocietyArchetypes(db);
+    societyPicks = pickSocietyArchetypes(societyList, await societyArchetypeCounts(db), count);
+  }
+
   const prompt = `You are designing the social media feed for a novel. Generate exactly ${count} unique creator sparks — each one a seed for a full AI-generated social media profile.
 
 LAYER: ${layer === 'lalaverse' ? 'LalaVerse (Book 2)' : "JustAWoman's Feed (Book 1)"}
 ${layerContext}
-${arcDirective}${brain.block || ''}
+${arcDirective}${brain.block || ''}${societySparkBlock(societyPicks)}
 
 EXISTING FEED COMPOSITION (${existing.length} profiles):
 - Handles already used: ${existingHandles || 'none yet'}
@@ -409,7 +422,7 @@ Return a JSON array of exactly ${count} objects:
       "drama_hint": "optional controversy or tension",
       "aesthetic_hint": "visual style keywords",
       "revenue_hint": "how they make money"
-    }${layer === 'lalaverse' ? ',\n    "city": "nova_prime",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}
+    }${layer === 'lalaverse' ? ',\n    "city": "nova_prime",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}${societyPicks.length ? ',\n    "society_archetype": "this spark\'s name from SOCIETY ARCHETYPES"' : ''}
   }
 ]
 
@@ -435,6 +448,16 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   if (!Array.isArray(sparks) || sparks.length === 0) {
     throw new Error('AI returned no sparks');
+  }
+
+  // A spark keeps the AI's archetype when it is on the list, else the one
+  // it was given.
+  if (societyPicks.length) {
+    sparks.forEach((s, i) => {
+      if (!s || typeof s !== 'object') return;
+      const chosen = matchSocietyArchetype(societyList, s.society_archetype) || societyPicks[i] || null;
+      s.society_archetype = chosen ? chosen.name : null;
+    });
   }
 
   // Deduplicate against existing handles
@@ -586,6 +609,14 @@ async function generateAndSaveProfile(db, spark, layer) {
     brain = await loadBrainContext(db, { showId, label: 'FeedScheduler' });
   }
 
+  // A LalaVerse profile's Society archetype (fix-list item 26): its spark's,
+  // else the least used.
+  let society = null;
+  if (layer === 'lalaverse') {
+    const societyList = await loadSocietyArchetypes(db);
+    society = matchSocietyArchetype(societyList, spark.society_archetype) || await assignSocietyArchetype(db, societyList);
+  }
+
   // Compact prompt for batch generation — ~60% smaller than the full buildGenerationPrompt
   const ctx = characterContext;
   const adv = spark.advanced_context || {};
@@ -596,7 +627,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${brain.block || ''}
+${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
 - Creators exist across MULTIPLE platforms with DIFFERENT personas on each
@@ -719,6 +750,7 @@ Return ONLY valid JSON with these fields:
     follower_count_approx: asText(generated.follower_count_approx),
     content_category:      asText(generated.content_category),
     archetype:             safeArchetype,
+    society_archetype:     society ? society.name : null,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
     posting_voice:         generated.posting_voice,

@@ -36,6 +36,7 @@ const {
 } = require('../services/characterGenerationService');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
+const { assignSocietyArchetype } = require('../services/societyArchetypes');
 
 router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
@@ -211,6 +212,10 @@ router.post('/confirm-feed', async (req, res) => {
       'macro': 1000000,
     };
 
+    const layer = FEED_LAYERS.includes(feed_layer || feed_proposal.feed_layer) ? (feed_layer || feed_proposal.feed_layer) : 'real_world';
+    // A LalaVerse profile's Society archetype, the least used (fix-list item 26).
+    const society = layer === 'lalaverse' ? await assignSocietyArchetype(models) : null;
+
     // Every string fitted to its column (Task #1851) — the proposal is
     // AI-generated, and confirming it must not fail on "value too long".
     const { fitted: createRecord, truncated } = fitRecordToModel(SocialProfile, {
@@ -227,7 +232,8 @@ router.post('/confirm-feed', async (req, res) => {
       // registry_character_id and always took the default layer: wiring map,
       // docs/reads/2026-10-06-lalaverse-wiring-map.md §6 finding 6a).
       registry_character_id: character.id,
-      feed_layer:      FEED_LAYERS.includes(feed_layer || feed_proposal.feed_layer) ? (feed_layer || feed_proposal.feed_layer) : 'real_world',
+      feed_layer:      layer,
+      society_archetype: society ? society.name : null,
     });
     warnTruncated('confirm-feed', truncated);
 

@@ -36,7 +36,7 @@ What that means in practice:
 
 | Store | What it holds | Who edits it | What the AI reads from it |
 |---|---|---|---|
-| Page content (`page_content` + page defaults) | The world-building pages' structured data: archetypes, relationship types, calendars, infrastructure, and so on. Defaults live in frontend code (`frontend/src/data/influencerData.js`, `calendarData.js`, and literals inside some pages); saved edits are `page_content` rows that replace a whole key (`usePageData`). | The pages, through `usePageData` → `/api/v1/page-content` | Almost nothing directly. Amber's `push_page_to_brain` and `develop_world` tools read it. |
+| Page content (`page_content` + page defaults) | The world-building pages' structured data: archetypes, relationship types, calendars, infrastructure, and so on. Defaults live in frontend code (`frontend/src/data/influencerData.js`, `calendarData.js`, and literals inside some pages); saved edits are `page_content` rows that replace a whole key (`usePageData`). | The pages, through `usePageData` → `/api/v1/page-content` | Almost nothing directly. Amber's `push_page_to_brain` and `develop_world` tools read it, and the Feed's profile generators read the Society tab's archetypes (`influencer_systems` / `ARCHETYPES`, else the page's defaults) through `services/societyArchetypes.js`: each new LalaVerse profile gets one, in `social_profiles.society_archetype` (fix-list item 26, 2026-10-08). |
 | The Brain (`franchise_knowledge`) | Laws, decisions, world facts and character truths as text entries | Ten seeders (about 101 entries), Show Bible create/edit, document and PDF ingestion, Push to Brain, Amber tools, Learn Location, episode completion (§3) | Nearly every generator (§4) |
 | `Universe` | Name, description, core themes, world rules, PNOS beliefs, narrative economy | `routes/universe.js` POST/PUT (no frontend caller found), `scripts/seed-lalaverse.js` | Three shallow routes, no generator (audit handoff v8 §6.15) |
 
@@ -159,8 +159,10 @@ There is no routing today. A reader gets entries by status and a severity / alwa
 filter, never by what the entry is about. Since 2026-10-08 every reader selects through
 `services/brainRules.js` (`selectInjectedRules`, `loadBrainContext`, or `selectRules`, which
 applies the same show scope and the same order, severity then id, to the reader's own
-filter); a reader that is sent no show reads every show's entries. Which entries each reader
-takes did not change (wiring map fix-list item 25; which cards count is item 24):
+filter); a reader that is sent no show reads every show's entries, except the book's
+readers, which take the franchise tier only (`franchiseOnly`, scope `franchise`; Evoni's
+ruling, 2026-10-08). Which entries each reader takes did not change (wiring map fix-list
+item 25; which cards count is item 24):
 
 | Reader | Filter |
 |---|---|
@@ -172,10 +174,10 @@ takes did not change (wiring map fix-list item 25; which cards count is item 24)
 | Event generator (`buildEventPrompt`) | `loadBrainContext` (`services/brainRules.js`, 2026-10-06): `selectInjectedRules` in the show's scope, the first 25, full text up to 600 characters a rule; each use counted (`recordRuleUse`: `injection_count`, `last_injected_at`). It was active AND always_inject, limit 10, cut to 200 characters, no show scope. |
 | Feed posts (`generateEpisodeFeedPosts`), seasonal events (`generateSeasonalEvents`), LalaVerse profile sparks and profiles (`feedScheduler`, POST `/social-profiles/generate` and `/:id/regenerate`) | `loadBrainContext`, the first 25, each use counted. LalaVerse only: JustAWoman's Feed (Book 1, `real_world`) is the real world and gets no LalaVerse rules. These read nothing before 2026-10-06. |
 | Comment drafts (`draftReactions`), post redrafts (`redraftPost`), event concept drafts (`draftEventConcept`, when the caller passes models and the show), Feed-to-event venues (`generateUniqueVenue`) | `loadBrainContext`, the first 15 (venues 10), each use counted. These read nothing before 2026-10-06. |
-| Memories engine (`loadFranchiseKnowledge`) | `selectRules`: any active, the first 15 (the critical laws fill it). WriteMode has no show. It took the newest within a severity. |
-| Story evaluation (`loadFranchiseConstraints`) | `selectRules`: active AND (critical OR always_inject), the first 20, then `applies_to` against the scene's characters. This is the only reader of `applies_to`. A story has no show. |
-| Tier franchise guard (`POST /tier/franchise-guard-check`) | `selectRules`: active AND category in (franchise_law, locked_decision, character, narrative); each use counted. A story has no show. |
-| Post-generation review (`POST /reviews/post-generation`) | `selectRules`: active AND critical. A story has no show. |
+| Memories engine (`loadFranchiseKnowledge`) | `selectRules`, franchise tier only: any active, the first 15 (the critical laws fill it). WriteMode is the book's. It took the newest within a severity, from every show. |
+| Story evaluation (`loadFranchiseConstraints`) | `selectRules`, franchise tier only: active AND (critical OR always_inject), the first 20, then `applies_to` against the scene's characters, an always-inject rule passing it. This is the only reader of `applies_to`. A story is the book's. It never selected `always_inject`, so the filter dropped every rule whose `applies_to` names systems (`story_engine`), as the seeded laws' do. |
+| Tier franchise guard (`POST /tier/franchise-guard-check`) | `selectRules`, franchise tier only: active AND category in (franchise_law, locked_decision, character, narrative); each use counted. A story is the book's. |
+| Post-generation review (`POST /reviews/post-generation`) | `selectRules`, franchise tier only: active AND critical. A story is the book's. |
 | Amber `develop_world` | `selectRules`: the page's own `source_document`, the first 30; and category franchise_law, the first 10. Amber is sent no show. |
 
 So "Used By" (step 6 of the redesign) is new backend work: each reader would select by the

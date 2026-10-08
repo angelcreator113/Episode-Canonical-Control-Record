@@ -67,13 +67,21 @@ describe('Show Bible readers select through brainRules', () => {
     expect(develop).toMatch(/selectRules\(db\.FranchiseKnowledge, \{ where: \{ category: 'franchise_law' \}, limit: 10 \}\)/);
   });
 
-  test('WriteMode, story evaluation, the tier guard and the post-generation review', () => {
+  // The book's readers take the franchise tier only (Evoni's ruling,
+  // 2026-10-08); story evaluation reads always_inject for its filter.
+  test('WriteMode, story evaluation, the tier guard and the post-generation review: the franchise tier only', () => {
     for (const src of [engine, story, tier, upgrade]) expect(src).not.toMatch(/FranchiseKnowledge\.findAll\(/);
-    expect(engine).toMatch(/selectRules\(FranchiseKnowledge, \{ limit: 15 \}\)/);
-    expect(story).toMatch(/where: CRITICAL_OR_ALWAYS_INJECT,\s*attributes: \[\.\.\.RULE_ATTRIBUTES, 'applies_to'\],\s*limit: 20,/);
-    expect(tier).toMatch(/selectRules\(db\.FranchiseKnowledge, \{\s*where: \{ category: \['franchise_law', 'locked_decision', 'character', 'narrative'\] \},\s*\}\)/);
+    expect(engine).toMatch(/selectRules\(FranchiseKnowledge, \{ franchiseOnly: true, limit: 15 \}\)/);
+    expect(story).toMatch(/franchiseOnly: true,\s*where: CRITICAL_OR_ALWAYS_INJECT,\s*attributes: \[\.\.\.RULE_ATTRIBUTES, 'applies_to', 'always_inject'\],\s*limit: 20,/);
+    expect(tier).toMatch(/selectRules\(db\.FranchiseKnowledge, \{\s*franchiseOnly: true,\s*where: \{ category: \['franchise_law', 'locked_decision', 'character', 'narrative'\] \},\s*\}\)/);
     expect(tier).toMatch(/recordRuleUse\(db\.sequelize, laws\.map\(l => l\.id\), 'franchise-guard-check'\)/);
     expect(tier).not.toMatch(/law\.update\(/);
-    expect(upgrade).toMatch(/selectRules\(db\.FranchiseKnowledge, \{ where: \{ severity: 'critical' \} \}\)/);
+    expect(upgrade).toMatch(/selectRules\(db\.FranchiseKnowledge, \{ franchiseOnly: true, where: \{ severity: 'critical' \} \}\)/);
+  });
+
+  test('Amber still reads every show\'s', () => {
+    const inject = slice(brain, 'async function buildKnowledgeInjection', 'async function getTechContext');
+    const develop = slice(amber, "case 'develop_world': {", "case 'read_relationships': {");
+    for (const src of [inject, develop]) expect(src).not.toMatch(/franchiseOnly/);
   });
 });

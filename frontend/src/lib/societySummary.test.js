@@ -1,7 +1,22 @@
 import { describe, test, expect } from 'vitest';
-import { archetypeCounts, trendBars, careerLadder, tierFromReputation } from './societySummary';
+import { archetypeCounts, societyArchetypeCounts, trendBars, careerLadder, tierFromReputation } from './societySummary';
 
 describe('the Society front page helpers', () => {
+  test('the Society tab\'s archetypes, counted by name as the backend compares names; the unset and names off the list apart', () => {
+    const list = [{ name: 'The Trendsetter' }, { name: 'The Educator' }, { name: 'The Rebel' }];
+    const c = societyArchetypeCounts({
+      society_archetypes: { 'The Trendsetter': 4, 'the trendsetter': 1, Educator: 2, 'The Old Name': 3 },
+      society_archetype_unset: 40,
+    }, list);
+    expect(c.count('The Trendsetter')).toBe(5);
+    expect(c.count('The Educator')).toBe(2);
+    expect(c.count('The Rebel')).toBe(0);
+    expect(c.unset).toBe(40);
+    expect(c.other).toBe(3);
+    const none = societyArchetypeCounts({}, list);
+    expect([none.count('The Rebel'), none.unset, none.other]).toEqual([0, 0, 0]);
+  });
+
   test('the ten profile archetypes, counted, biggest first; an unknown one is counted apart', () => {
     const { rows, total, other } = archetypeCounts({ archetypes: { soft_life: 4, the_peer: 9, mystery: 2 } });
     expect(rows).toHaveLength(10);
