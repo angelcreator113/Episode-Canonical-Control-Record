@@ -16,6 +16,7 @@
  * single source of truth for overlay timing on the episode.
  */
 import { useEffect, useState, useCallback } from 'react';
+import { Clapperboard } from 'lucide-react';
 import api from '../../services/api';
 
 export default function TimelinePlacementsSection({ episodeId }) {
@@ -114,20 +115,22 @@ export default function TimelinePlacementsSection({ episodeId }) {
   };
 
   return (
-    <div style={{ background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+    // Card and title in the Overview's card language (EpisodeOverviewSections.css).
+    <div className="eov-card">
+      <div className="eov-card-head is-wrap">
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4 }}>🎬 Video UI Overlays</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <h4 className="eov-card-title"><Clapperboard size={16} aria-hidden="true" /> Video UI overlays</h4>
+          <p className="eov-card-note">
             Where invites, checklists, and other on-screen graphics appear in the rendered video.
-          </div>
+          </p>
         </div>
         {addable.length > 0 && (
           <select
             value=""
             disabled={busyId === 'adding'}
             onChange={(e) => { if (e.target.value) addPlacement(e.target.value); e.target.value = ''; }}
-            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}
+            className="eov-select is-inline"
+            aria-label="Add overlay"
           >
             <option value="">+ Add overlay…</option>
             {addable.map((a) => (
@@ -140,13 +143,13 @@ export default function TimelinePlacementsSection({ episodeId }) {
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Loading…</div>
+        <p className="eov-empty">Loading…</p>
       ) : error ? (
-        <div style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</div>
+        <p className="eov-warn">{error}</p>
       ) : placements.length === 0 ? (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '6px 0' }}>
-          No overlays placed yet. Approve an invitation or lock the wardrobe checklist to auto-place one, or add a previously generated overlay from the dropdown above.
-        </div>
+        <p className="eov-empty">
+          No overlays placed yet. Approve an invitation or lock the wardrobe checklist to auto-place one{addable.length > 0 ? ', or add a previously generated overlay from the list above' : ''}.
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {placements.map((p) => {

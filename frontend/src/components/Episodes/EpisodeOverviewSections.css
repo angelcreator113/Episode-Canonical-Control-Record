@@ -1,0 +1,231 @@
+/* The Episode Overview below the summary (the Overview redesign,
+   2026-10-08): Identity, Production, Source, Stakes and Reference in the
+   same card language as the summary above them (EpisodeOverviewSummary.css,
+   Evoni's Episode mock). The money card, the teaser and the video overlay
+   section use these card classes too. Colours through tokens only. */
+
+.eov { margin: 0 auto; }
+
+/* A part of the page: a heading in the prose face and what it is for. */
+.eov-band { margin: 26px 0 0; }
+.eov-band-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
+.eov .eov-band-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--lala-ink); }
+.eov-band-note { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+
+/* Cards. */
+.eov-card {
+  display: block;
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+.eov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.eov-grid.is-auto { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.eov-grid > .eov-card { margin-bottom: 0; }
+.eov-grid + .eov-card, .eov-grid + .eov-grid { margin-top: 12px; }
+.eov-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
+.eov-card-head.is-wrap { flex-wrap: wrap; align-items: flex-start; }
+.eov .eov-card-title, .eov-card .eov-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--lala-ink);
+}
+.eov-card-title svg { flex-shrink: 0; color: var(--lala-lavender-text); }
+.eov-card-note { margin: 2px 0 10px; font-size: 13px; color: var(--lala-ink-muted); }
+.eov-card-head .eov-card-note { margin-bottom: 0; }
+.eov-count { padding: 0 8px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 600; }
+
+/* Text. */
+.eov-text { margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.eov-empty { margin: 0 0 4px; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.eov-warn { margin: 0 0 8px; font-size: 13px; color: var(--warning-text); }
+.eov-muted { font-size: 13px; color: var(--lala-ink-muted); }
+.eov-handle { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink-muted); }
+.eov .eov-sub { margin: 14px 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.eov-list { margin: 0; padding: 0 0 0 20px; list-style: disc; font-size: 14px; line-height: 1.6; color: var(--lala-ink); }
+
+/* Labelled values. */
+.eov-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.eov-fields.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.eov-fields + .eov-fields { margin-top: 12px; }
+.eov-field { min-width: 0; }
+.eov-field.is-wide { grid-column: 1 / -1; }
+.eov-field-label { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.eov-field-value { font-size: 14px; line-height: 1.5; color: var(--lala-ink); overflow-wrap: anywhere; }
+.eov-field-value.is-big, .eov-field-value.is-success-big, .eov-field-value.is-quiet-big { font-family: var(--font-prose); font-size: 20px; font-weight: 600; }
+.eov-field-value.is-success, .eov-field-value.is-success-big { color: var(--success-text); }
+.eov-field-value.is-danger { color: var(--danger-text); }
+.eov-field-value.is-gold { color: var(--lala-gold-text); font-weight: 700; }
+.eov-field-value.is-quiet, .eov-field-value.is-quiet-big { color: var(--lala-ink-muted); }
+.eov-field-value.is-quiet { font-style: italic; }
+
+/* Links and buttons: lavender, as in the summary. */
+.eov-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.eov-card-head .eov-link { margin-top: 0; }
+.eov-link:hover { text-decoration: underline; }
+.eov-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.eov-quick { margin-top: 26px; }
+.eov-btn, .eov-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.eov-btn { border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--lala-lavender-text); }
+.eov-btn:hover { background: var(--lala-lavender-soft); }
+.eov-btn-primary { border: none; background: var(--lala-lavender); color: var(--text-inverse); font-weight: 700; }
+.eov-btn-primary:hover { filter: brightness(0.95); }
+.eov-btn:disabled, .eov-btn-primary:disabled { cursor: not-allowed; opacity: 0.55; }
+.eov-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--lala-ink-muted);
+  cursor: pointer;
+}
+.eov-icon-btn:hover { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eov-icon-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.eov-select, .eov-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.eov-select.is-inline { width: auto; max-width: 100%; }
+.eov-select:disabled { cursor: not-allowed; color: var(--lala-ink-muted); }
+.eov-input:focus, .eov-select:focus { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+textarea.eov-input { resize: vertical; line-height: 1.5; }
+
+/* Chips and tags. */
+.eov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.eov-outcome {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--lala-ink-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.eov-outcome.is-on { border-color: var(--tier-color); background: var(--tier-bg); color: var(--tier-color); }
+.eov-outcome:disabled { cursor: not-allowed; opacity: 0.6; }
+.eov-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.eov-tag { padding: 2px 8px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; }
+.eov-tag.is-source { background: var(--lala-gold); color: var(--text-primary); }
+.eov-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.eov-pill.is-ok { background: var(--success-bg); color: var(--success-text); }
+.eov-status { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--status-border); background: var(--status-bg); color: var(--status-color); font-size: 12px; font-weight: 700; }
+
+/* Events. */
+.eov-events { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.eov-event { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--lala-gold-line); border-radius: 12px; background: var(--lala-gold-soft); }
+.eov-event-main { flex: 1; min-width: 0; }
+.eov-event-name { font-size: 15px; font-weight: 700; color: var(--lala-ink); overflow-wrap: anywhere; }
+.eov-event-tools { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* Season. */
+.eov-season-bar { display: flex; gap: 2px; margin-top: 2px; }
+.eov-season-bar span { flex: 1; height: 6px; border-radius: 3px; background: var(--lala-parchment-2); }
+.eov-season-bar span.is-past { background: var(--success-bg); }
+.eov-season-bar span.is-here { background: var(--lala-gold); }
+.eov-season-label { margin-top: 10px; font-size: 15px; font-weight: 700; color: var(--lala-gold-text); }
+.eov-season-phase { font-weight: 500; color: var(--lala-ink-muted); }
+
+/* Locations. */
+.eov-places { display: flex; flex-wrap: wrap; gap: 10px; }
+.eov-place { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.eov-place-thumb { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 10px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eov-place-text { min-width: 0; }
+.eov-place-name { font-size: 14px; font-weight: 700; color: var(--lala-ink); }
+.eov-place-meta { font-size: 12px; color: var(--lala-ink-muted); }
+
+/* Script, origin. */
+.eov-script { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.eov-origin-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 4px; }
+
+/* Reference: collapsed by default. */
+.eov-details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--lala-ink); }
+.eov-details summary svg { color: var(--lala-lavender-text); }
+.eov-details summary { list-style: none; }
+.eov-details summary::-webkit-details-marker { display: none; }
+.eov-details summary::after { content: '▾'; margin-left: auto; color: var(--lala-ink-muted); transition: transform 0.2s; transform: rotate(-90deg); }
+.eov-details[open] summary::after { transform: none; }
+.eov-details[open] summary { margin-bottom: 10px; }
+.eov-pre { max-height: 260px; margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-bg); color: var(--lala-ink-muted); font-family: 'DM Mono', var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.eov-outline { margin: 0; padding: 0 0 0 22px; list-style: decimal; }
+.eov-outline li { margin-bottom: 8px; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.eov-outline-title { font-weight: 600; }
+.eov-outline-note { margin-top: 2px; font-size: 13px; font-style: italic; color: var(--lala-ink-muted); }
+
+/* The verdict once evaluated. */
+.eov-tier { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; padding: 14px 18px; border: 2px solid var(--tier-color); border-radius: 14px; background: var(--tier-bg); }
+.eov-tier-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.eov-tier-emoji { font-size: 28px; }
+.eov-tier-title { font-size: 17px; font-weight: 800; color: var(--tier-color); }
+.eov-tier-line { font-size: 13px; font-style: italic; color: var(--lala-ink-muted); }
+.eov-tier-stats { display: flex; gap: 16px; }
+.eov-tier-stat { text-align: center; }
+.eov-tier-stat-value { font-size: 16px; font-weight: 700; }
+.eov-tier-stat-value.is-up { color: var(--success-text); }
+.eov-tier-stat-value.is-down { color: var(--danger-text); }
+.eov-tier-stat-label { font-size: 11px; color: var(--lala-ink-muted); }
+
+/* Edit details. */
+.eov-edit { max-width: 700px; margin: 0 auto; padding: 20px 22px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.eov-edit-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.eov-edit .eov-edit-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-ink); }
+.eov-edit-field { margin-bottom: 14px; }
+.eov-edit-field .eov-field-label { margin-bottom: 6px; }
+
+@media (max-width: 720px) {
+  .eov-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .eov-card { padding: 14px; }
+  .eov-fields.is-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eov-quick .eov-btn, .eov-quick .eov-btn-primary { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
+/* responsive.css sizes every h3/h4 on small screens with !important; the
+   section and card titles keep their size. */
+.eov .eov-band-title { font-size: 20px !important; }
+.eov .eov-card-title, .eov-card .eov-card-title { font-size: 15px !important; }
