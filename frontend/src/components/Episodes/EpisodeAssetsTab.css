@@ -1,267 +1,140 @@
-/* frontend/src/components/Episodes/EpisodeAssetsTab.css */
+/* Production → Assets (the Assets redesign, 2026-10-08), in the Episode
+   page's card language (the Script and Results pages, Evoni's Episode
+   mock): a card with how ready the assets are, the production checklist
+   as rows with a status pill, and the on-screen to-do lists below
+   (EpisodeTodoList, .etl-*). Colours through tokens only. This file
+   replaces old, unused styles from an earlier version of the tab. */
 
-.episode-assets-tab {
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 3rem;
-}
+.eat { max-width: 1100px; margin: 0 auto; padding: 4px 0 24px; }
+.eat-note { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
 
-.episode-assets-loading {
-  text-align: center;
-  padding: 4rem;
-  color: var(--text-secondary);
-}
-
-/* ==================== SECTION HEADER ==================== */
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-}
-
-.header-left h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: var(--text-3xl);
-  color: var(--text-primary);
+.eat-head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 20px 22px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  background: var(--surface-card);
 }
+.eat-head-text { flex: 1 1 260px; min-width: 0; }
+.eat .eat-title { margin: 0; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); }
+.eat-sub { margin: 2px 0 10px; font-size: 13px; color: var(--lala-ink-muted); }
+.eat-bar { height: 6px; max-width: 420px; border-radius: 3px; background: var(--lala-parchment-2); overflow: hidden; }
+.eat-bar span { display: block; height: 100%; border-radius: 3px; transition: width 0.3s; }
+.eat-bar.is-low span { background: var(--danger); }
+.eat-bar.is-mid span { background: var(--warning); }
+.eat-bar.is-high span { background: var(--success); }
 
-.section-subtitle {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-}
-
-/* ==================== BUTTONS ==================== */
-
-.btn-link-asset,
-.btn-upload {
-  padding: 0.875rem 1.5rem;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-link-asset:hover,
-.btn-upload:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(47, 127, 118, 0.35);
-}
-
-/* ==================== EMPTY STATE ==================== */
-
-.empty-section {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: var(--surface-bg);
-  border-radius: 12px;
-  border: 2px dashed var(--lala-parchment-3);
-}
-
-.empty-section p {
-  margin: 0 0 1.5rem 0;
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-}
-
-/* ==================== ASSETS GRID ==================== */
-
-.assets-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.5rem;
-}
-
-.asset-card {
-  position: relative;
-  background: white;
-  border: 2px solid var(--lala-parchment-3);
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.asset-card:hover {
-  border-color: var(--lala-parchment-3);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-.asset-badge {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  z-index: 1;
-  backdrop-filter: blur(8px);
-}
-
-.linked-badge {
-  background: var(--success-text);
-  color: white;
-}
-
-.episode-badge {
-  background: var(--primary);
-  color: white;
-}
-
-/* ==================== ASSET THUMBNAIL ==================== */
-
-.asset-thumbnail {
-  position: relative;
-  width: 100%;
-  padding-top: 75%; /* 4:3 aspect ratio like ShowAssetsTab */
-  background: var(--gray-800);
-  overflow: hidden;
-  border-radius: 10px 10px 0 0;
-}
-
-.asset-thumbnail img {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
-/* ==================== ASSET INFO ==================== */
-
-.asset-info {
-  padding: 0.875rem;
-  overflow: hidden;
-}
-
-.asset-category-badge {
+.eat-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  color: white;
-  border-radius: 6px;
-  font-size: var(--text-xs);
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-size: 14px;
   font-weight: 600;
-  text-transform: capitalize;
-  margin-bottom: 0.5rem;
-}
-
-.asset-name {
-  margin: 0 0 0.5rem 0;
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-decoration: none;
   white-space: nowrap;
-}
-
-.asset-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.btn-promote-inline {
-  background: var(--primary);
-  color: white;
-  border: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: var(--text-sm);
-  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
+.eat-btn:hover { background: var(--lala-lavender-soft); }
+.eat-btn.is-small { padding: 5px 12px; border-radius: 8px; font-size: 12px; }
 
-.btn-promote-inline:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(47, 127, 118, 0.35);
+.eat-card { padding: 18px 22px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.eat .eat-label { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.eat-list { list-style: none; margin: 0; padding: 0; }
+.eat-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--lala-parchment-2); }
+.eat-row:last-child { border-bottom: none; }
+.eat-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eat-row.is-approved .eat-icon { background: var(--success-bg); color: var(--success-text); }
+.eat-row.is-missing .eat-icon { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
+.eat-row-text { flex: 1; min-width: 0; }
+.eat-row-name { font-size: 15px; font-weight: 600; color: var(--lala-ink); }
+.eat-row-detail { font-size: 13px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.eat-thumb { width: 36px; height: 36px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--lala-lavender-line); object-fit: cover; }
+.eat-pill { flex-shrink: 0; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.eat-pill.is-approved { background: var(--success-bg); color: var(--success-text); }
+.eat-pill.is-generated { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eat-pill.is-pending { background: var(--warning-bg); color: var(--warning-text); }
+.eat-pill.is-missing { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
+
+.eat-section { margin-top: 26px; }
+.eat-section-head { margin-bottom: 12px; }
+.eat .eat-section-title { margin: 0 0 2px; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--lala-ink); }
+
+/* The on-screen to-do lists (EpisodeTodoList). The wardrobe list keeps
+   its gold accent, the career list the lavender; actions are lavender. */
+.etl { overflow: hidden; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.etl.is-wardrobe { --list-edge: var(--lala-gold); --list-text: var(--lala-gold-text); --list-soft: var(--lala-gold-soft); --list-line: var(--lala-gold-line); --list-check: var(--text-primary); }
+.etl.is-career { --list-edge: var(--lala-lavender); --list-text: var(--lala-lavender-text); --list-soft: var(--lala-lavender-soft); --list-line: var(--lala-lavender-line); --list-check: var(--text-inverse); }
+.etl-empty { padding: 28px 22px; border: 1px dashed var(--lala-gold-line); border-radius: 14px; background: var(--surface-card); text-align: center; }
+.etl-empty.is-inline { border: none; border-radius: 0; }
+.etl-empty-icon { font-size: 30px; }
+.etl-empty-title { margin: 6px 0 4px; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--lala-ink); }
+.etl-text { margin: 0 0 14px; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.etl-tabs { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--lala-lavender-line); }
+.etl-tab { flex: 1; padding: 8px 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--lala-ink-muted); font-size: 14px; font-weight: 600; cursor: pointer; }
+.etl-tab:hover { background: var(--lala-parchment-2); }
+.etl-tab.is-on.is-wardrobe { border-color: var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.etl-tab.is-on.is-career { border-color: var(--lala-lavender-line); background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.etl-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--list-line); background: var(--surface-card); }
+.etl-head.is-done { background: var(--success-bg); }
+.etl .etl-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--lala-ink); }
+.etl-locked { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--success-bg); color: var(--success-text); font-size: 11px; font-weight: 700; }
+.etl-sub { margin: 3px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
+.etl-ready { margin-left: 8px; color: var(--success-text); font-weight: 700; }
+.etl-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.etl-btn-primary { padding: 7px 16px; border: none; border-radius: 8px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 13px; font-weight: 700; cursor: pointer; }
+.etl-btn-primary.is-wide { width: 100%; margin-top: 12px; padding: 10px 0; }
+.etl-btn-primary:disabled { cursor: not-allowed; opacity: 0.6; }
+.etl-btn { padding: 6px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.etl-btn:hover { background: var(--lala-lavender-soft); }
+.etl-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.etl-progress { height: 4px; background: var(--lala-parchment-2); }
+.etl-progress span { display: block; height: 100%; background: var(--list-edge); transition: width 0.4s ease; }
+.etl-progress.is-done span { background: var(--success); }
+.etl-tasks { list-style: none; margin: 0; padding: 4px 0; }
+.etl-task { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--lala-parchment-2); }
+.etl-task:last-child { border-bottom: none; }
+.etl-task.is-done { background: var(--success-bg); }
+.etl-task.is-excluded { background: var(--surface-bg); opacity: 0.55; }
+.etl-toggle { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 22px; height: 22px; padding: 0; border: 1.5px solid var(--list-edge); border-radius: 6px; background: var(--list-edge); color: var(--list-check); font-size: 12px; font-weight: 700; cursor: pointer; }
+.etl-toggle.is-off { border-color: var(--lala-parchment-3); background: transparent; }
+.etl-check { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 22px; height: 22px; border: 1.5px solid var(--lala-parchment-3); border-radius: 6px; font-size: 12px; font-weight: 700; }
+.etl-check.is-required { border-color: var(--list-edge); }
+.etl-check.is-done { border: none; background: var(--success-text); color: var(--text-inverse); }
+.etl-task-text { flex: 1; min-width: 0; }
+.etl-task-label { font-size: 15px; font-weight: 600; color: var(--lala-ink); }
+.etl-task.is-done .etl-task-label, .etl-task.is-excluded .etl-task-label { color: var(--lala-ink-muted); text-decoration: line-through; }
+.etl-task-desc { margin-top: 2px; font-size: 13px; color: var(--lala-ink-muted); }
+.etl-task-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.etl-tag { font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); }
+.etl-tag.is-optional { color: var(--list-text); }
+.etl-error { margin: 0; padding: 10px 20px; background: var(--danger-bg); color: var(--danger-text); font-size: 13px; }
+.etl-empty .etl-error { margin-bottom: 12px; border-radius: 8px; }
+.etl-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.7); }
+.etl-modal-card { width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; background: var(--surface-card); }
+.etl-modal-card img { width: 100%; border-radius: 8px; }
+.etl-modal-role { margin: 8px 0 0; text-align: center; font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); }
+
+@media (max-width: 560px) {
+  .eat-head { padding: 16px; }
+  .eat-card { padding: 14px 16px; }
+  .eat-row { flex-wrap: wrap; }
+  .eat-row-text { flex-basis: calc(100% - 48px); }
+  .eat-row .eat-pill { margin-left: 48px; }
+  .etl-head, .etl-task { padding-left: 14px; padding-right: 14px; }
+  .etl-tab { font-size: 13px; padding: 8px 6px; }
 }
-
-.asset-card h4 {
-  margin: 0;
-  padding: 1rem;
-  font-size: var(--text-lg);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ==================== SECTIONS ==================== */
-
-.linked-assets-section {
-  background: var(--success-bg);
-  padding: 2rem;
-  border-radius: 16px;
-  border: 2px solid var(--success-border);
-}
-
-.episode-assets-section {
-  background: var(--primary-subtle);
-  padding: 2rem;
-  border-radius: 16px;
-  border: 2px solid var(--primary-light);
-}
-
-/* ==================== RESPONSIVE ==================== */
-
-@media (max-width: 1024px) {
-  .assets-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .episode-assets-tab {
-    padding: 1rem;
-    gap: 2rem;
-  }
-  
-  .section-header {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .btn-link-asset,
-  .btn-upload {
-    width: 100%;
-    text-align: center;
-  }
-  
-  .linked-assets-section,
-  .episode-assets-section {
-    padding: 1.5rem;
-  }
-  
-  .assets-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 1rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .assets-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
+/* responsive.css sizes every h2/h3 on small screens with !important. */
+.eat .eat-title { font-size: 24px !important; }
+.eat .eat-section-title { font-size: 20px !important; }
+.eat .eat-label { font-size: 12px !important; }
+.etl .etl-title { font-size: 16px !important; }
