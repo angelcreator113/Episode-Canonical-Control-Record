@@ -14,30 +14,21 @@
 .dce-city-a { --city-soft: var(--lala-lavender-soft); --city-line: var(--lala-lavender-line); --city-text: var(--lala-lavender-text); }
 .dce-city-m { --city-soft: var(--info-bg);            --city-line: var(--info-border);        --city-text: var(--info-text); }
 
-/* ── The map ── */
-.dce-map {
-  position: relative; min-height: 460px; overflow: hidden;
-  border-radius: 20px; border: 1px solid var(--success-border);
-  background: linear-gradient(160deg, var(--success-bg), var(--info-bg));
+/* ── The map: the illustrated DREAM map is the picker (one map, 2026-10-08) ── */
+.dce-map { min-width: 0; }
+
+/* ── The phone's city chips (the map's circles are small there) ── */
+.dce-picker { display: none; }
+.dce-chip {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: 44px; padding: 6px 14px; border-radius: 999px;
+  background: var(--city-soft); border: 2px solid var(--surface-card); cursor: pointer;
+  font-family: inherit; color: var(--text-primary);
 }
-.dce-roads { position: absolute; inset: 0; width: 100%; height: 100%; }
-.dce-roads line { stroke: var(--success-border); stroke-width: 3; stroke-dasharray: 8 6; vector-effect: non-scaling-stroke; }
-.dce-water { position: absolute; left: 0; right: 0; bottom: 0; height: 12%; background: var(--info-border); opacity: 0.45; border-radius: 50% 50% 0 0 / 40% 40% 0 0; }
-.dce-bubbles { position: absolute; inset: 0; }
-.dce-bubble {
-  position: absolute; transform: translate(-50%, -50%);
-  width: 132px; height: 132px; border-radius: 50%; padding: 8px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background: var(--city-soft); border: 3px solid var(--surface-card); cursor: pointer;
-  font-family: inherit; color: var(--text-primary); text-align: center;
-  box-shadow: 0 6px 18px -8px var(--city-line);
-  transition: transform 0.15s, border-color 0.15s;
-}
-.dce-bubble:hover { transform: translate(-50%, -50%) scale(1.04); }
-.dce-bubble.is-active { border-color: var(--city-text); transform: translate(-50%, -50%) scale(1.06); }
-.dce-letter { font-size: 26px; font-weight: 800; line-height: 1; color: var(--city-text); }
-.dce-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
-.dce-count { font-size: 11px; color: var(--text-secondary); }
+.dce-chip.is-active { border-color: var(--city-text); }
+.dce-letter { font-size: 18px; font-weight: 800; line-height: 1; color: var(--city-text); }
+.dce-name { font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.dce-count { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 
 /* ── The side cards ── */
 .dce-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start; }
@@ -69,18 +60,8 @@
 @media (max-width: 900px) {
   .dce { grid-template-columns: 1fr; }
 }
-/* On a phone the map is a row of chips: the bubbles would not fit. */
+/* On a phone the cities are also a row of chips above the cards. */
 @media (max-width: 560px) {
-  .dce-map { min-height: 0; padding: 12px; }
-  .dce-roads, .dce-water { display: none; }
-  .dce-bubbles { position: static; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-  .dce-bubble {
-    position: static; transform: none; flex-shrink: 0;
-    width: auto; height: auto; min-height: 44px; border-radius: 999px; padding: 6px 14px;
-    flex-direction: row; gap: 6px;
-  }
-  .dce-bubble:hover, .dce-bubble.is-active { transform: none; }
-  .dce-letter { font-size: 18px; }
-  .dce-count { display: none; }
+  .dce-picker { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
   .dce-card { padding: 16px; }
 }

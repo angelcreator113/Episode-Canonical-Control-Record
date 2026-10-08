@@ -36,10 +36,14 @@ describe('World tab', () => {
     expect(loop.open).toBe(true);
   });
 
-  test('in the hub the map keeps the illustrated map but not the old city, school and company cards', () => {
+  test('in the hub the illustrated map is the city picker; not the old city, school and company cards', () => {
     window.history.pushState({}, '', '/universe?tab=world');
     renderAt('/universe?tab=world');
-    expect(screen.getByTestId('dream-city-explorer')).toBeTruthy();
+    const explorer = screen.getByTestId('dream-city-explorer');
+    // One map: the illustrated map is the explorer's picker, no drawn bubbles above it.
+    expect(explorer.querySelector('[data-zone="dazzle_district"]')).toBeTruthy();
+    expect(explorer.querySelector('.dce-bubble')).toBeNull();
+    expect(screen.getAllByText('Edit Positions')).toHaveLength(1);
     expect(screen.queryByText('DREAM CITIES')).toBeNull();
     expect(screen.queryByText('UNIVERSITIES')).toBeNull();
     expect(screen.queryByText('CORPORATIONS')).toBeNull();
