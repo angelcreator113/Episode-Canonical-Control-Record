@@ -18,6 +18,11 @@
  * year (components/Culture/CultureYear: twelve months, the chosen month's
  * events and awards, the cultural memory), and the page and its three tabs
  * are in the hub's design (CultureEvents.css, tokens only).
+ *
+ * Awards & Media and History edit their lists (components/PageEdit/
+ * ListEditor; wiring map fix-list item 21): "Edit lists" in the header
+ * gives every item Edit and Remove and every list "+ Add", and a save
+ * writes the list to its own page (cultural_calendar or cultural_memory).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
@@ -32,6 +37,7 @@ import { CALENDAR_DEFAULTS } from '../data/calendarData';
 import { MEMORY_DEFAULTS } from '../data/memoryData';
 import { tabFromSearch } from '../utils/worldRedirects';
 import CultureYear from '../components/Culture/CultureYear';
+import useListEditor, { EditListsToggle } from '../components/PageEdit/ListEditor';
 import './CultureEvents.css';
 
 // File-local cross-CP duplicates of CP10 CulturalCalendar helpers per
@@ -59,8 +65,11 @@ const TABS = [
 export default function CultureEvents({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'events', undefined, 'sub'));
-  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
-  const { data: cmData, saving: cmSaving, loaded: cmLoaded } = usePageData('cultural_memory', MEMORY_DEFAULTS);
+  const calendarPage = usePageData('cultural_calendar', CALENDAR_DEFAULTS);
+  const memoryPage = usePageData('cultural_memory', MEMORY_DEFAULTS);
+  const { data: ccData, saving: ccSaving, loaded: ccLoaded } = calendarPage;
+  const { data: cmData, saving: cmSaving, loaded: cmLoaded } = memoryPage;
+  const lists = useListEditor({ cultural_calendar: calendarPage, cultural_memory: memoryPage });
 
   // Calendar events from API
   const [events, setEvents] = useState([]);
@@ -128,6 +137,7 @@ export default function CultureEvents({ embedded = false }) {
                 <ShowSelect shows={shows} value={showId} onChange={choose} label="Show for new events" prompt="Choose a show…" />
               </label>
             )}
+            {(tab === 'awards' || tab === 'history') && <EditListsToggle editing={lists.editing} onToggle={() => lists.setEditing(!lists.editing)} />}
             {tab === 'awards' && <BrainUpdate source="cultural_calendar" name="Calendar" data={ccData} ready={ccLoaded} />}
             {tab === 'history' && <BrainUpdate source="cultural_memory" name="Memory" data={cmData} ready={cmLoaded} />}
           </div>
@@ -143,9 +153,10 @@ export default function CultureEvents({ embedded = false }) {
         </div>
 
         {tab === 'events' && <EventsTab events={events} loading={loading} onCreateEvent={handleCreateEvent} onDelete={handleDelete} />}
-        {tab === 'awards' && <AwardsMediaTab data={ccData} />}
-        {tab === 'history' && <HistoryTab data={cmData} />}
+        {tab === 'awards' && <AwardsMediaTab data={ccData} lists={lists} />}
+        {tab === 'history' && <HistoryTab data={cmData} lists={lists} />}
       </section>
+      {lists.modal}
     </div>
   );
 }
