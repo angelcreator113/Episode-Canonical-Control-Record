@@ -35,7 +35,7 @@ test('AI zones: the proposal opens for review, and Approve adds and saves the zo
   expect(count).toBe(1);
   expect(onRequestAiZones).toHaveBeenCalledWith('the chat app');
   fireEvent.click(await screen.findByRole('button', { name: /Approve|Apply|Add/ }));
-  expect(onSave).toHaveBeenCalledWith([ZONE, proposed]);
+  expect(onSave.mock.calls[0][0]).toEqual([ZONE, proposed]);
 });
 
 test('AI zones with nothing proposed opens no review', async () => {

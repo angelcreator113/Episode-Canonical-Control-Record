@@ -788,34 +788,45 @@ router.post('/:showId/screen-links/:assetId/icon', requireAuth, upload.single('i
       req.file.mimetype
     );
 
-    // Update the matching link's icon_url in the asset metadata
-    const [rows] = await models.sequelize.query(
-      `SELECT metadata::text as metadata_text FROM assets
-       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
-    );
-
-    if (rows?.length) {
+    // The upload becomes the zone's own image: the library icon key goes, or
+    // it would keep drawing the library icon after a reload (phone audit,
+    // 2026-10-07). Read and written under a row lock, so a zones save made
+    // while the file uploaded is not overwritten by an older copy.
+    const found = await models.sequelize.transaction(async (transaction) => {
+      const [rows] = await models.sequelize.query(
+        `SELECT metadata::text as metadata_text FROM assets
+         WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
+         FOR UPDATE`,
+        { replacements: { assetId: req.params.assetId, showId: req.params.showId }, transaction }
+      );
+      if (!rows?.length) return false;
       let meta = {};
-      try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+      try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch (parseErr) {
+        console.error('[UIOverlay] icon upload: screen metadata is not JSON:', parseErr.message);
+        return false;
+      }
       const links = meta.screen_links || [];
       const link = links.find(l => l.id === link_id);
-      if (link) {
-        link.icon_url = url;
-        await models.sequelize.query(
-          `UPDATE assets SET metadata = CAST(:metadata AS jsonb), updated_at = NOW()
-           WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
-          { replacements: {
-            assetId: req.params.assetId,
-            showId: req.params.showId,
-            metadata: JSON.stringify(meta),
-          } }
-        );
-      }
-    }
+      if (!link) return false;
+      delete link.icon_overlay_id;
+      link.icon_url = url;
+      link.icon_urls = [url];
+      await models.sequelize.query(
+        `UPDATE assets SET metadata = CAST(:metadata AS jsonb), updated_at = NOW()
+         WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+        { replacements: {
+          assetId: req.params.assetId,
+          showId: req.params.showId,
+          metadata: JSON.stringify(meta),
+        }, transaction }
+      );
+      return true;
+    });
+    if (!found) return res.status(404).json({ success: false, error: 'That zone is not saved on this screen yet. Save the zones, then upload again.' });
 
     return res.json({ success: true, icon_url: url, link_id });
   } catch (err) {
+    console.error('[UIOverlay] icon upload error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

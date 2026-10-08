@@ -15,6 +15,11 @@
  * (the same type and variant; the main image when there is no variant),
  * soft-deletes only that row, and inserts the new one with the carried
  * metadata. A failure rolls back, so the old image stays.
+ *
+ * Phone audit (2026-10-07): only the show-wide image is replaced — an
+ * episode's own version of the screen (episode_id set) is left alone; it
+ * used to be soft-deleted with it. Episodes that placed the old image on
+ * their timeline are moved to the new one, so the placement keeps working.
  */
 
 const CARRIED_KEYS = Object.freeze(['screen_links', 'content_zones', 'image_fit', 'overlay_category']);
@@ -48,9 +53,9 @@ async function replaceOverlayAsset(sequelize, { showId, overlayId, variantLabel 
   return sequelize.transaction(async (transaction) => {
     const replacements = { showId, overlayId, variantLabel };
     const where = `asset_type = 'UI_OVERLAY' AND show_id = :showId AND metadata->>'overlay_type' = :overlayId
-                   AND ${variantClause(variantLabel)} AND deleted_at IS NULL`;
+                   AND ${variantClause(variantLabel)} AND episode_id IS NULL AND deleted_at IS NULL`;
     const previous = await sequelize.query(
-      `SELECT metadata FROM assets WHERE ${where} ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id, metadata FROM assets WHERE ${where} ORDER BY created_at DESC`,
       { replacements, type: sequelize.QueryTypes.SELECT, transaction });
     const carried = previous[0] ? carriedFrom(previous[0].metadata) : {};
     await sequelize.query(`UPDATE assets SET deleted_at = NOW() WHERE ${where}`, { replacements, transaction });
@@ -58,6 +63,16 @@ async function replaceOverlayAsset(sequelize, { showId, overlayId, variantLabel 
       `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
        VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
       { replacements: { id: assetId, name, url, showId, metadata: JSON.stringify({ ...metadata, ...carried }) }, transaction });
+    const oldIds = previous.map(r => r.id);
+    if (oldIds.length) {
+      const [[table]] = await sequelize.query(`SELECT to_regclass('public.timeline_placements') IS NOT NULL AS ok`, { transaction });
+      if (table?.ok) {
+        await sequelize.query(
+          `UPDATE timeline_placements SET asset_id = :assetId, updated_at = NOW()
+            WHERE asset_id IN (:oldIds)`,
+          { replacements: { assetId, oldIds }, transaction });
+      }
+    }
     return { assetId, carried: Object.keys(carried) };
   });
 }
