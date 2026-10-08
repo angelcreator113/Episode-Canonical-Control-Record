@@ -23,6 +23,7 @@ const {
   loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
   assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
 } = require('./societyArchetypes');
+const { assignHomeLocation } = require('./feedHomeLocation');
 
 // The Show Bible for one generation, or none (JustAWoman's Feed is the real world).
 const NO_BRAIN = Object.freeze({ block: null, ids: [] });
@@ -876,6 +877,16 @@ Return ONLY valid JSON with these fields:
     }
   } catch (err) {
     console.log(`[FeedScheduler] Follow/relationship auto-link warning: ${err.message}`);
+  }
+
+  // A LalaVerse creator's place on the DREAM map, as /generate and bulk
+  // import give one (services/feedHomeLocation).
+  if (layer === 'lalaverse' && city) {
+    try {
+      await assignHomeLocation(db, profile, city);
+    } catch (locErr) {
+      console.warn(`[FeedScheduler] home location for ${spark.handle}:`, locErr?.message);
+    }
   }
 
   return profile;

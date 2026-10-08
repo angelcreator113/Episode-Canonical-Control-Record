@@ -6,8 +6,8 @@
  * home_location_id), and up to three of the city's other venues as places
  * they frequent (frequent_venues, the signature venue first).
  *
- * /generate gave one to each LalaVerse creator it made; bulk import made
- * them with none. Both call this now.
+ * /generate gave one to each LalaVerse creator it made; bulk import and
+ * the Feed scheduler made them with none. All three call this now.
  */
 
 const { Op } = require('sequelize');
