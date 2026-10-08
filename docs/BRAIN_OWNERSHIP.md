@@ -101,7 +101,8 @@ Found by reading, not yet run:
   showed as ten empty sections. **Fixed 2026-10-04:** `showBibleSections.js` (`sectionOf`)
   puts every active entry in exactly one section: the Show Brain seeder's JSON `section`
   (now all thirteen of them), else the LalaVerse page named by `source_document`
-  (`cultural-system` → Culture & Events, `influencer-systems` → Influencer Systems, …, the
+  (`cultural-system` → Culture & Events, `influencer-systems` → Influencer Systems, named Social Systems,
+  its page's name, since 2026-10-08, …, the
   nine other seeders and the Brain Update manifests), else Uncategorized (written in the
   Show Bible, ingested, Amber, scene sets, episode completion). The section counts add
   up to the active count; `ShowBiblePage.knowledge.test.jsx` pins it. The Show Bible's
