@@ -1,11 +1,12 @@
 /* EpisodeTeaserSection.css: viewer teaser card on the episode Overview (Task #2386). */
 
+/* The card and title match the Overview's cards (EpisodeOverviewSections.css). */
 .ets {
   background: var(--surface-card);
-  border: 1px solid var(--lala-parchment-3);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
   min-width: 0;
 }
 
@@ -23,11 +24,10 @@
 
 .ets-title {
   margin: 0;
-  font-size: 10px;
+  font-family: var(--font-prose);
+  font-size: 17px;
   font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--lala-ink);
 }
 
 .ets-state {
@@ -45,15 +45,15 @@
 
 .ets-note {
   margin: 4px 0 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-size: 13px;
+  color: var(--lala-ink-muted);
   line-height: 1.4;
 }
 
 .ets-text,
 .ets-preview {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
   overflow-wrap: anywhere;
