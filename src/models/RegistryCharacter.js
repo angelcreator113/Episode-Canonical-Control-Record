@@ -365,6 +365,17 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // The cast's review of the old system (migration 20261008200000;
+    // routes/castRoutes.js): 'kept', or NULL while still to review.
+    cast_review: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      validate: { isIn: [['kept']] },
+    },
+    cast_reviewed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     ghost_characters: {
       type: DataTypes.JSONB,
       allowNull: true,

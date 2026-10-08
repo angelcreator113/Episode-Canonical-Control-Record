@@ -1,0 +1,117 @@
+/* The cast (CharacterRegistryPage, Evoni's mock, 2026-10-08). Tokens only
+   (TheCast.theme.test.js): lavender for the world and actions, pink for
+   Lala and archiving, gold for what waits for review. */
+
+.cast { max-width: 1100px; margin: 0 auto; padding: 16px 24px 40px; display: flex; flex-direction: column; gap: 20px; color: var(--text-primary); }
+.cast-loading { padding: 40px; text-align: center; color: var(--text-secondary); }
+.cast-toast {
+  position: fixed; top: 20px; right: 20px; z-index: 9999; padding: 10px 16px; border-radius: 10px;
+  background: var(--lala-lavender-soft); color: var(--lala-lavender-text); border: 1px solid var(--lala-lavender-line); font-size: 13px;
+}
+
+.cast-card { background: var(--surface-card); border: 1px solid var(--lala-lavender-line); border-radius: 18px; padding: 20px 24px; min-width: 0; }
+.cast-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.cast-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
+.cast-h2 { margin: 0; font-family: 'Lora', serif; font-size: 22px; font-weight: 700; }
+.cast-link { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
+.cast-link:hover { text-decoration: underline; }
+
+/* ── Buttons ── */
+.cast-btn-primary, .cast-btn-lavender, .cast-btn-soft, .cast-btn-archive {
+  min-height: 44px; padding: 8px 18px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid transparent;
+}
+.cast-btn-primary { background: var(--accent-dark); color: var(--text-inverse); }
+.cast-btn-lavender { background: var(--lala-lavender); color: var(--text-inverse); }
+.cast-btn-soft { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cast-btn-archive { background: var(--accent-subtle); color: var(--accent-dark); }
+.cast-btn-primary:disabled, .cast-btn-lavender:disabled, .cast-btn-soft:disabled, .cast-btn-archive:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── Header ── */
+.cast-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border-top: 4px solid var(--lala-lavender-light); }
+.cast-head-text { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cast-title { margin: 0; font-family: 'Lora', serif; font-size: 30px; font-weight: 700; }
+.cast-lede { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.cast-stats { display: flex; gap: 10px; }
+.cast-stat { min-width: 88px; padding: 10px 14px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cast-stat strong { font-family: 'Lora', serif; font-size: 22px; }
+.cast-stat span { font-size: 12px; font-weight: 600; }
+.cast-stat.is-lavender { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cast-stat.is-gold { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold-line); }
+.cast-stat.is-green { background: var(--success-bg); color: var(--success-text); }
+.cast-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cast-select { min-height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; }
+
+/* ── Lala ── */
+.cast-lala { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; background: linear-gradient(120deg, var(--accent-subtle), var(--lala-lavender-soft)); border-color: var(--accent-light); }
+.cast-lala-text { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cast-lala-name { margin: 0; font-family: 'Lora', serif; font-size: 26px; font-weight: 700; }
+.cast-lala-warn { flex: 0 1 300px; margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--surface-card); font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
+.cast-lala-warn strong { color: var(--text-primary); }
+
+.cast-avatar {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-family: 'Lora', serif; font-size: 18px; font-weight: 700;
+}
+.cast-avatar.is-lala { width: 72px; height: 72px; font-size: 32px; background: var(--surface-card); color: var(--accent-dark); border: 3px solid var(--accent-light); }
+
+/* ── Lala's world ── */
+.cast-section-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.cast-people { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.cast-person {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px 10px; align-items: center; height: 100%; box-sizing: border-box;
+  padding: 12px 14px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line);
+  color: var(--text-primary); text-decoration: none;
+}
+.cast-person:hover { border-color: var(--lala-lavender-light); }
+.cast-person-text { display: flex; flex-direction: column; min-width: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: break-word; }
+.cast-person-text strong { font-size: 13px; color: var(--text-primary); }
+.cast-chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.cast-chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.cast-chip.is-lavender { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cast-chip.is-gold { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.cast-chip.is-green { background: var(--success-bg); color: var(--success-text); }
+
+/* ── From the old system ── */
+.cast-old { background: var(--lala-gold-soft); border-color: var(--lala-gold-line); }
+.cast-tabs { margin-left: auto; display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-card); }
+.cast-tab { min-height: 36px; padding: 4px 14px; border-radius: 999px; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
+.cast-tab.is-on { background: var(--lala-lavender); color: var(--text-inverse); }
+.cast-tab:disabled { opacity: 0.55; cursor: not-allowed; }
+.cast-bulk { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 10px; border-radius: 12px; background: var(--surface-card); }
+.cast-bulk p { flex: 1 1 260px; margin: 0; font-size: 13px; color: var(--text-secondary); }
+.cast-bulk strong { color: var(--text-primary); }
+.cast-rows { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cast-row {
+  display: grid; grid-template-columns: 24px minmax(120px, 1fr) 90px minmax(0, 110px) auto; gap: 10px; align-items: center;
+  padding: 6px 12px; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line);
+}
+.cast-check { width: 18px; height: 18px; accent-color: var(--lala-lavender); }
+.cast-row-name { justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: none; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--text-primary); text-align: left; cursor: pointer; }
+.cast-row-name:hover span { text-decoration: underline; }
+.cast-role { justify-self: start; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.cast-role.is-protagonist { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.cast-role.is-pressure { background: var(--danger-bg); color: var(--danger-text); }
+.cast-role.is-mirror { background: var(--info-bg); color: var(--info-text); }
+.cast-role.is-support { background: var(--success-bg); color: var(--success-text); }
+.cast-role.is-shadow { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cast-role.is-special { background: var(--accent-subtle); color: var(--accent-dark); }
+.cast-row-note { font-size: 12px; min-width: 0; color: var(--text-secondary); }
+.cast-row.is-archived .cast-row-name { cursor: default; color: var(--text-secondary); }
+.cast-gap { margin-bottom: 10px; }
+.cast-match { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cast-match .cast-select { max-width: 240px; }
+.cast-row-actions .cast-btn-lavender { padding: 6px 12px; font-size: 12px; }
+.cast-twin { color: var(--lala-gold-text); font-weight: 700; }
+.cast-row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.cast-row-actions .cast-btn-soft, .cast-row-actions .cast-btn-archive { padding: 6px 12px; font-size: 12px; }
+
+@media (max-width: 760px) {
+  .cast-stats { flex-wrap: wrap; }
+  .cast { padding: 12px 16px 32px; }
+  .cast-card { padding: 16px; }
+  .cast-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .cast-row-note:empty { display: none; }
+  .cast-row-note, .cast-row-actions { grid-column: 2 / -1; }
+  .cast-row-actions { justify-content: flex-start; }
+  .cast-tabs { margin-left: 0; }
+}

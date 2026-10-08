@@ -1600,6 +1600,15 @@ try {
   console.error('✗ Failed to load Scene Studio Episode routes:', e.message);
 }
 
+// The cast — review of the old system's characters (Keep, Match, Archived)
+try {
+  const castRoutes = require('./routes/castRoutes');
+  app.use('/api/v1/cast', castRoutes);
+  console.log('✓ Cast loaded at /api/v1/cast');
+} catch (e) {
+  console.error('✗ Failed to load Cast routes:', e.message);
+}
+
 // Feed Posts — timeline activity after episodes
 try {
   const feedPostRoutes = require('./routes/feedPostRoutes');
