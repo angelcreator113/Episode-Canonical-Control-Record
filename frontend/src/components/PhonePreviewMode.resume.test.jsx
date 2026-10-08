@@ -59,6 +59,29 @@ describe('play-through resume', () => {
   });
 });
 
+// Lala's Phone audit (Evoni, 2026-10-07).
+describe('play-through taps and visits', () => {
+  test('a tap names the screen it was made on', async () => {
+    const pt = playthroughWith({ tap: vi.fn().mockResolvedValue({ effects: { navigate: null, toasts: [] }, state: null }) });
+    const home = { ...HOME, asset_id: 'asset-home' };
+    render(<PhonePreviewMode screens={[home, DMS]} initialScreen={home} playthrough={pt} onClose={() => {}} />);
+    fireEvent.click(await screen.findByTitle('Messages'));
+    await waitFor(() => expect(pt.tap).toHaveBeenCalledWith('z-dm', 'asset-home'));
+  });
+
+  test("a mission finished by landing on a screen is celebrated and its toast shown", async () => {
+    const pt = playthroughWith({
+      state: { state_flags: {}, visited_screens: [], completed_mission_ids: [], last_screen_id: 'dms' },
+      saveScreen: vi.fn().mockResolvedValue({ effects: { toasts: [{ text: 'Inbox cleared', tone: 'success' }] }, newlyCompleted: [{ id: 'm1', name: 'Check the DMs' }] }),
+    });
+    render(<PhonePreviewMode screens={[HOME, DMS]} initialScreen={HOME} playthrough={pt} onClose={() => {}} />);
+    await screen.findByAltText('DMs');
+    fireEvent.click(screen.getByTitle(/Home/));
+    expect(await screen.findByText('Inbox cleared')).toBeTruthy();
+    expect(await screen.findByText(/Check the DMs/)).toBeTruthy();
+  });
+});
+
 describe('play-through errors', () => {
   test('a refused tap is said on the phone, then cleared', async () => {
     const pt = playthroughWith({ error: 'zone is currently locked' });

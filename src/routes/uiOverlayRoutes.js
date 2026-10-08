@@ -6,7 +6,26 @@ const multer = require('multer');
 const { requireAuth, authorize } = require('../middleware/auth');
 const { isBudgetError } = require('../services/imageCostService');
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+// Images only (phone audit, 2026-10-07): the stored file keeps the type it
+// was sent with, so an HTML or SVG file posing as an overlay could run as a
+// page from the bucket. PNG, JPEG, WebP and GIF are accepted.
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const multerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (IMAGE_TYPES.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Only PNG, JPEG, WebP or GIF images can be uploaded.'));
+  },
+});
+// A refused or oversized file is a 400 with the reason, not a 500.
+const upload = {
+  single: (field) => (req, res, next) => multerUpload.single(field)(req, res, (err) => {
+    if (!err) return next();
+    console.error('[UIOverlay] upload refused:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
+  }),
+};
 
 // ── In-memory generation status tracking per show ──
 // Tracks progress/errors so the frontend can display feedback
@@ -137,6 +156,15 @@ router.get('/:showId', requireAuth, async (req, res) => {
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
         content_zones: primary?.metadata?.content_zones || null,
+        // Content zones read these on the device (phone audit, 2026-10-07):
+        // the feed/DM/notification zones need the show, the wardrobe
+        // price/brand zones read the screen's metadata. Only those two keys
+        // go out, not the whole metadata.
+        show_id: showId,
+        metadata: primary ? {
+          wardrobe_price: primary.metadata?.wardrobe_price ?? null,
+          wardrobe_brand: primary.metadata?.wardrobe_brand ?? null,
+        } : null,
         // True when the screen shown is this episode's own override of the
         // show default (only possible with ?episode_id=). Additive (Task #1920).
         is_episode_override: !!primary?.is_episode_override,
@@ -391,9 +419,11 @@ router.post('/:showId/remove-bg/:assetId', requireAuth, async (req, res) => {
       return res.status(503).json({ success: false, error: 'Background removal not configured. Set REMOVEBG_API_KEY.' });
     }
 
-    const result = await removeBackgroundFromAsset(req.params.assetId, models);
+    const result = await removeBackgroundFromAsset(req.params.assetId, models, { showId: req.params.showId });
     return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[UIOverlay] remove-bg error:', err.message);
+    if (err.message === 'Asset not found') return res.status(404).json({ success: false, error: 'No overlay image with that id in this show' });
     return res.status(500).json({ success: false, error: err.message });
   }
 });

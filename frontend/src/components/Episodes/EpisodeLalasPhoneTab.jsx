@@ -180,6 +180,8 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                 globalFit={frame.globalFit}
                 playthrough={null}
                 missions={[]}
+                showId={showId}
+                episodeId={episodeId}
               />
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">

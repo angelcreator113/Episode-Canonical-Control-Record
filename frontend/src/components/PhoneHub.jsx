@@ -110,7 +110,8 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
                 (onEditScreen || onSelectScreen)(target);
               }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
               {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (window.confirm(`Remove "${type.label}" from the grid? You can restore it later from "Show removed" at the top.`)) onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
-              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
+              {/* A screen you made can be deleted before it has an image (phone audit, 2026-10-07); an empty built-in one is hidden instead. */}
+              {onDelete && (screen?.generated || screen?.asset_id || screen?.url || screen?.custom) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
             </div>
           )}
         </div>

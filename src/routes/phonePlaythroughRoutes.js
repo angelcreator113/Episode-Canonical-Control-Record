@@ -14,7 +14,8 @@
  *   POST   /tap         — apply a zone's actions; returns new state + effects
  *   PUT    /screen      — remember the screen the player is on (Back, Home
  *                         and icon taps change it without /tap), so a reopened
- *                         play-through resumes there (Evoni, 2026-10-07)
+ *                         play-through resumes there (Evoni, 2026-10-07); a
+ *                         mission this visit completes fires its rewards
  *   POST   /reset       — clear flags + visited + completion
  *   POST   /complete    — mark the playthrough complete (also triggered by
  *                         `complete_episode` action via /tap)
@@ -56,20 +57,21 @@ async function loadOrCreateState(models, { userId, episodeId }) {
   return { state, showId: episode.show_id };
 }
 
-async function loadScreenZone(models, { showId, zoneId }) {
-  // Zones live inside asset metadata.screen_links[]. Pull any UI_OVERLAY asset
-  // on this show; narrowing by overlay_category is unreliable because it's in
-  // JSONB metadata and historically has three phone-family values (phone,
-  // phone_icon, icon) that not every author migrates between consistently.
-  // Scanning all UI_OVERLAY rows for the show is fine for PR2 — zone counts
-  // are low double digits in practice.
+// Find the tapped zone (phone audit, 2026-10-07). The client names the screen
+// it is on (screen_asset_id); that screen is searched first, so two screens
+// with a zone of the same id can't swap taps. Then the show-wide screens and
+// this episode's own (persistent home icons live on the home screen) — never
+// another episode's override.
+async function loadScreenZone(models, { showId, episodeId, zoneId, screenAssetId = null }) {
   const [rows] = await models.sequelize.query(
     `SELECT id, metadata::text AS metadata_text
      FROM assets
-     WHERE show_id = :showId AND deleted_at IS NULL AND asset_type = 'UI_OVERLAY'`,
-    { replacements: { showId } }
+     WHERE show_id = :showId AND deleted_at IS NULL AND asset_type = 'UI_OVERLAY'
+       AND (episode_id IS NULL OR episode_id = :episodeId)`,
+    { replacements: { showId, episodeId } }
   );
-  for (const row of rows || []) {
+  const ordered = [...(rows || [])].sort((a, b) => (b.id === screenAssetId) - (a.id === screenAssetId));
+  for (const row of ordered) {
     let meta = {};
     try { meta = JSON.parse(row.metadata_text || '{}'); } catch (parseErr) {
       console.error(`[phonePlaythroughRoutes] screen ${row.id} metadata is not JSON, skipped:`, parseErr.message);
@@ -79,6 +81,69 @@ async function loadScreenZone(models, { showId, zoneId }) {
     if (match) return { zone: match, screenAssetId: row.id };
   }
   return { zone: null };
+}
+
+const VISITED_CAP = 200;
+
+function addVisited(visited, screenId) {
+  const next = [...(visited || [])];
+  if (screenId && !next.includes(screenId)) {
+    next.push(screenId);
+    if (next.length > VISITED_CAP) next.splice(0, next.length - VISITED_CAP);
+  }
+  return next;
+}
+
+// Fire the rewards of every mission the state just completed. Mutates
+// `state` (flags, completed ids, completed_at) and `effects`; returns the
+// missions that completed. Fails open: a mission error never fails the tap
+// or the screen change that triggered it.
+async function runMissionRewards(models, { state, showId, episodeId, effects }) {
+  try {
+    const [missionRows] = await models.sequelize.query(
+      `SELECT id, name, description, start_condition, objectives, reward_actions, is_active, episode_id
+       FROM phone_missions
+       WHERE show_id = :showId AND deleted_at IS NULL
+         AND (episode_id = :episodeId OR episode_id IS NULL)`,
+      // Read outside the lock's transaction: a failed read (no table on an
+      // old database) must not abort the transaction that saves the tap.
+      { replacements: { showId, episodeId } }
+    );
+    const nextFlags = { ...(state.state_flags || {}) };
+    const missionCtx = { state: nextFlags, visitedScreens: new Set(state.visited_screens || []) };
+    const rewardWriter = {
+      setState: (k, v) => { nextFlags[k] = v; },
+      markEpisodeComplete: () => { if (!state.completed_at) state.completed_at = new Date(); },
+    };
+    const rewardResult = runtime.applyMissionRewards({
+      missions: missionRows || [],
+      prevCompletedIds: state.completed_mission_ids || [],
+      context: missionCtx,
+      writer: rewardWriter,
+    });
+    if (rewardResult.newlyCompletedIds.length) {
+      state.completed_mission_ids = [...(state.completed_mission_ids || []), ...rewardResult.newlyCompletedIds];
+    }
+    // Navigate prefers the zone's own navigate; rewards only override if the
+    // zone didn't set one (e.g. set_state zone triggers mission → navigate reward).
+    if (!effects.navigate && rewardResult.effects.navigate) effects.navigate = rewardResult.effects.navigate;
+    if (rewardResult.effects.toasts.length) effects.toasts.push(...rewardResult.effects.toasts);
+    if (rewardResult.effects.completeEpisode) effects.completeEpisode = true;
+    state.state_flags = nextFlags;
+    return rewardResult.newlyCompletedMissions;
+  } catch (missionErr) {
+    console.warn('[phonePlaythroughRoutes] mission reward eval skipped:', missionErr.message);
+    return [];
+  }
+}
+
+// Run `fn` on the state row locked for this request, so two taps at once
+// take turns instead of the second overwriting the first's flags.
+async function withLockedState(models, state, fn) {
+  return models.sequelize.transaction(async (transaction) => {
+    const locked = await models.PhonePlaythroughState.findByPk(state.id, { transaction, lock: transaction.LOCK.UPDATE });
+    return fn(locked, transaction);
+  });
 }
 
 // Serialize state in the same shape the client expects — keeps the "editor
@@ -127,93 +192,50 @@ router.post('/tap', requireAuth, async (req, res) => {
     const { zone_id } = req.body || {};
     if (!zone_id) return res.status(400).json({ success: false, error: 'zone_id is required' });
 
-    const { state, showId, error } = await loadOrCreateState(models, {
+    const { state: initialState, showId, error } = await loadOrCreateState(models, {
       userId: req.user.id,
       episodeId: req.params.episodeId,
     });
     if (error) return res.status(404).json({ success: false, error });
 
-    const { zone } = await loadScreenZone(models, { showId, zoneId: zone_id });
+    const screenAssetId = typeof req.body.screen_asset_id === 'string' ? req.body.screen_asset_id : null;
+    const { zone } = await loadScreenZone(models, { showId, episodeId: req.params.episodeId, zoneId: zone_id, screenAssetId });
     if (!zone) return res.status(404).json({ success: false, error: 'zone not found on any screen in this show' });
 
-    // Enforce visibility server-side too. A client that tries to tap a zone that
-    // SHOULDN'T be visible (condition returns false) gets 403 — can't exploit.
-    const visitedSet = new Set(state.visited_screens || []);
-    const evalCtx = { state: state.state_flags || {}, visitedScreens: visitedSet };
-    if (!runtime.evaluate(zone.conditions, evalCtx)) {
-      return res.status(403).json({ success: false, error: 'zone is currently locked' });
-    }
+    const result = await withLockedState(models, initialState, async (state, transaction) => {
+      // Enforce visibility server-side too. A client that tries to tap a zone that
+      // SHOULDN'T be visible (condition returns false) gets 403 — can't exploit.
+      const visitedSet = new Set(state.visited_screens || []);
+      const evalCtx = { state: state.state_flags || {}, visitedScreens: visitedSet };
+      if (!runtime.evaluate(zone.conditions, evalCtx)) return { locked: true };
 
-    // Build a writer that stages mutations; we apply them in one DB write below.
-    const nextFlags = { ...(state.state_flags || {}) };
-    let episodeNowComplete = false;
-    const writer = {
-      setState: (key, value) => { nextFlags[key] = value; },
-      markEpisodeComplete: () => { episodeNowComplete = true; },
-    };
-
-    const actions = runtime.actionsForZone(zone);
-    const effects = runtime.applyActions(actions, evalCtx, writer);
-
-    // Track visited_screens: the *target* of a navigate counts as visited. If
-    // the zone has an explicit screen_id param (e.g. the client already is on
-    // that screen before tapping), we could also push current screen — skipped
-    // for now to keep this narrow.
-    const nextVisited = [...visitedSet];
-    if (effects.navigate && !nextVisited.includes(effects.navigate)) {
-      nextVisited.push(effects.navigate);
-      if (nextVisited.length > 200) nextVisited.splice(0, nextVisited.length - 200);
-    }
-
-    // Apply zone-action mutations up-front so mission evaluation sees the new
-    // state. Missions only fire rewards on the transition from incomplete →
-    // complete; completed_mission_ids is the "already fired" tracker.
-    state.state_flags = nextFlags;
-    state.visited_screens = nextVisited;
-
-    let newlyCompletedMissions = [];
-    try {
-      const [missionRows] = await models.sequelize.query(
-        `SELECT id, name, description, start_condition, objectives, reward_actions, is_active, episode_id
-         FROM phone_missions
-         WHERE show_id = :showId AND deleted_at IS NULL
-           AND (episode_id = :episodeId OR episode_id IS NULL)`,
-        { replacements: { showId, episodeId: req.params.episodeId } }
-      );
-      const missionCtx = { state: nextFlags, visitedScreens: new Set(nextVisited) };
-      const rewardWriter = {
-        setState: (k, v) => { nextFlags[k] = v; },
-        markEpisodeComplete: () => { if (!state.completed_at) state.completed_at = new Date(); },
+      // Build a writer that stages mutations; we apply them in one DB write below.
+      const nextFlags = { ...(state.state_flags || {}) };
+      let episodeNowComplete = false;
+      const writer = {
+        setState: (key, value) => { nextFlags[key] = value; },
+        markEpisodeComplete: () => { episodeNowComplete = true; },
       };
-      const rewardResult = runtime.applyMissionRewards({
-        missions: missionRows || [],
-        prevCompletedIds: state.completed_mission_ids || [],
-        context: missionCtx,
-        writer: rewardWriter,
-      });
-      if (rewardResult.newlyCompletedIds.length) {
-        const next = [...(state.completed_mission_ids || []), ...rewardResult.newlyCompletedIds];
-        state.completed_mission_ids = next;
-        newlyCompletedMissions = rewardResult.newlyCompletedMissions;
-      }
-      // Merge reward-triggered effects into the response effects. Navigate
-      // prefers the zone's own navigate; rewards only override if the zone
-      // didn't set one (e.g. set_state zone triggers mission → navigate reward).
-      if (!effects.navigate && rewardResult.effects.navigate) effects.navigate = rewardResult.effects.navigate;
-      if (rewardResult.effects.toasts.length) effects.toasts.push(...rewardResult.effects.toasts);
-      if (rewardResult.effects.completeEpisode) effects.completeEpisode = true;
 
-      // Reward set_state mutations may have further changed nextFlags. Re-assign.
+      const actions = runtime.actionsForZone(zone);
+      const effects = runtime.applyActions(actions, evalCtx, writer);
+
+      // The *target* of a navigate counts as visited. Zone-action mutations
+      // apply first so mission evaluation sees the new state; missions only
+      // fire rewards on the transition from incomplete → complete.
       state.state_flags = nextFlags;
-    } catch (missionErr) {
-      // Fail open: if mission evaluation errors (e.g. table not yet migrated),
-      // don't fail the tap — the zone's primary action has already applied.
-      console.warn('[phonePlaythroughRoutes] mission reward eval skipped:', missionErr.message);
-    }
+      state.visited_screens = addVisited(state.visited_screens, effects.navigate);
+      const newlyCompletedMissions = await runMissionRewards(models, {
+        state, showId, episodeId: req.params.episodeId, effects,
+      });
 
-    if (effects.navigate) state.last_screen_id = effects.navigate;
-    if (episodeNowComplete && !state.completed_at) state.completed_at = new Date();
-    await state.save();
+      if (effects.navigate) state.last_screen_id = effects.navigate;
+      if (episodeNowComplete && !state.completed_at) state.completed_at = new Date();
+      await state.save({ transaction });
+      return { state, effects, newlyCompletedMissions };
+    });
+    if (result.locked) return res.status(403).json({ success: false, error: 'zone is currently locked' });
+    const { state, effects, newlyCompletedMissions } = result;
 
     return res.json({ success: true, state: serializeState(state), effects, newly_completed_missions: newlyCompletedMissions });
   } catch (err) {
@@ -228,16 +250,24 @@ router.put('/screen', requireAuth, async (req, res) => {
     const screenId = typeof req.body?.screen_id === 'string' ? req.body.screen_id.trim() : '';
     if (!screenId || screenId.length > 255) return res.status(400).json({ success: false, error: 'screen_id is required' });
     const models = require('../models');
-    const { state, error } = await loadOrCreateState(models, {
+    const { state: initialState, showId, error } = await loadOrCreateState(models, {
       userId: req.user.id,
       episodeId: req.params.episodeId,
     });
     if (error) return res.status(404).json({ success: false, error });
-    state.last_screen_id = screenId;
-    const visited = Array.isArray(state.visited_screens) ? state.visited_screens : [];
-    if (!visited.includes(screenId)) state.visited_screens = [...visited, screenId];
-    await state.save();
-    return res.json({ success: true, state: serializeState(state) });
+    // Landing on a screen can finish a "visited" mission, so its rewards
+    // fire here as they do on a tap (phone audit, 2026-10-07).
+    const effects = { navigate: null, toasts: [], completeEpisode: false };
+    const { state, newlyCompletedMissions } = await withLockedState(models, initialState, async (locked, transaction) => {
+      locked.last_screen_id = screenId;
+      locked.visited_screens = addVisited(locked.visited_screens, screenId);
+      const done = await runMissionRewards(models, {
+        state: locked, showId, episodeId: req.params.episodeId, effects,
+      });
+      await locked.save({ transaction });
+      return { state: locked, newlyCompletedMissions: done };
+    });
+    return res.json({ success: true, state: serializeState(state), effects, newly_completed_missions: newlyCompletedMissions });
   } catch (err) {
     console.error('[phonePlaythroughRoutes] screen error:', err);
     return res.status(500).json({ success: false, error: err.message });

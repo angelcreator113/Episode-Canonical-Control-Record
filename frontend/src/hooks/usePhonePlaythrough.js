@@ -35,10 +35,13 @@ export default function usePhonePlaythrough(episodeId) {
   // Tap a zone — server validates the condition, applies actions, persists state,
   // and returns { state, effects }. Client re-syncs state and the caller handles
   // effects (navigate / toasts / completion).
-  const tap = useCallback(async (zoneId) => {
+  // `screenAssetId` names the screen the zone was tapped on, so a zone id
+  // shared by two screens runs the right one.
+  const tap = useCallback(async (zoneId, screenAssetId = null) => {
     if (!episodeId || !zoneId) return null;
     try {
-      const res = await api.post(`/api/v1/episodes/${episodeId}/phone-state/tap`, { zone_id: zoneId });
+      const body = screenAssetId ? { zone_id: zoneId, screen_asset_id: screenAssetId } : { zone_id: zoneId };
+      const res = await api.post(`/api/v1/episodes/${episodeId}/phone-state/tap`, body);
       const nextState = res.data?.state;
       const effects = res.data?.effects || { navigate: null, toasts: [], completeEpisode: false };
       if (nextState) setState(nextState);
@@ -61,13 +64,18 @@ export default function usePhonePlaythrough(episodeId) {
 
   // Remember the screen the player is on (Back, Home and icon taps change it
   // without /tap), so a reopened play-through resumes there (Evoni,
-  // 2026-10-07). A failure is reported, not swallowed.
+  // 2026-10-07). A failure is reported, not swallowed. Landing on a screen
+  // can finish a mission, so the response's state, effects and newly
+  // completed missions come back as from a tap.
   const saveScreen = useCallback(async (screenId) => {
-    if (!episodeId || !screenId) return;
+    if (!episodeId || !screenId) return null;
     try {
-      await api.put(`/api/v1/episodes/${episodeId}/phone-state/screen`, { screen_id: screenId });
+      const res = await api.put(`/api/v1/episodes/${episodeId}/phone-state/screen`, { screen_id: screenId });
+      if (res.data?.state) setState(res.data.state);
+      return { effects: res.data?.effects || null, newlyCompleted: res.data?.newly_completed_missions || [] };
     } catch (err) {
       setError(err.response?.data?.error || err.message);
+      return null;
     }
   }, [episodeId]);
 
