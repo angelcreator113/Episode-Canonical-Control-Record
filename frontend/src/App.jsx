@@ -120,8 +120,6 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const SeriesPage = lazy(() => import('./pages/SeriesPage'));
 const UniverseProductionPage = lazy(() => import('./pages/UniverseProductionPage'));
 const UniverseSocialImportPage = lazy(() => import('./pages/UniverseSocialImportPage'));
-const UniverseWorldStatePage = lazy(() => import('./pages/UniverseWorldStatePage'));
-const UniverseTensionsPage = lazy(() => import('./pages/UniverseTensionsPage'));
 const StoryDashboardPage = lazy(() => import('./pages/StoryDashboardPage'));
 const WritingRhythmPage = lazy(() => import('./pages/WritingRhythmPage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
@@ -339,8 +337,6 @@ function AppContent() {
           {/* Opens the active show's Producer Mode (audit IA-01); no dashboard of its own. */}
           <Route path="/universe/production" element={<UniverseProductionPage />} />
           <Route path="/universe/assets" element={<Navigate to="/assets" replace />} />
-          <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
-          <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
           <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
           {/* The Show Bible is the LalaVerse hub's Bible tab (2026-10-04); /show-bible redirects there via HUB_TABS below. */}
           <Route path="/universe/knowledge" element={<Navigate to="/universe?tab=bible&sub=knowledge" replace />} />
@@ -594,8 +590,6 @@ function AppContent() {
             '/universe/series': 'Series',
             '/universe/wardrobe': 'Wardrobe Library',
             '/universe/assets': 'Assets',
-            '/universe/world-state': 'World State',
-            '/universe/tensions': 'Tensions',
             '/universe/story-dashboard': 'Story Dashboard',
             '/universe/knowledge': 'Franchise Brain',
             '/intelligence/franchise-brain': 'Franchise Brain',

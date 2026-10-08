@@ -30,6 +30,13 @@ describe('WORLD_REDIRECTS', () => {
       expect(to).toMatch(/^\/universe\?tab=(bible|world|society|culture|state)&sub=\w+$/);
     }
   });
+
+  test('the Universe World State and Tensions pages open the State tab, whose Tensions read the scanner\'s contract', () => {
+    // Their own copy (WorldStateTensions) read the pre-2026-10-04 contract:
+    // every pair nameless, and Propose Scene refused (400).
+    expect(WORLD_REDIRECTS['/universe/world-state']).toBe('/universe?tab=state&sub=state');
+    expect(WORLD_REDIRECTS['/universe/tensions']).toBe('/universe?tab=state&sub=tensions');
+  });
 });
 
 describe('HUB_TABS and hubTarget', () => {
