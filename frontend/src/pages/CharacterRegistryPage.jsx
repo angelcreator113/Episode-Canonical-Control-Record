@@ -8,8 +8,9 @@
  * returned); quick create goes into it.
  *
  * The old system's Archive is the registry's soft delete. Keep, Match to
- * feed person, the Kept and Archived tabs and episode counts need routes
- * that don't exist yet and come next; they show disabled, not pretend.
+ * feed person, the Kept and Archived tabs (Bring back, Delete permanently)
+ * and episode counts are routes/castRoutes.js (/api/v1/cast), per registry:
+ * with "All registries" in view they wait for a registry to be chosen.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -29,7 +30,8 @@ const ROLE_CONFIG = {
 };
 
 const ROLE_LABEL = Object.fromEntries(Object.entries(ROLE_CONFIG).map(([k, v]) => [k, v.label]));
-const NEXT = 'Comes next: this needs a route the registry does not have yet.';
+const CHOOSE = 'Choose a registry first';
+const episodesLabel = (n) => (n > 0 ? `${n} episode${n === 1 ? '' : 's'}` : 'No episodes');
 
 
 /**
@@ -72,6 +74,11 @@ export default function CharacterRegistryPage() {
   const [profiles, setProfiles] = useState([]);
   const [picked, setPicked] = useState(() => new Set());
   const [archiving, setArchiving] = useState(false);
+  // The registry's review (GET /api/v1/cast/review): kept marks, links, archived, episode counts.
+  const [review, setReview] = useState(null);
+  const [oldTab, setOldTab] = useState('review');
+  const [matching, setMatching] = useState(null); // { id, profileId } while a match is being chosen
+  const [busyId, setBusyId] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
   const [creating, setCreating] = useState(false);
@@ -105,6 +112,19 @@ export default function CharacterRegistryPage() {
       setProfiles(res.data?.profiles || []);
     } catch (err) { console.error('[CharacterRegistryPage] feed profiles load failed:', err); setProfiles([]); }
   };
+
+  const loadReview = async (id) => {
+    if (!id) { setReview(null); return; }
+    try {
+      const res = await api.get(`/api/v1/cast/review?registry_id=${id}`);
+      setReview({
+        byId: Object.fromEntries((res.data?.characters || []).map((c) => [c.id, c])),
+        archived: res.data?.archived || [],
+        counts: res.data?.episode_counts || {},
+      });
+    } catch (err) { console.error('[CharacterRegistryPage] cast review load failed:', err); setReview(null); }
+  };
+  useEffect(() => { loadReview(registryId); }, [registryId]);
 
   // Once the registries and the active show are known, settle the registry
   // in view; the URL keeps it so a link or Back lands on the same one.
@@ -150,14 +170,21 @@ export default function CharacterRegistryPage() {
   const old = oldSystem(characters, profiles, lala);
   const twins = sameNames(old);
   const protagonists = characters.filter((c) => c.role_type === 'protagonist').length;
-  const pickedOld = old.filter((c) => picked.has(c.id));
+  const isKept = (c) => review?.byId[c.id]?.cast_review === 'kept';
+  const toReview = old.filter((c) => !isKept(c));
+  const kept = old.filter(isKept);
+  const archived = review?.archived || [];
+  const episodes = (id) => review?.counts?.[id];
+  const freeProfiles = people.filter((p) => !p.characterId);
+  const shown = oldTab === 'kept' ? kept : toReview;
+  const pickedOld = shown.filter((c) => picked.has(c.id));
   const togglePick = (id) => setPicked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
-  // Archive is the registry's soft delete; bringing one back is not on this page yet, so ask first.
+  // Archive is the registry's soft delete; the Archived tab brings one back.
   const archive = async (chars) => {
     if (!chars.length) return;
     const names = chars.length === 1 ? chars[0].display_name : `${chars.length} characters`;
-    if (!window.confirm(`Archive ${names}? They leave the pickers. Bringing them back isn't on this page yet.`)) return;
+    if (!window.confirm(`Archive ${names}? They leave the pickers; the Archived tab can bring them back.`)) return;
     setArchiving(true);
     try {
       if (chars.length === 1) await api.delete(`/api/v1/character-registry/characters/${chars[0].id}`);
@@ -165,10 +192,39 @@ export default function CharacterRegistryPage() {
       setPicked(new Set());
       showToast(`Archived ${names}`);
       loadCharacters();
+      loadReview(registryId);
     } catch (err) {
       console.error('[CharacterRegistryPage] archive failed:', err);
       showToast('Archive failed: ' + (err.response?.data?.error || err.message));
     } finally { setArchiving(false); }
+  };
+
+  // One call to the cast routes, then the page reloads what it changed.
+  const castCall = async (id, call, done, { reloadProfiles = false, reloadCharacters = false } = {}) => {
+    setBusyId(id);
+    try {
+      await call();
+      showToast(done);
+      if (reloadCharacters) loadCharacters();
+      if (reloadProfiles) loadProfiles();
+      loadReview(registryId);
+    } catch (err) {
+      console.error('[CharacterRegistryPage] cast action failed:', err);
+      showToast(err.response?.data?.error || err.message);
+    } finally { setBusyId(null); }
+  };
+  const keep = (c, value) => castCall(c.id, () => api.post(`/api/v1/cast/characters/${c.id}/keep`, { kept: value }),
+    value ? `Kept ${c.display_name}` : `${c.display_name} is back to review`);
+  const match = (c, profileId) => {
+    const p = freeProfiles.find((x) => String(x.id) === String(profileId));
+    setMatching(null);
+    return castCall(c.id, () => api.put(`/api/v1/cast/characters/${c.id}/feed-profile`, { feed_profile_id: Number(profileId) }),
+      `${c.display_name} is now ${p?.handle ? '@' + p.handle : 'that feed person'}`, { reloadProfiles: true });
+  };
+  const bringBack = (c) => castCall(c.id, () => api.post(`/api/v1/cast/characters/${c.id}/restore`), `${c.display_name} is back`, { reloadCharacters: true });
+  const deleteForGood = (c) => {
+    if (!window.confirm(`Delete ${c.display_name} for good? This cannot be undone.`)) return;
+    return castCall(c.id, () => api.delete(`/api/v1/cast/characters/${c.id}/permanent`), `Deleted ${c.display_name}`);
   };
 
   if (loading) return <div className="cast-loading">Loading the cast…</div>;
@@ -188,7 +244,8 @@ export default function CharacterRegistryPage() {
         </div>
         <div className="cast-stats">
           <div className="cast-stat is-lavender"><strong>{people.length}</strong><span>feed people</span></div>
-          <div className="cast-stat is-gold"><strong>{old.length}</strong><span>old to review</span></div>
+          <div className="cast-stat is-gold"><strong>{toReview.length}</strong><span>old to review</span></div>
+          <div className="cast-stat is-green"><strong>{review ? kept.length + archived.length : '–'}</strong><span>reviewed</span></div>
         </div>
         <div className="cast-head-actions">
           {registries.length > 1 && (
@@ -241,6 +298,7 @@ export default function CharacterRegistryPage() {
                   <span className="cast-chips">
                     {p.archetype && <span className="cast-chip is-lavender">{p.archetype}</span>}
                     {!p.characterId && <span className="cast-chip is-gold">No character yet</span>}
+                    {p.characterId && episodes(p.characterId) > 0 && <span className="cast-chip is-green">In {episodesLabel(episodes(p.characterId))}</span>}
                   </span>
                 </Link>
               </li>
@@ -253,39 +311,92 @@ export default function CharacterRegistryPage() {
       <section className="cast-card cast-old" aria-labelledby="cast-old-heading">
         <div className="cast-section-head">
           <h2 id="cast-old-heading" className="cast-h2">From the old system</h2>
-          <span className="cast-note">{old.length} character{old.length !== 1 ? 's' : ''}</span>
+          <span className="cast-note">{old.length} character{old.length !== 1 ? 's' : ''}{review ? ` · ${kept.length + archived.length} reviewed` : ''}</span>
           <div className="cast-tabs" role="group" aria-label="Old-system characters">
-            <button type="button" className="cast-tab is-on" aria-pressed="true">To review</button>
-            <button type="button" className="cast-tab" disabled title={NEXT}>Kept</button>
-            <button type="button" className="cast-tab" disabled title={NEXT}>Archived</button>
+            {[['review', 'To review', toReview.length], ['kept', 'Kept', kept.length], ['archived', 'Archived', archived.length]].map(([key, label, n]) => (
+              <button key={key} type="button" className={`cast-tab${oldTab === key ? ' is-on' : ''}`} aria-pressed={oldTab === key}
+                disabled={key !== 'review' && !review} title={key !== 'review' && !review ? CHOOSE : undefined}
+                onClick={() => { setOldTab(key); setPicked(new Set()); setMatching(null); }}>
+                {label}{review || key === 'review' ? ` (${n})` : ''}
+              </button>
+            ))}
           </div>
         </div>
-        {old.length === 0 ? (
-          <p className="cast-note">Nothing left to review.</p>
+        {!review && <p className="cast-note cast-gap">Choose a registry to keep, match or see archived characters.</p>}
+
+        {oldTab === 'archived' ? (
+          archived.length === 0 ? <p className="cast-note">Nothing archived.</p> : (
+            <ul className="cast-rows" data-testid="cast-archived">
+              {archived.map((c) => {
+                const n = episodes(c.id) || 0;
+                return (
+                  <li key={c.id} className="cast-row is-archived">
+                    <span aria-hidden="true" />
+                    <span className="cast-row-name"><span>{c.display_name}</span></span>
+                    <span className={`cast-role is-${c.role_type || 'pressure'}`}>{ROLE_LABEL[c.role_type] || 'Pressure'}</span>
+                    <span className="cast-row-note">{episodesLabel(n)}</span>
+                    <span className="cast-row-actions">
+                      <button type="button" className="cast-btn-soft" disabled={busyId === c.id} onClick={() => bringBack(c)}>Bring back</button>
+                      <button type="button" className="cast-btn-archive" disabled={busyId === c.id || n > 0}
+                        title={n > 0 ? `${episodesLabel(n)} still use ${c.display_name}` : undefined} onClick={() => deleteForGood(c)}>Delete permanently</button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : shown.length === 0 ? (
+          <p className="cast-note">{oldTab === 'kept' ? 'Nothing kept yet.' : 'Nothing left to review.'}</p>
         ) : (<>
-          <div className="cast-bulk">
-            <p><strong>Not used any more?</strong> Select them and archive in one go. Archived characters leave the pickers.</p>
-            <button type="button" className="cast-btn-primary" disabled={!pickedOld.length || archiving} onClick={() => archive(pickedOld)}>
-              Archive selected{pickedOld.length ? ` (${pickedOld.length})` : ''}
-            </button>
-          </div>
-          <ul className="cast-rows" data-testid="cast-old">
-            {old.map((c) => (
-              <li key={c.id} className="cast-row">
-                <input type="checkbox" className="cast-check" aria-label={`Select ${c.display_name}`} checked={picked.has(c.id)} onChange={() => togglePick(c.id)} />
-                <button type="button" className="cast-row-name" onClick={() => navigate(`/character/${c.id}`)}><span>{c.display_name}</span></button>
-                <span className={`cast-role is-${c.role_type || 'pressure'}`}>{ROLE_LABEL[c.role_type] || 'Pressure'}</span>
-                <span className="cast-row-note">{twins[c.id] ? <span className="cast-twin">{sameNameNote(twins[c.id], c.display_name)}</span> : null}</span>
-                <span className="cast-row-actions">
-                  <button type="button" className="cast-btn-soft" disabled title={NEXT}>Match to feed person</button>
-                  <button type="button" className="cast-btn-soft" disabled title={NEXT}>Keep</button>
-                  <button type="button" className="cast-btn-archive" disabled={archiving} onClick={() => archive([c])}>Archive</button>
-                </span>
-              </li>
-            ))}
+          {oldTab === 'review' && (
+            <div className="cast-bulk">
+              <p><strong>Not used any more?</strong> Select them and archive in one go. Archived characters leave the pickers and can be brought back.</p>
+              <button type="button" className="cast-btn-primary" disabled={!pickedOld.length || archiving} onClick={() => archive(pickedOld)}>
+                Archive selected{pickedOld.length ? ` (${pickedOld.length})` : ''}
+              </button>
+            </div>
+          )}
+          <ul className="cast-rows" data-testid={oldTab === 'kept' ? 'cast-kept' : 'cast-old'}>
+            {shown.map((c) => {
+              const n = episodes(c.id);
+              const busy = busyId === c.id;
+              return (
+                <li key={c.id} className="cast-row">
+                  {oldTab === 'review'
+                    ? <input type="checkbox" className="cast-check" aria-label={`Select ${c.display_name}`} checked={picked.has(c.id)} onChange={() => togglePick(c.id)} />
+                    : <span aria-hidden="true" />}
+                  <button type="button" className="cast-row-name" onClick={() => navigate(`/character/${c.id}`)}><span>{c.display_name}</span></button>
+                  <span className={`cast-role is-${c.role_type || 'pressure'}`}>{ROLE_LABEL[c.role_type] || 'Pressure'}</span>
+                  <span className="cast-row-note">
+                    {twins[c.id] ? <span className="cast-twin">{sameNameNote(twins[c.id], c.display_name)}</span> : n !== undefined ? episodesLabel(n) : null}
+                  </span>
+                  <span className="cast-row-actions">
+                    {matching?.id === c.id ? (
+                      <span className="cast-match">
+                        <select aria-label={`Feed person for ${c.display_name}`} className="cast-select" value={matching.profileId}
+                          onChange={(e) => setMatching({ id: c.id, profileId: e.target.value })}>
+                          <option value="">Choose a feed person…</option>
+                          {freeProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}{p.handle ? ` (@${p.handle.replace(/^@/, '')})` : ''}</option>)}
+                        </select>
+                        <button type="button" className="cast-btn-lavender" disabled={!matching.profileId || busy} onClick={() => match(c, matching.profileId)}>Match</button>
+                        <button type="button" className="cast-btn-soft" onClick={() => setMatching(null)}>Cancel</button>
+                      </span>
+                    ) : (<>
+                      <button type="button" className="cast-btn-soft" disabled={!review || busy || !freeProfiles.length}
+                        title={!review ? CHOOSE : !freeProfiles.length ? 'Every feed person already has a character' : undefined}
+                        onClick={() => setMatching({ id: c.id, profileId: '' })}>Match to feed person</button>
+                      {oldTab === 'kept'
+                        ? <button type="button" className="cast-btn-soft" disabled={busy} onClick={() => keep(c, false)}>Back to review</button>
+                        : <button type="button" className="cast-btn-soft" disabled={!review || busy} title={!review ? CHOOSE : undefined} onClick={() => keep(c, true)}>Keep</button>}
+                      <button type="button" className="cast-btn-archive" disabled={archiving || busy} onClick={() => archive([c])}>Archive</button>
+                    </>)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </>)}
-        <p className="cast-note">Keep, Match to feed person and the Kept and Archived tabs come next.</p>
+        <p className="cast-note">Delete permanently lives in the Archived tab, and is blocked for anyone an episode still uses.</p>
       </section>
 
       {/* Create Modal */}
