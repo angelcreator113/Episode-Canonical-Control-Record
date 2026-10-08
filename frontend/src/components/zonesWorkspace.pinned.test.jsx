@@ -55,7 +55,7 @@ describe('ScreenLinkEditor — pinned (Task #2014)', () => {
     const ref = createRef();
     render(<ScreenLinkEditor ref={ref} screen={SCREEN} links={ZONES} iconOverlays={[CALL]} onSave={onSave} embedded />);
     act(() => { ref.current.save(); });
-    expect(onSave).toHaveBeenCalledWith(ZONES);
+    expect(onSave).toHaveBeenCalledWith(ZONES, SCREEN);
   });
 
   test('editing a label keeps the zone\'s target, conditions, actions and icon on save', () => {

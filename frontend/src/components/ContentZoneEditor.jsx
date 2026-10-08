@@ -9,10 +9,14 @@
  *   screenUrl         — URL of the screen template image
  *   zones             — array of { id, x, y, w, h, content_type, content_config }
  *   showId            — current show ID (for profile/data pickers)
- *   onSave(zones)     — callback to persist updated zones
+ *   onSave(zones, screen) — callback to persist updated zones; `screen` is
+ *                       the screen they were loaded for. Returning false (a
+ *                       failed save) keeps them unsaved.
+ *   ref               — { isDirty(), save() } so the page can save before
+ *                       leaving (phone audit, 2026-10-07).
  *   readOnly          — if true, hide editing controls
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
@@ -24,7 +28,7 @@ import { getScreenImageStyle } from './phone/phoneStyle';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
-export default function ContentZoneEditor({
+const ContentZoneEditor = forwardRef(function ContentZoneEditor({
   screenUrl,
   screen,
   globalFit,
@@ -40,7 +44,7 @@ export default function ContentZoneEditor({
   // Optional DOM node beside the phone (the Content stage's card, Evoni's
   // mock 2026-10-07): the zone list renders there instead of under the phone.
   sidePanel = null,
-}) {
+}, ref) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -59,13 +63,19 @@ export default function ContentZoneEditor({
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const containerRef = useRef(null);
+  // The screen the areas were loaded for, and the areas shown, so a save
+  // names its own screen and only clears "unsaved" when nothing changed
+  // while it ran.
+  const zonesScreenRef = useRef(screen);
+  const localZonesRef = useRef(localZones);
+  localZonesRef.current = localZones;
 
   // Reset to the saved zones only when they change, not when the parent
   // passes a new but equal array: a re-render of the Phone page used to wipe
   // unsaved content areas (Evoni, 2026-10-07, Lala's Phone step 1).
   const zonesKey = JSON.stringify(zones || []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setLocalZones(zones || []); setIsDirty(false); }, [zonesKey]);
+  useEffect(() => { setLocalZones(zones || []); setIsDirty(false); zonesScreenRef.current = screen; }, [zonesKey]);
 
   // Load social profiles for picker dropdowns
   useEffect(() => {
@@ -195,10 +205,26 @@ export default function ContentZoneEditor({
     setIsDirty(true);
   };
 
-  const handleSave = () => {
-    if (onSave) onSave(localZones);
-    setIsDirty(false);
+  // Clears "unsaved" only when the save worked (phone audit, 2026-10-07).
+  const persist = async (toSave) => {
+    if (!onSave) return true;
+    let ok;
+    try {
+      ok = await onSave(toSave, zonesScreenRef.current);
+    } catch (err) {
+      console.error('[ContentZoneEditor] save failed:', err);
+      ok = false;
+    }
+    if (ok === false) return false;
+    if (localZonesRef.current === toSave) setIsDirty(false);
+    return true;
   };
+  const handleSave = () => persist(localZones);
+
+  useImperativeHandle(ref, () => ({
+    isDirty: () => isDirty,
+    save: () => persist(localZones),
+  }));
 
   const drawRect = drawing && drawStart && drawCurrent ? {
     x: Math.min(drawStart.x, drawCurrent.x),
@@ -438,7 +464,9 @@ export default function ContentZoneEditor({
       })()}
     </div>
   );
-}
+});
+
+export default ContentZoneEditor;
 
 // ── Zone configuration panel — type picker + type-specific config fields ──
 function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsLoading = false, onUpdate, onAiFillZone }) {
