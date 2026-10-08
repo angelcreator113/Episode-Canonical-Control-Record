@@ -5,7 +5,7 @@
  * gap) and where the voices come from.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -13,7 +13,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import EpisodeScriptTab from './EpisodeScriptTab';
+import EpisodeScriptTab, { rewrittenLine } from './EpisodeScriptTab';
 
 const EVENT = {
   id: 'ev-1', show_id: 'show-1', name: 'Wearable Experiments', host_brand: 'SABLE',
@@ -74,5 +74,33 @@ describe('Script page', () => {
     renderTab();
     await waitFor(() => expect(screen.getByTestId('script-uses-look').getAttribute('data-ok')).toBe('true'));
     expect(screen.getByTestId('script-uses-look').textContent).toBe('Look 2 pieces locked: Silk slip dress, Strappy heels');
+  });
+
+  test('Rewrite keeps the speaker, sends the beat it sits in, and says when it fails (2026-10-08)', async () => {
+    const SCRIPT = '## BEAT: 1 · Opening Ritual\nPrime: "Hey besties. its been a minute."\nPrime: "Lets go ahead and login."\n';
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { rewrittenLine: 'Hey besties, welcome back!' } });
+    renderTab(SCRIPT);
+    fireEvent.click(screen.getAllByRole('button', { name: '✦ Rewrite' })[0]);
+    await waitFor(() => expect(screen.getAllByTestId('script-line')[0].textContent).toContain('"Hey besties, welcome back!"'));
+    expect(screen.getAllByTestId('script-line')[0].textContent).toContain('Prime');
+    expect(screen.getAllByRole('button', { name: '✦ Rewrite' })).toHaveLength(2);
+    const [url, body] = vi.mocked(api.post).mock.calls.at(-1);
+    expect(url).toBe('/api/v1/episode-brief/ep-1/rewrite-line');
+    expect(body).toMatchObject({ speaker: 'Prime', beatName: 'Opening Ritual', beatLines: ['Prime: "Hey besties. its been a minute."', 'Prime: "Lets go ahead and login."'] });
+    expect(screen.getByRole('status').textContent).toContain('Save to keep it');
+    expect(screen.getByTestId('script-dirty')).toBeTruthy();
+
+    vi.mocked(api.post).mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Daily AI budget reached' } } }));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fireEvent.click(screen.getAllByRole('button', { name: '✦ Rewrite' })[1]);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Rewrite failed: Daily AI budget reached'));
+    spy.mockRestore();
+  });
+
+  test('rewrittenLine: the new words in the original line\'s shape', () => {
+    expect(rewrittenLine('Prime: "Old words."', 'New words.')).toBe('Prime: "New words."');
+    expect(rewrittenLine('Lala: plain', '"Quoted back"')).toBe('Lala: Quoted back');
+    expect(rewrittenLine('Prime: "Same."', 'Prime: "Same."')).toBeNull();
+    expect(rewrittenLine('Prime: "x"', '  ')).toBeNull();
   });
 });
