@@ -562,12 +562,12 @@ router.post('/franchise-brain/guard', requireAuth, aiRateLimiter, async (req, re
   if (!scene_brief && !items) {
     return res.status(400).json({ error: 'scene_brief or items is required' });
   }
-  const showId = req.body.show_id || null;
-  if (showId !== null && !isShowId(showId)) {
-    return res.status(400).json({ error: 'show_id must be a show id (UUID)' });
-  }
 
   try {
+    const showId = req.body.show_id || null;
+    if (showId !== null && !isShowId(showId)) {
+      return res.status(400).json({ error: 'show_id must be a show id (UUID)' });
+    }
     const laws = await selectRules(db.FranchiseKnowledge, { showId, where: CRITICAL_OR_ALWAYS_INJECT });
 
     if (laws.length === 0) {
