@@ -11,6 +11,8 @@
  * episodes and events carry, and says so.
  */
 
+import { TENSION_LEVELS } from './stateSummary';
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const time = (value) => {
@@ -37,7 +39,9 @@ export function topTrend(trending) {
     || (Number(b.post_count) || 0) - (Number(a.post_count) || 0))[0];
 }
 
-const HOT = ['explosive', 'high', 'unresolved', 'simmering'];
+// Hottest first, in the State tab's order (lib/stateSummary TENSION_LEVELS),
+// which carries the Relationships page's volatile and fractured (fix-list item 23).
+const HOT = Object.keys(TENSION_LEVELS);
 
 /** The hottest tension pair (explosive first), or null. */
 export function topTension(pairs) {

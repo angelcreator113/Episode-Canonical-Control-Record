@@ -78,7 +78,8 @@ describe('StateSummary', () => {
     expect(within(tensions).getAllByRole('listitem').map((li) => li.querySelector('strong').textContent)).toEqual(['Nia & Rex', 'Sable & Lala']);
     expect(within(tensions).getByText('rival · The studio lease.')).toBeTruthy();
     expect(screen.queryByText(/cooling|heating/)).toBeNull();
-    expect(screen.getByRole('link', { name: '+ Add' }).getAttribute('href')).toBe('/world-studio');
+    // Relationships are kept on the Relationships page (fix-list item 23).
+    expect(screen.getByRole('link', { name: '+ Add' }).getAttribute('href')).toBe('/relationships');
     expect(within(screen.getByTestId('st-changes')).getByText('Reputation +3 · Stress −2')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Take a snapshot' }));
     expect(onTakeSnapshot).toHaveBeenCalled();
@@ -90,6 +91,7 @@ describe('StateSummary', () => {
     expect((await screen.findByTestId('st-no-episodes')).textContent).toContain('No episodes yet');
     expect(screen.getByText('No baseline yet')).toBeTruthy();
     expect(screen.getByTestId('st-no-tension').textContent).toContain('Nothing simmering among 4 characters');
+    expect(screen.getByTestId('st-no-tension').textContent).toContain('Simmering, Volatile or Fractured on the Relationships page');
     expect(screen.getByTestId('st-no-changes')).toBeTruthy();
   });
 

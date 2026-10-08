@@ -10,6 +10,11 @@
 // an empty list on failure, and the page sent char_a_id / char_b_id, which
 // the route never read. The page's side: frontend
 // WorldDashboard.tensions.test.jsx.
+//
+// Since 2026-10-08 the scanner reads character_relationships, the table the
+// Relationships page edits, and no longer World Studio's relationship_graph
+// (Evoni's ruling, wiring map fix-list item 23); the pairs are registry
+// characters. Behaviour: tests/integration/worldStudioTension.integration.test.js.
 
 const fs = require('fs');
 const path = require('path');
@@ -18,24 +23,32 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 const slice = (from, to) => SRC.slice(SRC.indexOf(from), SRC.indexOf(to, SRC.indexOf(from)));
 const scanner = slice("router.get('/world/tension-scanner'", "router.post('/world/create-story-task'");
 const proposal = slice("router.post('/world/create-tension-proposal'", "router.get('/world/context-summary'");
+const summary = slice("router.get('/world/context-summary'", 'WORLD MAP');
+const confirmed = slice('const confirmedRelationships = (req) => Q(req,', '/** Every relationship of one registry character');
 
 describe('world tension scanner contract', () => {
-  test('pairs carry their characters as objects with ids', () => {
-    expect(scanner).toMatch(/char_a:\s*\{\s*id:\s*char\.id,\s*name:\s*char\.display_name,\s*world_tag:\s*char\.world_tag\s*\}/);
-    // The other character's id: the scanner's keys, then World Studio's older
-    // character_id (wiring map fix-list item 10), then target_id.
-    expect(scanner).toMatch(/const otherId = rel\.related_character_id \|\| rel\.character_id \|\| rel\.target_id;/);
-    expect(scanner).toMatch(/char_b:\s*\{\s*id:\s*otherId,\s*name:\s*rel\.related_character_name \|\| rel\.character_name \|\| rel\.target_name\s*\}/);
+  test('the pairs are confirmed character_relationships rows, never the World Studio graph', () => {
+    expect(scanner).toMatch(/const rows = await confirmedRelationships\(req\);/);
+    expect(scanner).not.toMatch(/relationship_graph/);
+    expect(confirmed).toMatch(/FROM character_relationships cr/);
+    expect(confirmed).toMatch(/WHERE cr\.confirmed = true AND cr\.deleted_at IS NULL/);
+    expect(confirmed).toMatch(/JOIN registry_characters ra ON ra\.id = cr\.character_id_a AND ra\.deleted_at IS NULL/);
   });
-  test('the scanner and the context summary share one high-tension check', () => {
+  test('pairs carry their characters as objects with ids', () => {
+    expect(scanner).toMatch(/char_a:\s*\{\s*id:\s*r\.a_id,\s*name:\s*r\.a_name,\s*world_tag:\s*r\.a_world_tag \|\| null\s*\}/);
+    expect(scanner).toMatch(/char_b:\s*\{\s*id:\s*r\.b_id,\s*name:\s*r\.b_name\s*\}/);
+    expect(scanner).toMatch(/relationship_id:\s*r\.id/);
+  });
+  test('the scanner and the context summary share one high-tension check and one source', () => {
     expect(SRC).toMatch(/const \{ isHighTension \} = require\('\.\.\/services\/tensionLevels'\)/);
-    expect(scanner).toMatch(/if \(!isHighTension\(tension\)\) continue;/);
-    expect(SRC).toMatch(/if \(isHighTension\(t\)\) tensionCount\+\+;/);
+    expect(scanner).toMatch(/rows\.filter\(\(r\) => isHighTension\(r\.tension_state\)\)/);
+    expect(summary).toMatch(/tensionCount = \(await confirmedRelationships\(req\)\)\.filter\(\(r\) => isHighTension\(r\.tension_state\)\)\.length;/);
+    expect(summary).not.toMatch(/relationship_graph/);
     // No caller keeps its own list again.
     expect(SRC).not.toMatch(/\['Simmering', 'Explosive'/);
   });
   test('a scan says whether it ran, and a failed one is logged, not an empty list', () => {
-    expect(scanner).toMatch(/res\.json\(\{\s*status:\s*'ok',\s*pairs,\s*count:\s*pairs\.length,\s*characters_scanned:\s*rows\.length\s*\}\)/);
+    expect(scanner).toMatch(/res\.json\(\{\s*status:\s*'ok',\s*pairs,\s*count:\s*pairs\.length,\s*characters_scanned:\s*characters\.size\s*\}\)/);
     expect(scanner).toMatch(/status:\s*'scan_failed'/);
     expect(scanner).toMatch(/console\.error\('\[world-studio\] tension scan failed:'/);
     expect(scanner).not.toMatch(/catch \(err\) \{ res\.json\(\{ pairs: \[\], count: 0 \}\); \}/);
