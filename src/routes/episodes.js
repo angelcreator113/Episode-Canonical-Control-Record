@@ -487,6 +487,13 @@ router.put(
   asyncHandler(episodeController.updateEpisode)
 );
 
+// LOCK / UNLOCK SCRIPT BEATS (utils/scriptBeatLocks.js)
+router.put(
+  '/:id/script-locks',
+  requireAuth,
+  asyncHandler(episodeController.updateScriptLocks)
+);
+
 // ✅ UPLOAD THUMBNAIL for episode
 const thumbnailUpload = multer({
   storage: multer.memoryStorage(),
@@ -1196,7 +1203,9 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
     ].join('\n');
   }
 
-  // Save to episode
+  // Save to episode, keeping its locked beats (utils/scriptBeatLocks.js)
+  const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+  script = scriptKeepingLocks(episode, script).script;
   await episode.update({ script_content: script });
 
   return res.json({

@@ -45,7 +45,7 @@ describe('Episode Script theme', () => {
     expect(jsx).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--lala-lavender\)'/);
     expect(jsx).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)'[^}]*\}\}>💾 Save Final Script/);
     expect(page).toMatch(/\.esp-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
-    expect(jsx).toMatch(/background: 'var\(--lala-gold\)', color: 'var\(--text-primary\)'[^}]*\}\}>✓ APPROVED/);
+    expect(jsx).toMatch(/background: 'var\(--lala-gold\)', color: 'var\(--text-primary\)'[^}]*\}\}>🔒 APPROVED/);
     expect(jsx).not.toMatch(/(?<![-\w])color: 'var\(--lala-gold-text\)'[^}]*background: 'var\(--gray-900\)'/);
     expect(css).toMatch(/\.btn-save\s*\{[^}]*background: var\(--primary\);/);
     expect(css).toMatch(/\.preview-character\s*\{[^}]*color: var\(--primary-text\);/);

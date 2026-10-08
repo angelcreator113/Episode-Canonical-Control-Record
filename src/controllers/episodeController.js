@@ -540,6 +540,17 @@ module.exports = {
       updateData.title_approved_at = null;
     }
 
+    // Locked script beats (utils/scriptBeatLocks.js): a save can't change a
+    // locked beat. It is put back as it was, and the response names it so
+    // the Script tab shows what was kept.
+    let lockedKept = [];
+    if (typeof updateData.script_content === 'string') {
+      const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+      const locks = scriptKeepingLocks(oldValues, updateData.script_content);
+      updateData.script_content = locks.script;
+      lockedKept = locks.changed;
+    }
+
     await episode.update(updateData);
 
     // Published: the episode's draft feed posts go live at this point in
@@ -608,6 +619,52 @@ module.exports = {
     res.json({
       data: episode,
       message: 'Episode updated successfully',
+      ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
+    });
+  },
+
+  /**
+   * PUT /episodes/:id/script-locks - Lock or unlock script beats
+   *
+   * Body: { locked_beats: [numbers], script_content? }. Approving a beat on
+   * the Script tab locks it (utils/scriptBeatLocks.js). When script_content
+   * comes too (the page had unsaved edits), it is saved in the same update:
+   * a beat locked before and after keeps its saved text, and a beat being
+   * locked now is locked as the page shows it.
+   */
+  async updateScriptLocks(req, res, _next) {
+    const { id } = req.params;
+    const { locked_beats: lockedBeats, script_content: scriptContent } = req.body || {};
+    if (!Array.isArray(lockedBeats)) {
+      return res.status(400).json({ error: 'locked_beats must be a list of beat numbers' });
+    }
+    if (scriptContent !== undefined && typeof scriptContent !== 'string') {
+      return res.status(400).json({ error: 'script_content must be text' });
+    }
+    const { normalizeLockedBeats, keepLockedBeats } = require('../utils/scriptBeatLocks');
+    const next = normalizeLockedBeats(lockedBeats);
+    if (next.length !== lockedBeats.length) {
+      return res.status(400).json({ error: 'locked_beats must be beat numbers from 1 to 14, each once' });
+    }
+
+    const episode = await Episode.findByPk(id);
+    if (!episode) {
+      throw new NotFoundError('Episode', id);
+    }
+    const before = normalizeLockedBeats(episode.script_locked_beats);
+    const update = { script_locked_beats: next };
+    let lockedKept = [];
+    if (typeof scriptContent === 'string') {
+      const stillLocked = before.filter((n) => next.includes(n));
+      const locks = keepLockedBeats(scriptContent, episode.script_content, stillLocked);
+      update.script_content = locks.script;
+      lockedKept = locks.changed;
+    }
+    await episode.update(update);
+
+    res.json({
+      data: { id: episode.id, script_locked_beats: episode.script_locked_beats, script_content: episode.script_content },
+      ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
     });
   },
 
