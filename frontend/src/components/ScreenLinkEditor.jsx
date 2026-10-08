@@ -14,7 +14,10 @@
  *   globalFit       — device-level fit defaults (applied when screen has no override)
  *   customFrameUrl  — optional custom phone frame image URL (matches PhoneHub behavior)
  *   phoneSkin       — optional skin key for the built-in frame (passed through for visual parity)
- *   onSave(links)   — callback to persist updated links
+ *   onSave(links, screen) — callback to persist updated links. `screen` is
+ *                     the screen the links were loaded for, so a save that
+ *                     finishes after a screen switch lands on the right one.
+ *                     Returning false (a failed save) keeps them unsaved.
  *   onUploadIcon(linkId, file) — callback to upload icon image for a zone
  *   readOnly        — if true, hide editing controls (used in preview mode)
  *
@@ -176,8 +179,15 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // AI proposal — populated after a successful /ai/add-zones call; review modal opens when non-null.
   const [aiProposal, setAiProposal] = useState(null);
   const [aiBusy, setAiBusy] = useState(false);
+  // The screen the zones were loaded for, and the zones being shown, so a
+  // save names its own screen and only clears "unsaved" when nothing changed
+  // while it ran (phone audit, 2026-10-07).
+  const zonesScreenRef = useRef(screen);
+  const zonesRef = useRef(zones);
+  zonesRef.current = zones;
 
   useEffect(() => {
+    zonesScreenRef.current = screen;
     // Retroactively inherit target from the icon library when a zone has an
     // icon_url but no target yet — covers zones created before the auto-fill
     // was wired up on icon selection. Non-destructive: never overwrites an
@@ -248,7 +258,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
 
   // Expose save/isDirty/undo/redo to the parent so it can coordinate screen switches.
   useImperativeHandle(ref, () => ({
-    save: () => { if (onSave) onSave(zones); setIsDirty(false); },
+    save: () => persist(zones),
     isDirty: () => isDirty,
     getZones: () => zones,
     addDefaultZone,
@@ -604,10 +614,23 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     setIsDirty(true);
   };
 
-  const handleSave = () => {
-    if (onSave) onSave(zones);
-    setIsDirty(false);
+  // Save, and clear "unsaved" only when the save worked (phone audit,
+  // 2026-10-07: a failed save used to clear it, and the switch went on).
+  const persist = async (toSave) => {
+    if (!onSave) return true;
+    let ok;
+    try {
+      ok = await onSave(toSave, zonesScreenRef.current);
+    } catch (err) {
+      console.error('[ScreenLinkEditor] save failed:', err);
+      ok = false;
+    }
+    if (ok === false) return false;
+    if (zonesRef.current === toSave) setIsDirty(false);
+    return true;
   };
+
+  const handleSave = () => persist(zones);
 
   const handleIconUpload = (linkId) => {
     uploadingLinkId.current = linkId;
@@ -623,8 +646,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       // can find this zone in activeScreen.screen_links. Without this, newly-drawn
       // zones get silently wiped when the parent re-hydrates from the server.
       if (isDirty && onSave) {
-        await onSave(zones);
-        setIsDirty(false);
+        if (!(await persist(zones))) return;
       }
       setUploadingForZone(linkId);
       if (onUploadIcon) {
@@ -746,7 +768,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             type="button"
             onClick={() => {
               // Auto-save pending work before entering preview so navigation doesn't silently discard it.
-              if (!preview && isDirty && onSave) { onSave(zones); setIsDirty(false); }
+              if (!preview && isDirty && onSave) persist(zones);
               setPreview(p => !p);
             }}
             title={preview ? 'Exit preview — back to editing' : 'Preview how this screen will look on the phone'}
@@ -842,10 +864,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               pushUndo();
               const merged = [...zones, ...newZones];
               setZones(merged);
+              zonesRef.current = merged;
               setIsDirty(true);
               // Persist immediately — AI work is safer on disk than in memory.
-              if (onSave) onSave(merged);
-              setIsDirty(false);
+              persist(merged);
             }
             setAiProposal(null);
           }}

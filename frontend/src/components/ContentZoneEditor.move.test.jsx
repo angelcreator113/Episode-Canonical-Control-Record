@@ -39,5 +39,5 @@ test('dragging a content area moves it and keeps it on the screen', () => {
   expect(area.style.top).toBe('80%');   // 100 - h
 
   fireEvent.click(screen.getByRole('button', { name: /Save/ }));
-  expect(onSave).toHaveBeenCalledWith([{ ...ZONE, x: 70, y: 80 }]);
+  expect(onSave.mock.calls[0][0]).toEqual([{ ...ZONE, x: 70, y: 80 }]);
 });

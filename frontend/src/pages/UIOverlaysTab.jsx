@@ -269,16 +269,48 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const fileInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
-  // Save the zone editor's unsaved changes before Done, a screen switch or
-  // the jump to Content (Task #2016; one editor since Task #2021).
-  const saveZoneDrafts = () => {
-    if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+  const contentEditorRef = useRef(null);  // exposes save()/isDirty() from the Content stage's editor
+  // Save the zone and content editors' unsaved changes before Done, a screen
+  // switch, a stage change or the jump to Content (Task #2016; one editor
+  // since Task #2021). A failed save keeps you where you are, with your work
+  // (phone audit, 2026-10-07: the switch used to go on and drop it).
+  // Resolves true when it is safe to leave.
+  const editorsDirty = () => [linkEditorRef.current, contentEditorRef.current].some(e => e?.isDirty?.());
+  const leaveEditors = async () => {
+    for (const editor of [linkEditorRef.current, contentEditorRef.current]) {
+      if (!editor?.isDirty?.()) continue;
+      const ok = await editor.save();
+      if (ok === false) {
+        flash('Not saved, so you are still on this screen. Your changes are kept; try Save again.', 'error');
+        return false;
+      }
+    }
+    return true;
   };
+  // Runs `fn` once the editors have saved — at once when nothing is unsaved.
+  const whenSaved = (fn) => {
+    if (!editorsDirty()) return fn();
+    return leaveEditors().then(ok => (ok ? fn() : undefined));
+  };
+  const afterSave = (fn) => (...args) => whenSaved(() => fn(...args));
   // Background removal this session, by overlay id: { state: 'removing' } or
   // { state: 'failed', reason }. Original / Removed come from bg_removed
   // (Task #2024); nothing here is stored.
   const [bgAttempts, setBgAttempts] = useState({});
   const [contentAreaPick, setContentAreaPick] = useState(false);  // "+ Add" ▸ Content Area
+
+  // Reloading or closing the page with unsaved zones or content areas asks
+  // first (phone audit, 2026-10-07).
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (linkEditorRef.current?.isDirty?.() || contentEditorRef.current?.isDirty?.()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Keep activeScreenRef in sync with activeScreen state
   useEffect(() => { activeScreenRef.current = activeScreen; }, [activeScreen]);
@@ -328,11 +360,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   }, []);
 
+  // Undo puts back the screen's fit only, the one edit here that is not
+  // saved as it is made; zones, content, the name and the type are saved,
+  // so restoring an old copy of them showed what the server no longer had
+  // (phone audit, 2026-10-07).
   const handleUndo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
     const prev = undoStackRef.current.pop();
-    setActiveScreen(prev);
-    setOverlays(ov => ov.map(o => o.id === prev.id ? { ...o, ...prev } : o));
+    const fit = prev.image_fit ?? prev.metadata?.image_fit ?? null;
+    const withFit = (o) => ({ ...o, image_fit: fit, metadata: { ...(o.metadata || {}), image_fit: fit } });
+    setActiveScreen(cur => (cur?.id === prev.id ? withFit(cur) : cur));
+    setOverlays(ov => ov.map(o => (o.id === prev.id ? withFit(o) : o)));
     flash('Undone');
   }, [flash]);
 
@@ -355,6 +393,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Text fields keep their own undo, and the zone/content editors have
+        // theirs (phone audit, 2026-10-07: both undid at once, and the page's
+        // brought back old tap zones).
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (linkEditorRef.current || contentEditorRef.current) return;
         e.preventDefault();
         handleUndo();
       }
@@ -579,7 +623,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Full edit of a screen: select it and open the detail panel in Build.
   // The card's ⋮ → Edit, a click on a card with no image, and a card's
   // "Continue →" for its image all come here.
-  const openScreenEditor = (s) => {
+  const openScreenEditor = async (s) => {
+    if (editorsDirty() && !(await leaveEditors())) return;
     setActiveScreen(s);
     setPanelOpen(true);
     setNavHistory([]);
@@ -592,8 +637,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   //   image    → Build, the screen's editor
   //   links    → Connect on that screen, at its first zone with no destination
   //   incoming → Connect on the home screen, where a link to it is placed
-  const handleContinueCard = (s, step) => {
+  const handleContinueCard = async (s, step) => {
     if (!s) return;
+    if (editorsDirty() && !(await leaveEditors())) return;
     if (step === 'image') { openScreenEditor(s); return; }
     let target = s;
     let zoneId = null;
@@ -605,7 +651,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       const generated = overlays.filter(o => o.generated && o.url && isScreen(o));
       target = generated.find(o => o.is_home) || generated[0] || s;
     }
-    saveZoneDrafts();
     setActiveScreen(target);
     setNavHistory([]);
     setActiveTab('zones');
@@ -906,7 +951,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // fromKey: the screen the phone was showing, when the caller knows it —
   // PhoneHub passes it so that navigating while an icon is selected records
   // that screen, not the icon, for Back (Task #2008).
-  const handleNavigate = (targetKey, fromKey) => {
+  const handleNavigate = async (targetKey, fromKey) => {
+    if (editorsDirty() && !(await leaveEditors())) return;
     // Find the overlay matching the target screen key
     const target = overlays.find(o => {
       const id = (o.id || '').toLowerCase();
@@ -924,8 +970,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     if (navHistory.length === 0) return;
+    if (editorsDirty() && !(await leaveEditors())) return;
     const prevKey = navHistory[navHistory.length - 1];
     setNavHistory(prev => prev.slice(0, -1));
     const prevScreen = overlays.find(o => o.id === prevKey);
@@ -934,20 +981,28 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // ── Screen link editing ──
 
-  const handleSaveLinks = async (savedLinks) => {
-    if (!activeScreen?.asset_id || !showId) return;
+  // `screen` is the screen the editor loaded the zones for: a save that ends
+  // after a switch updates that screen, never the one now shown (phone
+  // audit, 2026-10-07). Resolves false when the save failed.
+  const handleSaveLinks = async (savedLinks, screen = activeScreen) => {
+    if (!screen?.asset_id || !showId) return false;
     // A legacy zone whose address is an icon's current image gains that
     // icon's key as it is saved, so the reference survives the next image
     // change (doctrine rule 17, Task #2005). Other zones are saved as given.
     const iconList = overlays.filter(isIcon);
     const links = (savedLinks || []).map(z => withResolvedIconKey(z, iconList));
     try {
-      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}`, { screen_links: links });
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: links });
       // Update local state
-      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: links, metadata: { ...(o.metadata || {}), screen_links: links } } : o));
-      setActiveScreen(prev => prev ? { ...prev, screen_links: links, metadata: { ...(prev.metadata || {}), screen_links: links } } : prev);
+      setOverlays(prev => prev.map(o => o.id === screen.id ? { ...o, screen_links: links, metadata: { ...(o.metadata || {}), screen_links: links } } : o));
+      setActiveScreen(prev => (prev?.id === screen.id ? { ...prev, screen_links: links, metadata: { ...(prev.metadata || {}), screen_links: links } } : prev));
       flash('Links saved!');
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+      return true;
+    } catch (err) {
+      console.error('[UIOverlaysTab] saving zones failed:', err);
+      flash(err.response?.data?.error || err.message, 'error');
+      return false;
+    }
   };
 
   // Screen health's "Move inside" (Task #2014): clamps the named zones into
@@ -1052,16 +1107,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   const handleUploadIcon = async (linkId, file) => {
-    if (!activeScreen?.asset_id || !showId) return;
+    // The screen the upload was started on: if you move on while it uploads,
+    // the result still lands there, not on the screen now shown.
+    const screen = activeScreen;
+    if (!screen?.asset_id || !showId) return;
     try {
       const fd = new FormData();
       fd.append('icon', file);
       fd.append('link_id', linkId);
-      const res = await api.post(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}/icon`, fd);
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}/icon`, fd);
       const iconUrl = res.data?.icon_url;
       if (iconUrl) {
-        // Append uploaded icon to the link's icon_urls array
-        const currentLinks = getScreenLinks(activeScreen);
+        const currentLinks = getScreenLinks(overlays.find(o => o.id === screen.id) || screen);
         // The upload becomes the zone's image ("Custom image"), replacing a
         // library icon if it had one; otherwise the key would keep drawing
         // the library icon and the upload would never show (Task #2014).
@@ -1070,23 +1127,33 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           const { icon_overlay_id: _replacedKey, ...rest } = l;
           return { ...rest, icon_urls: [iconUrl], icon_url: iconUrl };
         });
-        setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: updated, metadata: { ...(o.metadata || {}), screen_links: updated } } : o));
-        setActiveScreen(prev => prev ? { ...prev, screen_links: updated, metadata: { ...(prev.metadata || {}), screen_links: updated } } : prev);
+        setOverlays(prev => prev.map(o => o.id === screen.id ? { ...o, screen_links: updated, metadata: { ...(o.metadata || {}), screen_links: updated } } : o));
+        setActiveScreen(prev => (prev?.id === screen.id ? { ...prev, screen_links: updated, metadata: { ...(prev.metadata || {}), screen_links: updated } } : prev));
         flash('Icon uploaded!');
       }
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+    } catch (err) {
+      console.error('[UIOverlaysTab] icon upload failed:', err);
+      flash(err.response?.data?.error || err.message, 'error');
+    }
   };
 
   // ── Content zones (live data rendering on templates) ──
 
-  const handleSaveContentZones = async (zones) => {
-    if (!activeScreen?.asset_id || !showId) return;
+  // As handleSaveLinks: saved to the screen the areas were loaded for;
+  // resolves false when the save failed.
+  const handleSaveContentZones = async (zones, screen = activeScreen) => {
+    if (!screen?.asset_id || !showId) return false;
     try {
-      await api.put(`/api/v1/ui-overlays/${showId}/content-zones/${activeScreen.asset_id}`, { content_zones: zones });
-      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, content_zones: zones, metadata: { ...(o.metadata || {}), content_zones: zones } } : o));
-      setActiveScreen(prev => prev ? { ...prev, content_zones: zones, metadata: { ...(prev.metadata || {}), content_zones: zones } } : prev);
+      await api.put(`/api/v1/ui-overlays/${showId}/content-zones/${screen.asset_id}`, { content_zones: zones });
+      setOverlays(prev => prev.map(o => o.id === screen.id ? { ...o, content_zones: zones, metadata: { ...(o.metadata || {}), content_zones: zones } } : o));
+      setActiveScreen(prev => (prev?.id === screen.id ? { ...prev, content_zones: zones, metadata: { ...(prev.metadata || {}), content_zones: zones } } : prev));
       flash('Content zones saved!');
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+      return true;
+    } catch (err) {
+      console.error('[UIOverlaysTab] saving content areas failed:', err);
+      flash(err.response?.data?.error || err.message, 'error');
+      return false;
+    }
   };
 
   // ── Image fit controls ──
@@ -1140,7 +1207,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleRename = async (newName) => {
     if (!newName?.trim() || !activeScreen || !showId) return;
     const trimmed = newName.trim();
-    pushUndo();
     try {
       if (activeScreen.custom && activeScreen.custom_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { name: trimmed });
@@ -1159,7 +1225,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Change screen's type (screen vs icon)
   const handleChangeScreenType = async (category) => {
     if (!activeScreen || !showId) return;
-    pushUndo();
     try {
       if (activeScreen.custom && activeScreen.custom_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { category });
@@ -1502,7 +1567,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               even when PhoneHub unmounts for the Zones workspace. */}
           <PhoneHubSectionTabs
             activeTab={activeTab}
-            onChangeTab={setActiveTab}
+            onChangeTab={afterSave(setActiveTab)}
             screenCount={screenOverlays.length}
             iconCount={iconOverlays.length}
             placementCount={placementsCount}
@@ -1516,14 +1581,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               <PhoneHub
                 screens={overlays}
                 activeScreen={activeScreen}
-                onSelectScreen={(s) => {
+                onSelectScreen={afterSave((s) => {
                   // Preview-only: just swap which screen the phone is showing.
                   // No modal, no nav history reset — creators can browse
                   // screens by clicking cards without committing to editing.
                   setActiveScreen(s);
                   setNavHistory([]);
                   if (previewing) setPreviewRun(n => n + 1);
-                }}
+                })}
                 onEditScreen={openScreenEditor}
                 screenDiagnostics={screenDiagnostics}
                 onContinue={handleContinueCard}
@@ -1539,10 +1604,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 onChangeSkin={handleChangeSkin}
                 customFrameUrl={customFrameUrl}
                 globalFit={globalFit}
-                onEditZones={() => setActiveTab('zones')}
+                onEditZones={afterSave(() => setActiveTab('zones'))}
                 // Preview shows the screen list beside the embedded phone.
                 activeTab={previewing ? 'screens' : activeTab}
-                onChangeTab={setActiveTab}
+                onChangeTab={afterSave(setActiveTab)}
                 suppressSectionTabs
                 detailOpen={!!(panelOpen && activeScreen && ['screens', 'icons', 'placements'].includes(activeTab))}
                 detailRef={setDetailHost}
@@ -1592,9 +1657,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                  ── */
             (() => {
               const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
-              const switchToScreen = (target) => {
+              const switchToScreen = async (target) => {
                 if (!target || target.id === activeScreen.id) return;
-                saveZoneDrafts();
+                if (editorsDirty() && !(await leaveEditors())) return;
                 setActiveScreen(target);
                 setNavHistory([]);
                 setFlowAudit(null);
@@ -1628,13 +1693,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 issueCount: 0,
                 severity: 'ok',
               };
-              const focusIssue = (issue) => {
+              const focusIssue = async (issue) => {
                 if (!issue) return;
+                if (editorsDirty() && !(await leaveEditors())) return;
                 const targetScreen = editableScreens.find(s => s.id === issue.screenId);
-                if (targetScreen && targetScreen.id !== activeScreen.id) switchToScreen(targetScreen);
+                if (targetScreen && targetScreen.id !== activeScreen.id) {
+                  setActiveScreen(targetScreen);
+                  setNavHistory([]);
+                  setFlowAudit(null);
+                }
                 // Content issues live on their own top-level tab now.
                 if (issue.mode === 'content') {
-                  saveZoneDrafts();
                   setActiveTab('content');
                   setPendingIssueFocus({
                     screenId: issue.screenId || activeScreen.id,
@@ -1709,11 +1778,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         {tapZonesDirty && (
                           <span className="zones-unsaved" role="status">● Unsaved</span>
                         )}
-                        <button onClick={() => {
-                          saveZoneDrafts();
+                        <button onClick={afterSave(() => {
                           setActiveTab('screens');
                           setNavHistory([]);
-                        }} className="zone-editor-done-btn">
+                        })} className="zone-editor-done-btn">
                           <Check size={14} /> Done
                         </button>
                       </div>
@@ -2154,8 +2222,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                phone sits in the exact same visual slot as Screens/Icons/Zones. */}
           {editingContent && activeScreen?.url && isScreen(activeScreen) && (() => {
             const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
-            const switchToScreen = (target) => {
+            const switchToScreen = async (target) => {
               if (!target || target.id === activeScreen.id) return;
+              if (editorsDirty() && !(await leaveEditors())) return;
               setActiveScreen(target);
               setNavHistory([]);
             };
@@ -2169,6 +2238,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 <div className="zones-tab">
                   <div className="zones-tab__canvas">
                     <ContentZoneEditor
+                      ref={contentEditorRef}
                       screenUrl={activeScreen.url}
                       screen={activeScreen}
                       globalFit={globalFit}
@@ -2194,7 +2264,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                           </div>
                         </div>
                         <button
-                          onClick={() => { setActiveTab('screens'); setNavHistory([]); }}
+                          onClick={afterSave(() => { setActiveTab('screens'); setNavHistory([]); })}
                           className="zone-editor-done-btn"
                         >
                           <Check size={14} /> Done
@@ -2708,7 +2778,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         <ScreenFlowMap
           screens={overlays}
           onClose={() => setShowFlowMap(false)}
-          onSelectScreen={(s) => { setActiveScreen(s); setShowFlowMap(false); }}
+          onSelectScreen={afterSave((s) => { setActiveScreen(s); setShowFlowMap(false); })}
         />
       )}
 
@@ -2730,14 +2800,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           screens={overlays.filter(o => o.generated && o.url && isScreen(o))}
           currentId={activeScreen?.id}
           onClose={() => setContentAreaPick(false)}
-          onPick={(target) => {
-            saveZoneDrafts();
+          onPick={afterSave((target) => {
             setContentAreaPick(false);
             setPanelOpen(false);
             setActiveScreen(target);
             setNavHistory([]);
             setActiveTab('content');
-          }}
+          })}
           onAddScreen={() => {
             setContentAreaPick(false);
             setCreateMode('phone');
