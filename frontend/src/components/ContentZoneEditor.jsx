@@ -14,6 +14,9 @@
  *                       failed save) keeps them unsaved.
  *   ref               — { isDirty(), save() } so the page can save before
  *                       leaving (phone audit, 2026-10-07).
+ *   armedType         — { content_type, content_config } picked in the Content
+ *                       stage's "Add an area" (Evoni's mockup, 2026-10-08): the
+ *                       next area drawn gets it; onArmedUsed() is then called.
  *   readOnly          — if true, hide editing controls
  */
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
@@ -44,6 +47,8 @@ const ContentZoneEditor = forwardRef(function ContentZoneEditor({
   // Optional DOM node beside the phone (the Content stage's card, Evoni's
   // mock 2026-10-07): the zone list renders there instead of under the phone.
   sidePanel = null,
+  armedType = null,
+  onArmedUsed,
 }, ref) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
@@ -181,12 +186,13 @@ const ContentZoneEditor = forwardRef(function ContentZoneEditor({
         y: Math.round(y * 10) / 10,
         w: Math.round(w * 10) / 10,
         h: Math.round(h * 10) / 10,
-        content_type: '',
-        content_config: {},
+        content_type: armedType?.content_type || '',
+        content_config: armedType?.content_config ? { ...armedType.content_config } : {},
       };
       setLocalZones(prev => [...prev, newZone]);
       setSelectedZone(newZone.id);
       setIsDirty(true);
+      if (armedType) onArmedUsed?.();
     }
 
     setDrawing(false);
