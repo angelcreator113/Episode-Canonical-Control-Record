@@ -1275,3 +1275,111 @@
   font-size: var(--text-md);
   color: #888;
 }
+
+/* ═══ The character page (Evoni's STUDIO BY SABLE mock, 2026-10-08) ═══════════
+   Everything from here down is the page's shell and Overview: tokens only
+   (CharacterProfilePage.theme.test.js reads from this marker). The cp-*
+   rules above still style the Inner life, Voice & feed, Connections and
+   In the world sections. */
+.ch-page { max-width: 1220px; margin: 0 auto; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 18px; color: var(--text-primary); }
+
+.ch-hero {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 24px 28px; border-radius: 22px;
+  border: 1px solid var(--lala-lavender-line);
+  background: linear-gradient(110deg, var(--lala-lavender-soft), var(--accent-subtle) 60%, var(--surface-card));
+}
+.ch-avatar {
+  width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--lala-gold-soft), var(--accent-subtle)); border: 4px solid var(--surface-card);
+  font-family: 'Lora', serif; font-size: 52px; font-weight: 700; color: var(--lala-gold-text);
+}
+.ch-hero-text { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ch-back { font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.ch-back:hover { text-decoration: underline; }
+.ch-name { margin: 0; font-family: 'Lora', serif; font-size: 34px; font-weight: 700; line-height: 1.15; overflow-wrap: break-word; }
+.ch-sub { margin: 0; font-size: 15px; color: var(--text-secondary); }
+.ch-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ch-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ch-chip.is-blue { background: var(--info-bg); color: var(--info-text); }
+.ch-chip.is-green { background: var(--success-bg); color: var(--success-text); }
+.ch-chip.is-plain { background: none; color: var(--accent-dark); }
+
+.ch-alive { flex: 0 1 270px; display: flex; flex-direction: column; gap: 10px; }
+.ch-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+/* responsive.css sizes every h2 with !important on a phone; a kicker stays small. */
+.ch-page h2.ch-kicker { font-size: 12px !important; }
+.ch-kicker.is-pink { color: var(--accent-dark); }
+.ch-kicker.is-blue { color: var(--info-text); }
+.ch-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ch-steps li { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ch-step-bar { width: 100%; height: 5px; border-radius: 999px; background: var(--accent-subtle); }
+.ch-steps li.is-on .ch-step-bar { background: var(--accent-dark); }
+.ch-step-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+.ch-steps li.is-on .ch-step-label { color: var(--accent-dark); }
+.ch-btn-deepen {
+  min-height: 44px; border: none; border-radius: 999px; cursor: pointer; font: inherit; font-size: 15px; font-weight: 700;
+  background: var(--lala-lavender); color: var(--text-inverse);
+}
+
+.ch-link { align-self: flex-start; min-height: 32px; padding: 0; border: none; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
+.ch-alive .ch-link { align-self: center; }
+.ch-link:hover { text-decoration: underline; }
+
+.ch-tabs { display: flex; gap: 4px; flex-wrap: wrap; align-self: flex-start; padding: 5px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); }
+.ch-tab { min-height: 40px; padding: 6px 16px; border: none; border-radius: 999px; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); }
+.ch-tab.is-on { background: var(--lala-lavender); color: var(--text-inverse); }
+
+.ch-panel { min-width: 0; }
+.ch-overview { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.ch-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.ch-voice-tab { display: flex; flex-direction: column; gap: 18px; }
+.ch-card { background: var(--surface-card); border: 1px solid var(--lala-lavender-line); border-radius: 20px; padding: 20px 22px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.ch-card.is-blue { background: var(--info-bg); border-color: var(--info-border); }
+.ch-card-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ch-card-head .ch-link { margin-left: auto; }
+.ch-h2 { margin: 0; font-family: 'Lora', serif; font-size: 22px; font-weight: 700; }
+.ch-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.ch-note a { color: var(--lala-lavender-text); font-weight: 700; }
+.ch-text { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-primary); }
+.ch-prose { margin: 0; font-size: 15px; line-height: 1.6; color: var(--text-secondary); white-space: pre-line; }
+.ch-textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-lavender-line); font: inherit; font-size: 14px; line-height: 1.55; color: var(--text-primary); background: var(--surface-card); resize: vertical; }
+.ch-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ch-btn, .ch-btn-soft, .ch-btn-chip { min-height: 40px; padding: 6px 16px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.ch-btn { background: var(--lala-lavender); color: var(--text-inverse); }
+.ch-btn-soft { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ch-btn-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ch-btn:disabled, .ch-btn-soft:disabled, .ch-btn-chip:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.ch-shows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ch-show {
+  display: grid; grid-template-columns: 110px minmax(0, 1fr) 20px; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 14px; text-decoration: none; color: var(--text-primary);
+  background: var(--lala-lavender-soft); --kind: var(--lala-lavender-text);
+}
+.ch-show.is-event { background: var(--success-bg); --kind: var(--success-text); }
+.ch-show.is-episode { background: var(--accent-subtle); --kind: var(--accent-dark); }
+.ch-show.is-goal { background: var(--lala-gold-soft); --kind: var(--lala-gold-text); }
+.ch-show.is-feed { background: var(--info-bg); --kind: var(--info-text); }
+.ch-show-kind { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kind); }
+.ch-show-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: break-word; }
+.ch-show-text strong { font-size: 14px; color: var(--text-primary); }
+.ch-show-go { color: var(--kind); }
+a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
+
+.ch-sample { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-card); font-size: 14px; line-height: 1.5; color: var(--text-primary); }
+.ch-sample strong { color: var(--info-text); }
+.ch-card.is-blue .ch-chip { background: var(--surface-card); color: var(--info-text); }
+
+@media (max-width: 900px) {
+  .ch-overview { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .ch-page { padding: 12px 16px 32px; }
+  .ch-hero { padding: 18px; gap: 14px; }
+  .ch-avatar { width: 72px; height: 72px; font-size: 32px; }
+  .ch-name { font-size: 26px; }
+  .ch-alive { flex: 1 1 100%; }
+  .ch-card { padding: 16px; }
+  .ch-show { grid-template-columns: minmax(0, 1fr) 20px; }
+  .ch-show-kind { grid-column: 1 / -1; }
+}

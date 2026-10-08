@@ -52,6 +52,9 @@ describe('WorldDashboard — Track 6 CP7 module-scope helpers', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { pairs: [] } });
     await getTensionScannerApi();
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/world/tension-scanner');
+    // With a show, that show's pairs.
+    await getTensionScannerApi('show b');
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/v1/world/tension-scanner?show_id=show%20b');
   });
 
   test('createSnapshotApi POST on /world/state/snapshots', async () => {

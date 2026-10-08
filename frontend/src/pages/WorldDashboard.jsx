@@ -25,7 +25,10 @@ const API = import.meta.env.VITE_API_URL || '/api/v1';
 // timeline, tension-scanner, create-tension-proposal).
 export const listSnapshotsApi = () => apiClient.get(`${API}/world/state/snapshots`);
 export const listTimelineApi = () => apiClient.get(`${API}/world/state/timeline`);
-export const getTensionScannerApi = () => apiClient.get(`${API}/world/tension-scanner`);
+// With a show, that show's pairs (routes/worldStudio.js inShow; Evoni's ruling, 2026-10-08).
+export const getTensionScannerApi = (showId) => apiClient.get(showId
+  ? `${API}/world/tension-scanner?show_id=${encodeURIComponent(showId)}`
+  : `${API}/world/tension-scanner`);
 export const createSnapshotApi = (payload) =>
   apiClient.post(`${API}/world/state/snapshots`, payload);
 export const createTimelineEventApi = (payload) =>
@@ -48,7 +51,7 @@ export default function WorldDashboard({ embedded = false }) {
   const navigate = useNavigate();
   // A snapshot is saved to the active show's universe (the script writers
   // read that universe's newest; wiring map fix-list item 17).
-  const { showId } = useActiveShow();
+  const { showId, loaded: showsLoaded } = useActiveShow();
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'state', undefined, 'sub'));
   const [toast, setToast] = useState(null);
   const flash = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
@@ -83,22 +86,31 @@ export default function WorldDashboard({ embedded = false }) {
   // so every pair rendered nameless), and the scan says whether it ran.
   const loadTensions = useCallback(async () => {
     setTensionLoading(true);
-    try { const r = await getTensionScannerApi(); setTensionPairs(r.data?.pairs || []); setTensionScan({ status: r.data?.status || 'ok', characters_scanned: r.data?.characters_scanned, error: r.data?.error }); }
+    try { const r = await getTensionScannerApi(showId); setTensionPairs(r.data?.pairs || []); setTensionScan({ status: r.data?.status || 'ok', characters_scanned: r.data?.characters_scanned, error: r.data?.error }); }
     catch (e) { console.error(e); setTensionPairs([]); setTensionScan({ status: 'scan_failed', error: e.response?.data?.error || e.message }); }
     finally { setTensionLoading(false); }
-  }, []);
+  }, [showId]);
 
   // In the hub the front page shows both, so both load at once.
   const [loadedTabs] = useState(() => new Set());
   useEffect(() => {
     const want = embedded ? ['state', 'tensions'] : [tab];
     for (const k of want) {
-      if (loadedTabs.has(k)) continue;
+      if (k === 'tensions' || loadedTabs.has(k)) continue;
       loadedTabs.add(k);
       if (k === 'state') { loadSnapshots(); loadTimeline(); }
-      if (k === 'tensions') loadTensions();
     }
-  }, [tab, embedded, loadedTabs, loadSnapshots, loadTimeline, loadTensions]);
+  }, [tab, embedded, loadedTabs, loadSnapshots, loadTimeline]);
+
+  // The scan is the active show's, so it waits for the shows to load, and
+  // runs again when the active show changes.
+  const scannedFor = useRef();
+  useEffect(() => {
+    if (!showsLoaded || !(embedded || tab === 'tensions')) return;
+    if (scannedFor.current === showId) return;
+    scannedFor.current = showId;
+    loadTensions();
+  }, [showsLoaded, showId, embedded, tab, loadTensions]);
 
   // "Take a snapshot" on the front page opens World State at the form.
   useEffect(() => {

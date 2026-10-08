@@ -17,7 +17,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
-import { findLala, feedPeople, oldSystem, sameNames, sameNameNote } from '../lib/theCast';
+import { chooseRegistry, findLala, feedPeople, oldSystem, sameNames, sameNameNote } from '../lib/theCast';
 import './TheCast.css';
 
 const ROLE_CONFIG = {
@@ -34,20 +34,8 @@ const CHOOSE = 'Choose a registry first';
 const episodesLabel = (n) => (n > 0 ? `${n} episode${n === 1 ? '' : 's'}` : 'No episodes');
 
 
-/**
- * Which registry the page works in (audit IA-05, 2026-10-03): the one the
- * URL names (?registry=), else the active show's, else the only one; null
- * is "all registries", a read-only view. Quick create never falls back to
- * the first registry the API returned.
- */
-export function chooseRegistry(registries, { urlRegistryId = null, showId = null } = {}) {
-  if (!registries?.length) return null;
-  const byUrl = urlRegistryId && registries.find((r) => String(r.id) === String(urlRegistryId));
-  if (byUrl) return byUrl.id;
-  const byShow = showId && registries.find((r) => String(r.show_id || '') === String(showId));
-  if (byShow) return byShow.id;
-  return registries.length === 1 ? registries[0].id : null;
-}
+// Which registry the page works in: lib/theCast (the LalaVerse Overview counts the same way).
+export { chooseRegistry };
 
 export const characterKeyFor = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
