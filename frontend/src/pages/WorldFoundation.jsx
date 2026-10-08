@@ -4,12 +4,13 @@
  * layers connect) is a fold-out intro above the map, not a tab (2026-10-04);
  * the Locations tab is the doorway to the Property Manager.
  *
- * In the LalaVerse hub (embedded) the tabs sit under the city explorer
- * (components/World/DreamCityExplorer, the mock, 2026-10-06): pick a DREAM
- * city to see its venues, schools and companies. There The Map keeps the
- * Loop and the illustrated map (Edit Positions sets the phone map's pins)
- * but not the old city, university and corporation cards, which the
- * explorer shows (2026-10-07).
+ * In the LalaVerse hub (embedded) The Map is the city explorer
+ * (components/World/DreamCityExplorer, the mock, 2026-10-06): the
+ * illustrated map (Edit Positions sets the phone map's pins) is the city
+ * picker, with the city's venues, schools and companies beside it. One map
+ * (Evoni, 2026-10-08): the explorer's own drawn map of bubbles sat above
+ * this one and is gone. The old city, university and corporation cards
+ * are the standalone page's only (2026-10-07).
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
@@ -184,14 +185,20 @@ export default function WorldFoundation({ embedded = false }) {
     finally { setUploading(false); if (mapFileRef.current) mapFileRef.current.value = ''; }
   }, [flash]);
 
+  // Map image upload: under the map (in the hub, in the map's column)
+  const mapUpload = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      <input ref={mapFileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleMapUpload} style={{ display: 'none' }} />
+      <button onClick={() => mapFileRef.current?.click()} disabled={uploading} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer', color: '#666' }}>
+        {uploading ? 'Uploading...' : mapImageUrl ? 'Change Map Image' : 'Upload Map Image'}
+      </button>
+      {mapImageUrl && <span style={{ fontSize: 10, color: '#16a34a' }}>Custom map active</span>}
+    </div>
+  );
+
   return (
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: embedded ? 0 : '24px 20px' }}>
-      {embedded && (
-        <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
-          locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')} />
-      )}
-
       {/* Header; inside the LalaVerse hub the tab is the heading */}
       <div style={{ display: 'flex', justifyContent: embedded ? 'flex-end' : 'space-between', alignItems: 'flex-start', marginBottom: embedded ? 8 : 20 }}>
         {!embedded && <div>
@@ -241,16 +248,19 @@ export default function WorldFoundation({ embedded = false }) {
             </div>
           </details>
 
-          <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl} />
+          {embedded ? (
+            <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
+              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')}
+              renderMap={(cityKey, pickCity) => (<>
+                <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl}
+                  selectedCity={cityKey} onSelectCity={pickCity} />
+                {mapUpload}
+              </>)} />
+          ) : (<>
+            <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl} />
+            {mapUpload}
+          </>)}
 
-          {/* Map image upload */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <input ref={mapFileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleMapUpload} style={{ display: 'none' }} />
-            <button onClick={() => mapFileRef.current?.click()} disabled={uploading} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer', color: '#666' }}>
-              {uploading ? 'Uploading...' : mapImageUrl ? 'Change Map Image' : 'Upload Map Image'}
-            </button>
-            {mapImageUrl && <span style={{ fontSize: 10, color: '#16a34a' }}>Custom map active</span>}
-          </div>
 
           {/* Selected location detail */}
           {selectedLoc && (
