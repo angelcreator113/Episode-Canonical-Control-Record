@@ -1,6 +1,7 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { Dices, CalendarHeart, Tv, MapPin, FileText, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, PenLine, Clapperboard, Sparkles, Pencil, LayoutGrid, ArrowRight, ListOrdered, Package } from 'lucide-react';
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
@@ -11,6 +12,7 @@ import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './
 import { episodePlanning } from '../../utils/episodePlanning';
 import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
 import { fromEventItems, nextStep, coinsAfter } from '../../lib/episodeOverview';
+import './EpisodeOverviewSections.css';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
 // the array on every render. Order = display order.
@@ -37,34 +39,46 @@ const TIER_CONFIG = {
 };
 
 /**
- * SectionBand — visual grouping for the Overview page.
- *
- * Renders a small monospace gold header above a hairline rule, then the
- * children. Used to separate IDENTITY / PRODUCTION / SOURCE / STAKES /
- * REFERENCE without competing with the cards below — the band is a quiet
- * organizational cue, not a heading element.
+ * SectionBand — one part of the Overview below the summary (the Overview
+ * redesign, 2026-10-08): a heading in the prose face, a line saying what
+ * the part is for, then its cards. Same card language as the summary above
+ * (EpisodeOverviewSummary.css); styles in EpisodeOverviewSections.css.
  */
+const BAND_NOTES = {
+  Identity: 'What this episode is and where it sits.',
+  Production: "What's been made for it so far.",
+  Source: 'Where it came from on the Feed.',
+  Stakes: "What's at risk, and the money.",
+  Reference: 'Snapshots from the event, for reading only.',
+};
 function SectionBand({ title, children }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 10,
-        paddingBottom: 6,
-        borderBottom: '1px solid var(--lala-gold-line)',
-      }}>
-        <span style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: 'var(--lala-gold-text)',
-          textTransform: 'uppercase',
-          letterSpacing: 1.2,
-          fontFamily: "'DM Mono', monospace",
-        }}>{title}</span>
-      </div>
+    <section className="eov-band" aria-label={title}>
+      <header className="eov-band-head">
+        <h3 className="eov-band-title">{title}</h3>
+        {BAND_NOTES[title] && <p className="eov-band-note">{BAND_NOTES[title]}</p>}
+      </header>
       {children}
+    </section>
+  );
+}
+
+/** A card's title row: a lucide icon, the title, and anything on the right. */
+function CardTitle({ icon: Icon, children, aside }) {
+  return (
+    <div className="eov-card-head">
+      <h4 className="eov-card-title">{Icon && <Icon size={16} aria-hidden="true" />}{children}</h4>
+      {aside}
+    </div>
+  );
+}
+
+/** A labelled value inside a card. */
+function Field({ label, children, wide, tone }) {
+  return (
+    <div className={`eov-field${wide ? ' is-wide' : ''}`}>
+      <span className="eov-field-label">{label}</span>
+      <div className={`eov-field-value${tone ? ` is-${tone}` : ''}`}>{children}</div>
     </div>
   );
 }
@@ -431,19 +445,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
   };
 
-  const S = {
-    card: { background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--lala-parchment-3)', padding: '14px 16px', marginBottom: 12 },
-    label: { fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, display: 'block' },
-  };
 
   if (isEditing) {
     return (
-      <div style={{ maxWidth: 700, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Edit Episode</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setIsEditing(false)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-            <button onClick={handleSave} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+      <div className="eov-edit">
+        <div className="eov-edit-head">
+          <h2 className="eov-edit-title">Edit episode</h2>
+          <div className="eov-actions">
+            <button type="button" className="eov-btn" onClick={() => setIsEditing(false)}>Cancel</button>
+            <button type="button" className="eov-btn-primary" onClick={handleSave}>Save</button>
           </div>
         </div>
         {[
@@ -453,14 +463,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           { key: 'episode_intent', label: 'Intent', type: 'input', placeholder: 'Internal goal for this episode...' },
           { key: 'creative_notes', label: 'Creative Notes', type: 'textarea', placeholder: 'Tone, direction, things to remember...', rows: 4 },
         ].map(f => (
-          <div key={f.key} style={{ marginBottom: 12 }}>
-            <label style={S.label}>{f.label}</label>
+          <div key={f.key} className="eov-edit-field">
+            <label className="eov-field-label" htmlFor={`eov-edit-${f.key}`}>{f.label}</label>
             {f.type === 'textarea' ? (
-              <textarea value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                placeholder={f.placeholder} rows={f.rows} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              <textarea id={`eov-edit-${f.key}`} className="eov-input" value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
+                placeholder={f.placeholder} rows={f.rows} />
             ) : (
-              <input type={f.type || 'text'} value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                placeholder={f.placeholder} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+              <input id={`eov-edit-${f.key}`} className="eov-input" type={f.type || 'text'} value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
+                placeholder={f.placeholder} />
             )}
           </div>
         ))}
@@ -469,25 +479,25 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   }
 
   return (
-    <div style={{ maxWidth: 'none', margin: '0 auto' }}>
+    <div className="eov">
       {/* Tier Banner (if evaluated) */}
       {tier && (
-        <div style={{ background: tier.bg, border: `2px solid ${tier.color}`, borderRadius: 10, padding: '12px 18px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 28 }}>{tier.emoji}</span>
+        <div className="eov-tier" style={{ '--tier-color': tier.color, '--tier-bg': tier.bg }}>
+          <div className="eov-tier-main">
+            <span className="eov-tier-emoji" aria-hidden="true">{tier.emoji}</span>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: tier.color }}>{tier.label} — {evalData.score}/100</div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{evalData.narrative_lines?.short || ''}</div>
+              <div className="eov-tier-title">{tier.label} — {evalData.score}/100</div>
+              {evalData.narrative_lines?.short && <div className="eov-tier-line">{evalData.narrative_lines.short}</div>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="eov-tier-stats">
             {[
               { icon: '🪙', val: evalData.stat_deltas?.coins, label: 'Coins' },
               { icon: '⭐', val: evalData.stat_deltas?.reputation, label: 'Rep' },
-            ].map(s => s.val ? (
-              <div key={s.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: s.val > 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{s.val > 0 ? '+' : ''}{s.val}</div>
-                <div style={{ fontSize: 8, color: 'var(--text-secondary)' }}>{s.icon} {s.label}</div>
+            ].map(st => st.val ? (
+              <div key={st.label} className="eov-tier-stat">
+                <div className={`eov-tier-stat-value ${st.val > 0 ? 'is-up' : 'is-down'}`}>{st.val > 0 ? '+' : ''}{st.val}</div>
+                <div className="eov-tier-stat-label">{st.icon} {st.label}</div>
               </div>
             ) : null)}
           </div>
@@ -508,17 +518,17 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       {/* Viewer teaser (P12, Task #2386) */}
       <EpisodeTeaserSection episode={episode} onUpdate={onUpdate} />
 
-      {/* IDENTITY band — what is this episode? Creative intent + allowed
-          outcomes (editable on the brief), then the events driving it +
-          where it sits in the season. */}
+      {/* IDENTITY band — what is this episode? The allowed outcomes
+          (editable on the brief), then the events driving it and where it
+          sits in the season. */}
       <SectionBand title="Identity">
-      {/* Creative intent moved up into the Story brief card (Evoni's Episode mock). */}
       {/* ALLOWED OUTCOMES — toggleable. Disabling tiers narrows what the
           script generator and evaluator are allowed to produce. */}
       {brief && (
-        <div style={S.card}>
-          <span style={S.label}>🎲 Allowed Outcomes</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+        <div className="eov-card">
+          <CardTitle icon={Dices}>Allowed outcomes</CardTitle>
+          <p className="eov-card-note">Turn one off and the script and the evaluation won't land on it.</p>
+          <div className="eov-chips">
             {INTENTS.map(o => {
               const cfg = TIER_CONFIG[o];
               const active = draft.allowed_outcomes.includes(o);
@@ -526,9 +536,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                 <button
                   key={o}
                   type="button"
+                  className={`eov-outcome${active ? ' is-on' : ''}`}
+                  style={{ '--tier-color': cfg.color, '--tier-bg': cfg.bg }}
+                  aria-pressed={active}
                   disabled={isLocked}
                   onClick={() => toggleOutcome(o)}
-                  style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : 'var(--lala-parchment-3)'}`, background: active ? cfg.bg : 'var(--surface-card)', color: active ? cfg.color : 'var(--text-secondary)', opacity: isLocked ? 0.6 : 1 }}
                 >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
               );
             })}
@@ -536,29 +548,29 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 0 }}>
-        {/* Events — multi-link. Each linked event is a chip with × to
+      <div className="eov-grid">
+        {/* Events — multi-link. Each linked event is a row with × to
             unlink. The dropdown below lists every show event not yet
             linked anywhere; picking one stamps it with this episode's
             used_in_episode_id. */}
-        <div style={S.card}>
-          <span style={S.label}>💌 Events ({linkedEvents.length})</span>
+        <div className="eov-card">
+          <CardTitle icon={CalendarHeart}>Events <span className="eov-count">{linkedEvents.length}</span></CardTitle>
           {linkedEvents.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>No events linked</div>
+            <p className="eov-empty">No events linked</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+            <div className="eov-events">
               {linkedEvents.map(ev => (
-                <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 8px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', borderRadius: 6 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.name}</div>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                <div key={ev.id} className="eov-event">
+                  <div className="eov-event-main">
+                    <div className="eov-event-name">{ev.name}</div>
+                    <div className="eov-tags">
                       {/* The brief's source event (Task #1906). It stays
                           listed while the brief names it, even if its
                           used_in_episode_id link is cleared. */}
-                      {ev.link?.anchor && <span title={ev.link.stamped ? 'The event this episode was started from' : 'The event this episode was started from; its link to this episode is missing or points elsewhere'} style={{ padding: '1px 5px', background: 'var(--lala-gold)', borderRadius: 3, fontSize: 9, color: 'var(--text-primary)', fontWeight: 700 }}>source{ev.link.stamped ? '' : ' · unlinked'}</span>}
-                      {ev.host &&<span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--text-secondary)' }}>{ev.host}</span>}
-                      {ev.dress_code && <span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--lala-gold-text)' }}>{ev.dress_code}</span>}
-                      {ev.event_type && <span style={{ padding: '1px 5px', background: 'var(--surface-card)', borderRadius: 3, fontSize: 9, color: 'var(--primary-text)' }}>{ev.event_type}</span>}
+                      {ev.link?.anchor && <span className="eov-tag is-source" title={ev.link.stamped ? 'The event this episode was started from' : 'The event this episode was started from; its link to this episode is missing or points elsewhere'}>source{ev.link.stamped ? '' : ' · unlinked'}</span>}
+                      {ev.host && <span className="eov-tag">{ev.host}</span>}
+                      {ev.dress_code && <span className="eov-tag">{ev.dress_code}</span>}
+                      {ev.event_type && <span className="eov-tag">{ev.event_type}</span>}
                     </div>
                     {/* Back to the event (Task #2356): its Event Package,
                         read-only once Start Episode has locked the terms. */}
@@ -566,40 +578,43 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                       <Link
                         to={`/shows/${ev.show_id || showId}/events/${ev.id}`}
                         data-testid={`overview-event-package-${ev.id}`}
-                        style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, color: 'var(--lala-gold-text)', textDecoration: 'underline' }}
+                        className="eov-link"
                       >
-                        View Event Package →
+                        View Event Package <ArrowRight size={14} aria-hidden="true" />
                       </Link>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <div className="eov-event-tools">
                     <button
                       type="button"
+                      className="eov-icon-btn"
                       onClick={() => regenerateFromEvent(ev)}
                       disabled={linkBusy}
                       title="Regenerate this episode from the event (soft-deletes the current episode)"
-                      style={{ background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', cursor: 'pointer', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}
-                    >♻️</button>
+                      aria-label="Regenerate this episode from the event"
+                    ><RefreshCw size={15} aria-hidden="true" /></button>
                     <button
                       type="button"
+                      className="eov-icon-btn"
                       onClick={() => unlinkEvent(ev.id)}
                       disabled={linkBusy}
                       title="Unlink event from this episode"
-                      style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
-                    >×</button>
+                      aria-label="Unlink event from this episode"
+                    ><X size={15} aria-hidden="true" /></button>
                   </div>
                 </div>
               ))}
             </div>
           )}
           {linkError && (
-            <p role="alert" style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--warning-text)' }}>{linkError}</p>
+            <p role="alert" className="eov-warn">{linkError}</p>
           )}
           <select
+            className="eov-select"
+            aria-label="Link an event"
             value=""
             disabled={linkBusy || linkableEvents.length === 0}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
-            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', fontSize: 12, color: 'var(--text-secondary)', cursor: linkableEvents.length === 0 ? 'not-allowed' : 'pointer' }}
           >
             <option value="">{linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
             {linkableEvents.map(ev => (
@@ -611,82 +626,81 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         {/* Season Position — the season context snapshotted at Start Episode
             (Season Arc §8(ff) A5), shown "S1 · E7" (Q3); the show-wide
             episode count stays internal. */}
-        <div style={S.card} data-testid="season-position">
-          <span style={S.label}>📺 Season Position</span>
+        <div className="eov-card" data-testid="season-position">
+          <CardTitle icon={Tv}>Season position</CardTitle>
           {seasonContext?.label ? (
             <>
-              <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <div className="eov-season-bar" aria-hidden="true">
                 {Array.from({ length: 24 }, (_, i) => (
-                  <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === seasonContext.slot_number ? 'var(--lala-gold)' : (i + 1) < seasonContext.slot_number ? 'var(--success-bg)' : 'var(--lala-parchment-2)' }} />
+                  <span key={i} className={(i + 1) === seasonContext.slot_number ? 'is-here' : (i + 1) < seasonContext.slot_number ? 'is-past' : ''} />
                 ))}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--lala-gold-text)', fontWeight: 700, marginTop: 6 }}>
+              <div className="eov-season-label">
                 {seasonContext.label}
-                {seasonContext.phase?.title && <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
+                {seasonContext.phase?.title && <span className="eov-season-phase"> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
               </div>
-              <div style={{ fontSize: 12, color: seasonContext.story_purpose ? 'var(--text-primary)' : 'var(--text-secondary)', marginTop: 4, fontStyle: seasonContext.story_purpose ? 'normal' : 'italic' }}>
+              <p className={seasonContext.story_purpose ? 'eov-text' : 'eov-empty'}>
                 {seasonContext.story_purpose || 'No story purpose set for this slot yet.'}
-              </div>
+              </p>
             </>
           ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+            <p className="eov-empty">
               Not in a season slot yet. Place it on Producer Mode → Episodes → Season Plan.
-            </div>
+            </p>
           )}
         </div>
       </div>
       </SectionBand>
 
-      {/* PRODUCTION band — what's been built? Locations, script status,
-          narrative read-through from the linked events, and the timeline
-          overlay placements. */}
+      {/* PRODUCTION band — what's been built? Locations, script status and
+          the timeline overlay placements. */}
       <SectionBand title="Production">
-      {/* Locations + Script */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+      <div className="eov-grid">
         {/* Locations — derived from the linked events' venue_location_id
             (or venue_name when no FK is set). No standalone state on the
             episode; locations are always read through the events so
             there's no risk of drift. Hint creators that empty = link an
             event with a venue. */}
-        <div style={S.card}>
-          <span style={S.label}>📍 Locations ({eventLocations.length})</span>
+        <div className="eov-card">
+          <CardTitle icon={MapPin}>Locations <span className="eov-count">{eventLocations.length}</span></CardTitle>
           {eventLocations.length > 0 ? (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+            <div className="eov-places">
               {eventLocations.map((entry, i) => {
                 const name = entry.kind === 'location' ? entry.loc.name : entry.name;
                 const district = entry.kind === 'location' ? entry.loc.district : null;
                 return (
-                  <div key={i} style={{ flexShrink: 0, minWidth: 80 }}>
-                    <div style={{ width: 80, height: 50, background: 'var(--lala-parchment-2)', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 18 }}>📍</div>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-primary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                    {district && <div style={{ fontSize: 8, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{district}</div>}
-                    <div style={{ fontSize: 8, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {entry.eventName}</div>
+                  <div key={i} className="eov-place">
+                    <div className="eov-place-thumb" aria-hidden="true"><MapPin size={20} /></div>
+                    <div className="eov-place-text">
+                      <div className="eov-place-name">{name}</div>
+                      {district && <div className="eov-place-meta">{district}</div>}
+                      <div className="eov-place-meta">via {entry.eventName}</div>
+                    </div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            <p className="eov-empty">
               {linkedEvents.length === 0 ? 'Link an event to see its location here' : 'Linked events have no venue set'}
-            </div>
+            </p>
           )}
         </div>
 
         {/* Script */}
-        <div style={S.card}>
-          <span style={S.label}>📝 Script</span>
+        <div className="eov-card">
+          <CardTitle icon={FileText}>Script</CardTitle>
           {scriptInfo?.exists ? (
-            <div>
-              <span style={{ padding: '3px 10px', background: 'var(--success-bg)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var(--success-text)' }}>✓ Script written</span>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>{scriptInfo.wordCount?.toLocaleString()} words</span>
+            <div className="eov-script">
+              <span className="eov-pill is-ok">✓ Script written</span>
+              <span className="eov-muted">{scriptInfo.wordCount?.toLocaleString()} words</span>
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No script yet</div>
+            <p className="eov-empty">No script yet</p>
           )}
+          {onOpenTab && <button type="button" className="eov-link" onClick={() => onOpenTab('scripts')}>Open Script <ArrowRight size={14} aria-hidden="true" /></button>}
         </div>
       </div>
-
-
 
       {/* Video UI overlays — invites, checklists, etc. on the rendered
           video frame. Auto-populated when an invite is approved or the
@@ -701,70 +715,70 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           least one is present. */}
       {hasSourceBand && (
         <SectionBand title="Source">
+          <div className="eov-grid">
           {hasFeedOrigin && (
-            <div style={S.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid var(--lala-parchment-2)' }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>🌐 {feedOriginName}</div>
-                  {feedOriginHandle && <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>@{String(feedOriginHandle).replace(/^@/, '')}</div>}
-                  {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: 'var(--primary-subtle)', color: 'var(--primary-text)', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
-                </div>
-                <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid var(--lala-parchment-3)', background: 'var(--surface-card)', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>
+            <div className="eov-card">
+              <CardTitle icon={Globe} aside={<Link to="/feed" className="eov-link">Feed <ArrowRight size={14} aria-hidden="true" /></Link>}>{feedOriginName}</CardTitle>
+              <div className="eov-origin-meta">
+                {feedOriginHandle && <span className="eov-handle">@{String(feedOriginHandle).replace(/^@/, '')}</span>}
+                {automation.content_category && <span className="eov-tag">{automation.content_category}</span>}
               </div>
               {(automation.follow_motivation || automation.follow_emotion || automation.follow_trigger || automation.event_excitement != null) && (
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ ...S.label, marginBottom: 4 }}>Why this hooked Lala</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, fontSize: 11 }}>
-                    {automation.follow_motivation && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_motivation}</div></div>}
-                    {automation.follow_emotion && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_emotion}</div></div>}
-                    {automation.follow_trigger && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: 'var(--text-primary)' }}>{automation.follow_trigger}</div></div>}
-                    {automation.event_excitement != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: 'var(--lala-gold-text)', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>}
+                <>
+                  <h5 className="eov-sub">Why this hooked Lala</h5>
+                  <div className="eov-fields">
+                    {automation.follow_motivation && <Field label="Motivation">{automation.follow_motivation}</Field>}
+                    {automation.follow_emotion && <Field label="Emotion">{automation.follow_emotion}</Field>}
+                    {automation.follow_trigger && <Field label="Trigger" wide>{automation.follow_trigger}</Field>}
+                    {automation.event_excitement != null && <Field label="Excitement" tone="gold">{automation.event_excitement}/10</Field>}
                   </div>
-                </div>
+                </>
               )}
               {(automation.lifestyle_claim || automation.lifestyle_reality || automation.lifestyle_gap) && (
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ ...S.label, marginBottom: 4 }}>Lifestyle gap</label>
-                  {automation.lifestyle_claim && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}</div>}
-                  {automation.lifestyle_reality && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}</div>}
-                  {automation.lifestyle_gap && <div style={{ fontSize: 11, color: 'var(--danger-text)', fontStyle: 'italic' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}</div>}
-                </div>
+                <>
+                  <h5 className="eov-sub">Lifestyle gap</h5>
+                  <div className="eov-fields">
+                    {automation.lifestyle_claim && <Field label="Claim" wide>{automation.lifestyle_claim}</Field>}
+                    {automation.lifestyle_reality && <Field label="Reality" wide>{automation.lifestyle_reality}</Field>}
+                    {automation.lifestyle_gap && <Field label="Gap" wide tone="danger">{automation.lifestyle_gap}</Field>}
+                  </div>
+                </>
               )}
               {(automation.host_brand || automation.beauty_factor) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
-                  {automation.host_brand && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{automation.host_brand}</div></div>}
-                  {automation.beauty_factor && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: 'var(--text-primary)' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>}
+                <div className="eov-fields">
+                  {automation.host_brand && <Field label="Brand">{automation.host_brand}</Field>}
+                  {automation.beauty_factor && <Field label="Beauty hook">{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</Field>}
                 </div>
               )}
             </div>
           )}
           {hasNarChain && (
-            <div style={S.card}>
-              <span style={S.label}>🔗 Narrative Chain</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: seeds.length || narChain.chain_reason ? 10 : 0, marginTop: 4 }}>
-                {narChain.chain_position != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Chain position</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{narChain.chain_position}</div></div>}
+            <div className="eov-card">
+              <CardTitle icon={Link2}>Narrative chain</CardTitle>
+              <div className="eov-fields">
+                {narChain.chain_position != null && <Field label="Chain position">{narChain.chain_position}</Field>}
                 {narChain.parent_event_id && (
-                  <div>
-                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Parent event</span>
+                  <Field label="Parent event">
                     {parentEvent ? (
                       parentEvent.used_in_episode_id
-                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} style={{ display: 'block', fontSize: 12, color: 'var(--lala-gold-text)', fontWeight: 600 }}>{parentEvent.name} →</Link>
-                        : <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{parentEvent.name} <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>(no episode yet)</span></div>
-                    ) : <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>{String(narChain.parent_event_id).slice(0, 8)}…</div>}
-                  </div>
+                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} className="eov-link">{parentEvent.name} <ArrowRight size={14} aria-hidden="true" /></Link>
+                        : <>{parentEvent.name} <span className="eov-muted">(no episode yet)</span></>
+                    ) : <span className="eov-handle">{String(narChain.parent_event_id).slice(0, 8)}…</span>}
+                  </Field>
                 )}
+                {narChain.chain_reason && <Field label="Chain reason" wide tone="quiet">{narChain.chain_reason}</Field>}
               </div>
-              {narChain.chain_reason && <div style={{ marginBottom: seeds.length ? 10 : 0 }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Chain reason</span><div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, fontStyle: 'italic' }}>{narChain.chain_reason}</div></div>}
               {seeds.length > 0 && (
-                <div>
-                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Seeds for future events</span>
-                  <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <>
+                  <h5 className="eov-sub">Seeds for future events</h5>
+                  <ul className="eov-list">
                     {seeds.map((seed, i) => <li key={i}>{typeof seed === 'string' ? seed : JSON.stringify(seed)}</li>)}
                   </ul>
-                </div>
+                </>
               )}
             </div>
           )}
+          </div>
         </SectionBand>
       )}
 
@@ -773,80 +787,77 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           (strictness, deadline). Snapshot from the source event — not
           editable here; change them on the event itself. */}
       {hasStakesBand && (() => {
-        // Layout: span the available columns evenly. 3 cards → three columns,
-        // 2 → two, 1 → full width. Keeps the band tidy regardless of which
-        // pieces of brief data exist on this episode.
-        const cardCount = (hasCareerCtx ? 1 : 0) + (hasEventDiff ? 1 : 0) + (hasRewards ? 1 : 0);
-        const gridCols = cardCount >= 3 ? 'repeat(3, 1fr)' : cardCount === 2 ? '1fr 1fr' : '1fr';
         // Pending vs earned: read evaluation_json.tier_final to badge each
         // reward. slay/pass = earned (matches episodeCompletionService gate),
         // safe/fail = missed (rewards don't fire), undefined = pending.
-        const tier = evalData?.tier_final || null;
-        const rewardStatus = !tier ? 'pending' : (['slay', 'pass'].includes(tier) ? 'earned' : 'missed');
+        const tierFinal = evalData?.tier_final || null;
+        const rewardStatus = !tierFinal ? 'pending' : (['slay', 'pass'].includes(tierFinal) ? 'earned' : 'missed');
         const statusCfg = {
-          pending: { label: 'PENDING', bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)' },
-          earned: { label: 'EARNED', bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)' },
-          missed: { label: 'MISSED', bg: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'var(--danger-border)' },
+          pending: { label: 'Pending', bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)' },
+          earned: { label: 'Earned', bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)' },
+          missed: { label: 'Missed', bg: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'var(--danger-border)' },
         }[rewardStatus];
         const statIcons = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣' };
         return (
           <SectionBand title="Stakes">
-            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
+            {(hasCareerCtx || hasEventDiff || hasRewards) && (
+            <div className="eov-grid is-auto">
               {hasCareerCtx && (
-                <div style={S.card}>
-                  <span style={S.label}>💼 Career Context</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                    {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
-                    {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
-                    {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: 'var(--success-text)', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
-                    {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: 'var(--danger-text)', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                <div className="eov-card">
+                  <CardTitle icon={Briefcase}>Career context</CardTitle>
+                  <div className="eov-fields">
+                    {careerCtx.career_tier && <Field label="Tier">{careerCtx.career_tier}</Field>}
+                    {careerCtx.career_milestone && <Field label="Milestone">{careerCtx.career_milestone}</Field>}
+                    {careerCtx.success_unlock && <Field label="Success unlock" wide tone="success">{careerCtx.success_unlock}</Field>}
+                    {careerCtx.fail_consequence && <Field label="Fail consequence" wide tone="danger">{careerCtx.fail_consequence}</Field>}
                   </div>
                 </div>
               )}
               {hasEventDiff && (
-                <div style={S.card}>
-                  <span style={S.label}>⚡ Event Difficulty</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
-                    {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{eventDiff.strictness}/10</div></div>}
-                    {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{eventDiff.deadline_type}</div></div>}
-                    {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{eventDiff.deadline_minutes}</div></div>}
+                <div className="eov-card">
+                  <CardTitle icon={Zap}>Event difficulty</CardTitle>
+                  <div className="eov-fields is-three">
+                    {eventDiff.strictness != null && <Field label="Strictness" tone="big">{eventDiff.strictness}/10</Field>}
+                    {eventDiff.deadline_type && <Field label="Deadline">{eventDiff.deadline_type}</Field>}
+                    {eventDiff.deadline_minutes != null && <Field label="Minutes" tone="big">{eventDiff.deadline_minutes}</Field>}
                   </div>
                 </div>
               )}
               {hasRewards && (
-                <div style={S.card}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={S.label}>🏆 Rewards</span>
-                    <span
-                      title={
-                        rewardStatus === 'pending' ? 'Episode not evaluated yet — rewards will fire on slay/pass.' :
-                        rewardStatus === 'earned' ? 'Episode landed slay or pass — rewards applied.' :
-                        'Episode landed safe or fail — rewards did not fire.'
-                      }
-                      style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}
-                    >{statusCfg.label}</span>
-                  </div>
+                <div className="eov-card">
+                  <CardTitle
+                    icon={Trophy}
+                    aside={(
+                      <span
+                        className="eov-status"
+                        style={{ '--status-bg': statusCfg.bg, '--status-color': statusCfg.color, '--status-border': statusCfg.border }}
+                        title={
+                          rewardStatus === 'pending' ? 'Episode not evaluated yet — rewards will fire on slay/pass.' :
+                          rewardStatus === 'earned' ? 'Episode landed slay or pass — rewards applied.' :
+                          'Episode landed safe or fail — rewards did not fire.'
+                        }
+                      >{statusCfg.label}</span>
+                    )}
+                  >Rewards</CardTitle>
                   {rewardStats.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(rewardStats.length, 4)}, 1fr)`, gap: 8, marginTop: 4 }}>
+                    <div className="eov-fields">
                       {rewardStats.map(k => (
-                        <div key={k}>
-                          <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>{statIcons[k]} {k.replace('_', ' ')}</span>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: rewardStatus === 'earned' ? 'var(--success-text)' : rewardStatus === 'missed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>+{rewards[k]}</div>
-                        </div>
+                        <Field key={k} label={`${statIcons[k] || ''} ${k.replace('_', ' ')}`} tone={rewardStatus === 'earned' ? 'success-big' : rewardStatus === 'missed' ? 'quiet-big' : 'big'}>+{rewards[k]}</Field>
                       ))}
                     </div>
                   )}
                   {rewardOutcomes.length > 0 && (
-                    <div style={{ marginTop: rewardStats.length ? 8 : 4 }}>
-                      <span style={{ fontSize: 9, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Outcomes</span>
-                      <ul style={{ margin: '2px 0 0', padding: '0 0 0 16px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    <>
+                      <h5 className="eov-sub">Outcomes</h5>
+                      <ul className="eov-list">
                         {rewardOutcomes.map((o, i) => <li key={i}>{o}</li>)}
                       </ul>
-                    </div>
+                    </>
                   )}
                 </div>
               )}
             </div>
+            )}
             {/* The Money card (§8(gg) MB5, Q10): it replaces the ledger list;
                 the Money tab is the one full view. */}
             {showId && <EpisodeMoneyCard showId={showId} episodeId={episode.id} />}
@@ -860,53 +871,45 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       {hasReferenceBand && (
         <SectionBand title="Reference">
           {hasCanonCons && (
-            <div style={S.card}>
-              <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>🌐 Canon consequences</summary>
-                <pre style={{ background: 'var(--surface-bg)', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", border: '1px solid var(--lala-parchment-3)' }}>
-                  {JSON.stringify(canonConsCleaned, null, 2)}
-                </pre>
-              </details>
-            </div>
+            <details className="eov-card eov-details">
+              <summary><Globe size={16} aria-hidden="true" /> Canon consequences</summary>
+              <pre className="eov-pre">{JSON.stringify(canonConsCleaned, null, 2)}</pre>
+            </details>
           )}
           {beatOutline.length > 0 && (
-            <div style={S.card}>
-              <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📋 AI beat outline ({beatOutline.length})</summary>
-                <ol style={{ margin: '10px 0 0', padding: '0 0 0 22px' }}>
-                  {beatOutline.map((beat, i) => (
-                    <li key={i} style={{ marginBottom: 6, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                      <div style={{ fontWeight: 600 }}>{beat.summary || beat.name || `Beat ${beat.beat_number || i + 1}`}</div>
-                      {beat.dramatic_function && <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, fontStyle: 'italic' }}>{beat.dramatic_function}</div>}
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            </div>
+            <details className="eov-card eov-details">
+              <summary><ListOrdered size={16} aria-hidden="true" /> AI beat outline ({beatOutline.length})</summary>
+              <ol className="eov-outline">
+                {beatOutline.map((beat, i) => (
+                  <li key={i}>
+                    <div className="eov-outline-title">{beat.summary || beat.name || `Beat ${beat.beat_number || i + 1}`}</div>
+                    {beat.dramatic_function && <div className="eov-outline-note">{beat.dramatic_function}</div>}
+                  </li>
+                ))}
+              </ol>
+            </details>
           )}
           {hasEventMeta && (
-            <div style={S.card}>
-              <details>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📦 Event metadata</summary>
-                <pre style={{ background: 'var(--surface-bg)', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", border: '1px solid var(--lala-parchment-3)' }}>
-                  {JSON.stringify(eventMeta, null, 2)}
-                </pre>
-              </details>
-            </div>
+            <details className="eov-card eov-details">
+              <summary><Package size={16} aria-hidden="true" /> Event metadata</summary>
+              <pre className="eov-pre">{JSON.stringify(eventMeta, null, 2)}</pre>
+            </details>
           )}
         </SectionBand>
       )}
 
       {/* Quick Actions */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--primary)', border: 'none', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
-        {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
-        <button onClick={() => navigate(`/episodes/${episode.id}/plan`)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎬 Scene Plan</button>
+      <div className="eov-actions eov-quick">
+        <button type="button" className="eov-btn-primary" onClick={() => navigate(`/episodes/${episode.id}/script-writer`)}><PenLine size={15} aria-hidden="true" /> Script Writer</button>
+        {showId && <button type="button" className="eov-btn" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}><LayoutGrid size={15} aria-hidden="true" /> Producer Mode</button>}
+        <button type="button" className="eov-btn" onClick={() => navigate(`/episodes/${episode.id}/plan`)}><Clapperboard size={15} aria-hidden="true" /> Scene Plan</button>
         {/* AI scene-set suggester — disabled until the episode has a script
             since there's nothing to analyze otherwise. Fires the suggest
             endpoint then opens SceneSuggestionReview for the creator to
             approve / discard. */}
         <button
+          type="button"
+          className="eov-btn"
           onClick={async () => {
             setSuggestBusy(true);
             try {
@@ -924,11 +927,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           }}
           disabled={!scriptInfo?.exists || suggestBusy}
           title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
-          style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', fontSize: 11, fontWeight: 600, cursor: !scriptInfo?.exists || suggestBusy ? 'not-allowed' : 'pointer', opacity: !scriptInfo?.exists ? 0.55 : 1 }}
         >
-          {suggestBusy ? '✦ Thinking…' : '✦ Suggest Scenes'}
+          <Sparkles size={15} aria-hidden="true" /> {suggestBusy ? 'Thinking…' : 'Suggest Scenes'}
         </button>
-        <button onClick={() => setIsEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Edit Details</button>
+        <button type="button" className="eov-btn" onClick={() => setIsEditing(true)}><Pencil size={15} aria-hidden="true" /> Edit Details</button>
       </div>
       {sceneSuggestion && (
         <SceneSuggestionReview

@@ -22,14 +22,10 @@ const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(n)}`;
 const tone = (n) => (n > 0 ? 'var(--success-text)' : n < 0 ? 'var(--danger-text)' : 'var(--text-primary)');
 
 const S = {
-  card: { background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, padding: '12px 14px', marginTop: 12 },
-  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
-  label: { fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--lala-gold-text)' },
-  link: { fontFamily: "'DM Mono', monospace", fontSize: 12, color: 'var(--lala-gold-text)', textDecoration: 'none' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 },
-  statLabel: { fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-secondary)' },
+  statLabel: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--lala-ink-muted)' },
   statValue: { fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 700, marginTop: 2 },
-  note: { fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 },
+  note: { fontSize: 13, color: 'var(--lala-ink-muted)', marginTop: 8 },
   chip: { display: 'inline-block', padding: '1px 8px', marginRight: 4, borderRadius: 999, border: '1px solid var(--lala-gold)', color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", fontSize: 10 },
 };
 
@@ -57,10 +53,11 @@ export default function EpisodeMoneyCard({ showId, episodeId }) {
   const open = p?.open_count ?? 0;
 
   return (
-    <div style={S.card} data-testid="episode-money-card">
-      <div style={S.head}>
-        <span style={{ ...S.label, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Coins size={13} aria-hidden="true" /> Money</span>
-        <Link to={`/episodes/${episodeId}?tab=money`} style={S.link} data-testid="episode-money-card-link">See all in Money →</Link>
+    // Card and title in the Overview's card language (EpisodeOverviewSections.css).
+    <div className="eov-card" data-testid="episode-money-card">
+      <div className="eov-card-head">
+        <h4 className="eov-card-title"><Coins size={16} aria-hidden="true" /> Money</h4>
+        <Link to={`/episodes/${episodeId}?tab=money`} className="eov-link" data-testid="episode-money-card-link">See all in Money →</Link>
       </div>
       {failed && <div style={S.note}>Couldn't load this episode's money.</div>}
       {!failed && !p && <div style={S.note}>Loading money…</div>}

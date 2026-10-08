@@ -5,7 +5,9 @@
  * renders set colors only through tokens; the Save, Script Writer,
  * teaser and accept actions are the primary; gold is never under white
  * nor used as text; verdicts and reward states read text tokens on
- * their surfaces.
+ * their surfaces. The Overview redesign (2026-10-08) moved the tab's
+ * cards, buttons and edit form into EpisodeOverviewSections.css classes;
+ * the actions are lavender, as in the summary above them.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -16,6 +18,7 @@ const read = (rel) => readFileSync(resolve(__dirname, rel), 'utf8');
 const files = {
   'EpisodeOverviewTab.jsx': read('EpisodeOverviewTab.jsx'),
   'EpisodeOverviewTab.css': read('EpisodeOverviewTab.css'),
+  'EpisodeOverviewSections.css': read('EpisodeOverviewSections.css'),
   'EpisodeTeaserSection.jsx': read('EpisodeTeaserSection.jsx'),
   'EpisodeTeaserSection.css': read('EpisodeTeaserSection.css'),
   'EpisodeMoneyCard.jsx': read('EpisodeMoneyCard.jsx'),
@@ -29,6 +32,7 @@ const HEX = /#[0-9a-f]{3,8}\b/i;
 // Task references ("Task #2386") are not colors.
 const tab = files['EpisodeOverviewTab.jsx'];
 const css = files['EpisodeOverviewTab.css'];
+const sections = files['EpisodeOverviewSections.css'];
 
 describe('Episode Overview theme', () => {
   test.each(Object.keys(files))('%s carries no color literal', (name) => {
@@ -36,8 +40,11 @@ describe('Episode Overview theme', () => {
   });
 
   test('the actions are the primary and gold is never under white nor text', () => {
-    expect(tab).toMatch(/border: 'none', background: 'var\(--primary\)', color: 'var\(--text-inverse\)'[^}]*\}\}>Save</);
-    expect(tab).toMatch(/background: 'var\(--primary\)', border: 'none', color: 'var\(--text-inverse\)'[^}]*\}\}>✦ Script Writer/);
+    // Save (edit details) and Script Writer are the lavender primary.
+    expect(sections).toMatch(/\.eov-btn-primary \{ border: none; background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
+    expect(tab).toMatch(/className="eov-btn-primary" onClick=\{handleSave\}>Save</);
+    expect(tab).toMatch(/className="eov-btn-primary"[^\n]*> Script Writer<\/button>/);
+    expect(sections).toMatch(/\.eov-btn \{ border: 1px solid var\(--lala-lavender-line\); background: var\(--surface-card\); color: var\(--lala-lavender-text\); \}/);
     expect(files['EpisodeTeaserSection.css']).toMatch(/border-color: var\(--primary\);\s*background: var\(--primary\);\s*color: var\(--text-inverse\);/);
     expect(files['SceneSuggestionReview.jsx']).toMatch(/background: acceptedCount === 0 \? 'var\(--lala-parchment-3\)' : 'var\(--primary\)'/);
     for (const text of Object.values(files)) {
@@ -45,7 +52,9 @@ describe('Episode Overview theme', () => {
       expect(text).not.toMatch(/(?<![-\w])color: ['"]?var\(--lala-gold\)['"]?/);
       expect(text).not.toMatch(/(?<![-\w])color: ['"]?var\(--accent\)['"]?/);
     }
-    expect(tab).toMatch(/background: 'var\(--lala-gold\)', borderRadius: 3, fontSize: 9, color: 'var\(--text-primary\)'/);
+    // The source tag is ink on gold.
+    expect(sections).toMatch(/\.eov-tag\.is-source \{ background: var\(--lala-gold\); color: var\(--text-primary\); \}/);
+    expect(sections).not.toMatch(/(?<![-\w])color: var\(--lala-gold\)/);
   });
 
   test('verdicts, reward states and the money tone read text tokens on their surfaces', () => {
@@ -80,6 +89,15 @@ describe('Episode Overview theme', () => {
       ['--text-secondary', '--surface-card'],
       ['--text-secondary', '--lala-gold-soft'],
       ['--text-primary', '--lala-gold-soft'],
+      // The redesign's cards, links and chips.
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-ink', '--surface-card'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--lala-ink', '--lala-gold-soft'],
+      ['--lala-ink-muted', '--lala-gold-soft'],
+      ['--lala-gold-text', '--surface-card'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
