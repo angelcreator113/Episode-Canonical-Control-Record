@@ -17,6 +17,11 @@ export const WORLD_REDIRECTS = {
   // its History sub-tab.
   '/cultural-calendar': '/universe?tab=culture&sub=events',
   '/cultural-memory': '/universe?tab=culture&sub=history',
+  // World State and Tensions are the State tab's (WorldDashboard). The
+  // copy these opened (WorldStateTensions) read the tension scanner's
+  // pre-2026-10-04 contract: every pair nameless, Propose Scene refused.
+  '/universe/world-state': '/universe?tab=state&sub=state',
+  '/universe/tensions': '/universe?tab=state&sub=tensions',
 };
 
 /**
