@@ -24,7 +24,7 @@ module.exports = {
           summary: 'Different cities become centers of influence for specific industries. Characters travel between them during the cultural calendar. Where a character lives or travels to is a character statement.',
           cities: [
             {
-              name: 'Velvet City',
+              name: 'Dazzle District',
               capitalOf: 'Fashion',
               famousFor: 'Couture houses, runway shows, designer studios, high-end boutiques',
               majorEvents: ['Velvet Season', 'Atelier Circuit'],
@@ -32,7 +32,7 @@ module.exports = {
               energy: 'Elegant, high-status, trend-setting. Every sidewalk is a runway.'
             },
             {
-              name: 'Glow District',
+              name: 'Radiance Row',
               capitalOf: 'Beauty',
               famousFor: 'Skincare labs, salons, beauty schools, product launch spaces',
               majorEvents: ['Glow Week', 'Glow Honors Awards'],
@@ -40,7 +40,7 @@ module.exports = {
               energy: 'Experimental, aesthetic, transformation culture. Reinvention is the local religion.'
             },
             {
-              name: 'Pulse City',
+              name: 'Echo Park',
               capitalOf: 'Entertainment',
               famousFor: 'Music studios, comedy clubs, creator houses, nightlife venues',
               majorEvents: ['Neon Nights', 'Soundwave Nights'],
@@ -48,7 +48,7 @@ module.exports = {
               energy: 'Chaotic, loud, viral culture. Something happens here that becomes a meme by morning.'
             },
             {
-              name: 'Creator Harbor',
+              name: 'Maverick Harbor',
               capitalOf: 'Influencer culture',
               famousFor: 'Creator studios, content houses, podcast networks, collab spaces',
               majorEvents: ['Creator Camp', 'Creator Cruise departures'],
@@ -56,7 +56,7 @@ module.exports = {
               energy: 'Collaborative, entrepreneurial. The city that runs on content and deals.'
             },
             {
-              name: 'Horizon City',
+              name: 'Ascent Tower',
               capitalOf: 'Tech and startups',
               famousFor: 'Digital platforms, creator economy tools, startup founders, incubators',
               majorEvents: ['Dream Market', 'Trend Summit'],
@@ -82,29 +82,29 @@ module.exports = {
           summary: 'These schools produce the next generation of creators and industry leaders. Where a character went to school — or didn\'t — is part of their identity in LalaVerse.',
           institutions: [
             {
-              name: 'The Velvet Academy',
-              city: 'Velvet City',
+              name: 'The Dazzle Academy',
+              city: 'Dazzle District',
               specialization: 'World\'s top fashion school',
               programs: ['Fashion design', 'Styling', 'Fashion photography', 'Fashion journalism'],
-              significance: 'Graduates often debut during the Atelier Circuit. A Velvet Academy degree is a Tier 1 credential.'
+              significance: 'Graduates often debut during the Atelier Circuit. A Dazzle Academy degree is a Tier 1 credential.'
             },
             {
-              name: 'The Glow Institute',
-              city: 'Glow District',
+              name: 'The Radiance Institute',
+              city: 'Radiance Row',
               specialization: 'Most prestigious beauty academy',
               programs: ['Makeup artistry', 'Skincare science', 'Cosmetic formulation', 'Aesthetic treatments'],
-              significance: 'Graduates dominate Glow Week. The Glow Institute and the beauty industry are inseparable.'
+              significance: 'Graduates dominate Glow Week. The Radiance Institute and the beauty industry are inseparable.'
             },
             {
               name: 'The Creator Conservatory',
-              city: 'Creator Harbor',
+              city: 'Maverick Harbor',
               specialization: 'Content creation and media',
               programs: ['Storytelling', 'Video production', 'Social media strategy', 'Branding'],
               significance: 'The school that legitimized being a creator. Graduates become influencers who cite it.'
             },
             {
-              name: 'Horizon Tech Institute',
-              city: 'Horizon City',
+              name: 'Ascent Tech Institute',
+              city: 'Ascent Tower',
               specialization: 'Technology and innovation',
               programs: ['Digital product design', 'Social platform engineering', 'AI and media tools'],
               significance: 'Many founders of major LalaVerse platforms came from here. The architecture of the world.'
@@ -128,11 +128,11 @@ module.exports = {
           summary: 'These companies shape the economy of LalaVerse. They hold power, employ creators, and make the decisions that change the landscape.',
           corporations: [
             {
-              name: 'Velvet House',
+              name: 'Dazzle House',
               industry: 'Luxury fashion',
               knownFor: 'Couture collections, high-status events, collaborations with top creators',
               power: 'Controls what high fashion means. Who they invite to shows is a power signal.',
-              storyPotential: 'The creator Velvet House ignores. The designer they finally recognize. The collaboration that changes everything.'
+              storyPotential: 'The creator Dazzle House ignores. The designer they finally recognize. The collaboration that changes everything.'
             },
             {
               name: 'Glow Labs',
@@ -185,7 +185,7 @@ module.exports = {
               count: 5,
               roles: [
                 { role: 'The Style Queen', function: 'Defines what is fashionable this season and what is over', signature: 'Her opinion reshapes the Feed overnight' },
-                { role: 'Velvet Muse', function: 'The living embodiment of Velvet City\'s aesthetic', signature: 'Every Velvet Season moment is built around her presence or absence' },
+                { role: 'Velvet Muse', function: 'The living embodiment of Dazzle District\'s aesthetic', signature: 'Every Velvet Season moment is built around her presence or absence' },
                 { role: 'The Runway Architect', function: 'Designs the shows that define the Atelier Circuit', signature: 'Their runway is the reference point for the year' },
                 { role: 'Street Style Sovereign', function: 'Bridges street style and high fashion', signature: 'Discovered at Style Market, now front row at every show' },
                 { role: 'The Fashion Archivist', function: 'Documents and preserves fashion history in LalaVerse', signature: 'The ultimate authority on what actually happened vs. what people remember' }
@@ -198,7 +198,7 @@ module.exports = {
                 { role: 'The Glow Guru', function: 'Defines beauty standards — her recommendations sell out in hours', signature: 'The beauty world waits for her review before celebrating a launch' },
                 { role: 'Skin Scientist', function: 'Makes skincare evidence-based and aspirational simultaneously', signature: 'Translates beauty lab science into the Feed\'s language' },
                 { role: 'The Makeup Oracle', function: 'Predicts beauty trends before they surface publicly', signature: 'The look she posts in January becomes the look everyone does in March' },
-                { role: 'Lash Empress', function: 'Rules the lash and eye beauty space absolutely', signature: 'Started in Glow District salons — the Velvet Academy equivalent in beauty' },
+                { role: 'Lash Empress', function: 'Rules the lash and eye beauty space absolutely', signature: 'Started in Radiance Row salons — the Dazzle Academy equivalent in beauty' },
                 { role: 'The Aesthetic Alchemist', function: 'Combines beauty, fashion, and art into a singular visual language', signature: 'Impossible to copy because the source is a specific interior life' }
               ]
             },
