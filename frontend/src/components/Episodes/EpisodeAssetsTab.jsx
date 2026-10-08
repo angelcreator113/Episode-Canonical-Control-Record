@@ -3,7 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { sceneSetPath } from '../../utils/sceneSets';
+import { Clapperboard, Mail, MapPin, Shirt, ClipboardList, Smartphone, Target, Coins, FileText, Users, Images, Package } from 'lucide-react';
 import EpisodeTodoList from './EpisodeTodoList';
+import './EpisodeAssetsTab.css';
 
 /**
  * EpisodeAssetsTab — Production Readiness Checklist
@@ -15,11 +17,27 @@ import EpisodeTodoList from './EpisodeTodoList';
  * Each item shows: generated/approved/missing status, thumbnail, quick action
  */
 
-const STATUS_STYLES = {
-  approved: { bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)', icon: '✅', label: 'Approved' },
-  generated: { bg: 'var(--primary-subtle)', color: 'var(--primary-text)', border: 'var(--primary-light)', icon: '🔵', label: 'Generated' },
-  pending: { bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)', icon: '⏳', label: 'Pending' },
-  missing: { bg: 'var(--lala-parchment-2)', color: 'var(--text-secondary)', border: 'var(--lala-parchment-3)', icon: '⬜', label: 'Not generated' },
+// Each status is a pill on the row (the Assets redesign, 2026-10-08);
+// colours in EpisodeAssetsTab.css (.eat-pill.is-<status>).
+const STATUS_LABELS = {
+  approved: 'Ready',
+  generated: 'Drafted',
+  pending: 'Pending',
+  missing: 'Not yet',
+};
+
+// A lucide icon per checklist item, in place of the emoji.
+const ITEM_ICONS = {
+  title_card: Clapperboard,
+  invitation: Mail,
+  venue: MapPin,
+  outfit: Shirt,
+  wardrobe_list: ClipboardList,
+  social_tasks: Smartphone,
+  career_list: Target,
+  stats_panel: Coins,
+  script: FileText,
+  feed_posts: Users,
 };
 
 /**
@@ -97,21 +115,21 @@ function EpisodeAssetsTab({ episode, show }) {
       // Build checklist
       const items = [
         {
-          id: 'title_card', icon: '🎬', name: 'Episode Title Card',
+          id: 'title_card', name: 'Episode Title Card',
           status: titleAsset ? 'approved' : 'missing',
           detail: titleAsset ? 'Generated' : 'Generate from event panel',
           thumbnail: titleAsset?.s3_url_processed || titleAsset?.s3_url_raw,
           action: event ? { label: 'Generate', url: `/shows/${showId}/world?tab=events` } : null,
         },
         {
-          id: 'invitation', icon: '💌', name: 'Invitation',
+          id: 'invitation', name: 'Invitation',
           status: invitationAsset || event?.invitation_asset_id ? 'approved' : event ? 'missing' : 'missing',
           detail: invitationAsset ? 'Approved' : event ? 'Generate from event panel' : 'No event linked',
           thumbnail: invitationAsset?.s3_url_processed || event?.invitation_url,
           action: event ? { label: 'Event Panel', url: `/shows/${showId}/world?tab=events` } : null,
         },
         {
-          id: 'venue', icon: '📍', name: 'Venue Images',
+          id: 'venue', name: 'Venue Images',
           status: event?.scene_set_id ? 'approved' : event ? 'missing' : 'missing',
           detail: event?.scene_set_id
             ? `Scene set linked${event?.video_clip_url ? ' + video' : ''}`
@@ -119,44 +137,44 @@ function EpisodeAssetsTab({ episode, show }) {
           action: venueFixTarget({ event, episode, showId }),
         },
         {
-          id: 'outfit', icon: '👗', name: 'Outfit',
+          id: 'outfit', name: 'Outfit',
           status: outfitPieces.length > 0 ? 'approved' : 'missing',
           detail: outfitPieces.length > 0
-            ? `${outfitPieces.length} pieces ($${outfitPieces.reduce((s, p) => s + (parseFloat(p.price) || 0), 0).toLocaleString()})`
+            ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} ($${outfitPieces.reduce((s, p) => s + (parseFloat(p.price) || 0), 0).toLocaleString()})`
             : 'Pick outfit from event panel',
           thumbnail: outfitPieces[0]?.image_url,
           action: event ? { label: 'Pick Outfit', url: `/shows/${showId}/world?tab=events` } : null,
         },
         {
-          id: 'wardrobe_list', icon: '📋', name: 'Wardrobe Shopping List',
+          id: 'wardrobe_list', name: 'Wardrobe Shopping List',
           status: wardrobeOverlay || auto.wardrobe_overlay_url ? 'approved' : todoList?.tasks ? 'generated' : 'missing',
           detail: wardrobeOverlay ? 'Overlay approved' : todoList?.tasks ? `${(typeof todoList.tasks === 'string' ? JSON.parse(todoList.tasks) : todoList.tasks).length} tasks` : 'Generate from event panel',
           thumbnail: auto.wardrobe_overlay_url || wardrobeOverlay?.s3_url_processed,
         },
         {
-          id: 'social_tasks', icon: '📱', name: 'Social Tasks',
+          id: 'social_tasks', name: 'Social Tasks',
           status: socialOverlay || auto.social_checklist_url ? 'approved' : socialTasks.length > 0 ? 'generated' : 'missing',
           detail: socialTasks.length > 0 ? `${socialCompleted}/${socialTasks.length} completed` : 'Generate from event panel',
           thumbnail: auto.social_checklist_url || socialOverlay?.s3_url_processed,
         },
         {
-          id: 'career_list', icon: '🎯', name: 'Career Checklist',
+          id: 'career_list', name: 'Career Checklist',
           status: careerOverlay ? 'approved' : 'missing',
           detail: careerOverlay ? 'Overlay approved' : 'Optional — generate from event panel',
         },
         {
-          id: 'stats_panel', icon: '🪙', name: 'Stats Panel',
+          id: 'stats_panel', name: 'Stats Panel',
           status: statsOverlay ? 'approved' : 'missing',
           detail: statsOverlay ? 'Generated' : 'Optional — shows financial reveal',
         },
         {
-          id: 'script', icon: '📝', name: 'Script',
+          id: 'script', name: 'Script',
           status: epData.script_content ? 'approved' : 'missing',
           detail: epData.script_content ? 'Script written' : 'Write from episode detail',
           action: { label: 'Write Script', url: `/episodes/${episodeId}?tab=scripts` },
         },
         {
-          id: 'feed_posts', icon: '👥', name: 'Feed Posts',
+          id: 'feed_posts', name: 'Feed Posts',
           status: feedPosts.length > 0 ? 'approved' : 'missing',
           detail: feedPosts.length > 0 ? `${feedPosts.length} posts generated` : 'Generate after script is written',
         },
@@ -173,107 +191,70 @@ function EpisodeAssetsTab({ episode, show }) {
   };
 
   if (!episode) {
-    return <div style={{ padding: 24, color: 'var(--text-secondary)' }}>Loading episode...</div>;
+    return <div className="eat"><p className="eat-note">Loading episode...</p></div>;
   }
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>Loading production checklist...</div>;
+    return <div className="eat"><p className="eat-note">Loading production checklist...</p></div>;
   }
 
   const pct = readiness.total > 0 ? Math.round((readiness.ready / readiness.total) * 100) : 0;
+  const tone = pct >= 80 ? 'is-high' : pct >= 50 ? 'is-mid' : 'is-low';
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Production Readiness</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-            {readiness.ready}/{readiness.total} assets ready — {pct}% complete
+    <div className="eat">
+      {/* The page's card: how ready the assets are, and the thumbnails. */}
+      <section className="eat-head" data-testid="assets-head">
+        <div className="eat-head-text">
+          <h2 className="eat-title">Assets</h2>
+          <p className="eat-sub">
+            {readiness.ready} of {readiness.total} ready · {pct}%
           </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* The episode's thumbnails (audit LINK-02): the gallery that reads
-              them. The builder that makes one is the release workflow, batch 5. */}
-          <Link to={`/thumbnails/${episodeId}`} data-testid="episode-thumbnails-link" style={{
-            fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
-            border: '1px solid var(--primary)', color: 'var(--primary-text)', background: 'var(--primary-subtle)', textDecoration: 'none',
-          }}>Thumbnails →</Link>
-          <div style={{
-            width: 48, height: 48, borderRadius: '50%',
-            background: `conic-gradient(${pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'} ${pct * 3.6}deg, var(--lala-parchment-2) 0deg)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: '50%', background: 'var(--surface-card)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 800, color: pct >= 80 ? 'var(--success-text)' : pct >= 50 ? 'var(--warning-text)' : 'var(--danger-text)',
-            }}>
-              {pct}%
-            </div>
+          <div className={`eat-bar ${tone}`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Assets ready">
+            <span style={{ width: `${pct}%` }} />
           </div>
         </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{ height: 4, background: 'var(--lala-parchment-2)', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', borderRadius: 2, transition: 'width 0.3s',
-          width: `${pct}%`,
-          background: pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)',
-        }} />
-      </div>
+        {/* The episode's thumbnails (audit LINK-02): the gallery that reads
+            them. The builder that makes one is the release workflow, batch 5. */}
+        <Link to={`/thumbnails/${episodeId}`} data-testid="episode-thumbnails-link" className="eat-btn">
+          <Images size={15} aria-hidden="true" /> Thumbnails
+        </Link>
+      </section>
 
       {/* Checklist */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {checklist.map(item => {
-          const st = STATUS_STYLES[item.status] || STATUS_STYLES.missing;
+      <section className="eat-card">
+        <h3 className="eat-label">Production checklist</h3>
+        <ul className="eat-list">
+          {checklist.map(item => {
+            const Icon = ITEM_ICONS[item.id] || Package;
+            const status = STATUS_LABELS[item.status] ? item.status : 'missing';
+            return (
+              <li key={item.id} className={`eat-row is-${status}`} data-testid={`asset-row-${item.id}`}>
+                <span className="eat-icon" aria-hidden="true"><Icon size={18} /></span>
+                <div className="eat-row-text">
+                  <div className="eat-row-name">{item.name}</div>
+                  <div className="eat-row-detail">{item.detail}</div>
+                </div>
+                {item.thumbnail && (
+                  <img src={item.thumbnail} alt="" className="eat-thumb" onError={e => { e.target.style.display = 'none'; }} />
+                )}
+                <span className={`eat-pill is-${status}`}>{STATUS_LABELS[status]}</span>
+                {item.action && item.status === 'missing' && (
+                  <button type="button" className="eat-btn is-small" onClick={() => navigate(item.action.url)}>
+                    {item.action.label}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
-          return (
-            <div key={item.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-              background: st.bg, borderRadius: 8, border: `1px solid ${st.border}`,
-            }}>
-              {/* Status icon + item icon */}
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{st.icon}</span>
-              <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
-
-              {/* Name + detail */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
-                <div style={{ fontSize: 10, color: st.color }}>{item.detail}</div>
-              </div>
-
-              {/* Thumbnail */}
-              {item.thumbnail && (
-                <img src={item.thumbnail} alt="" style={{
-                  width: 32, height: 32, borderRadius: 6, objectFit: 'cover',
-                  border: '1px solid var(--lala-parchment-3)', flexShrink: 0,
-                }} onError={e => e.target.style.display = 'none'} />
-              )}
-
-              {/* Action button */}
-              {item.action && item.status === 'missing' && (
-                <button onClick={() => navigate(item.action.url)} style={{
-                  fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 6,
-                  border: '1px solid var(--primary-light)', background: 'var(--primary-subtle)', color: 'var(--primary-text)',
-                  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                }}>
-                  {item.action.label}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <section style={{ marginTop: 24 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-          Episode To-Do Overlays
-        </h2>
-        <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
-          Show/game overlays the audience sees during the episode — not the production checklist.
-        </p>
+      <section className="eat-section">
+        <div className="eat-section-head">
+          <h3 className="eat-section-title">On-screen to-do lists</h3>
+          <p className="eat-note">What the audience sees during the episode, not the production checklist above.</p>
+        </div>
         <EpisodeTodoList episodeId={episode.id} showId={show.id} />
       </section>
     </div>
