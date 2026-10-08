@@ -1,16 +1,23 @@
 /**
- * CharacterProfilePage.jsx — Character Profile Redesign
+ * CharacterProfilePage.jsx — the character page
  *
  * Route: /character/:id
- * 6-tab editorial layout with fixed sidebar + inline tab content.
- * Reads depth_level instead of status for progression.
+ * Evoni's STUDIO BY SABLE mock (2026-10-08): a header with the character's
+ * feed handle, chips and how alive they are, then five tabs. Overview is
+ * "Who they are" (editable; Rewrite drafts it from the profile), "Where
+ * they show up" (lib/characterPage, from GET /api/v1/cast/characters/:id/
+ * appearances), their voice and what is between them and Lala. Inner life
+ * holds the interior, DEPTH and the deep profile; Voice & feed the feed
+ * profile; Connections and In the world as before.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Sparkles, ArrowRight } from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
 import apiClient from '../services/api';
+import { DEPTH_STEPS, depthOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -26,15 +33,12 @@ export const getCharacterEntanglementsApi = (id) =>
   apiClient.get(`${API_URL}/entanglements/character/${id}`);
 export const getSocialProfileApi = (profileId) =>
   apiClient.get(`${API_URL}/social-profiles/${profileId}`);
+export const getAppearancesApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/appearances`);
+export const draftProseApi = (id) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/writer-paragraph/generate`);
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
-
-const DEPTH_CONFIG = {
-  sparked:   { label: 'Sparked',   color: '#888',    bg: '#f5f5f5',  dot: '#aaa' },
-  breathing: { label: 'Breathing', color: '#7ab3d4', bg: '#eef5fb',  dot: '#4a8fb5' },
-  active:    { label: 'Active',    color: '#a889c8', bg: '#f5f0fb',  dot: '#8055b8' },
-  alive:     { label: 'Alive',     color: '#d4789a', bg: '#fdf0f4',  dot: '#c0527a' },
-};
 
 const STATE_CONFIG = {
   rising:        { label: 'Rising',        color: '#6a9e60', bg: '#f0f7ee' },
@@ -48,13 +52,11 @@ const STATE_CONFIG = {
 };
 
 const TABS = [
-  { id: 'overview',     label: 'Overview' },
-  { id: 'interior',     label: 'Interior' },
-  { id: 'depth',        label: 'DEPTH' },
-  { id: 'connections',  label: 'Connections' },
-  { id: 'online',       label: 'Online' },
-  { id: 'world',        label: 'World' },
-  { id: 'deep_profile', label: 'Deep Profile' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'inner',       label: 'Inner life' },
+  { id: 'voice',       label: 'Voice & feed' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'world',       label: 'In the world' },
 ];
 
 const DIMENSION_KEYS = [
@@ -81,18 +83,6 @@ const DIMENSION_ICONS = {
   the_unseen:          '\uD83D\uDD2E',
 };
 
-/* ── Depth Pill ──────────────────────────────────────────────────────────────── */
-
-function DepthPill({ level }) {
-  const cfg = DEPTH_CONFIG[level] || DEPTH_CONFIG.sparked;
-  return (
-    <span className="cp-depth-pill" style={{ background: cfg.bg, color: cfg.color }}>
-      <span className="cp-depth-dot" style={{ background: cfg.dot }} />
-      {cfg.label}
-    </span>
-  );
-}
-
 /* ── Empty State ─────────────────────────────────────────────────────────────── */
 
 function EmptyState({ label }) {
@@ -104,93 +94,141 @@ function EmptyState({ label }) {
   );
 }
 
-/* ── Tab 1: Overview ─────────────────────────────────────────────────────────── */
+/* ── Overview ────────────────────────────────────────────────────────────────── */
 
-function TabOverview({ character }) {
-  const prose = character.prose_overview;
-  const arc   = character.current_arc || character.arc_summary;
-  const gen   = character.generation_context;
+function WhoTheyAre({ character, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const prose = character.prose_overview || character.description || '';
+  const locked = character.status === 'finalized';
+
+  const edit = (text) => { setDraft(text); setEditing(true); };
+  const save = async () => {
+    setBusy(true); setNote(null);
+    try {
+      await updateCharacterApi(character.id, { prose_overview: draft.trim() || null });
+      onSaved({ prose_overview: draft.trim() || null });
+      setEditing(false);
+    } catch (err) {
+      console.error('[CharacterProfilePage] save prose failed:', err);
+      setNote(err.response?.data?.error || 'Could not save.');
+    } finally { setBusy(false); }
+  };
+  const rewrite = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const res = await draftProseApi(character.id);
+      const text = res.data?.paragraph;
+      if (!text) throw new Error('No draft came back.');
+      edit(text);
+      setNote('A draft from the profile. Save to keep it.');
+    } catch (err) {
+      console.error('[CharacterProfilePage] rewrite from profile failed:', err);
+      setNote(err.response?.data?.error || err.message || 'Could not draft it.');
+    } finally { setBusy(false); }
+  };
 
   return (
-    <div className="cp-tab-content">
-      {/* Prose overview — hero */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Prose Overview</h3>
-        {prose
-          ? <p className="cp-prose-overview">{prose}</p>
-          : <EmptyState label="No prose overview yet. Generate one from the character spark." />}
-      </section>
-
-      {/* Current arc */}
-      {arc && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Current Arc</h3>
-          <p className="cp-arc-text">{arc}</p>
-        </section>
-      )}
-
-      {/* Meta grid */}
-      <section className="cp-section cp-meta-grid">
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Role</span>
-          <span className="cp-meta-value">{character.role_type || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Appearance</span>
-          <span className="cp-meta-value">{character.appearance_mode || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">World</span>
-          <select
-            className="cp-meta-select"
-            value={character.world || 'book-1'}
-            onChange={async (e) => {
-              const newWorld = e.target.value;
-              try {
-                await updateCharacterApi(character.id, { world: newWorld });
-                setCharacter(prev => ({ ...prev, world: newWorld }));
-              } catch (err) { console.error('Failed to update world:', err); }
-            }}
-            disabled={character.status === 'finalized'}
-            style={{ fontSize: 13, padding: '2px 6px', border: '1px solid var(--cp-border, #333)', borderRadius: 4, background: 'var(--cp-surface, #1a1a1a)', color: 'var(--cp-text, #e0e0e0)' }}
-          >
-            <option value="book-1">Book 1 — JustAWoman's World</option>
-            <option value="lalaverse">LalaVerse</option>
-            <option value="series-2">Series 2</option>
-          </select>
-        </div>
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Series</span>
-          <span className="cp-meta-value">{character.series_id || '\u2014'}</span>
-        </div>
-      </section>
-
-      {/* Generation context */}
-      {gen && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Generation Context</h3>
-          <div className="cp-meta-grid">
-            {gen.world && (
-              <div className="cp-meta-item">
-                <span className="cp-meta-label">World</span>
-                <span className="cp-meta-value">{gen.world}</span>
-              </div>
-            )}
-            {gen.book_id && (
-              <div className="cp-meta-item">
-                <span className="cp-meta-label">Book</span>
-                <span className="cp-meta-value">Book {gen.book_id}</span>
-              </div>
-            )}
-            {gen.source && (
-              <div className="cp-meta-item">
-                <span className="cp-meta-label">Source</span>
-                <span className="cp-meta-value">{gen.source}</span>
-              </div>
-            )}
+    <section className="ch-card" aria-labelledby="ch-who">
+      <div className="ch-card-head">
+        <h2 id="ch-who" className="ch-h2">Who they are</h2>
+        {!editing && !locked && <button type="button" className="ch-link" onClick={() => edit(prose)}>Edit</button>}
+      </div>
+      {editing ? (
+        <>
+          <textarea className="ch-textarea" aria-label="Edit who they are" value={draft} rows={6} onChange={(e) => setDraft(e.target.value)} />
+          <div className="ch-row">
+            <button type="button" className="ch-btn" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+            <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => { setEditing(false); setNote(null); }}>Cancel</button>
           </div>
-        </section>
+        </>
+      ) : prose
+        ? <p className="ch-prose" data-testid="ch-prose">{prose}</p>
+        : <p className="ch-note">Nothing written yet.</p>}
+      {note && <p className="ch-note" role="status">{note}</p>}
+      {!editing && !locked && (
+        <button type="button" className="ch-btn-chip" disabled={busy} onClick={rewrite}>
+          <Sparkles size={14} aria-hidden="true" /> {busy ? 'Drafting…' : 'Rewrite from profile'}
+        </button>
       )}
+    </section>
+  );
+}
+
+function WhereTheyShowUp({ appearances, feedProfile }) {
+  const rows = showUpRows(appearances, feedProfile);
+  return (
+    <section className="ch-card" aria-labelledby="ch-where">
+      <div className="ch-card-head">
+        <h2 id="ch-where" className="ch-h2">Where they show up</h2>
+        <span className="ch-note">Everything in the show that points at them</span>
+      </div>
+      {!appearances ? <p className="ch-note">Loading…</p>
+        : !appearances.linked ? <p className="ch-note">No feed profile yet, so nothing in the show points at them. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</p>
+        : rows.length === 0 ? <p className="ch-note">Not in the show yet: no event, home or posts.</p>
+        : (
+          <ul className="ch-shows" data-testid="ch-shows">
+            {rows.map((r, i) => {
+              const inner = (<>
+                <span className="ch-show-kind">{r.label}</span>
+                <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}</span>
+                {r.to && <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />}
+              </>);
+              return (
+                <li key={`${r.kind}-${i}`}>
+                  {r.to ? <Link className={`ch-show is-${r.kind}`} to={r.to}>{inner}</Link> : <div className={`ch-show is-${r.kind}`}>{inner}</div>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </section>
+  );
+}
+
+function TheirVoice({ character, feedProfile }) {
+  const voice = voiceOf(character, feedProfile);
+  const name = character.display_name || character.selected_name;
+  return (
+    <section className="ch-card is-blue" aria-labelledby="ch-voice" data-testid="ch-voice">
+      <h2 id="ch-voice" className="ch-kicker is-blue">Their voice</h2>
+      {!voice ? <p className="ch-note">No voice yet. It comes from their feed profile and voice signature.</p> : (<>
+        {voice.sample && <p className="ch-sample"><strong>{name}</strong> {voice.sample}</p>}
+        <div className="ch-chips">
+          {voice.habit && <span className="ch-chip">{voice.habit}</span>}
+          {voice.phrase && <span className="ch-chip">{voice.phrase}</span>}
+          {voice.neverSays && <span className="ch-chip">never says outright: {voice.neverSays}</span>}
+        </div>
+        <p className="ch-note">The feed drafts their posts from this.</p>
+      </>)}
+    </section>
+  );
+}
+
+function WithLala({ appearances }) {
+  const line = withLala(appearances);
+  return (
+    <section className="ch-card" aria-labelledby="ch-lala" data-testid="ch-lala">
+      <h2 id="ch-lala" className="ch-kicker is-pink">With Lala</h2>
+      <p className="ch-text">{line || 'Nothing between them and Lala yet.'}</p>
+      <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
+    </section>
+  );
+}
+
+function TabOverview({ character, appearances, feedProfile, onSaved }) {
+  return (
+    <div className="ch-overview">
+      <div className="ch-col">
+        <WhoTheyAre character={character} onSaved={onSaved} />
+        <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
+      </div>
+      <div className="ch-col">
+        <TheirVoice character={character} feedProfile={feedProfile} />
+        <WithLala appearances={appearances} />
+      </div>
     </div>
   );
 }
@@ -564,12 +602,44 @@ function TabOnline({ character, feedProfile }) {
 
 /* ── Tab 5: World ────────────────────────────────────────────────────────────── */
 
-function TabWorld({ character }) {
+function TabWorld({ character, onSaved }) {
   const living = character.living_state || character.living_context;
   const dp     = character.deep_profile;
 
   return (
     <div className="cp-tab-content">
+      {/* Details (the old Overview's meta; its World picker's save never reached the page's state) */}
+      <section className="cp-section cp-meta-grid">
+        <div className="cp-meta-item">
+          <span className="cp-meta-label">Role</span>
+          <span className="cp-meta-value">{character.role_type || '\u2014'}</span>
+        </div>
+        <div className="cp-meta-item">
+          <span className="cp-meta-label">Appearance</span>
+          <span className="cp-meta-value">{character.appearance_mode || '\u2014'}</span>
+        </div>
+        <div className="cp-meta-item">
+          <label className="cp-meta-label" htmlFor="cp-world">World</label>
+          <select
+            id="cp-world"
+            className="cp-meta-select"
+            value={character.world || 'book-1'}
+            onChange={async (e) => {
+              const world = e.target.value;
+              try {
+                await updateCharacterApi(character.id, { world });
+                onSaved({ world });
+              } catch (err) { console.error('[CharacterProfilePage] world update failed:', err); }
+            }}
+            disabled={character.status === 'finalized'}
+          >
+            <option value="book-1">Book 1 — JustAWoman&rsquo;s World</option>
+            <option value="lalaverse">LalaVerse</option>
+            <option value="series-2">Series 2</option>
+          </select>
+        </div>
+      </section>
+
       {/* Living State */}
       <section className="cp-section">
         <h3 className="cp-section-title">Living State</h3>
@@ -751,6 +821,7 @@ export default function CharacterProfilePage() {
   const [relationships, setRelationships] = useState([]);
   const [entanglements, setEntanglements] = useState([]);
   const [feedProfile, setFeedProfile]     = useState(null);
+  const [appearances, setAppearances]     = useState(null);
   const [activeTab, setActiveTab]         = useState('overview');
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
@@ -759,11 +830,12 @@ export default function CharacterProfilePage() {
     if (!id) return;
     setLoading(true);
     setError(null);
+    setAppearances(null);
     try {
       const [charRes, relRes, entRes] = await Promise.all([
         getCharacterApi(id),
-        getCharacterRelationshipsApi(id).catch(() => null),
-        getCharacterEntanglementsApi(id).catch(() => null),
+        getCharacterRelationshipsApi(id).catch((err) => { console.error('[CharacterProfilePage] relationships load failed:', err); return null; }),
+        getCharacterEntanglementsApi(id).catch((err) => { console.error('[CharacterProfilePage] entanglements load failed:', err); return null; }),
       ]);
 
       const charData = charRes.data;
@@ -780,9 +852,12 @@ export default function CharacterProfilePage() {
         setEntanglements(entData.entanglements || entData || []);
       }
 
-      // Load feed profile if linked
+      // Where they show up (through the feed profile) and the profile itself.
+      getAppearancesApi(id)
+        .then((res) => setAppearances(res.data))
+        .catch((err) => { console.error('[CharacterProfilePage] appearances load failed:', err); setAppearances({ linked: false, events: [], episodes: [] }); });
       if (char.feed_profile_id) {
-        const feedRes = await getSocialProfileApi(char.feed_profile_id).catch(() => null);
+        const feedRes = await getSocialProfileApi(char.feed_profile_id).catch((err) => { console.error('[CharacterProfilePage] feed profile load failed:', err); return null; });
         if (feedRes) {
           const feedData = feedRes.data;
           setFeedProfile(feedData.profile || feedData);
@@ -797,6 +872,19 @@ export default function CharacterProfilePage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const onSaved = (patch) => setCharacter((prev) => ({ ...prev, ...patch }));
+
+  // Export: the character as JSON, to keep or share.
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(character, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${character.character_key || character.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return (
     <div className="cp-loading">
       <div className="cp-loading-pulse" />
@@ -810,98 +898,79 @@ export default function CharacterProfilePage() {
     </div>
   );
 
-  const depth    = character.depth_level || 'sparked';
-  const initials = (character.selected_name || character.name || '?')
-    .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const ghostCount = character.ghost_characters?.filter(g => !g.promoted).length || 0;
-  const gen = character.generation_context;
+  const name = character.display_name || character.selected_name || character.name || 'Unnamed';
+  const { index: depthIndex, step, next } = depthOf(character.depth_level || 'sparked');
+  const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
+  const city = cityLabel(feedProfile?.city);
+  const archetype = archetypeOf(feedProfile);
+  const firstEpisode = appearances?.episodes?.[0];
+  const role = character.role_label || (character.role_type ? character.role_type.charAt(0).toUpperCase() + character.role_type.slice(1) : null);
 
   return (
-    <div className="cp-page">
-      {/* ── Left Sidebar (fixed) ── */}
-      <aside className="cp-sidebar">
-        <button className="cp-back-btn" onClick={() => navigate(-1)}>
-          &larr; Registry
-        </button>
-
-        <div className="cp-avatar">{initials}</div>
-        <h2 className="cp-name">{character.selected_name || character.name}</h2>
-        <p className="cp-role">{character.role_type || 'character'}</p>
-        <DepthPill level={depth} />
-
-        {/* Feed linked indicator */}
-        {character.feed_profile_id && (
-          <span className="cp-feed-linked">&bull; Online</span>
-        )}
-
-        {/* Generation context book label */}
-        {gen?.book_id && (
-          <span className="cp-book-label">Book {gen.book_id}</span>
-        )}
-
-        <div className="cp-sidebar-actions">
-          {depth !== 'alive' && (
-            <button className="cp-btn-deepen" onClick={() => navigate('/world-studio')}>
-              &uarr; Deepen
-            </button>
+    <div className="ch-page">
+      <header className="ch-hero">
+        <div className="ch-avatar" aria-hidden="true">{name.charAt(0).toUpperCase()}</div>
+        <div className="ch-hero-text">
+          <Link to="/character-registry" className="ch-back">&larr; The cast</Link>
+          <h1 className="ch-name">{name}</h1>
+          <p className="ch-sub">{[handle, role, city].filter(Boolean).join(' · ')}</p>
+          <div className="ch-chips">
+            {archetype && <span className="ch-chip">{archetype}</span>}
+            {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
+            {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
+            <span className="ch-chip is-plain">{step.label}</span>
+          </div>
+        </div>
+        <div className="ch-alive">
+          <div className="ch-kicker is-pink">How alive they are</div>
+          <ol className="ch-steps" aria-label={`How alive: ${step.label}`}>
+            {DEPTH_STEPS.map((s, i) => (
+              <li key={s.key} className={i <= depthIndex ? 'is-on' : ''} aria-current={i === depthIndex ? 'step' : undefined}>
+                <span className="ch-step-bar" />
+                <span className="ch-step-label">{s.label}</span>
+              </li>
+            ))}
+          </ol>
+          {next && (
+            <button type="button" className="ch-btn-deepen" onClick={() => navigate('/world-studio')}>&uarr; Deepen to {next.label}</button>
           )}
-          <button className="cp-btn-export" onClick={() => {}}>
-            Export
+          <button type="button" className="ch-link" onClick={exportJson}>Export</button>
+        </div>
+      </header>
+
+      <nav className="ch-tabs" aria-label="Character sections">
+        {TABS.map((tab) => (
+          <button key={tab.id} type="button" className={`ch-tab${activeTab === tab.id ? ' is-on' : ''}`}
+            aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+            {tab.label}
           </button>
-        </div>
+        ))}
+      </nav>
 
-        {/* Ghost count */}
-        {ghostCount > 0 && (
-          <div className="cp-ghost-indicator" onClick={() => setActiveTab('world')}>
-            <span className="cp-ghost-num">{ghostCount}</span>
-            {ghostCount === 1 ? 'ghost pending' : 'ghosts pending'}
+      <div className="ch-panel">
+        {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} onSaved={onSaved} />}
+        {activeTab === 'inner' && (
+          <div className="ch-card">
+            <TabInterior character={character} />
+            <section className="cp-section">
+              <h3 className="cp-section-title">DEPTH</h3>
+              <CharacterDepthPanel characterId={character.id} characterName={name} />
+            </section>
+            <section className="cp-section">
+              <h3 className="cp-section-title">Deep Profile</h3>
+              <TabDeepProfile character={character} />
+            </section>
           </div>
         )}
-
-        {/* Sidebar meta */}
-        {character.change_capacity?.mobility && (
-          <div className="cp-sidebar-meta">
-            <span className="cp-meta-label">Mobility</span>
-            <span className="cp-sidebar-meta-value">{character.change_capacity.mobility}</span>
+        {activeTab === 'voice' && (
+          <div className="ch-voice-tab">
+            <TheirVoice character={character} feedProfile={feedProfile} />
+            <div className="ch-card"><TabOnline character={character} feedProfile={feedProfile} /></div>
           </div>
         )}
-        {character.time_orientation && (
-          <div className="cp-sidebar-meta">
-            <span className="cp-meta-label">Time</span>
-            <span className="cp-sidebar-meta-value">
-              {character.time_orientation.replace?.(/_/g, ' ') || character.time_orientation}
-            </span>
-          </div>
-        )}
-      </aside>
-
-      {/* ── Main Panel ── */}
-      <main className="cp-main">
-        <nav className="cp-tab-bar">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              className={`cp-tab-btn ${activeTab === tab.id ? 'cp-tab-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-              {tab.id === 'online' && character.feed_profile_id && (
-                <span className="cp-tab-dot" />
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <div className="cp-tab-panel">
-          {activeTab === 'overview'     && <TabOverview character={character} />}
-          {activeTab === 'interior'     && <TabInterior character={character} />}
-          {activeTab === 'depth'        && <CharacterDepthPanel characterId={character.id} characterName={character.selected_name || character.display_name} />}
-          {activeTab === 'connections'   && <TabConnections character={character} relationships={relationships} entanglements={entanglements} />}
-          {activeTab === 'online'       && <TabOnline character={character} feedProfile={feedProfile} />}
-          {activeTab === 'world'        && <TabWorld character={character} />}
-          {activeTab === 'deep_profile' && <TabDeepProfile character={character} />}
-        </div>
-      </main>
+        {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
+        {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} /></div>}
+      </div>
     </div>
   );
 }

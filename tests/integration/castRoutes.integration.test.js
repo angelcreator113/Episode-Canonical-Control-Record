@@ -28,6 +28,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const ids = {
     show: crypto.randomUUID(), reg: crypto.randomUUID(), ep: crypto.randomUUID(), ev: crypto.randomUUID(), rel: crypto.randomUUID(),
     host: crypto.randomUUID(), guest: crypto.randomUUID(), old: crypto.randomUUID(), friend: crypto.randomUUID(),
+    loc: crypto.randomUUID(), post: crypto.randomUUID(),
   };
   const profiles = {};
   const auth = () => `Bearer ${token}`;
@@ -62,11 +63,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // The host by source_profile_id; the guest in the automation copy, by profile_id.
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, source_profile_id, canon_consequences, created_at, updated_at)
                VALUES (:ev, :show, 'Cast event', 'used', :ep, :hostProfile, :cc::jsonb, NOW(), NOW())`,
-    { ...ids, hostProfile: profiles.host, cc: JSON.stringify({ automation: { guest_profiles: [{ profile_id: profiles.guest }, { id: 'not-a-number' }] } }) });
+    { ...ids, hostProfile: profiles.host, cc: JSON.stringify({ automation: {
+      guest_profiles: [{ profile_id: profiles.guest }, { id: 'not-a-number' }],
+      relationship_goals: [{ slot: 'relationship_host', label: 'Follow up with the host after the event' }],
+    } }) });
+    await run(`UPDATE world_events SET event_date = 'Nov 12', venue_name = 'The Studio', is_paid = true, payment_amount = 439 WHERE id = :ev`, ids);
+    // The host lives at a place with one scene set, and has one post.
+    await run(`INSERT INTO world_locations (id, name, created_at, updated_at) VALUES (:loc, :name, NOW(), NOW())`, { ...ids, name: `Studio ${TAG}` });
+    await run('UPDATE social_profiles SET home_location_id = :loc, lala_relationship = \'direct\' WHERE id = :p', { ...ids, p: profiles.host });
+    await run(`INSERT INTO scene_sets (id, name, scene_type, world_location_id, created_at, updated_at) VALUES (:id, 'Studio set', 'EVENT_LOCATION', :loc, NOW(), NOW())`, { ...ids, id: crypto.randomUUID() });
+    await run(`INSERT INTO feed_posts (id, show_id, poster_handle, social_profile_id, created_at, updated_at) VALUES (:post, :show, 'host', :p, NOW(), NOW())`, { ...ids, p: profiles.host });
   });
 
   afterAll(async () => {
     await run('DELETE FROM character_relationships WHERE id = :rel', ids);
+    await run('DELETE FROM feed_posts WHERE id = :post', ids);
+    await run('DELETE FROM scene_sets WHERE world_location_id = :loc', ids);
+    await run('UPDATE social_profiles SET home_location_id = NULL WHERE home_location_id = :loc', ids);
+    await run('DELETE FROM world_locations WHERE id = :loc', ids);
     await run('DELETE FROM world_events WHERE id = :ev', ids);
     await run('DELETE FROM episodes WHERE id = :ep', ids);
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
@@ -88,6 +102,28 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(res.body.episode_counts).toMatchObject({ [ids.host]: 1, [ids.guest]: 1, [ids.old]: 0, [ids.friend]: 0 });
     expect(res.body.characters).toHaveLength(4);
     expect(res.body.archived).toEqual([]);
+  });
+
+  it('where a character shows up: its events with episode, goals and pay, its place and its posts', async () => {
+    const res = await request(app).get(`/api/v1/cast/characters/${ids.host}/appearances`).set('Authorization', auth());
+    expect(res.status).toBe(200);
+    expect(res.body.linked).toBe(true);
+    expect(res.body.events).toHaveLength(1);
+    expect(res.body.events[0]).toMatchObject({
+      id: ids.ev, show_id: ids.show, role: 'host', event_date: 'Nov 12', venue_name: 'The Studio', is_paid: true, payment_amount: 439,
+      goals: [{ slot: 'relationship_host', label: 'Follow up with the host after the event' }],
+      episode: { id: ids.ep, episode_number: 1, title: 'Cast episode' },
+    });
+    expect(res.body.episodes).toEqual([{ id: ids.ep, episode_number: 1, title: 'Cast episode' }]);
+    expect(res.body.place).toMatchObject({ id: ids.loc, residents: 1, scene_sets: 1 });
+    expect(res.body.feed).toEqual({ posts: 1, lala_relationship: 'direct' });
+
+    const guest = await request(app).get(`/api/v1/cast/characters/${ids.guest}/appearances`).set('Authorization', auth());
+    expect(guest.body.events.map((e) => e.role)).toEqual(['guest']);
+    expect(guest.body.place).toBeNull();
+
+    const none = await request(app).get(`/api/v1/cast/characters/${ids.old}/appearances`).set('Authorization', auth());
+    expect(none.body).toMatchObject({ linked: false, events: [], episodes: [], place: null, feed: null });
   });
 
   it('Keep marks a character kept, and back to review', async () => {
