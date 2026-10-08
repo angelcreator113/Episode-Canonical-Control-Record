@@ -557,9 +557,11 @@ router.post('/franchise-guard-check', requireAuth, aiRateLimiter, async (req, re
     if (!scene_text) return res.status(400).json({ error: 'scene_text required' });
 
     // Every active law of these categories, critical first, in the shared
-    // order (services/brainRules; wiring map fix-list item 25). A story has
-    // no show, so every show's.
+    // order (services/brainRules; wiring map fix-list item 25). A story is
+    // the book's, so the franchise tier only, never a show's own canon
+    // (Evoni's ruling, 2026-10-08).
     const laws = await selectRules(db.FranchiseKnowledge, {
+      franchiseOnly: true,
       where: { category: ['franchise_law', 'locked_decision', 'character', 'narrative'] },
     });
 

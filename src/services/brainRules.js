@@ -32,6 +32,12 @@
  * selectRules gives each of them this scope and this order. Which entries
  * a reader takes (its `where`) stays the reader's own: which cards count
  * is fix-list item 24, Evoni's call.
+ *
+ * The book's readers (Story Engine writing and evaluation, WriteMode, the
+ * tier guard, the post-generation review) are sent no show, so they read
+ * every show's entries, a show's own canon included. They take the
+ * franchise tier only (franchiseOnly: scope 'franchise'): Evoni's ruling,
+ * 2026-10-08. Amber still reads every show's.
  */
 
 const { Op } = require('sequelize');
@@ -63,14 +69,14 @@ function scopedWhere(where = {}, showId = null) {
 
 /**
  * The entries one reader takes: active, its `where`, in scope for the show
- * (every entry when no show is given), severity first then id, the first
- * `limit` (all of them with none). Plain rows with `attributes`; none
- * without a model.
+ * (every entry when no show is given; the franchise tier alone with
+ * franchiseOnly), severity first then id, the first `limit` (all of them
+ * with none). Plain rows with `attributes`; none without a model.
  */
-async function selectRules(FranchiseKnowledge, { showId = null, where = {}, limit = null, attributes = RULE_ATTRIBUTES } = {}) {
+async function selectRules(FranchiseKnowledge, { showId = null, franchiseOnly = false, where = {}, limit = null, attributes = RULE_ATTRIBUTES } = {}) {
   if (!FranchiseKnowledge) return [];
   const rows = await FranchiseKnowledge.findAll({
-    where: scopedWhere(where, showId),
+    where: scopedWhere(franchiseOnly ? { ...where, scope: 'franchise' } : where, franchiseOnly ? null : showId),
     attributes,
     // The severity ENUM is declared critical, important, context, so the
     // database orders as SEVERITY_RANK does and its limit cuts the same set.
