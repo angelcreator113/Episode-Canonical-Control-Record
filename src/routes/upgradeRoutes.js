@@ -25,7 +25,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
-const { selectRules } = require('../services/brainRules');
+const { reviewStory } = require('../services/postGenerationReview');
 
 const client = new Anthropic();
 
@@ -161,101 +161,31 @@ router.get('/session/brief/latest', requireAuth, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UPGRADE 2: POST-GENERATION REVIEW
-// Reads approved scene output against franchise laws — catches what guard misses
+// Reads a story's final text against franchise laws — catches what guard misses.
+// Evaluate runs it in the background (services/postGenerationReview); this
+// route runs it again on demand. Failed reviews wait on the Story Dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
+const STORY_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.post('/reviews/post-generation', requireAuth, aiRateLimiter, async (req, res) => {
   const { story_id } = req.body;
   if (!story_id) return res.status(400).json({ error: 'story_id required' });
+  if (!STORY_ID_RE.test(String(story_id))) return res.status(400).json({ error: 'story_id must be a story id (UUID)' });
 
   try {
-    const story = await db.StorytellerStory.findByPk(story_id);
-    if (!story) return res.status(404).json({ error: 'Story not found' });
+    const result = await reviewStory(db, String(story_id));
+    if (result.error === 'not_found') return res.status(404).json({ error: 'Story not found' });
+    if (result.error === 'no_text') return res.status(400).json({ error: 'The story has no final text to review yet: Evaluate sets it' });
+    if (result.error === 'unreadable') return res.status(502).json({ error: 'The review could not be read. Try again.' });
 
-    const approvedText = story.evaluation_result?.approved_version || story.story_a || '';
-    if (!approvedText) return res.status(400).json({ error: 'No approved text to review' });
-
-    // Every active critical entry, in the shared order (services/brainRules;
-    // wiring map fix-list item 25): it came in whatever order Postgres
-    // returned. A story is the book's, so the franchise tier only, never a
-    // show's own canon (Evoni's ruling, 2026-10-08).
-    const laws = await selectRules(db.FranchiseKnowledge, { franchiseOnly: true, where: { severity: 'critical' } });
-
-    const reviewPrompt = `You are the Post-Generation Review agent for Prime Studios. Read this approved scene and check it against the franchise laws. Your job is to catch what slipped through — subtle drift, tone violations, character contradictions that feel almost right but aren't.
-
-APPROVED SCENE:
-${approvedText}
-
-CHARACTERS IN SCENE: ${(story.characters_in_scene || []).join(', ')}
-SCENE TYPE: ${story.scene_type || 'not specified'}
-TONE: ${story.tone_dial || 'not specified'}
-
-FRANCHISE LAWS TO CHECK AGAINST:
-${laws.map(l => `[${l.title}]\n${l.content}`).join('\n\n')}
-
-Read carefully. Look for:
-1. JustAWoman written as smaller than she is — even slightly passive, even mildly uncertain about her own worth
-2. Any moment that nudges toward Lala having awareness of her origin
-3. David framed as obstacle even briefly — even one sentence of "he doesn't understand her"
-4. Anything that reads like a coaching realization landing in Book 1
-5. Character voice drift — someone speaking in a register that doesn't match their registry entry
-6. Anything that gives a character knowledge the reader should hold alone
-
-Be specific. Quote the exact line if you find a violation. Vague warnings help nobody.
-
-Respond ONLY in valid JSON:
-{
-  "violations": [
-    {
-      "severity": "critical" | "important",
-      "law_violated": "which franchise law",
-      "offending_line": "the exact line or passage",
-      "why_it_violates": "specific explanation",
-      "suggested_rewrite": "how to fix this specific line"
-    }
-  ],
-  "warnings": [
-    {
-      "type": "voice_drift" | "tone_creep" | "arc_risk" | "subtle_framing",
-      "note": "what to watch",
-      "line_reference": "the line or passage"
-    }
-  ],
-  "passed": true or false,
-  "overall_assessment": "one sentence on the franchise health of this scene",
-  "strongest_moment": "the line or passage that best embodies the franchise"
-}`;
-
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-      system: 'You are the Post-Generation Review agent. You read finished scenes for franchise violations. Be specific — quote lines, name laws. Respond ONLY in valid JSON.',
-      messages: [{ role: 'user', content: reviewPrompt }],
-    });
-
-    let reviewData;
-    try {
-      reviewData = JSON.parse(extractAIText(response).replace(/```json|```/g, '').trim());
-    } catch {
-      reviewData = { violations: [], warnings: [], passed: true, overall_assessment: 'Review parse failed', strongest_moment: '' };
-    }
-
-    const review = await db.PostGenerationReview.create({
-      story_id: parseInt(story_id),
-      approved_version_reviewed: approvedText,
-      violations: reviewData.violations || [],
-      warnings: reviewData.warnings || [],
-      passed: reviewData.passed !== false,
-      knowledge_entries_checked: laws.length,
-      review_note: reviewData.overall_assessment,
-    });
-
+    const { review, reply } = result;
     return res.json({
       review_id: review.id,
       passed: review.passed,
       violations: review.violations,
       warnings: review.warnings,
-      overall_assessment: reviewData.overall_assessment,
-      strongest_moment: reviewData.strongest_moment,
+      overall_assessment: reply.overall_assessment,
+      strongest_moment: reply.strongest_moment,
       requires_attention: !review.passed,
     });
   } catch (err) {
@@ -271,9 +201,39 @@ router.post('/reviews/:id/acknowledge', requireAuth, async (req, res) => {
     await review.update({ author_acknowledged: true, acknowledged_at: new Date() });
     return res.json({ ok: true });
   } catch (err) {
+    console.error('Post-gen review acknowledge error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * The reviewed stories, by id: each one's title, and the chapter and book it
+ * was written back to (null until the write-back), so the Story Dashboard can
+ * name the story and open it.
+ */
+async function reviewedStories(storyIds) {
+  const ids = [...new Set(storyIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+  const stories = await db.StorytellerStory.findAll({
+    where: { id: ids }, attributes: ['id', 'title', 'status', 'written_back_chapter_id'],
+  });
+  const chapterIds = [...new Set(stories.map((s) => s.written_back_chapter_id).filter(Boolean))];
+  const chapters = chapterIds.length
+    ? await db.StorytellerChapter.findAll({ where: { id: chapterIds }, attributes: ['id', 'title', 'book_id'] })
+    : [];
+  const chapterOf = new Map(chapters.map((c) => [c.id, c]));
+  return new Map(stories.map((s) => {
+    const chapter = chapterOf.get(s.written_back_chapter_id);
+    return [s.id, {
+      id: s.id,
+      title: s.title || null,
+      status: s.status || null,
+      chapter_id: chapter ? chapter.id : null,
+      chapter_title: chapter ? chapter.title || null : null,
+      book_id: chapter ? chapter.book_id : null,
+    }];
+  }));
+}
 
 router.get('/reviews/unacknowledged', requireAuth, async (req, res) => {
   try {
@@ -281,8 +241,13 @@ router.get('/reviews/unacknowledged', requireAuth, async (req, res) => {
       where: { author_acknowledged: false },
       order: [['created_at', 'DESC']],
     });
-    return res.json({ reviews, count: reviews.length });
+    const stories = await reviewedStories(reviews.map((r) => r.story_id));
+    return res.json({
+      reviews: reviews.map((r) => ({ ...r.toJSON(), story: stories.get(r.story_id) || null })),
+      count: reviews.length,
+    });
   } catch (err) {
+    console.error('Post-gen review list error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
