@@ -59,8 +59,8 @@ not via any page's UI.
 | `/universe/series` | `pages/SeriesPage.jsx` (App.jsx:329) | live | URL only |
 | `/universe/production` | `pages/UniverseProductionPage.jsx` | redirect (audit IA-01, 2026-10-03): opens the active show's Producer Mode, Episodes → Production; `ProductionTab` is gone | URL only |
 | `/universe/assets` | redirect → `/assets` (App.jsx:331) | redirect | — |
-| `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` (App.jsx:332) | live | URL only |
-| `/universe/tensions` | `pages/UniverseTensionsPage.jsx` (App.jsx:333) | live | URL only |
+| `/universe/world-state` | redirect → `/universe?tab=state&sub=state` (2026-10-08, `utils/worldRedirects.js` `WORLD_REDIRECTS`; its page and the `WorldStateTensions` copy are deleted) | redirect | — |
+| `/universe/tensions` | redirect → `/universe?tab=state&sub=tensions` (2026-10-08, `WORLD_REDIRECTS`) | redirect | — |
 | `/universe/story-dashboard` | `pages/StoryDashboardPage.jsx` (App.jsx:334) | live | URL only |
 | `/show-bible` | redirect → `/universe?tab=bible` (2026-10-04; `ShowBiblePage` is the LalaVerse hub's Bible tab, `utils/worldRedirects.js` `HUB_TABS`; a `?tab=` becomes `&sub=`) | redirect | the LalaVerse hub's Show Bible tab (the Sidebar's Show Bible row was removed 2026-10-04) |
 | `/universe/knowledge` | redirect → `/universe?tab=bible&sub=knowledge` | redirect | — |
@@ -180,7 +180,7 @@ not via any page's UI.
 | `/narrative-control` | `pages/NarrativeControlCenter.jsx` (App.jsx:480) | live | URL only |
 | `/story-engine` | redirect → `/stories` (App.jsx:483) | redirect | Sidebar (WRITE > Stories > "Structure" child, `Sidebar.jsx:44`) + Command Palette (`story` result, `CommandPalette.jsx:17`) — both entry points land on a route that immediately redirects |
 | `/texture-review/:storyNumber` | `pages/TextureReviewPage.jsx` (App.jsx:486) | live | URL only (`components/Breadcrumbs.jsx:37` is a breadcrumb label lookup for the current path, not a link to it) |
-| `/story-evaluation` | `pages/StoryEvaluationEngine.jsx` (App.jsx:489) | live | in-app link (`pages/StoryProposer.jsx:623`, `pages/WorldDashboard.jsx:121`, `components/WorldStateTensions.jsx:102`) |
+| `/story-evaluation` | `pages/StoryEvaluationEngine.jsx` (App.jsx:489) | live | in-app link (`pages/StoryProposer.jsx:623`, `pages/WorldDashboard.jsx` `proposeTensionScene`) |
 | `/scene-proposer` | `pages/StoryProposer.jsx` (App.jsx:492) | live | URL only (named in `Sidebar.jsx:137`'s Stories auto-expand array, no matching nav item) |
 | `/story-threads` | `pages/StoryThreadTracker.jsx` (App.jsx:495) | live | Sidebar (WRITE > Stories > "Threads" child, `Sidebar.jsx:45`) + Command Palette (`thread` result, `CommandPalette.jsx:19`) |
 | `/story-calendar` | `pages/StoryCalendar.jsx` (App.jsx:498) | live | Sidebar (WRITE > Stories > "Calendar" child, `Sidebar.jsx:46`) + Command Palette (`event` result, `CommandPalette.jsx:20`) |
@@ -590,8 +590,8 @@ on by this document.
 | `/universe/social-import` | `pages/UniverseSocialImportPage.jsx` | Standalone page wrapper that renders the Social Import view for a universe. |
 | `/universe/series` | `pages/SeriesPage.jsx` | Standalone page for managing a universe's series, books, and linked shows (list/create/update/delete). |
 | `/universe/production` | `pages/UniverseProductionPage.jsx` | Redirect into the active show's Producer Mode (Episodes → Production); its former `ProductionTab` dashboard duplicated Producer Mode's Overview and Episodes tabs and was removed (audit IA-01, 2026-10-03). |
-| `/universe/world-state` | `pages/UniverseWorldStatePage.jsx` | Standalone page rendering the "world-state" sub-tab of the `WorldStateTensions` component. |
-| `/universe/tensions` | `pages/UniverseTensionsPage.jsx` | Standalone page rendering the "tensions" sub-tab of the `WorldStateTensions` component. |
+| `/universe/world-state` | redirect | Opens the LalaVerse hub's State tab on World State (2026-10-08). Its standalone page rendered `WorldStateTensions`, a second copy of the State tab (`WorldDashboard`), now deleted. |
+| `/universe/tensions` | redirect | Opens the State tab on Tensions (2026-10-08). The copy it rendered read the tension scanner's pre-2026-10-04 contract: every pair nameless, and Propose Scene refused. |
 | `/universe/story-dashboard` | `pages/StoryDashboardPage.jsx` | Standalone page wrapper that renders the Story Dashboard component. |
 | `/universe/writing-rhythm` | `pages/WritingRhythmPage.jsx` | Standalone page wrapper that renders the Writing Rhythm component. |
 | `/assets` | `pages/AssetLibrary.jsx` | Global asset library page for browsing/filtering/uploading show assets (logos, intros, music, wardrobe, etc.) by category and show. |

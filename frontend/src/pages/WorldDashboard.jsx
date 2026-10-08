@@ -1,6 +1,7 @@
 /**
  * WorldDashboard — World State + Tensions (the LalaVerse hub's State tab)
- * Merges: UniverseWorldStatePage. Its Setup Progress moved to the hub's
+ * Merges: UniverseWorldStatePage and UniverseTensionsPage, whose routes open
+ * this tab (2026-10-08, utils/worldRedirects). Its Setup Progress moved to the hub's
  * Overview as components/WorldSetupProgress (2026-10-04).
  *
  * 2026-10-06: in the hub's design (WorldDashboard.css, tokens only, State's
