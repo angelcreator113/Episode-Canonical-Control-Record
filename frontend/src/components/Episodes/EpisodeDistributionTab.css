@@ -833,3 +833,41 @@
     border-radius: 6px;
   }
 }
+
+/* The Results redesign (2026-10-08): Distribution wears the Results card
+   language (EpisodeResultsSummary.css, Evoni's Episode mock). The tab's
+   primary is the lavender, so Save, Enable and the tag chips follow it;
+   the selected platform is outlined in lavender, not the brand colour. */
+.episode-distribution-tab {
+  --primary: var(--lala-lavender);
+  --primary-subtle: var(--lala-lavender-soft);
+  --primary-text: var(--lala-lavender-text);
+}
+.episode-distribution-tab .header-left h2 { font-family: var(--font-prose); font-size: 26px; font-weight: 600; color: var(--lala-ink); }
+.episode-distribution-tab .header-subtitle { color: var(--lala-ink-muted); }
+.episode-distribution-tab .btn-save { border-radius: 10px; color: var(--text-inverse); }
+.episode-distribution-tab .btn-generate {
+  margin-right: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.episode-distribution-tab .btn-generate:hover:not(:disabled) { background: var(--lala-lavender-soft); }
+.episode-distribution-tab .btn-generate:disabled { cursor: wait; opacity: 0.7; }
+.episode-distribution-tab .platform-card { border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); }
+.episode-distribution-tab .platform-card:hover { border-color: var(--lala-lavender-light); }
+.episode-distribution-tab .platform-card.active { border: 2px solid var(--lala-lavender); background: var(--lala-lavender-soft); }
+.episode-distribution-tab .platform-editor { border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.episode-distribution-tab .editor-header { background: var(--surface-card); border-bottom-color: var(--lala-lavender-line); }
+.episode-distribution-tab .editor-title h3 { font-family: var(--font-prose); font-weight: 600; color: var(--lala-ink); }
+.episode-distribution-tab .editor-form { background: var(--surface-card); }
+.episode-distribution-tab .form-select { border-color: var(--lala-lavender-line); border-radius: 10px; }
+.episode-distribution-tab .distribution-header { flex-wrap: wrap; gap: 12px 16px; }
+.episode-distribution-tab .header-left { flex: 1 1 auto; min-width: min(260px, 100%); }
+.episode-distribution-tab .header-actions { flex-wrap: wrap; }
+.episode-distribution-tab .btn-generate, .episode-distribution-tab .btn-save { white-space: nowrap; }
