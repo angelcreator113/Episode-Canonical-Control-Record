@@ -82,6 +82,27 @@ describe('play-through taps and visits', () => {
   });
 });
 
+describe('Home and Reset (phone audit, 2026-10-07)', () => {
+  test('Home goes to the home screen, not the screen the preview opened on', async () => {
+    render(<PhonePreviewMode screens={[HOME, DMS]} initialScreen={DMS} onClose={() => {}} />);
+    expect(screen.getByAltText('DMs')).toBeTruthy();
+    fireEvent.click(screen.getByTitle(/Home/));
+    expect(await screen.findByAltText('Home')).toBeTruthy();
+  });
+
+  test('a saved play-through asks before Reset wipes it', async () => {
+    const pt = playthroughWith({ reset: vi.fn().mockResolvedValue() });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<PhonePreviewMode screens={[HOME, DMS]} initialScreen={HOME} playthrough={pt} onClose={() => {}} />);
+    fireEvent.click(screen.getByTitle('Reset playthrough'));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(pt.reset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTitle('Reset playthrough'));
+    await waitFor(() => expect(pt.reset).toHaveBeenCalledTimes(1));
+    confirm.mockRestore();
+  });
+});
+
 describe('play-through errors', () => {
   test('a refused tap is said on the phone, then cleared', async () => {
     const pt = playthroughWith({ error: 'zone is currently locked' });

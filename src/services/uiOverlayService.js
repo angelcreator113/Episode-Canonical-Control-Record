@@ -340,6 +340,9 @@ async function generateAllOverlays(showId, models, options = {}) {
           console.log(`[UIOverlay] Asset saved: ${overlayType.name} → ${assetUuid}`);
         } catch (assetErr) {
           console.error(`[UIOverlay] Asset save FAILED for ${overlayType.name}:`, assetErr.message);
+          // Not saved is not done (phone audit, 2026-10-07): it used to be
+          // counted as generated, with no image on the card.
+          throw new Error(`Generated, but not saved: ${assetErr.message}`);
         }
 
         return {

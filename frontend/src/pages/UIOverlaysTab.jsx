@@ -12,7 +12,7 @@ import api from '../services/api';
 import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
-import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById } from '../lib/phoneHubSummary';
+import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById, phoneFlowMap } from '../lib/phoneHubSummary';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 
@@ -23,11 +23,12 @@ import ActionRow from '../components/phone-editor/ActionRow';
 import ZoneIconPicker, { ZoneIconSummary } from '../components/phone-editor/ZoneIconPicker';
 // PhoneHubSteps removed — see below where the 4-step guide was deleted.
 import ContentZoneEditor from '../components/ContentZoneEditor';
-import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
+import PhonePreviewMode from '../components/PhonePreviewMode';
 import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
 import ToolbarMenu from '../components/phone/ToolbarMenu';
 import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
+import PhoneMapStage from '../components/phone/PhoneMapStage';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 import { activeShowId, rememberShow } from '../utils/activeShow';
@@ -249,7 +250,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
   const [showSizeGuide, setShowSizeGuide] = useState(false);
-  const [showFlowMap, setShowFlowMap] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
@@ -510,13 +510,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .finally(() => setLoading(false));
   }, [showId]);
 
+  // While Connect has unsaved zones, the screen being edited is checked as
+  // drawn, not as last saved (phone audit, 2026-10-07: health named problems
+  // already fixed, or missed new ones, until Save).
+  const draftScreenId = editingLinks && tapZonesDirty ? activeScreen?.id : null;
   const screenDiagnostics = useMemo(() => {
     const screens = overlays.filter(o => o.generated && o.url && isScreen(o));
     const generatedKeys = new Set(screens.map(s => s.id));
     const diagnostics = new Map();
 
     screens.forEach((screen) => {
-      const links = getScreenLinks(screen);
+      const links = screen.id === draftScreenId ? tapZonesDraft : getScreenLinks(screen);
       const contentZones = screen.content_zones || screen.metadata?.content_zones || [];
       const iconCount = links.filter(link => (
         !!link?.icon_overlay_id
@@ -618,7 +622,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     });
 
     return diagnostics;
-  }, [overlays]);
+  }, [overlays, draftScreenId, tapZonesDraft]);
 
   // Full edit of a screen: select it and open the detail panel in Build.
   // The card's ⋮ → Edit, a click on a card with no image, and a card's
@@ -790,20 +794,35 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (!screen.custom) {
         handleHideScreen(deletedKey);
       }
-      // Clean orphaned links: remove any screen_links targeting the deleted screen
-      for (const overlay of overlays) {
-        const links = getScreenLinks(overlay);
-        const orphans = links.filter(l => l.target === deletedKey);
-        if (orphans.length > 0 && overlay.asset_id) {
-          const cleaned = links.filter(l => l.target !== deletedKey);
-          api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned })
-            .catch(err => console.warn(`[handleDeleteScreen] orphan cleanup failed on ${overlay.name}`, err));
+      // A screen you made: the server removes the zones that led to it, with
+      // the type (phone audit, 2026-10-07). A built-in one only hides, so
+      // its links are cleaned here, each save awaited and reported.
+      const failed = [];
+      if (!(screen.custom && screen.custom_id)) {
+        for (const overlay of overlays) {
+          const links = getScreenLinks(overlay);
+          if (!overlay.asset_id || !links.some(l => l.target === deletedKey)) continue;
+          try {
+            await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: links.filter(l => l.target !== deletedKey) });
+          } catch (cleanErr) {
+            console.error(`[handleDeleteScreen] link cleanup failed on ${overlay.name}`, cleanErr);
+            failed.push(overlay.name);
+          }
         }
       }
+      // Zones that led to it are gone from the other screens too.
+      const dropLinks = (o) => {
+        const links = getScreenLinks(o);
+        if (!links.some(l => l.target === deletedKey)) return o;
+        const kept = links.filter(l => l.target !== deletedKey);
+        return { ...o, screen_links: kept, metadata: { ...(o.metadata || {}), screen_links: kept } };
+      };
+      setOverlays(prev => prev.map(dropLinks));
       // Optimistic removal from local state
       setOverlays(prev => prev.filter(o => o.id !== deletedKey));
       if (activeScreen?.id === deletedKey) { closePanel(); }
-      flash('Deleted');
+      if (failed.length) flash(`Deleted, but links to it remain on: ${failed.join(', ')}`, 'error');
+      else flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
   const handleDelete = () => handleDeleteScreen(activeScreen);
@@ -878,6 +897,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         opens_screen: newType.opens_screen, is_home: !!newType.is_home,
         custom: true, custom_id: newType.id, generated: false, url: null,
       }]);
+      // The message says what happened: a failed image upload is not
+      // reported as uploaded, and a failed refresh keeps the list (phone
+      // audit, 2026-10-07: the success message replaced the failure, and a
+      // failed refresh emptied the grid).
+      let uploaded = false;
       if (file && newType.type_key) {
         try {
           const fd = new FormData();
@@ -887,21 +911,25 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           // path. Caused "ReferenceError: targetKey is not defined" on every
           // screen/icon create with an attached image.
           await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+          uploaded = true;
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
-          flash('Created, but the image upload failed — upload from the card', 'error');
         }
         // Refetch to surface the newly-uploaded asset URL on the icon. A new
         // icon lands in the icon library only; it is placed deliberately,
         // never automatically (doctrine rule 17). Auto-bg-removal is off
         // here too — mirror of handleUpload.
-        const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
-        setOverlays(fresh);
+        try {
+          const fresh = await api.get(`/api/v1/ui-overlays/${showId}`);
+          if (Array.isArray(fresh.data?.data)) setOverlays(fresh.data.data);
+        } catch (refreshErr) {
+          console.error('[createScreen] refresh failed:', refreshErr);
+        }
       }
       setShowCreateModal(false);
-      flash(createMode === 'phone_icon'
-        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
-        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
+      const kind = createMode === 'phone_icon' ? 'Icon' : 'Screen';
+      if (file && !uploaded) flash(`${kind} created, but the image upload failed — upload it from the card`, 'error');
+      else flash(file ? `${kind} created + image uploaded` : `${kind} type created`);
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -953,13 +981,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // that screen, not the icon, for Back (Task #2008).
   const handleNavigate = async (targetKey, fromKey) => {
     if (editorsDirty() && !(await leaveEditors())) return;
-    // Find the overlay matching the target screen key
-    const target = overlays.find(o => {
-      const id = (o.id || '').toLowerCase();
-      const name = (o.name || '').toLowerCase();
-      const key = targetKey.toLowerCase();
-      return id === key || name.includes(key) || (o.overlay_type || '').toLowerCase() === key;
-    });
+    // The screen the zone names: its key, else (older zones) its exact name.
+    // A partial name match sent "Feed" to "Feed Settings" or a title card
+    // (phone audit, 2026-10-07); icons are never a destination.
+    const key = String(targetKey || '').toLowerCase();
+    const screensOnly = overlays.filter(isScreen);
+    const target = screensOnly.find(o => (o.id || '').toLowerCase() === key)
+      || screensOnly.find(o => (o.overlay_type || '').toLowerCase() === key)
+      || screensOnly.find(o => (o.name || '').toLowerCase() === key);
     if (target) {
       // Push current screen to history for back navigation
       const from = fromKey || (activeScreen && (activeScreen.id || activeScreen.key));
@@ -1282,7 +1311,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     const target = overlays.find(o => o.id === targetScreenId);
     if (!target?.asset_id) { flash('Target screen has no asset', 'error'); return; }
     const fit = activeScreen.image_fit || activeScreen.metadata?.image_fit;
-    const links = activeScreen.screen_links || activeScreen.metadata?.screen_links;
+    // Copies get their own ids, so editing one screen's zone never touches
+    // the other's; a screen that has zones asks before they are replaced
+    // (phone audit, 2026-10-07).
+    const links = (activeScreen.screen_links || activeScreen.metadata?.screen_links || [])
+      .map(z => ({ ...z, id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }));
+    const existing = getScreenLinks(target).length;
+    if (links.length && existing && !window.confirm(`Replace the ${existing} tap zone${existing === 1 ? '' : 's'} on "${target.name}" with ${links.length} from "${activeScreen.name}"?`)) return;
     try {
       if (fit) await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${target.asset_id}`, { image_fit: fit });
       if (links?.length) await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: links });
@@ -1297,7 +1332,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   const generatedCount = overlays.filter(o => o.generated).length;
-  const headerTiles = phoneHubTiles(overlays, screenDiagnostics);
+  const activeIsHome = !!activeScreen && activeScreen.id === homeScreenOf(overlays)?.id;
+  const headerTiles = phoneHubTiles(overlays.filter(o => !hiddenScreens.includes(o.id)), screenDiagnostics);
   // The screen panel's status: the cards' Ready rule and their lines in one
   // ("5 icons · 5/5 linked"), for a screen; icons have none.
   const panelStatus = (() => {
@@ -1360,12 +1396,37 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // The setup guide (doctrine rule 18, Task #2053). It starts collapsed once
   // Screens, Icons and Links are complete; a toggle is remembered per show in
   // this browser.
+  // Hidden (removed) screens and icons aren't counted: they read as work
+  // still to do (phone audit, 2026-10-07).
   const setupProgress = phoneSetupProgress({
-    screens: screenOverlays,
-    icons: iconOverlays,
+    screens: screenOverlays.filter(o => !hiddenScreens.includes(o.id)),
+    icons: iconOverlays.filter(o => !hiddenScreens.includes(o.id)),
     diagnostics: screenDiagnostics,
     flowAudit,
   });
+  // The header bar's chips (Evoni's mockup, 2026-10-08): screens ready and
+  // icons always; unplaced icons, dead ends and screens nothing reaches
+  // only when there are any. Hidden screens and icons aren't counted.
+  const flowMap = useMemo(
+    () => phoneFlowMap(overlays.filter(o => !hiddenScreens.includes(o.id)), iconOverlaysForEditor),
+    [overlays, hiddenScreens, iconOverlaysForEditor]
+  );
+  const headerChips = (() => {
+    const visibleIcons = iconOverlays.filter(o => !hiddenScreens.includes(o.id));
+    const placed = new Set();
+    screenOverlays.forEach(sc => getScreenLinks(sc).forEach(l => { const k = resolveZoneIconKey(l, visibleIcons); if (k) placed.add(k); }));
+    const unplaced = visibleIcons.filter(i => !placed.has(i.id)).length;
+    const ready = headerTiles.find(t => t.key === 'ready')?.value || '0/0';
+    const [readyN, readyOf] = ready.split('/').map(Number);
+    const n = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+    return [
+      { key: 'ready', text: `${ready} screens ready`, tone: readyOf > 0 && readyN === readyOf ? 'good' : 'plain', tab: 'screens' },
+      { key: 'icons', text: n(visibleIcons.length, 'icon'), tone: 'plain', tab: 'icons' },
+      unplaced > 0 && { key: 'unplaced', text: `${n(unplaced, 'icon')} unplaced`, tone: 'warn', tab: 'icons' },
+      flowMap.deadEnds.length > 0 && { key: 'dead', text: n(flowMap.deadEnds.length, 'dead end'), tone: 'danger', tab: 'map' },
+      flowMap.unreachable.length > 0 && { key: 'unreachable', text: `${n(flowMap.unreachable.length, 'screen')} not reachable`, tone: 'danger', tab: 'map' },
+    ].filter(Boolean);
+  })();
   const setupGuideKey = showId ? `phoneSetupGuide:${showId}` : null;
   const [setupGuideChoice, setSetupGuideChoice] = useState(null);
   useEffect(() => {
@@ -1375,7 +1436,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
     setSetupGuideChoice(stored === 'open' || stored === 'closed' ? stored : null);
   }, [setupGuideKey]);
-  const setupGuideCollapsed = setupGuideChoice ? setupGuideChoice === 'closed' : setupProgress.complete;
+  // One line (its next step) until opened (Evoni's mockup, 2026-10-08).
+  const setupGuideCollapsed = setupGuideChoice ? setupGuideChoice === 'closed' : true;
   const toggleSetupGuide = () => {
     const choice = setupGuideCollapsed ? 'open' : 'closed';
     setSetupGuideChoice(choice);
@@ -1428,17 +1490,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         <ShowChooser shows={shows} onChoose={(id) => { setShowId(id); rememberShow(id); }} purpose="to open Lala's Phone" />
       )}
 
-      {/* The header card (Evoni's mock, 2026-10-07): the title and its line,
-          three tiles counted by the screen cards' own Ready rule
-          (lib/phoneHubSummary), and the setup guide inside the card. */}
-      <section className="ph-hero" aria-label="Lala's Phone">
-      <div className="overlays-header">
-        <div className="overlays-header-top">
-          <div className="ph-hero-main">
-            <div className="ph-hero-text">
-              <h2 className="ph-hero-title">Lala&apos;s Phone</h2>
-              <p className="ph-hero-line">One phone for the whole show. Episodes pick screens from here.</p>
-            </div>
+      {/* The header bar (Evoni's mockup, 2026-10-08): the name, what needs
+          doing as chips, and the stages on the right. A chip opens the stage
+          that fixes it. The tools ("+ Add", the size guide, More) sit at its
+          end; the setup guide is one line under it until opened. */}
+      <section className="ph-bar overlays-header" aria-label="Lala's Phone">
+        <div className="ph-bar__row">
+          <div className="ph-bar__main">
+            <h2 className="ph-bar__title">Lala&apos;s Phone</h2>
             {/* Show selector — visible when no propShowId so user can switch shows */}
             {!propShowId && shows.length > 0 && (
               <select
@@ -1453,23 +1512,29 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 ))}
               </select>
             )}
+            {!loading && (
+              <ul className="ph-bar__chips" data-testid="phone-hub-chips">
+                {headerChips.map(c => (
+                  <li key={c.key}>
+                    <button type="button" className={`ph-bar__chip is-${c.tone}`} onClick={afterSave(() => setActiveTab(c.tab))} data-testid={`phone-chip-${c.key}`}>
+                      {c.text}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {!loading && (
-            <ul className="ph-hero-tiles" data-testid="phone-hub-tiles">
-              {headerTiles.map(t => (
-                <li key={t.key} className="ph-hero-tile">
-                  <span className="ph-hero-tile-value">{t.value}</span>
-                  <span className="ph-hero-tile-label">{t.label}</span>
-                </li>
-              ))}
-            </ul>
+            <PhoneHubSectionTabs
+              part="stages"
+              activeTab={activeTab}
+              onChangeTab={afterSave(setActiveTab)}
+              showMap
+              showPreview
+            />
           )}
         </div>
-
-        {/* "+ Add" asks one question: a Screen, an Icon or a Content Area
-            (doctrine rule 18, Task #2024). The Flow Map and the phone frame
-            live in "More". */}
-        <div className="overlays-toolbar ph-hero-tools">
+        <div className="overlays-toolbar ph-bar__tools">
           <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId}>
             <div className="overlays-add-chooser__title" role="presentation">What are you adding?</div>
             <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
@@ -1498,7 +1563,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 the contact sheet and variants were removed (Evoni, 2026-10-07,
                 Lala's Phone step 2). */}
             <ToolbarMenu label="More">
-              <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
+              <button onClick={afterSave(() => setActiveTab('map'))} disabled={!generatedCount}>
                 <GitBranch size={13} /> Flow Map
               </button>
               <button onClick={() => frameInputRef.current?.click()}>
@@ -1525,7 +1590,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             </ToolbarMenu>
           </div>
         </div>
-
         {/* Size guide */}
         {showSizeGuide && (
           <div className="overlays-size-guide">
@@ -1539,8 +1603,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             <div style={{ marginTop: 6, color: '#aaa', fontSize: 9 }}>PNG with transparency recommended for icons. JPG/PNG for screens.</div>
           </div>
         )}
-
-      </div>
+      </section>
 
       {/* The setup guide (doctrine rule 18, Task #2053): plain-word progress,
           one next step; it collapses once screens, icons and links are done. */}
@@ -1553,7 +1616,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           onRunPreview={runSetupFlowTest}
         />
       )}
-      </section>
 
       {loading ? (
         <div className="overlays-loading">
@@ -1565,7 +1627,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         <div className="phone-hub-layout">
           {/* Section tabs rendered outside PhoneHub so they stay visible
               even when PhoneHub unmounts for the Zones workspace. */}
+          {/* The stages are in the header bar; Build's Screens | Icons
+              toggle stays here, over the grid. */}
           <PhoneHubSectionTabs
+            part="build"
             activeTab={activeTab}
             onChangeTab={afterSave(setActiveTab)}
             screenCount={screenOverlays.length}
@@ -1574,9 +1639,25 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             hiddenCount={hiddenScreens.length}
             showHidden={showHidden}
             onToggleShowHidden={() => setShowHidden(h => !h)}
-            showPreview
           />
-          {!((editingLinks || editingContent) && activeScreen?.url && isScreen(activeScreen)) && <div className="phone-hub-main">
+          {/* The Map stage (Evoni's mockup, 2026-10-08): a screen opens in Connect. */}
+          {activeTab === 'map' && (
+            <PhoneMapStage
+              overlays={overlays.filter(o => !hiddenScreens.includes(o.id))}
+              icons={iconOverlaysForEditor}
+              skin={phoneSkin}
+              customFrameUrl={customFrameUrl}
+              globalFit={globalFit}
+              showId={showId}
+              onOpenScreen={afterSave((target) => {
+                if (!target) return;
+                setActiveScreen(target);
+                setNavHistory([]);
+                setActiveTab('zones');
+              })}
+            />
+          )}
+          {activeTab !== 'map' && !((editingLinks || editingContent) && activeScreen?.url && isScreen(activeScreen)) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1718,7 +1799,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   zoneId: issue.zoneId || null,
                 });
               };
-              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, activeScreen.id));
+              // The Flow Test starts where the player does, at home (phone
+              // audit, 2026-10-07: it started from the screen being edited).
+              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, (homeScreenOf(overlays) || activeScreen).id));
               return (
                 <div className="phone-hub-zones-panel">
                                   <div className="zones-tab">
@@ -1735,6 +1818,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         customFrameUrl={customFrameUrl}
                         phoneSkin={phoneSkin}
                         onSave={handleSaveLinks}
+                        isHome={activeIsHome}
                         onUploadIcon={handleUploadIcon}
                         onNavigate={handleNavigate}
                         navigationHistory={navHistory}
@@ -1995,15 +2079,23 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                                     )}
                                     {isExpanded && (
                                       <div className="zones-tap-row__advanced">
-                                        {/* Pin: shown on every screen (ICON mode's pin, Task #2021). */}
-                                        <label className="zones-tap-row__pin">
-                                          <input
-                                            type="checkbox"
-                                            checked={!!zone.persistent}
-                                            onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { persistent: e.target.checked })}
-                                          />
-                                          Pin to all screens
-                                        </label>
+                                        {/* Pin: shown on every screen (ICON mode's pin, Task #2021).
+                                            Only the home screen's pins show elsewhere, so it is
+                                            offered there (phone audit, 2026-10-07). */}
+                                        {activeIsHome ? (
+                                          <label className="zones-tap-row__pin">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!zone.persistent}
+                                              onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { persistent: e.target.checked })}
+                                            />
+                                            Pin to all screens
+                                          </label>
+                                        ) : (
+                                          <div className="zones-tap-row__pin zones-tap-row__pin--note" data-testid="pin-home-only">
+                                            To show a zone on every screen, pin it on the home screen.
+                                          </div>
+                                        )}
                                         {/* Size, kept inside the screen (Task #2020). */}
                                         <div className="zones-tap-row__adv-section zones-tap-row__size">
                                           <div className="zones-tap-row__adv-header"><span>SIZE</span></div>
@@ -2544,9 +2636,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         const removing = bgAttempts[activeScreen.id]?.state === 'removing';
                         return <ActionBtn icon={removing ? Loader : Eraser} label={removing ? 'Removing…' : 'Remove background'} onClick={handleRemoveBg} disabled={removing} className="ph-chip-btn" />;
                       })()}
-                      {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
+                      {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated && o.asset_id && isScreen(o) === isScreen(activeScreen)).length > 0 && (
                         <DuplicateSettingsBtn
-                          screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
+                          screens={overlays.filter(o => o.id !== activeScreen.id && o.generated && o.asset_id && isScreen(o) === isScreen(activeScreen))}
                           onDuplicate={handleDuplicateSettings}
                         />
                       )}
@@ -2773,14 +2865,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       </>
       )}
 
-      {/* Flow Map — visual graph of screen-to-screen links */}
-      {showFlowMap && (
-        <ScreenFlowMap
-          screens={overlays}
-          onClose={() => setShowFlowMap(false)}
-          onSelectScreen={afterSave((s) => { setActiveScreen(s); setShowFlowMap(false); })}
-        />
-      )}
 
       {/* Create Screen Modal */}
       {showCreateModal && (

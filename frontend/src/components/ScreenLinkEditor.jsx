@@ -92,6 +92,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   customFrameUrl,
   phoneSkin,
   onSave,
+  // Whether this is the phone's home screen; pins are offered only there.
+  isHome = true,
   onUploadIcon,
   onNavigate,
   navigationHistory = NO_ITEMS,
@@ -1446,8 +1448,9 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                         </div>
                       )}
                     </div>
-                    {/* Persistent toggle — pin icon to show on all screens */}
-                    <button
+                    {/* Persistent toggle — pin icon to show on all screens. Only the
+                        home screen's pins show elsewhere (phone audit, 2026-10-07). */}
+                    {isHome && <button
                       onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { persistent: !zone.persistent }); }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6,
@@ -1460,7 +1463,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                       }}
                     >
                       <Pin size={12} /> {zone.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
-                    </button>
+                    </button>}
 
                     {/* Bulk-place (Phase 3.3): copy this zone (icon + label +
                         position) onto other screens in one click. Different from

@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
@@ -70,13 +70,23 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
   // which counted every row with an image, the Call icon included. Ready is
   // the cards' rule: Homepage has a zone with no destination, mail inbox has
   // nothing linking to it and dm thread has no image, so 1 of the 4 screens.
-  test('the header reads Lala\'s Phone (one name, Evoni 2026-10-07), its line, and screens ready · screens · icons', async () => {
+  // The header bar (Evoni's mockup, 2026-10-08): the tiles became chips.
+  // calls list is reached from Homepage but leads nowhere (a dead end);
+  // mail inbox is reached from nothing; dm thread has no image, so it is in
+  // neither count.
+  test('the header bar reads Lala\'s Phone and its chips: screens ready, icons, dead ends, not reachable', async () => {
     await renderPage();
     const header = document.querySelector('.overlays-header');
     expect(within(header).getByRole('heading', { name: "Lala's Phone" })).toBeTruthy();
-    expect(within(header).getByText('One phone for the whole show. Episodes pick screens from here.')).toBeTruthy();
-    const tiles = Array.from(header.querySelectorAll('[data-testid="phone-hub-tiles"] li')).map(li => li.textContent);
-    expect(tiles).toEqual(['1/4screens ready', '4screens', '1icon']);
+    const chips = Array.from(header.querySelectorAll('[data-testid="phone-hub-chips"] li')).map(li => li.textContent);
+    expect(chips).toEqual(['1/4 screens ready', '1 icon', '1 dead end', '1 screen not reachable']);
+  });
+
+  test('a chip opens the stage that fixes it: dead ends open the Map', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByTestId('phone-chip-dead'));
+    await waitFor(() => expect(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Map' }).getAttribute('aria-current')).toBe('page'));
+    expect(screen.getByRole('heading', { name: 'How Lala moves through her phone' })).toBeTruthy();
   });
 
   // The contact sheet and batch upload were removed (Evoni, 2026-10-07,
@@ -94,20 +104,21 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
   });
 
   // Advanced ▾ (show-wide Missions) is gone: missions are per episode now.
-  test('the stage row reads Build · Connect · Content · Preview, Build current', async () => {
+  test('the stage row reads Map · Build · Connect · Content · Preview, Build current', async () => {
     await renderPage();
     const row = document.querySelector('.phone-hub-stage-row');
     const names = within(row).getAllByRole('button').map(b => b.textContent.trim());
-    expect(names).toEqual(['Build', 'Connect', 'Content', 'Preview']);
+    expect(names).toEqual(['Map', 'Build', 'Connect', 'Content', 'Preview']);
     expect(within(row).getByRole('button', { name: 'Build' }).getAttribute('aria-current')).toBe('page');
   });
 
-  test('the header and toolbar come before the stage row and the phone', async () => {
+  test('the stage row is in the header bar, before the phone', async () => {
     await renderPage();
     const header = document.querySelector('.overlays-header');
     const layout = document.querySelector('.phone-hub-layout');
     expect(header.compareDocumentPosition(layout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(layout.querySelector('.phone-hub-stage-row')).toBeTruthy();
+    expect(header.querySelector('.phone-hub-stage-row')).toBeTruthy();
+    expect(layout.querySelector('.phone-hub-stage-row')).toBeNull();
     expect(layout.querySelector('.phone-hub-screen-grid')).toBeTruthy();
   });
 

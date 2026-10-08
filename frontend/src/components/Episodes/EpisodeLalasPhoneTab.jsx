@@ -210,7 +210,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
               )}
             </div>
             <p className="lalas-phone-subtitle">
-              One phone, scoped to this episode. Screens are built in Producer Mode → Lala&apos;s Phone; this episode can have its own version of any of them.
+              One phone, scoped to this episode. Screens are built in Producer Mode → Lala&apos;s Phone. A screen marked &ldquo;this episode&rdquo; is this episode&apos;s own: its invitation, or a per-episode screen made for it.
             </p>
             {overlaysLoading && <div className="lalas-phone-muted">Loading phone screens…</div>}
             {overlaysError && <div className="lalas-phone-error">Error: {overlaysError}</div>}

@@ -1,0 +1,128 @@
+/* PhoneMapStage — the Map stage (Evoni's mockup, 2026-10-08). Three columns
+   on a wide screen (phone · taps · notes); one column at 375px. */
+
+.phone-map-stage {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 20px 22px;
+  background: var(--lala-surface, #fff);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 16px;
+  color: var(--lala-ink);
+}
+
+.phone-map-stage__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 16px; }
+.phone-map-stage__title { margin: 0; font-family: 'Lora', serif; font-size: 20px; font-weight: 700; }
+.phone-map-stage__sub { font-size: 12px; color: var(--lala-ink-muted); }
+.phone-map-stage__empty, .phone-map-stage__none { font-size: 13px; color: var(--lala-ink-muted); }
+
+.phone-map-stage__body {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.phone-map-stage__home { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.phone-map-stage__device { width: 170px; padding: 0; background: none; border: 0; cursor: pointer; }
+/* The frame sets its own width (PhoneFrame.css); here it fills the column. */
+.phone-map-stage__device .phone-hub-frame { width: 100%; }
+.phone-map-stage__home-name { font-family: 'Lora', serif; font-size: 15px; font-weight: 700; }
+.phone-map-stage__home-line { font-size: 11px; font-weight: 600; color: var(--lala-teal-dark); }
+
+/* The taps: a line down the left with an arrow to each screen. */
+.phone-map-stage__taps {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 2px solid var(--lala-pink);
+  min-width: 0;
+}
+.phone-map-stage__tap { position: relative; min-width: 0; }
+.phone-map-stage__tap::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  width: 16px;
+  border-top: 2px solid var(--lala-pink);
+}
+.phone-map-stage__tap::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: calc(50% - 4px);
+  border: 5px solid transparent;
+  border-left-color: var(--lala-pink);
+}
+.phone-map-stage__tap.is-onward::before { border-top-color: var(--lala-lavender); }
+.phone-map-stage__tap.is-onward::after { border-left-color: var(--lala-lavender); }
+
+.phone-map-stage__node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 260px;
+  min-height: 52px;
+  padding: 6px 10px 6px 6px;
+  background: var(--lala-danger-soft);
+  border: 1px solid var(--lala-danger);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.is-onward .phone-map-stage__node { background: var(--lala-teal-soft); border-color: var(--lala-teal-dark); }
+.is-missing .phone-map-stage__node { background: var(--lala-parchment-2); border-color: var(--lala-parchment-3); }
+.phone-map-stage__thumb { flex: none; width: 26px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--lala-lavender-soft); }
+.phone-map-stage__node-text { display: flex; flex-direction: column; min-width: 0; }
+.phone-map-stage__node-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-map-stage__node-line { font-size: 11px; color: var(--lala-danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.is-onward .phone-map-stage__node-line { color: var(--lala-teal-dark); }
+.is-missing .phone-map-stage__node-line { color: var(--lala-ink-muted); }
+
+.phone-map-stage__notes { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.phone-map-stage__note { padding: 14px 16px; border-radius: 12px; font-size: 13px; line-height: 1.5; min-width: 0; }
+.phone-map-stage__note p { margin: 4px 0 0; }
+.phone-map-stage__note-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.phone-map-stage__note.is-danger { background: var(--lala-danger-soft); color: var(--lala-danger); }
+.phone-map-stage__note.is-warn { background: var(--lala-gold-soft); color: var(--lala-ink); }
+.phone-map-stage__note.is-warn .phone-map-stage__note-title { color: var(--lala-gold-text); }
+.phone-map-stage__note.is-good { background: var(--lala-teal-soft); color: var(--lala-teal-dark); }
+.phone-map-stage__note.is-key { background: var(--lala-lavender-soft); color: var(--lala-ink); }
+.phone-map-stage__note.is-key .phone-map-stage__note-title { color: var(--lala-lavender-text); }
+.phone-map-stage__key-onward { color: var(--lala-teal-dark); font-weight: 600; }
+.phone-map-stage__key-dead { color: var(--lala-danger); font-weight: 600; }
+
+.phone-map-stage__chips, .phone-map-stage__names { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-map-stage__chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px 6px 6px; min-height: 44px;
+  background: var(--lala-surface, #fff); border: 1px solid var(--lala-danger); border-radius: 10px;
+  cursor: pointer; font: inherit; color: var(--lala-ink); text-align: left;
+}
+.phone-map-stage__chip img { width: 22px; height: 34px; border-radius: 4px; object-fit: cover; }
+.phone-map-stage__chip span { display: flex; flex-direction: column; font-size: 12px; }
+.phone-map-stage__chip em { font-style: normal; font-size: 10px; color: var(--lala-danger); }
+.phone-map-stage__link {
+  padding: 0; min-height: 24px;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .phone-map-stage__body { grid-template-columns: 160px minmax(0, 1fr); }
+  .phone-map-stage__notes { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .phone-map-stage { padding: 16px 14px; }
+  .phone-map-stage__body { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .phone-map-stage__device { width: 150px; }
+  .phone-map-stage__node { max-width: none; }
+}

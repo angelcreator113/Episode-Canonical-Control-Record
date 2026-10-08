@@ -249,7 +249,16 @@ function mergeInvitationIntoOverlayStatus(status, invitation) {
   };
   const idx = status.findIndex((ot) => isInvitationOverlayType(ot.id, ot.name));
   if (idx >= 0) {
-    return status.map((ot, i) => (i === idx ? { ...ot, ...fields } : ot));
+    // The invitation is the screen's image for this episode; the zones,
+    // content areas and fit drawn on the show's invitation screen stay
+    // (phone audit, 2026-10-07: they were wiped, so its Back zone vanished).
+    return status.map((ot, i) => (i === idx ? {
+      ...ot,
+      ...fields,
+      screen_links: ot.screen_links ?? null,
+      content_zones: ot.content_zones ?? null,
+      image_fit: ot.image_fit ?? null,
+    } : ot));
   }
   return [...status, {
     id: invitation.overlay_type,

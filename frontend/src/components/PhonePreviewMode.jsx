@@ -36,6 +36,13 @@ function getLinks(screen) {
 export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false, showId, episodeId }) {
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens.find(isScreen) || screens[0] || null);
   const [history, setHistory] = useState([]);
+  // The phone's home: Home and Reset go here, not to the screen the preview
+  // opened on (phone audit, 2026-10-07).
+  const homeScreen = useMemo(() => {
+    // Screens only: an icon is never the phone's home (Evoni, 2026-10-07).
+    const generated = screens.filter(s => s.generated && s.url && isScreen(s));
+    return generated.find(s => s.is_home) || generated[0] || null;
+  }, [screens]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
   // A custom frame that fails to load falls back to the built-in frame, as in
   // Producer Mode; a new frame URL gets a fresh try.
@@ -126,6 +133,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const completedCount = visibleMissions.filter(m => m.progress.is_complete).length;
 
   const resetState = useCallback(async () => {
+    // A saved play-through is wiped for good, so it asks first.
+    if (playthrough?.reset && !window.confirm('Start this play-through over? Flags, visited screens and finished missions are cleared.')) return;
     if (playthrough?.reset) {
       await playthrough.reset();  // server wipes + returns new state, useEffect re-hydrates
     } else {
@@ -137,8 +146,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     setCelebrations([]);
     setEpisodeComplete(false);
     setHistory([]);
-    setActiveScreen(initialScreen || screens[0] || null);
-  }, [initialScreen, screens, playthrough]);
+    setActiveScreen(homeScreen || initialScreen || screens[0] || null);
+  }, [homeScreen, initialScreen, screens, playthrough]);
 
   // Queue a celebration banner per newly-completed mission; auto-clears after 3s.
   const celebrate = useCallback((missionsJustDone) => {
@@ -279,7 +288,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   }, [history, animating]);
 
   const goHome = useCallback(() => {
-    const home = initialScreen || screens[0];
+    const home = homeScreen || initialScreen || screens[0];
     if (!home || animating) return;
     setSlideDir('right');
     setAnimating(true);
@@ -289,7 +298,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       setSlideDir(null);
       setAnimating(false);
     }, TRANSITION_MS);
-  }, [initialScreen, screens, animating]);
+  }, [homeScreen, initialScreen, screens, animating]);
 
   // ESC key handler — overlay only; an embedded phone leaves ESC to its page.
   useEffect(() => {
@@ -312,11 +321,6 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   // Also merge in the home screen's `persistent` links so pinned icons show on every
   // screen — PhoneHub does this for authors; without it here the player would lose
   // the nav bar / persistent controls once they leave the home screen.
-  const homeScreen = useMemo(() => {
-    // Screens only: an icon is never the phone's home (Evoni, 2026-10-07).
-    const generated = screens.filter(s => s.generated && s.url && isScreen(s));
-    return generated.find(s => s.is_home) || generated[0] || null;
-  }, [screens]);
   const persistentLinks = useMemo(() => {
     if (!homeScreen || homeScreen.id === activeScreen?.id) return [];
     return getLinks(homeScreen).filter(l => l.persistent && l.icon_url);
