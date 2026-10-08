@@ -4,7 +4,8 @@
  * through tokens; the link, upload and promote buttons are the primary
  * (they were purple and amber gradients under white); the readiness
  * ring, bar and status badges read the success, warning, danger and
- * teal families.
+ * teal families. Redesigned 2026-10-08: lavender actions and status
+ * pills, in EpisodeAssetsTab.css.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -23,19 +24,26 @@ describe('Episode Assets theme', () => {
     expect(css).not.toMatch(/linear-gradient/);
   });
 
-  test('the buttons are the primary', () => {
-    expect(css).toMatch(/\.btn-link-asset,\s*\.btn-upload\s*\{[^}]*background: var\(--primary\);/);
-    expect(css).toMatch(/\.btn-promote-inline\s*\{[^}]*background: var\(--primary\);/);
-    expect(jsx).toMatch(/border: '1px solid var\(--primary\)', color: 'var\(--primary-text\)', background: 'var\(--primary-subtle\)'/);
+  // The Assets redesign (2026-10-08) moved the tab's styles into
+  // EpisodeAssetsTab.css (.eat-*, and .etl-* for the to-do lists); the old,
+  // unused rules in that file were replaced.
+  test('the actions are the lavender', () => {
+    expect(css).toMatch(/\.eat-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
+    expect(css).toMatch(/\.etl-btn-primary \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
+    expect(jsx).toMatch(/className="eat-btn"[^>]*>\s*<Images/);
   });
 
-  test('the statuses, the readiness ring and the bar read the token families', () => {
-    expect(jsx).toMatch(/approved: \{ bg: 'var\(--success-bg\)', color: 'var\(--success-text\)', border: 'var\(--success-border\)'/);
-    expect(jsx).toMatch(/generated: \{ bg: 'var\(--primary-subtle\)', color: 'var\(--primary-text\)', border: 'var\(--primary-light\)'/);
-    expect(jsx).toMatch(/pending: \{ bg: 'var\(--warning-bg\)', color: 'var\(--warning-text\)', border: 'var\(--warning-border\)'/);
-    expect(jsx).toMatch(/missing: \{ bg: 'var\(--lala-parchment-2\)', color: 'var\(--text-secondary\)', border: 'var\(--lala-parchment-3\)'/);
-    expect(jsx).toMatch(/color: pct >= 80 \? 'var\(--success-text\)' : pct >= 50 \? 'var\(--warning-text\)' : 'var\(--danger-text\)'/);
-    expect(jsx).toMatch(/background: pct >= 80 \? 'var\(--success\)' : pct >= 50 \? 'var\(--warning\)' : 'var\(--danger\)'/);
+  test('the statuses and the readiness bar read the token families', () => {
+    expect(css).toMatch(/\.eat-pill\.is-approved \{ background: var\(--success-bg\); color: var\(--success-text\); \}/);
+    expect(css).toMatch(/\.eat-pill\.is-generated \{ background: var\(--lala-lavender-soft\); color: var\(--lala-lavender-text\); \}/);
+    expect(css).toMatch(/\.eat-pill\.is-pending \{ background: var\(--warning-bg\); color: var\(--warning-text\); \}/);
+    expect(css).toMatch(/\.eat-pill\.is-missing \{ background: var\(--lala-parchment-2\); color: var\(--lala-ink-muted\); \}/);
+    expect(jsx).toMatch(/const tone = pct >= 80 \? 'is-high' : pct >= 50 \? 'is-mid' : 'is-low';/);
+    expect(css).toMatch(/\.eat-bar\.is-low span \{ background: var\(--danger\); \}/);
+    expect(css).toMatch(/\.eat-bar\.is-mid span \{ background: var\(--warning\); \}/);
+    expect(css).toMatch(/\.eat-bar\.is-high span \{ background: var\(--success\); \}/);
+    // Gold is never text on white.
+    expect(css).not.toMatch(/(?<![-\w])color: var\(--lala-gold\)/);
   });
 
   test('every text pair the tab draws holds 4.5:1 or better', () => {
@@ -51,6 +59,13 @@ describe('Episode Assets theme', () => {
       ['--text-secondary', '--lala-parchment-2'],
       ['--text-secondary', '--surface-card'],
       ['--text-primary', '--surface-card'],
+      ['--text-inverse', '--lala-lavender'],
+      ['--lala-lavender-text', '--surface-card'],
+      ['--lala-lavender-text', '--lala-lavender-soft'],
+      ['--lala-ink', '--surface-card'],
+      ['--lala-ink-muted', '--surface-card'],
+      ['--lala-ink-muted', '--lala-parchment-2'],
+      ['--lala-gold-text', '--lala-gold-soft'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
