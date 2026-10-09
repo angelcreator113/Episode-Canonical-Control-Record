@@ -448,6 +448,47 @@ router.delete('/:id/title-overlay', validateUUIDParam('id'), requireAuth, async 
   }
 });
 
+// Upload her own title image as the title overlay (multipart field "file":
+// PNG, JPEG or WebP, 10 MB at most). Evoni, 2026-10-09: "i also want to be
+// able to upload my own episode title".
+const titleImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, ['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype)),
+});
+router.post('/:id/title-overlay/upload', validateUUIDParam('id'), requireAuth, (req, res, next) => {
+  titleImageUpload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('[EpisodeTitleCard] title image upload rejected:', err.message);
+      return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The image is larger than 10 MB.' : err.message });
+    }
+    return next();
+  });
+}, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { uploadTitleOverlay } = require('../services/episodeTitleOverlayService');
+    if (!req.file) return res.status(400).json({ success: false, error: 'Choose a PNG, JPEG or WebP image to upload.', code: 'NO_FILE' });
+    await uploadTitleOverlay(models, req.params.id, req.file);
+    const { getTitleCardState } = require('../services/episodeTitleCardService');
+    return res.json({ success: true, data: await getTitleCardState(models, req.params.id) });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'POST /:id/title-overlay/upload');
+  }
+});
+
+// Delete the full-screen framed card (its image and placements); the title stays.
+router.delete('/:id/title-card', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { deleteTitleCard } = require('../services/episodeTitleCardService');
+    const data = await deleteTitleCard(models, req.params.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendTitleCardError(res, err, 'DELETE /:id/title-card');
+  }
+});
+
 // ==================== EPISODE OVERLAYS (P15) ====================
 // Production's Overlays tab: every on-screen piece the episode owns (title
 // overlay, framed card, invitation, task-list overlay) with its preview,

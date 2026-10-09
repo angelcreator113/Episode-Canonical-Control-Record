@@ -536,6 +536,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     .every(i => checks[i.id]);
 
   const completedCount = Object.values(checks).filter(Boolean).length;
+  // Items dim only until the first check lands; a re-check keeps the last
+  // answers in place rather than flashing every row.
+  const hasChecked = Object.keys(checks).length > 0;
   const totalCount = CHECKLIST_SECTIONS.flatMap(s => s.items).length;
 
   return (
@@ -592,7 +595,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             </div>
           )}
           {section.items.map(item => (
-            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} note={notes[item.id]}
+            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading && !hasChecked} note={notes[item.id]}
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
               unavailable={sectionStatus.state === 'unavailable'} />
           ))}

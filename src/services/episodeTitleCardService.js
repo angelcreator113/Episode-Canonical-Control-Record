@@ -285,7 +285,46 @@ async function designTitleCard(models, episodeId, { showId = null } = {}) {
   };
 }
 
+/**
+ * Delete the full-screen framed card (Evoni, 2026-10-09: "i cant delete
+ * Full-screen framed card"): its image leaves the episode and the timeline,
+ * and the episode has no card. The title and its approval stay. Returns
+ * the state as GET reads it.
+ */
+async function deleteTitleCard(models, episodeId) {
+  const { sequelize } = models;
+  const ep = await loadEpisode(sequelize, episodeId);
+  if (!ep) throw notFound();
+  await sequelize.transaction(async (transaction) => {
+    const [gone] = await sequelize.query(
+      `UPDATE assets SET deleted_at = NOW(), updated_at = NOW()
+        WHERE ((episode_id = :episodeId AND asset_role = :role) OR id = :cardId) AND deleted_at IS NULL
+        RETURNING id`,
+      { replacements: { episodeId, role: TITLE_CARD_ROLE, cardId: ep.title_card_asset_id || '00000000-0000-0000-0000-000000000000' }, transaction }
+    );
+    const ids = (gone || []).map((r) => r.id);
+    const [[reg]] = await sequelize.query(
+      "SELECT to_regclass('public.timeline_placements') IS NOT NULL AS present",
+      { transaction }
+    );
+    if (ids.length > 0 && reg?.present) {
+      await sequelize.query(
+        `UPDATE timeline_placements SET deleted_at = NOW(), updated_at = NOW()
+          WHERE episode_id = :episodeId AND asset_id IN (:ids) AND deleted_at IS NULL`,
+        { replacements: { episodeId, ids }, transaction }
+      );
+    }
+    await sequelize.query(
+      `UPDATE episodes SET title_card_asset_id = NULL, title_card_title = NULL, updated_at = NOW()
+        WHERE id = :episodeId`,
+      { replacements: { episodeId }, transaction }
+    );
+  });
+  return getTitleCardState(models, episodeId);
+}
+
 module.exports = {
+  deleteTitleCard,
   TITLE_CARD_ROLE,
   TITLE_CARD_OPTIONS,
   TitleCardError,

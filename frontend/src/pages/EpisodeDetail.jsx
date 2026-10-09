@@ -557,7 +557,9 @@ const EpisodeDetail = () => {
     return steps;
   };
 
-  if (authLoading || loading) {
+  // The page's spinner is for the first load only: a refetch (a saved
+  // edit) keeps the open tab mounted instead of blanking it.
+  if (authLoading || (loading && (!episode || String(episode.id) !== String(episodeId)))) {
     return (
       <div className="ed-page">
         <div className="ed-state">

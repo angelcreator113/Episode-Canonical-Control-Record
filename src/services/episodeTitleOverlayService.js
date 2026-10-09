@@ -317,7 +317,8 @@ function titleOverlayState(ep, asset = null) {
   return {
     asset_id: ep.title_overlay_asset_id,
     designed_for: ep.title_overlay_title,
-    outdated: ep.title_overlay_title !== title,
+    // An uploaded image is her own design: a later rename does not outdate it.
+    outdated: parseJson(ep.title_overlay_style, {})?.uploaded ? false : ep.title_overlay_title !== title,
     style: parseJson(ep.title_overlay_style, null),
     image_url: asset ? (asset.s3_url_processed || asset.s3_url_raw || null) : null,
   };
@@ -372,14 +373,14 @@ async function getTitleOverlayVariants(models, episodeId) {
   };
 }
 
-async function uploadPng(buffer, key) {
+async function uploadPng(buffer, key, contentType = 'image/png') {
   const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
-  if (!S3_BUCKET) return `data:image/png;base64,${buffer.toString('base64')}`;
+  if (!S3_BUCKET) return `data:${contentType};base64,${buffer.toString('base64')}`;
   const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
   const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
   const s3 = new S3Client({ region: AWS_REGION });
   await s3.send(new PutObjectCommand({
-    Bucket: S3_BUCKET, Key: key, Body: buffer, ContentType: 'image/png', CacheControl: 'max-age=31536000',
+    Bucket: S3_BUCKET, Key: key, Body: buffer, ContentType: contentType, CacheControl: 'max-age=31536000',
   }));
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 }
@@ -437,6 +438,17 @@ async function writeOverlay(models, ep, style) {
     height: HEIGHT,
     replaces_asset_id: ep.title_overlay_asset_id || null,
   };
+  return recordOverlay(models, ep, { assetId, url, metadata, style });
+}
+
+/**
+ * Make `url` the episode's title overlay: the asset row, the earlier
+ * overlays (and their placements) retired, the episode stamped, and the
+ * overlay placed on the opening beat. Shared by the drawn overlay and an
+ * uploaded one.
+ */
+async function recordOverlay(models, ep, { assetId, url, metadata, style }) {
+  const { sequelize } = models;
   await sequelize.transaction(async (transaction) => {
     await sequelize.query(
       `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
@@ -495,6 +507,34 @@ async function writeOverlay(models, ep, style) {
 
   const after = await loadEpisode(sequelize, ep.id);
   return titleOverlayState(after, { s3_url_processed: url });
+}
+
+const UPLOAD_TYPES = Object.freeze({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' });
+
+/**
+ * Her own title image as the episode's title overlay (Evoni, 2026-10-09: "i
+ * also want to be able to upload my own episode title"). PNG (keeps its
+ * transparency), JPEG or WebP. It replaces the drawn overlay and is placed
+ * on the opening beat like it; renaming the episode never redraws it.
+ */
+async function uploadTitleOverlay(models, episodeId, { buffer, mimetype, originalname } = {}) {
+  const { sequelize } = models;
+  const ext = UPLOAD_TYPES[mimetype];
+  if (!buffer || !buffer.length) throw new TitleOverlayError('Choose an image to upload.', 400, 'NO_FILE');
+  if (!ext) throw new TitleOverlayError('The title image must be a PNG, JPEG or WebP.', 400, 'INVALID_TYPE');
+  const ep = await loadEpisode(sequelize, episodeId);
+  if (!ep) throw new TitleOverlayError('Episode not found', 404, 'EPISODE_NOT_FOUND');
+  const url = await uploadPng(buffer, `overlays/episode-title-text/${ep.id}/${crypto.randomUUID()}.${ext}`, mimetype);
+  const style = { uploaded: true, file_name: originalname || null };
+  const metadata = {
+    source: 'episode-title-overlay-upload',
+    episode_title: ep.title,
+    episode_number: ep.episode_number,
+    style,
+    transparent: mimetype === 'image/png',
+    replaces_asset_id: ep.title_overlay_asset_id || null,
+  };
+  return recordOverlay(models, ep, { assetId: crypto.randomUUID(), url, metadata, style });
 }
 
 /**
@@ -576,7 +616,8 @@ async function setTitleWords(models, episodeId, words) {
   );
   const { approveTitle, getTitleCardState } = require('./episodeTitleCardService');
   await approveTitle(models, episodeId, { expectedTitle: title });
-  if (ep.title_overlay_asset_id) await saveTitleOverlay(models, episodeId, {});
+  // A drawn overlay is redrawn with the new words; an uploaded image is hers and stays.
+  if (ep.title_overlay_asset_id && !parseJson(ep.title_overlay_style, {})?.uploaded) await saveTitleOverlay(models, episodeId, {});
   return getTitleCardState(models, episodeId);
 }
 
@@ -619,6 +660,7 @@ async function deleteTitleOverlay(models, episodeId) {
 }
 
 module.exports = {
+  uploadTitleOverlay,
   setTitleWords,
   deleteTitleOverlay,
   TITLE_OVERLAY_ROLE,

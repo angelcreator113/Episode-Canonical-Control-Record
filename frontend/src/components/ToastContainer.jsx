@@ -3,7 +3,7 @@
  * Manages multiple toast notifications
  */
 
-import { useState, useCallback, createContext, useContext } from 'react';
+import { useState, useCallback, useMemo, createContext, useContext } from 'react';
 import Toast from './Toast';
 import './ToastContainer.css';
 
@@ -38,8 +38,15 @@ export const ToastProvider = ({ children }) => {
     return addToast(message, 'info', duration);
   }, [addToast]);
 
+  // One value for the provider's life: a fresh object on each toast re-ran
+  // every effect keyed on useToast() (EpisodeDetail refetched the episode
+  // and blanked the page on any toast; Evoni, 2026-10-09: the checklist
+  // flickered).
+  const value = useMemo(() => ({ addToast, removeToast, showSuccess, showError, showWarning, showInfo }),
+    [addToast, removeToast, showSuccess, showError, showWarning, showInfo]);
+
   return (
-    <ToastContext.Provider value={{ addToast, removeToast, showSuccess, showError, showWarning, showInfo }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="toast-container">
         {toasts.map((toast) => (

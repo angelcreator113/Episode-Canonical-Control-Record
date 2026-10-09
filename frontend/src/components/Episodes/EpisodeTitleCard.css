@@ -194,3 +194,8 @@
     justify-content: center;
   }
 }
+
+/* "Upload your own title" is a label around a hidden file input (2026-10-09). */
+label.etc-btn { position: relative; cursor: pointer; }
+label.etc-btn.is-disabled { opacity: 0.6; cursor: not-allowed; }
+label.etc-btn:focus-within { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
