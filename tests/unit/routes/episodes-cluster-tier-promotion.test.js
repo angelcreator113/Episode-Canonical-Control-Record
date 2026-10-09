@@ -77,7 +77,8 @@ const REQUIRE_AUTH_COUNTS = {
   // +1 for GET /:episodeId/production-coverage (§8(o) item 2, episode creation step 8, requireAuth).
   // +3 for GET, PUT /:episodeId/performance-clips and DELETE .../:clipId (the clip home, requireAuth).
   // +1 for POST /:episodeId/setup/resume (audit STATE-01, requireAuth).
-  'episodeBriefRoutes.js': 22,
+  // +1 for POST /:episodeId/regenerate-beat (one script beat, Task #2785, requireAuth).
+  'episodeBriefRoutes.js': 23,
   'episodeOrchestrationRoute.js': 2,
   'episodeScriptWriterRoutes.js': 8,
   'gameShows.js': 7,
@@ -279,7 +280,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for uiOverlayRoutes.js GET /:showId/usage (the show's Overlays library);
     // -3 for episodes.js task-list overlay routes, retired (Evoni, 2026-10-07);
     // +1 for episodes.js PUT /:id/script-locks (locked script beats, 2026-10-08).
-    test('CP2 zone contains 282 total requireAuth references across 22 files', () => {
+    test('CP2 zone contains 283 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -288,7 +289,8 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for episodeBriefRoutes.js POST /:episodeId/setup/resume (audit STATE-01).
     // +1 for phonePlaythroughRoutes.js PUT /screen (Lala's Phone resume, 2026-10-07).
     // +2 for episodes.js PUT /:id/title-overlay/words and DELETE /:id/title-overlay (2026-10-07).
-      expect(total).toBe(282);
+    // +1 for episodeBriefRoutes.js POST /:episodeId/regenerate-beat (Task #2785).
+      expect(total).toBe(283);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {
