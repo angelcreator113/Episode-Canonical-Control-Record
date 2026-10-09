@@ -574,6 +574,11 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { line, speaker, beatName, beatContext } = req.body;
+    // The beat the line sits in, so the rewrite reads what is already there
+    // (Evoni, 2026-10-08); at most 40 lines of 600 characters.
+    const beatLines = Array.isArray(req.body.beatLines)
+      ? req.body.beatLines.filter((l) => typeof l === 'string' && l.trim()).slice(0, 40).map((l) => l.slice(0, 600))
+      : [];
     // The show being written (the Script tab sends it), so the rules are its
     // own and the franchise's, never another show's (wiring map fix-list
     // item 25).
@@ -612,7 +617,7 @@ ${voiceLaws ? `SHOW BRAIN VOICE RULES:\n${voiceLaws}\n\n` : ''}
 SPEAKER: ${speaker}
 BEAT: ${beatName || 'Unknown'}
 ${beatContext ? `EMOTIONAL CONTEXT: ${beatContext}\n` : ''}
-ORIGINAL LINE: ${line}
+${beatLines.length ? `THE BEAT AS IT STANDS (keep the rewrite consistent with it; do not repeat what other lines already say):\n${beatLines.map((l) => (l === line ? `>> ${l}   <- the line to rewrite` : `   ${l}`)).join('\n')}\n\n` : ''}ORIGINAL LINE: ${line}
 
 ${isLala ? 'Rewrite as Lala — confident, short, punchy, calls people "bestie", slightly dramatic, always positive. Max 2 sentences.' : ''}
 ${isPrime ? 'Rewrite as JAWIHP (Prime) — warm, direct, addresses "besties", reacts naturally, community-focused.' : ''}

@@ -156,6 +156,20 @@ const TITLE = 'Readers test';
     expect(bad.body.error).toBe('showId must be a show id (UUID)');
   });
 
+  it('the line rewrite reads the beat it sits in, with the line to rewrite marked (2026-10-08)', async () => {
+    mockCreate.mockReset();
+    mockCreate.mockResolvedValue(reply('Hey besties, welcome back.'));
+    const episodeId = crypto.randomUUID();
+    const res = await request(app).post(`/api/v1/episode-brief/${episodeId}/rewrite-line`).set('Authorization', `Bearer ${token}`)
+      .send({ line: 'Prime: "Hey besties. its been a minute."', speaker: 'Prime', beatName: 'Opening Ritual', showId: showA,
+        beatLines: ['Prime: "Hey besties. its been a minute."', 'Prime: "Lets go ahead and login."', 42] });
+    expect(res.status).toBe(200);
+    const prompt = promptOf(mockCreate.mock.calls[0]);
+    expect(prompt).toContain('THE BEAT AS IT STANDS');
+    expect(prompt).toContain('>> Prime: "Hey besties. its been a minute."   <- the line to rewrite');
+    expect(prompt).toContain('   Prime: "Lets go ahead and login."');
+  });
+
   it('Amber\'s knowledge block lists critical and always-inject rules in the shared order and counts each use', async () => {
     const before = await counts();
     const block = await buildKnowledgeInjection();
