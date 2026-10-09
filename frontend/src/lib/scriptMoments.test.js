@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, EXPECTED_ON_SCREEN } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, EXPECTED_ON_SCREEN } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -44,5 +44,18 @@ describe('scriptMoments', () => {
   test('every canonical beat says what it puts on screen', () => {
     expect(Object.keys(EXPECTED_ON_SCREEN).map(Number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     expect(EXPECTED_ON_SCREEN[5]).toMatchObject({ what: 'The invitation letter, opened', where: "Lala's Phone → Full Screen" });
+  });
+});
+
+describe('beatOnScreen (Task #2793)', () => {
+  const on = { screens: [{ id: 'closet', name: 'Closet' }, { id: 'mail', name: 'Mail' }], overlays: [{ key: 'lower_third', label: 'Lower Third' }, { key: 'invitation', label: 'Invitation' }] };
+  test('overlays stay on until hidden; the phone shows one screen at a time', () => {
+    const { withByLine, used } = beatOnScreen([
+      '[UI:DISPLAY lower_third]', 'Lala: hi', '[UI:OPEN mail]', '[UI:DISPLAY invitation]', '[UI:OPEN closet]', '[UI:HIDE lower_third]', '[UI:CLOSE closet]',
+    ], on);
+    expect(withByLine).toEqual({
+      0: [], 2: ['Lower Third'], 3: ['Lower Third', 'Mail'], 4: ['Lower Third', 'Invitation'], 5: ['Invitation', 'Closet'], 6: ['Invitation'],
+    });
+    expect(used.map((u) => [u.name, u.kind])).toEqual([['Lower Third', 'overlay'], ['Mail', 'phone'], ['Invitation', 'overlay'], ['Closet', 'phone']]);
   });
 });

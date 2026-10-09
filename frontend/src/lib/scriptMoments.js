@@ -29,11 +29,13 @@ export const PHONE_VERBS = [
   { verb: 'OPEN', label: 'Opens' },
   { verb: 'CLICK', label: 'Taps' },
   { verb: 'SCROLL', label: 'Scrolls' },
+  { verb: 'CLOSE', label: 'Closes' },
 ];
-export const OVERLAY_VERBS = [{ verb: 'DISPLAY', label: 'Shows' }];
+// An overlay stays on screen from Shows until Hides (Task #2793).
+export const OVERLAY_VERBS = [{ verb: 'DISPLAY', label: 'Shows' }, { verb: 'HIDE', label: 'Hides' }];
 const VERB_LABELS = {
   OPEN: 'Opens', CLICK: 'Taps', TAP: 'Taps', SCROLL: 'Scrolls', DISPLAY: 'Shows', SHOW: 'Shows',
-  CLOSE: 'Closes', TYPE: 'Types', CHECK: 'Checks', CHECK_ITEM: 'Checks', NOTIFY: 'Notifies', SWIPE: 'Swipes',
+  CLOSE: 'Closes', HIDE: 'Hides', REMOVE: 'Hides', TYPE: 'Types', CHECK: 'Checks', CHECK_ITEM: 'Checks', NOTIFY: 'Notifies', SWIPE: 'Swipes',
   NOTIFICATION: 'Notification:', SELECT: 'Selects', HOVER: 'Hovers on', PULSE: 'Pulses', VOICE_ACTIVATE: 'Voice-activates',
 };
 export const verbLabel = (verb) => VERB_LABELS[String(verb || '').toUpperCase()]
@@ -80,6 +82,40 @@ export function resolveMoment(moment, { screens = [], overlays = [] } = {}) {
     .filter((c) => c.s > 0)
     .sort((a, b) => b.s - a.s)[0];
   return loose ? { kind: loose.o.kind, name: loose.o.name, url: loose.o.url } : null;
+}
+
+const OFF_VERBS = new Set(['HIDE', 'REMOVE', 'CLOSE']);
+
+/**
+ * What is on screen through a beat (Evoni, 2026-10-09: "some beats use
+ * multiple overlays and Lala's phone between lines within a beat. And certain
+ * overlays help build the full scene"; Task #2793). Walking the beat's lines
+ * in order: a moment that shows something puts it on screen, Hides / Closes
+ * takes it off, and Lala's phone is one screen at a time. Returns, per line
+ * index, the names on screen with that line's moment (itself excluded), and
+ * every screen or overlay the beat uses, in order of first appearance.
+ */
+export function beatOnScreen(lines = [], on = {}) {
+  const showing = new Map(); // name -> kind, in the order they came on
+  const withByLine = {};
+  const used = new Map();
+  lines.forEach((line, i) => {
+    const moment = parseMoment(line);
+    if (!moment) return;
+    const shown = resolveMoment(moment, on);
+    const name = shown ? shown.name : moment.target;
+    if (shown && !used.has(name)) used.set(name, shown);
+    if (OFF_VERBS.has(moment.verb)) {
+      showing.delete(name);
+    } else {
+      if (shown?.kind === 'phone') {
+        for (const [n, k] of showing) if (k === 'phone') showing.delete(n);
+      }
+      showing.set(name, shown?.kind || 'unknown');
+    }
+    withByLine[i] = [...showing.keys()].filter((n) => n !== name);
+  });
+  return { withByLine, used: [...used.entries()].map(([name, s]) => ({ name, kind: s.kind, url: s.url })) };
 }
 
 /** The UI line a picker writes: the verb and the screen's or overlay's key. */
