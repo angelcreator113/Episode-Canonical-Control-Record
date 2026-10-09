@@ -253,3 +253,17 @@
    panel's small caps and the empty card's title keep their size. */
 .esp .esp-side-title { font-size: 12px !important; }
 .esp .esp-empty-title { font-size: 17px !important; }
+
+/* Several moments in a beat: placed between lines, on screen together, and
+   what builds the scene (Task #2793). */
+.esp-moment-with { font-size: 11px; color: var(--lala-lavender-text); }
+.esp-picker-where { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; font-size: 11px; color: var(--lala-ink-muted); }
+.esp-picker-where select { width: 100%; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 13px; }
+.esp-picker-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+.esp-picker-added { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--success-text); }
+.esp-build { margin: 0 0 10px; }
+.esp-build-title { display: block; margin-bottom: 4px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp-build-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.esp-build-item { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; font-size: 10px; color: var(--text-primary); text-align: center; overflow-wrap: anywhere; }
+.esp-build-item img, .esp-build-item svg { width: 64px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--accent-subtle); color: var(--lala-lavender-text); }
+.esp-build-item.is-scene img { outline: 2px solid var(--lala-lavender); }

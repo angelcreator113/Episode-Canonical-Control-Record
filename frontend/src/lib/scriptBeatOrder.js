@@ -76,6 +76,22 @@ export function appendLine(scriptText, beatIndex, line) {
   return join({ ...split, sections });
 }
 
+// The script with `line` put after line `afterIndex` of the beat at position
+// `beatIndex` (lines counted as moveLine counts them; -1 puts it first, past
+// the end puts it last), for a moment between two lines (Task #2793).
+export function insertLine(scriptText, beatIndex, afterIndex, line) {
+  const split = splitSections(scriptText);
+  const text = String(line || '').trim();
+  if (!inRange(beatIndex, split.sections.length) || !text) return scriptText;
+  const [header, ...rest] = split.sections[beatIndex].split('\n');
+  const lines = rest.filter((l) => l.trim());
+  const at = Math.max(0, Math.min(lines.length, Number.isInteger(afterIndex) ? afterIndex + 1 : lines.length));
+  lines.splice(at, 0, text);
+  const sections = split.sections.slice();
+  sections[beatIndex] = [header, ...lines].join('\n');
+  return join({ ...split, sections });
+}
+
 // Where a dragged item lands: dropping on the top half of a target puts it
 // before the target, on the bottom half after it. Returns the index the
 // item ends up at once it is taken out of its old place.

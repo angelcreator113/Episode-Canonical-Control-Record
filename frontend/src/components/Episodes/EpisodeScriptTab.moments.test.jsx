@@ -26,6 +26,7 @@ const SCREENS = [
   { id: 'mail', name: 'Mail', category: 'phone_screen', generated: true, url: 'https://x/mail.png' },
   { id: 'closet', name: 'Closet', category: 'phone_screen', generated: true, url: 'https://x/closet.png' },
   { id: 'mail_icon_badge', name: 'Mail badge', category: 'phone_icon', url: 'https://x/badge.png' },
+  { id: 'lower_third', name: 'Lower Third', category: 'production', generated: true, url: 'https://x/lower.png' },
 ];
 const OVERLAYS = { wardrobe: [
   { key: 'look_sculpted_dress', label: 'Sculpted Dress', category: 'dress', wardrobe_id: 'w1', image_url: 'https://x/dress.png' },
@@ -86,6 +87,9 @@ describe('Script tab: what is on screen in each beat', () => {
     fireEvent.click(within(picker).getByTestId('script-pick-phone-closet'));
     fireEvent.click(within(picker).getByRole('button', { name: 'Scrolls' }));
     fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    // It stays open for the next one (Task #2793); Done closes it.
+    expect(within(picker).getByTestId('script-moment-added').textContent).toBe('Added: Scrolls Closet');
+    fireEvent.click(within(picker).getByTestId('script-moment-done'));
     expect(screen.queryByTestId('script-moment-picker')).toBeNull();
     const moments = within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment');
     expect(moments[moments.length - 1].textContent).toContain('Scrolls Closet');
@@ -130,5 +134,67 @@ describe('Script tab: what is on screen in each beat', () => {
     const added = moments[moments.length - 1];
     expect(added.textContent).toContain('Shows Sculpted Dress');
     expect(added.querySelector('img').getAttribute('src')).toBe('https://x/dress.png');
+  });
+
+  test("the show's production overlays are in their own group, and a line names them (Task #2793)", async () => {
+    renderTab();
+    await screen.findByTestId('script-picture-4');
+    fireEvent.click(screen.getByTestId('script-add-moment-4'));
+    const picker = screen.getByTestId('script-moment-picker');
+    await waitFor(() => expect(within(picker).getByTestId('script-pick-overlay-lower_third')).toBeTruthy());
+    expect(picker.textContent).toContain('Production overlays');
+    // A production overlay is not a phone screen.
+    expect(within(picker).queryByTestId('script-pick-phone-lower_third')).toBeNull();
+    fireEvent.click(within(picker).getByTestId('script-pick-overlay-lower_third'));
+    fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    const moments = within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment');
+    const added = moments[moments.length - 1];
+    expect(added.textContent).toContain('On screen');
+    expect(added.textContent).toContain('Shows Lower Third');
+    expect(added.querySelector('img').getAttribute('src')).toBe('https://x/lower.png');
+  });
+
+  test('a moment goes between two lines, and the next one after it (Task #2793)', async () => {
+    vi.mocked(api.put).mockImplementation(async (url, body) => ({ data: { data: { script_content: body.script_content } } }));
+    renderTab();
+    await screen.findByTestId('script-picture-4');
+    fireEvent.click(screen.getByTestId('script-add-moment-4'));
+    const picker = screen.getByTestId('script-moment-picker');
+    await waitFor(() => expect(within(picker).getByTestId('script-pick-overlay-lower_third')).toBeTruthy());
+    fireEvent.click(within(picker).getByTestId('script-pick-overlay-lower_third'));
+    const where = within(picker).getByTestId('script-moment-where');
+    expect([...where.options].map((o) => o.textContent)).toEqual(['Lala: Mail!', 'Taps Mail', 'The end of the beat']);
+    fireEvent.change(where, { target: { value: '0' } });
+    fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    fireEvent.click(within(picker).getByTestId('script-pick-overlay-look_sculpted_dress'));
+    fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    fireEvent.click(within(picker).getByTestId('script-moment-done'));
+    fireEvent.click(within(screen.getByTestId('script-head')).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    expect(vi.mocked(api.put).mock.calls[0][1].script_content.split('\n\n')[0]).toBe(
+      '## BEAT: 4 · Interruption Pulse 1\nLala: Mail!\n[UI:DISPLAY lower_third]\n[UI:DISPLAY look_sculpted_dress]\n[UI:CLICK MailIcon]',
+    );
+  });
+
+  test('overlays stay on screen together until hidden, and build the scene (Task #2793)', async () => {
+    const script = '## BEAT: 4 · Interruption Pulse 1\n[UI:DISPLAY lower_third]\nLala: Mail!\n[UI:DISPLAY look_sculpted_dress]\n[UI:CLICK MailIcon]\n[UI:HIDE lower_third]\n[UI:OPEN closet]';
+    render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: [] }} show={{ id: 'show-1' }} /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('script-build-4')).toBeTruthy());
+    const cards = within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment');
+    expect(cards.map((c) => c.querySelector('.esp-moment-what').textContent)).toEqual(
+      ['Shows Lower Third', 'Shows Sculpted Dress', 'Taps Mail', 'Hides Lower Third', 'Opens Closet'],
+    );
+    expect(cards.map((c) => c.querySelector('[data-testid=script-moment-with]')?.textContent || '')).toEqual([
+      '',
+      'With: Lower Third',
+      'With: Lower Third, Sculpted Dress',
+      'With: Sculpted Dress, Mail',
+      // The phone shows one screen at a time: Closet replaces Mail.
+      'With: Sculpted Dress',
+    ]);
+    const build = screen.getByTestId('script-build-4');
+    expect([...build.querySelectorAll('.esp-build-item span')].map((n) => n.textContent)).toEqual(
+      ['Scene', 'Lower Third', 'Sculpted Dress', 'Mail', 'Closet'],
+    );
   });
 });

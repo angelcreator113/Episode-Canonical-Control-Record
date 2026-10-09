@@ -7,9 +7,9 @@ import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIc
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs } from '../../lib/episodeScript';
-import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, PHONE_VERBS, OVERLAY_VERBS, EXPECTED_ON_SCREEN } from '../../lib/scriptMoments';
-import { isScreen } from '../../lib/overlayUtils';
+import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, PHONE_VERBS, OVERLAY_VERBS, EXPECTED_ON_SCREEN } from '../../lib/scriptMoments';
+import { isScreen, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
 
@@ -117,7 +117,7 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen }) {
+function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -160,7 +160,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
           {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
-      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} />}
+      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} />}
       {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
     </div>
@@ -169,7 +169,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
 
 // A moment on screen in the script: what the phone or an overlay shows, with
 // its picture, so the beat reads the way it will play (Task #2789).
-function MomentCard({ moment, shown }) {
+function MomentCard({ moment, shown, alongside = [] }) {
   const Icon = shown?.kind === 'overlay' ? ImageIcon : Smartphone;
   return (
     <div className={`esp-moment is-${shown ? shown.kind : 'unknown'}`} data-testid="script-moment">
@@ -178,6 +178,7 @@ function MomentCard({ moment, shown }) {
         <span className="esp-moment-kind">{shown?.kind === 'overlay' ? 'On screen' : "Lala's phone"}</span>
         <span className="esp-moment-what">{verbLabel(moment.verb)} {shown ? shown.name : moment.target}</span>
         {!shown && <span className="esp-moment-missing">No screen or overlay by this name yet</span>}
+        {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
       </span>
     </div>
   );
@@ -186,8 +187,20 @@ function MomentCard({ moment, shown }) {
 // Add a moment to a beat: a Lala's Phone screen or one of the episode's
 // overlays, from their pictures, and what happens with it. The line goes at
 // the end of the beat; it moves like any line, and Save keeps it.
-function MomentPicker({ screens, overlays, look = [], onAdd, onClose }) {
+// A line as the picker's "Put it after" names it.
+function lineLabel(line, on) {
+  const p = parseLine(line);
+  if (!p || p.hidden) return null;
+  const text = p.type === 'moment' ? `${verbLabel(p.verb)} ${resolveMoment(p, on)?.name || p.target}`
+    : p.type === 'dialogue' ? `${p.speaker}: ${p.text}` : p.text;
+  return text.length > 48 ? `${text.slice(0, 47)}…` : text;
+}
+
+function MomentPicker({ screens, overlays, look = [], production = [], lines = [], onScreen, onAdd, onClose }) {
   const [picked, setPicked] = useState(null);
+  // Where it goes: after a line of the beat, or at the end (Task #2793).
+  const [after, setAfter] = useState('end');
+  const [added, setAdded] = useState(null);
   const verbs = picked?.kind === 'overlay' ? OVERLAY_VERBS : PHONE_VERBS;
   const [verb, setVerb] = useState('OPEN');
   const pick = (item) => { setPicked(item); setVerb(item.kind === 'overlay' ? 'DISPLAY' : 'OPEN'); };
@@ -200,10 +213,11 @@ function MomentPicker({ screens, overlays, look = [], onAdd, onClose }) {
     </button>
   );
   const phoneItems = screens.map((s) => ({ kind: 'phone', key: s.id, name: s.name || s.id, url: s.url || null }));
-  const lookKeys = new Set(look.map((o) => o.key));
+  const ownGroup = new Set([...look, ...production].map((o) => o.key));
   const asOverlay = (o) => ({ kind: 'overlay', key: o.key, name: o.label || o.key, url: o.image_url || null });
-  const overlayItems = overlays.filter((o) => !lookKeys.has(o.key)).map(asOverlay);
+  const overlayItems = overlays.filter((o) => !ownGroup.has(o.key)).map(asOverlay);
   const lookItems = look.map(asOverlay);
+  const productionItems = production.map(asOverlay);
   return (
     <div className="esp-picker" data-testid="script-moment-picker" onClick={(e) => e.stopPropagation()}>
       <div className="esp-picker-head">
@@ -216,6 +230,8 @@ function MomentPicker({ screens, overlays, look = [], onAdd, onClose }) {
       {overlayItems.length ? <div className="esp-pick-grid">{overlayItems.map(tile)}</div> : <p className="esp-picker-empty">No overlays for this episode yet.</p>}
       <p className="esp-picker-group">Lala&apos;s look</p>
       {lookItems.length ? <div className="esp-pick-grid">{lookItems.map(tile)}</div> : <p className="esp-picker-empty">No wardrobe pieces approved for this episode yet. Lock the look on the Wardrobe tab.</p>}
+      <p className="esp-picker-group">Production overlays</p>
+      {productionItems.length ? <div className="esp-pick-grid">{productionItems.map(tile)}</div> : <p className="esp-picker-empty">No production overlays yet. Make them in the show&apos;s Overlays.</p>}
       {picked && (
         <div className="esp-picker-do">
           <span className="esp-picker-verbs" role="group" aria-label="What happens">
@@ -223,11 +239,28 @@ function MomentPicker({ screens, overlays, look = [], onAdd, onClose }) {
               <button key={v.verb} type="button" className={`esp-verb${verb === v.verb ? ' is-on' : ''}`} aria-pressed={verb === v.verb} onClick={() => setVerb(v.verb)}>{v.label}</button>
             ))}
           </span>
-          <button type="button" className="esp-btn-primary is-small" data-testid="script-moment-add" onClick={() => onAdd(momentLine(verb, picked.key))}>
+          <label className="esp-picker-where">
+            <span>Put it after</span>
+            <select data-testid="script-moment-where" value={after} onChange={(e) => setAfter(e.target.value)}>
+              {lines.map((l, i) => { const label = lineLabel(l, onScreen); return label ? <option key={i} value={String(i)}>{label}</option> : null; })}
+              <option value="end">The end of the beat</option>
+            </select>
+          </label>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-moment-add" onClick={() => {
+            const at = after === 'end' ? null : Number(after);
+            onAdd(momentLine(verb, picked.key), at);
+            setAdded(`${verbLabel(verb)} ${picked.name}`);
+            // The next one goes after this one.
+            if (at !== null) setAfter(String(at + 1));
+          }}>
             Add &ldquo;{verbLabel(verb)} {picked.name}&rdquo;
           </button>
         </div>
       )}
+      <div className="esp-picker-foot">
+        {added && <span className="esp-picker-added" role="status" data-testid="script-moment-added">Added: {added}</span>}
+        <button type="button" className="esp-btn is-small" data-testid="script-moment-done" onClick={onClose}>Done</button>
+      </div>
     </div>
   );
 }
@@ -239,6 +272,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const [zoomed, setZoomed] = useState(false);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
+  // What is on screen through the beat, line by line, and everything it uses (Task #2793).
+  const { withByLine, used } = beatOnScreen(beat.lines, onScreen);
   const [dropAt, setDropAt] = useState(null);
   const visibleLines = beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length;
   return (
@@ -297,6 +332,20 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           ) : (
             <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=scenes" onClick={(e) => e.stopPropagation()}>Open Scenes</Link></p>
           )}
+          {used.length > 0 && (
+            <div className="esp-build" data-testid={`script-build-${beat.number}`}>
+              <span className="esp-build-title">Builds the scene</span>
+              <span className="esp-build-strip">
+                {picture && <span className="esp-build-item is-scene"><img src={picture} alt="" loading="lazy" /><span>Scene</span></span>}
+                {used.map((u) => (
+                  <span key={u.name} className={`esp-build-item is-${u.kind}`}>
+                    {u.url ? <img src={u.url} alt="" loading="lazy" /> : (u.kind === 'phone' ? <Smartphone size={16} aria-hidden="true" /> : <ImageIcon size={16} aria-hidden="true" />)}
+                    <span>{u.name}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
           {expects && (
             <p className="esp-beat-expects" data-testid={`script-expects-${beat.number}`}>
               <Smartphone size={13} aria-hidden="true" /> On screen: {expects.what}{expects.where ? ` · ${expects.where}` : ''}
@@ -304,10 +353,11 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           )}
           {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
-          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} />)}</div>
+          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} />)}</div>
           {picking && !beat.approved && (
-            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} onClose={() => setPicking(false)}
-              onAdd={(line) => { onAddMoment(beat.id, line); setPicking(false); }} />
+            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen}
+              onClose={() => setPicking(false)}
+              onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           <div className="esp-beat-foot">
             {beat.approved && <span className="esp-beat-locked-note">Locked: unlock to edit it, move it, or let Regenerate rewrite it.</span>}
@@ -377,15 +427,23 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [outfit, setOutfit] = useState([]);
   // What can be on screen in a beat (Task #2789): the episode's Lala's Phone
   // screens and its overlays, each with its picture.
-  const [onScreen, setOnScreen] = useState({ screens: [], overlays: [], look: [] });
+  const [onScreen, setOnScreen] = useState({ screens: [], overlays: [], look: [], production: [] });
   useEffect(() => {
     if (!episodeId) return undefined;
     let cancelled = false;
+    // The show's overlays: its phone screens, and its production overlays
+    // (Show Title, Lower Third…), each an overlay the script can show (Task #2793).
     const screens = showId
       ? api.get(`/api/v1/ui-overlays/${showId}?episode_id=${encodeURIComponent(episodeId)}`)
-        .then((res) => (Array.isArray(res.data?.data) ? res.data.data : []).filter((o) => isScreen(o) && o.id))
-        .catch((err) => { console.error('[EpisodeScript] phone screens load failed:', err); return []; })
-      : Promise.resolve([]);
+        .then((res) => {
+          const all = (Array.isArray(res.data?.data) ? res.data.data : []).filter((o) => o && o.id);
+          return {
+            phone: all.filter(isScreen),
+            production: all.filter(isProduction).map((o) => ({ key: o.id, label: o.name || o.id, image_url: o.url || null })),
+          };
+        })
+        .catch((err) => { console.error('[EpisodeScript] show overlays load failed:', err); return { phone: [], production: [] }; })
+      : Promise.resolve({ phone: [], production: [] });
     // The episode's overlays, and its look's approved wardrobe pieces, each an overlay too (Task #2791).
     const overlays = api.get(`/api/v1/episodes/${episodeId}/overlays`)
       .then((res) => {
@@ -394,7 +452,7 @@ export default function EpisodeScriptTab({ episode, show }) {
       })
       .catch((err) => { console.error('[EpisodeScript] overlays load failed:', err); return { pieces: [], look: [] }; });
     Promise.all([screens, overlays]).then(([s, o]) => {
-      if (!cancelled) setOnScreen({ screens: s, overlays: [...o.pieces, ...o.look], look: o.look });
+      if (!cancelled) setOnScreen({ screens: s.phone, overlays: [...o.pieces, ...o.look, ...s.production], look: o.look, production: s.production });
     });
     return () => { cancelled = true; };
   }, [episodeId, showId]);
@@ -487,10 +545,10 @@ export default function EpisodeScriptTab({ episode, show }) {
   };
 
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
-  const handleAddMoment = (beatId, line) => {
+  const handleAddMoment = (beatId, line, after = null) => {
     const at = beats.findIndex(b => b.id === beatId);
     if (at < 0 || beats[at].approved) return;
-    const next = appendLine(scriptText, at, line);
+    const next = after === null ? appendLine(scriptText, at, line) : insertLine(scriptText, at, after, line);
     if (next !== scriptText) { setScriptText(next); setDevScript(next); }
   };
 
