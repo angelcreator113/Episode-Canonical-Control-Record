@@ -178,4 +178,20 @@ describe('EventDocuments', () => {
     expect(row.textContent).toContain('Overlay out of date until approved');
     expect(screen.queryByTestId('evd-make-overlay-shopping_list')).toBeNull();
   });
+
+  test('with no pieces passed (the episode\'s Overlays tab), the list adds up the look the server reads (Task #2787)', async () => {
+    const approved = { ...SHOP, status: 'approved', overlay: { url: 'https://x/list.png', version: 1, look_total: 420 } };
+    api.get.mockResolvedValue({ data: { success: true, data: {
+      shopping_list: approved, career_plan: null, balance: 1500,
+      look: { state: 'locked', total: 570, pieces: [
+        { name: 'Sculpted Dress', category: 'dress', coin_cost: 420, charge: { category: 'wardrobe_purchase', amount: 420 }, free_because: null },
+        { name: 'Pearl Choker', category: 'jewelry', coin_cost: 150, charge: { category: 'wardrobe_purchase', amount: 150 }, free_because: null },
+      ] },
+    } } });
+    render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} />);
+    await waitFor(() => expect(screen.getByTestId('evd-shopping-total').textContent).toBe('Total 🪙 570 / 1,500 coins'));
+    // Drawn with 420, the look now costs 570: the image is out of date and can be redrawn.
+    expect(screen.getByTestId('evd-overlay-shopping_list').textContent).toContain('Overlay out of date: the look changed');
+    expect(screen.getByTestId('evd-make-overlay-shopping_list')).toBeTruthy();
+  });
 });

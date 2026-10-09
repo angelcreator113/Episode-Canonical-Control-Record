@@ -78,7 +78,7 @@ function placedBeat(placement) {
  * @param {object} input.placements  — { [asset_id]: timeline_placements row }
  * @param {object} input.estimates   — { invitation } image estimate
  */
-function overlayPieces({ title, invitation, event, placements = {}, estimates = {} }) {
+function overlayPieces({ title, invitation, event, placements = {}, estimates = {}, lookTotals = {} }) {
   const beatOf = (assetId) => (assetId ? placedBeat(placements[assetId]) : null);
   const overlay = title?.overlay || null;
   const card = title?.card || null;
@@ -129,7 +129,7 @@ function overlayPieces({ title, invitation, event, placements = {}, estimates = 
     },
   };
 
-  return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event)];
+  return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event, lookTotals)];
 }
 
 const DOCUMENT_PIECES = Object.freeze([
@@ -138,8 +138,12 @@ const DOCUMENT_PIECES = Object.freeze([
 ]);
 const DOC_STATUS = Object.freeze({ current: 'approved', outdated: 'outdated', not_made: 'not_made' });
 
-/** The event's documents as pieces: made (free) on approval in the Event Package. Pure. */
-function documentPieces(event) {
+/**
+ * The event's documents as pieces: made (free) on approval in the Event
+ * Package. lookTotals.shopping_list: the list's total with the look as it is
+ * now; a shopping list drawn with another total reads outdated. Pure.
+ */
+function documentPieces(event, lookTotals = {}) {
   if (!event?.id) return [];
   const docs = readDocuments(event);
   return DOCUMENT_PIECES.map(({ type, key, label }) => {
@@ -147,7 +151,7 @@ function documentPieces(event) {
     return {
       key,
       label,
-      status: DOC_STATUS[overlayState(doc)],
+      status: DOC_STATUS[overlayState(doc, lookTotals[type] ?? null)],
       image_url: doc?.overlay?.url || null,
       asset_id: doc?.overlay?.asset_id || null,
       beat: null,
@@ -179,7 +183,7 @@ async function loadEpisodeRow(sequelize, episodeId) {
 
 async function loadAnchorEvent(sequelize, episodeId) {
   const [event] = await sequelize.query(
-    `SELECT id, show_id, name, canon_consequences FROM world_events
+    `SELECT id, show_id, name, canon_consequences, outfit_pieces, used_in_episode_id FROM world_events
       WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
       ORDER BY updated_at DESC LIMIT 1`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
@@ -219,6 +223,28 @@ async function loadPlacements(sequelize, episodeId, assetIds) {
   return byAsset;
 }
 
+/** The event's saved outfit as a list (the column may come back as text). */
+function outfitPiecesOf(event) {
+  const raw = event?.outfit_pieces;
+  if (typeof raw !== 'string') return Array.isArray(raw) ? raw : [];
+  try { return JSON.parse(raw); } catch (err) {
+    console.error('[episodeOverlays] outfit_pieces parse failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * The shopping list's total with the look as it is now, for an approved list
+ * whose overlay recorded the total it was drawn with; {} otherwise.
+ */
+async function shoppingListTotals(sequelize, event) {
+  const doc = event ? readDocuments(event).shopping_list : null;
+  if (!doc?.overlay?.url || doc.overlay.look_total == null) return {};
+  const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
+  const { look } = await shoppingListContext(sequelize, { ...event, outfit_pieces: outfitPiecesOf(event) });
+  return look ? { shopping_list: shoppingLines(doc, look.pieces).total } : {};
+}
+
 /** GET /episodes/:id/overlays. null when the episode does not exist. */
 async function getEpisodeOverlays(models, episodeId) {
   const { sequelize } = models;
@@ -235,6 +261,7 @@ async function getEpisodeOverlays(models, episodeId) {
   const pieces = overlayPieces({
     title, invitation, event, placements,
     estimates: { invitation: estimateInvitation() },
+    lookTotals: await shoppingListTotals(sequelize, event),
   });
   return {
     episode_id: ep.id,

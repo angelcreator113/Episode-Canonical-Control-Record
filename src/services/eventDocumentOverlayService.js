@@ -89,21 +89,40 @@ function documentByline(event) {
   return [who && `for ${who}`, when].filter(Boolean).join(' · ');
 }
 
-/** The shopping list's lines with the look's pieces (lib/eventDocuments.shoppingLines). */
+// What a piece costs on the list, and whether Lala has it. A piece from the
+// episode's look (episodeLookCharges.episodeLook) carries the charge Finalize
+// books for it, so the list adds up what the Money page and Finalize do: a
+// piece owned or already bought, gifted or borrowed costs nothing; a rented
+// one its rental (Evoni, 2026-10-09: "Lala's shopping list overlay is not
+// showing the correct total for everything"). A piece without one (the
+// event's outfit before Start Episode) costs its coin_cost unless owned.
+function pieceCost(piece) {
+  if (piece && 'charge' in piece) return piece.charge ? Number(piece.charge.amount) || 0 : 0;
+  return piece && piece.is_owned !== true ? Number(piece.coin_cost) || 0 : 0;
+}
+function pieceHad(piece) {
+  if (piece && 'charge' in piece) return !piece.charge && piece.free_because !== 'free';
+  return piece?.is_owned === true;
+}
+
+/**
+ * The shopping list's lines with the look's pieces (lib/eventDocuments.
+ * shoppingLines). Each item takes the first piece for its line; a piece no
+ * item takes is a line of its own, so the total is every piece the look
+ * costs, not only the ones the list names.
+ */
 function shoppingLines(doc, outfitPieces = []) {
   const { listSlotOf } = require('./todoListService');
-  const pieces = Array.isArray(outfitPieces) ? outfitPieces : [];
+  const pieces = Array.isArray(outfitPieces) ? outfitPieces.filter(Boolean) : [];
   const used = new Set();
+  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0 });
   const lines = (doc?.items || []).map((item) => {
-    const index = pieces.findIndex((p, i) => !used.has(i) && listSlotOf(p?.category || p?.clothing_category) === item.slot);
-    const piece = index >= 0 ? pieces[index] : null;
-    if (piece) used.add(index);
-    return {
-      label: item.label,
-      piece,
-      owned: piece ? piece.is_owned === true : false,
-      cost: piece && piece.is_owned !== true ? Number(piece.coin_cost) || 0 : 0,
-    };
+    const index = pieces.findIndex((p, i) => !used.has(i) && listSlotOf(p.category || p.clothing_category) === item.slot);
+    if (index >= 0) used.add(index);
+    return line({ slot: item.slot, label: item.label }, index >= 0 ? pieces[index] : null);
+  });
+  pieces.forEach((p, i) => {
+    if (!used.has(i)) lines.push(line({ slot: 'extra', label: p.name || 'Another piece', extra: true }, p));
   });
   return { lines, total: lines.reduce((n, l) => n + l.cost, 0) };
 }
@@ -128,7 +147,7 @@ function wrap(ctx, text, width, maxLines = 2) {
 }
 
 /** Draws the list at height H; returns where its writing ends. */
-function drawShoppingList(ctx, H, { doc, event, balance }) {
+function drawShoppingList(ctx, H, { doc, event, balance, pieces }) {
   const ROW = 56;
   ctx.fillStyle = COLORS.pinkPaper;
   ctx.fillRect(0, 0, WIDTH, H);
@@ -147,9 +166,9 @@ function drawShoppingList(ctx, H, { doc, event, balance }) {
   ctx.font = '34px Caveat';
   ctx.fillText(documentByline(event), 110, 182);
 
-  const { lines, total } = shoppingLines(doc, event?.outfit_pieces);
+  const { lines, total } = shoppingLines(doc, pieces || event?.outfit_pieces);
   let y = 182 + ROW;
-  for (const l of lines.slice(0, 14)) {
+  for (const l of lines.slice(0, 16)) {
     ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 3;
     ctx.strokeRect(110, y - 30, 30, 30);
     if (l.owned) { ctx.font = 'bold 34px Caveat'; ctx.fillStyle = COLORS.ink; ctx.fillText('✓', 113, y - 4); }
@@ -267,15 +286,12 @@ async function makeDocumentOverlay(models, { event, type, doc, deliverables = []
   const { sequelize } = models;
   if (!doc || doc.status !== 'approved') return null;
   let balance = null;
+  let look = null;
   if (type === 'shopping_list') {
-    try {
-      const { getCurrentBalance } = require('./financialTransactionService');
-      balance = await getCurrentBalance(sequelize, event.show_id);
-    } catch (err) {
-      console.error('[DocumentOverlay] balance read failed (the total shows without it):', err.message);
-    }
+    ({ look, balance } = await shoppingListContext(sequelize, event));
   }
-  const buffer = renderDocument(type, { doc, event, balance, deliverables });
+  const pieces = look ? look.pieces : null;
+  const buffer = renderDocument(type, { doc, event, balance, deliverables, pieces });
   if (!buffer) return null;
   const url = await storePng(buffer, event.id, type);
   const assetId = crypto.randomUUID();
@@ -298,19 +314,54 @@ async function makeDocumentOverlay(models, { event, type, doc, deliverables = []
           AND metadata->>'event_id' = :eventId AND metadata->>'document_type' = :type`,
       { replacements: { assetId, eventId: event.id, type }, transaction });
   });
-  return { asset_id: assetId, url, version: doc.version, made_at: madeAt };
+  const drawn = { asset_id: assetId, url, version: doc.version, made_at: madeAt };
+  // The total it was drawn with: a look that changes after approval leaves
+  // the image out of date (overlayState), and Approve draws it again.
+  if (type === 'shopping_list') drawn.look_total = shoppingLines(doc, pieces || event?.outfit_pieces).total;
+  return drawn;
 }
 
-/** An overlay is current when it was drawn from the document as it stands (approved, same version). */
-function overlayState(doc) {
+/**
+ * The look the shopping list reads, and Lala's balance: the episode's look
+ * as Finalize charges it (episodeLookCharges.episodeLook; the episode the
+ * event started, else the event's own outfit), and her current coins. Each
+ * read that fails leaves its part null, logged.
+ */
+async function shoppingListContext(sequelize, event) {
+  let look = null;
+  let balance = null;
+  try {
+    const { episodeLook } = require('./episodeLookCharges');
+    look = await episodeLook(sequelize, { episodeId: event.used_in_episode_id || null, event, showId: event.show_id });
+  } catch (err) {
+    console.error('[DocumentOverlay] look read failed (the list reads the event outfit):', err.message);
+  }
+  try {
+    const { getCurrentBalance } = require('./financialTransactionService');
+    balance = await getCurrentBalance(sequelize, event.show_id);
+  } catch (err) {
+    console.error('[DocumentOverlay] balance read failed (the total shows without it):', err.message);
+  }
+  return { look, balance };
+}
+
+/**
+ * An overlay is current when it was drawn from the document as it stands
+ * (approved, same version) and, for a shopping list given the look's total
+ * now, with that total.
+ */
+function overlayState(doc, lookTotal = null) {
   if (!doc?.overlay?.url) return 'not_made';
-  return doc.status === 'approved' && doc.overlay.version === doc.version ? 'current' : 'outdated';
+  if (doc.status !== 'approved' || doc.overlay.version !== doc.version) return 'outdated';
+  if (lookTotal != null && doc.overlay.look_total != null && Number(doc.overlay.look_total) !== Number(lookTotal)) return 'outdated';
+  return 'current';
 }
 
 module.exports = {
   drawingAvailable,
   renderDocument,
   shoppingLines,
+  shoppingListContext,
   documentByline,
   makeDocumentOverlay,
   overlayState,
