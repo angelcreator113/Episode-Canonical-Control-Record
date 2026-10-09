@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs } from '../../lib/episodeScript';
@@ -265,10 +265,71 @@ function MomentPicker({ screens, overlays, look = [], production = [], lines = [
   );
 }
 
+// Who a new line is for, and how it is written (the script's own shapes:
+// "Lala: …", "Me: …" for Prime, "(…)" for an action, plain narration).
+const LINE_KINDS = [
+  { key: 'Lala', label: 'Lala', write: (t) => `Lala: ${t}` },
+  { key: 'Prime', label: 'Prime', write: (t) => `Me: ${t}` },
+  { key: 'Kelli', label: 'Kelli', write: (t) => `Kelli: ${t}` },
+  { key: 'Guest', label: 'Guest', write: (t) => `Guest: ${t}` },
+  { key: 'action', label: 'Action', write: (t) => (/^\(.*\)$/.test(t) ? t : `(${t.replace(/^\(|\)$/g, '')})`) },
+  { key: 'narration', label: 'Narration', write: (t) => t },
+];
+
+// Add a line anywhere in a beat (Evoni, 2026-10-09; Task #2795): who it is
+// for, the words, and where it goes. It stays open for the next line, which
+// goes after this one; Save keeps them.
+function LineAdder({ lines = [], onScreen, onAdd, onClose }) {
+  const [kind, setKind] = useState('Lala');
+  const [text, setText] = useState('');
+  const [after, setAfter] = useState('end');
+  const [added, setAdded] = useState(0);
+  const words = text.trim().replace(/\s+/g, ' ');
+  const add = () => {
+    if (!words) return;
+    const at = after === 'end' ? null : Number(after);
+    onAdd(LINE_KINDS.find((k) => k.key === kind).write(words), at);
+    setText('');
+    setAdded((n) => n + 1);
+    if (at !== null) setAfter(String(at + 1));
+  };
+  return (
+    <div className="esp-picker esp-adder" data-testid="script-line-adder" onClick={(e) => e.stopPropagation()}>
+      <div className="esp-picker-head">
+        <span className="esp-picker-title">Add a line</span>
+        <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
+      </div>
+      <span className="esp-picker-verbs" role="group" aria-label="Who">
+        {LINE_KINDS.map((k) => (
+          <button key={k.key} type="button" className={`esp-verb${kind === k.key ? ' is-on' : ''}`} aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>
+        ))}
+      </span>
+      <textarea className="esp-line-input esp-adder-text" data-testid="script-line-adder-text" aria-label="The line" rows={3} value={text}
+        placeholder={kind === 'action' ? 'What happens' : kind === 'narration' ? 'Narration' : `What ${LINE_KINDS.find((k) => k.key === kind).label} says`}
+        onChange={(e) => setText(e.target.value)} />
+      <div className="esp-picker-do">
+        <label className="esp-picker-where">
+          <span>Put it after</span>
+          <select data-testid="script-line-adder-where" value={after} onChange={(e) => setAfter(e.target.value)}>
+            {lines.map((l, i) => { const label = lineLabel(l, onScreen); return label ? <option key={i} value={String(i)}>{label}</option> : null; })}
+            <option value="end">The end of the beat</option>
+          </select>
+        </label>
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-line-adder-add" disabled={!words} onClick={add}>Add line</button>
+      </div>
+      <div className="esp-picker-foot">
+        {added > 0 && <span className="esp-picker-added" role="status">{added === 1 ? 'Line added' : `${added} lines added`}</span>}
+        <button type="button" className="esp-btn is-small" data-testid="script-line-adder-done" onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [zoomed, setZoomed] = useState(false);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
@@ -354,6 +415,10 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
           <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} />)}</div>
+          {adding && !beat.approved && (
+            <LineAdder lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
+              onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
+          )}
           {picking && !beat.approved && (
             <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen}
               onClose={() => setPicking(false)}
@@ -367,7 +432,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
-            {!beat.approved && !picking && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(true); }}><Smartphone size={14} aria-hidden="true" /> Phone / overlay</button>}
+            {!beat.approved && !adding && <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding(true); }}><Plus size={14} aria-hidden="true" /> Line</button>}
+            {!beat.approved && !picking && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking(true); }}><Smartphone size={14} aria-hidden="true" /> Phone / overlay</button>}
             {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={regenerating} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
             <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>

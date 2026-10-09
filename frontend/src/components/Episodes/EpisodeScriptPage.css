@@ -267,3 +267,7 @@
 .esp-build-item { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; font-size: 10px; color: var(--text-primary); text-align: center; overflow-wrap: anywhere; }
 .esp-build-item img, .esp-build-item svg { width: 64px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--accent-subtle); color: var(--lala-lavender-text); }
 .esp-build-item.is-scene img { outline: 2px solid var(--lala-lavender); }
+
+/* Add a line anywhere in a beat (Task #2795). */
+.esp-adder .esp-picker-verbs { margin: 8px 0; }
+.esp-adder-text { margin-bottom: 4px; }
