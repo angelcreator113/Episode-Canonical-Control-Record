@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../../services/api';
@@ -20,6 +20,16 @@ export const getWorldMapApi = () =>
   api.get('/api/v1/world/map').then((r) => r.data);
 
 const DreamMap = lazy(() => import('../DreamMap'));
+
+// The element that scrolls the page around `el`: <body> on a phone,
+// .app-content on a desktop (hooks/useScrolledPast's pageScrollTop).
+export function scrollerOf(el) {
+  for (let n = el?.parentElement; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement || document.documentElement;
+}
 
 const BEAT_NAMES = [
   { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: 'var(--primary-text)' },
@@ -255,6 +265,30 @@ export default function EpisodeScriptTab({ episode, show }) {
   // The outfit locked on the Wardrobe tab, which the script writer reads (null: could not be read).
   const [outfit, setOutfit] = useState([]);
 
+  // Evoni, 2026-10-09 (Task #2783): on a phone, tapping in the Script tab
+  // jumped the page. One beat is open at a time, so opening a beat closes
+  // the one above it and everything below moves up by that beat's height;
+  // the episode page turns scroll anchoring off (EpisodeDetail.css) and iOS
+  // Safari has none, so nothing put the tapped beat back. A tap inside a
+  // beat now notes where that beat sits on screen, and the render it causes
+  // scrolls the page so the beat is where it was.
+  const pinRef = useRef(null);
+  const pinTappedBeat = (e) => {
+    const el = e.target?.closest?.('.esp-beat');
+    if (!el) return;
+    const pin = { el, top: el.getBoundingClientRect().top };
+    pinRef.current = pin;
+    // The pin holds for the tap's renders only (a moved beat lands on the
+    // second one, after the script is parsed again), never a later render.
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (pinRef.current === pin) pinRef.current = null; }));
+  };
+  useLayoutEffect(() => {
+    const pin = pinRef.current;
+    if (!pin || !pin.el.isConnected) return;
+    const moved = pin.el.getBoundingClientRect().top - pin.top;
+    if (Math.abs(moved) >= 1) scrollerOf(pin.el).scrollTop += moved;
+  });
+
   // Load map data when map is opened
   useEffect(() => {
     if (!showMap) return;
@@ -464,7 +498,7 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   return (
     <div className="esp">
-    <div className="esp-main">
+    <div className="esp-main" onClickCapture={pinTappedBeat}>
       {toast && <div className={`esp-toast is-${toast.type === 'error' ? 'error' : 'success'}`} role="status">{toast.msg}</div>}
 
       {unsaved && (
