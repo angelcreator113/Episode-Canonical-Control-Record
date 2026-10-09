@@ -89,6 +89,18 @@ function parseLine(line) {
   return { type: 'narration', text: t };
 }
 
+/**
+ * The rewritten line in the original's shape: its speaker label and quotes
+ * kept, the new words inside. Null when nothing came back or nothing changed.
+ */
+export function rewrittenLine(original, words) {
+  const text = String(words || '').trim().replace(/^(Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*/, '').replace(/^["“]|["”]$/g, '').trim();
+  if (!text) return null;
+  const m = String(original || '').match(/^(\s*(?:Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*)(["“]?)/);
+  const next = m ? `${m[1]}${m[2] ? `"${text}"` : text}` : text;
+  return next.trim() === String(original || '').trim() ? null : next;
+}
+
 function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
@@ -338,17 +350,32 @@ export default function EpisodeScriptTab({ episode, show }) {
     setScriptText(preamble ? `${preamble}\n\n${body}` : body);
   };
 
+  // Rewrite one line (Evoni, 2026-10-08: "when i click rewrite in script
+  // nothing happens? ... is it reading what i already have?"). The rewrite
+  // reads the whole beat around the line, and keeps the line's speaker: the
+  // route returns the words only, and putting them in place of the whole
+  // line dropped "Prime:", so the line turned into narration and lost its
+  // Rewrite button. A failure says why.
   const handleRewriteLine = async (beatId, lineIndex, originalLine) => {
     const beat = beats.find(b => b.id === beatId);
     if (beat?.approved) return;
     setRewritingLine(`${beatId}-${lineIndex}`);
     try {
       const parsed = parseLine(originalLine);
-      const res = await api.post(`/api/v1/episode-brief/${episodeId}/rewrite-line`, { line: originalLine, speaker: parsed?.speaker || 'Prime', beatName: beat?.name, beatContext: scenePlan.find(p => p.beat_number === beat?.number)?.emotional_intent, showId });
-      handleEditLine(beatId, lineIndex, res.data.rewrittenLine);
-      flash('Line rewritten ✦', 'success');
-    } catch (err) { console.error('[EpisodeScript] rewrite failed:', err); flash('Rewrite failed', 'error'); }
-    finally { setRewritingLine(null); }
+      const res = await api.post(`/api/v1/episode-brief/${episodeId}/rewrite-line`, {
+        line: originalLine, speaker: parsed?.speaker || 'Prime', beatName: beat?.name,
+        beatContext: scenePlan.find(p => p.beat_number === beat?.number)?.emotional_intent,
+        beatLines: (beat?.lines || []).filter((l) => typeof l === 'string' && l.trim() && !parseLine(l)?.hidden),
+        showId,
+      });
+      const next = rewrittenLine(originalLine, res.data?.rewrittenLine);
+      if (!next) { flash('The rewrite came back the same; try again.', 'error'); return; }
+      handleEditLine(beatId, lineIndex, next);
+      flash('Line rewritten ✦ Save to keep it.', 'success');
+    } catch (err) {
+      console.error('[EpisodeScript] rewrite failed:', err);
+      flash(`Rewrite failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
+    } finally { setRewritingLine(null); }
   };
 
   // Approve = lock (Evoni, 2026-10-08). The lock is kept on the episode, so
