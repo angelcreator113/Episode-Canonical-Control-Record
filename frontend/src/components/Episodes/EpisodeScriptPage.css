@@ -89,6 +89,17 @@
 .esp-unsaved-banner-text { flex: 1 1 240px; min-width: 0; }
 .esp-error { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); font-size: 13px; }
 .esp-unsaved { color: var(--accent-dark); font-weight: 600; }
+.esp-waiting { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--accent-subtle); border: 1px solid var(--accent); color: var(--text-primary); font-size: 13px; }
+/* Save from anywhere in the script: it sticks to the bottom of the screen
+   while there are unsaved changes (Task #2785). */
+.esp-savebar { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 10px 14px; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--accent); box-shadow: var(--shadow-lg, 0 4px 16px rgba(0, 0, 0, 0.12)); font-size: 13px; }
+.esp-savebar-text { color: var(--accent-dark); font-weight: 600; }
+/* The episode page's wrappers clip sideways with overflow-x: hidden, which
+   makes each a scroll container that never scrolls, so a sticky bar sticks
+   to them and not to the screen. clip cuts the same overflow without being a
+   scroll container. Only while the Script tab is showing; other tabs keep
+   the wrappers as they are. */
+.ed-wrap:has(.esp-main), .ed-content:has(> .esp) { overflow-x: clip; }
 .esp-order-hint, .esp-raw-note { margin: 0 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
 
 /* Raw editor. */
@@ -138,6 +149,8 @@
 .esp-lock-btn { padding: 7px 18px; border: none; border-radius: 8px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 12px; font-weight: 700; cursor: pointer; }
 .esp-lock-btn.is-locked { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold); }
 .esp-lock-btn:disabled { cursor: wait; opacity: 0.7; }
+.esp-regen-btn { padding: 7px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-regen-btn:disabled { cursor: wait; opacity: 0.7; }
 
 /* A line: speaker in small caps, the words in the prose face. */
 .esp-line { padding: 6px 10px; border-radius: 8px; cursor: pointer; }

@@ -51,7 +51,10 @@ const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, 
   name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
 }]));
 
-async function generateGroundedScript(episodeId, showId, models) {
+// What the grounded prompt reads for an episode: brief, scene plan, franchise laws,
+// event, wardrobe, Lala's state and season, read the same way for the whole
+// script and for one beat.
+async function groundedScriptInputs(episodeId, showId, models) {
   const { EpisodeBrief, ScenePlan, SceneSet, FranchiseKnowledge, sequelize } = models;
 
   // 1. Load Episode Brief
@@ -149,18 +152,63 @@ async function generateGroundedScript(episodeId, showId, models) {
     console.error('[ScriptGen] season context failed (non-blocking):', err.message);
   }
 
-  // Build prompt
-  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext });
+  console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext };
+}
 
-  console.log(`[ScriptGen] Generating script for episode ${episodeId} with ${scenePlan.length} beats`);
+const MODELS = ['claude-sonnet-4-6'];
 
-  const response = await getClient().messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
-    messages: [{ role: 'user', content: prompt }],
+// A Sonnet call. The whole script tries once, as it always has (a second
+// 8000-token try doubles a wait that already runs long); one beat tries
+// twice, the retry the AI routes use.
+async function writeWith(prompt, maxTokens, attempts) {
+  let lastErr = null;
+  for (const model of MODELS) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const response = await getClient().messages.create({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] });
+        return response.content[0]?.text || '';
+      } catch (err) {
+        lastErr = err;
+        console.error(`[ScriptGen] ${model} attempt ${attempt} failed:`, err.message);
+      }
+    }
+  }
+  throw lastErr;
+}
+
+async function generateGroundedScript(episodeId, showId, models) {
+  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models));
+  return writeWith(prompt, 8000, 1);
+}
+
+// One beat's text from the writer's reply: the section under the beat's own
+// header, or the whole reply under that header when the header did not come
+// back. The header is always the canonical one. null when nothing came back.
+function beatFromReply(reply, beatNumber) {
+  const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
+  if (!canon) return null;
+  const { splitScriptBeats } = require('../utils/scriptBeatLocks');
+  const split = splitScriptBeats(String(reply || '').trim());
+  const own = split.beats.find((b) => b.number === beatNumber);
+  const body = own
+    ? own.text.split('\n').slice(1).join('\n')
+    : [split.preamble, ...split.beats.map((b) => b.text.split('\n').slice(1).join('\n'))].join('\n');
+  const lines = body.split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim());
+  if (!lines.length) return null;
+  return [beatHeader(canon), ...lines].join('\n');
+}
+
+// Evoni, 2026-10-09 (Task #2785): regenerate one beat, not the whole script.
+// The grounded prompt, the script as it stands, and the one beat to write
+// again; the reply is that beat, header first.
+async function generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript }) {
+  const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
+  if (!canon) throw new Error(`No canonical beat ${beatNumber}`);
+  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), {
+    only: { beat: canon, currentScript: String(currentScript || '') },
   });
-
-  return response.content[0]?.text || '';
+  return beatFromReply(await writeWith(prompt, 1500, 2), beatNumber);
 }
 
 // A10: every season story purpose, primary first, each with its thread.
@@ -178,7 +226,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }, { only = null } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -305,7 +353,13 @@ RULES:
 5. Stats only appear as [STAT:] tags
 6. End with a forward hook seeding the next episode
 
-Write the complete 14-beat script now. No preamble — just the script.`;
+${only ? `═══ THE SCRIPT AS IT STANDS ═══
+${only.currentScript.trim() || '(empty)'}
+
+═══ THIS TASK ═══
+Write ONLY beat ${only.beat.number} again, keeping it consistent with the beats before and after it as they stand above and not repeating what they already say. Start with its header line, exactly:
+${beatHeader(only.beat)}
+Return only that beat. No other beats, no preamble.` : 'Write the complete 14-beat script now. No preamble — just the script.'}`;
 }
 
-module.exports = { generateGroundedScript, buildScriptPrompt };
+module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply };

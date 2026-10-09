@@ -569,6 +569,42 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
   }
 });
 
+// ── REGENERATE ONE BEAT ───────────────────────────────────────────────────────
+// Evoni, 2026-10-09 (Task #2785): "what if I only want to regenerate a line
+// or a beat?" The grounded prompt writes one beat again against the script
+// as the page has it. Nothing is saved: the page puts the beat in place and
+// Save keeps it, as with a rewritten line. A locked beat is refused.
+
+router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { showId, script } = req.body;
+    const beatNumber = Number(req.body.beatNumber);
+    if (!showId || !SHOW_ID_RE.test(String(showId))) return res.status(400).json({ error: 'showId must be a show id (UUID)' });
+    if (!Number.isInteger(beatNumber) || beatNumber < 1 || beatNumber > 14) return res.status(400).json({ error: 'beatNumber must be 1-14' });
+    if (typeof script !== 'string' || script.length > 100000) return res.status(400).json({ error: 'script must be the script text (at most 100000 characters)' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
+    if (!brief) return res.status(400).json({ error: 'Episode Brief not found. Create the Brief first.' });
+    const episode = await Episode.findByPk(episodeId);
+    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    const { normalizeLockedBeats } = require('../utils/scriptBeatLocks');
+    if (normalizeLockedBeats(episode.script_locked_beats).includes(beatNumber)) {
+      return res.status(409).json({ error: `Beat ${beatNumber} is locked. Unlock it to regenerate it.`, code: 'BEAT_LOCKED' });
+    }
+
+    const { generateGroundedBeat } = require('../services/groundedScriptGeneratorService');
+    const models = require('../models');
+    const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script });
+    if (!beat) return res.status(502).json({ error: 'The writer sent back no lines for this beat; try again.' });
+    return res.json({ success: true, beatNumber, beat });
+  } catch (err) {
+    console.error('[RegenerateBeat] Error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── REWRITE SINGLE LINE (with Show Brain voice DNA) ───────────────────────────
 
 router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
