@@ -198,3 +198,62 @@ describe('Script tab: what is on screen in each beat', () => {
     );
   });
 });
+
+// Evoni, 2026-10-09 (Task #2801): "instead of lala's phone screens showing I
+// think we need to show the icons … some of them are one steps and some of
+// them are two steps."
+describe("Script tab: Lala's phone is its icons", () => {
+  const PHONE = [
+    { id: 'home', name: 'Home', category: 'phone_screen', is_home: true, generated: true, url: 'https://x/home.png', screen_links: [
+      { id: 'z1', label: 'Mail', target: 'mail', icon_overlay_id: 'mail_app' },
+      { id: 'z2', label: 'Closet', target: 'closet', icon_url: 'https://x/closet-icon.png' },
+    ] },
+    { id: 'mail', name: 'Mail', category: 'phone_screen', generated: true, url: 'https://x/mail.png', screen_links: [
+      { id: 'z3', label: 'Invite', target: 'letter' },
+    ] },
+    { id: 'letter', name: 'Letter', category: 'phone_screen', generated: true, url: 'https://x/letter.png' },
+    { id: 'closet', name: 'Closet', category: 'phone_screen', generated: true, url: 'https://x/closet.png' },
+    { id: 'settings', name: 'Settings', category: 'phone_screen', generated: true, url: 'https://x/settings.png' },
+    { id: 'mail_app', name: 'Mail', category: 'phone_icon', url: 'https://x/mail-icon.png' },
+  ];
+  beforeEach(() => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/ui-overlays/show-1')) return { data: { data: PHONE } };
+      if (url === '/api/v1/episodes/ep-1/overlays') return { data: { data: OVERLAYS } };
+      return { data: { data: [] } };
+    });
+  });
+
+  test('the picker shows the icons by the screen they sit on, a two-tap icon writes both taps', async () => {
+    vi.mocked(api.put).mockImplementation(async (url, body) => ({ data: { data: { script_content: body.script_content } } }));
+    renderTab();
+    await waitFor(() => expect(within(screen.getByTestId('script-beat-4')).getByTestId('script-moment').textContent).toContain('Taps Mail'));
+    // The script's own [UI:CLICK MailIcon] is the Mail icon, with its art, and opens Mail.
+    const tapped = within(screen.getByTestId('script-beat-4')).getByTestId('script-moment');
+    expect(tapped.querySelector('img').getAttribute('src')).toBe('https://x/mail-icon.png');
+    expect(within(tapped).getByTestId('script-moment-opens').textContent).toBe('On Home · Opens Mail');
+
+    fireEvent.click(screen.getByTestId('script-add-moment-4'));
+    const picker = screen.getByTestId('script-moment-picker');
+    const groups = within(picker).getAllByTestId('script-pick-icon-group');
+    expect(groups.map((g) => g.querySelector('.esp-picker-sub').textContent)).toEqual(['On the home screen (Home)', 'Inside Mail']);
+    expect(within(groups[0]).getByTestId('script-pick-icon-mail_app').textContent).toContain('→ Mail');
+    expect(within(groups[1]).getByTestId('script-pick-icon-invite').textContent).toContain('2 taps');
+    // Screens an icon opens are not listed again; the one no icon opens is.
+    expect(within(picker).queryByTestId('script-pick-phone-mail')).toBeNull();
+    expect(within(picker).getByTestId('script-pick-phone-settings')).toBeTruthy();
+
+    fireEvent.click(within(groups[1]).getByTestId('script-pick-icon-invite'));
+    expect(within(picker).queryByRole('button', { name: 'Opens' })).toBeNull();
+    expect(within(picker).getByTestId('script-moment-taps').textContent).toBe('1. Mail (opens Mail)  2. Invite (opens Letter)');
+    fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    expect(within(picker).getByTestId('script-moment-added').textContent).toBe('Added: Taps Mail → Invite');
+    fireEvent.click(within(picker).getByTestId('script-moment-done'));
+
+    fireEvent.click(within(screen.getByTestId('script-head')).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    expect(vi.mocked(api.put).mock.calls[0][1].script_content).toBe(
+      '## BEAT: 4 · Interruption Pulse 1\nLala: Mail!\n[UI:CLICK MailIcon]\n[UI:CLICK mail_app]\n[UI:CLICK invite]\n\n## BEAT: 5 · Reveal\nLala: An invite?\n[UI:DISPLAY InviteLetterOverlay]',
+    );
+  });
+});
