@@ -518,10 +518,16 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 
     const { generateGroundedScript } = require('../services/groundedScriptGeneratorService');
     const models = require('../models');
-    const generated = await generateGroundedScript(episodeId, showId, models);
     // Locked beats (utils/scriptBeatLocks.js): Regenerate rewrites only the
-    // unlocked beats; each locked one comes back word for word.
-    const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+    // unlocked beats; each locked one comes back word for word. The writer
+    // reads the locked beats so the new ones fit around them (Evoni,
+    // 2026-10-09: "If I regenerate does the script read the previous?").
+    const { scriptKeepingLocks, splitScriptBeats, normalizeLockedBeats } = require('../utils/scriptBeatLocks');
+    const lockedNumbers = normalizeLockedBeats(episodeForGuard?.script_locked_beats);
+    const lockedBeats = lockedNumbers.length
+      ? splitScriptBeats(episodeForGuard?.script_content).beats.filter((b, i, all) => lockedNumbers.includes(b.number) && all.findIndex((x) => x.number === b.number) === i)
+      : [];
+    const generated = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
     const locks = scriptKeepingLocks(episodeForGuard, generated);
     const script = locks.script;
 

@@ -81,3 +81,24 @@ describe('generateGroundedBeat', () => {
     expect(create.mock.calls[0][0].messages[0].content).toContain('Write the complete 14-beat script now');
   });
 });
+
+describe('whole-script Regenerate reads the locked beats', () => {
+  test('the approved beats go into the prompt, to be written around', async () => {
+    const create = jest.fn(async () => ({ content: [{ text: 'SCRIPT' }] }));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    await generateGroundedScript('ep1', 'show-1', models(), { lockedBeats: [{ number: 5, text: '## BEAT: 5 · Reveal\nLala: The approved reveal.' }] });
+    const prompt = create.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain('APPROVED BEATS (LOCKED)');
+    expect(prompt).toContain('Lala: The approved reveal.');
+    expect(prompt).toContain('Write the complete 14-beat script now');
+  });
+
+  test('with nothing locked, the prompt has no approved-beats section', async () => {
+    const create = jest.fn(async () => ({ content: [{ text: 'SCRIPT' }] }));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    await generateGroundedScript('ep1', 'show-1', models());
+    expect(create.mock.calls[0][0].messages[0].content).not.toContain('APPROVED BEATS');
+  });
+});

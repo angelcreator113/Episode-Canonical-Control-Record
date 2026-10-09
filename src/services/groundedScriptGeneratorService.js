@@ -177,8 +177,11 @@ async function writeWith(prompt, maxTokens, attempts) {
   throw lastErr;
 }
 
-async function generateGroundedScript(episodeId, showId, models) {
-  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models));
+// `lockedBeats`: the approved beats, [{ number, text }]. The writer reads
+// them and writes the other beats around them; the route puts each one back
+// word for word (utils/scriptBeatLocks.js).
+async function generateGroundedScript(episodeId, showId, models, { lockedBeats = [] } = {}) {
+  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), { lockedBeats });
   return writeWith(prompt, 8000, 1);
 }
 
@@ -226,7 +229,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }, { only = null } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -332,7 +335,11 @@ ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitSc
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
-
+${!only && lockedBeats.length ? `
+═══ APPROVED BEATS (LOCKED) ═══
+These beats are approved and stay exactly as written. Write every other beat so it leads into and out of them, and does not repeat what they already say. For each of these, write its header line and nothing under it; the approved text goes back in its place.
+${lockedBeats.map((b) => b.text).join('\n\n')}
+` : ''}
 ═══ FORMAT ═══
 Each of the 14 beats opens with its header line, exactly as written above, in order from 1 to 14:
 ${beatHeader(CANONICAL_BEATS[0])}
