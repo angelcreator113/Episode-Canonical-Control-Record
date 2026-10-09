@@ -30,7 +30,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Clapperboard, RefreshCw, TriangleAlert, Type, Sparkles, Pencil, Trash2 } from 'lucide-react';
+import { BadgeCheck, Clapperboard, RefreshCw, TriangleAlert, Type, Sparkles, Pencil, Trash2, Upload } from 'lucide-react';
 import api from '../../services/api';
 import './EpisodeTitleCard.css';
 
@@ -51,6 +51,14 @@ export const setTitleWordsApi = async (episodeId, title) =>
   (await api.put(`/api/v1/episodes/${episodeId}/title-overlay/words`, { title }))?.data?.data;
 export const deleteTitleOverlayApi = async (episodeId) =>
   (await api.delete(`/api/v1/episodes/${episodeId}/title-overlay`))?.data?.data;
+// Evoni, 2026-10-09: her own title image as the overlay, and the framed card deletable.
+export const uploadTitleOverlayApi = async (episodeId, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post(`/api/v1/episodes/${episodeId}/title-overlay/upload`, form))?.data?.data;
+};
+export const deleteTitleCardApi = async (episodeId) =>
+  (await api.delete(`/api/v1/episodes/${episodeId}/title-card`))?.data?.data;
 
 export function formatEstimate(estimate) {
   if (!estimate || typeof estimate.usd !== 'number') return 'price not set';
@@ -154,6 +162,39 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
     }
   };
 
+  const uploadOverlay = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy('upload');
+    setError(null);
+    try {
+      setState(await uploadTitleOverlayApi(episodeId, file));
+      onChange?.();
+    } catch (err) {
+      console.error('[EpisodeTitleCard] title image upload failed:', err);
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteCard = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Delete the full-screen framed card? It leaves the episode and its timeline. The title stays.')) return;
+    setBusy('delete-card');
+    setError(null);
+    try {
+      setState(await deleteTitleCardApi(episodeId));
+      onChange?.();
+    } catch (err) {
+      console.error('[EpisodeTitleCard] delete card failed:', err);
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!episodeId || !state) {
     return error ? <div className="etc-panel"><p className="etc-error" role="alert">{error}</p></div> : null;
   }
@@ -186,6 +227,14 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
           <button type="button" className="etc-btn" onClick={() => setWords(title)} disabled={busy !== null} data-testid="etc-words-edit">
             <Pencil size={14} aria-hidden="true" /> Edit words
           </button>
+          <label className={`etc-btn${busy !== null ? ' is-disabled' : ''}`} data-testid="etc-overlay-upload">
+            <Upload size={14} aria-hidden="true" /> {busy === 'upload' ? 'Uploading…' : 'Upload your own title'}
+            <input
+              type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadOverlay} disabled={busy !== null}
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
+              data-testid="etc-overlay-upload-input"
+            />
+          </label>
           {state.overlay && (
             <button type="button" className="etc-btn etc-btn-danger" onClick={deleteOverlay} disabled={busy !== null} data-testid="etc-overlay-delete">
               <Trash2 size={14} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete overlay'}
@@ -219,6 +268,12 @@ export default function EpisodeTitleCard({ episode, showCardImage = true, onChan
               : offer.kind === 'redesign'
                 ? `${offer.requires_approval ? 'Approve title & redesign' : 'Redesign title card'} (est. ${cost})`
                 : `Full-screen framed card — est. ${cost}`}
+          </button>
+        )}
+
+        {showCard && card?.asset_id && (
+          <button type="button" className="etc-btn etc-btn-danger" onClick={deleteCard} disabled={busy !== null} data-testid="etc-card-delete">
+            <Trash2 size={14} aria-hidden="true" /> {busy === 'delete-card' ? 'Deleting…' : 'Delete card'}
           </button>
         )}
       </div>
