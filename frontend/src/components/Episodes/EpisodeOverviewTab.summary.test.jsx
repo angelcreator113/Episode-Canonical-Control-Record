@@ -5,7 +5,7 @@
  * Episode carried from the event, and where to finish each gap.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -68,9 +68,34 @@ describe('Episode Overview summary', () => {
   test('a missing look opens Wardrobe; a missing scene set opens the Event Package', async () => {
     const { onOpenTab } = renderTab();
     const card = await screen.findByTestId('episode-planning');
-    expect(within(card).getByTestId('episode-planning-fix-location').getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+    expect(within(card).getByTestId('episode-planning-fix-location').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-place');
     fireEvent.click(within(card).getByTestId('episode-planning-fix-look'));
     expect(onOpenTab).toHaveBeenCalledWith('wardrobe');
+  });
+
+  test('Look is the outfit locked on the Wardrobe tab (Evoni, 2026-10-09: "my look has already been chosen")', async () => {
+    const base = api.get.getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/wardrobe/outfit/ep-1'
+      ? { data: { items: [{ name: 'Silk slip dress' }, { name: 'Strappy heels' }] } }
+      : base(url)));
+    renderTab();
+    const card = await screen.findByTestId('episode-planning');
+    await waitFor(() => expect(within(card).getByTestId('episode-planning-look').getAttribute('data-done')).toBe('true'));
+    expect(within(card).getByTestId('episode-planning-look').textContent).toMatch(/2 pieces locked: Silk slip dress, Strappy heels/);
+    expect(within(card).queryByTestId('episode-planning-fix-look')).toBeNull();
+    expect(screen.getByTestId('overview-tile-look').textContent).toContain('2 pieces locked');
+  });
+
+  test('Cast with none featured links to People in the Event Package', async () => {
+    const base = api.get.getMockImplementation();
+    const noneFeatured = { ...EVENT, canon_consequences: { automation: { guest_profiles: [{ profile_id: 1, display_name: 'Maya Chen' }] } } };
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/world/show-1/events/ev-1'
+      ? { data: { success: true, event: noneFeatured, sourceProfile: null, sceneSet: null, venueLocation: null } }
+      : base(url)));
+    renderTab();
+    const link = await screen.findByTestId('episode-planning-fix-cast');
+    expect(link.textContent).toBe('Choose featured attendees');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-people');
   });
 
   test('with no script the next step is Generate the script, and it opens the Script tab', async () => {

@@ -11,6 +11,11 @@
  * editable until the episode is accepted; 'wardrobe': the episode's
  * Wardrobe tab) or is null when nothing on this side can set it.
  *
+ * Look is the outfit locked on the episode's Wardrobe tab when `outfit`
+ * (GET /wardrobe/outfit/:episodeId, its items) is given, the one the script
+ * writer reads; the Overview said "Not chosen yet" over a locked outfit
+ * (Evoni, 2026-10-09). Without it, the event's planned look, as before.
+ *
  * Pure; no I/O.
  */
 import { describeEventOrganizer } from './eventOrganizer';
@@ -18,7 +23,22 @@ import { resolveEventVenueAndDate } from './eventReadiness';
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
-export function episodePlanning({ episode, event, sourceProfile = null, sceneSet = null, venueLocation = null } = {}) {
+/** The Look item from the outfit locked on the Wardrobe tab. */
+function lockedLook(outfit, planned) {
+  if (outfit.length) {
+    const names = outfit.map((p) => p?.name).filter(Boolean);
+    const shown = names.slice(0, 3).join(', ');
+    const more = names.length > 3 ? ` +${names.length - 3}` : '';
+    return { key: 'look', label: 'Look', done: true, detail: `${outfit.length} piece${outfit.length === 1 ? '' : 's'} locked${shown ? `: ${shown}${more}` : ''}`, fix: null };
+  }
+  return {
+    key: 'look', label: 'Look', done: false,
+    detail: planned ? 'Planned in the event, not locked on the Wardrobe tab yet; Beat 8 needs it' : 'Not chosen yet; Beat 8 needs it',
+    fix: 'wardrobe',
+  };
+}
+
+export function episodePlanning({ episode, event, sourceProfile = null, sceneSet = null, venueLocation = null, outfit } = {}) {
   if (!event) return null;
   const organizer = describeEventOrganizer(event, sourceProfile);
   const guests = event.canon_consequences?.automation?.guest_profiles || [];
@@ -64,7 +84,7 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
         : 'No venue',
       fix: hasVenue && !hasSet ? 'package' : null,
     },
-    {
+    Array.isArray(outfit) ? lockedLook(outfit, hasLook) : {
       key: 'look', label: 'Look', done: hasLook,
       detail: hasLook
         ? (pieces.length ? `${pieces.length} piece${pieces.length === 1 ? '' : 's'} chosen` : 'Outfit set chosen')

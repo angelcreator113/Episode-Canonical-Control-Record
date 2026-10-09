@@ -45,6 +45,8 @@ export function OverviewTiles({ tiles, onOpenTab }) {
 }
 
 const INTENT_LABEL = { slay: 'Slay', pass: 'Pass', safe: 'Safe', fail: 'Fail' };
+// Where in the Event Package each item is finished (its section anchor).
+const PACKAGE_SECTION = { cast: 'epp-sec-people', location: 'epp-sec-place' };
 
 export function StoryBriefCard({
   brief, draft, setDraft, saveBriefField, saving, locked, synopsis, onEdit, archetypes, intents,
@@ -141,7 +143,7 @@ export function FromEventCard({ from, showId, eventId, onOpenTab }) {
               <strong>{it.label}</strong>
               <span>{it.detail}</span>
               {it.fix === 'package' && (
-                <Link className="eos-link" to={`/shows/${showId}/events/${eventId}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
+                <Link className="eos-link" to={`/shows/${showId}/events/${eventId}${PACKAGE_SECTION[it.key] ? `#${PACKAGE_SECTION[it.key]}` : ''}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
               )}
               {it.fix === 'wardrobe' && (
                 <button type="button" className="eos-link" onClick={() => onOpenTab?.('wardrobe')} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</button>

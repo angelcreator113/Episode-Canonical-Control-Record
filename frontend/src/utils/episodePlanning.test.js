@@ -100,4 +100,13 @@ describe('episodePlanning', () => {
     const idOnly = { ...spawned, canon_consequences: { automation: { venue_location_id: 'loc-9' } } };
     expect(byKey(episodePlanning({ episode: {}, event: idOnly })).location).toMatchObject({ done: true });
   });
+
+  test('given the locked outfit, Look is it; planned but not locked is still open', () => {
+    const locked = byKey(episodePlanning({ episode: {}, event: EVENT, outfit: [{ name: 'Dress' }, { name: 'Heels' }, { name: 'Bag' }, { name: 'Hoops' }] })).look;
+    expect(locked).toEqual({ key: 'look', label: 'Look', done: true, detail: '4 pieces locked: Dress, Heels, Bag +1', fix: null });
+    const planned = byKey(episodePlanning({ episode: {}, event: EVENT, outfit: [] })).look;
+    expect(planned).toMatchObject({ done: false, fix: 'wardrobe', detail: 'Planned in the event, not locked on the Wardrobe tab yet; Beat 8 needs it' });
+    const none = byKey(episodePlanning({ episode: {}, event: { ...EVENT, outfit_pieces: [] }, outfit: [] })).look;
+    expect(none).toMatchObject({ done: false, detail: 'Not chosen yet; Beat 8 needs it' });
+  });
 });
