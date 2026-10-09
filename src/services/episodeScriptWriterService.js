@@ -11,7 +11,7 @@
  * 5. Wardrobe (locked outfit filtered by event dress code + affordability)
  * 6. Show Brain (franchise voice laws)
  * 7. Event data (prestige, dress code, stakes)
- * 8. Opportunity pipeline (career context)
+ * 8. (retired: the Opportunity pipeline; see 3b, the event's career)
  *
  * Output: Structured script_json + rendered script_text, saved as versioned EpisodeScript.
  */
@@ -73,7 +73,7 @@ const BEAT_TEMPLATES = {
  */
 async function loadScriptContext(episodeId, showId, models) {
   const { EpisodeBrief, ScenePlan, SceneSet, SceneAngle, FranchiseKnowledge,
-          WorldEvent, WorldLocation, Opportunity, sequelize } = models;
+          WorldEvent, WorldLocation, sequelize } = models;
 
   const context = {};
 
@@ -242,22 +242,9 @@ async function loadScriptContext(episodeId, showId, models) {
     .filter(b => b.feed_moment)
     .map(b => ({ beat_number: b.beat_number, ...b.feed_moment }));
 
-  // 8. Active opportunities (career context)
-  context.opportunities = [];
-  if (Opportunity) {
-    try {
-      context.opportunities = await Opportunity.findAll({
-        where: {
-          show_id: showId,
-          status: ['offered', 'considering', 'booked', 'preparing', 'active'],
-        },
-        attributes: ['name', 'opportunity_type', 'status', 'brand_or_company', 'prestige',
-                     'payment_amount', 'career_impact', 'emotional_arc'],
-        limit: 10,
-        order: [['prestige', 'DESC']],
-      }).then(opps => opps.map(o => o.toJSON()));
-    } catch { /* non-blocking */ }
-  }
+  // 8. The old Opportunity pipeline is retired here (Evoni, 2026-10-09):
+  //    the table is empty or stale for her; the event's deal, deliverables
+  //    and goals (3b, scriptCareerService) are her career in the episode.
 
   // 9. Lala's world state
   // The newest snapshot of the show's universe (or of none); the old
@@ -292,7 +279,7 @@ async function loadScriptContext(episodeId, showId, models) {
       const [rows] = await sequelize.query(
         `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,
                 sp.posting_voice, sp.content_persona, sp.lala_relevance_score, sp.celebrity_tier,
-                sp.follow_motivation, sp.follow_emotion, rc.id AS registry_character_id,
+                sp.follow_motivation, sp.follow_emotion, sp.lala_relationship, rc.id AS registry_character_id,
                 rc.display_name as char_name, rc.core_belief, rc.pressure_type, rc.pressure_quote,
                 rc.role_type, rc.role_label, rc.appearance_mode, rc.depth_level,
                 rc.personality, rc.description as char_description,
@@ -443,8 +430,79 @@ function seasonPurposes(sc) {
   return sc?.story_purpose ? [{ text: sc.story_purpose, primary: true, story_thread: sc.story_thread || null }] : [];
 }
 
+// A guest's tie to Lala (social_profiles.lala_relationship), as the
+// script should play it; the character page's labels (lib/characterPage).
+const LALA_TIES = {
+  direct: 'friends; they talk directly',
+  aware: 'knows of her; they have not really met',
+  one_sided: 'follows Lala; Lala barely knows them',
+  mutual_unaware: "in Lala's circles; same world, not close",
+  competitive: "Lala's rival; every exchange is a contest",
+  justawoman: 'JustAWoman herself',
+};
+
+const parseJsonField = (v, fallback) => {
+  if (v == null) return fallback;
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch (err) { console.error('[ScriptWriter] event JSON field did not parse:', err.message); return fallback; }
+};
+
+/** The invitation's words as stored (canon_consequences.invitation_text): a string, or the generator's { opening, body, closing }. */
+function invitationWords(event) {
+  const t = parseJsonField(event?.canon_consequences, {})?.invitation_text;
+  if (!t) return null;
+  if (typeof t === 'string') return t.trim() || null;
+  if (typeof t !== 'object') return null;
+  const body = Array.isArray(t.body) ? t.body.join(' ') : t.body;
+  return [t.opening, t.eventName, body, t.closing].filter((x) => typeof x === 'string' && x.trim()).join(' / ') || null;
+}
+
+/**
+ * The EVENT block: what the event is, where and when, its look and feel,
+ * how strict it is, what she needs to get in and what she may not do, and
+ * the invitation's words (Evoni, 2026-10-09: the script was missing them).
+ */
+function eventContextBlock(event) {
+  if (!event) return 'No event assigned';
+  const lines = [`EVENT: ${event.name}`];
+  if (event.description) lines.push(`  What it is: ${String(event.description).slice(0, 600)}`);
+  lines.push(`  Type: ${event.event_type} | Prestige: ${event.prestige}/10 | Cost: ${event.cost_coins} coins`);
+  const where = [event.venue_name, event.venue_address].filter(Boolean).join(', ');
+  const when = [event.event_date, event.event_time].filter(Boolean).join(', ');
+  if (where) lines.push(`  Where: ${where}`);
+  if (when) lines.push(`  When: ${when}`);
+  lines.push(`  Dress code: ${event.dress_code || 'Not specified'}`);
+  const palette = (Array.isArray(parseJsonField(event.color_palette, null)) ? parseJsonField(event.color_palette, []) : [])
+    .map((c) => (typeof c === 'string' ? c : c?.name || c?.hex)).filter(Boolean);
+  const feel = [event.theme && `theme ${event.theme}`, event.mood && `mood ${event.mood}`, palette.length && `palette ${palette.join(', ')}`].filter(Boolean);
+  if (feel.length) lines.push(`  Look and feel: ${feel.join(' | ')}`);
+  lines.push(`  Host: ${event.host || 'Unknown'}${event.host_brand ? ` (${event.host_brand})` : ''}`);
+  if (event.strictness) lines.push(`  Strictness: ${event.strictness}/10${event.strictness >= 7 ? ' (they will notice a wrong look)' : ''}`);
+  if (event.deadline_type && event.deadline_type !== 'none') {
+    lines.push(`  Time pressure: ${String(event.deadline_type).replace(/_/g, ' ')}${event.deadline_minutes ? ` (${event.deadline_minutes}-minute deadline)` : ''}`);
+  }
+  const req = parseJsonField(event.requirements, {}) || {};
+  const needs = [
+    req.reputation_min && `reputation ${req.reputation_min}+`,
+    req.brand_trust_min && `brand trust ${req.brand_trust_min}+`,
+    req.coins_min && `${req.coins_min}+ coins`,
+  ].filter(Boolean);
+  if (needs.length) lines.push(`  To get in she needs: ${needs.join(', ')}`);
+  const restrictions = (Array.isArray(parseJsonField(event.restrictions, [])) ? parseJsonField(event.restrictions, []) : [])
+    .map((r) => (typeof r === 'string' ? r : r?.description)).filter((r) => typeof r === 'string' && r.trim());
+  if (restrictions.length) lines.push(`  Restrictions she agreed to: ${restrictions.join('; ')}`);
+  lines.push(`  Narrative stakes: ${event.narrative_stakes || 'None specified'}`);
+  lines.push(`  Career tier: ${event.career_tier || 1}`);
+  if (event.career_milestone) lines.push(`  Milestone: ${event.career_milestone}`);
+  if (event.fail_consequence) lines.push(`  If she fails: ${event.fail_consequence}`);
+  if (event.success_unlock) lines.push(`  If she succeeds: ${event.success_unlock}`);
+  const invite = invitationWords(event);
+  if (invite) lines.push(`  THE INVITATION (the words on screen at Beat 5; Lala reads from it, never contradicts it): "${invite.slice(0, 800)}"`);
+  return lines.join('\n');
+}
+
 function buildFullPrompt(context) {
-  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, opportunities, worldState } = context;
+  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, worldState } = context;
 
   // Scene plan with full context
   const beatContext = scenePlan.length > 0
@@ -531,19 +589,8 @@ function buildFullPrompt(context) {
     wardrobeContext += `\n\n═══ WARDROBE INTELLIGENCE ═══\n${wi.script_context}`;
   }
 
-  // Event context
-  let eventContext = 'No event assigned';
-  if (event) {
-    eventContext = `EVENT: ${event.name}
-  Type: ${event.event_type} | Prestige: ${event.prestige}/10 | Cost: ${event.cost_coins} coins
-  Dress code: ${event.dress_code || 'Not specified'}
-  Host: ${event.host || 'Unknown'}${event.host_brand ? ` (${event.host_brand})` : ''}
-  Narrative stakes: ${event.narrative_stakes || 'None specified'}
-  Career tier: ${event.career_tier || 1}`;
-    if (event.career_milestone) eventContext += `\n  Milestone: ${event.career_milestone}`;
-    if (event.fail_consequence) eventContext += `\n  If she fails: ${event.fail_consequence}`;
-    if (event.success_unlock) eventContext += `\n  If she succeeds: ${event.success_unlock}`;
-  }
+  // Event context (eventContextBlock)
+  const eventContext = eventContextBlock(event);
 
   // Franchise laws
   const lawsByCategory = {};
@@ -560,16 +607,6 @@ function buildFullPrompt(context) {
   const voiceLaws = Object.entries(lawsByCategory).map(([cat, rules]) =>
     `[${cat.replace(/_/g, ' ').toUpperCase()}]\n${rules.join('\n')}`
   ).join('\n\n') || 'No Show Brain laws loaded';
-
-  // Opportunities context
-  let oppContext = '';
-  if (opportunities.length > 0) {
-    oppContext = `\n═══ ACTIVE CAREER PIPELINE ═══\n`;
-    oppContext += opportunities.map(o =>
-      `- ${o.name} (${o.opportunity_type}, prestige ${o.prestige}/10, ${o.status}) — ${o.career_impact || ''}`
-    ).join('\n');
-    oppContext += `\nSCRIPT DIRECTIVE: Lala is aware of her career pipeline. Upcoming opportunities fuel her motivation and anxiety.`;
-  }
 
   // World state
   const stateContext = worldState?.character_states
@@ -599,7 +636,6 @@ Allowed outcomes: ${JSON.stringify(brief?.allowed_outcomes || [])}
 ═══ FINANCIAL CONTEXT ═══
 ${financialContext}
 ${careerBlock(context.career)}
-${oppContext}
 ${stateContext}
 
 ═══ WARDROBE ═══
@@ -619,6 +655,7 @@ ${(() => {
   Voice: ${p.posting_voice || 'Standard social media voice'}
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
       if (p.story_role) block += `\n  Story role: ${p.story_role}`;
+      if (LALA_TIES[p.lala_relationship]) block += `\n  With Lala: ${LALA_TIES[p.lala_relationship]}`;
 
       // Character literary depth (from registry) + therapy + life simulation
       if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound) {
@@ -826,7 +863,7 @@ async function generateEpisodeScript(episodeId, showId, models) {
       wardrobe_count: context.wardrobe.length,
       feed_moments_count: context.feedMoments.length,
       financial_pressure: context.financial?.pressure_level,
-      opportunities_count: context.opportunities.length,
+      career: context.career ? { deal: !!context.career.deal, deliverables: context.career.deliverables.length, goals: context.career.goals.length } : null,
     },
     feed_moments_used: context.feedMoments,
     financial_context: context.financial,
@@ -959,4 +996,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock };
