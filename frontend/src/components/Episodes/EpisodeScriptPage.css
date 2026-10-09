@@ -136,6 +136,45 @@
 .esp-beat-scene { display: block; margin-top: 2px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 12px; text-align: left; cursor: pointer; }
 .esp-beat-scene:hover { text-decoration: underline; }
 .esp-beat-count { font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); white-space: nowrap; }
+
+/* The beat's scene, its phone moments and overlays (Task #2789). */
+.esp-beat-thumb { flex-shrink: 0; width: 44px; height: 30px; border-radius: 6px; overflow: hidden; background: var(--surface-bg); }
+.esp-beat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-beat-picture { position: relative; display: block; width: 100%; margin: 6px 0 12px; padding: 0; border: none; border-radius: 10px; overflow: hidden; background: var(--surface-bg); cursor: zoom-in; }
+.esp-beat-picture img { display: block; width: 100%; max-height: 260px; object-fit: cover; }
+.esp-beat-picture-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 11px; font-weight: 600; }
+.esp-beat-nopicture { margin: 6px 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+.esp-beat-nopicture .esp-link { font-size: 12px; }
+.esp-beat-expects { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--lala-lavender-text); }
+.esp-moment { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px dashed var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); }
+.esp-moment.is-unknown { border-color: var(--warning-border, var(--lala-lavender-line)); }
+.esp-moment-thumb { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 40px; height: 56px; border-radius: 6px; overflow: hidden; background: var(--accent-subtle); color: var(--lala-lavender-text); }
+.esp-moment.is-overlay .esp-moment-thumb { width: 56px; height: 40px; }
+.esp-moment-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-moment-text { display: flex; flex-direction: column; min-width: 0; }
+.esp-moment-kind { font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp-moment-what { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-moment-missing { font-size: 11px; color: var(--warning-text, var(--lala-ink-muted)); }
+.esp-moment-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-picker { margin-top: 12px; padding: 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); }
+.esp-picker-head { display: flex; align-items: center; justify-content: space-between; }
+.esp-picker-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.esp-picker-close { display: inline-flex; padding: 4px; border: none; background: none; color: var(--lala-ink-muted); cursor: pointer; }
+.esp-picker-group { margin: 10px 0 6px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp-picker-empty { margin: 0; font-size: 12px; color: var(--lala-ink-muted); }
+.esp-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.esp-pick-tile { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; border: 2px solid transparent; border-radius: 10px; background: var(--accent-subtle); cursor: pointer; text-align: left; }
+.esp-pick-tile.is-picked { border-color: var(--lala-lavender); }
+.esp-pick-img { display: flex; align-items: center; justify-content: center; height: 90px; border-radius: 6px; overflow: hidden; background: var(--surface-card); color: var(--lala-lavender-text); }
+.esp-pick-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-pick-name { font-size: 11px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-picker-do { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.esp-picker-verbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.esp-verb { padding: 5px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-verb.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.esp-zoom { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.7); cursor: zoom-out; }
+.esp-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; object-fit: contain; }
+.esp-zoom-close { position: absolute; top: 12px; right: 12px; display: inline-flex; padding: 8px; border: none; border-radius: 999px; background: var(--surface-card); color: var(--text-primary); cursor: pointer; }
 .esp-beat-chev { font-size: 11px; color: var(--lala-ink-muted); transition: transform 0.2s; }
 .esp-beat.is-open .esp-beat-chev { transform: rotate(180deg); }
 .esp-beat-body { padding: 4px 18px 16px; border-top: 1px solid var(--lala-lavender-line); }

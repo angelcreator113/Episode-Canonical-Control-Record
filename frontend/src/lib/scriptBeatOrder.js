@@ -64,6 +64,18 @@ export function replaceBeat(scriptText, beatIndex, text) {
   return join({ ...split, sections });
 }
 
+// The script with `line` added at the end of the beat at position
+// `beatIndex` (a phone moment or an overlay, Task #2789); every other beat
+// and the text before the first beat stay exactly as they are.
+export function appendLine(scriptText, beatIndex, line) {
+  const split = splitSections(scriptText);
+  const text = String(line || '').trim();
+  if (!inRange(beatIndex, split.sections.length) || !text) return scriptText;
+  const sections = split.sections.slice();
+  sections[beatIndex] = `${sections[beatIndex]}\n${text}`;
+  return join({ ...split, sections });
+}
+
 // Where a dragged item lands: dropping on the top half of a target puts it
 // before the target, on the bottom half after it. Returns the index the
 // item ends up at once it is taken out of its old place.
