@@ -70,19 +70,27 @@ const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n])
  * ("InviteLetterOverlay" finds the Invitation), the closest match first.
  */
 export function resolveMoment(moment, on = {}) {
-  const { screens = [], overlays = [] } = on;
+  const { screens = [], overlays = [], icons = [] } = on;
   if (!moment) return null;
   // "ClosetItems x5" names ClosetItems.
   const target = normKey(String(moment.target || '').replace(/\s+x\d+$/i, ''));
   if (!target) return null;
   if (PHONE_NAMES.has(target)) return { kind: 'device', name: PHONE_NAME, url: on.phoneFrame || null };
   const stem = targetStem(moment.target);
-  const options = [
+  // A tap is on an icon first (Task #2801); any other verb finds a screen or
+  // an overlay first, and an icon after them.
+  const iconOptions = icons.map((i) => ({ kind: 'icon', keys: [i.key, i.name], name: i.name, url: i.url, icon: i }));
+  const others = [
     ...screens.map((s) => ({ kind: 'phone', keys: [s.id, s.name], name: s.name || s.id, url: s.url || null })),
     ...overlays.map((o) => ({ kind: 'overlay', keys: [o.key, o.label], name: o.label || o.key, url: o.image_url || null })),
-  ].map((o) => ({ ...o, keys: o.keys.map(normKey).filter(Boolean) }));
+  ];
+  const options = (TAP_VERBS.has(moment.verb) ? [...iconOptions, ...others] : [...others, ...iconOptions])
+    .map((o) => ({ ...o, keys: o.keys.map(normKey).filter(Boolean) }));
+  const found = (o) => (o.kind === 'icon'
+    ? { kind: 'icon', name: o.name, url: o.url, opens: o.icon.opensName, on: o.icon.onName }
+    : { kind: o.kind, name: o.name, url: o.url });
   const exact = options.find((o) => o.keys.includes(target));
-  if (exact) return { kind: exact.kind, name: exact.name, url: exact.url };
+  if (exact) return found(exact);
   const score = (k) => {
     if (k.length < 4 || stem.length < 4) return 0;
     if (k === stem) return 1000;
@@ -94,7 +102,76 @@ export function resolveMoment(moment, on = {}) {
     .flatMap((o) => o.keys.map((k) => ({ o, s: score(k) })))
     .filter((c) => c.s > 0)
     .sort((a, b) => b.s - a.s)[0];
-  return loose ? { kind: loose.o.kind, name: loose.o.name, url: loose.o.url } : null;
+  return loose ? found(loose.o) : null;
+}
+
+const TAP_VERBS = new Set(['CLICK', 'TAP', 'SELECT']);
+
+/**
+ * The icons on Lala's phone (Evoni, 2026-10-09: "instead of lala's phone
+ * screens showing I think we need to show the icons because we have the icons
+ * that then link to the screen … some of them are one steps and some of them
+ * are two steps"; Task #2801). Each screen's tap zones (screen_links, the
+ * Phone Hub's icons) open another screen: the zone's navigate action, else
+ * its target, as the phone runs it (src/services/phoneRuntime actionsForZone).
+ * Walking from the home screen (is_home) one tap at a time gives every icon
+ * the taps that reach it: an icon on the home screen, or pinned there to
+ * every screen (persistent), is one tap; an icon inside Mail is Mail's tap,
+ * then its own.
+ *
+ * Returns [{ key, name, url, on, onName, opens, opensName, path }] in the
+ * order a tap reaches them; path is the icons' keys from home, this one last.
+ * `iconArt` is the icon library (the list route's phone_icon overlays), for
+ * each zone's current picture.
+ */
+export function phoneIcons(screens = [], iconArt = []) {
+  const byId = new Map(screens.map((s) => [s.id, s]));
+  const nameOf = (id) => byId.get(id)?.name || id || null;
+  const linksOf = (s) => (s?.screen_links || s?.metadata?.screen_links || []).filter((z) => z && typeof z === 'object');
+  const opensOf = (z) => {
+    const nav = Array.isArray(z.actions) ? z.actions.find((a) => a?.type === 'navigate' && a.target) : null;
+    return nav ? nav.target : (z.target || null);
+  };
+  const artOf = (z) => {
+    const art = z.icon_overlay_id ? iconArt.find((i) => i.id === z.icon_overlay_id) : null;
+    return art?.url || z.icon_url || (Array.isArray(z.icon_urls) ? z.icon_urls[0] : null) || null;
+  };
+  const home = screens.find((s) => s.is_home) || null;
+  const icons = [];
+  const seenKey = new Set();
+  const add = (z, screen, pathBefore) => {
+    const name = String(z.label || iconArt.find((i) => i.id === z.icon_overlay_id)?.name || nameOf(opensOf(z)) || '').trim();
+    if (!name) return null;
+    let key = z.icon_overlay_id || normKey(name) || z.id;
+    if (seenKey.has(key)) key = `${key}_${normKey(screen?.name || screen?.id || '')}`;
+    if (seenKey.has(key)) return null;
+    seenKey.add(key);
+    const icon = {
+      key, name, url: artOf(z), on: screen ? screen.id : null, onName: screen ? (z.persistent && screen === home ? 'Every screen' : nameOf(screen.id)) : null,
+      opens: opensOf(z), opensName: nameOf(opensOf(z)), path: [...pathBefore, key],
+    };
+    icons.push(icon);
+    return icon;
+  };
+  // Breadth first from home: the fewest taps to each screen.
+  const pathTo = new Map();
+  const queue = [];
+  if (home) { pathTo.set(home.id, []); queue.push(home.id); }
+  while (queue.length) {
+    const id = queue.shift();
+    const screen = byId.get(id);
+    for (const z of linksOf(screen)) {
+      const icon = add(z, screen, pathTo.get(id));
+      const next = icon?.opens;
+      if (next && byId.has(next) && !pathTo.has(next)) { pathTo.set(next, icon.path); queue.push(next); }
+    }
+  }
+  // Icons on screens no tap from home reaches: their own tap only.
+  for (const screen of screens) {
+    if (pathTo.has(screen.id)) continue;
+    for (const z of linksOf(screen)) add(z, screen, []);
+  }
+  return icons;
 }
 
 const OFF_VERBS = new Set(['HIDE', 'REMOVE', 'CLOSE']);
@@ -126,6 +203,16 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
+    if (shown?.kind === 'icon') {
+      // Tapping an icon (Task #2801) opens its screen on the phone.
+      if (!up) phoneDownAt.push(i);
+      if (shown.opens) {
+        for (const [n, k] of showing) if (k === 'phone') showing.delete(n);
+        showing.set(shown.opens, 'phone');
+      }
+      withByLine[i] = [...showing.keys()].filter((n) => n !== shown.opens);
+      return;
+    }
     if (shown?.kind === 'device') {
       up = DEVICE_ON.has(moment.verb);
       if (up) showing.set(name, 'device');

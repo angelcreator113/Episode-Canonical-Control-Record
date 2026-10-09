@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, EXPECTED_ON_SCREEN } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -78,5 +78,51 @@ describe("the phone itself (Task #2797)", () => {
     expect(r.phoneDownAt).toEqual([]);
     expect(r.withByLine[0]).toEqual(["Lala's phone"]);
     expect(r.phoneUpAtEnd).toBe(true);
+  });
+});
+
+describe("the phone's icons (Task #2801)", () => {
+  const screens = [
+    { id: 'home', name: 'Home', is_home: true, screen_links: [
+      { id: 'z1', label: 'Mail', target: 'mail', icon_overlay_id: 'mail_icon' },
+      { id: 'z2', label: 'Closet', target: 'closet', icon_url: 'https://x/closet-icon.png' },
+      { id: 'z3', label: 'Home', target: 'home', persistent: true },
+    ] },
+    { id: 'mail', name: 'Mail', screen_links: [
+      { id: 'z4', label: 'Letter', actions: [{ type: 'navigate', target: 'letter' }] },
+    ] },
+    { id: 'letter', name: 'Invitation Letter', screen_links: [] },
+    { id: 'closet', name: 'Closet' },
+  ];
+  const art = [{ id: 'mail_icon', name: 'Mail', category: 'phone_icon', url: 'https://x/mail-icon.png' }];
+  const icons = phoneIcons(screens, art);
+
+  test('every icon, the screen it sits on, what it opens, and the taps from home', () => {
+    expect(icons.map((i) => [i.key, i.name, i.onName, i.opensName, i.path, i.url])).toEqual([
+      ['mail_icon', 'Mail', 'Home', 'Mail', ['mail_icon'], 'https://x/mail-icon.png'],
+      ['closet', 'Closet', 'Home', 'Closet', ['closet'], 'https://x/closet-icon.png'],
+      ['home', 'Home', 'Every screen', 'Home', ['home'], null],
+      ['letter', 'Letter', 'Mail', 'Invitation Letter', ['mail_icon', 'letter'], null],
+    ]);
+  });
+
+  test('a tap finds the icon; opening by name still finds the screen', () => {
+    const on = { screens, icons };
+    expect(resolveMoment(parseMoment('[UI:CLICK mail_icon]'), on)).toEqual({ kind: 'icon', name: 'Mail', url: 'https://x/mail-icon.png', opens: 'Mail', on: 'Home' });
+    expect(resolveMoment(parseMoment('[UI:CLICK MailIcon]'), on)).toMatchObject({ kind: 'icon', name: 'Mail' });
+    expect(resolveMoment(parseMoment('[UI:TAP Letter]'), on)).toMatchObject({ kind: 'icon', opens: 'Invitation Letter', on: 'Mail' });
+    expect(resolveMoment(parseMoment('[UI:OPEN mail]'), on)).toMatchObject({ kind: 'phone', name: 'Mail' });
+  });
+
+  test('tapping icons changes the screen on the phone, one at a time', () => {
+    const r = beatOnScreen(['[UI:SHOW phone]', '[UI:CLICK mail_icon]', '[UI:CLICK letter]', 'Lala: oh!'], { screens, icons });
+    expect(r.withByLine[1]).toEqual(["Lala's phone"]);
+    expect(r.withByLine[2]).toEqual(["Lala's phone"]);
+    expect(r.phoneDownAt).toEqual([]);
+    expect(beatOnScreen(['[UI:CLICK mail_icon]'], { screens, icons }).phoneDownAt).toEqual([0]);
+  });
+
+  test('no home screen: each icon is its own one tap', () => {
+    expect(phoneIcons([{ id: 'mail', name: 'Mail', screen_links: [{ label: 'Letter', target: 'letter' }] }]).map((i) => i.path)).toEqual([['letter']]);
   });
 });

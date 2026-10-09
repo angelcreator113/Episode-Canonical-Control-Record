@@ -271,3 +271,16 @@
 /* Add a line anywhere in a beat (Task #2795). */
 .esp-adder .esp-picker-verbs { margin: 8px 0; }
 .esp-adder-text { margin-bottom: 4px; }
+
+/* Lala's phone icons (Task #2801): the icon the script taps, square, with the
+   screen it opens and how many taps reach it. */
+.esp-picker-sub { margin: 8px 0 4px; font-size: 11px; font-weight: 600; color: var(--lala-lavender-text); }
+.esp-pick-grid.is-icons { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+.esp-pick-grid.is-icons .esp-pick-img { height: 56px; }
+.esp-pick-grid.is-icons .esp-pick-img img { object-fit: contain; }
+.esp-pick-sub { font-size: 10px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.esp-pick-steps { align-self: flex-start; padding: 1px 6px; border-radius: 999px; background: var(--surface-card); font-size: 10px; font-weight: 600; color: var(--lala-lavender-text); }
+.esp-picker-taps { flex: 1 1 100%; font-size: 12px; color: var(--text-primary); }
+.esp-moment.is-icon .esp-moment-thumb { width: 40px; height: 40px; border-radius: 10px; }
+.esp-moment.is-icon .esp-moment-thumb img { object-fit: contain; }
+.esp-moment-opens { font-size: 11px; color: var(--lala-ink-muted); }
