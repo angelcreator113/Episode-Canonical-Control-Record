@@ -54,7 +54,22 @@ describe('Script page', () => {
     expect(within(uses).getByTestId('script-uses-look').textContent).toBe('Look not locked on the Wardrobe tab yet · Open Wardrobe');
     expect(within(uses).getByRole('link', { name: 'Open Wardrobe' }).getAttribute('href')).toBe('/?tab=wardrobe');
     expect(api.get).toHaveBeenCalledWith('/api/v1/wardrobe/outfit/ep-1');
+    // Career: the event has no deal, deliverables or goals yet (2026-10-09).
+    expect(within(uses).getByTestId('script-uses-career').textContent).toBe('Career no deal, deliverables or goals on the event · Open the event');
+    expect(within(uses).getByRole('link', { name: 'Open the event' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
     expect(within(screen.getByTestId('script-voice')).getByText('Open Character Studio').getAttribute('href')).toBe('/character-registry?view=world');
+  });
+
+  test("Career reads the event's deal and the deliverables Lala owes", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1') return { data: { data: BRIEF } };
+      if (url === '/api/v1/world/show-1/events/ev-1') return { data: { success: true, event: { ...EVENT, deal_components: ['paid_for_content'] } } };
+      if (url === '/api/v1/world/show-1/events/ev-1/deliverables') return { data: { success: true, deliverables: [{ id: 'd1', description: 'A reel' }] } };
+      return { data: { data: [] } };
+    });
+    renderTab();
+    await waitFor(() => expect(screen.getByTestId('script-uses-career').textContent).toBe('Career Paid content from SABLE · 1 deliverable owed'));
+    expect(screen.getByTestId('script-uses-career').getAttribute('data-ok')).toBe('true');
   });
 
   test('with a script: its beats and approvals, and Raw editor, Regenerate and Save', () => {

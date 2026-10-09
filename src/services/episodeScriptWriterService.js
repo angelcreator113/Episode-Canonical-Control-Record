@@ -21,6 +21,7 @@ const crypto = require('crypto');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
+const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -118,6 +119,29 @@ async function loadScriptContext(episodeId, showId, models) {
       attributes: WorldEvent.CURRENT_ATTRIBUTES,
     }).then(e => e?.toJSON());
   } catch { /* non-blocking */ }
+  // An event the brief names but Start Episode has not stamped yet
+  // (used_in_episode_id is set at Start; the brief's event_id earlier):
+  // still this episode's event (episodeEventsService reads both).
+  if (!context.event && context.brief?.event_id) {
+    try {
+      context.event = await WorldEvent.findByPk(context.brief.event_id, {
+        attributes: WorldEvent.CURRENT_ATTRIBUTES,
+      }).then(e => e?.toJSON() || null);
+    } catch (err) {
+      console.error('[ScriptWriter] brief event lookup failed (non-blocking):', err.message);
+    }
+  }
+
+  // 3b. Lala's career in this episode: the event's deal, what she owes,
+  // what she wants from it (scriptCareerService).
+  context.career = null;
+  if (context.event?.id) {
+    try {
+      context.career = await loadScriptCareer(sequelize, context.event.id);
+    } catch (err) {
+      console.error('[ScriptWriter] career context failed (non-blocking):', err.message);
+    }
+  }
 
   // 4. Financial state, from the ledger (§8(z) Law 0 and Law 14; §8(aa)
   //    M4; Task #2288). Lala's balance is her ledger balance
@@ -574,6 +598,7 @@ Allowed outcomes: ${JSON.stringify(brief?.allowed_outcomes || [])}
 
 ═══ FINANCIAL CONTEXT ═══
 ${financialContext}
+${careerBlock(context.career)}
 ${oppContext}
 ${stateContext}
 
@@ -725,7 +750,7 @@ Return a JSON array of 14 beats. Each beat object:
 8. End Beat 14 with a forward hook that seeds the next episode
 9. Each beat should have 3-8 lines minimum — make them ALIVE
 10. Inner monologue ("internal" type) reveals what Lala is REALLY feeling vs. what she shows
-
+${context.career && careerBlock(context.career) ? "11. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
 Return ONLY the JSON array. No markdown, no preamble.`;
 }
 

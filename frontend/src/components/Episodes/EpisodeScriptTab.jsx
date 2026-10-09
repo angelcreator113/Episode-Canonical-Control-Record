@@ -251,6 +251,7 @@ export default function EpisodeScriptTab({ episode, show }) {
   // brief's source event, as the Overview reads them.
   const [brief, setBrief] = useState(null);
   const [source, setSource] = useState(null);
+  const [deliverables, setDeliverables] = useState([]);
   // The outfit locked on the Wardrobe tab, which the script writer reads (null: could not be read).
   const [outfit, setOutfit] = useState([]);
 
@@ -274,6 +275,9 @@ export default function EpisodeScriptTab({ episode, show }) {
         api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
           .then((res) => setSource(res.data || null))
           .catch((err) => console.error('[EpisodeScript] source event load failed:', err));
+        api.get(`/api/v1/world/${showId}/events/${b.event_id}/deliverables`)
+          .then((res) => setDeliverables(res.data?.deliverables || []))
+          .catch((err) => { console.error('[EpisodeScript] deliverables load failed:', err); setDeliverables(null); });
       }
     }).catch((err) => console.error('[EpisodeScript] brief load failed:', err));
     api.get(`/api/v1/wardrobe/outfit/${episodeId}`)
@@ -456,7 +460,7 @@ export default function EpisodeScriptTab({ episode, show }) {
   const plan = source?.event
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
     : null;
-  const inputs = scriptInputs({ brief, plan, outfit });
+  const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
 
   return (
     <div className="esp">
@@ -551,6 +555,7 @@ export default function EpisodeScriptTab({ episode, show }) {
               <span className="esp-dot" aria-hidden="true" />
               <span><strong>{i.label}</strong> {i.detail}
                 {i.fix === 'wardrobe' && !i.ok && <> · <Link className="esp-link" to="?tab=wardrobe">Open Wardrobe</Link></>}
+                {i.fix === 'event' && !i.ok && i.to && <> · <Link className="esp-link" to={i.to}>Open the event</Link></>}
               </span>
             </li>
           ))}
