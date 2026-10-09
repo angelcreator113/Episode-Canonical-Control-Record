@@ -1,0 +1,48 @@
+/**
+ * What is on screen in a script beat (Task #2789): UI lines read as moments
+ * and find the phone screen or overlay they name.
+ */
+import { describe, test, expect } from 'vitest';
+import { parseMoment, resolveMoment, momentLine, verbLabel, EXPECTED_ON_SCREEN } from './scriptMoments';
+
+const SCREENS = [
+  { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
+  { id: 'mail_inbox', name: 'Mail Inbox', url: 'https://x/mail.png' },
+];
+const OVERLAYS = [
+  { key: 'invitation', label: 'Invitation', image_url: 'https://x/invite.png' },
+  { key: 'shopping_list_doc', label: 'Shopping list', image_url: null },
+];
+
+describe('scriptMoments', () => {
+  test('a UI line is a moment with its verb and target; anything else is not', () => {
+    expect(parseMoment('[UI:OPEN closet]')).toEqual({ verb: 'OPEN', target: 'closet' });
+    expect(parseMoment('  [UI:scroll ClosetItems x5] ')).toEqual({ verb: 'SCROLL', target: 'ClosetItems x5' });
+    expect(parseMoment('[STAT: coins +5]')).toBeNull();
+    expect(parseMoment('Lala: [UI:OPEN closet]')).toBeNull();
+  });
+
+  test('a moment finds its phone screen or overlay by key or name, loosely when it must', () => {
+    const on = { screens: SCREENS, overlays: OVERLAYS };
+    expect(resolveMoment(parseMoment('[UI:OPEN closet]'), on)).toEqual({ kind: 'phone', name: 'Closet', url: 'https://x/closet.png' });
+    expect(resolveMoment(parseMoment('[UI:CLICK MailInbox]'), on)).toMatchObject({ kind: 'phone', name: 'Mail Inbox' });
+    expect(resolveMoment(parseMoment('[UI:DISPLAY shopping_list_doc]'), on)).toEqual({ kind: 'overlay', name: 'Shopping list', url: null });
+    // The skeleton's names: "InviteLetterOverlay" is the invitation, "ClosetItems x5" the closet, "MailPanel" the inbox.
+    expect(resolveMoment(parseMoment('[UI:DISPLAY InviteLetterOverlay]'), on)).toMatchObject({ kind: 'overlay', name: 'Invitation' });
+    expect(resolveMoment(parseMoment('[UI:OPEN MailPanel]'), on)).toMatchObject({ kind: 'phone', name: 'Mail Inbox' });
+    expect(resolveMoment(parseMoment('[UI:SCROLL ClosetItems x5]'), on)).toMatchObject({ kind: 'phone', name: 'Closet' });
+    expect(resolveMoment(parseMoment('[UI:OPEN LoginWindow]'), on)).toBeNull();
+  });
+
+  test('the line a picker writes, and how verbs read', () => {
+    expect(momentLine('display', 'invitation')).toBe('[UI:DISPLAY invitation]');
+    expect(parseMoment(momentLine('OPEN', 'closet'))).toEqual({ verb: 'OPEN', target: 'closet' });
+    expect([verbLabel('OPEN'), verbLabel('CLICK'), verbLabel('DISPLAY'), verbLabel('CHECK_ITEM'), verbLabel('WAVE_HAND')])
+      .toEqual(['Opens', 'Taps', 'Shows', 'Checks', 'Wave hand']);
+  });
+
+  test('every canonical beat says what it puts on screen', () => {
+    expect(Object.keys(EXPECTED_ON_SCREEN).map(Number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(EXPECTED_ON_SCREEN[5]).toMatchObject({ what: 'The invitation letter, opened', where: "Lala's Phone → Full Screen" });
+  });
+});
