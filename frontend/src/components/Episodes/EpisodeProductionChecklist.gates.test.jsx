@@ -20,7 +20,7 @@ let slotCoverage;
 const renderChecklist = () => render(
   <MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1' }} showId="show-1" /></MemoryRouter>,
 );
-const planItem = () => screen.findByText(/^Scene plan generated \(14 beats\)/);
+const planItem = () => screen.findByText(/^Scene plan generated/);
 const slotsItem = () => screen.findByText(/^Required wardrobe slots covered/);
 const inventoryItem = () => screen.findByText(/^Wardrobe pieces uploaded/);
 
@@ -44,8 +44,6 @@ describe('GATE-01: the 14-beat plan', () => {
     expect(label.textContent).toMatch(/required/i);
     expect((await screen.findByTestId('check-note-scene_plan')).textContent).toBe('1 of 14 beats · missing beats 2 and 3');
     expect((await screen.findByTestId('checklist-scene-next')).textContent).toContain('Next: Complete the beat plan: 1 of 14 beats · missing beats 2 and 3');
-    // Locks never count before the plan is whole.
-    expect((await screen.findByText(/^Scene plan locked/)).style.textDecoration).toBe('none');
   });
 
   test('fourteen beats, once each, is the plan', async () => {
@@ -54,7 +52,6 @@ describe('GATE-01: the 14-beat plan', () => {
     renderChecklist();
     await waitFor(async () => expect((await planItem()).style.textDecoration).toBe('line-through'));
     expect(screen.queryByTestId('check-note-scene_plan')).toBeNull();
-    expect((await screen.findByText(/^Scene plan locked/)).style.textDecoration).toBe('line-through');
   });
 
   test('rows without a coverage result are not taken as a plan', async () => {

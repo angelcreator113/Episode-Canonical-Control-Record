@@ -4,7 +4,6 @@ import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
-import ProductionCoveragePanel from './ProductionCoveragePanel';
 import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
 import { SECTION_GUIDE, sectionCount } from '../../lib/checklistHub';
 
@@ -46,8 +45,10 @@ export const CHECKLIST_SECTIONS = [
     label: 'Scene Plan',
     items: [
       { id: 'scene_sets',        label: 'Scene sets assigned',        required: true  },
-      { id: 'scene_plan',        label: 'Scene plan generated (14 beats)', required: true  },
-      { id: 'scene_plan_locked', label: 'Scene plan locked',          required: false },
+      // Evoni, 2026-10-09: "scenes should not have beats attached makes
+      // things too complicated": the checklist no longer asks for beat
+      // locks or per-beat clips (the Scenes tab keeps them).
+      { id: 'scene_plan',        label: 'Scene plan generated',       required: true  },
       // L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking.
       { id: 'scene_images',      label: 'Scene images for every beat', required: false },
     ],
@@ -299,7 +300,6 @@ export async function loadProductionChecks(episode, showId) {
       results.scene_plan        = Boolean(coverage?.complete);
       if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
       else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
-      results.scene_plan_locked = Boolean(coverage?.complete) && plan.every(b => b.locked);
       if (plan.some((b) => b.scene_set_id || b.sceneSet)) results.scene_sets = true;
       // L5, Q21: every planned beat has an angle with an image.
       const readiness = data?.readiness;
@@ -311,9 +311,11 @@ export async function loadProductionChecks(episode, showId) {
         checkNotes.scene_images = `${readiness.ready} ready · ${n} ${n === 1 ? 'needs' : 'need'} attention: beat${n === 1 ? '' : 's'} ${beats}`;
       }
       sceneStep = nextStep(plan, readiness, coverage);
+      // Locking the beats is not a checklist step (2026-10-09).
+      if (sceneStep?.kind === 'lock') sceneStep = { kind: 'script', text: 'Write the script' };
     } catch (err) {
       console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
-      results.scene_plan = results.scene_plan_locked = results.scene_images = false;
+      results.scene_plan = results.scene_images = false;
       sceneStep = null;
     }
 
@@ -382,7 +384,17 @@ export async function loadProductionChecks(episode, showId) {
     }
 
     // ── Check the Overlays card: the title overlay, and overlays placed on the video ──
-    results.title_overlay = !!episode.title_overlay_asset_id;
+    // The title overlay or the framed title card, read from the episode as
+    // it is now (the page's copy can predate the Overlays tab's save;
+    // Evoni, 2026-10-09: "title has already been created").
+    let titleRow = episode;
+    try {
+      const { data } = await api.get(`/api/v1/episodes/${episode.id}`);
+      titleRow = data?.data || data?.episode || data || episode;
+    } catch (err) {
+      console.error('[Checklist] episode re-read failed:', err.response?.status || err.message);
+    }
+    results.title_overlay = !!(titleRow.title_overlay_asset_id || titleRow.title_card_asset_id || episode.title_overlay_asset_id || episode.title_card_asset_id);
     try {
       const { data } = await api.get(`/api/v1/episodes/${episode.id}/timeline/placements`);
       results.overlays_placed = (data?.data?.length || 0) > 0;
@@ -421,7 +433,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // S9 (c): the scenes' next step (plan, images, locks, script), moved here
   // from the Scenes tab.
   const [sceneStep, setSceneStep] = useState(null);
-  const [locking, setLocking] = useState(false);
   // The source event (the event package card's link) and a counter that
   // reloads the timeline with each re-check.
   const [linkedEvent, setLinkedEvent] = useState(null);
@@ -489,19 +500,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   }));
 
   // S9 (c): lock every beat, then re-check.
-  const lockAllBeats = async () => {
-    setLocking(true);
-    try {
-      await api.post(`/api/v1/episode-brief/${episode.id}/plan/lock-all`);
-      await checkReadiness();
-    } catch (err) {
-      console.error('[EpisodeProductionChecklist] lock all failed:', err);
-      setToast({ msg: err.response?.data?.error || 'Could not lock the beats', type: 'error' });
-      setTimeout(() => setToast(null), 5000);
-    } finally {
-      setLocking(false);
-    }
-  };
   // Audit STATE-01: a partly initialised episode (setup_status.complete
   // false, or canonical beats missing) is repaired in place, never by a
   // second episode. The server makes only the missing beats.
@@ -530,8 +528,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   // Each action is offered once on the list: the plan and the script by the
   // footer's Scene Plan and Write Script, the images by their row's Open
-  // Scenes; only locking every beat has no other button.
-  const sceneStepAction = sceneStep?.kind === 'lock' ? { label: 'Lock all beats', onClick: lockAllBeats } : null;
+  // Scenes, so the next step is words only.
 
   const allRequired = CHECKLIST_SECTIONS
     .flatMap(s => s.items)
@@ -578,12 +575,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           {section.id === 'scene' && sceneStep && (
             <div data-testid="checklist-scene-next" className="ckh-next">
               <span style={{ flex: '1 1 180px', minWidth: 0 }}><strong>Next:</strong> {sceneStep.text}</span>
-              {sceneStepAction && (
-                <button type="button" data-testid="checklist-scene-next-action" onClick={sceneStepAction.onClick} disabled={locking} style={{
-                  padding: '3px 10px', borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)',
-                  fontSize: 11, fontWeight: 600, cursor: locking ? 'wait' : 'pointer',
-                }}>{sceneStepAction.label}</button>
-              )}
             </div>
           )}
           {/* Production coverage (§8(o) item 2, episode creation step 8). */}
@@ -605,8 +596,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
               onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
               unavailable={sectionStatus.state === 'unavailable'} />
           ))}
-          {/* The clips each beat needs (JustAWoman, Lala), attached here. */}
-          {section.id === 'scene' && <ProductionCoveragePanel episodeId={episode.id} />}
         </SectionCard>
           );
         })()

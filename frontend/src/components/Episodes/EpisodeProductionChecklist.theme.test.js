@@ -48,7 +48,6 @@ describe('Episode Production Checklist theme', () => {
     expect(hubCss).toMatch(/\.ckh-evaluate \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
     expect(checklist).toMatch(/background: allRequired \? 'var\(--lala-lavender\)' : 'var\(--lala-parchment-3\)'/);
     expect(checklist).toMatch(/color: allRequired \? 'var\(--text-inverse\)' : 'var\(--text-secondary\)'/);
-    expect(checklist).toMatch(/border: 'none', background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)',\s*fontSize: 11, fontWeight: 600, cursor: locking/);
     expect(coverage).toMatch(/buttonStyle\(TEAL\)/);
     expect(coverage).toMatch(/buttonStyle\('var\(--danger\)'\)\}>Remove/);
   });
