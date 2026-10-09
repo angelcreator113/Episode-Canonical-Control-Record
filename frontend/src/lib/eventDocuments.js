@@ -31,10 +31,15 @@ export function docState(doc) {
  * drawn on approval (eventDocumentOverlayService): current when drawn from
  * the approved version as it stands, outdated once edited or redrafted.
  */
-export function docOverlay(doc) {
+export function docOverlay(doc, lookTotal = null) {
   if (!doc) return null;
   const url = doc.overlay?.url || null;
   if (url && doc.status === 'approved' && doc.overlay.version === doc.version) {
+    // A shopping list drawn with another total: the look changed since.
+    const drawn = doc.overlay.look_total;
+    if (lookTotal != null && drawn != null && Number(drawn) !== Number(lookTotal)) {
+      return { key: 'outdated', url, label: 'Overlay out of date: the look changed' };
+    }
     return { key: 'current', url, label: 'Overlay ready' };
   }
   if (url) {
@@ -53,23 +58,39 @@ export function lineOfPiece(piece) {
   return CANONICAL_TO_LINE[canonicalCategory(piece?.category || piece?.clothing_category)] || null;
 }
 
+// What a piece costs on the list, and whether Lala has it. A piece of the
+// episode's look carries the charge Finalize books for it (the server's
+// episodeLookCharges.episodeLook), so the list adds up what the Money page
+// does: owned, already bought, gifted or borrowed costs nothing; rented, its
+// rental (Evoni, 2026-10-09: "Lala's shopping list overlay is not showing the
+// correct total for everything"). Without one, its coin_cost unless owned.
+function pieceCost(piece) {
+  if (piece && 'charge' in piece) return piece.charge ? Number(piece.charge.amount) || 0 : 0;
+  return piece && piece.is_owned !== true ? Number(piece.coin_cost) || 0 : 0;
+}
+function pieceHad(piece) {
+  if (piece && 'charge' in piece) return !piece.charge && piece.free_because !== 'free';
+  return piece?.is_owned === true;
+}
+
 /**
  * The shopping list's lines with the look's pieces: each line the piece the
- * look holds for it (owned, ticked; or to buy, its coins), or nothing yet.
- * The total is what the pieces still to buy cost.
+ * look holds for it (had, ticked; or to buy, its coins), or nothing yet. A
+ * piece no line takes is a line of its own, so the total is every piece the
+ * look costs (the server's eventDocumentOverlayService.shoppingLines draws
+ * the same lines).
  */
 export function shoppingLines(doc, outfitPieces = []) {
-  const pieces = Array.isArray(outfitPieces) ? outfitPieces : [];
+  const pieces = Array.isArray(outfitPieces) ? outfitPieces.filter(Boolean) : [];
   const used = new Set();
+  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0 });
   const lines = (doc?.items || []).map((item) => {
-    const piece = pieces.find((p, i) => !used.has(i) && lineOfPiece(p) === item.slot);
-    if (piece) used.add(pieces.indexOf(piece));
-    return {
-      ...item,
-      piece: piece || null,
-      owned: piece ? piece.is_owned === true : false,
-      cost: piece && piece.is_owned !== true ? Number(piece.coin_cost) || 0 : 0,
-    };
+    const index = pieces.findIndex((p, i) => !used.has(i) && lineOfPiece(p) === item.slot);
+    if (index >= 0) used.add(index);
+    return line(item, index >= 0 ? pieces[index] : null);
+  });
+  pieces.forEach((p, i) => {
+    if (!used.has(i)) lines.push(line({ slot: 'extra', label: p.name || 'Another piece', extra: true }, p));
   });
   return { lines, total: lines.reduce((n, l) => n + l.cost, 0) };
 }

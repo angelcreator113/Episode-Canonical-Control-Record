@@ -105,8 +105,8 @@ function CareerCard({ doc, deliverables = [] }) {
 
 // The document's overlay: its image, whether it matches the document, and
 // Make overlay (the approve call draws it again) when an approved one has none.
-function OverlayRow({ type, doc, busy, onMake }) {
-  const o = docOverlay(doc);
+function OverlayRow({ type, doc, busy, onMake, lookTotal = null }) {
+  const o = docOverlay(doc, lookTotal);
   if (!o) return null;
   const canMake = doc.status === 'approved' && o.key !== 'current';
   return (
@@ -201,6 +201,14 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
     }
   }, []);
 
+  // The look the shopping list adds up and Lala's coins, as the server reads
+  // them with the documents (the look Finalize charges, Evoni 2026-10-09);
+  // the caller's pieces and balance only until they load. The episode's
+  // Overlays tab passes neither, so its list read a total of 0.
+  const listPieces = docs?.look ? docs.look.pieces : outfitPieces;
+  const listBalance = docs?.balance ?? balance;
+  const listTotal = docs?.shopping_list && docs?.look ? shoppingLines(docs.shopping_list, docs.look.pieces).total : null;
+
   return (
     <div className={`evd${layout === 'wide' ? ' is-wide' : ''}`} data-testid="event-documents">
       {intro && <p className="evd-intro">
@@ -234,7 +242,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     />
                   )}
                   {doc && editing !== type && type === 'shopping_list' && (
-                    <ShoppingPaper doc={doc} event={event} outfitPieces={outfitPieces} balance={balance} />
+                    <ShoppingPaper doc={doc} event={event} outfitPieces={listPieces} balance={listBalance} />
                   )}
                   {doc && editing !== type && type === 'career_plan' && <CareerCard doc={doc} deliverables={docs.deliverables || []} />}
                 </div>
@@ -263,6 +271,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                 {doc && (
                   <OverlayRow
                     type={type} doc={doc} busy={busy}
+                    lookTotal={type === 'shopping_list' ? listTotal : null}
                     onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type))}
                   />
                 )}

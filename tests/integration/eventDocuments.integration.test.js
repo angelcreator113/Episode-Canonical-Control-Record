@@ -78,7 +78,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const ids = await seed();
     const empty = await auth(request(app).get(`${base(ids)}/documents`));
     expect(empty.status).toBe(200);
-    expect(empty.body.data).toEqual({ shopping_list: null, career_plan: null, deliverables: [] });
+    expect(empty.body.data).toMatchObject({ shopping_list: null, career_plan: null, deliverables: [] });
+    // The look the shopping list adds up, and Lala's coins, come with the documents (Task #2787).
+    expect(empty.body.data.look).toEqual({ state: 'none', pieces: [], total: 0 });
+    expect(typeof empty.body.data.balance).toBe('number');
 
     const drafted = await auth(request(app).post(`${base(ids)}/documents/shopping_list/draft`));
     expect(drafted.status).toBe(200);

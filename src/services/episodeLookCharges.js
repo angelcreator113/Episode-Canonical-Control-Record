@@ -38,7 +38,7 @@ async function loadLookPieces(sequelize, { episodeId, event, transaction = null 
   let linked = [];
   try {
     linked = await sequelize.query(
-      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.tier, w.brand,
+      `SELECT w.id, w.name, w.clothing_category, w.is_owned, w.coin_cost, w.price, w.tier, w.brand,
               w.acquisition_type, w.rental_price,
               COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
@@ -141,6 +141,9 @@ async function episodeLook(sequelize, { episodeId, event, showId = null }) {
   const slim = (p) => ({
     id: p.id,
     name: p.name || null,
+    // The piece's category, so the shopping list finds its line (a linked
+    // piece's clothing_category; the event's snapshot calls it category).
+    category: p.category || p.clothing_category || null,
     is_owned: p.is_owned === true,
     coin_cost: p.coin_cost != null ? (parseFloat(p.coin_cost) || 0) : (p.price != null ? (parseFloat(p.price) || 0) : null),
     acquisition_type: p.acquisition_type || null,
@@ -167,7 +170,7 @@ async function episodeLook(sequelize, { episodeId, event, showId = null }) {
   let linked = [];
   try {
     linked = await sequelize.query(
-      `SELECT w.id, w.name, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url,
+      `SELECT w.id, w.name, w.clothing_category, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url,
               w.acquisition_type, w.rental_price,
               COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id

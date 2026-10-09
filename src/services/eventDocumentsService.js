@@ -226,7 +226,17 @@ async function expectedOfHer(sequelize, eventId) {
 /** GET: both documents, and the deliverables expected of her. */
 async function getDocuments(models, { showId, eventId }) {
   const event = await loadEvent(models.sequelize, showId, eventId);
-  return { ...readDocuments(event), deliverables: await expectedOfHer(models.sequelize, event.id) };
+  // The look the shopping list adds up and Lala's coins (Evoni, 2026-10-09:
+  // the list's total was wrong): the same look and charges as Finalize, read
+  // here so every place that shows the list shows one total.
+  const { shoppingListContext } = require('./eventDocumentOverlayService');
+  const { look, balance } = await shoppingListContext(models.sequelize, event);
+  return {
+    ...readDocuments(event),
+    deliverables: await expectedOfHer(models.sequelize, event.id),
+    look: look ? { state: look.state, pieces: look.pieces, total: look.total } : null,
+    balance,
+  };
 }
 
 /** Draft, or redraft: a new draft written from the event. */
@@ -283,7 +293,13 @@ async function approveDocument(models, { showId, eventId, type }) {
   const prev = readDocuments(event)[type];
   if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
   if (prev.status === 'approved') {
-    return overlayState(prev) === 'current' ? prev : withOverlay(models, event, type, prev);
+    let lookTotal = null;
+    if (type === 'shopping_list') {
+      const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
+      const { look } = await shoppingListContext(models.sequelize, event);
+      if (look) lookTotal = shoppingLines(prev, look.pieces).total;
+    }
+    return overlayState(prev, lookTotal) === 'current' ? prev : withOverlay(models, event, type, prev);
   }
   const now = new Date().toISOString();
   const doc = await writeDocument(models.sequelize, eventId, type, { ...prev, status: 'approved', approved_at: now, updated_at: now });
