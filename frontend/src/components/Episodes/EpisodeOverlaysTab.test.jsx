@@ -232,3 +232,31 @@ describe('EpisodeOverlaysTab — one card per overlay', () => {
     expect(screen.queryByTestId('eot-new-menu')).toBeNull();
   });
 });
+
+describe("EpisodeOverlaysTab: Lala's look as overlays (Task #2791)", () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockImplementation(routeGet);
+  });
+
+  test('each wardrobe piece approved for the episode is an overlay with its picture', async () => {
+    const wardrobe = [
+      { key: 'look_sculpted_dress', label: 'Sculpted Dress', category: 'dress', wardrobe_id: 'w1', image_url: 'https://img/dress-nobg.png' },
+      { key: 'look_gold_drops', label: 'Gold Drops', category: 'jewelry', wardrobe_id: 'w2', image_url: null },
+    ];
+    vi.mocked(api.get).mockImplementation((url) => (url === '/api/v1/episodes/ep-1/overlays' ? ok({ ...OVERLAYS, wardrobe }) : routeGet(url)));
+    renderTab();
+    const dress = await screen.findByTestId('eot-look-look_sculpted_dress');
+    expect(dress.querySelector('img').getAttribute('src')).toBe('https://img/dress-nobg.png');
+    expect(dress.textContent).toContain('Sculpted Dress');
+    expect(screen.getByTestId('eot-look-look_gold_drops').textContent).toContain('Gold Drops');
+    expect(screen.queryByTestId('eot-look-none')).toBeNull();
+  });
+
+  test('with no approved pieces it points to the Wardrobe tab', async () => {
+    renderTab();
+    const none = await screen.findByTestId('eot-look-none');
+    expect(none.textContent).toContain('No wardrobe pieces approved for this episode yet');
+    expect(within(none).getByRole('link', { name: 'Wardrobe tab' }).getAttribute('href')).toContain('tab=wardrobe');
+  });
+});

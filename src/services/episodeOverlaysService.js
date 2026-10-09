@@ -245,15 +245,59 @@ async function shoppingListTotals(sequelize, event) {
   return look ? { shopping_list: shoppingLines(doc, look.pieces).total } : {};
 }
 
+/**
+ * The wardrobe pieces approved for the episode as overlays (Evoni,
+ * 2026-10-09: "The wardrobe pieces that's approved for the episode should
+ * also become overlays"; Task #2791): one per piece of the look locked in
+ * the styling game (episode_wardrobe approved, as Finalize charges it), its
+ * picture the background-removed image when there is one. The key names it
+ * in a script's UI line, [UI:DISPLAY look_gold_drops]. Pure.
+ */
+function lookOverlayPieces(rows = []) {
+  const used = new Set();
+  return rows.map((r) => {
+    const base = `look_${String(r.name || 'piece').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'piece'}`;
+    let key = base;
+    for (let n = 2; used.has(key); n += 1) key = `${base}_${n}`;
+    used.add(key);
+    return {
+      key,
+      label: r.name || 'Wardrobe piece',
+      category: r.clothing_category || null,
+      wardrobe_id: r.id,
+      image_url: r.s3_url_processed || r.s3_url_regenerated || r.s3_url || r.thumbnail_url || null,
+    };
+  });
+}
+
+async function loadLookOverlays(sequelize, episodeId) {
+  try {
+    const rows = await sequelize.query(
+      `SELECT w.id, w.name, w.clothing_category, w.s3_url_processed, w.s3_url_regenerated, w.s3_url, w.thumbnail_url
+         FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id
+        WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL AND ew.approval_status = 'approved'
+          AND w.deleted_at IS NULL AND w.parent_item_id IS NULL
+        ORDER BY ew.created_at ASC, w.id ASC`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    return lookOverlayPieces(rows);
+  } catch (err) {
+    // The other overlays still list without the look's pieces.
+    console.error('[episodeOverlays] look pieces read failed; not shown:', err.message);
+    return [];
+  }
+}
+
 /** GET /episodes/:id/overlays. null when the episode does not exist. */
 async function getEpisodeOverlays(models, episodeId) {
   const { sequelize } = models;
   const ep = await loadEpisodeRow(sequelize, episodeId);
   if (!ep) return null;
-  const [title, invitation, event] = await Promise.all([
+  const [title, invitation, event, wardrobe] = await Promise.all([
     getTitleCardState(models, episodeId),
     loadEpisodeInvitationOverlay(sequelize, { showId: ep.show_id, episodeId }),
     loadAnchorEvent(sequelize, episodeId),
+    loadLookOverlays(sequelize, episodeId),
   ]);
   const placements = await loadPlacements(sequelize, episodeId, [
     title?.overlay?.asset_id, title?.card?.asset_id, invitation?.id,
@@ -268,6 +312,8 @@ async function getEpisodeOverlays(models, episodeId) {
     show_id: ep.show_id,
     title: { text: ep.title || '', approved: Boolean(title?.approved) },
     pieces,
+    // The look's approved pieces, each an overlay (Task #2791).
+    wardrobe,
     title_chip: titleChip(pieces),
     // The event its documents come from (the redesigned tab, 2026-10-07).
     event: event ? { id: event.id, show_id: event.show_id || ep.show_id, name: event.name || null } : null,
@@ -282,6 +328,7 @@ module.exports = {
   placedBeat,
   overlayPieces,
   documentPieces,
+  lookOverlayPieces,
   titleChip,
   getEpisodeOverlays,
 };

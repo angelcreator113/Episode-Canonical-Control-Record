@@ -27,7 +27,9 @@ const SCREENS = [
   { id: 'closet', name: 'Closet', category: 'phone_screen', generated: true, url: 'https://x/closet.png' },
   { id: 'mail_icon_badge', name: 'Mail badge', category: 'phone_icon', url: 'https://x/badge.png' },
 ];
-const OVERLAYS = { pieces: [
+const OVERLAYS = { wardrobe: [
+  { key: 'look_sculpted_dress', label: 'Sculpted Dress', category: 'dress', wardrobe_id: 'w1', image_url: 'https://x/dress.png' },
+], pieces: [
   { key: 'invitation', label: 'Invitation', image_url: 'https://x/invite.png' },
   { key: 'shopping_list_doc', label: 'Shopping list', image_url: 'https://x/list.png' },
 ] };
@@ -113,5 +115,20 @@ describe('Script tab: what is on screen in each beat', () => {
     renderTab([4]);
     await screen.findByTestId('script-picture-4');
     expect(screen.queryByTestId('script-add-moment-4')).toBeNull();
+  });
+
+  test("the look's approved wardrobe pieces are overlays in their own group (Task #2791)", async () => {
+    renderTab();
+    await screen.findByTestId('script-picture-4');
+    fireEvent.click(screen.getByTestId('script-add-moment-4'));
+    const picker = screen.getByTestId('script-moment-picker');
+    await waitFor(() => expect(within(picker).getByTestId('script-pick-overlay-look_sculpted_dress')).toBeTruthy());
+    expect(picker.textContent).toContain("Lala's look");
+    fireEvent.click(within(picker).getByTestId('script-pick-overlay-look_sculpted_dress'));
+    fireEvent.click(within(picker).getByTestId('script-moment-add'));
+    const moments = within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment');
+    const added = moments[moments.length - 1];
+    expect(added.textContent).toContain('Shows Sculpted Dress');
+    expect(added.querySelector('img').getAttribute('src')).toBe('https://x/dress.png');
   });
 });

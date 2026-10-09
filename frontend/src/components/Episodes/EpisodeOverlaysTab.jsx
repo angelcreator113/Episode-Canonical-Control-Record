@@ -254,6 +254,26 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
               <p className="eot-note" data-testid="eot-docs-none">No event started this episode, so it has no invitation, shopping list or career plan.</p>
             )}
           </div>
+
+          {/* The look's approved wardrobe pieces, each an overlay (Evoni,
+              2026-10-09; Task #2791): the Script tab puts them on screen. */}
+          <div className="eot-look" data-testid="eot-look">
+            <h3 className="eot-look-title">Lala&apos;s look</h3>
+            {(data.wardrobe || []).length ? (
+              <ul className="eot-look-list">
+                {data.wardrobe.map((w) => (
+                  <li key={w.key} className="eot-look-piece" data-testid={`eot-look-${w.key}`}>
+                    <span className="eot-look-img">{w.image_url ? <img src={w.image_url} alt="" loading="lazy" /> : null}</span>
+                    <span className="eot-look-name">{w.label}</span>
+                    {w.category && <span className="eot-look-cat">{w.category}</span>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="eot-note" data-testid="eot-look-none">No wardrobe pieces approved for this episode yet. Lock the look on the <Link to="?tab=wardrobe">Wardrobe tab</Link>; each piece then shows here as an overlay.</p>
+            )}
+            <p className="eot-look-hint">Put a piece on screen from the Script tab: a beat&apos;s Phone / overlay button.</p>
+          </div>
         </section>
       )}
 
