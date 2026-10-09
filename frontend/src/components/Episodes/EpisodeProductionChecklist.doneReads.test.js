@@ -54,4 +54,13 @@ describe('the checks read what the work actually writes', () => {
     expect(checks.social_checklist).toBe(false);
     expect(checks.show_brain).toBe(false);
   });
+
+  test('a title made after the page loaded counts, the overlay or the framed card (Evoni, 2026-10-09)', async () => {
+    responses['/api/v1/episodes/ep-1'] = { data: { id: 'ep-1', title_overlay_asset_id: null, title_card_asset_id: 'card-1' } };
+    expect((await loadProductionChecks(episode, 'show-1')).checks.title_overlay).toBe(true);
+    responses['/api/v1/episodes/ep-1'] = { data: { id: 'ep-1', title_overlay_asset_id: 'ov-1' } };
+    expect((await loadProductionChecks(episode, 'show-1')).checks.title_overlay).toBe(true);
+    responses['/api/v1/episodes/ep-1'] = { data: { id: 'ep-1' } };
+    expect((await loadProductionChecks(episode, 'show-1')).checks.title_overlay).toBe(false);
+  });
 });

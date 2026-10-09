@@ -40,7 +40,7 @@ describe('Checklist hub', () => {
     renderHub();
     const summary = await screen.findByTestId('checklist-summary');
     await screen.findByTestId('episode-timeline-row-environment');
-    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 23$/);
+    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 22$/);
   });
 
   test('the timeline: a cell per beat per row, and Lala\'s look on Beat 8', async () => {

@@ -61,15 +61,14 @@ describe('EpisodeProductionChecklist: the scenes\' next step (S9 c)', () => {
     expect((await screen.findByTestId('check-note-scene_images')).textContent).toBe('1 ready · 2 need attention: beats 10, 11');
   });
 
-  test('every image ready, beats unlocked: Lock all beats locks them and re-checks', async () => {
+  test('every image ready, beats unlocked: the checklist skips locking and goes to the script (Evoni, 2026-10-09)', async () => {
     plan = [{ beat_number: 1, locked: false }, { beat_number: 2, locked: true }];
     readiness = { ready: 2, total: 2, not_ready: [] };
     renderChecklist();
-    expect((await screen.findByTestId('checklist-scene-next')).textContent).toContain('Next: Lock the beats');
-    const getsBefore = vi.mocked(api.get).mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: 'Lock all beats' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan/lock-all'));
-    await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(getsBefore));
+    expect((await screen.findByTestId('checklist-scene-next')).textContent).toContain('Next: Write the script');
+    expect(screen.queryByRole('button', { name: 'Lock all beats' })).toBeNull();
+    expect(screen.queryByText(/^Scene plan locked/)).toBeNull();
+    expect(screen.queryByText(/Production coverage/)).toBeNull();
   });
 
   test('no plan yet: make the beat plan; all locked: write the script', async () => {
