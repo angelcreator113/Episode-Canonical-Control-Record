@@ -59,3 +59,24 @@ describe('beatOnScreen (Task #2793)', () => {
     expect(used.map((u) => [u.name, u.kind])).toEqual([['Lower Third', 'overlay'], ['Mail', 'phone'], ['Invitation', 'overlay'], ['Closet', 'phone']]);
   });
 });
+
+describe("the phone itself (Task #2797)", () => {
+  const on = { screens: [{ id: 'closet', name: 'Closet' }, { id: 'mail', name: 'Mail' }], overlays: [{ key: 'lower_third', label: 'Lower Third' }], phoneFrame: 'https://x/frame.png' };
+  test('[UI:SHOW phone] is the phone, with its frame', () => {
+    expect(resolveMoment(parseMoment('[UI:SHOW phone]'), on)).toEqual({ kind: 'device', name: "Lala's phone", url: 'https://x/frame.png' });
+    expect(resolveMoment(parseMoment("[UI:HIDE Lala's Phone]"), on)).toMatchObject({ kind: 'device' });
+  });
+  test('it comes up, its screens show on it, and taking it away takes them too; a screen with no phone is flagged', () => {
+    const r = beatOnScreen(['[UI:OPEN mail]', '[UI:SHOW phone]', '[UI:DISPLAY lower_third]', '[UI:OPEN closet]', '[UI:HIDE phone]'], on);
+    expect(r.phoneDownAt).toEqual([0]);
+    expect(r.withByLine[3]).toEqual(["Lala's phone", 'Lower Third']);
+    expect(r.withByLine[4]).toEqual(['Lower Third']);
+    expect(r.phoneUpAtEnd).toBe(false);
+  });
+  test('it carries in from an earlier beat', () => {
+    const r = beatOnScreen(['[UI:OPEN closet]', 'Lala: cute'], on, { phoneUp: true });
+    expect(r.phoneDownAt).toEqual([]);
+    expect(r.withByLine[0]).toEqual(["Lala's phone"]);
+    expect(r.phoneUpAtEnd).toBe(true);
+  });
+});

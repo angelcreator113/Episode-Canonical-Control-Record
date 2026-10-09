@@ -31,6 +31,17 @@ export const PHONE_VERBS = [
   { verb: 'SCROLL', label: 'Scrolls' },
   { verb: 'CLOSE', label: 'Closes' },
 ];
+// The phone itself, not one of its screens (Evoni, 2026-10-09: "I have no
+// way of the script knowing when the actual phone will be on screen";
+// Task #2797): [UI:SHOW phone] brings it up, [UI:HIDE phone] takes it away.
+export const PHONE_KEY = 'phone';
+const PHONE_NAMES = new Set(['phone', 'thephone', 'lalasphone', 'lalaphone', 'phonedevice']);
+export const PHONE_NAME = "Lala's phone";
+export const DEVICE_VERBS = [{ verb: 'SHOW', label: 'Comes on screen' }, { verb: 'HIDE', label: 'Goes away' }];
+const DEVICE_ON = new Set(['SHOW', 'DISPLAY', 'OPEN']);
+/** How a moment of the phone itself reads: "Comes on screen", "Goes away". */
+export const deviceLabel = (verb) => (DEVICE_ON.has(String(verb || '').toUpperCase()) ? 'Comes on screen' : 'Goes away');
+
 // An overlay stays on screen from Shows until Hides (Task #2793).
 export const OVERLAY_VERBS = [{ verb: 'DISPLAY', label: 'Shows' }, { verb: 'HIDE', label: 'Hides' }];
 const VERB_LABELS = {
@@ -58,11 +69,13 @@ const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n])
  * generic words, contained in a key or sharing its first five letters
  * ("InviteLetterOverlay" finds the Invitation), the closest match first.
  */
-export function resolveMoment(moment, { screens = [], overlays = [] } = {}) {
+export function resolveMoment(moment, on = {}) {
+  const { screens = [], overlays = [] } = on;
   if (!moment) return null;
   // "ClosetItems x5" names ClosetItems.
   const target = normKey(String(moment.target || '').replace(/\s+x\d+$/i, ''));
   if (!target) return null;
+  if (PHONE_NAMES.has(target)) return { kind: 'device', name: PHONE_NAME, url: on.phoneFrame || null };
   const stem = targetStem(moment.target);
   const options = [
     ...screens.map((s) => ({ kind: 'phone', keys: [s.id, s.name], name: s.name || s.id, url: s.url || null })),
@@ -94,10 +107,18 @@ const OFF_VERBS = new Set(['HIDE', 'REMOVE', 'CLOSE']);
  * takes it off, and Lala's phone is one screen at a time. Returns, per line
  * index, the names on screen with that line's moment (itself excluded), and
  * every screen or overlay the beat uses, in order of first appearance.
+ *
+ * The phone itself (Task #2797) carries from beat to beat: phoneUp says
+ * whether it is on screen as the beat starts, phoneUpAtEnd whether it still
+ * is when the beat ends. Taking it away takes its screens with it, and a
+ * phone screen opened while it is not on screen is listed in phoneDownAt.
  */
-export function beatOnScreen(lines = [], on = {}) {
+export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
   const showing = new Map(); // name -> kind, in the order they came on
+  if (phoneUp) showing.set(PHONE_NAME, 'device');
+  let up = phoneUp;
   const withByLine = {};
+  const phoneDownAt = [];
   const used = new Map();
   lines.forEach((line, i) => {
     const moment = parseMoment(line);
@@ -105,17 +126,27 @@ export function beatOnScreen(lines = [], on = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
-    if (OFF_VERBS.has(moment.verb)) {
+    if (shown?.kind === 'device') {
+      up = DEVICE_ON.has(moment.verb);
+      if (up) showing.set(name, 'device');
+      else for (const [n, k] of showing) if (k === 'device' || k === 'phone') showing.delete(n);
+    } else if (OFF_VERBS.has(moment.verb)) {
       showing.delete(name);
     } else {
       if (shown?.kind === 'phone') {
+        if (!up) phoneDownAt.push(i);
         for (const [n, k] of showing) if (k === 'phone') showing.delete(n);
       }
       showing.set(name, shown?.kind || 'unknown');
     }
     withByLine[i] = [...showing.keys()].filter((n) => n !== name);
   });
-  return { withByLine, used: [...used.entries()].map(([name, s]) => ({ name, kind: s.kind, url: s.url })) };
+  return {
+    withByLine,
+    phoneDownAt,
+    phoneUpAtEnd: up,
+    used: [...used.entries()].map(([name, s]) => ({ name, kind: s.kind, url: s.url })),
+  };
 }
 
 /** The UI line a picker writes: the verb and the screen's or overlay's key. */
