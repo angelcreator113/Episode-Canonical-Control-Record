@@ -8,7 +8,7 @@ import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs } from '../../lib/episodeScript';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, PHONE_VERBS, OVERLAY_VERBS, EXPECTED_ON_SCREEN } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN } from '../../lib/scriptMoments';
 import { isScreen, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -117,7 +117,7 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen }) {
+function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -160,7 +160,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
           {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
-      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} />}
+      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} phoneDown={phoneDown} />}
       {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
     </div>
@@ -169,15 +169,18 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
 
 // A moment on screen in the script: what the phone or an overlay shows, with
 // its picture, so the beat reads the way it will play (Task #2789).
-function MomentCard({ moment, shown, alongside = [] }) {
+function MomentCard({ moment, shown, alongside = [], phoneDown = false }) {
   const Icon = shown?.kind === 'overlay' ? ImageIcon : Smartphone;
+  // The phone itself reads "Lala's phone · Comes on screen" (Task #2797).
+  const what = shown?.kind === 'device' ? deviceLabel(moment.verb) : `${verbLabel(moment.verb)} ${shown ? shown.name : moment.target}`;
   return (
     <div className={`esp-moment is-${shown ? shown.kind : 'unknown'}`} data-testid="script-moment">
       <span className="esp-moment-thumb">{shown?.url ? <img src={shown.url} alt="" loading="lazy" /> : <Icon size={18} aria-hidden="true" />}</span>
       <span className="esp-moment-text">
         <span className="esp-moment-kind">{shown?.kind === 'overlay' ? 'On screen' : "Lala's phone"}</span>
-        <span className="esp-moment-what">{verbLabel(moment.verb)} {shown ? shown.name : moment.target}</span>
+        <span className="esp-moment-what">{what}</span>
         {!shown && <span className="esp-moment-missing">No screen or overlay by this name yet</span>}
+        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</span>}
         {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
       </span>
     </div>
@@ -196,14 +199,15 @@ function lineLabel(line, on) {
   return text.length > 48 ? `${text.slice(0, 47)}…` : text;
 }
 
-function MomentPicker({ screens, overlays, look = [], production = [], lines = [], onScreen, onAdd, onClose }) {
+function MomentPicker({ screens, overlays, look = [], production = [], lines = [], onScreen, phoneFrame = null, onAdd, onClose }) {
   const [picked, setPicked] = useState(null);
   // Where it goes: after a line of the beat, or at the end (Task #2793).
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(null);
-  const verbs = picked?.kind === 'overlay' ? OVERLAY_VERBS : PHONE_VERBS;
+  const verbs = picked?.kind === 'overlay' ? OVERLAY_VERBS : picked?.kind === 'device' ? DEVICE_VERBS : PHONE_VERBS;
   const [verb, setVerb] = useState('OPEN');
-  const pick = (item) => { setPicked(item); setVerb(item.kind === 'overlay' ? 'DISPLAY' : 'OPEN'); };
+  const pickedLabel = picked?.kind === 'device' ? `${PHONE_NAME}: ${deviceLabel(verb).toLowerCase()}` : picked ? `${verbLabel(verb)} ${picked.name}` : '';
+  const pick = (item) => { setPicked(item); setVerb(item.kind === 'overlay' ? 'DISPLAY' : item.kind === 'device' ? 'SHOW' : 'OPEN'); };
   const tile = (item) => (
     <button key={`${item.kind}:${item.key}`} type="button"
       className={`esp-pick-tile${picked?.kind === item.kind && picked?.key === item.key ? ' is-picked' : ''}`}
@@ -212,7 +216,11 @@ function MomentPicker({ screens, overlays, look = [], production = [], lines = [
       <span className="esp-pick-name">{item.name}</span>
     </button>
   );
-  const phoneItems = screens.map((s) => ({ kind: 'phone', key: s.id, name: s.name || s.id, url: s.url || null }));
+  // The phone itself first (Task #2797), then its screens.
+  const phoneItems = [
+    { kind: 'device', key: PHONE_KEY, name: 'The phone itself', url: phoneFrame || null },
+    ...screens.map((s) => ({ kind: 'phone', key: s.id, name: s.name || s.id, url: s.url || null })),
+  ];
   const ownGroup = new Set([...look, ...production].map((o) => o.key));
   const asOverlay = (o) => ({ kind: 'overlay', key: o.key, name: o.label || o.key, url: o.image_url || null });
   const overlayItems = overlays.filter((o) => !ownGroup.has(o.key)).map(asOverlay);
@@ -225,7 +233,8 @@ function MomentPicker({ screens, overlays, look = [], production = [], lines = [
         <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
       </div>
       <p className="esp-picker-group">Lala&apos;s Phone</p>
-      {phoneItems.length ? <div className="esp-pick-grid">{phoneItems.map(tile)}</div> : <p className="esp-picker-empty">No phone screens yet. Make them in Lala&apos;s Phone.</p>}
+      <div className="esp-pick-grid">{phoneItems.map(tile)}</div>
+      {!screens.length && <p className="esp-picker-empty">No phone screens yet. Make them in Lala&apos;s Phone.</p>}
       <p className="esp-picker-group">Overlays</p>
       {overlayItems.length ? <div className="esp-pick-grid">{overlayItems.map(tile)}</div> : <p className="esp-picker-empty">No overlays for this episode yet.</p>}
       <p className="esp-picker-group">Lala&apos;s look</p>
@@ -249,11 +258,11 @@ function MomentPicker({ screens, overlays, look = [], production = [], lines = [
           <button type="button" className="esp-btn-primary is-small" data-testid="script-moment-add" onClick={() => {
             const at = after === 'end' ? null : Number(after);
             onAdd(momentLine(verb, picked.key), at);
-            setAdded(`${verbLabel(verb)} ${picked.name}`);
+            setAdded(pickedLabel);
             // The next one goes after this one.
             if (at !== null) setAfter(String(at + 1));
           }}>
-            Add &ldquo;{verbLabel(verb)} {picked.name}&rdquo;
+            Add &ldquo;{pickedLabel}&rdquo;
           </button>
         </div>
       )}
@@ -325,7 +334,7 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose }) {
   );
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -334,7 +343,10 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
   // What is on screen through the beat, line by line, and everything it uses (Task #2793).
-  const { withByLine, used } = beatOnScreen(beat.lines, onScreen);
+  const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart });
+  // The phone carries in from an earlier beat (Task #2797): it builds this scene too.
+  const used = phoneUpAtStart
+    ? [{ name: PHONE_NAME, kind: 'device', url: onScreen.phoneFrame || null }, ...usedHere.filter((u) => u.kind !== 'device')] : usedHere;
   const [dropAt, setDropAt] = useState(null);
   const visibleLines = beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length;
   return (
@@ -400,7 +412,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 {picture && <span className="esp-build-item is-scene"><img src={picture} alt="" loading="lazy" /><span>Scene</span></span>}
                 {used.map((u) => (
                   <span key={u.name} className={`esp-build-item is-${u.kind}`}>
-                    {u.url ? <img src={u.url} alt="" loading="lazy" /> : (u.kind === 'phone' ? <Smartphone size={16} aria-hidden="true" /> : <ImageIcon size={16} aria-hidden="true" />)}
+                    {u.url ? <img src={u.url} alt="" loading="lazy" /> : (u.kind === 'phone' || u.kind === 'device' ? <Smartphone size={16} aria-hidden="true" /> : <ImageIcon size={16} aria-hidden="true" />)}
                     <span>{u.name}</span>
                   </span>
                 ))}
@@ -414,13 +426,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           )}
           {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
-          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} />)}</div>
+          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} />)}</div>
           {adding && !beat.approved && (
             <LineAdder lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {picking && !beat.approved && (
-            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen}
+            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
               onClose={() => setPicking(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
@@ -517,8 +529,14 @@ export default function EpisodeScriptTab({ episode, show }) {
         return { pieces: list(res.data?.data?.pieces), look: list(res.data?.data?.wardrobe) };
       })
       .catch((err) => { console.error('[EpisodeScript] overlays load failed:', err); return { pieces: [], look: [] }; });
-    Promise.all([screens, overlays]).then(([s, o]) => {
-      if (!cancelled) setOnScreen({ screens: s.phone, overlays: [...o.pieces, ...o.look, ...s.production], look: o.look, production: s.production });
+    // The phone itself: its frame from the Phone Hub (Task #2797).
+    const frame = showId
+      ? api.get(`/api/v1/ui-overlays/${showId}/frame`)
+        .then((res) => (typeof res.data?.frame_url === 'string' ? res.data.frame_url : null))
+        .catch((err) => { console.error('[EpisodeScript] phone frame load failed:', err); return null; })
+      : Promise.resolve(null);
+    Promise.all([screens, overlays, frame]).then(([s, o, f]) => {
+      if (!cancelled) setOnScreen({ screens: s.phone, overlays: [...o.pieces, ...o.look, ...s.production], look: o.look, production: s.production, phoneFrame: f });
     });
     return () => { cancelled = true; };
   }, [episodeId, showId]);
@@ -810,6 +828,11 @@ export default function EpisodeScriptTab({ episode, show }) {
     finally { if (mountedRef.current) setGenerating(false); }
   };
 
+  // Whether Lala's phone is on screen as each beat starts: it stays up from
+  // the beat that brings it up until one takes it away (Task #2797).
+  const phoneUpAtStart = [];
+  beats.reduce((up, b, i) => { phoneUpAtStart[i] = up; return beatOnScreen(b.lines, onScreen, { phoneUp: up }).phoneUpAtEnd; }, false);
+
   const approvedCount = beats.filter(b => b.approved).length;
   const allApproved = beats.length > 0 && approvedCount === beats.length;
   const hasScript = !!scriptText?.trim();
@@ -866,7 +889,8 @@ export default function EpisodeScriptTab({ episode, show }) {
           {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
-            return <BeatSection key={beat.id} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreen} onAddMoment={handleAddMoment} />;
+            const phoneUp = phoneUpAtStart[index] || false;
+            return <BeatSection key={beat.id} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreen} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
