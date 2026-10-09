@@ -83,6 +83,19 @@ function Field({ label, children, wide, tone }) {
   );
 }
 
+/**
+ * The look tile: the outfit locked on the Wardrobe tab once it is read
+ * (the one the script writer reads), else the events' planned pieces.
+ */
+function lookTile(locked, planned) {
+  const n = (k) => `${k} piece${k === 1 ? '' : 's'}`;
+  if (Array.isArray(locked)) {
+    if (locked.length) return { value: `${n(locked.length)} locked`, tone: null };
+    return { value: planned.length ? 'Planned, not locked' : 'Not chosen', tone: 'warn' };
+  }
+  return { value: planned.length ? n(planned.length) : 'Not chosen', tone: planned.length ? null : 'warn' };
+}
+
 function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -114,6 +127,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // The brief's source event as the Event Package reads it (with its
   // organizer, scene set and venue): "From the event" and the next step.
   const [source, setSource] = useState(null);
+  // The outfit locked on the Wardrobe tab (undefined until read; the
+  // event's planned look stands in if it cannot be read).
+  const [outfit, setOutfit] = useState(undefined);
   // Feed origin for an event started from a Feed creator (Task #1790): the
   // brief's automation holds only started_from_profile_id, so the name and
   // handle are read from that profile.
@@ -199,6 +215,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
           .then((res) => setSource(res.data || null))
           .catch((err) => { console.error('[Episode] source event load failed:', err); setSource(null); });
+        api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
+          .then((res) => setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined))
+          .catch((err) => { console.error('[Episode] locked outfit load failed:', err); setOutfit(undefined); });
       }
       // Resolve narrative_chain.parent_event_id → event name for the Source band.
       const parentId = b?.narrative_chain?.parent_event_id;
@@ -427,7 +446,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // The top of the Overview (Evoni's Episode mock): the next step, the
   // tiles, the brief and what Start Episode carried from the event.
   const plan = source?.event
-    ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
+    ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation, outfit })
     : null;
   const fromEvent = fromEventItems(plan);
   const hasScript = !!(typeof episode.script_content === 'string' && episode.script_content.trim()) || !!scriptInfo?.exists;
@@ -438,7 +457,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     { key: 'checklist', label: 'Production checklist', value: checks ? `${checks.done} / ${checks.total}` : '—', link: { label: 'Open Production', tab: 'checklist' } },
     { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
     { key: 'coins', label: 'Coins after episode', value: coins == null ? '—' : coins.toLocaleString(), link: { label: 'Open Money', tab: 'money' }, note: netIsPrediction ? 'estimate' : null },
-    { key: 'look', label: "Lala's look", value: outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'}` : 'Not chosen', tone: outfitPieces.length ? null : 'warn', link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
+    { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
   const handleSave = async () => {

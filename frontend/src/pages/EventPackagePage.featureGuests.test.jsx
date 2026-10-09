@@ -1,7 +1,9 @@
 /**
  * Feature a guest by clicking their name in the Full Guest List: click to
  * feature, click again to unfeature, at most five, while the package is
- * editable; once Start Episode locks it the names are plain text and say so.
+ * editable. After Start Episode they stay editable until the episode is
+ * accepted (Evoni, 2026-10-09), like the scene set; then the names are
+ * plain text and say so.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
@@ -27,9 +29,10 @@ const eventWith = (list, extra = {}) => ({
 
 let stored;
 let usedInEpisode;
+let placeLocked;
 
-const renderPage = () => render(
-  <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
+const renderPage = (path = '/shows/show-1/events/ev-1') => render(
+  <MemoryRouter initialEntries={[path]}>
     <Routes><Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} /></Routes>
   </MemoryRouter>,
 );
@@ -37,9 +40,10 @@ const renderPage = () => render(
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   usedInEpisode = null;
+  placeLocked = false;
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === EVENT_URL) {
-      return { data: { success: true, event: stored, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode } };
+      return { data: { success: true, event: stored, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode, placeLocked } };
     }
     return { data: { success: true, deliverables: [], locked: false } };
   });
@@ -89,14 +93,34 @@ describe('feature a guest by clicking their name', () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
-  test('a locked package shows the names as plain text and says featured attendees are locked', async () => {
+  test('after Start Episode, a draft episode can still feature a guest', async () => {
     stored = eventWith(guests([1]), { used_in_episode_id: 'ep-9' });
     usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    renderPage();
+    const list = await openList();
+    expect(screen.queryByTestId('guest-list-locked')).toBeNull();
+    fireEvent.click(within(list).getByRole('button', { name: /guest4/ }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(savedGuests(0).map((g) => g.featured)).toEqual([false, true, false, true, false, false, false]);
+  });
+
+  test("the episode's link lands on People with the guest list open", async () => {
+    stored = eventWith(guests(), { used_in_episode_id: 'ep-9' });
+    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    renderPage('/shows/show-1/events/ev-1#epp-sec-people');
+    await screen.findByText('Hide Full Guest List (7)');
+    expect(within(document.getElementById('epp-guest-list')).getAllByRole('button').length).toBeGreaterThan(0);
+  });
+
+  test('once the episode is accepted, the names are plain text and say featured attendees are locked', async () => {
+    stored = eventWith(guests([1]), { used_in_episode_id: 'ep-9' });
+    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    placeLocked = true;
     renderPage();
     const list = await openList();
     expect(within(list).queryAllByRole('button')).toHaveLength(0);
     expect(list.textContent).toContain('guest2');
     expect(list.textContent).toContain('Featured');
-    expect(screen.getByTestId('guest-list-locked').textContent).toBe('Featured attendees are locked with the package (Episode 4).');
+    expect(screen.getByTestId('guest-list-locked').textContent).toBe('Featured attendees are locked: Episode 4 is accepted.');
   });
 });

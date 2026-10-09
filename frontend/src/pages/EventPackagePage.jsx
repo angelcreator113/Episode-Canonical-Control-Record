@@ -514,6 +514,9 @@ export default function EventPackagePage() {
     const el = document.getElementById(hash.slice(1));
     if (!el) return;
     hashScrolledRef.current = hash;
+    // The episode's "Choose featured attendees" lands on People with the
+    // guest list open, where each name features or unfeatures that guest.
+    if (hash === '#epp-sec-people') setFullGuestListOpen(true);
     el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [loading, hash]);
 
@@ -572,6 +575,11 @@ export default function EventPackagePage() {
   const used = !!event.used_in_episode_id || !!termsLockedBy;
   const moneyWarnings = moneyPreview?.warnings || [];
   const lockEpisode = termsLockedBy || usedInEpisode || null;
+  // Featured attendees (Evoni, 2026-10-09: "im not able to choose a
+  // featured guest" after Start Episode, while the episode asked for them):
+  // they only steer the script, so like the scene set (L13) they stay
+  // editable until the episode is accepted. Who is invited stays locked.
+  const castLocked = used && !!placeLocked;
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
   const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
@@ -1642,9 +1650,9 @@ export default function EventPackagePage() {
                 {/* Each guest's name features or unfeatures them (up to
                     MAX_FEATURED_GUESTS) while the package is editable; once
                     Start Episode locks it the names are plain text. */}
-                {used ? (
+                {castLocked ? (
                   <p className="epp-guests-note epp-guest-list-note" data-testid="guest-list-locked">
-                    Featured attendees are locked with the package{lockEpisode?.episode_number ? ` (Episode ${lockEpisode.episode_number})` : ''}.
+                    Featured attendees are locked: {lockEpisode?.episode_number ? `Episode ${lockEpisode.episode_number}` : 'the episode'} is accepted.
                   </p>
                 ) : featuredGuests.length >= MAX_FEATURED_GUESTS && (
                   <p className="epp-guests-note epp-guest-list-note" data-testid="guest-list-full">
@@ -1656,7 +1664,7 @@ export default function EventPackagePage() {
                     const name = g.display_name || g.handle;
                     return (
                       <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
-                        {used ? (
+                        {castLocked ? (
                           <>
                             <span>{name}</span>
                             {g.featured && <span className="epp-saved-copy">Featured</span>}
