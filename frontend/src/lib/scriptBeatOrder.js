@@ -53,6 +53,17 @@ export function moveLine(scriptText, beatIndex, from, to) {
   return join({ ...split, sections });
 }
 
+// The script with the beat at position `beatIndex` replaced by `text` (a
+// regenerated beat, header first); every other beat and the text before the
+// first beat stay exactly as they are. Out of range: unchanged.
+export function replaceBeat(scriptText, beatIndex, text) {
+  const split = splitSections(scriptText);
+  if (!inRange(beatIndex, split.sections.length) || !HEADER_START.test(String(text || ''))) return scriptText;
+  const sections = split.sections.slice();
+  sections[beatIndex] = String(text).trimEnd();
+  return join({ ...split, sections });
+}
+
 // Where a dragged item lands: dropping on the top half of a target puts it
 // before the target, on the bottom half after it. Returns the index the
 // item ends up at once it is taken out of its old place.

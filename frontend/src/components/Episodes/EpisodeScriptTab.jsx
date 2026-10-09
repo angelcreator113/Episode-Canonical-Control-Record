@@ -1,13 +1,13 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs } from '../../lib/episodeScript';
-import { moveBeat, moveLine, dropIndex } from '../../lib/scriptBeatOrder';
+import { moveBeat, moveLine, dropIndex, replaceBeat } from '../../lib/scriptBeatOrder';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -20,6 +20,16 @@ export const getWorldMapApi = () =>
   api.get('/api/v1/world/map').then((r) => r.data);
 
 const DreamMap = lazy(() => import('../DreamMap'));
+
+// The element that scrolls the page around `el`: <body> on a phone,
+// .app-content on a desktop (hooks/useScrolledPast's pageScrollTop).
+export function scrollerOf(el) {
+  for (let n = el?.parentElement; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement || document.documentElement;
+}
 
 const BEAT_NAMES = [
   { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: 'var(--primary-text)' },
@@ -150,7 +160,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
   );
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [dropAt, setDropAt] = useState(null);
@@ -212,6 +222,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
+            {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={regenerating} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
             <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>
         </div>
@@ -236,6 +247,14 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [rewritingLine, setRewritingLine] = useState(null);
+  const [regeneratingBeat, setRegeneratingBeat] = useState(null);
+  // Regenerate outlasted its request: the page waits for the saved script.
+  const [waitingForScript, setWaitingForScript] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // The script as the page has it now, for a reply that lands after more edits.
+  const scriptRef = useRef(scriptText);
+  scriptRef.current = scriptText;
   const [developerMode, setDeveloperMode] = useState(false);
   const [devScript, setDevScript] = useState('');
   const [toast, setToast] = useState(null);
@@ -254,6 +273,30 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [deliverables, setDeliverables] = useState([]);
   // The outfit locked on the Wardrobe tab, which the script writer reads (null: could not be read).
   const [outfit, setOutfit] = useState([]);
+
+  // Evoni, 2026-10-09 (Task #2783): on a phone, tapping in the Script tab
+  // jumped the page. One beat is open at a time, so opening a beat closes
+  // the one above it and everything below moves up by that beat's height;
+  // the episode page turns scroll anchoring off (EpisodeDetail.css) and iOS
+  // Safari has none, so nothing put the tapped beat back. A tap inside a
+  // beat now notes where that beat sits on screen, and the render it causes
+  // scrolls the page so the beat is where it was.
+  const pinRef = useRef(null);
+  const pinTappedBeat = (e) => {
+    const el = e.target?.closest?.('.esp-beat');
+    if (!el) return;
+    const pin = { el, top: el.getBoundingClientRect().top };
+    pinRef.current = pin;
+    // The pin holds for the tap's renders only (a moved beat lands on the
+    // second one, after the script is parsed again), never a later render.
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (pinRef.current === pin) pinRef.current = null; }));
+  };
+  useLayoutEffect(() => {
+    const pin = pinRef.current;
+    if (!pin || !pin.el.isConnected) return;
+    const moved = pin.el.getBoundingClientRect().top - pin.top;
+    if (Math.abs(moved) >= 1) scrollerOf(pin.el).scrollTop += moved;
+  });
 
   // Load map data when map is opened
   useEffect(() => {
@@ -378,6 +421,28 @@ export default function EpisodeScriptTab({ episode, show }) {
     } finally { setRewritingLine(null); }
   };
 
+  // Regenerate one beat (Evoni, 2026-10-09, Task #2785: "what if I only want
+  // to regenerate a line or a beat?"). The beat is written again against the
+  // script as the page has it and put in place; Save keeps it.
+  const handleRegenerateBeat = async (beatId) => {
+    const at = beats.findIndex(b => b.id === beatId);
+    const beat = beats[at];
+    if (!beat || beat.approved || regeneratingBeat) return;
+    setRegeneratingBeat(beatId);
+    try {
+      const res = await api.post(`/api/v1/episode-brief/${episodeId}/regenerate-beat`, { showId, beatNumber: beat.number, script: scriptText });
+      if (!mountedRef.current) return;
+      const current = scriptRef.current;
+      const next = replaceBeat(current, at, res.data?.beat);
+      if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
+      setScriptText(next); setDevScript(next);
+      flash(`Beat ${beat.number} rewritten ✦ Save to keep it.`, 'success');
+    } catch (err) {
+      console.error('[EpisodeScript] beat regenerate failed:', err);
+      flash(`Regenerate failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
+    } finally { if (mountedRef.current) setRegeneratingBeat(null); }
+  };
+
   // Approve = lock (Evoni, 2026-10-08). The lock is kept on the episode, so
   // it survives a reload, and Regenerate leaves the beat as it is. Edits the
   // page hasn't saved go with the lock, so the beat is locked as shown.
@@ -408,8 +473,37 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   // keepsLocked: the person already agreed to replace the unlocked beats, so
   // the server's "replace the script?" check is answered for them.
+  // Evoni, 2026-10-09 (Task #2785): "when I regenerate I have to refresh the
+  // page to see it". Writing all 14 beats can outlast the request, which then
+  // fails at the gateway while the server goes on to save the script. When
+  // the request fails without the server's own answer, the page asks for the
+  // episode every 8 seconds for 4 minutes and shows the script once it
+  // changes.
+  const waitForSavedScript = async (before) => {
+    setWaitingForScript(true);
+    try {
+      for (let i = 0; i < 30 && mountedRef.current; i += 1) {
+        await new Promise((r) => setTimeout(r, 8000));
+        if (!mountedRef.current) return;
+        try {
+          const res = await api.get(`/api/v1/episodes/${episodeId}`);
+          const ep = res.data?.data || res.data || {};
+          const script = typeof ep.script_content === 'string' ? ep.script_content : null;
+          if (script !== null && script !== before) {
+            setScriptText(script); setDevScript(script); setSavedScript(script); setUnsaved(null);
+            if (Array.isArray(ep.script_locked_beats)) setLockedBeats(ep.script_locked_beats);
+            flash('✦ Script generated and saved.', 'success', 5000);
+            return;
+          }
+        } catch (err) { console.error('[EpisodeScript] waiting for the script:', err); }
+      }
+      if (mountedRef.current) setGenError('The new script has not arrived after 4 minutes. Refresh later to see whether it was saved.');
+    } finally { if (mountedRef.current) setWaitingForScript(false); }
+  };
+
   const handleGenerate = async (keepsLocked = false) => {
     setGenerating(true); setGenError(null); setGuardResult(null);
+    const before = savedScript;
     const post = (confirmOverwrite) => api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, {
       showId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
     });
@@ -450,8 +544,13 @@ export default function EpisodeScriptTab({ episode, show }) {
         setToast({ msg: `✦ Script generated!${beatGap}`, type: beatGap ? 'error' : 'success' });
       }
       setTimeout(() => setToast(null), 5000);
-    } catch (err) { setGenError(err.response?.data?.error || 'Generation failed'); }
-    finally { setGenerating(false); }
+    } catch (err) {
+      console.error('[EpisodeScript] generate failed:', err);
+      const status = err.response?.status;
+      if (!err.response || status === 502 || status === 504) { await waitForSavedScript(before); return; }
+      setGenError(err.response?.data?.error || 'Generation failed');
+    }
+    finally { if (mountedRef.current) setGenerating(false); }
   };
 
   const approvedCount = beats.filter(b => b.approved).length;
@@ -464,7 +563,7 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   return (
     <div className="esp">
-    <div className="esp-main">
+    <div className="esp-main" onClickCapture={pinTappedBeat}>
       {toast && <div className={`esp-toast is-${toast.type === 'error' ? 'error' : 'success'}`} role="status">{toast.msg}</div>}
 
       {unsaved && (
@@ -490,16 +589,17 @@ export default function EpisodeScriptTab({ episode, show }) {
                 : 'Regenerate the entire script? Your current script will be replaced.';
               if (!window.confirm(ask)) return;
               handleGenerate(approvedCount > 0);
-            }} disabled={generating}>{generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
+            }} disabled={generating}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
             <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
           <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
-            {generating ? 'Generating the 14 beats…' : 'Generate Script'}
+            {waitingForScript ? 'Still writing the 14 beats…' : generating ? 'Generating the 14 beats…' : 'Generate Script'}
           </button>
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
+      {waitingForScript && <div className="esp-waiting" role="status" data-testid="script-waiting">Still writing. The new script will show here as soon as it is saved; no need to refresh.</div>}
 
       {hasScript && developerMode && approvedCount > 0 && <p className="esp-raw-note" data-testid="script-raw-locked-note">🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
       {hasScript && developerMode && <textarea className="esp-raw" aria-label="Raw script" value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} />}
@@ -509,7 +609,7 @@ export default function EpisodeScriptTab({ episode, show }) {
           {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
-            return <BeatSection key={beat.id} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} />;
+            return <BeatSection key={beat.id} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
@@ -543,6 +643,16 @@ export default function EpisodeScriptTab({ episode, show }) {
           </p>
         </section>
       ))}
+
+      {/* Evoni, 2026-10-09 (Task #2785): "to save I need to scroll all the
+          way up even if I'm at beat 11". While there are unsaved changes,
+          Save rides along the bottom of the screen. */}
+      {hasScript && scriptText !== savedScript && (
+        <div className="esp-savebar" data-testid="script-savebar" role="region" aria-label="Unsaved changes">
+          <span className="esp-savebar-text">Unsaved changes</span>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-savebar-save" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      )}
     </div>
 
     {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
