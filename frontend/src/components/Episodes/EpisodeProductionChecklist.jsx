@@ -269,8 +269,6 @@ export async function loadProductionChecks(episode, showId) {
         const auto = linkedEvent?.canon_consequences?.automation || {};
         results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
         results.venue_image = await venueImageGenerated(linkedEvent);
-        const outfit = typeof linkedEvent?.outfit_pieces === 'string' ? JSON.parse(linkedEvent.outfit_pieces || '[]') : (linkedEvent?.outfit_pieces || []);
-        results.outfit_picked = outfit.length > 0;
       } else {
         results.event_linked = false;
       }
@@ -278,13 +276,16 @@ export async function loadProductionChecks(episode, showId) {
       results.event_linked = false;
     }
 
-    // ── Check Scene Sets assigned ──
+    // ── Check Scene Sets assigned: linked to the episode, or used by the
+    // scene plan or the event (checked again below, once the plan is read;
+    // Evoni, 2026-10-09: the checklist did not cross out what was done) ──
     try {
       const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
       const sets = data?.data || data?.sceneSets || [];
-      results.scene_sets = Array.isArray(sets) ? sets.length > 0 : false;
-    } catch {
-      results.scene_sets = false;
+      results.scene_sets = (Array.isArray(sets) && sets.length > 0) || !!linkedEvent?.scene_set_id;
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] episode scene sets read failed:', err.response?.status || err.message);
+      results.scene_sets = !!linkedEvent?.scene_set_id;
     }
 
     // ── Check Scene Plan ──
@@ -299,6 +300,7 @@ export async function loadProductionChecks(episode, showId) {
       if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
       else if (coverage && !coverage.complete) checkNotes.scene_plan = coverage.text;
       results.scene_plan_locked = Boolean(coverage?.complete) && plan.every(b => b.locked);
+      if (plan.some((b) => b.scene_set_id || b.sceneSet)) results.scene_sets = true;
       // L5, Q21: every planned beat has an angle with an image.
       const readiness = data?.readiness;
       results.scene_images = Boolean(readiness && readiness.total > 0 && readiness.ready === readiness.total);
@@ -330,6 +332,16 @@ export async function loadProductionChecks(episode, showId) {
       checkNotes.wardrobe_ready = 'Wardrobe could not be read';
     }
 
+    // ── Outfit picked: the outfit locked on the Wardrobe tab, the one the
+    // script writer reads (it read the event's planned pieces only) ──
+    try {
+      const { data } = await api.get(`/api/v1/wardrobe/outfit/${episode.id}`);
+      results.outfit_picked = (data?.items?.length || 0) > 0;
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] locked outfit read failed:', err.response?.status || err.message);
+      results.outfit_picked = false;
+    }
+
     // ── Check Character state ──
     try {
       const { data } = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
@@ -351,10 +363,21 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check Social Checklist ──
     try {
       results.social_checklist = false;
-      // Check if episode has a social checklist asset
-      const { data } = await api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`);
-      results.social_checklist = (data?.data?.length || 0) > 0;
-    } catch {
+      // The episode's social tasks (episode_todo_lists, the To-Do tab and the
+      // script read them), or a social checklist image.
+      const [tasks, assets] = await Promise.all([
+        api.get(`/api/v1/episodes/${episode.id}/todo/social`).then((r) => r.data?.social_tasks || []).catch((err) => {
+          console.error('[EpisodeProductionChecklist] social tasks read failed:', err.response?.status || err.message);
+          return [];
+        }),
+        api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`).then((r) => r.data?.data || []).catch((err) => {
+          console.error('[EpisodeProductionChecklist] social checklist asset read failed:', err.response?.status || err.message);
+          return [];
+        }),
+      ]);
+      results.social_checklist = tasks.length > 0 || assets.length > 0;
+    } catch (err) {
+      console.error('[EpisodeProductionChecklist] social checklist check failed:', err.message);
       results.social_checklist = false;
     }
 
@@ -374,7 +397,8 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check Show Brain ──
     try {
       const { data } = await api.get('/api/v1/franchise-brain/entries?category=franchise_law&status=active&limit=1');
-      const entries = data?.data || [];
+      // The route answers { entries, count }; it read data.data, never there.
+      const entries = data?.entries || data?.data || [];
       results.show_brain = Array.isArray(entries) ? entries.length > 0 : false;
     } catch {
       results.show_brain = false;
