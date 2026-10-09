@@ -186,7 +186,7 @@ function MomentCard({ moment, shown }) {
 // Add a moment to a beat: a Lala's Phone screen or one of the episode's
 // overlays, from their pictures, and what happens with it. The line goes at
 // the end of the beat; it moves like any line, and Save keeps it.
-function MomentPicker({ screens, overlays, onAdd, onClose }) {
+function MomentPicker({ screens, overlays, look = [], onAdd, onClose }) {
   const [picked, setPicked] = useState(null);
   const verbs = picked?.kind === 'overlay' ? OVERLAY_VERBS : PHONE_VERBS;
   const [verb, setVerb] = useState('OPEN');
@@ -200,7 +200,10 @@ function MomentPicker({ screens, overlays, onAdd, onClose }) {
     </button>
   );
   const phoneItems = screens.map((s) => ({ kind: 'phone', key: s.id, name: s.name || s.id, url: s.url || null }));
-  const overlayItems = overlays.map((o) => ({ kind: 'overlay', key: o.key, name: o.label || o.key, url: o.image_url || null }));
+  const lookKeys = new Set(look.map((o) => o.key));
+  const asOverlay = (o) => ({ kind: 'overlay', key: o.key, name: o.label || o.key, url: o.image_url || null });
+  const overlayItems = overlays.filter((o) => !lookKeys.has(o.key)).map(asOverlay);
+  const lookItems = look.map(asOverlay);
   return (
     <div className="esp-picker" data-testid="script-moment-picker" onClick={(e) => e.stopPropagation()}>
       <div className="esp-picker-head">
@@ -211,6 +214,8 @@ function MomentPicker({ screens, overlays, onAdd, onClose }) {
       {phoneItems.length ? <div className="esp-pick-grid">{phoneItems.map(tile)}</div> : <p className="esp-picker-empty">No phone screens yet. Make them in Lala&apos;s Phone.</p>}
       <p className="esp-picker-group">Overlays</p>
       {overlayItems.length ? <div className="esp-pick-grid">{overlayItems.map(tile)}</div> : <p className="esp-picker-empty">No overlays for this episode yet.</p>}
+      <p className="esp-picker-group">Lala&apos;s look</p>
+      {lookItems.length ? <div className="esp-pick-grid">{lookItems.map(tile)}</div> : <p className="esp-picker-empty">No wardrobe pieces approved for this episode yet. Lock the look on the Wardrobe tab.</p>}
       {picked && (
         <div className="esp-picker-do">
           <span className="esp-picker-verbs" role="group" aria-label="What happens">
@@ -301,7 +306,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
           <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} />)}</div>
           {picking && !beat.approved && (
-            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} onClose={() => setPicking(false)}
+            <MomentPicker screens={onScreen.screens} overlays={onScreen.overlays} look={onScreen.look} onClose={() => setPicking(false)}
               onAdd={(line) => { onAddMoment(beat.id, line); setPicking(false); }} />
           )}
           <div className="esp-beat-foot">
@@ -372,7 +377,7 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [outfit, setOutfit] = useState([]);
   // What can be on screen in a beat (Task #2789): the episode's Lala's Phone
   // screens and its overlays, each with its picture.
-  const [onScreen, setOnScreen] = useState({ screens: [], overlays: [] });
+  const [onScreen, setOnScreen] = useState({ screens: [], overlays: [], look: [] });
   useEffect(() => {
     if (!episodeId) return undefined;
     let cancelled = false;
@@ -381,10 +386,16 @@ export default function EpisodeScriptTab({ episode, show }) {
         .then((res) => (Array.isArray(res.data?.data) ? res.data.data : []).filter((o) => isScreen(o) && o.id))
         .catch((err) => { console.error('[EpisodeScript] phone screens load failed:', err); return []; })
       : Promise.resolve([]);
+    // The episode's overlays, and its look's approved wardrobe pieces, each an overlay too (Task #2791).
     const overlays = api.get(`/api/v1/episodes/${episodeId}/overlays`)
-      .then((res) => (Array.isArray(res.data?.data?.pieces) ? res.data.data.pieces : []).filter((o) => o.key))
-      .catch((err) => { console.error('[EpisodeScript] overlays load failed:', err); return []; });
-    Promise.all([screens, overlays]).then(([s, o]) => { if (!cancelled) setOnScreen({ screens: s, overlays: o }); });
+      .then((res) => {
+        const list = (v) => (Array.isArray(v) ? v : []).filter((o) => o && o.key);
+        return { pieces: list(res.data?.data?.pieces), look: list(res.data?.data?.wardrobe) };
+      })
+      .catch((err) => { console.error('[EpisodeScript] overlays load failed:', err); return { pieces: [], look: [] }; });
+    Promise.all([screens, overlays]).then(([s, o]) => {
+      if (!cancelled) setOnScreen({ screens: s, overlays: [...o.pieces, ...o.look], look: o.look });
+    });
     return () => { cancelled = true; };
   }, [episodeId, showId]);
 
