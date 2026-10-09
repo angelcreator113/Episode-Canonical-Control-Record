@@ -28,6 +28,7 @@
   --ps-surface:     var(--surface-card);     /* white against the parchment page */
   --ps-sidebar-w:         192px;
   --ps-sidebar-w-collapsed: 52px;
+  --ps-brand-h:     57px;
   --ps-radius:      8px;
   --ps-radius-sm:   5px;
 }
@@ -52,14 +53,19 @@
 }
 
 /* ── BRAND ───────────────────────────────────────────────────────────── */
+/* The brand row is exactly as tall as the page header beside it (Header.css:
+   56px of .header-content plus its 1px border; 60px at 480px and under), so
+   the two bottom lines meet in one straight line on every screen. */
 .ps-sidebar-brand {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 16px 14px 14px;
+  padding: 0 14px;
   cursor: pointer;
   border-bottom: 1px solid var(--ps-border);
-  min-height: 52px;
+  box-sizing: border-box;
+  height: var(--ps-brand-h);
+  flex-shrink: 0;
   position: relative;
 }
 
@@ -100,9 +106,9 @@
 
 .ps-collapse-btn-out {
   position: absolute;
-  top: 14px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   margin-left: 0;
 }
 
@@ -445,22 +451,72 @@
     z-index: 999;
   }
 
+  /* The drawer: wider than the desktop column, as the layout tokens say
+     (--sidebar-width-mobile), so labels and hints are not squeezed; never
+     more than 85% of the screen, so the page still shows beside it. It
+     clears the notch and the home bar on phones. */
   .ps-sidebar-open {
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
     z-index: 1000;
-    width: var(--ps-sidebar-w);
+    width: min(var(--sidebar-width-mobile, 280px), 85vw);
+    min-height: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 4px 0 24px rgba(44, 44, 44, 0.12);
   }
 
-  .ps-sidebar-close { display: flex; }
+  .ps-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-right: -8px;
+  }
   .ps-collapse-btn { display: none; }
 
   /* Hide sidebar from layout when not open as mobile drawer */
   .ps-sidebar:not(.ps-sidebar-open) {
     display: none;
   }
+}
+
+@media (max-width: 480px) {
+  .ps-sidebar { --ps-brand-h: 60px; }
+}
+
+/* A short screen (a phone on its side): the pinned rows under the nav
+   (Search, Settings, Admin, the user) would leave the nav a sliver, so the
+   whole drawer scrolls as one instead. */
+@media (max-height: 500px) {
+  .ps-sidebar-open {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ps-sidebar-open .ps-nav {
+    flex: none;
+    overflow: visible;
+  }
+}
+
+/* Fingers, not a mouse (phones, tablets, a touch laptop): rows a finger can
+   hit, 44px as Apple and Google ask. */
+@media (hover: none) and (pointer: coarse) {
+  .ps-sidebar:not(.ps-sidebar-collapsed) .ps-nav-item {
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .ps-sidebar-collapsed .ps-nav-item { min-height: 44px; }
+  .ps-subnav-item,
+  .ps-subnav-create {
+    line-height: 30px;
+  }
+  .ps-subnav-heading-toggle { min-height: 36px; }
+  .ps-zone-label-toggle { min-height: 36px; }
 }
 
 /* ── BRAND ACTIONS ───────────────────────────────────────────────────── */
