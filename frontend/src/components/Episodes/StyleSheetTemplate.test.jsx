@@ -22,6 +22,21 @@ describe('style sheet template', () => {
     expect(screen.getByLabelText('Styling Adventures with Lala')).toBeTruthy();
   });
 
+  test("the show's logo, when Show Settings has one, replaces the lettered title", () => {
+    const logo = 'data:image/png;base64,AAAA';
+    const { container } = render(<StyleSheetTemplate sheet={{ ...EPISODE_ONE, logo }} />);
+    const img = screen.getByTestId('ss-logo-image');
+    expect(img.style.backgroundImage).toContain(logo);
+    expect(img.getAttribute('aria-label')).toBe('Styling Adventures with Lala');
+    expect(container.querySelector('.ss-logo-styling')).toBeNull();
+  });
+
+  test('without a logo the title is lettered', () => {
+    const { container } = render(<StyleSheetTemplate sheet={{ ...EPISODE_ONE, logo: null }} />);
+    expect(screen.queryByTestId('ss-logo-image')).toBeNull();
+    expect(container.querySelector('.ss-logo-styling').textContent).toBe('Styling');
+  });
+
   test('the seven wardrobe columns; Body Needed; empty columns left blank', () => {
     render(<StyleSheetTemplate sheet={EPISODE_ONE} />);
     expect(within(screen.getByTestId('ss-col-body')).getAllByText('Needed').length).toBeGreaterThan(0);
