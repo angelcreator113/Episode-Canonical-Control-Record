@@ -30,6 +30,8 @@ function buildNav() {
         // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
         { icon: '📱', label: 'Social Media', route: '/feed', hint: 'What was said, and who said it' },
+        // The public landing page's images and video (Task #2822).
+        { icon: '🌐', label: 'Website', route: '/website', hint: 'The public site\'s images and video' },
       ],
     },
     {
