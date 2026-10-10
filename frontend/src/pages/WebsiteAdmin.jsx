@@ -336,7 +336,7 @@ export default function WebsiteAdmin() {
                   <label className="wsa-check is-disabled">
                     <input type="checkbox" disabled aria-describedby="wsa-logo-why" />
                     Use the logo from Show Settings
-                    <span id="wsa-logo-why" className="wsa-hint"> (Show Settings has no logo yet; upload one here.)</span>
+                    <span id="wsa-logo-why" className="wsa-hint"> (Show Settings now has the show's logo, but the site's logo is Prime Studios'. Upload it here until you decide which the site uses.)</span>
                   </label>
                 );
               }
