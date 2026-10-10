@@ -1,5 +1,5 @@
 /**
- * Section 8, the closing on plum and the footer (spec Part 1; Task #2809).
+ * Section 8, the closing on deep lavender and the footer (spec Part 1; Task #2809).
  * Privacy and Terms are visible placeholders: no such pages exist yet.
  */
 import { Link } from 'react-router-dom';

@@ -47,13 +47,10 @@ describe('public landing: navigation and hero', () => {
   test('hero buttons: Explore Our Universe goes to Our World; Watch Our Vision scrolls to Featured Production', () => {
     renderPage();
     expect(screen.getByRole('link', { name: 'Explore Our Universe' }).getAttribute('href')).toBe('#our-world');
-    const target = document.createElement('section');
-    target.id = 'featured-production';
+    const target = document.getElementById('featured-production');
     target.scrollIntoView = vi.fn();
-    document.body.appendChild(target);
     fireEvent.click(screen.getByRole('button', { name: 'Watch Our Vision' }));
     expect(target.scrollIntoView).toHaveBeenCalled();
-    target.remove();
   });
 
   test('without the map the hero shows its placeholder field, not a broken image', () => {

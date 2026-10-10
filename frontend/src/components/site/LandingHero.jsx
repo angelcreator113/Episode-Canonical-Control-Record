@@ -1,6 +1,6 @@
 /**
  * The landing page hero (spec Part 1, section 2; Task #2808): the
- * LalaVerse map full-bleed with a plum gradient from the left, and real
+ * LalaVerse map full-bleed with a lavender wash from the left, and real
  * text over it, never baked into the image. On phones the map sits above
  * the headline. "Explore Our Universe" goes to Our World; "Watch Our
  * Vision" scrolls to Featured Production until a vision video exists.
@@ -32,7 +32,7 @@ export default function LandingHero({ mapSrc = HERO_MAP }) {
         <p className="site-hero__body">{HERO.body}</p>
         <div className="site-hero__actions">
           <a className="site-btn site-btn--ivory" href={`#${SECTION_IDS.world}`}>{HERO.primary}</a>
-          <button type="button" className="site-btn site-btn--outline-light" onClick={() => scrollToSection(SECTION_IDS.featured)}>
+          <button type="button" className="site-btn site-btn--outline" onClick={() => scrollToSection(SECTION_IDS.featured)}>
             {HERO.secondary}
           </button>
         </div>
