@@ -19,6 +19,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
+const EpisodeLookbookTab = lazy(() => import('../components/Episodes/EpisodeLookbookTab'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -895,6 +896,11 @@ const EpisodeDetail = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* Lookbook Tab — the episode's photos for the style sheet (Task #2813) */}
+        {tabKey === 'production.lookbook' && (
+          <EpisodeLookbookTab episode={episode} />
         )}
 
         {/* Results → Summary (Evoni's Episode mock): the one page. */}

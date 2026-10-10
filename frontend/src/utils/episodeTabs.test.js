@@ -9,6 +9,7 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
     expect(resolveEpisodeTab('assets')).toEqual({ main: 'production', sub: 'assets', key: 'production.assets' });
     expect(resolveEpisodeTab('money')).toEqual({ main: 'production', sub: 'money', key: 'production.money' });
     expect(resolveEpisodeTab('wardrobe')).toEqual({ main: 'production', sub: 'wardrobe', key: 'production.wardrobe' });
+    expect(resolveEpisodeTab('lookbook')).toEqual({ main: 'production', sub: 'lookbook', key: 'production.lookbook' });
     expect(resolveEpisodeTab('results')).toEqual({ main: 'results', sub: 'summary', key: 'results.summary' });
     expect(resolveEpisodeTab('evaluation')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
     expect(resolveEpisodeTab('story')).toEqual({ main: 'results', sub: 'story', key: 'results.story' });
@@ -30,5 +31,12 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
   test('withEpisodeTab keeps the page\'s other parameters', () => {
     expect(withEpisodeTab(new URLSearchParams('tab=overview&from=%2Fshows%2F1'), 'money').toString()).toBe('tab=money&from=%2Fshows%2F1');
     expect(withEpisodeTab(new URLSearchParams(''), 'scenes').toString()).toBe('tab=scenes');
+  });
+});
+
+describe('the Lookbook tab (Task #2813)', () => {
+  test('sits between Wardrobe and Phone under Production', () => {
+    const subs = EP_TABS.find((t) => t.key === 'production').subs.map((s) => s.key);
+    expect(subs.slice(subs.indexOf('wardrobe'), subs.indexOf('wardrobe') + 3)).toEqual(['wardrobe', 'lookbook', 'phone']);
   });
 });

@@ -120,10 +120,10 @@ describe('Episode header and tabs (redesign part 1)', () => {
     await waitFor(() => expect(screen.getByTestId('ed-production-left').textContent).toBe('1 left'));
   });
 
-  test('the pills run Checklist, Scenes, Wardrobe, Phone, Overlays, Money, Assets; the chosen one is marked', async () => {
+  test('the pills run Checklist, Scenes, Wardrobe, Lookbook, Phone, Overlays, Money, Assets; the chosen one is marked', async () => {
     renderAt('/episodes/ep-1?tab=checklist');
     const row = await screen.findByTestId('ed-subtabs');
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Checklist', 'Scenes', 'Wardrobe', 'Phone', 'Overlays', 'Money', 'Assets']);
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Checklist', 'Scenes', 'Wardrobe', 'Lookbook', 'Phone', 'Overlays', 'Money', 'Assets']);
     const chosen = row.querySelector('[aria-current="page"]');
     expect(chosen.textContent).toBe('Checklist');
     expect(chosen.className).toContain('is-active');
