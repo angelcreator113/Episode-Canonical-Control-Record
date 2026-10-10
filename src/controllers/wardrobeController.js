@@ -26,6 +26,44 @@ const BUCKET_NAME =
   process.env.S3_BUCKET_NAME ||
   'episode-metadata-storage-dev';
 
+// The real-world source of a piece (Task #2872), read from a create or
+// update body by its snake_case name. Nothing in-world reads these. Text is
+// trimmed and an empty value clears the field; a price must be a number of
+// zero or more; a date must be YYYY-MM-DD. A key that is absent is left out,
+// so an update keeps what is stored.
+const REAL_TEXT_FIELDS = ['real_brand', 'real_retailer', 'real_product_name', 'real_color', 'real_size',
+  'real_product_url', 'affiliate_url', 'real_source'];
+const REAL_PRICE_FIELDS = ['real_price_paid', 'real_list_price'];
+
+function realFieldsFrom(body) {
+  const out = {};
+  const errors = [];
+  if (!body || typeof body !== 'object') return { values: out, errors };
+  for (const key of REAL_TEXT_FIELDS) {
+    if (body[key] === undefined) continue;
+    const v = body[key] === null ? '' : String(body[key]).trim();
+    out[key] = v || null;
+  }
+  for (const key of REAL_PRICE_FIELDS) {
+    if (body[key] === undefined) continue;
+    if (body[key] === null || body[key] === '') { out[key] = null; continue; }
+    const n = Number(body[key]);
+    if (!Number.isFinite(n) || n < 0) errors.push(`${key} must be a number of zero or more`);
+    else out[key] = Math.round(n * 100) / 100;
+  }
+  if (body.real_order_date !== undefined) {
+    const v = body.real_order_date === null ? '' : String(body.real_order_date).trim();
+    if (!v) out.real_order_date = null;
+    else {
+      // A round trip, so 2026-02-30 is refused rather than rolled into March.
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00Z`) : null;
+      if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) errors.push('real_order_date must be a date, YYYY-MM-DD');
+      else out.real_order_date = v;
+    }
+  }
+  return { values: out, errors };
+}
+
 /**
  * Coerce a tags input into the shape the wardrobe.tags column takes: an array
  * of non-empty strings. The column is a Postgres array in canon and the model
@@ -115,6 +153,12 @@ module.exports = {
         lalaReactionLocked,
         lalaReactionReject,
       } = req.body;
+
+      // The real-world source (Task #2872), checked before any upload.
+      const real = realFieldsFrom(req.body);
+      if (real.errors.length) {
+        return res.status(400).json({ error: 'Invalid real-world fields', details: real.errors });
+      }
 
       // Validation - character is REQUIRED, name and category auto-fill
       if (!character) {
@@ -258,6 +302,7 @@ module.exports = {
         lala_reaction_own: lalaReactionOwn || undefined,
         lala_reaction_locked: lalaReactionLocked || undefined,
         lala_reaction_reject: lalaReactionReject || undefined,
+        ...real.values,
       });
 
       // Auto background removal — runs async, updates the record when done.
@@ -654,6 +699,11 @@ module.exports = {
     try {
       const { id } = req.params;
       const updates = req.body;
+      // The real-world source (Task #2872), checked before any upload.
+      const real = realFieldsFrom(updates);
+      if (real.errors.length) {
+        return res.status(400).json({ error: 'Invalid real-world fields', details: real.errors });
+      }
 
       const wardrobeItem = await Wardrobe.findOne({
         where: { id, deleted_at: null },
@@ -766,6 +816,7 @@ module.exports = {
         // acquisition_type was missing from the PUT handler — added so the
         // edit panel's "How Lala Got It" dropdown actually persists.
         acquisition_type: updates.acquisition_type,
+        ...real.values,
         updated_at: new Date(),
       };
 
