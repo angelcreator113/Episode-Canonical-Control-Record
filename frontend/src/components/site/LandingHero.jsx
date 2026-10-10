@@ -6,6 +6,7 @@
  * Vision" scrolls to Featured Production until a vision video exists.
  */
 import { HERO, HERO_MAP, HERO_MAP_ALT, SECTION_IDS } from './siteContent';
+import { useSlot } from './siteMedia';
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
@@ -16,12 +17,16 @@ function scrollToSection(id) {
   el.scrollIntoView?.({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
 }
 
-export default function LandingHero({ mapSrc = HERO_MAP }) {
+export default function LandingHero({ mapSrc: bundledMap = HERO_MAP }) {
+  // The published hero image from the Website page, else the bundled map.
+  const hero = useSlot('hero');
+  const mapSrc = (hero?.media_type === 'image' && hero.url) || bundledMap;
+  const mapAlt = (hero?.url && hero.alt_text) || HERO_MAP_ALT;
   return (
     <section className="site-hero" aria-labelledby="site-hero-heading" data-testid="site-hero">
       <div className="site-hero__art">
         {mapSrc ? (
-          <img src={mapSrc} alt={HERO_MAP_ALT} width="1600" height="900" fetchpriority="high" />
+          <img src={mapSrc} alt={mapAlt} width="1600" height="900" fetchpriority="high" />
         ) : (
           <div className="site-hero__placeholder" data-testid="site-hero-placeholder" aria-hidden="true" />
         )}
