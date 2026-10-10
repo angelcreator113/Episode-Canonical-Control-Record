@@ -1,0 +1,65 @@
+/* ──────────────────────────────────────────────────────────────
+   PUBLIC SITE TOKENS — the landing page's palette and type
+   (docs/design/2026-10-landing-and-stylesheet.md Part 1, "Design tokens";
+   Task #2807). Scoped to `.site`, the public site's root class, so no
+   studio page reads or changes with them; the studio keeps its own
+   `--lala-*` tokens in design-tokens.css. Imported only by the public
+   site's components.
+
+   Contrast (WCAG AA, checked in siteTokens.test.js): plum on ivory, blush,
+   ice and champagne, and ivory on plum, all hold 4.5:1. Orchid is for
+   accents and small labels only; white text on orchid fails AA.
+   ────────────────────────────────────────────────────────────── */
+
+/* Display face. DM Sans (body) is already loaded by index.html. */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
+.site {
+  /* Palette */
+  --site-ivory: #FAF6F1;      /* page backgrounds */
+  --site-blush: #E9C4D5;      /* cards, soft accents */
+  --site-orchid: #AD79B6;     /* accents and small labels only */
+  --site-ice: #B7DFEA;        /* cool contrast */
+  --site-champagne: #D6B77C;  /* premium details, closing button */
+  --site-plum: #30253D;       /* headings, dark sections, primary buttons */
+  --site-white: #FFFFFF;      /* the world pillars' section */
+
+  /* Type */
+  --site-font-display: 'Cormorant Garamond', 'Lora', Georgia, serif;
+  --site-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Roles */
+  --site-bg: var(--site-ivory);
+  --site-text: var(--site-plum);
+  --site-heading: var(--site-plum);
+  --site-dark-bg: var(--site-plum);
+  --site-dark-text: var(--site-ivory);
+  --site-btn-primary-bg: var(--site-plum);
+  --site-btn-primary-text: var(--site-ivory);
+  --site-btn-secondary-bg: var(--site-ivory);
+  --site-btn-secondary-text: var(--site-plum);
+  --site-btn-secondary-border: var(--site-plum);
+  --site-btn-closing-bg: var(--site-champagne);
+  --site-btn-closing-text: var(--site-plum);
+  --site-focus: var(--site-plum);
+  --site-focus-on-dark: var(--site-champagne);
+
+  /* Layout */
+  --site-content-width: 1200px;
+  --site-gutter: 16px;
+  --site-nav-height: 76px;
+  --site-touch: 44px;
+  --site-radius: 12px;
+  --site-radius-pill: 999px;
+
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: var(--site-font-body);
+}
+
+.site h1,
+.site h2,
+.site h3 {
+  font-family: var(--site-font-display);
+  color: var(--site-heading);
+}
