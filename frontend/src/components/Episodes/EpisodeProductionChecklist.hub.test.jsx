@@ -40,7 +40,8 @@ describe('Checklist hub', () => {
     renderHub();
     const summary = await screen.findByTestId('checklist-summary');
     await screen.findByTestId('episode-timeline-row-environment');
-    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 22$/);
+    // 24: the Lookbook card's two checks count in the total (Task #2815).
+    expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 24$/);
   });
 
   test('the timeline: a cell per beat per row, and Lala\'s look on Beat 8', async () => {
@@ -81,5 +82,34 @@ describe('Checklist hub', () => {
     expect(onOpenTab).toHaveBeenCalledWith('overview');
     const world = screen.getByTestId('checklist-section-world');
     expect((await within(world).findByText('Open the event package')).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+  });
+
+  test('the Lookbook card: x of 11 photos in and the style sheet status, opening the Lookbook (Task #2815)', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/lookbook') {
+        return { data: { data: { sheet_status: 'draft', readiness: { done: 7, total: 11, missing: ['side', 'back', 'lips', 'inspo'] } } } };
+      }
+      return { data: {} };
+    });
+    const onOpenTab = vi.fn();
+    render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala' }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
+    const card = await screen.findByTestId('checklist-section-lookbook');
+    expect(card.textContent).toContain('Lookbook');
+    await within(card).findByText('7 of 11 ready · missing: side, back, lips, inspo');
+    expect(within(card).getByText('Style sheet photos in (11 of 11)')).toBeTruthy();
+    expect(within(card).getByText('Style sheet approved')).toBeTruthy();
+    expect(within(card).getByText('Draft')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Open Lookbook' }));
+    expect(onOpenTab).toHaveBeenCalledWith('lookbook');
+  });
+
+  test('the Lookbook card is complete when all 11 are in and the sheet is approved', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/lookbook') return { data: { data: { sheet_status: 'approved', readiness: { done: 11, total: 11, missing: [] } } } };
+      return { data: {} };
+    });
+    render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala' }} showId="show-1" onOpenTab={vi.fn()} /></MemoryRouter>);
+    const card = await screen.findByTestId('checklist-section-lookbook');
+    await within(card).findByText('Complete');
   });
 });
