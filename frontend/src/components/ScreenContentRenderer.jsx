@@ -51,6 +51,11 @@ export const CONTENT_TYPES = [
   { key: 'goal_ladder', label: 'Goal Ladder', icon: '🏆', desc: 'Full milestone ladder with triggered status', group: 'stats' },
   { key: 'finance_kpis', label: 'Finance KPIs', icon: '🧮', desc: 'Burn rate / runway / avg income strip', group: 'stats' },
   { key: 'closet_net_worth', label: 'Closet Net Worth', icon: '💎', desc: 'Owned vs wishlist wardrobe value', group: 'stats' },
+  // T2 follow-up (§8(bb); Task #2295): the episode's one task list, the same
+  // saved episode_todo_lists.social_tasks the Run Sheet and Career Checklist
+  // read, each task with its source. Canonical beat 9 (Reminder/Deadline)
+  // shows it on Lala's Phone.
+  { key: 'task_list', label: 'Task List', icon: '📋', desc: 'The episode’s one task list, each task with its source', group: 'messages' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -183,6 +188,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
       return <ClosetNetWorthRenderer showId={showId} config={config} />;
     case 'closet_wishlist_grid':
       return <ClosetWishlistGridRenderer showId={showId} config={config} />;
+    case 'task_list':
+      return <TaskListRenderer episodeId={episodeId} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -404,6 +411,56 @@ function DMThreadRenderer({ showId, episodeId, config }) {
               </div>
             )}
             {m.screen_content || m.justawoman_line || m.lala_line || '...'}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Task List (Task #2295) ──
+// The source labels the Run Sheet prints (todoListService SOURCE_BADGE);
+// 'deliverable' is a T1-era task stamped before owed_to existed.
+export const TASK_SOURCE_LABELS = {
+  host_requirement: 'host requirement',
+  brand_deliverable: 'brand deliverable',
+  deliverable: 'host requirement',
+  goal: 'goal',
+  optional: 'optional idea',
+};
+
+// Read-only: GET /episodes/:id/todo/social returns the saved list and its
+// completion; nothing here completes a task. A show's screen (no episode)
+// says where the list comes from instead of fetching.
+function TaskListRenderer({ episodeId, config }) {
+  const maxItems = config.max_items || 6;
+  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo/social` : null;
+  const { data, loading } = useContentData(url);
+
+  if (!episodeId) return <ZoneEmpty label="Task list · shown in an episode" />;
+  if (loading) return <ZoneLoader />;
+  const tasks = (data?.social_tasks || []).slice(0, maxItems);
+  if (!tasks.length) return <ZoneEmpty label="No tasks yet" />;
+  const total = data?.completion?.total ?? data.social_tasks.length;
+  const done = data?.completion?.completed ?? data.social_tasks.filter(t => t.completed).length;
+
+  return (
+    <div data-testid="task-list-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: 3, background: config.bg || 'rgba(0,0,0,0.35)' }}>
+      <div style={{ fontSize: 7, fontWeight: 700, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase' }}>
+        To do · {done}/{total}
+      </div>
+      {tasks.map((t, i) => {
+        const source = t.task_source ? (TASK_SOURCE_LABELS[t.task_source] || 'optional idea') : null;
+        return (
+          <div key={t.slot || i} data-testid="task-list-item" style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+            <span aria-hidden="true" style={{ fontSize: 8, color: t.completed ? '#86efac' : 'rgba(255,255,255,0.6)', lineHeight: 1.3 }}>{t.completed ? '✓' : '○'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 8, color: '#fff', lineHeight: 1.3, textDecoration: t.completed ? 'line-through' : 'none', opacity: t.completed ? 0.7 : 1 }}>
+                {t.label || t.description || 'Task'}
+                {t.required && !t.completed && <span style={{ color: '#fca5a5' }}> *</span>}
+              </div>
+              {source && <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', fontFamily: "'DM Mono', monospace" }}>{source}</div>}
+            </div>
           </div>
         );
       })}
