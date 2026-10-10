@@ -94,6 +94,9 @@
   height: var(--site-nav-height);
 }
 .site .site-wordmark {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--site-touch);
   font: 600 26px/1 var(--site-font-display);
   color: var(--site-plum);
   text-decoration: none;
@@ -331,6 +334,9 @@
   .site .site-grid--4 { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .site .site-flagship__inner { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .site .site-closing { text-align: left; }
+  /* Phone body text stays 15–17px (spec "Phone"). */
+  .site .site-section__lede,
+  .site .site-closing p { font-size: 16px; }
   .site .site-featured__inner { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .site .site-featured__actions { flex-direction: column; }
   .site .site-featured__actions .site-btn { width: 100%; }
