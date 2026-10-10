@@ -87,16 +87,20 @@ describe('Checklist hub', () => {
   // The Style Page card (was Lookbook; Tasks #2815, #2876): "Style sheet
   // ready x of 12" from the shared rule (lib/styleReadiness), the sheet's
   // status, and a link to the Style Page.
-  const img = () => ({ id: Math.random().toString(36).slice(2), source: 'upload', in_lookbook: true });
-  const FIVE = ['#A01428', '#B8962E', '#D4AF93', '#BB6573', '#E3D4AD'].map((hex) => ({ hex }));
+  // The server's readiness (Task #2877), as GET /style-sheet returns it.
+  const CHIPS = ['Front', 'Side', 'Back', 'Hero', 'Hair', 'Nails', 'Beauty', 'Venue', 'Inspo', 'Wardrobe', 'Palette', 'Tagline'];
+  const readiness = (ready) => {
+    const items = CHIPS.map((label) => ({ key: label.toLowerCase(), label, ready: ready.includes(label) }));
+    return { items, done: ready.length, total: 12, missing: items.filter((i) => !i.ready).map((i) => i.label) };
+  };
 
-  test('the Style Page card: ready x of 12 from the shared rule, the sheet status, opening the Style Page', async () => {
+  test("the Style Page card: ready x of 12 as the server computed it, the sheet status, opening the Style Page", async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/lookbook') {
-        return { data: { data: { sheet_status: 'draft', hair_name: '', images: { front: [img()], hero: [img()], venue: [img()], inspo: [img()] } } } };
+        return { data: { data: { sheet_status: 'draft' } } };
       }
       if (url === '/api/v1/episodes/ep-1/style-sheet') {
-        return { data: { data: { wardrobe: { state: 'chosen', columns: [{ key: 'body', needed: true }] }, palette: null, palette_sources: [] } } };
+        return { data: { data: { readiness: readiness(['Front', 'Hero', 'Venue', 'Inspo']) } } };
       }
       return { data: {} };
     });
@@ -115,13 +119,10 @@ describe('Checklist hub', () => {
   test('the Style Page card is complete when all 12 are ready and the sheet is approved', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/lookbook') {
-        return { data: { data: {
-          sheet_status: 'approved', hair_name: 'soft glam waves', nails_name: 'crimson almond', tagline: 'A line.',
-          images: { front: [img()], side: [img()], back: [img()], hero: [img()], hair: [img()], nails: [img()], eyes: [img()], venue: [img()], inspo: [img()] },
-        } } };
+        return { data: { data: { sheet_status: 'approved' } } };
       }
       if (url === '/api/v1/episodes/ep-1/style-sheet') {
-        return { data: { data: { wardrobe: { state: 'locked', columns: [{ key: 'body', needed: false }] }, palette: FIVE } } };
+        return { data: { data: { readiness: readiness(CHIPS) } } };
       }
       return { data: {} };
     });

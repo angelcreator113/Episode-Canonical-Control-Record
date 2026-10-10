@@ -16,8 +16,15 @@ vi.mock('../../services/api', () => ({
 vi.mock('../../lib/stylePalette', () => ({ extractPalette: vi.fn(async () => []) }));
 
 import api from '../../services/api';
-import EpisodeStylePage, { SPOT_INFO } from './EpisodeStylePage';
+import EpisodeStylePage, { SPOT_INFO, EXPORT_SIZES } from './EpisodeStylePage';
 import { EPISODE_ONE } from './StyleSheetTemplate.fixture';
+import { READINESS_CHIPS } from '../../lib/styleReadiness';
+
+// The server's readiness (Task #2877): here Front and Venue are ready.
+const readiness = (readyKeys = ['front', 'venue']) => {
+  const items = READINESS_CHIPS.map((c) => ({ ...c, ready: readyKeys.includes(c.key) }));
+  return { items, done: readyKeys.length, total: 12, missing: items.filter((i) => !i.ready).map((i) => i.label) };
+};
 
 const EP = 'ep-1';
 const LB_URL = `/api/v1/episodes/${EP}/lookbook`;
@@ -49,6 +56,7 @@ const sheet = (over = {}) => ({
   palette_sources: [],
   status: 'draft',
   stale: false,
+  readiness: readiness(),
   ...over,
 });
 
@@ -166,9 +174,9 @@ describe('Style Page', () => {
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/img-wide`, { sort_order: 0 }));
   });
 
-  test('readiness: Ready x of 12 from the shared rule, a chip per item; a chip opens its spot', async () => {
+  test("readiness: Ready x of 12 as the server computed it, a chip per item; a chip opens its spot", async () => {
     await renderPage();
-    // Front and Venue (the scene set image the sheet falls back to) are ready.
+    // The server says Front and Venue are ready.
     expect(screen.getByTestId('esp2-ready').textContent).toBe('Ready 2 of 12');
     expect(screen.getByTestId('esp2-chip-front').className).toContain('is-ready');
     expect(screen.getByTestId('esp2-chip-venue').className).toContain('is-ready');
@@ -186,17 +194,46 @@ describe('Style Page', () => {
     expect(onOpenTab).toHaveBeenCalledWith('wardrobe');
   });
 
-  test('Approve approves the sheet; an approved sheet is read-only until Reopen', async () => {
+  test('Approve approves the sheet; approved, editing stays open (it returns the sheet to Draft)', async () => {
     await renderPage();
     api.post.mockResolvedValue({ data: { data: sheet({ status: 'approved' }) } });
     mockRoutes({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
     fireEvent.click(screen.getByRole('button', { name: /Approve/ }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SHEET_URL}/approve`));
     await waitFor(() => expect(screen.getByTestId('esp2-status').textContent).toContain('Approved'));
-    expect(screen.getByText(/read-only until it is reopened/)).toBeTruthy();
+    expect(screen.getByText(/Editing anything returns it to Draft/)).toBeTruthy();
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Side' }));
-    expect(panel().getByRole('button', { name: /Upload Side/ }).disabled).toBe(true);
+    expect(panel().getByRole('button', { name: /Upload Side/ }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /Reopen/ })).toBeTruthy();
+  });
+
+  test('Share & export: six sizes, off while Draft', async () => {
+    await renderPage();
+    const exp = within(screen.getByTestId('esp2-export'));
+    expect(exp.getByText('Approve the sheet to export it.')).toBeTruthy();
+    expect(EXPORT_SIZES.map((e) => e.size)).toEqual(['sheet', 'pin', 'story', 'post', 'look', 'pdf']);
+    for (const e of EXPORT_SIZES) expect(screen.getByTestId(`esp2-export-${e.size}`).disabled).toBe(true);
+  });
+
+  test('Share & export: approved and up to date, a size downloads from the server', async () => {
+    await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    const blob = new Blob(['png'], { type: 'image/png' });
+    api.get.mockResolvedValueOnce({ data: blob, headers: { 'content-disposition': 'attachment; filename="style-sheet-episode-01-pin.png"' } });
+    URL.createObjectURL = vi.fn(() => 'blob:sheet');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    expect(screen.getByTestId('esp2-export-pin').disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('esp2-export-pin'));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`${SHEET_URL}/export/pin`, { responseType: 'blob' }));
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(URL.createObjectURL).toHaveBeenCalledWith(blob);
+    click.mockRestore();
+  });
+
+  test('Share & export: an approved sheet that is out of date cannot be exported', async () => {
+    await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved', stale: true }) });
+    expect(within(screen.getByTestId('esp2-export')).getByText(/approve the sheet again/)).toBeTruthy();
+    expect(screen.getByTestId('esp2-export-sheet').disabled).toBe(true);
   });
 
   test('a failed save shows its message and keeps the page', async () => {

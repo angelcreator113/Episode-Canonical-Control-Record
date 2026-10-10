@@ -8,12 +8,15 @@
  * What you see is what exports.
  *
  * Data: the Lookbook routes (lib/lookbookApi) and GET /episodes/:id/style-
- * sheet for the sheet itself. No new routes. Every value is the episode's
+ * sheet for the sheet itself. Share & export (Task #2877) downloads the
+ * approved sheet in each size, drawn on the server; editing an approved
+ * sheet returns it to Draft. Every value is the episode's
  * own data; an empty one shows its "+ Add" spot (Evoni, 2026-10-10: real
  * data only). Reloads keep the page in place, and tapping never scrolls it.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ImagePlus, Loader2, Lock, RotateCcw, Shirt, Trash2, Upload } from 'lucide-react';
+import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Shirt, Trash2, Upload } from 'lucide-react';
+import api from '../../services/api';
 import { lookbookApi } from '../../lib/lookbookApi';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
@@ -42,6 +45,16 @@ export const SPOT_INFO = {
   palette: { section: 'Color palette', label: 'Palette', hint: "Five colours taken from the pieces' images; adjust any of them." },
   tagline: { section: 'Footer', label: 'Tagline', hint: 'One line in script on the footer. Type it on the sheet or here.' },
 };
+// Share & export: each size of the approved sheet, drawn on the server.
+export const EXPORT_SIZES = [
+  { size: 'sheet', label: 'Style sheet PNG', detail: '1024 × 1536' },
+  { size: 'pin', label: 'Pinterest pin', detail: '1000 × 1500' },
+  { size: 'story', label: 'Instagram story', detail: '1080 × 1920, padded' },
+  { size: 'post', label: 'Instagram post', detail: '1080 × 1350, the top of the sheet' },
+  { size: 'look', label: 'The look only', detail: 'Front, side and back' },
+  { size: 'pdf', label: 'Print PDF', detail: '8 × 12 in' },
+];
+
 // A readiness chip opens its spot (Beauty opens Eyes).
 const CHIP_SPOT = { beauty: 'eyes' };
 
@@ -155,8 +168,11 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
     return <div className="esp2-page"><p className="esp2-error" role="alert">{error || 'The Style Page could not be loaded.'}</p></div>;
   }
 
-  const approved = lb.sheet_status === 'approved' || sheet.status === 'approved';
-  const locked = busy || approved;
+  const approved = lb.sheet_status === 'approved' && sheet.status === 'approved';
+  // Editing an approved sheet returns it to Draft (the server does it), so
+  // nothing locks while it is approved; only a save in flight does.
+  const locked = busy;
+  const canExport = approved && !sheet.stale;
   const tray = lb.images?.unsorted || [];
   const readiness = styleReadiness({ lookbook: lb, sheet, palette });
   const info = selected ? SPOT_INFO[selected] : null;
@@ -216,7 +232,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const edit = {
     selected,
     onSelect: setSelected,
-    locked: approved,
+    locked: false,
     text,
     onText: (field, value) => setText((t) => ({ ...t, [field]: value })),
     onCommit: commitText,
@@ -250,7 +266,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
         </div>
       </header>
 
-      {approved && <p className="esp2-note">The style sheet is approved, so it is read-only until it is reopened.</p>}
+      {approved && <p className="esp2-note">Approved. Editing anything returns it to Draft, and it needs approving again before it can be exported.</p>}
       {error && <p className="esp2-error" role="alert">{error}</p>}
 
       <div className="esp2-layout">
@@ -310,6 +326,8 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               ))}
             </ul>
           </section>
+
+          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} />
         </aside>
       </div>
     </div>
@@ -468,6 +486,62 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+// Each export size as a download, enabled only while the sheet is approved
+// and up to date; the server refuses the rest (409).
+function ShareExport({ episodeId, episodeNumber, canExport, approved, stale }) {
+  const [busySize, setBusySize] = useState(null);
+  const [error, setError] = useState(null);
+  const download = async (size) => {
+    setBusySize(size);
+    setError(null);
+    try {
+      const res = await api.get(`/api/v1/episodes/${episodeId}/style-sheet/export/${size}`, { responseType: 'blob' });
+      const disposition = res.headers?.['content-disposition'] || '';
+      const n = episodeNumber != null ? String(episodeNumber).padStart(2, '0') : 'episode';
+      const name = /filename="([^"]+)"/.exec(disposition)?.[1] || `style-sheet-episode-${n}-${size}.${size === 'pdf' ? 'pdf' : 'png'}`;
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error('[StylePage] export failed:', err);
+      let msg = err?.message || 'The export could not be made.';
+      const data = err?.response?.data;
+      if (data && typeof data.text === 'function') {
+        try { msg = JSON.parse(await data.text()).error || msg; } catch (parseErr) { console.error('[StylePage] export error body unreadable:', parseErr); }
+      } else if (data?.error) msg = data.error;
+      setError(msg);
+    } finally {
+      setBusySize(null);
+    }
+  };
+  return (
+    <section className="esp2-export" aria-labelledby="esp2-export-title" data-testid="esp2-export">
+      <h3 id="esp2-export-title" className="esp2-spot-title">Share &amp; export</h3>
+      <p className="esp2-hint">
+        {canExport ? 'Drawn on the server from the approved sheet.'
+          : stale && approved ? 'The event or the look changed since approval: approve the sheet again to export it.'
+            : 'Approve the sheet to export it.'}
+      </p>
+      {error && <p className="esp2-error" role="alert">{error}</p>}
+      <ul className="esp2-exports">
+        {EXPORT_SIZES.map((e) => (
+          <li key={e.size}>
+            <button type="button" className="esp2-btn esp2-export-btn" disabled={!canExport || busySize !== null} onClick={() => download(e.size)} data-testid={`esp2-export-${e.size}`}>
+              {busySize === e.size ? <Loader2 size={16} className="esp2-spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
+              <span className="esp2-export-text"><span>{e.label}</span><span className="esp2-export-detail">{e.detail}</span></span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

@@ -609,6 +609,22 @@ router.post('/:id/style-sheet/approve', validateUUIDParam('id'), requireAuth, as
   }
 });
 
+// One export size of the approved sheet, drawn on the server (Task #2877):
+// sheet, pin, story, post, look or pdf. Refused while Draft or out of date.
+router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { exportStyleSheet } = require('../services/styleSheetService');
+    const out = await exportStyleSheet(models, req.params.id, req.params.size);
+    res.set('Content-Type', out.type);
+    res.set('Content-Disposition', `attachment; filename="${out.filename}"`);
+    res.set('Cache-Control', 'private, no-store');
+    return res.send(out.buffer);
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/style-sheet/export/:size');
+  }
+});
+
 router.post('/:id/style-sheet/reopen', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const models = require('../models');
