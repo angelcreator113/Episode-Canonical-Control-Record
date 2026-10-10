@@ -26,6 +26,11 @@ describe('checklistFixTarget', () => {
     expect(checklistFixTarget('scene_images', { episode: EPISODE, showId: 'show-1' })).toEqual({ label: 'Open Scenes', href: '/episodes/ep-1?tab=scenes' });
   });
 
+  test('the Lookbook card opens the Lookbook, and its style sheet item opens Wardrobe (Task #2815)', () => {
+    expect(checklistFixTarget('lookbook_ready', { episode: EPISODE, showId: null })).toEqual({ label: 'Add photos', href: '/episodes/ep-1?tab=lookbook' });
+    expect(checklistFixTarget('style_sheet_approved', { episode: EPISODE, showId: null })).toEqual({ label: 'Open style sheet', href: '/episodes/ep-1?tab=wardrobe' });
+  });
+
   test('no target without the show for show work, nor for an item with no page', () => {
     expect(checklistFixTarget('scene_sets', { episode: EPISODE, showId: null })).toBeNull();
     expect(checklistFixTarget('arc_position', { episode: EPISODE, showId: null })).toEqual({ label: 'Set up', href: '/episodes/ep-1/plan' });
