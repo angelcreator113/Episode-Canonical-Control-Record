@@ -23,6 +23,10 @@ export default function FinalCallToAction() {
             <li><span className="site-footer__pending" data-testid="site-footer-terms">Terms <em>(coming soon)</em></span></li>
             <li><Link to={LOGIN_PATH}>Enter Studio</Link></li>
           </ul>
+          {/* For the Privacy page, when it exists (Task #2822): the YouTube embed. */}
+          <p className="site-footer__note" data-testid="site-footer-youtube">
+            Videos from YouTube play in its privacy-enhanced mode (youtube-nocookie.com) and load only when you press play.
+          </p>
         </div>
       </footer>
     </>
