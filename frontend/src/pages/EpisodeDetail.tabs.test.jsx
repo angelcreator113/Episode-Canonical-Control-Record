@@ -71,6 +71,7 @@ vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => n
 vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
 vi.mock('../components/EpisodeWardrobeGameplay', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeStyleSheetPanel', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeScenesTab', () => ({ default: () => null }));
 vi.mock('../components/PhonePreviewMode', () => ({ default: () => null }));
 
@@ -155,7 +156,9 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
     fireEvent.keyDown(window, { key: '2', ctrlKey: true });
     expect(where()).toBe('/episodes/ep-1?tab=wardrobe');
     await waitFor(() => expect(activeMain()).toBe('Production'));
-    expect(screen.queryByTestId('episode-checklist')).toBeNull();
+    // The Wardrobe body loads a lazy panel (the style sheet, Task #2814);
+    // the checklist stays on screen until it arrives.
+    await waitFor(() => expect(screen.queryByTestId('episode-checklist')).toBeNull());
 
     fireEvent.click(screen.getByTestId('back'));
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();

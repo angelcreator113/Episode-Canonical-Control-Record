@@ -1,0 +1,167 @@
+/* The style sheet template, 1024 x 1536 (spec Part 2; Task #2814):
+   blush-to-lilac-to-ivory background, champagne-gold frame borders and pill
+   labels, plum text. These are the printed sheet's own colours, kept on the
+   sheet root; the studio's theme tokens do not apply to the artifact. */
+
+.ss-sheet {
+  --ss-blush: #E9C4D5;
+  --ss-lilac: #D9CBEB;
+  --ss-ivory: #FAF6F1;
+  --ss-gold: #B8962E;
+  --ss-champagne: #D6B77C;
+  --ss-pink: #C2668F;
+  --ss-plum: #30253D;
+  --ss-white: #FFFFFF;
+  --ss-serif: 'Cormorant Garamond', 'Lora', Georgia, serif;
+  --ss-script: 'Great Vibes', 'Brush Script MT', cursive;
+  --ss-sans: 'DM Sans', system-ui, sans-serif;
+
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 32px 25px 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--ss-blush) 0%, var(--ss-lilac) 45%, var(--ss-ivory) 100%);
+  color: var(--ss-plum);
+  font-family: var(--ss-sans);
+}
+.ss-sheet *, .ss-sheet *::before, .ss-sheet *::after { box-sizing: border-box; }
+.ss-sheet figure { margin: 0; }
+.ss-sheet p, .ss-sheet h1 { margin: 0; }
+
+.ss-pill {
+  align-self: flex-start;
+  padding: 4px 14px;
+  border: 1.5px solid var(--ss-champagne);
+  border-radius: 999px;
+  background: var(--ss-ivory);
+  font: 600 12px/1.2 var(--ss-sans);
+  letter-spacing: 0.16em;
+}
+.ss-pill-centre { align-self: center; }
+
+.ss-photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(250, 246, 241, 0.6);
+}
+.ss-photo-img { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat; }
+.ss-photo-empty { font: italic 500 15px/1.2 var(--ss-serif); color: rgba(48, 37, 61, 0.45); }
+.ss-frame { border: 2px solid var(--ss-champagne); border-radius: 10px; }
+
+/* Top row */
+.ss-top { display: grid; grid-template-columns: 290px 344px 290px; gap: 25px; height: 704px; }
+.ss-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.ss-logo { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 6px; }
+.ss-logo-styling { font: 600 52px/1.15 var(--ss-serif); color: var(--ss-gold); }
+.ss-logo-adventures { margin-left: 18px; font: 400 54px/1.2 var(--ss-script); color: var(--ss-pink); }
+.ss-logo-with { margin-left: 4px; font: italic 500 20px/1.3 var(--ss-serif); }
+.ss-logo-lala { font: 700 46px/1.2 var(--ss-serif); letter-spacing: 0.24em; }
+
+.ss-look { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; min-height: 0; }
+.ss-look-item { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.ss-look-item .ss-photo { flex: 1; min-height: 0; }
+.ss-look-item figcaption, .ss-beauty-item figcaption, .ss-venue figcaption {
+  font: 600 11px/1.2 var(--ss-sans);
+  letter-spacing: 0.14em;
+  text-align: center;
+}
+
+.ss-col-centre { justify-content: center; }
+.ss-hero {
+  height: 620px;
+  padding: 14px 14px 40px;
+  background: var(--ss-white);
+  box-shadow: 0 14px 30px rgba(48, 37, 61, 0.22);
+  transform: rotate(-2.5deg);
+}
+
+.ss-episode { font: 600 14px/1 var(--ss-sans); letter-spacing: 0.3em; color: var(--ss-gold); }
+.ss-event-name { font: 600 32px/1.2 var(--ss-serif); }
+.ss-chip {
+  align-self: flex-start;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--ss-plum);
+  color: var(--ss-ivory);
+  font: 600 12px/1.4 var(--ss-sans);
+  letter-spacing: 0.08em;
+}
+.ss-venue { display: flex; flex-direction: column; gap: 6px; }
+.ss-venue .ss-photo { height: 180px; }
+.ss-details { display: flex; flex-direction: column; gap: 7px; }
+.ss-detail { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: baseline; }
+.ss-detail-label { font: 600 11px/1.3 var(--ss-sans); letter-spacing: 0.14em; color: var(--ss-gold); }
+.ss-detail-value { font: 500 17px/1.25 var(--ss-serif); }
+
+/* Wardrobe breakdown */
+.ss-wardrobe { display: flex; flex-direction: column; gap: 10px; height: 290px; }
+.ss-columns { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; flex: 1; min-height: 0; }
+.ss-column { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+.ss-column-label { font: 700 12px/1 var(--ss-sans); letter-spacing: 0.16em; text-align: center; }
+.ss-column-photo { flex: 1; min-height: 0; background: var(--ss-white); }
+.ss-column-photo .ss-photo-img { inset: 6px; background-size: contain; }
+.ss-column-name { font: 600 11px/1.25 var(--ss-sans); font-variant: small-caps; letter-spacing: 0.04em; text-align: center; min-height: 28px; }
+.ss-column.is-needed .ss-column-photo { border-style: dashed; }
+.ss-column.is-needed .ss-column-name, .ss-column.is-needed .ss-photo-empty { color: var(--ss-pink); font-style: italic; }
+
+/* Bottom row */
+.ss-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; height: 330px; }
+.ss-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 2px solid var(--ss-champagne);
+  border-radius: 14px;
+  background: rgba(250, 246, 241, 0.75);
+  min-height: 0;
+}
+.ss-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+/* No box-shadow: html2canvas paints a spread shadow over the fill. */
+.ss-swatch { aspect-ratio: 1; border-radius: 50%; border: 3px solid var(--ss-champagne); }
+.ss-swatch.is-empty { background: transparent; border-style: dashed; }
+.ss-mood-title { font: 400 44px/1.3 var(--ss-script); color: var(--ss-pink); text-align: center; }
+.ss-mood-words { font: italic 500 17px/1.35 var(--ss-serif); text-align: center; }
+.ss-beauty { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
+.ss-beauty-item { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.ss-beauty-item .ss-photo { flex: 1; min-height: 0; }
+.ss-inspo { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
+.ss-texture { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: rgba(250, 246, 241, 0.6); }
+.ss-texture-img { position: absolute; inset: 0; background-size: 320%; background-position: center; background-repeat: no-repeat; }
+
+/* Footer strip */
+.ss-footer {
+  position: relative;
+  margin: auto -25px 0;
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 16px;
+  background: var(--ss-plum);
+  color: var(--ss-ivory);
+  overflow: hidden;
+}
+/* [placeholder] The LalaVerse map as a skyline, until the exported map is
+   supplied: a soft silhouette of rooftops along the top edge. */
+.ss-skyline {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 46px;
+  background:
+    repeating-linear-gradient(90deg, rgba(217, 203, 235, 0.45) 0 38px, rgba(217, 203, 235, 0.25) 38px 70px, transparent 70px 84px);
+  clip-path: polygon(0 60%, 6% 30%, 12% 55%, 20% 10%, 27% 50%, 35% 25%, 44% 60%, 52% 5%, 60% 45%, 68% 20%, 76% 55%, 84% 15%, 92% 50%, 100% 30%, 100% 100%, 0 100%);
+}
+.ss-tagline { position: relative; font: 400 38px/1.3 var(--ss-script); color: var(--ss-blush); }
+.ss-footer-line { position: relative; font: 600 13px/1.4 var(--ss-sans); letter-spacing: 0.3em; }

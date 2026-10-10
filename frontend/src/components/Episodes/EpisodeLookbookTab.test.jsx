@@ -43,7 +43,7 @@ const renderTab = async (data = lookbook()) => {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe('Lookbook tab', () => {
-  test('header: images in, ready x of 11, what is missing, and the preview waits for the style sheet', async () => {
+  test('header: images in, ready x of 11, and what is missing', async () => {
     const images = empty();
     images.front = [photo('f', 'front')];
     images.unsorted = [photo('u1', 'unsorted'), photo('u2', 'unsorted')];
@@ -53,6 +53,7 @@ describe('Lookbook tab', () => {
     expect(screen.getByTestId('elb-images-in').textContent).toBe('3 images in');
     expect(screen.getByTestId('elb-ready').textContent).toBe('style sheet ready (1 of 11)');
     expect(screen.getByText('Still to add: Side, Back')).toBeTruthy();
+    // Without a way to open Wardrobe the preview button is off.
     expect(screen.getByRole('button', { name: 'Preview style sheet' }).disabled).toBe(true);
   });
 
@@ -149,5 +150,13 @@ describe('Lookbook tab', () => {
     fireEvent.blur(hair);
     expect((await screen.findByRole('alert')).textContent).toBe('The tagline is longer than 200 characters.');
     expect(screen.getByTestId('episode-lookbook-tab')).toBeTruthy();
+  });
+
+  test('"Preview style sheet" opens Wardrobe, where the style sheet is', async () => {
+    api.get.mockResolvedValue({ data: { data: lookbook() } });
+    const onOpenTab = vi.fn();
+    render(<EpisodeLookbookTab episode={{ id: EP }} onOpenTab={onOpenTab} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview style sheet' }));
+    expect(onOpenTab).toHaveBeenCalledWith('wardrobe');
   });
 });

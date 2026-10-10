@@ -20,6 +20,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeLookbookTab = lazy(() => import('../components/Episodes/EpisodeLookbookTab'));
+const EpisodeStyleSheetPanel = lazy(() => import('../components/Episodes/EpisodeStyleSheetPanel'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -843,6 +844,8 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {tabKey === 'production.wardrobe' && (
           <div>
+            {/* The style sheet panel (Task #2814): status, readiness, Preview, Approve, Download PNG */}
+            <EpisodeStyleSheetPanel episode={episode} />
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
               <div>
@@ -900,7 +903,7 @@ const EpisodeDetail = () => {
 
         {/* Lookbook Tab — the episode's photos for the style sheet (Task #2813) */}
         {tabKey === 'production.lookbook' && (
-          <EpisodeLookbookTab episode={episode} />
+          <EpisodeLookbookTab episode={episode} onOpenTab={openTab} />
         )}
 
         {/* Results → Summary (Evoni's Episode mock): the one page. */}
