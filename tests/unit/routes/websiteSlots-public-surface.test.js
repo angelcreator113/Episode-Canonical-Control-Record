@@ -39,9 +39,9 @@ describe('websiteSlots.js: every route is admin-only', () => {
   const code = strip(read('src/routes/websiteSlots.js'));
   const routes = code.match(/router\.(get|post|put|patch|delete)\('[^']*', [^\n]*/g) || [];
 
-  test('eight routes, each behind ...admin = [requireAuth, authorize([\'ADMIN\'])]', () => {
+  test('nine routes, each behind ...admin = [requireAuth, authorize([\'ADMIN\'])]', () => {
     expect(code).toMatch(/const admin = \[requireAuth, authorize\(\['ADMIN'\]\)\];/);
-    expect(routes).toHaveLength(8);
+    expect(routes).toHaveLength(9);
     for (const r of routes) expect({ r, admin: /, \.\.\.admin, / .test(r) }).toEqual({ r, admin: true });
     expect(code).not.toMatch(/optionalAuth/);
   });
