@@ -489,6 +489,90 @@ router.delete('/:id/title-card', validateUUIDParam('id'), requireAuth, async (re
   }
 });
 
+// ==================== LOOKBOOK (Task #2812) ====================
+// The episode's Lookbook (docs/design/2026-10-landing-and-stylesheet.md
+// Part 2): her photos sorted into the style sheet's spots, plus hair and
+// nails names, beauty notes, palette, mood words and tagline. No AI, no
+// cost. Every image route checks the photo belongs to this episode.
+function sendLookbookError(res, err, where) {
+  console.error(`[Lookbook] ${where} failed:`, err.message);
+  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  return res.status(500).json({ success: false, error: 'The Lookbook could not be saved. Try again.' });
+}
+
+router.get('/:id/lookbook', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getLookbook } = require('../services/episodeLookbookService');
+    return res.json({ success: true, data: await getLookbook(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/lookbook');
+  }
+});
+
+router.put('/:id/lookbook', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { updateLookbook } = require('../services/episodeLookbookService');
+    return res.json({ success: true, data: await updateLookbook(models, req.params.id, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PUT /:id/lookbook');
+  }
+});
+
+// Multipart field "files" (one or many), optional field "category"; PNG,
+// JPEG or WebP, 10 MB each, 20 at once.
+const lookbookUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 20 },
+  fileFilter: (req, file, cb) => {
+    if (['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype)) return cb(null, true);
+    const err = new Error('Photos must be PNG, JPEG or WebP.');
+    err.code = 'INVALID_TYPE';
+    return cb(err);
+  },
+});
+router.post('/:id/lookbook/images', validateUUIDParam('id'), requireAuth, (req, res, next) => {
+  lookbookUpload.array('files', 20)(req, res, (err) => {
+    if (err) {
+      console.error('[Lookbook] upload rejected:', err.message);
+      const error = err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be 10 MB or smaller.'
+        : err.code === 'LIMIT_FILE_COUNT' ? 'Upload at most 20 photos at once.' : err.message;
+      return res.status(400).json({ success: false, error, code: err.code || 'UPLOAD_REJECTED' });
+    }
+    return next();
+  });
+}, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { addImages } = require('../services/episodeLookbookService');
+    const data = await addImages(models, req.params.id, req.files || [], { category: req.body && req.body.category });
+    return res.status(201).json({ success: true, data });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/lookbook/images');
+  }
+});
+
+router.patch('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validateUUIDParam('imageId'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { updateImage } = require('../services/episodeLookbookService');
+    return res.json({ success: true, data: await updateImage(models, req.params.id, req.params.imageId, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PATCH /:id/lookbook/images/:imageId');
+  }
+});
+
+router.delete('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validateUUIDParam('imageId'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { deleteImage } = require('../services/episodeLookbookService');
+    return res.json({ success: true, data: await deleteImage(models, req.params.id, req.params.imageId) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'DELETE /:id/lookbook/images/:imageId');
+  }
+});
+
 // ==================== EPISODE OVERLAYS (P15) ====================
 // Production's Overlays tab: every on-screen piece the episode owns (title
 // overlay, framed card, invitation, task-list overlay) with its preview,

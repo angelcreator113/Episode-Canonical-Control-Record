@@ -661,6 +661,8 @@ async function deleteTitleOverlay(models, episodeId) {
 
 module.exports = {
   uploadTitleOverlay,
+  // The episode image upload rule (bucket, else a data URL), shared with the Lookbook (Task #2812).
+  uploadPng,
   setTitleWords,
   deleteTitleOverlay,
   TITLE_OVERLAY_ROLE,
