@@ -59,10 +59,16 @@ jobs:
     steps:
       - name: Check configuration
         env:
-          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          # An environment secret (production), so the log masks it (#2863).
+          # Only its presence is checked; its value is never echoed.
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
         run: |
+          if [ -z "$AWS_ROLE_ARN" ]; then
+            echo "::error::The production environment secret AWS_ROLE_ARN is not set. Nothing was changed. See $RUNBOOK, §2.3."
+            exit 1
+          fi
           missing=""
-          for v in AWS_ROLE_ARN AWS_REGION RDS_INSTANCE_ID EC2_INSTANCE_ID HEALTH_URL; do
+          for v in AWS_REGION RDS_INSTANCE_ID EC2_INSTANCE_ID HEALTH_URL; do
             if [ -z "${!v}" ]; then missing="$missing $v"; fi
           done
           if [ -n "$missing" ]; then
@@ -85,7 +91,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           role-session-name: deploy-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
 
