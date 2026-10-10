@@ -6,7 +6,12 @@ Source: Evoni's design canvas and the "Prime Studios Public Website Redesign Blu
 
 ### Purpose and rules
 - Public, logged-out page that says what Prime Studios makes. Positioning: Prime Studios is the creator, Styling Adventures with Lala is the flagship, LalaVerse is the destination.
-- It is static. It makes no calls to the app's API and shows no private production data. Images are exported files in the frontend's public assets, not fetched from the media service.
+- It shows no private production data. Bundled images in the frontend's public assets are its defaults. **Amended 2026-10-10 (was "It is static. It makes no calls to the app's API"):** the page now makes one read, `GET /api/v1/public/site-content`.
+  - That route needs no sign-in, takes no writes and is rate-limited.
+  - It returns only the Website slots Evoni has published, field by field (`websiteSlotService.publicContent`).
+  - The media it names lives in the public site location (`SITE_PUBLIC_*`, served through the CDN once it is set up), never the studio's media service.
+  - With nothing published, or if the read fails, the page keeps its bundled defaults.
+  - Contract: `docs/reads/2026-10-10-website-content-read.md` §1 and §4. Built in #2833 (endpoint and admin) and #2838 (the page). Go-live steps: `docs/WEBSITE_GO_LIVE.md`.
 - "Enter Studio" goes to the existing login route. Do not change authentication.
 - Never present an episode as published unless it is. Episode 1 is a draft, so Featured Production ships in its fallback state.
 - Do not reveal author-only canon (for example, who JustAWoman is to Lala).
