@@ -103,6 +103,7 @@ Lala's in-world social network is also called "lalaverse". Do not create a publi
   - An optional "Include Shop the Look links" adds each piece's real-world link.
   - When any link is an affiliate link, a disclosure line is added at the start of the caption, and it cannot be removed while links are present.
 - **Phone:** works at 375px, with the sheet on top and the panel below. Tapping never jumps the page.
+- **Real data only (Evoni, 2026-10-10):** every value on the page is the episode's own data: its event package, scene set, saved look, Lookbook photos and tagline. An empty value shows its dashed "+ Add" spot or a quiet placeholder. Mockup sample content is never shown or copied into code.
 
 ### Style sheet panel (episode › Production › Wardrobe)
 - Title "Style sheet" with status Draft or Approved and a readiness bar (x of 11).
