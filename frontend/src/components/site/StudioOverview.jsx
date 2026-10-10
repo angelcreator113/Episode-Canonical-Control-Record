@@ -5,9 +5,12 @@
  * exists.
  */
 import MediaSlot from './MediaSlot';
+import { SiteContentContext } from './siteMedia';
+import { useContext } from 'react';
 import { STUDIO, SECTION_IDS } from './siteContent';
 
 export default function StudioOverview() {
+  const { slots } = useContext(SiteContentContext);
   return (
     <section id={SECTION_IDS.studio} className="site-section site-studio" aria-labelledby="site-studio-heading">
       <div className="site-wrap">
@@ -19,7 +22,7 @@ export default function StudioOverview() {
         <ul className="site-grid site-grid--4">
           {STUDIO.cards.map((c) => (
             <li key={c.key} className="site-card site-card--brand">
-              <MediaSlot src={c.image} alt={c.title} label={c.imageLabel} ratio="4 / 5" />
+              <MediaSlot src={c.image} media={slots?.[`brand_${c.key}`] || null} alt={c.title} label={c.imageLabel} ratio="4 / 5" />
               <h3>{c.title}</h3>
               <p>{c.body}</p>
             </li>

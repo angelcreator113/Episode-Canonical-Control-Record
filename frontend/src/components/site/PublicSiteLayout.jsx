@@ -9,10 +9,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { NAV_LINKS, LOGIN_PATH } from './siteContent';
+import { useSlot } from './siteMedia';
 import '../../styles/site-tokens.css';
 import '../../styles/PublicSite.css';
 
 export default function PublicSiteLayout({ children }) {
+  // The published logo from the Website page, else the wordmark in type.
+  const logo = useSlot('logo');
+  const logoSrc = logo?.media_type === 'image' ? logo.url : null;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef(null);
   const drawerRef = useRef(null);
@@ -39,7 +43,9 @@ export default function PublicSiteLayout({ children }) {
       <a className="site-skip" href="#site-main">Skip to content</a>
       <header className="site-nav">
         <div className="site-wrap site-nav__inner">
-          <a className="site-wordmark" href="#site-main">Prime Studios</a>
+          <a className="site-wordmark" href="#site-main">
+            {logoSrc ? <img className="site-wordmark__logo" src={logoSrc} alt={logo.alt_text || 'Prime Studios'} /> : 'Prime Studios'}
+          </a>
           <nav className="site-nav__links" aria-label="Site">
             {NAV_LINKS.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}
           </nav>

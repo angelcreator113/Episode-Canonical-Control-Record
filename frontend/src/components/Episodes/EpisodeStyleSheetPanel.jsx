@@ -29,11 +29,11 @@ const LOOK_SLOTS = [['front', 'Front'], ['side', 'Side'], ['back', 'Back'], ['he
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-/** The PNG of a full-size template node (html2canvas, loaded on demand). */
-export async function sheetToPng(node) {
+/** The PNG (or another image type) of a full-size template node (html2canvas, loaded on demand). */
+export async function sheetToPng(node, type = 'image/png', quality) {
   const { default: html2canvas } = await import('html2canvas');
   const canvas = await html2canvas(node, { scale: 1, width: SHEET_WIDTH, height: SHEET_HEIGHT, backgroundColor: null, logging: false });
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('The PNG could not be made.'))), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('The image could not be made.'))), type, quality));
 }
 
 export default function EpisodeStyleSheetPanel({ episode }) {
