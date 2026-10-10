@@ -3,7 +3,7 @@
  * note; each slot card's preview, status pill, alt text, Upload/Replace,
  * Publish/Unpublish and Preview on site; the featured video's YouTube or
  * clip switch, poster and captions; the brand cards with "Use an approved
- * style sheet instead"; the logo toggle; admins only.
+ * style sheet instead"; the logo from Show Settings; admins only.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -154,11 +154,36 @@ describe('Website page', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  test("the logo toggle stays off: the show's logo is not the site's", async () => {
+  test("the logo from Show Settings: choose the show, then the server copies its logo in as a draft", async () => {
     await renderPage();
-    const toggle = card('logo').getByLabelText(/Use the logo from Show Settings/);
-    expect(toggle.disabled).toBe(true);
-    expect(card('logo').getByText(/the site's logo is Prime Studios'/)).toBeTruthy();
+    api.get.mockImplementation(async (url) => (url === '/api/v1/shows'
+      ? { data: { data: [{ id: 'show-1', name: 'Styling Adventures with Lala' }, { id: 'show-2', name: 'Before Lala' }] } }
+      : { data: { data: list() } }));
+    api.post.mockResolvedValue({ data: { data: { slot_key: 'logo' } } });
+    fireEvent.click(card('logo').getByRole('button', { name: 'Use the logo from Show Settings' }));
+    const select = await card('logo').findByLabelText('Show whose logo to use');
+    expect(card('logo').getByRole('button', { name: "Use this show's logo" }).disabled).toBe(true);
+    fireEvent.change(select, { target: { value: 'show-1' } });
+    fireEvent.click(card('logo').getByRole('button', { name: "Use this show's logo" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/website-slots/logo/from-show', { show_id: 'show-1' }));
+    expect(card('logo').getByText(/A copy, saved as a draft/)).toBeTruthy();
+  });
+
+  test("one show is chosen for you; a show with no logo says so", async () => {
+    await renderPage();
+    api.get.mockImplementation(async (url) => (url === '/api/v1/shows'
+      ? { data: { data: [{ id: 'show-1', name: 'Styling Adventures with Lala' }] } }
+      : { data: { data: list() } }));
+    api.post.mockRejectedValue({ response: { status: 400, data: { error: 'That show has no logo yet. Add one in Show Settings.' } } });
+    fireEvent.click(card('logo').getByRole('button', { name: 'Use the logo from Show Settings' }));
+    await waitFor(() => expect(card('logo').getByLabelText('Show whose logo to use').value).toBe('show-1'));
+    fireEvent.click(card('logo').getByRole('button', { name: "Use this show's logo" }));
+    expect((await screen.findByRole('alert')).textContent).toBe('That show has no logo yet. Add one in Show Settings.');
+  });
+
+  test('the logo action is off until the public site storage is set up', async () => {
+    await renderPage(list({}, false));
+    expect(card('logo').getByRole('button', { name: 'Use the logo from Show Settings' }).disabled).toBe(true);
   });
 
   test('a non-admin is told the page is for admins', async () => {
