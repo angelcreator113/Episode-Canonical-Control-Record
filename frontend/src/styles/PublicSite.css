@@ -1,0 +1,211 @@
+/* ──────────────────────────────────────────────────────────────
+   PUBLIC SITE — the logged-out landing page's frame and sections
+   (docs/design/2026-10-landing-and-stylesheet.md Part 1). Every class is
+   prefixed `site-` and lives under `.site`, so no studio page is affected.
+   Colours and fonts come from site-tokens.css, which PublicSiteLayout
+   imports first.
+   ────────────────────────────────────────────────────────────── */
+
+.site {
+  /* App.css locks html/body scroll; the public site owns its own. */
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--site-nav-height);
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+.site *,
+.site *::before,
+.site *::after { box-sizing: border-box; }
+
+.site a { color: inherit; }
+
+.site :focus-visible {
+  outline: 3px solid var(--site-focus);
+  outline-offset: 3px;
+}
+
+.site .site-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.site .site-skip {
+  position: absolute; left: var(--site-gutter); top: -100px; z-index: 30;
+  padding: 10px 16px; border-radius: var(--site-radius);
+  background: var(--site-plum); color: var(--site-ivory); text-decoration: none;
+}
+.site .site-skip:focus { top: 12px; }
+
+.site .site-wrap {
+  width: 100%;
+  max-width: calc(var(--site-content-width) + 2 * var(--site-gutter));
+  margin: 0 auto;
+  padding: 0 var(--site-gutter);
+}
+
+.site .site-eyebrow {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ── Buttons ── */
+.site .site-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--site-touch);
+  padding: 10px 22px;
+  border-radius: var(--site-radius-pill);
+  border: 1.5px solid transparent;
+  font: 600 15px/1.2 var(--site-font-body);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.site .site-btn--primary { background: var(--site-btn-primary-bg); color: var(--site-btn-primary-text); }
+.site .site-btn--outline {
+  background: var(--site-btn-secondary-bg);
+  color: var(--site-btn-secondary-text);
+  border-color: var(--site-btn-secondary-border);
+}
+.site .site-btn--outline:hover { background: var(--site-plum); color: var(--site-ivory); }
+.site .site-btn--ivory { background: var(--site-ivory); color: var(--site-plum); }
+.site .site-btn--outline-light { background: transparent; color: var(--site-ivory); border-color: var(--site-ivory); }
+.site .site-btn--outline-light:hover { background: var(--site-ivory); color: var(--site-plum); }
+
+/* ── Navigation (76px, sticky) ── */
+.site .site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--site-ivory);
+  border-bottom: 1px solid rgba(48, 37, 61, 0.12);
+}
+.site .site-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: var(--site-nav-height);
+}
+.site .site-wordmark {
+  font: 600 26px/1 var(--site-font-display);
+  color: var(--site-plum);
+  text-decoration: none;
+  margin-right: auto;
+}
+.site .site-nav__links { display: flex; gap: 28px; }
+.site .site-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--site-touch);
+  font-weight: 500;
+  text-decoration: none;
+}
+.site .site-nav__links a:hover { text-decoration: underline; text-underline-offset: 6px; }
+.site .site-nav__menu {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--site-touch);
+  height: var(--site-touch);
+  border: 1.5px solid var(--site-plum);
+  border-radius: var(--site-radius);
+  background: var(--site-ivory);
+  color: var(--site-plum);
+  cursor: pointer;
+}
+.site .site-drawer { display: none; }
+
+/* ── Hero (about 760px) ── */
+.site .site-hero {
+  position: relative;
+  min-height: 760px;
+  display: flex;
+  align-items: center;
+  color: var(--site-ivory);
+  background: var(--site-plum);
+  overflow: hidden;
+}
+.site .site-hero__art { position: absolute; inset: 0; }
+.site .site-hero__art img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Until the map is supplied: the plum-to-orchid field the map will sit on. */
+.site .site-hero__placeholder {
+  width: 100%; height: 100%;
+  background:
+    radial-gradient(ellipse at 75% 40%, rgba(173, 121, 182, 0.55), transparent 60%),
+    radial-gradient(ellipse at 90% 85%, rgba(183, 223, 234, 0.35), transparent 55%),
+    var(--site-plum);
+}
+/* The plum gradient from the left, so the text reads over the map. */
+.site .site-hero__art::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(48, 37, 61, 0.92) 0%, rgba(48, 37, 61, 0.75) 40%, rgba(48, 37, 61, 0.1) 75%);
+}
+.site .site-hero__content { position: relative; z-index: 1; padding-top: 64px; padding-bottom: 64px; }
+.site .site-hero .site-eyebrow { color: var(--site-champagne); }
+.site .site-hero h1 {
+  max-width: 640px;
+  margin: 0 0 20px;
+  font-size: clamp(38px, 5.6vw, 76px);
+  font-weight: 600;
+  line-height: 1.05;
+  color: var(--site-ivory);
+}
+.site .site-hero__body { max-width: 560px; margin: 0 0 32px; font-size: 18px; }
+.site .site-hero__actions { display: flex; flex-wrap: wrap; gap: 14px; }
+
+/* ── Phone (check 320, 375, 430) ── */
+@media (max-width: 860px) {
+  .site .site-nav__links,
+  .site .site-nav__enter { display: none; }
+  .site .site-nav__menu { display: inline-flex; }
+  .site .site-drawer.is-open {
+    display: block;
+    border-top: 1px solid rgba(48, 37, 61, 0.12);
+    background: var(--site-ivory);
+  }
+  .site .site-drawer nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px var(--site-gutter) 20px;
+  }
+  .site .site-drawer nav a {
+    display: flex;
+    align-items: center;
+    min-height: var(--site-touch);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .site .site-drawer .site-btn { margin-top: 8px; width: 100%; }
+
+  /* The map sits above the headline; text on plum below it. */
+  .site .site-hero { display: block; min-height: 0; }
+  .site .site-hero__art { position: relative; aspect-ratio: 16 / 10; }
+  .site .site-hero__art::after { background: linear-gradient(180deg, transparent 55%, rgba(48, 37, 61, 0.9) 100%); }
+  .site .site-hero__content { padding-top: 28px; padding-bottom: 48px; }
+  /* responsive.css shrinks every h1 on phones with !important; the public
+     site keeps the spec's 38–48px hero heading. */
+  .site .site-hero h1 { font-size: clamp(38px, 11vw, 48px) !important; }
+  .site .site-hero__body { font-size: 16px; }
+  .site .site-hero__actions { flex-direction: column; }
+  .site .site-hero__actions .site-btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site { scroll-behavior: auto; }
+  .site .site-btn { transition: none; }
+}

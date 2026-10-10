@@ -9,7 +9,7 @@ import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 
 // Eager-loaded: critical path pages (login, landing, home)
 import Login from './pages/Login';
-import LandingPage from './pages/LandingPage';
+import PublicLanding from './pages/PublicLanding';
 import Home from './pages/Home';
 
 // Dev-only token carrier (Shape A) — ruled at
@@ -278,7 +278,7 @@ function AppContent() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<PublicLanding />} />
         <Route path="/login" element={<Login />} />
         {import.meta.env.DEV && (
           <Route
