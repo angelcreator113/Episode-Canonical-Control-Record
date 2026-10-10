@@ -21,7 +21,9 @@
   --site-orchid: #AD79B6;     /* accents and small labels only */
   --site-ice: #B7DFEA;        /* cool contrast */
   --site-champagne: #D6B77C;  /* premium details, closing button */
-  --site-plum: #30253D;       /* headings, dark sections, primary buttons */
+  --site-plum: #30253D;       /* headings, text, primary buttons */
+  --site-lavender: #E4DAF1;   /* soft purple: hero, featured */
+  --site-lavender-deep: #CFBFE6; /* closing and footer */
   --site-white: #FFFFFF;      /* the world pillars' section */
 
   /* Type */
@@ -32,8 +34,12 @@
   --site-bg: var(--site-ivory);
   --site-text: var(--site-plum);
   --site-heading: var(--site-plum);
-  --site-dark-bg: var(--site-plum);
-  --site-dark-text: var(--site-ivory);
+  /* The feature sections (hero, featured, closing, footer) were plum with
+     ivory text; Evoni asked for a soft lavender, so they are lavender with
+     plum text. */
+  --site-feature-bg: var(--site-lavender);
+  --site-feature-deep: var(--site-lavender-deep);
+  --site-feature-text: var(--site-plum);
   --site-btn-primary-bg: var(--site-plum);
   --site-btn-primary-text: var(--site-ivory);
   --site-btn-secondary-bg: var(--site-ivory);
@@ -42,7 +48,6 @@
   --site-btn-closing-bg: var(--site-champagne);
   --site-btn-closing-text: var(--site-plum);
   --site-focus: var(--site-plum);
-  --site-focus-on-dark: var(--site-champagne);
 
   /* Layout */
   --site-content-width: 1200px;

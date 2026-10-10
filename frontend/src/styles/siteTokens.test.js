@@ -21,6 +21,8 @@ describe('public site tokens', () => {
     expect(token('--site-ice')).toBe('#B7DFEA');
     expect(token('--site-champagne')).toBe('#D6B77C');
     expect(token('--site-plum')).toBe('#30253D');
+    expect(token('--site-lavender')).toBe('#E4DAF1');
+    expect(token('--site-lavender-deep')).toBe('#CFBFE6');
   });
 
   test('display and body fonts, with fallbacks', () => {
@@ -56,7 +58,10 @@ describe('public site tokens', () => {
       ['--site-btn-primary-text', '--site-btn-primary-bg'],
       ['--site-btn-secondary-text', '--site-btn-secondary-bg'],
       ['--site-btn-closing-text', '--site-btn-closing-bg'],
-      ['--site-dark-text', '--site-dark-bg'],
+      ['--site-feature-text', '--site-feature-bg'],
+      ['--site-feature-text', '--site-feature-deep'],
+      ['--site-btn-closing-text', '--site-btn-closing-bg'],
+      ['--site-btn-secondary-text', '--site-feature-bg'],
     ];
     for (const [fg, bg] of pairs) {
       expect({ pair: `${fg} on ${bg}`, ratio: contrast(token(fg), token(bg)) >= 4.5 }).toEqual({ pair: `${fg} on ${bg}`, ratio: true });

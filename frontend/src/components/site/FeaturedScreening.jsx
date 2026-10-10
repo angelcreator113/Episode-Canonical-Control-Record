@@ -1,5 +1,5 @@
 /**
- * Section 5, Featured Production on plum (spec Part 1, amended by #2818;
+ * Section 5, Featured Production on lavender (spec Part 1, amended by #2818;
  * Task #2810). With no published video it shows the fallback: the map,
  * dimmed, in a 16:9 frame with "First look coming soon", and "Watch
  * Featured Video" disabled and labelled soon. Static: nothing is fetched
@@ -54,7 +54,7 @@ export default function FeaturedScreening({ video = FEATURED.video, mapSrc = HER
               {FEATURED.watch}
               {!published && <span className="site-featured__badge">{FEATURED.watchSoon}</span>}
             </button>
-            <a className="site-btn site-btn--outline-light" href={`#${SECTION_IDS.flagship}`}>{FEATURED.explore}</a>
+            <a className="site-btn site-btn--outline" href={`#${SECTION_IDS.flagship}`}>{FEATURED.explore}</a>
           </div>
         </div>
       </div>

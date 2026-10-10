@@ -78,8 +78,6 @@
 }
 .site .site-btn--outline:hover { background: var(--site-plum); color: var(--site-ivory); }
 .site .site-btn--ivory { background: var(--site-ivory); color: var(--site-plum); }
-.site .site-btn--outline-light { background: transparent; color: var(--site-ivory); border-color: var(--site-ivory); }
-.site .site-btn--outline-light:hover { background: var(--site-ivory); color: var(--site-plum); }
 
 /* ── Navigation (76px, sticky) ── */
 .site .site-nav {
@@ -130,8 +128,8 @@
   min-height: 760px;
   display: flex;
   align-items: center;
-  color: var(--site-ivory);
-  background: var(--site-plum);
+  color: var(--site-feature-text);
+  background: var(--site-feature-bg);
   overflow: hidden;
 }
 .site .site-hero__art { position: absolute; inset: 0; }
@@ -140,29 +138,30 @@
   object-fit: cover;
   display: block;
 }
-/* Until the map is supplied: the plum-to-orchid field the map will sit on. */
+/* Until the map is supplied: the lavender field the map will sit on. */
 .site .site-hero__placeholder {
   width: 100%; height: 100%;
   background:
-    radial-gradient(ellipse at 75% 40%, rgba(173, 121, 182, 0.55), transparent 60%),
-    radial-gradient(ellipse at 90% 85%, rgba(183, 223, 234, 0.35), transparent 55%),
-    var(--site-plum);
+    radial-gradient(ellipse at 75% 40%, rgba(173, 121, 182, 0.45), transparent 60%),
+    radial-gradient(ellipse at 90% 85%, rgba(183, 223, 234, 0.7), transparent 55%),
+    radial-gradient(ellipse at 60% 10%, rgba(233, 196, 213, 0.6), transparent 50%),
+    var(--site-feature-bg);
 }
-/* The plum gradient from the left, so the text reads over the map. */
+/* A lavender wash from the left, so the plum text reads over the map. */
 .site .site-hero__art::after {
   content: '';
   position: absolute; inset: 0;
-  background: linear-gradient(90deg, rgba(48, 37, 61, 0.92) 0%, rgba(48, 37, 61, 0.75) 40%, rgba(48, 37, 61, 0.1) 75%);
+  background: linear-gradient(90deg, rgba(228, 218, 241, 0.95) 0%, rgba(228, 218, 241, 0.8) 40%, rgba(228, 218, 241, 0.1) 75%);
 }
 .site .site-hero__content { position: relative; z-index: 1; padding-top: 64px; padding-bottom: 64px; }
-.site .site-hero .site-eyebrow { color: var(--site-champagne); }
+.site .site-hero .site-eyebrow { color: var(--site-feature-text); }
 .site .site-hero h1 {
   max-width: 640px;
   margin: 0 0 20px;
   font-size: clamp(38px, 5.6vw, 76px);
   font-weight: 600;
   line-height: 1.05;
-  color: var(--site-ivory);
+  color: var(--site-heading);
 }
 .site .site-hero__body { max-width: 560px; margin: 0 0 32px; font-size: 18px; }
 .site .site-hero__actions { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -221,25 +220,23 @@
 .site .site-pillar h3 { margin-top: 20px; }
 
 
-/* 5: Featured Production on plum (Task #2810) */
-.site .site-featured { background: var(--site-plum); color: var(--site-ivory); }
-.site .site-featured h2 { color: var(--site-ivory); }
-.site .site-featured .site-eyebrow { color: var(--site-champagne); }
+/* 5: Featured Production on lavender (Task #2810) */
+.site .site-featured { background: var(--site-feature-bg); color: var(--site-feature-text); }
 .site .site-featured__inner { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 56px; align-items: center; }
-.site .site-featured__frame { position: relative; aspect-ratio: 16 / 9; border-radius: var(--site-radius); overflow: hidden; background: #000; }
+.site .site-featured__frame { position: relative; aspect-ratio: 16 / 9; border-radius: var(--site-radius); overflow: hidden; background: var(--site-feature-deep); }
 .site .site-featured__frame img,
 .site .site-featured__map { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.45; }
 .site .site-featured__map {
   background:
     radial-gradient(ellipse at 70% 35%, rgba(173, 121, 182, 0.9), transparent 60%),
-    radial-gradient(ellipse at 20% 85%, rgba(183, 223, 234, 0.6), transparent 55%),
-    var(--site-plum);
+    radial-gradient(ellipse at 20% 85%, rgba(183, 223, 234, 0.8), transparent 55%),
+    var(--site-feature-deep);
 }
 .site .site-featured__soon {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px; text-align: center;
-  background: rgba(48, 37, 61, 0.55);
+  background: rgba(228, 218, 241, 0.45);
 }
 .site .site-featured__soon p { margin: 0; max-width: 420px; }
 .site .site-featured__soon .site-featured__soon-title { font: 600 clamp(26px, 3vw, 36px)/1.15 var(--site-font-display); margin-bottom: 10px; }
@@ -266,13 +263,12 @@
 .site .site-card--ice { background: var(--site-ice); }
 .site .site-collaborate .site-card h3 { margin-top: 0; }
 
-/* 8: Closing on plum, and the footer */
-.site .site-closing { background: var(--site-plum); color: var(--site-ivory); text-align: center; }
-.site .site-closing h2 { color: var(--site-ivory); }
+/* 8: Closing on deep lavender, and the footer */
+.site .site-closing { background: var(--site-feature-deep); color: var(--site-feature-text); text-align: center; }
 .site .site-closing__inner { max-width: 720px; }
 .site .site-closing p { font-size: 18px; margin-bottom: 32px; }
 .site .site-btn--closing { background: var(--site-btn-closing-bg); color: var(--site-btn-closing-text); }
-.site .site-footer { background: var(--site-plum); color: var(--site-ivory); border-top: 1px solid rgba(250, 246, 241, 0.18); }
+.site .site-footer { background: var(--site-feature-deep); color: var(--site-feature-text); border-top: 1px solid rgba(48, 37, 61, 0.15); }
 .site .site-footer__inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 24px; padding-bottom: 24px; font-size: 14px; }
 .site .site-footer__inner p { margin: 0; }
 .site .site-footer__links { list-style: none; display: flex; flex-wrap: wrap; gap: 24px; margin: 0; padding: 0; }
@@ -310,10 +306,10 @@
   }
   .site .site-drawer .site-btn { margin-top: 8px; width: 100%; }
 
-  /* The map sits above the headline; text on plum below it. */
+  /* The map sits above the headline; text on lavender below it. */
   .site .site-hero { display: block; min-height: 0; }
   .site .site-hero__art { position: relative; aspect-ratio: 16 / 10; }
-  .site .site-hero__art::after { background: linear-gradient(180deg, transparent 55%, rgba(48, 37, 61, 0.9) 100%); }
+  .site .site-hero__art::after { background: linear-gradient(180deg, transparent 55%, rgba(228, 218, 241, 0.95) 100%); }
   .site .site-hero__content { padding-top: 28px; padding-bottom: 48px; }
   /* responsive.css shrinks every h1 on phones with !important; the public
      site keeps the spec's 38–48px hero heading. */
