@@ -814,6 +814,15 @@ app.use('/api/v1', worldRoutes);
 const worldEventRoutes = trackRouteLoad('worldEvents', () => require('./routes/worldEvents'));
 app.use('/api/v1', worldEventRoutes);
 
+// The public landing page's media slots (Task #2821). The admin routes are
+// requireAuth + authorize(['ADMIN']); the one public read is its own file on
+// its own path, so no other route becomes public
+// (docs/reads/2026-10-10-website-content-read.md §1).
+const websiteSlotRoutes = trackRouteLoad('websiteSlots', () => require('./routes/websiteSlots'));
+app.use('/api/v1/website-slots', websiteSlotRoutes);
+const publicSiteRoutes = trackRouteLoad('publicSite', () => require('./routes/publicSite'));
+app.use('/api/v1/public', publicSiteRoutes);
+
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
 try {

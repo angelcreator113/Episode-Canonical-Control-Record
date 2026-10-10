@@ -94,6 +94,7 @@ let FranchiseTechKnowledge; // Franchise tech knowledge (build assistant only)
 let SessionBrief; // Session brief generation
 let PostGenerationReview; // Post-generation franchise review
 let EpisodeLookbook, EpisodeLookbookImage; // The episode's Lookbook (Task #2812)
+let WebsiteSlot; // The public landing page's media slots (Task #2821)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -354,6 +355,7 @@ try {
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
   EpisodeLookbook = require('./EpisodeLookbook')(sequelize, DataTypes);
   EpisodeLookbookImage = require('./EpisodeLookbookImage')(sequelize, DataTypes);
+  WebsiteSlot = require('./WebsiteSlot')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -533,6 +535,7 @@ const requiredModels = {
   PostGenerationReview,
   EpisodeLookbook,
   EpisodeLookbookImage,
+  WebsiteSlot,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2052,6 +2055,7 @@ module.exports.SessionBrief = SessionBrief;
 module.exports.PostGenerationReview = PostGenerationReview;
 module.exports.EpisodeLookbook = EpisodeLookbook;
 module.exports.EpisodeLookbookImage = EpisodeLookbookImage;
+module.exports.WebsiteSlot = WebsiteSlot;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
