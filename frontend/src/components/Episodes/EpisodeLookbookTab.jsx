@@ -4,7 +4,8 @@
  * them into the spots the style sheet uses. Her photos are used as-is;
  * nothing is generated here and nothing costs.
  *
- * Sections, in the spec's order: the header with its counters; the batch
+ * Sections, in the spec's order: the header with its counters ("Preview
+ * style sheet" opens Wardrobe, where the style sheet panel is); the batch
  * drop zone and the "To sort" tray (tap a photo, then a spot); Lala in the
  * look (Front, Side, Back, Hero); Hair and Nails (a photo and a name each);
  * Beauty details (Eyes, Lips, Skin, with notes); Venue, pre-filled from the
@@ -128,7 +129,7 @@ function SavedField({ id, label, value, placeholder, maxLength, multiline = fals
   );
 }
 
-export default function EpisodeLookbookTab({ episode }) {
+export default function EpisodeLookbookTab({ episode, onOpenTab }) {
   const episodeId = episode?.id;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -208,7 +209,8 @@ export default function EpisodeLookbookTab({ episode }) {
           </p>
           {missing.length > 0 && <p className="elb-missing">Still to add: {missing.map(spotLabel).join(', ')}</p>}
         </div>
-        <button type="button" className="elb-btn elb-btn-primary" disabled title="The style sheet preview arrives with the style sheet (#2814)">
+        <button type="button" className="elb-btn elb-btn-primary" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('wardrobe')}
+          title="The style sheet lives in Wardrobe">
           Preview style sheet
         </button>
       </header>

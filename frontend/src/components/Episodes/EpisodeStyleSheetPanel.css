@@ -1,0 +1,125 @@
+/* Production → Wardrobe → Style sheet (Task #2814). Colours only through
+   tokens; the sheet itself (StyleSheetTemplate.css) keeps its own. */
+
+.ssp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius, 8px);
+  color: var(--lala-ink);
+  overflow-anchor: none;
+}
+.ssp-loading { flex-direction: row; align-items: center; gap: 8px; color: var(--text-secondary); }
+.ssp-spin { animation: ssp-spin 1s linear infinite; }
+@keyframes ssp-spin { to { transform: rotate(360deg); } }
+
+.ssp-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ssp-title { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 20px; font-weight: 600; }
+.ssp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-medium);
+  font: 600 12px/1.4 'DM Mono', monospace;
+}
+.ssp-status.is-approved { color: var(--success-text); border-color: var(--success-border); background: var(--success-bg); }
+.ssp-status.is-draft { color: var(--text-secondary); }
+.ssp-status.is-stale { color: var(--warning-text); border-color: var(--warning-border); background: var(--warning-bg); }
+
+.ssp-ready { display: flex; align-items: center; gap: 10px; }
+.ssp-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--lala-parchment-2); overflow: hidden; }
+.ssp-bar span { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+.ssp-ready-label { font: 600 13px/1 'DM Mono', monospace; color: var(--text-secondary); }
+
+.ssp-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.ssp-look { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ssp-look-slot { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.ssp-look-frame {
+  aspect-ratio: 3 / 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px dashed var(--lala-parchment-3);
+  background: var(--lala-parchment-2);
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ssp-look-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ssp-look-slot figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; font: 600 12px/1.2 'DM Mono', monospace; }
+
+.ssp-h4 { margin: 4px 0 0; font: 600 12px/1.2 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.ssp-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ssp-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius, 8px); background: var(--surface-card); }
+.ssp-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ssp-row-label { font-weight: 600; font-size: 14px; }
+.ssp-row-source { font-size: 12px; color: var(--text-secondary); margin-right: auto; }
+.ssp-row-detail { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.ssp-state { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border-medium); font: 600 11px/1.5 'DM Mono', monospace; }
+.ssp-state.is-ready { color: var(--success-text); border-color: var(--success-border); background: var(--success-bg); }
+.ssp-state.is-partial { color: var(--warning-text); border-color: var(--warning-border); background: var(--warning-bg); }
+.ssp-state.is-missing { color: var(--danger-text); border-color: var(--danger-border); background: var(--danger-bg); }
+
+.ssp-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.ssp-field input, .ssp-field select {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--border-medium);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: 400 14px/1.4 'DM Sans', system-ui, sans-serif;
+}
+
+.ssp-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ssp-swatch { display: inline-flex; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; border: 2px solid var(--lala-gold-line); cursor: pointer; }
+.ssp-swatch input { width: 64px; height: 64px; margin: -10px; border: 0; padding: 0; cursor: pointer; }
+
+.ssp-btn, .ssp-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--border-medium);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: 600 14px/1.2 'DM Sans', system-ui, sans-serif;
+  cursor: pointer;
+}
+.ssp-mini-btn { padding: 6px 10px; font-size: 12px; }
+.ssp-mini-btn.is-disabled, .ssp-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.ssp-btn-primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+.ssp-btn-quiet { min-height: 44px; font-size: 13px; }
+.ssp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ssp-cost { font-size: 12px; color: var(--text-secondary); }
+.ssp-tab :focus-visible, .ssp-panel :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+
+.ssp-preview { width: 100%; max-width: 640px; overflow: hidden; border-radius: var(--lala-radius, 8px); border: 1px solid var(--lala-parchment-3); }
+/* The full-size copy html2canvas draws, out of view. */
+.ssp-capture { position: fixed; left: -12000px; top: 0; pointer-events: none; }
+
+@media (max-width: 640px) {
+  .ssp-panel { padding: 12px; }
+  .ssp-look { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ssp-actions .ssp-btn { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .ssp-spin { animation: none; } }

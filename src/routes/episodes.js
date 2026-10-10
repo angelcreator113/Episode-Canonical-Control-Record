@@ -585,6 +585,40 @@ router.delete('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validate
   }
 });
 
+// ==================== STYLE SHEET (Task #2814) ====================
+// The 1024 x 1536 style sheet from canon data and the Lookbook: read it
+// (images inlined so the browser can draw the PNG), approve it, reopen it.
+// No AI, no image generation, no cost.
+router.get('/:id/style-sheet', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { buildStyleSheet } = require('../services/styleSheetService');
+    return res.json({ success: true, data: await buildStyleSheet(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/style-sheet');
+  }
+});
+
+router.post('/:id/style-sheet/approve', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { approveStyleSheet } = require('../services/styleSheetService');
+    return res.json({ success: true, data: await approveStyleSheet(models, req.params.id, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/approve');
+  }
+});
+
+router.post('/:id/style-sheet/reopen', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { reopenStyleSheet } = require('../services/styleSheetService');
+    return res.json({ success: true, data: await reopenStyleSheet(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/reopen');
+  }
+});
+
 // ==================== EPISODE OVERLAYS (P15) ====================
 // Production's Overlays tab: every on-screen piece the episode owns (title
 // overlay, framed card, invitation, task-list overlay) with its preview,
