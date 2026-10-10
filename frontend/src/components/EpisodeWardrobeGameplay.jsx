@@ -71,6 +71,23 @@ export function stillNeeded(slots = {}) {
   return need.join(' and ');
 }
 
+/**
+ * Whether an empty slot is one the look still needs, by stillNeeded's rule
+ * (#2856): Body until a dress or a top and bottom is in, a top or a bottom
+ * when its other half is in and there is no dress, and Shoes. Every other
+ * empty slot is optional ("Not chosen").
+ */
+export function slotNeeded(key, slots = {}) {
+  if (slots[key]) return false;
+  switch (key) {
+    case 'body': return !(slots.top && slots.bottom);
+    case 'top': return !slots.body && Boolean(slots.bottom);
+    case 'bottom': return !slots.body && Boolean(slots.top);
+    case 'shoes': return true;
+    default: return false;
+  }
+}
+
 // How long the draft score waits after the last slot change before asking
 // the server (Task #1943).
 const SCORE_DEBOUNCE_MS = 350;
@@ -872,14 +889,21 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                         {pi === 0 && (
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lala-ink)' }}>
                             {slot.label}
-                            {slot.required && !piece && <span style={{ color: 'var(--danger-text)', fontSize: 12 }}> *</span>}
                             {multi && pieces.length > 1 && <span style={{ color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 400 }}> · {pieces.length} pieces</span>}
                           </div>
                         )}
                         {piece ? (
                           <div style={{ fontSize: 14, color: 'var(--lala-ink)', fontWeight: 700 }}>{piece.name}</div>
                         ) : (
-                          <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{slot.desc}</div>
+                          <>
+                            {/* An empty slot says whether the look needs it (#2856). */}
+                            {slotNeeded(slot.key, filledSlots) ? (
+                              <span data-testid={`slot-state-${slot.key}`} style={W.slotNeeded}>Needed</span>
+                            ) : (
+                              <span data-testid={`slot-state-${slot.key}`} style={W.slotNotChosen}>Not chosen</span>
+                            )}
+                            <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{slot.desc}</div>
+                          </>
                         )}
                       </div>
                       {/* Owned, or still to buy (charged at Finalize), as in Evoni's Episode mock. */}
@@ -1250,6 +1274,10 @@ const W = {
   synBadge: { padding: '1px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)', fontWeight: 600 },
   costBar: { display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 4, padding: '10px 12px', borderRadius: 10, background: 'var(--lala-lavender-soft)', color: 'var(--lala-ink)', fontSize: 13 },
   slotCard: { padding: '10px 12px', borderRadius: 12, transition: 'all 0.15s' },
+  // An empty slot's state (#2856), as the style sheet reads it: Needed is the
+  // checklist's dashed amber, Not chosen the muted lavender.
+  slotNeeded: { display: 'inline-block', margin: '2px 0', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--warning-text)', background: 'var(--warning-bg)', border: '1px dashed var(--warning-border)' },
+  slotNotChosen: { display: 'inline-block', margin: '2px 0', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--lala-lavender-text)', background: 'var(--lala-lavender-soft)' },
   removeBtn: { width: 22, height: 22, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   miniTier: (tier) => ({ padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
   lockBtn: { padding: '11px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },

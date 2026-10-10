@@ -962,3 +962,65 @@ describe('EpisodeWardrobeGameplay — the event\'s look', () => {
     expect(screen.getByTestId('event-look-link').textContent).toBe('Open the Event Package');
   });
 });
+
+// #2856: an empty slot says "Needed" when the look needs it (stillNeeded's
+// rule) and "Not chosen" otherwise; the red asterisk is gone.
+describe('EpisodeWardrobeGameplay — empty slots say Needed or Not chosen (#2856)', () => {
+  test('slotNeeded follows stillNeeded: body or top+bottom, and shoes', async () => {
+    const { slotNeeded } = await import('./EpisodeWardrobeGameplay');
+    const x = { id: 'x' };
+    expect(slotNeeded('body', {})).toBe(true);
+    expect(slotNeeded('shoes', {})).toBe(true);
+    expect(slotNeeded('top', {})).toBe(false);
+    expect(slotNeeded('bottom', {})).toBe(false);
+    expect(slotNeeded('jewelry', {})).toBe(false);
+    expect(slotNeeded('accessories', {})).toBe(false);
+    expect(slotNeeded('perfume', {})).toBe(false);
+    expect(slotNeeded('outerwear', {})).toBe(false);
+    // A top and bottom stand in for the dress.
+    expect(slotNeeded('body', { top: x, bottom: x })).toBe(false);
+    // Half a pair needs its other half, unless there is a dress.
+    expect(slotNeeded('bottom', { top: x })).toBe(true);
+    expect(slotNeeded('top', { bottom: x })).toBe(true);
+    expect(slotNeeded('bottom', { top: x, body: x })).toBe(false);
+    // A filled slot is never needed.
+    expect(slotNeeded('shoes', { shoes: x })).toBe(false);
+  });
+
+  const own = { ...base, is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined };
+  const CLOSET = [
+    { ...own, id: 'n-dress', name: 'Silk Gown', clothing_category: 'dress' },
+    { ...own, id: 'n-heels', name: 'Gold Heels', clothing_category: 'shoes' },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const poolGet = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url.startsWith('/api/v1/wardrobe?show_id=')
+      ? Promise.resolve({ data: { success: true, data: CLOSET, pagination: { page: 1, limit: 200, total: CLOSET.length } } })
+      : poolGet(url)));
+  });
+
+  test('an empty look: Body and Shoes are Needed, the optional slots Not chosen, no asterisk', async () => {
+    await renderGame();
+    expect(screen.getByTestId('slot-state-body').textContent).toBe('Needed');
+    expect(screen.getByTestId('slot-state-shoes').textContent).toBe('Needed');
+    expect(screen.getByTestId('slot-state-accessories').textContent).toBe('Not chosen');
+    expect(screen.getByTestId('slot-state-jewelry').textContent).toBe('Not chosen');
+    expect(within(screen.getByTestId('slot-body')).queryByText('*')).toBeNull();
+    // The slot's hint stays under its state.
+    expect(within(screen.getByTestId('slot-body')).getByText('Dress or Top+Bottom')).toBeTruthy();
+  });
+
+  test('wearing a dress clears Body; Shoes stays Needed', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Silk Gown');
+    fireEvent.click(screen.getAllByText('Silk Gown')[0]);
+    await waitFor(() => expect(within(screen.getByTestId('slot-body')).getByText('Silk Gown')).toBeTruthy());
+    expect(screen.queryByTestId('slot-state-body')).toBeNull();
+    expect(screen.getByTestId('slot-state-shoes').textContent).toBe('Needed');
+  });
+});

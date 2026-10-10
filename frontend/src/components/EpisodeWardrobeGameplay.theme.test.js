@@ -20,6 +20,9 @@ describe('Wardrobe game theme', () => {
     expect(jsx).toMatch(/lockBtn: \{[^}]*background: 'var\(--lala-lavender\)'[^}]*color: 'var\(--text-inverse\)'/);
     expect(jsx).toMatch(/dressCode: \{[^}]*background: 'var\(--accent-subtle\)', color: 'var\(--lala-ink\)'/);
     expect(jsx).toMatch(/costBar: \{[^}]*background: 'var\(--lala-lavender-soft\)', color: 'var\(--lala-ink\)'/);
+    // An empty slot's state (#2856): Needed is the dashed amber, Not chosen the muted lavender.
+    expect(jsx).toMatch(/slotNeeded: \{[^}]*color: 'var\(--warning-text\)', background: 'var\(--warning-bg\)', border: '1px dashed var\(--warning-border\)'/);
+    expect(jsx).toMatch(/slotNotChosen: \{[^}]*color: 'var\(--lala-lavender-text\)', background: 'var\(--lala-lavender-soft\)'/);
   });
   test('every text pair holds 4.5:1', () => {
     for (const [fg, bg] of [
