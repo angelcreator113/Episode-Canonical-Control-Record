@@ -22,7 +22,7 @@ On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was que
 
 | # | Step | Where | If it fails |
 |---|---|---|---|
-| 1 | Check configuration (the five variables are set) | runner | Nothing changed |
+| 1 | Check configuration (the `AWS_ROLE_ARN` environment secret and the four variables are set; no value is printed) | runner | Nothing changed |
 | 2 | OIDC: assume the deploy role (no stored keys) | runner | Nothing changed |
 | 3 | Preflight: the instance is `Online` in SSM | runner | Nothing changed |
 | 4 | **Plan**, read-only: clean tree; the target is on `origin/main` and a fast-forward; **no package or lock file changes** (else stop: deploy that range by hand); no existing migration file modified; the ledger has nothing pending for the current code | box | Nothing changed |
@@ -193,15 +193,22 @@ stat -c '%a %U' ~/.episode-migrate.env    # must print: 600 ubuntu
    - **Required reviewers:** Evoni.
    - **Prevent self-review:** off. She is the only reviewer, and pushes to `main` come from her merges.
    - **Deployment branches and tags:** selected branches, `main` only.
-2. **Settings → Secrets and variables → Actions → Variables** (repository variables; they are not secret):
+2. **Settings → Environments → `production` → Environment secrets → Add environment secret:** `AWS_ROLE_ARN` = the role from §2.1. A secret, not a variable, so the public job log shows `***` in its place (#2863). The workflow reads `secrets.AWS_ROLE_ARN`, and a run with it missing stops at **Check configuration**, changing nothing.
+3. **Settings → Secrets and variables → Actions → Variables** (repository variables; they are not secret):
 
 | Variable | Value |
 |---|---|
-| `AWS_ROLE_ARN` | the role from §2.1 |
 | `AWS_REGION` | the region of the instance and the database |
 | `RDS_INSTANCE_ID` | the canon instance's identifier |
 | `EC2_INSTANCE_ID` | the production box's instance id |
 | `HEALTH_URL` | the public `/health` URL of the site |
+
+**Moving `AWS_ROLE_ARN` from a variable to a secret (once; Evoni, in the browser).** Step 1 can be done before #2863 merges, since an unused secret changes nothing; that way no run ever stops for it. Step 2 comes after the merge.
+1. **Settings → Environments → `production` → Environment secrets → Add environment secret.** Name `AWS_ROLE_ARN`; value: copy it from the existing repository variable (Settings → Secrets and variables → Actions → Variables → `AWS_ROLE_ARN`), unchanged.
+2. **Settings → Secrets and variables → Actions → Variables:** delete the repository variable `AWS_ROLE_ARN`.
+3. Nothing in AWS changes: the role, its trust policy and its permissions stay as they are.
+
+If a run starts after #2863 merges but before step 1, it stops at **Check configuration** ("The production environment secret AWS_ROLE_ARN is not set"), with nothing changed. Do step 1, then **Re-run jobs** on that run, or approve the next one. Doing step 2 before step 1 has the same effect. Logs of runs before the change (Deploy #21 and earlier) still show the account number; deleting those run logs (the run page's ⋯ menu → **Delete all logs**) is optional.
 
 ### 2.4 Turn it on and approve the first run
 
