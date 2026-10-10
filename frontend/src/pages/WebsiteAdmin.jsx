@@ -80,16 +80,18 @@ function FilePick({ label, accept, onFile, disabled, icon: Icon = Upload }) {
   );
 }
 
+// The field starts from the saved alt text and is remounted (its `key`)
+// when that changes; no effect resets it, so a late effect can never wipe
+// what is being typed. Blur saves the input's own value.
 function AltField({ slot, disabled, onSave }) {
   const [draft, setDraft] = useState(slot.alt_text || '');
-  useEffect(() => { setDraft(slot.alt_text || ''); }, [slot.alt_text]);
   const id = `wsa-alt-${slot.slot_key}`;
   return (
     <label className="wsa-field" htmlFor={id}>
       <span>Alt text (required to publish)</span>
       <input id={id} type="text" maxLength={300} value={draft} disabled={disabled} placeholder="Describe the image for people who can't see it"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { if (draft !== (slot.alt_text || '')) onSave(draft); }}
+        onBlur={(e) => { const v = e.target.value; if (v !== (slot.alt_text || '')) onSave(v); }}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
     </label>
   );
@@ -121,7 +123,7 @@ function SlotCard({ slot, label, storageReady, busy, run, extra }) {
         <span className={`wsa-pill is-${status.toLowerCase()}`} data-testid={`wsa-status-${slot.slot_key}`}>{status}</span>
       </header>
       <div className="wsa-preview"><Preview slot={slot} /></div>
-      <AltField slot={slot} disabled={busy} onSave={(v) => run(() => websiteApi.details(slot.slot_key, { alt_text: v }))} />
+      <AltField key={slot.alt_text || ''} slot={slot} disabled={busy} onSave={(v) => run(() => websiteApi.details(slot.slot_key, { alt_text: v }))} />
       {extra}
       <div className="wsa-actions">
         {(allowsImage || allowsClip) && (
