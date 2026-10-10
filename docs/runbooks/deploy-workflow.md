@@ -155,8 +155,14 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
 
    The two parameters are fixed by `allowedValues` and `allowedPattern`, so nothing else can be passed in. The script always comes from a commit already on `origin/main`, which means a reviewed and merged PR.
 
-2. **The box is SSM-managed.** In Systems Manager → Fleet Manager, the production instance shows **Online**. If not, its instance profile needs the `AmazonSSMManagedInstanceCore` policy and the SSM agent must be running.
-3. **Review the box's instance role** (EC2 → the instance → Security → IAM role). The deploy runs as `ubuntu` on that box, and anything running there can use that role. Remove permissions the app does not use, in particular Secrets Manager and Cognito admin access. The app's only Cognito call (`InitiateAuthCommand`) needs no IAM permission.
+2. **Make the box SSM-managed.** Today the production box has **no IAM instance profile**, so SSM cannot reach it. `PROJECT_CONTEXT.md` §7, prod-box row, records "no IAM instance profile (so no SSM)", and F-Deploy-1 finding AD ("no instance profile on prod") is still owed after the keystone's close. Give it one:
+   1. **IAM → Roles → Create role**, trusted entity **AWS service → EC2**. Name it, for example, `episode-prod-ssm`. Attach **only** the AWS-managed policy `AmazonSSMManagedInstanceCore`.
+   2. **EC2 → the production instance (`<EC2_INSTANCE_ID>`) → Actions → Security → Modify IAM role**, choose that role, and save. No reboot is needed.
+   3. On the box, check the SSM agent is running: `sudo snap services amazon-ssm-agent` (Ubuntu images ship it as a snap; INFERRED, so check). If it is missing or stopped, install or start it from the AWS documentation for Ubuntu.
+   4. **Systems Manager → Fleet Manager:** the instance shows **Online**. It can take a few minutes after the role is attached.
+3. **Keep that role to SSM only.** The deploy runs as `ubuntu` on the box, and anything running there as root can use the instance role. The role holds `AmazonSSMManagedInstanceCore` and nothing else: no Secrets Manager, no Cognito, no S3 or RDS permissions. The app's only Cognito call (`InitiateAuthCommand`) needs no IAM permission.
+
+   *INFERRED: how the app's own AWS access is affected.* The AWS SDK's default credential chain uses environment variables and `~/.aws/credentials` before the instance profile. `ecosystem.config.js` notes that the app's "credentials come from ~/.aws/credentials or env vars". If the app gets its AWS credentials either way today, attaching the role does not change what the app can do. Check which source the app uses without printing any value, for example whether `~/.aws/credentials` exists and whether `.env` has an `AWS_ACCESS_KEY_ID=` line (count it, as `scripts/deploy-prod.sh` counts `ANTHROPIC_API_KEY`). If it has neither, the app would start using the instance role for S3 and similar calls. Then it would get only SSM permissions, and those calls would fail, so decide with that in mind.
 4. **The migration credential** (Evoni's ruling for #2837: a `600` file on the box). On the box, as `ubuntu`:
 
 ```bash
