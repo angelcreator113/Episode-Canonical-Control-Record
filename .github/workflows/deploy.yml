@@ -1,0 +1,242 @@
+# =============================================================================
+# Deploy — production deploys and migrations (Task #2837)
+#
+# Evoni's Rule 7 decision (docs/audit/F-Deploy-1_Rule7_DeployWorkflow_Ruling_2026-10-10.md):
+# migrations and deploys to production run only through this workflow, only in
+# the protected "production" environment, and only after Evoni approves the
+# run. Agent sessions may change this file through reviewed PRs; they never
+# dispatch, approve, re-run or enable it.
+#
+# Off until Evoni turns it on: the job runs only when the repository variable
+# DEPLOY_ENABLED is "true". She sets it after the one-time setup in
+# docs/runbooks/deploy-workflow.md. Until her first approved run, the earlier
+# rule applies in full and deploys stay her manual action.
+#
+# What it does, in order (docs/reads/2026-10-10-deploy-path-read.md §6):
+#   plan (read-only, on the box) -> RDS snapshot -> wait until available ->
+#   fast-forward + vite build -> db:migrate if pending -> restart API, /health,
+#   restart worker -> public health check -> job summary.
+# On any failure it stops. It never rolls back by itself: the summary names
+# the snapshot and the runbook says what to do.
+#
+# Credentials: GitHub OIDC only, to a role that can create and describe
+# deploy-* snapshots and send the PrimeStudios-Deploy SSM document to one
+# instance. No stored AWS keys, no SSH, no Cognito, no database credential:
+# the box keeps its own.
+# =============================================================================
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deploy at a time. A running deploy is never cancelled (it may be
+# mid-migration); a newer pending run replaces an older pending one.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    if: vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      RDS_INSTANCE_ID: ${{ vars.RDS_INSTANCE_ID }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      HEALTH_URL: ${{ vars.HEALTH_URL }}
+      TARGET_SHA: ${{ github.sha }}
+      SSM_DOCUMENT: PrimeStudios-Deploy
+      RUNBOOK: docs/runbooks/deploy-workflow.md
+    steps:
+      - name: Check configuration
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          missing=""
+          for v in AWS_ROLE_ARN AWS_REGION RDS_INSTANCE_ID EC2_INSTANCE_ID HEALTH_URL; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Repository variables not set:$missing. See $RUNBOOK, 'One-time setup'."
+            exit 1
+          fi
+          if ! printf '%s' "$TARGET_SHA" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::Unexpected commit SHA."
+            exit 1
+          fi
+          echo "Deploying ${TARGET_SHA} to production."
+
+      - name: Check out the deploy helpers
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/deploy
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: deploy-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Preflight — instance is SSM-managed and online
+        run: |
+          PING="$(aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=${EC2_INSTANCE_ID}" \
+            --query "InstanceInformationList[0].PingStatus" --output text)"
+          echo "SSM ping status: ${PING}"
+          if [ "$PING" != "Online" ]; then
+            echo "::error::The production instance is not Online in SSM (${PING}). Nothing was changed."
+            exit 1
+          fi
+
+      - name: Plan (read-only, on the box)
+        id: plan
+        run: |
+          bash scripts/deploy/ssm-phase.sh plan
+          OUT="$RUNNER_TEMP/phase-plan.out"
+          # Only well-formed PLAN_ lines reach the step outputs.
+          get() { grep -E "^$1=[A-Za-z0-9._-]*$" "$OUT" | head -1 | cut -d= -f2- || true; }
+          {
+            echo "old_sha=$(get PLAN_OLD_SHA)"
+            echo "resume=$(get PLAN_RESUME)"
+            echo "commits=$(get PLAN_COMMITS)"
+            echo "migrations=$(get PLAN_MIGRATIONS)"
+            echo "ok=$(get PLAN_OK)"
+          } >>"$GITHUB_OUTPUT"
+          grep -E '^PLAN_MIGRATION=[0-9A-Za-z._-]+\.js$' "$OUT" | cut -d= -f2- >"$RUNNER_TEMP/migrations.txt" || true
+          if [ "$(get PLAN_OK)" != "1" ]; then
+            echo "::error::The plan did not finish (no PLAN_OK line). Nothing was changed."
+            exit 1
+          fi
+
+      - name: Snapshot the database
+        id: snapshot
+        run: |
+          SNAP="deploy-${TARGET_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          aws rds create-db-snapshot \
+            --db-instance-identifier "$RDS_INSTANCE_ID" \
+            --db-snapshot-identifier "$SNAP" \
+            --query "DBSnapshot.[DBSnapshotIdentifier,Status]" --output text
+          # Recorded only once the snapshot exists, so the summary never names one that does not.
+          echo "name=${SNAP}" >>"$GITHUB_OUTPUT"
+          echo "Snapshot ${SNAP} requested."
+
+      - name: Wait for the snapshot to be available
+        env:
+          SNAP: ${{ steps.snapshot.outputs.name }}
+        run: |
+          # Up to 60 minutes, every 30 s. Anything but "available" stops the run.
+          for _ in $(seq 1 120); do
+            read -r STATUS PROGRESS < <(aws rds describe-db-snapshots \
+              --db-snapshot-identifier "$SNAP" \
+              --query "DBSnapshots[0].[Status,PercentProgress]" --output text)
+            echo "$(date -u +%H:%M:%S) ${SNAP}: ${STATUS} ${PROGRESS}%"
+            case "$STATUS" in
+              available) exit 0 ;;
+              pending|creating|backing-up) sleep 30 ;;
+              *) echo "::error::Snapshot ${SNAP} is ${STATUS}. Nothing on the box was changed."; exit 1 ;;
+            esac
+          done
+          echo "::error::Snapshot ${SNAP} was not available within 60 minutes. Nothing on the box was changed."
+          exit 1
+
+      - name: Deploy (fast-forward and build, on the box)
+        run: bash scripts/deploy/ssm-phase.sh deploy
+
+      - name: Migrate (on the box, if pending)
+        id: migrate
+        run: |
+          bash scripts/deploy/ssm-phase.sh migrate
+          ran="$(grep -E '^MIGRATE_RAN=[01]$' "$RUNNER_TEMP/phase-migrate.out" | head -1 | cut -d= -f2 || true)"
+          echo "ran=${ran}" >>"$GITHUB_OUTPUT"
+
+      - name: Restart and health check (on the box)
+        id: restart
+        run: |
+          bash scripts/deploy/ssm-phase.sh restart
+          head_sha="$(grep -E '^RESTART_HEAD=[0-9a-f]{40}$' "$RUNNER_TEMP/phase-restart.out" | head -1 | cut -d= -f2 || true)"
+          if [ "$head_sha" != "$TARGET_SHA" ]; then
+            echo "::error::The box reports ${head_sha:-nothing} after the restart, not ${TARGET_SHA}."
+            exit 1
+          fi
+
+      - name: Public health check
+        id: health
+        run: |
+          for _ in $(seq 1 10); do
+            BODY="$(curl -sS -m 10 "$HEALTH_URL" || true)"
+            if printf '%s' "$BODY" | grep -q '"status":"healthy"' \
+              && printf '%s' "$BODY" | grep -q '"database":"connected"'; then
+              echo "Healthy: ${BODY}"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::${HEALTH_URL} did not report healthy with the database connected. Last response: ${BODY:-(none)}"
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          OLD_SHA: ${{ steps.plan.outputs.old_sha }}
+          RESUME: ${{ steps.plan.outputs.resume }}
+          COMMITS: ${{ steps.plan.outputs.commits }}
+          MIGRATIONS: ${{ steps.plan.outputs.migrations }}
+          SNAP: ${{ steps.snapshot.outputs.name }}
+          MIGRATE_RAN: ${{ steps.migrate.outputs.ran }}
+          RESTART_OUTCOME: ${{ steps.restart.outcome }}
+          HEALTH_OUTCOME: ${{ steps.health.outcome }}
+        run: |
+          {
+            echo "## Deploy ${JOB_STATUS}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${TARGET_SHA}\` |"
+            echo "| Box before | \`${OLD_SHA:-not read}\` |"
+            if [ "$RESUME" = "1" ]; then
+              echo "| Mode | resumed: the box was already at this commit |"
+            fi
+            echo "| Commits in range | ${COMMITS:-?} |"
+            echo "| Snapshot | \`${SNAP:-none taken}\` |"
+            echo "| New migration files | ${MIGRATIONS:-?} |"
+            case "$MIGRATE_RAN" in
+              1) echo "| Migrations run | yes |" ;;
+              0) echo "| Migrations run | none pending |" ;;
+              *) echo "| Migrations run | not reached |" ;;
+            esac
+            echo "| Restart and on-box /health | ${RESTART_OUTCOME:-not reached} |"
+            echo "| Public health | ${HEALTH_OUTCOME:-not reached} |"
+            if [ -s "$RUNNER_TEMP/migrations.txt" ]; then
+              echo
+              echo "Migration files in the range:"
+              while IFS= read -r m; do echo "- \`${m}\`"; done <"$RUNNER_TEMP/migrations.txt"
+            fi
+            if [ "$JOB_STATUS" != "success" ]; then
+              echo
+              echo "**Stopped.** No automatic rollback was attempted."
+              if [ -n "$SNAP" ]; then
+                echo "The database snapshot taken before any migration is \`${SNAP}\`."
+              fi
+              echo "Follow \`${RUNBOOK}\` (what failed, restoring from the snapshot, rolling back the code)."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Point to the snapshot and the runbook
+        if: failure()
+        env:
+          SNAP: ${{ steps.snapshot.outputs.name }}
+        run: |
+          echo "::error::Deploy stopped. Snapshot: ${SNAP:-none taken}. No automatic rollback. Runbook: ${RUNBOOK}"
