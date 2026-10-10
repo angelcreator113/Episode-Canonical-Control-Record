@@ -99,3 +99,20 @@ export const CLOSING = Object.freeze({
   button: 'Start a Conversation',
   footer: 'Prime Studios — The Creative Home of LaLaVerse.',
 });
+
+// ── Section 5, Featured Production (Task #2810; spec amended by #2818).
+// `video` is the single switch: null means the fallback. Once something is
+// published, #2822 sets it to ONE of:
+//   { kind: 'youtube', id: '<video id>', title, thumbnail }   // facade, privacy-enhanced embed
+//   { kind: 'clip', src, poster, captions, title }            // uploaded MP4, 30 s max
+// Never set it to an unpublished episode (Episode 1 is a draft).
+export const FEATURED = Object.freeze({
+  eyebrow: 'Featured production',
+  heading: 'Step Inside the Story.',
+  comingSoon: 'First look coming soon',
+  comingSoonLine: 'A 30-second clip or a YouTube video appears here once it is published.',
+  watch: 'Watch Featured Video',
+  watchSoon: 'Coming soon',
+  explore: 'Explore the Production',
+  video: null,
+});

@@ -33,7 +33,7 @@ describe('public landing: sections 3–8', () => {
   test('sections render in the spec order and make no network calls', () => {
     renderPage();
     const ids = [...document.querySelectorAll('main > section, main > footer')].map((el) => el.id || el.dataset.testid || el.tagName.toLowerCase());
-    expect(ids).toEqual(['site-hero', 'flagship', 'our-world', 'inside-prime-studios', 'collaborate', 'contact', 'footer']);
+    expect(ids).toEqual(['site-hero', 'flagship', 'our-world', 'featured-production', 'inside-prime-studios', 'collaborate', 'contact', 'footer']);
     expect(fetchSpy).not.toHaveBeenCalled();
     for (const fn of Object.values(api)) expect(fn).not.toHaveBeenCalled();
   });
