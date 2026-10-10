@@ -6,6 +6,7 @@ import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
 import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
 import { SECTION_GUIDE, sectionCount } from '../../lib/checklistHub';
+import { styleReadiness } from '../../lib/styleReadiness';
 
 /**
  * EpisodeProductionChecklist
@@ -65,14 +66,15 @@ export const CHECKLIST_SECTIONS = [
       { id: 'outfit_picked',     label: 'Outfit picked for event',    required: false },
     ],
   },
-  // The episode's Lookbook and its style sheet (Task #2815): counted in the
-  // checklist's total, never blocking the script.
+  // The episode's Style Page (was Lookbook; Tasks #2815, #2876): counted in
+  // the checklist's total, never blocking the script. Readiness is the Style
+  // Page's own rule (lib/styleReadiness, 12 chips).
   {
     id: 'lookbook',
     icon: '📸',
-    label: 'Lookbook',
+    label: 'Style Page',
     items: [
-      { id: 'lookbook_ready',       label: 'Style sheet photos in (11 of 11)', required: false },
+      { id: 'lookbook_ready',       label: 'Style sheet ready (12 of 12)', required: false },
       { id: 'style_sheet_approved', label: 'Style sheet approved',             required: false },
     ],
   },
@@ -207,8 +209,8 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
     wardrobe_ready: wardrobe,
     outfit_picked: { ...events, label: 'Pick outfit' },
     overlays_generated: { href: `/shows/${showId}/world?tab=overlays-tab`, label: "Lala's Phone" },
-    lookbook_ready: { href: `/episodes/${episodeId}?tab=lookbook`, label: 'Add photos' },
-    style_sheet_approved: { href: `/episodes/${episodeId}?tab=wardrobe`, label: 'Open style sheet' },
+    lookbook_ready: { href: `/episodes/${episodeId}?tab=lookbook`, label: 'Fill the Style Page' },
+    style_sheet_approved: { href: `/episodes/${episodeId}?tab=lookbook`, label: 'Approve on the Style Page' },
     character_state: { href: `/shows/${showId}/world?tab=overview`, label: 'Set up' },
   };
   const target = targets[itemId];
@@ -416,20 +418,37 @@ export async function loadProductionChecks(episode, showId) {
       results.overlays_placed = false;
     }
 
-    // ── Check the Lookbook card: x of 11 photos in, and the style sheet's status ──
+    // ── Check the Style Page card: ready x of 12 (the Style Page's own rule,
+    //    lib/styleReadiness), and the style sheet's status ──
     try {
-      const { data } = await api.get(`/api/v1/episodes/${episode.id}/lookbook`);
-      const lookbook = data?.data || {};
-      const { done = 0, total = 11, missing = [] } = lookbook.readiness || {};
-      results.lookbook_ready = total > 0 && done >= total;
-      if (!results.lookbook_ready) checkNotes.lookbook_ready = `${done} of ${total} ready${missing.length ? ` · missing: ${missing.join(', ')}` : ''}`;
+      const [lbRes, sheetRes] = await Promise.all([
+        api.get(`/api/v1/episodes/${episode.id}/lookbook`),
+        api.get(`/api/v1/episodes/${episode.id}/style-sheet`).catch((err) => {
+          console.error('[Checklist] style sheet read failed:', err.response?.status || err.message);
+          return null;
+        }),
+      ]);
+      const lookbook = lbRes?.data?.data || {};
+      const sheet = sheetRes?.data?.data || null;
+      let palette = sheet?.palette || null;
+      if (!palette && sheet?.palette_sources?.length) {
+        try {
+          const { extractPalette } = await import('../../lib/stylePalette');
+          palette = await extractPalette(sheet.palette_sources);
+        } catch (err) {
+          console.error('[Checklist] palette could not be taken from the pieces:', err.message);
+        }
+      }
+      const { done, total, missing } = styleReadiness({ lookbook, sheet, palette });
+      results.lookbook_ready = done >= total;
+      if (!results.lookbook_ready) checkNotes.lookbook_ready = `Style sheet ready ${done} of ${total}${missing.length ? ` · missing: ${missing.join(', ')}` : ''}`;
       results.style_sheet_approved = lookbook.sheet_status === 'approved';
       if (!results.style_sheet_approved) checkNotes.style_sheet_approved = 'Draft';
     } catch (err) {
       console.error('[Checklist] Lookbook read failed:', err.response?.status || err.message);
       results.lookbook_ready = false;
       results.style_sheet_approved = false;
-      checkNotes.lookbook_ready = 'The Lookbook could not be read';
+      checkNotes.lookbook_ready = 'The Style Page could not be read';
     }
 
     // ── Check Episode Title (AI-generated vs default) ──

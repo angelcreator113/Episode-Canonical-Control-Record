@@ -8,8 +8,19 @@
  *
  * Rendered at full size; the panel scales it for the preview and draws it
  * to a PNG for the download.
+ *
+ * Edit mode (the Style Page, Task #2876): with an `edit` prop, every spot
+ * is a button over its frame. An empty spot reads "+ Add <spot>"; the
+ * selected one has a pink outline; the tagline and the hair and nails names
+ * become inputs in place while their spot is selected. Without `edit` the
+ * sheet renders exactly as before, so downloads and exports don't change.
+ *
+ *   edit = { selected, onSelect(spot), locked,
+ *            text: { tagline, hair_name, nails_name },
+ *            onText(field, value), onCommit(field),
+ *            canSwapVenue, onSwapVenue() }
  */
-import React, { forwardRef, useEffect } from 'react';
+import React, { forwardRef, useEffect, useRef } from 'react';
 import './StyleSheetTemplate.css';
 
 export const SHEET_WIDTH = 1024;
@@ -41,6 +52,45 @@ function Photo({ src, label, alt = label, className = '' }) {
   );
 }
 
+// In edit mode: a button over a spot's frame. Empty spots read "+ Add".
+function SpotButton({ edit, spot, label, filled, needed = false }) {
+  if (!edit) return null;
+  const selected = edit.selected === spot;
+  return (
+    <button
+      type="button"
+      className={`ss-spot${filled ? ' is-filled' : ' is-empty'}${selected ? ' is-selected' : ''}`}
+      aria-pressed={selected}
+      aria-label={filled ? `Edit ${label}` : `Add ${label}${needed ? ' (needed)' : ''}`}
+      data-spot={spot}
+      onClick={() => edit.onSelect(spot)}
+    >
+      {!filled && <span className="ss-spot-add">+ Add {label}{needed ? <em> · Needed</em> : null}</span>}
+    </button>
+  );
+}
+
+// In edit mode, a text field on the sheet while its spot is selected. It
+// takes focus without scrolling the page, and saves when it is left.
+function InPlaceText({ edit, field, placeholder, className, maxLength }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus({ preventScroll: true }); }, []);
+  return (
+    <input
+      ref={ref}
+      type="text"
+      className={`ss-inplace ${className}`}
+      value={edit.text?.[field] ?? ''}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      aria-label={placeholder}
+      onChange={(e) => edit.onText(field, e.target.value)}
+      onBlur={() => edit.onCommit(field)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+    />
+  );
+}
+
 const Detail = ({ label, value }) => (
   <div className="ss-detail">
     <span className="ss-detail-label">{label}</span>
@@ -48,7 +98,7 @@ const Detail = ({ label, value }) => (
   </div>
 );
 
-const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palette }, ref) {
+const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palette, edit = null }, ref) {
   useSheetFonts();
   const ev = sheet.event || {};
   const venue = sheet.venue || {};
@@ -57,7 +107,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
   const inspo = sheet.inspo || { photos: [], textures: [] };
 
   return (
-    <div ref={ref} className="ss-sheet" style={{ width: SHEET_WIDTH, height: SHEET_HEIGHT }} data-testid="style-sheet">
+    <div ref={ref} className={`ss-sheet${edit ? ' is-editing' : ''}`} style={{ width: SHEET_WIDTH, height: SHEET_HEIGHT }} data-testid="style-sheet">
       {/* Top row: logo and THE LOOK · Hero · episode, venue, details */}
       <div className="ss-top">
         <div className="ss-col ss-col-left">
@@ -78,7 +128,10 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           <div className="ss-look">
             {['front', 'side', 'back'].map((k) => (
               <figure key={k} className="ss-look-item">
-                <Photo src={sheet.look?.[k]} label={k[0].toUpperCase() + k.slice(1)} className="ss-frame" />
+                <div className="ss-spot-wrap">
+                  <Photo src={sheet.look?.[k]} label={edit ? '' : k[0].toUpperCase() + k.slice(1)} className="ss-frame" />
+                  <SpotButton edit={edit} spot={k} label={k[0].toUpperCase() + k.slice(1)} filled={Boolean(sheet.look?.[k])} />
+                </div>
                 <figcaption>{k.toUpperCase()}</figcaption>
               </figure>
             ))}
@@ -87,7 +140,10 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
 
         <div className="ss-col ss-col-centre">
           <div className="ss-hero">
-            <Photo src={sheet.look?.hero} label="Hero" />
+            <div className="ss-spot-wrap">
+              <Photo src={sheet.look?.hero} label={edit ? '' : 'Hero'} />
+              <SpotButton edit={edit} spot="hero" label="Hero" filled={Boolean(sheet.look?.hero)} />
+            </div>
           </div>
         </div>
 
@@ -96,7 +152,13 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           <h1 className="ss-event-name">{ev.name || 'Event to come'}</h1>
           {venue.chip && <div className="ss-chip">{venue.chip}</div>}
           <figure className="ss-venue">
-            <Photo src={venue.image} label="Venue" className="ss-frame" />
+            <div className="ss-spot-wrap">
+              <Photo src={venue.image} label={edit ? '' : 'Venue'} className="ss-frame" />
+              <SpotButton edit={edit} spot="venue" label="Venue" filled={Boolean(venue.image)} />
+              {edit && venue.image && edit.canSwapVenue && !edit.locked && (
+                <button type="button" className="ss-swap" onClick={edit.onSwapVenue} aria-label="Swap the venue image">Swap</button>
+              )}
+            </div>
             <figcaption>THE VENUE{venue.name ? ` · ${venue.name}` : ''}</figcaption>
           </figure>
           <div className="ss-pill">EVENT DETAILS</div>
@@ -117,8 +179,20 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           {(sheet.wardrobe?.columns || []).map((c) => (
             <figure key={c.key} className={`ss-column${c.needed ? ' is-needed' : ''}`} data-testid={`ss-col-${c.key}`}>
               <div className="ss-column-label">{c.label}</div>
-              <Photo src={c.image} label={c.needed ? 'Needed' : ''} alt={c.name || c.label} className="ss-frame ss-column-photo" />
-              <figcaption className="ss-column-name">{c.needed ? 'Needed' : (c.name || '')}</figcaption>
+              <div className="ss-spot-wrap ss-column-photo-wrap">
+                <Photo src={c.image} label={c.needed && !edit ? 'Needed' : ''} alt={c.name || c.label} className="ss-frame ss-column-photo" />
+                {(() => {
+                  // Hair and nails are Lookbook spots; the other columns are the saved look's pieces.
+                  const spot = c.key === 'hair' || c.key === 'nails' ? c.key : 'wardrobe';
+                  const label = c.label.charAt(0) + c.label.slice(1).toLowerCase();
+                  return <SpotButton edit={edit} spot={spot} label={label} filled={Boolean(c.image) || (!c.needed && spot === 'wardrobe')} needed={c.needed} />;
+                })()}
+              </div>
+              <figcaption className="ss-column-name">
+                {(c.key === 'hair' || c.key === 'nails') && edit && edit.selected === c.key && !edit.locked
+                  ? <InPlaceText edit={edit} field={`${c.key}_name`} placeholder={`${c.key === 'hair' ? 'Hair' : 'Nails'} name`} className="ss-inplace-name" maxLength={120} />
+                  : (c.needed ? 'Needed' : ((edit && (c.key === 'hair' || c.key === 'nails') ? edit.text?.[`${c.key}_name`] : c.name) || ''))}
+              </figcaption>
             </figure>
           ))}
         </div>
@@ -126,7 +200,8 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
 
       {/* Bottom row: palette · beauty · inspo */}
       <div className="ss-bottom">
-        <section className="ss-panel">
+        <section className="ss-panel ss-spot-wrap">
+          <SpotButton edit={edit} spot="palette" label="Palette" filled />
           <div className="ss-pill ss-pill-centre">COLOR PALETTE</div>
           <div className="ss-swatches">
             {Array.from({ length: 5 }, (_, i) => swatches[i] || null).map((s, i) => (
@@ -142,7 +217,10 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           <div className="ss-beauty">
             {[['eyes', 'Eyes'], ['lips', 'Lips'], ['skin', 'Skin'], ['nails', 'Nails']].map(([k, label]) => (
               <figure key={k} className="ss-beauty-item">
-                <Photo src={sheet.beauty?.[k]} label={label} className="ss-frame" />
+                <div className="ss-spot-wrap">
+                  <Photo src={sheet.beauty?.[k]} label={edit ? '' : label} className="ss-frame" />
+                  <SpotButton edit={edit} spot={k} label={label} filled={Boolean(sheet.beauty?.[k])} />
+                </div>
                 <figcaption>{label.toUpperCase()}{k === 'nails' && sheet.nails_name ? ` · ${sheet.nails_name}` : ''}</figcaption>
               </figure>
             ))}
@@ -152,7 +230,12 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
         <section className="ss-panel">
           <div className="ss-pill ss-pill-centre">KEY INSPO</div>
           <div className="ss-inspo">
-            {[0, 1].map((i) => <Photo key={`p${i}`} src={inspo.photos?.[i]?.image} label="Inspo" className="ss-frame" />)}
+            {[0, 1].map((i) => (
+              <div key={`p${i}`} className="ss-spot-wrap">
+                <Photo src={inspo.photos?.[i]?.image} label={edit ? '' : 'Inspo'} className="ss-frame" />
+                <SpotButton edit={edit} spot="inspo" label="Inspo" filled={Boolean(inspo.photos?.[i]?.image)} />
+              </div>
+            ))}
             {[0, 1].map((i) => (
               <div key={`t${i}`} className="ss-frame ss-texture">
                 {inspo.textures?.[i]?.image
@@ -167,7 +250,17 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
       {/* Footer strip */}
       <footer className="ss-footer">
         <div className="ss-skyline" aria-hidden="true" />
-        {sheet.tagline && <p className="ss-tagline">{sheet.tagline}</p>}
+        {edit ? (
+          <div className="ss-tagline-spot">
+            {edit.selected === 'tagline' && !edit.locked
+              ? <InPlaceText edit={edit} field="tagline" placeholder="Write a tagline" className="ss-tagline ss-inplace-tagline" maxLength={200} />
+              : (
+                <button type="button" className={`ss-tagline-btn${edit.selected === 'tagline' ? ' is-selected' : ''}`} aria-pressed={edit.selected === 'tagline'} onClick={() => edit.onSelect('tagline')}>
+                  {edit.text?.tagline ? <span className="ss-tagline">{edit.text.tagline}</span> : <span className="ss-tagline ss-tagline-empty">Tap to write a tagline</span>}
+                </button>
+              )}
+          </div>
+        ) : (sheet.tagline && <p className="ss-tagline">{sheet.tagline}</p>)}
         <p className="ss-footer-line">LALAVERSE · FASHION · ATTENTION · MONEY</p>
       </footer>
     </div>
