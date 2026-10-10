@@ -64,19 +64,45 @@ WCAG AA contrast, keyboard and focus support, alt text, reduced-motion support, 
 ### Open naming question
 Lala's in-world social network is also called "lalaverse". Do not create a public /lalaverse route until Evoni decides which meaning it has.
 
-## Part 2: Lookbook tab, style sheet panel, style sheet template
+## Part 2: Style Page (was the Lookbook tab), style sheet panel, style sheet template
 
-### Lookbook tab (episode › Production sub-tab, between Wardrobe and Phone)
-Purpose: the place Evoni uploads that episode's images, sorted into the spots the style sheet uses. Her photos are used as-is; nothing is generated here.
-- Header: "Lookbook", counters "images in" and "style sheet ready (x of 11)", button "Preview style sheet".
-- Batch drop zone: drop many photos; they land in a "To sort" tray; tapping a photo assigns it a category: front, side, back, hero, hair, nails, eyes, lips, skin, venue, inspo.
-- Lala in the look: four upload slots, Front, Side, Back (full body) and Hero.
-- Hair: one photo plus a name field (e.g. "soft glam waves"); the name prints under HAIR on the sheet.
-- Nails: one photo plus a name field; prints under NAILS.
-- Beauty details: Eyes, Lips, Skin photos plus optional makeup notes.
-- Venue: pre-filled from the episode's event scene set (its look image and angles). Tapping an image toggles "In lookbook". "Upload your own" adds a custom venue image.
-- Key inspo: up to two uploads plus two textures made automatically from the wardrobe piece images.
-Hair, nails and beauty are fields on the episode's look, not closet items.
+### Style Page (episode › Production sub-tab, between Wardrobe and Phone)
+**Amended 2026-10-10 (Task #2875):** the "Lookbook" tab is now the **Style Page**. Its data and routes stay the Lookbook's; the layout is new. The style sheet itself is the editor.
+
+**The data the page edits (the Lookbook, unchanged).** Evoni's photos are used as they are, and nothing is generated here.
+- **To sort tray and categories:** photos dropped on the page land in a "To sort" tray. Each one can be assigned a category: front, side, back, hero, hair, nails, eyes, lips, skin, venue, inspo.
+- **Lala in the look:** Front, Side and Back (full body), and Hero.
+- **Hair and nails:** each has one photo plus a name (for example "soft glam waves"). The name prints under HAIR or NAILS on the sheet.
+- **Beauty:** Eyes, Lips and Skin photos, plus optional makeup notes.
+- **Venue:** pre-filled from the episode's event scene set (its look image and angles). Evoni's own venue upload is also allowed.
+- **Key inspo:** up to two uploads, plus two textures made automatically from the wardrobe piece images.
+- **Where the fields live:** hair, nails and beauty are fields on the episode's look, not closet items.
+
+**STYLE PAGE**
+- **Tab:** episode › Production › "Style Page". It replaces "Lookbook" and uses the same data and routes.
+- **Layout:** the style sheet at its real layout on the left (scaled to fit), and an editing panel on the right. What you see is what exports.
+- **Empty spots:** every empty spot on the sheet is a dashed "+ Add <spot>" button in place: Front, Side, Back, Hero, Hair, Nails, Eyes, Lips, Skin, Inspo, plus the Body wardrobe slot ("Needed"). Tapping one selects it (pink outline) and opens it in the panel.
+- **Filled spots:** show the real image. The venue has a "Swap" button that cycles through the event scene set's images. Textures and palette come from the piece images automatically.
+- **In-place text:** tap the footer to edit the tagline ("Tap to write a tagline" when empty). Hair and nails names edit in place under their images.
+- **Panel:** "Editing <section> · <spot>" with a one-line hint, Upload, and a picker from the To sort tray. Below it, the readiness bar ("Ready x of 11") with a chip per item, ticked when ready.
+- **Readiness rule:**
+  - look photos, venue, inspo, beauty: at least one image;
+  - hair and nails: an image AND a name;
+  - wardrobe: every required slot filled (Body included);
+  - palette: five colours;
+  - tagline: not empty.
+- **Header:** "Style Page", a Draft/Approved pill, "Drop photos to sort", "Approve".
+- **Share & export** (enabled only when Approved), all drawn on the server, as the title overlay is:
+  - Style sheet PNG 1024x1536
+  - Pinterest pin 1000x1500
+  - Instagram story 1080x1920 (padded)
+  - Instagram post 1080x1350 (cropped)
+  - "The look only" strip (front, side, back)
+  - print PDF
+- **Send to Distribution:** adds the approved sheet and every export size to the episode's Distribution queue, with a caption draft.
+  - An optional "Include Shop the Look links" adds each piece's real-world link.
+  - When any link is an affiliate link, a disclosure line is added at the start of the caption, and it cannot be removed while links are present.
+- **Phone:** works at 375px, with the sheet on top and the panel below. Tapping never jumps the page.
 
 ### Style sheet panel (episode › Production › Wardrobe)
 - Title "Style sheet" with status Draft or Approved and a readiness bar (x of 11).
@@ -86,7 +112,7 @@ Hair, nails and beauty are fields on the episode's look, not closet items.
 - Once approved: download as PNG. Using it in Release, Lala's Feed and the website is later wiring.
 
 ### Style sheet template (portrait 1024 x 1536)
-All text is real text laid over images.
+All text is real text laid over images. The Style Page (above) shows this template as its editor, and every export is drawn from it.
 - Top row, three columns: left, the show logo ("Styling" gold serif, "Adventures" pink script, "with", "LALA" serif caps) above THE LOOK (Front, Side, Back photos with labels); centre, the Hero photo in a slightly tilted white frame; right, "EPISODE 0n", the event name, the venue's city chip, a venue image labelled "THE VENUE · <venue name>", and EVENT DETAILS rows: HOST, TYPE, DRESS CODE, WHEN, VIBE.
 - WARDROBE BREAKDOWN: seven columns, BODY, SHOES, BAG, JEWELRY, HAIR, PERFUME, NAILS, each with the piece image and its name in small caps. Empty required slots show "Needed".
 - Bottom row, three framed panels: COLOR PALETTE (five swatches, the word "Mood" in script, mood words); BEAUTY DETAILS (Eyes, Lips, Skin, Nails); KEY INSPO (two venue angles, two textures).
