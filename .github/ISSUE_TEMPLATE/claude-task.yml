@@ -65,7 +65,7 @@ body:
     attributes:
       label: Guardrails
       options:
-        - label: This task needs no host, AWS, database, or Cognito contact from the agent session.
+        - label: Session holds no credentials and contacts no host, AWS, database, or Cognito. Migrations and deploys run only through the approved Deploy workflow.
           required: true
         - label: This task is inside the locked fix sequence or is explicitly approved product work (see PROJECT_CONTEXT.md).
           required: false
