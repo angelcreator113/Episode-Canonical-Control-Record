@@ -154,11 +154,11 @@ describe('Website page', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  test('the logo toggle explains Show Settings has no logo yet', async () => {
+  test("the logo toggle stays off: the show's logo is not the site's", async () => {
     await renderPage();
     const toggle = card('logo').getByLabelText(/Use the logo from Show Settings/);
     expect(toggle.disabled).toBe(true);
-    expect(card('logo').getByText(/Show Settings has no logo yet/)).toBeTruthy();
+    expect(card('logo').getByText(/the site's logo is Prime Studios'/)).toBeTruthy();
   });
 
   test('a non-admin is told the page is for admins', async () => {

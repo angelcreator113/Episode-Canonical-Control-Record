@@ -6,7 +6,7 @@
  * After Producer Mode moved to Universe Admin, Settings has one job:
  * technical show configuration. Two tabs only.
  *
- * ⚙️  Config   — Show title, status, era, season settings, economy model
+ * ⚙️  Config   — Show title, status, logo, era, season settings, economy model
  * 🔧  Advanced — Seed data, export, reset stats
  *
  * Everything else (events, wardrobe, goals, characters, hub) lives in:
@@ -294,6 +294,9 @@ export default function ShowSettings() {
               <ReadOnlyField label='Show ID' value={showId} mono />
             </ConfigBlock>
 
+            {/* The show's logo (the style sheet prints it) */}
+            <ShowLogoBlock showId={showId} onToast={showToast} />
+
             {/* Lala's home (D13 travel, 2026-09-30) */}
             <LalaHomeBlock showId={showId} onToast={showToast} />
 
@@ -505,6 +508,93 @@ export function LalaHomeBlock({ showId, onToast }) {
   );
 }
 
+// The show's logo, a show setting stored on Show.metadata.logo
+// (showLogoService). Uploading or removing saves at once. The episode style
+// sheet prints it in place of the lettered title.
+export const showLogoApi = {
+  get: (showId) => api.get(`/api/v1/shows/${showId}/logo`).then((r) => r.data?.logo || null),
+  upload: (showId, file) => {
+    const form = new FormData();
+    form.append('image', file);
+    return api.post(`/api/v1/shows/${showId}/logo`, form).then((r) => r.data?.logo || null);
+  },
+  remove: (showId) => api.delete(`/api/v1/shows/${showId}/logo`).then(() => null),
+};
+
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp';
+
+export function ShowLogoBlock({ showId, onToast }) {
+  const [logo, setLogo] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!showId) return undefined;
+    let cancelled = false;
+    showLogoApi.get(showId)
+      .then((l) => { if (!cancelled) setLogo(l); })
+      .catch((err) => console.error('[ShowSettings] logo load failed:', err));
+    return () => { cancelled = true; };
+  }, [showId]);
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      setLogo(await showLogoApi.upload(showId, file));
+      onToast('Logo saved');
+    } catch (err) {
+      console.error('[ShowSettings] logo upload failed:', err);
+      onToast(`Not saved: ${err.response?.data?.error || "couldn't reach the server."}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm('Remove the logo? Style sheets go back to the lettered title.')) return;
+    setBusy(true);
+    try {
+      setLogo(await showLogoApi.remove(showId));
+      onToast('Logo removed');
+    } catch (err) {
+      console.error('[ShowSettings] logo remove failed:', err);
+      onToast(`Not removed: ${err.response?.data?.error || "couldn't reach the server."}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ConfigBlock title='Logo'>
+      <div style={lg.row}>
+        <div style={lg.preview} data-testid='show-logo-preview'>
+          {logo
+            ? <img src={logo.url} alt="The show's logo" style={lg.img} />
+            : <span style={lg.empty}>No logo</span>}
+        </div>
+        <div style={lg.actions}>
+          <label style={{ ...s.saveBtn, ...lg.uploadBtn, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Saving…' : logo ? 'Replace logo' : 'Upload logo'}
+            <input type='file' accept={LOGO_ACCEPT} onChange={upload} disabled={busy}
+              style={lg.fileInput} data-testid='show-logo-input' />
+          </label>
+          {logo && (
+            <button type='button' style={lg.removeBtn} onClick={remove} disabled={busy} data-testid='show-logo-remove'>
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={s.sectionDesc}>
+        PNG, JPEG or WebP, up to 5 MB. A PNG with a transparent background looks best. Episode style sheets print
+        it in place of the lettered title.
+      </div>
+    </ConfigBlock>
+  );
+}
+
 function ConfigBlock({ title, children }) {
   return (
     <div style={cb.block}>
@@ -558,6 +648,25 @@ function ActionCard({ color, icon, title, desc, danger, children }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────
+
+const lg = {
+  row: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
+  // A light check pattern, so a transparent logo shows its edges.
+  preview: {
+    width: 160, height: 100, borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    background: 'repeating-conic-gradient(#f1f5f9 0% 25%, #fff 0% 50%) 50% / 16px 16px',
+  },
+  img: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' },
+  empty: { fontSize: 12, color: '#94a3b8' },
+  actions: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
+  uploadBtn: { position: 'relative', display: 'inline-flex', alignItems: 'center', minHeight: 44, cursor: 'pointer' },
+  fileInput: { position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' },
+  removeBtn: {
+    minHeight: 44, padding: '0 16px', borderRadius: 8, border: '1px solid #fecaca',
+    background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  },
+};
 
 const s = {
   page: {

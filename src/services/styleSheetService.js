@@ -202,6 +202,9 @@ async function buildStyleSheet(models, episodeId) {
   const wardrobe = await wardrobeColumns(sequelize, ep, event);
   const cache = new Map();
   const inline = (url) => inlineImage(url, cache);
+  // The show's logo from Show Settings; the template letters the title without one.
+  const showRow = ep.show_id ? await one(sequelize, 'SELECT metadata FROM shows WHERE id = :id', { id: ep.show_id }) : null;
+  const logo = require('./showLogoService').readLogo(parseJson(showRow?.metadata, {}));
 
   // THE VENUE: the first venue image in the Lookbook (sorted; "choose
   // angle" reorders), else the event's look or set base.
@@ -248,6 +251,7 @@ async function buildStyleSheet(models, episodeId) {
       label: ep.episode_number != null ? `EPISODE ${String(ep.episode_number).padStart(2, '0')}` : null,
       title: text(ep.title),
     },
+    logo: await inline(logo?.url),
     event: details,
     venue: {
       ...venue,
@@ -315,7 +319,7 @@ async function buildStyleSheet(models, episodeId) {
   // What the approval was given for: every value and image URL, not the
   // inlined pixels. A change after Approve marks the sheet out of date.
   const hash = crypto.createHash('sha256').update(JSON.stringify({
-    episode: sheet.episode, event: details, venue: { ...venue, url: chosenVenue?.url || null },
+    episode: sheet.episode, logo: logo?.url || null, event: details, venue: { ...venue, url: chosenVenue?.url || null },
     columns: columns.map((c) => [c.key, c.name, c.needed]), lookbook: lb.images, notes, palette: sheet.palette,
     mood: sheet.mood_words, tagline: sheet.tagline, hair: sheet.hair_name, nails: sheet.nails_name,
   })).digest('hex');
