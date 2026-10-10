@@ -15,7 +15,8 @@
 # What it does, in order (docs/reads/2026-10-10-deploy-path-read.md §6):
 #   plan (read-only, on the box) -> RDS snapshot -> wait until available ->
 #   fast-forward + vite build -> db:migrate if pending -> restart API, /health,
-#   restart worker -> public health check -> job summary.
+#   restart the worker if it was online (a stopped one stays stopped) ->
+#   public health check -> job summary.
 # On any failure it stops. It never rolls back by itself: the summary names
 # the snapshot and the runbook says what to do.
 #
@@ -174,7 +175,16 @@ jobs:
       - name: Restart and health check (on the box)
         id: restart
         run: |
-          bash scripts/deploy/ssm-phase.sh restart
+          rc=0
+          bash scripts/deploy/ssm-phase.sh restart || rc=$?
+          # The worker's status words reach the summary even when the phase stops.
+          wstate() { grep -E "^$1=[a-z-]+$" "$RUNNER_TEMP/phase-restart.out" 2>/dev/null | head -1 | cut -d= -f2 || true; }
+          {
+            echo "worker_before=$(wstate WORKER_BEFORE)"
+            echo "worker_after=$(wstate WORKER_AFTER)"
+            echo "worker_action=$(wstate WORKER_ACTION)"
+          } >>"$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           head_sha="$(grep -E '^RESTART_HEAD=[0-9a-f]{40}$' "$RUNNER_TEMP/phase-restart.out" | head -1 | cut -d= -f2 || true)"
           if [ "$head_sha" != "$TARGET_SHA" ]; then
             echo "::error::The box reports ${head_sha:-nothing} after the restart, not ${TARGET_SHA}."
@@ -207,6 +217,9 @@ jobs:
           SNAP: ${{ steps.snapshot.outputs.name }}
           MIGRATE_RAN: ${{ steps.migrate.outputs.ran }}
           RESTART_OUTCOME: ${{ steps.restart.outcome }}
+          WORKER_BEFORE: ${{ steps.restart.outputs.worker_before }}
+          WORKER_AFTER: ${{ steps.restart.outputs.worker_after }}
+          WORKER_ACTION: ${{ steps.restart.outputs.worker_action }}
           HEALTH_OUTCOME: ${{ steps.health.outcome }}
         run: |
           {
@@ -228,6 +241,14 @@ jobs:
               *) echo "| Migrations run | not reached |" ;;
             esac
             echo "| Restart and on-box /health | ${RESTART_OUTCOME:-not reached} |"
+            if [ -n "$WORKER_BEFORE" ]; then
+              case "$WORKER_ACTION" in
+                restarted) note="restarted" ;;
+                left-*) note="left ${WORKER_ACTION#left-}, not started" ;;
+                *) if [ -n "$WORKER_AFTER" ]; then note="restart failed"; else note="not reached"; fi ;;
+              esac
+              echo "| Worker | ${WORKER_BEFORE} → ${WORKER_AFTER:-?} (${note}) |"
+            fi
             echo "| Public health | ${HEALTH_OUTCOME:-not reached} |"
             if [ -s "$RUNNER_TEMP/migrations.txt" ]; then
               echo
