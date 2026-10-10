@@ -10,9 +10,15 @@
 #
 # Usage: ssm-phase.sh <plan|deploy|migrate|restart>
 # Needs: EC2_INSTANCE_ID, TARGET_SHA, SSM_DOCUMENT, AWS_REGION (from the workflow env).
-# Exit: 0 when the phase succeeded on the box; 1 otherwise.
+# Exit: 0 when the phase succeeded on the box; 1 otherwise; 2 when refused
+# inside a Claude Code session (CLAUDECODE set), before any aws call.
 
 set -euo pipefail
+
+if [ -n "${CLAUDECODE:-}" ]; then
+  echo "REFUSED: CLAUDECODE is set, so this is a Claude Code session. Only the Deploy workflow runs this." >&2
+  exit 2
+fi
 
 PHASE="${1:?phase required}"
 : "${EC2_INSTANCE_ID:?}" "${TARGET_SHA:?}" "${SSM_DOCUMENT:?}" "${RUNNER_TEMP:?}"
