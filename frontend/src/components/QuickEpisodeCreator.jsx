@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getEpisodeEvents } from '../services/episodeEventsApi';
 import LoadingSkeleton from './LoadingSkeleton';
 
 const STORAGE_KEY_PREFIX = 'quick_episode_draft_';
@@ -97,6 +98,12 @@ export default function QuickEpisodeCreator() {
   const [lastEpisode, setLastEpisode] = useState(null);
   const [resolvedShowId, setResolvedShowId] = useState(showId || null);
   const [existingEvent, setExistingEvent] = useState(null);
+  // Edit mode: where this episode's event stands (#1916). 'linked' (its own
+  // event, loaded into the form), 'none' (no event: fields start empty, and
+  // naming one creates and links it), 'elsewhere' (its event is now another
+  // episode's: never written here), 'unknown' (couldn't load: no event write).
+  const [eventLink, setEventLink] = useState(null);
+  const [eventLinkName, setEventLinkName] = useState('');
 
   // Episode fields
   const [title, setTitle] = useState('');
@@ -213,12 +220,23 @@ export default function QuickEpisodeCreator() {
           setSeason(ep.season_number || 1);
           setDescription(ep.description || '');
 
-          // Try to load the event linked to this episode
+          // The episode's own event (#1916): the anchor of GET
+          // /episodes/:id/events (the brief's event, else the first one
+          // stamped to this episode). The show's event list ignores
+          // episode_id, and its first event used to stand in when nothing
+          // was stamped, so saving rewrote an unrelated event.
           try {
-            const evRes = await api.get(`/api/v1/world/${effectiveShowId}/events?episode_id=${editEpisodeId}`);
-            const events = evRes.data?.events || evRes.data?.data || evRes.data || [];
-            const ev = Array.isArray(events) ? events.find(e => e.used_in_episode_id === editEpisodeId) || events[0] : null;
-            if (ev) {
+            const data = await getEpisodeEvents(editEpisodeId);
+            const ev = (data?.events || []).find(e => e.link?.anchor) || null;
+            if (!ev) {
+              setEventLink('none');
+            } else if (ev.link?.stamped_elsewhere) {
+              // Its event is now another episode's: named, never written here.
+              setEventLink('elsewhere');
+              setEventLinkName(ev.name || '');
+            } else {
+              setEventLink('linked');
+              setEventLinkName(ev.name || '');
               setExistingEvent(ev);
               setEventName(ev.name || '');
               setFormat(ev.format || '');
@@ -234,7 +252,10 @@ export default function QuickEpisodeCreator() {
               setNarrativeStakes(ev.narrative_stakes || '');
               setInviteType(ev.invite_type || 'invite');
             }
-          } catch { /* no event found — that's ok */ }
+          } catch (evErr) {
+            console.error('[QuickEpisodeCreator] episode event load failed:', evErr);
+            setEventLink('unknown');
+          }
         }
 
         if (!effectiveShowId) throw new Error('No show ID available');
@@ -301,6 +322,8 @@ export default function QuickEpisodeCreator() {
 
     try {
       let episodeId;
+      // Edit mode: an event write that fails is told, not swallowed (#1916).
+      let eventWarning = null;
 
       if (isEditMode) {
         // ─── UPDATE existing episode ───
@@ -312,7 +335,9 @@ export default function QuickEpisodeCreator() {
         });
         episodeId = editEpisodeId;
 
-        // Update existing event if we have one
+        // Only this episode's own event is ever written (#1916): existingEvent
+        // is set only for the episode's linked event; with none, naming an
+        // event creates one and links it; 'elsewhere' or 'unknown' writes none.
         if (existingEvent?.id && eventName.trim()) {
           try {
             await api.put(`/api/v1/world/${effectiveShowId}/events/${existingEvent.id}`, {
@@ -330,8 +355,11 @@ export default function QuickEpisodeCreator() {
               host_brand: hostBrand,
               narrative_stakes: narrativeStakes,
             });
-          } catch { /* event update failed — not fatal */ }
-        } else if (!existingEvent && eventName.trim()) {
+          } catch (evErr) {
+            console.error('[QuickEpisodeCreator] event update failed:', evErr);
+            eventWarning = `The episode was saved, but its event wasn't updated: ${evErr.response?.data?.error || evErr.message}`;
+          }
+        } else if (eventLink === 'none' && eventName.trim()) {
           // No existing event — create one and inject
           try {
             const evRes = await api.post(`/api/v1/world/${effectiveShowId}/events`, {
@@ -353,10 +381,24 @@ export default function QuickEpisodeCreator() {
             const event = evRes.data?.event || evRes.data;
             try {
               await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, { episode_id: episodeId });
-            } catch {
-              try { await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, { episode_id: episodeId }); } catch {}
+            } catch (injectErr) {
+              console.error('[QuickEpisodeCreator] event inject failed, linking directly:', injectErr);
+              try {
+                await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, { episode_id: episodeId });
+              } catch (linkErr) {
+                console.error('[QuickEpisodeCreator] event link failed:', linkErr);
+                eventWarning = `The episode was saved and the event "${eventName.trim()}" was created, but it isn't linked to this episode: ${linkErr.response?.data?.error || linkErr.message}`;
+              }
             }
-          } catch { /* event creation failed — not fatal in edit mode */ }
+          } catch (createErr) {
+            console.error('[QuickEpisodeCreator] event create failed:', createErr);
+            eventWarning = `The episode was saved, but its event wasn't created: ${createErr.response?.data?.error || createErr.message}`;
+          }
+        }
+        if (eventWarning) {
+          // Stay on the form so the message is seen; the episode itself saved.
+          setError(eventWarning);
+          return;
         }
       } else {
         // ─── CREATE new episode + event ───
@@ -558,6 +600,16 @@ Lala arrives at ${evName}.
           <span style={S.sectionNum}>2</span>
           <span style={S.sectionLabel}>Event</span>
         </div>
+
+        {/* Edit mode: which event this form edits, if any (#1916). */}
+        {isEditMode && eventLink && (
+          <div data-testid="quick-episode-event-link" style={S.eventLinkNote}>
+            {eventLink === 'linked' && <>Editing this episode&apos;s event: <strong>{eventLinkName || 'Untitled event'}</strong>.</>}
+            {eventLink === 'none' && <>No event linked. Name an event below to create one for this episode; otherwise no event is changed.</>}
+            {eventLink === 'elsewhere' && <>This episode&apos;s event, <strong>{eventLinkName || 'Untitled event'}</strong>, is now used by another episode, so it isn&apos;t changed here.</>}
+            {eventLink === 'unknown' && <>This episode&apos;s event couldn&apos;t be loaded, so no event is changed when you save.</>}
+          </div>
+        )}
 
         {/* Preset buttons */}
         <div style={S.field}>
@@ -770,6 +822,11 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
   },
   sectionLabel: { fontSize: 16, fontWeight: 700, color: '#1a1a2e' },
+  // Edit mode: which event this form edits (#1916). Studio tokens.
+  eventLinkNote: {
+    marginBottom: 14, padding: '8px 12px', borderRadius: 8, fontSize: 13, lineHeight: 1.45,
+    background: 'var(--lala-lavender-soft)', color: 'var(--lala-ink)', border: '1px solid var(--lala-lavender-line)',
+  },
 
   field: { marginBottom: 14 },
   fieldRow: { display: 'flex', gap: 12, marginBottom: 14 },

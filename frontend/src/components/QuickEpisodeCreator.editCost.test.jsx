@@ -34,8 +34,12 @@ function mockLoad(event) {
     if (url === `/api/v1/episodes/${EPISODE_ID}`) {
       return { data: { data: { id: EPISODE_ID, show_id: SHOW_ID, title: 'Gala Night', episode_number: 3, season_number: 1, description: '' } } };
     }
-    if (url.startsWith(`/api/v1/world/${SHOW_ID}/events`)) {
-      return { data: { events: [{ id: EVENT_ID, used_in_episode_id: EPISODE_ID, name: 'The Gala', prestige: 7, strictness: 6, ...event }] } };
+    // The episode's own event comes from GET /episodes/:id/events (#1916).
+    if (url === `/api/v1/episodes/${EPISODE_ID}/events`) {
+      return { data: { success: true, anchor_event_id: EVENT_ID, events: [{
+        id: EVENT_ID, used_in_episode_id: EPISODE_ID, name: 'The Gala', prestige: 7, strictness: 6, ...event,
+        link: { anchor: true, anchor_source: 'stamped', stamped: true, stamped_elsewhere: false },
+      }] } };
     }
     if (url === `/api/v1/shows/${SHOW_ID}`) return { data: { show: { id: SHOW_ID, name: 'Styling Adventures' } } };
     return { data: {} };
