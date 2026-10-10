@@ -355,6 +355,56 @@
   min-width: 0;
 }
 
+/* A moment a screen draws is a button that shows that screen (#2855). */
+.lalas-phone-moment-item {
+  min-width: 0;
+}
+
+.lalas-phone-moment-btn {
+  width: 100%;
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lalas-phone-moment-btn:hover {
+  border-color: var(--accent-light);
+}
+
+.lalas-phone-moment-btn:focus-visible {
+  outline: 2px solid var(--accent-dark);
+  outline-offset: 2px;
+}
+
+.lalas-phone-moment-item.is-shown .lalas-phone-moment-btn {
+  border-color: var(--accent-dark);
+  background: var(--accent-subtle);
+}
+
+.lalas-phone-moment-screen {
+  margin-left: auto;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--accent-dark);
+}
+
+/* A moment no screen draws says so, with the way to build one. */
+.lalas-phone-moment.is-unplaced {
+  border-style: dashed;
+}
+
+.lalas-phone-moment-note {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.lalas-phone-moment-note a {
+  color: var(--lala-lavender-text);
+}
+
 .lalas-phone-moment-type,
 .lalas-phone-moment-handle {
   font-family: 'DM Mono', monospace;

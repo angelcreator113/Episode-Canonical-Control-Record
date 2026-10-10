@@ -67,6 +67,12 @@ describe('Episode Phone theme', () => {
       ['--lala-danger', '--lala-surface'],
       ['--text-secondary', '--surface-card'],
       ['--lala-ink-muted', '--lala-gold-soft'],
+      // Feed-moment rows (#2855): the type and handle on the shown row, its
+      // "on <screen>" label, and the unplaced note with its link.
+      ['--lala-ink-muted', '--accent-subtle'],
+      ['--accent-dark', '--lala-surface'],
+      ['--text-secondary', '--lala-surface'],
+      ['--lala-lavender-text', '--lala-surface'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });

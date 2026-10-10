@@ -85,6 +85,23 @@ export function splitPhoneOverlays(overlays) {
   };
 }
 
+// The content zone that draws a feed moment of each phone_screen_type
+// (ScreenContentRenderer: DMThreadRenderer keeps 'dm', NotificationsRenderer
+// keeps 'notification'). No zone draws the other types (post, story, live,
+// ui_interaction), so those moments belong to no screen yet (#2855).
+export const MOMENT_ZONE_TYPES = { dm: 'dm_thread', notification: 'notifications' };
+
+// The playable screen a feed moment belongs to: the first one with a content
+// zone that draws its type (the home screen first, as the phone opens there),
+// or null when no screen on this phone draws it.
+export function screenForMoment(moment, screens) {
+  const zoneType = MOMENT_ZONE_TYPES[moment?.phone_screen_type];
+  if (!zoneType) return null;
+  const draws = s => Array.isArray(s?.content_zones) && s.content_zones.some(z => z?.content_type === zoneType);
+  const list = screens || [];
+  return list.find(s => s.is_home && draws(s)) || list.find(draws) || null;
+}
+
 function countBy(items, key) {
   return (items || []).reduce((acc, item) => {
     const k = item?.[key] || 'other';
@@ -326,15 +343,48 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                   ))}
                 </div>
                 <ul className="lalas-phone-moments">
-                  {moments.map(m => (
-                    <li key={m.id} className="lalas-phone-moment">
-                      <span className="lalas-phone-moment-type">{m.phone_screen_type || 'other'}</span>
-                      {m.trigger_handle && <span className="lalas-phone-moment-handle">{m.trigger_handle}</span>}
-                      <span className="lalas-phone-moment-text">
-                        {m.screen_content || m.lala_line || m.trigger_action || '—'}
-                      </span>
-                    </li>
-                  ))}
+                  {moments.map(m => {
+                    const type = m.phone_screen_type || 'other';
+                    const body = (
+                      <>
+                        <span className="lalas-phone-moment-type">{type}</span>
+                        {m.trigger_handle && <span className="lalas-phone-moment-handle">{m.trigger_handle}</span>}
+                        <span className="lalas-phone-moment-text">
+                          {m.screen_content || m.lala_line || m.trigger_action || '—'}
+                        </span>
+                      </>
+                    );
+                    // A moment opens the screen that draws it (#2855); one no
+                    // screen draws says so instead of doing nothing.
+                    const target = screenForMoment(m, playable);
+                    if (!target) {
+                      return (
+                        <li key={m.id} className="lalas-phone-moment is-unplaced">
+                          {body}
+                          <span className="lalas-phone-moment-note">
+                            No screen on this phone shows {type} moments yet.{' '}
+                            {studioPath && <Link to={studioPath}>Build one in Producer Mode → Lala&apos;s Phone</Link>}
+                          </span>
+                        </li>
+                      );
+                    }
+                    const key = target.asset_id || target.id;
+                    const isShown = Boolean(shown && (shown.asset_id || shown.id) === key);
+                    return (
+                      <li key={m.id} className={`lalas-phone-moment-item${isShown ? ' is-shown' : ''}`}>
+                        <button
+                          type="button"
+                          className="lalas-phone-moment lalas-phone-moment-btn"
+                          onClick={() => setShownId(key)}
+                          aria-pressed={isShown}
+                          title={`Show ${target.name} on the phone`}
+                        >
+                          {body}
+                          <span className="lalas-phone-moment-screen">on {target.name}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             )}

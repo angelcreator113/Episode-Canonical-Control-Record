@@ -39,6 +39,7 @@ import EpisodeLalasPhoneTab, {
   listEpisodePhoneOverlaysApi,
   listEpisodeFeedMomentsApi,
   splitPhoneOverlays,
+  screenForMoment,
 } from './EpisodeLalasPhoneTab';
 
 const EPISODE = { id: 'ep-1', show_id: 's-1', title: 'Ep 1' };
@@ -290,5 +291,66 @@ describe('EpisodeLalasPhoneTab — missions section still works', () => {
     expect(dms.className).toContain('is-shown');
     expect(within(dms).getByRole('button').getAttribute('aria-pressed')).toBe('true');
     await screen.findByText('Find the invite');
+  });
+});
+
+// #2855: a feed-moment row opens the screen whose content zone draws it
+// (ScreenContentRenderer: dm_thread draws 'dm', notifications draws
+// 'notification'); a moment no screen draws says so and links to the studio.
+describe('EpisodeLalasPhoneTab — feed-moment rows open their screen (#2855)', () => {
+  const ZONED = [
+    { id: 'home', name: 'Home', category: 'phone', is_home: true, generated: true, url: 'https://x/home.png', asset_id: 'a-home', content_zones: [{ id: 'n1', content_type: 'notifications' }] },
+    { id: 'dms', name: 'DMs', category: 'phone', generated: true, url: 'https://x/dms.png', asset_id: 'a-dms', content_zones: [{ id: 'c1', content_type: 'dm_thread' }] },
+    { id: 'feed', name: 'Feed', category: 'phone', generated: true, url: 'https://x/feed.png', asset_id: 'a-feed', content_zones: [{ id: 'f1', content_type: 'feed_posts' }] },
+  ];
+  const ZONED_MOMENTS = [
+    { id: 'm1', phone_screen_type: 'dm', trigger_handle: '@bestie', screen_content: 'Are you going tonight?' },
+    { id: 'm2', phone_screen_type: 'notification', screen_content: 'New follower' },
+    { id: 'm3', phone_screen_type: 'story', screen_content: 'Lala posted a story' },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('screenForMoment picks the screen whose content zone draws the type, home first', () => {
+    expect(screenForMoment({ phone_screen_type: 'dm' }, ZONED).id).toBe('dms');
+    expect(screenForMoment({ phone_screen_type: 'notification' }, ZONED).id).toBe('home');
+    const twoNotif = [{ ...ZONED[2], content_zones: [{ content_type: 'notifications' }] }, ZONED[0]];
+    expect(screenForMoment({ phone_screen_type: 'notification' }, twoNotif).id).toBe('home');
+    expect(screenForMoment({ phone_screen_type: 'story' }, ZONED)).toBeNull();
+    expect(screenForMoment({ phone_screen_type: 'post' }, ZONED)).toBeNull();
+    expect(screenForMoment({}, ZONED)).toBeNull();
+    expect(screenForMoment({ phone_screen_type: 'dm' }, [])).toBeNull();
+  });
+
+  test('clicking a moment row shows its screen on the phone', async () => {
+    mockGets({ overlays: ZONED, moments: ZONED_MOMENTS });
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const dmRow = (await screen.findByText('Are you going tonight?')).closest('button');
+    expect(dmRow).toBeTruthy();
+    expect(within(dmRow).getByText('on DMs')).toBeTruthy();
+    expect(dmRow.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home');
+    fireEvent.click(dmRow);
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: DMs');
+    expect(dmRow.getAttribute('aria-pressed')).toBe('true');
+    expect(dmRow.closest('li').className).toContain('is-shown');
+    // The notification row points at Home, which is no longer shown.
+    const notifRow = screen.getByText('New follower').closest('button');
+    expect(notifRow.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(notifRow);
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home');
+  });
+
+  test('a moment no screen draws says so and links to the studio, with no button', async () => {
+    mockGets({ overlays: ZONED, moments: ZONED_MOMENTS });
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const storyRow = (await screen.findByText('Lala posted a story')).closest('li');
+    expect(storyRow.className).toContain('is-unplaced');
+    expect(within(storyRow).queryByRole('button')).toBeNull();
+    expect(within(storyRow).getByText(/No screen on this phone shows story moments yet/)).toBeTruthy();
+    const link = within(storyRow).getByRole('link', { name: /Build one in Producer Mode/ });
+    expect(link.getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
   });
 });
