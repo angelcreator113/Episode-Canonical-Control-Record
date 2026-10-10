@@ -189,6 +189,50 @@ async function wardrobeColumns(sequelize, ep, event) {
   return { state: look.state || 'none', pieces: look.pieces || [], byColumn, required };
 }
 
+// ── Readiness: "Ready x of 12" (Evoni's ruling, 2026-10-10) ──
+
+const READINESS_CHIPS = Object.freeze([
+  ['front', 'Front'], ['side', 'Side'], ['back', 'Back'], ['hero', 'Hero'], ['hair', 'Hair'], ['nails', 'Nails'],
+  ['beauty', 'Beauty'], ['venue', 'Venue'], ['inspo', 'Inspo'], ['wardrobe', 'Wardrobe'], ['palette', 'Palette'], ['tagline', 'Tagline'],
+]);
+const hasText = (v) => typeof v === 'string' && v.trim().length > 0;
+
+/**
+ * The one readiness rule (Task #2877; it lived in the browser in #2876).
+ * The Style Page, the Production checklist and the Wardrobe panel all read
+ * the result from GET /style-sheet.
+ *   Front, Side, Back, Hero   a photo in that spot
+ *   Hair, Nails               a photo AND a name
+ *   Beauty                    a photo in any of eyes, lips, skin
+ *   Venue                     an image on the sheet (one In lookbook, or the
+ *                             event scene set's first image the sheet falls back to)
+ *   Inspo                     one of her uploads (automatic textures don't count)
+ *   Wardrobe                  a saved look with every required slot filled, Body included
+ *   Palette                   five colours saved, or (none saved yet) piece images
+ *                             the page takes its five colours from
+ *   Tagline                   not empty
+ */
+function styleReadiness(lb, sheet) {
+  const images = lb.images || {};
+  const has = (spot) => (images[spot] || []).length > 0;
+  const columns = sheet.wardrobe?.columns || [];
+  const saved = Array.isArray(lb.palette) ? lb.palette : null;
+  const ready = {
+    front: has('front'), side: has('side'), back: has('back'), hero: has('hero'),
+    hair: has('hair') && hasText(lb.hair_name),
+    nails: has('nails') && hasText(lb.nails_name),
+    beauty: has('eyes') || has('lips') || has('skin'),
+    venue: (images.venue || []).some((i) => i.in_lookbook) || (lb.venue_options || []).length > 0,
+    inspo: (images.inspo || []).some((i) => i.source === 'upload'),
+    wardrobe: sheet.wardrobe?.state !== 'none' && columns.length > 0 && !columns.some((c) => c.needed),
+    palette: saved && saved.length ? saved.length >= 5 : (sheet.palette_sources || []).length > 0,
+    tagline: hasText(lb.tagline),
+  };
+  const items = READINESS_CHIPS.map(([key, label]) => ({ key, label, ready: Boolean(ready[key]) }));
+  const missing = items.filter((i) => !i.ready).map((i) => i.label);
+  return { items, done: items.length - missing.length, total: items.length, missing };
+}
+
 // ── The sheet ──
 
 const firstImage = (lb, spot) => lb.images?.[spot]?.[0] || null;
@@ -329,7 +373,7 @@ async function buildStyleSheet(models, episodeId) {
   const stored = await models.EpisodeLookbook.findOne({ where: { episode_id: ep.id }, attributes: ['sheet_inputs_hash'] });
   const approvedHash = stored ? stored.sheet_inputs_hash : null;
   sheet.stale = lb.sheet_status === 'approved' && Boolean(approvedHash) && approvedHash !== hash;
-  sheet.readiness = lb.readiness;
+  sheet.readiness = styleReadiness(lb, sheet);
   sheet.cost_usd = 0;
   return sheet;
 }
@@ -345,6 +389,24 @@ async function approveStyleSheet(models, episodeId, user) {
   return buildStyleSheet(models, episodeId);
 }
 
+/**
+ * One export of an approved sheet, drawn on the server (Task #2877): refused
+ * while the sheet is a Draft, and while it is out of date (the event or the
+ * look changed since it was approved; Evoni, 2026-10-10).
+ */
+async function exportStyleSheet(models, episodeId, size) {
+  const { EXPORTS, renderExport } = require('./styleSheetRenderService');
+  if (!Object.prototype.hasOwnProperty.call(EXPORTS, size)) {
+    throw new LookbookError(`size is one of: ${Object.keys(EXPORTS).join(', ')}.`, 400, 'UNKNOWN_SIZE');
+  }
+  const sheet = await buildStyleSheet(models, episodeId);
+  if (sheet.status !== 'approved') throw new LookbookError('Approve the style sheet before exporting it.', 409, 'SHEET_NOT_APPROVED');
+  if (sheet.stale) throw new LookbookError('The event or the look changed since approval; approve the style sheet again before exporting it.', 409, 'SHEET_OUT_OF_DATE');
+  const out = await renderExport(sheet, size);
+  const n = sheet.episode?.number != null ? String(sheet.episode.number).padStart(2, '0') : 'episode';
+  return { ...out, filename: `style-sheet-episode-${n}-${size}.${out.ext}` };
+}
+
 /** Reopen an approved sheet: back to Draft, so the Lookbook can change. */
 async function reopenStyleSheet(models, episodeId) {
   const { sequelize } = models;
@@ -355,4 +417,4 @@ async function reopenStyleSheet(models, episodeId) {
   return buildStyleSheet(models, episodeId);
 }
 
-module.exports = { COLUMNS, buildStyleSheet, approveStyleSheet, reopenStyleSheet, inlineImage, isBag };
+module.exports = { COLUMNS, READINESS_CHIPS, styleReadiness, buildStyleSheet, approveStyleSheet, reopenStyleSheet, exportStyleSheet, inlineImage, isBag };

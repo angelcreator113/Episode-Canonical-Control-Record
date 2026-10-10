@@ -64,10 +64,18 @@ async function ensureLookbook(models, ep) {
   }
 }
 
-function assertDraft(lookbook) {
-  if (lookbook.sheet_status === 'approved') {
-    throw new LookbookError('The style sheet is approved; reopen it to change the Lookbook.', 409, 'SHEET_APPROVED');
-  }
+/**
+ * Editing an approved style sheet returns it to Draft (Task #2877): the
+ * edit goes through, and the sheet must be approved again before it can be
+ * exported. (Before, an approved sheet refused every edit until Reopen.)
+ */
+async function returnToDraft(models, lookbook) {
+  if (lookbook.sheet_status !== 'approved') return;
+  await models.EpisodeLookbook.update(
+    { sheet_status: 'draft', approved_at: null, approved_by: null, sheet_inputs_hash: null },
+    { where: { id: lookbook.id, episode_id: lookbook.episode_id } });
+  lookbook.sheet_status = 'draft';
+  lookbook.approved_at = null;
 }
 
 const imageView = (img) => ({
@@ -223,7 +231,7 @@ async function setVenueImage(models, episodeId, { source, ref_id: refId, in_look
   if (!VENUE_SOURCES.includes(source)) throw new LookbookError(`source is one of: ${VENUE_SOURCES.join(', ')}.`);
   if (typeof inLookbook !== 'boolean') throw new LookbookError('in_lookbook is true or false.');
   const lookbook = await ensureLookbook(models, ep);
-  assertDraft(lookbook);
+  await returnToDraft(models, lookbook);
   const sources = await lookSources(models, ep);
   const opt = sources.venue.find((o) => o.source === source && o.ref_id === refId);
   if (!opt) throw new LookbookError("That image is not one of this episode's venue images.", 404, 'VENUE_IMAGE_NOT_FOUND');
@@ -301,7 +309,7 @@ async function updateLookbook(models, episodeId, body) {
   const ep = await loadLiveEpisode(models, episodeId);
   const fields = cleanFields(body);
   const lookbook = await ensureLookbook(models, ep);
-  assertDraft(lookbook);
+  await returnToDraft(models, lookbook);
   if (Object.keys(fields).length) {
     await models.EpisodeLookbook.update(fields, { where: { id: lookbook.id, episode_id: ep.id } });
   }
@@ -362,7 +370,7 @@ async function addImages(models, episodeId, files = [], { category } = {}) {
     if (!UPLOAD_TYPES[f.mimetype]) throw new LookbookError('Photos must be PNG, JPEG or WebP.', 400, 'INVALID_TYPE');
   }
   const lookbook = await ensureLookbook(models, ep);
-  assertDraft(lookbook);
+  await returnToDraft(models, lookbook);
   if (cat === 'inspo') await assertInspoRoom(models, lookbook, files.length);
 
   // Upload first; the rows are written together once every file is stored.
@@ -406,7 +414,7 @@ async function findOwnImage(models, ep, imageId) {
 async function updateImage(models, episodeId, imageId, body = {}) {
   const ep = await loadLiveEpisode(models, episodeId);
   const lookbook = await ensureLookbook(models, ep);
-  assertDraft(lookbook);
+  await returnToDraft(models, lookbook);
   const img = await findOwnImage(models, ep, imageId);
   const changes = {};
   if ('category' in body) changes.category = cleanCategory(body.category, img.category);
@@ -435,7 +443,7 @@ async function updateImage(models, episodeId, imageId, body = {}) {
 async function deleteImage(models, episodeId, imageId) {
   const ep = await loadLiveEpisode(models, episodeId);
   const lookbook = await ensureLookbook(models, ep);
-  assertDraft(lookbook);
+  await returnToDraft(models, lookbook);
   const img = await findOwnImage(models, ep, imageId);
   await models.EpisodeLookbookImage.destroy({ where: { id: img.id, episode_id: ep.id } });
   return { deleted: img.id, lookbook: await getLookbook(models, episodeId) };

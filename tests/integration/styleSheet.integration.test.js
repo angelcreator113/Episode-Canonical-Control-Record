@@ -153,7 +153,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(s.look.front).toBeNull();
   });
 
-  it('Approve saves the status, who and when; the Lookbook is then read-only; Reopen returns it to Draft', async () => {
+  it('Approve saves the status, who and when; an edit returns it to Draft; Reopen returns it to Draft', async () => {
     const ids = await seedEpisodeOne();
     const approved = await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`));
     expect(approved.status).toBe(200);
@@ -165,13 +165,59 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(row.approved_at).not.toBeNull();
     expect(row.sheet_inputs_hash).toHaveLength(64);
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(409);
-    expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'x' })).status).toBe(409);
     // The canon changes under it: the approval is marked out of date.
     await run("UPDATE world_events SET dress_code = 'black tie' WHERE id = :event", ids);
     expect((await auth(request(app).get(sheetUrl(ids.ep)))).body.data.stale).toBe(true);
     const reopened = await auth(request(app).post(`${sheetUrl(ids.ep)}/reopen`));
     expect(reopened.body.data.status).toBe('draft');
     expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'x' })).status).toBe(200);
+    // Approved again, then edited: the edit goes through and the sheet is a Draft again (Task #2877).
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'y' })).status).toBe(200);
+    expect((await auth(request(app).get(sheetUrl(ids.ep)))).body.data.status).toBe('draft');
+  });
+
+  it('readiness: the 12 chips, computed on the server (Task #2877)', async () => {
+    const ids = await seedEpisodeOne();
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.readiness.total).toBe(12);
+    expect(s.readiness.items.map((i) => i.key)).toEqual(['front', 'side', 'back', 'hero', 'hair', 'nails', 'beauty', 'venue', 'inspo', 'wardrobe', 'palette', 'tagline']);
+    // Body is still needed on Episode 1, so Wardrobe is not ready.
+    expect(s.readiness.items.find((i) => i.key === 'wardrobe').ready).toBe(false);
+    expect(s.readiness.done).toBe(s.readiness.items.filter((i) => i.ready).length);
+  });
+
+  it('exports: refused while Draft and while out of date; each size at its dimensions once approved (Task #2877)', async () => {
+    const ids = await seedEpisodeOne();
+    const exp = (size) => auth(request(app).get(`${sheetUrl(ids.ep)}/export/${size}`)).buffer(true).parse((res, cb) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    expect((await request(app).get(`${sheetUrl(ids.ep)}/export/sheet`)).status).toBe(401);
+    let res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/sheet`));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/poster`));
+    expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_SIZE']);
+
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    const want = { sheet: [1024, 1536], pin: [1000, 1500], story: [1080, 1920], post: [1080, 1350] };
+    for (const [size, [w, h]] of Object.entries(want)) {
+      res = await exp(size);
+      expect([size, res.status, res.headers['content-type']]).toEqual([size, 200, 'image/png']);
+      expect(res.headers['content-disposition']).toBe(`attachment; filename="style-sheet-episode-01-${size}.png"`);
+      const meta = await sharp(res.body).metadata();
+      expect([size, meta.width, meta.height]).toEqual([size, w, h]);
+    }
+    res = await exp('look');
+    const look = await sharp(res.body).metadata();
+    expect(look.height).toBeGreaterThan(look.width);
+    res = await exp('pdf');
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.body.slice(0, 5).toString()).toBe('%PDF-');
+
+    // Out of date after approval: refused until approved again.
+    await run("UPDATE world_events SET dress_code = 'black tie' WHERE id = :event", ids);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/pin`));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_OUT_OF_DATE']);
   });
 
   it('an unknown episode is 404', async () => {

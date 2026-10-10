@@ -418,8 +418,8 @@ export async function loadProductionChecks(episode, showId) {
       results.overlays_placed = false;
     }
 
-    // ── Check the Style Page card: ready x of 12 (the Style Page's own rule,
-    //    lib/styleReadiness), and the style sheet's status ──
+    // ── Check the Style Page card: ready x of 12 (the server's rule, read
+    //    through lib/styleReadiness), and the style sheet's status ──
     try {
       const [lbRes, sheetRes] = await Promise.all([
         api.get(`/api/v1/episodes/${episode.id}/lookbook`),
@@ -430,16 +430,7 @@ export async function loadProductionChecks(episode, showId) {
       ]);
       const lookbook = lbRes?.data?.data || {};
       const sheet = sheetRes?.data?.data || null;
-      let palette = sheet?.palette || null;
-      if (!palette && sheet?.palette_sources?.length) {
-        try {
-          const { extractPalette } = await import('../../lib/stylePalette');
-          palette = await extractPalette(sheet.palette_sources);
-        } catch (err) {
-          console.error('[Checklist] palette could not be taken from the pieces:', err.message);
-        }
-      }
-      const { done, total, missing } = styleReadiness({ lookbook, sheet, palette });
+      const { done, total, missing } = styleReadiness({ sheet });
       results.lookbook_ready = done >= total;
       if (!results.lookbook_ready) checkNotes.lookbook_ready = `Style sheet ready ${done} of ${total}${missing.length ? ` · missing: ${missing.join(', ')}` : ''}`;
       results.style_sheet_approved = lookbook.sheet_status === 'approved';

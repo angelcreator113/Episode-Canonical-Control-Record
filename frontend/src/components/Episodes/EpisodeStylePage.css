@@ -175,6 +175,13 @@
 .esp2-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
 .esp2-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+/* Share & export: one download per size, enabled once approved. */
+.esp2-export { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); }
+.esp2-exports { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.esp2-export-btn { width: 100%; justify-content: flex-start; text-align: left; }
+.esp2-export-text { display: flex; flex-direction: column; gap: 2px; }
+.esp2-export-detail { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
 @media (max-width: 900px) {
   .esp2-layout { grid-template-columns: minmax(0, 1fr); }
   .esp2-panel { position: static; }

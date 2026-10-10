@@ -228,19 +228,24 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     ]) expect((await auth(request(app).put(base(ids.ep))).send(bad)).status).toBe(400);
   });
 
-  it('while the style sheet is approved the Lookbook is read-only (409)', async () => {
+  // Task #2877: editing an approved sheet goes through and returns it to Draft.
+  it('editing while the style sheet is approved returns it to Draft', async () => {
     const ids = await seed();
     const up = await upload(ids.ep, { category: 'skin' });
-    await run("UPDATE episode_lookbooks SET sheet_status = 'approved', approved_at = NOW() WHERE episode_id = :ep", ids);
     const id = up.body.data.images[0].id;
-    const results = [
-      await auth(request(app).put(base(ids.ep))).send({ tagline: 'new' }),
-      await upload(ids.ep),
-      await auth(request(app).patch(`${base(ids.ep)}/images/${id}`)).send({ category: 'hero' }),
-      await auth(request(app).delete(`${base(ids.ep)}/images/${id}`)),
-    ];
-    expect(results.map((r) => [r.status, r.body.code])).toEqual(Array(4).fill([409, 'SHEET_APPROVED']));
-    expect((await auth(request(app).get(base(ids.ep)))).status).toBe(200);
+    const approve = () => run("UPDATE episode_lookbooks SET sheet_status = 'approved', approved_at = NOW(), sheet_inputs_hash = :h WHERE episode_id = :ep", { ...ids, h: 'x'.repeat(64) });
+    const status = async () => (await run('SELECT sheet_status, approved_at, sheet_inputs_hash FROM episode_lookbooks WHERE episode_id = :ep', ids))[0][0];
+    for (const edit of [
+      () => auth(request(app).put(base(ids.ep))).send({ tagline: 'new' }),
+      () => upload(ids.ep),
+      () => auth(request(app).patch(`${base(ids.ep)}/images/${id}`)).send({ category: 'hero' }),
+      () => auth(request(app).delete(`${base(ids.ep)}/images/${id}`)),
+    ]) {
+      await approve();
+      const res = await edit();
+      expect(res.status).toBe(res.req.method === 'POST' ? 201 : 200);
+      expect(await status()).toEqual({ sheet_status: 'draft', approved_at: null, sheet_inputs_hash: null });
+    }
   });
 
   // ── Venue pre-fill (Task #2813) ──
