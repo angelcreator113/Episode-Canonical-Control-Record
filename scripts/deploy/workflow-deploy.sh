@@ -14,7 +14,8 @@
 #   deploy  <sha>  back up frontend/dist, fast-forward to <sha>, vite build
 #   migrate <sha>  if files are pending: sequelize-cli db:migrate with the
 #                  credential in ~/.episode-migrate.env, then re-check
-#   restart <sha>  pm2 restart the API, /health, then the worker
+#   restart <sha>  pm2 restart the API, /health, then the worker only if it
+#                  was online before (a stopped worker stays stopped, #2861)
 #
 # It prints no .env value, no credential, no host or IP (redact() below),
 # never runs `set -x`, `pm2 describe`, `pm2 env` or an unfiltered
@@ -113,6 +114,15 @@ let s = ""; process.stdin.on("data", (d) => { s += d; }).on("end", () => {
   if (!p || !p.pm2_env) { console.log("missing"); return; }
   console.log(p.pm2_env.status + " restarts=" + p.pm2_env.restart_time);
 });' "$1"
+}
+
+# The status word alone (online, stopped, errored, missing, ...), spaces as
+# dashes, for the WORKER_BEFORE / WORKER_AFTER lines the workflow reads.
+pm2_status() {
+  local s
+  s="$(pm2_state "$1")"
+  s="${s%% restarts=*}"
+  printf '%s' "${s// /-}"
 }
 
 phase_plan() {
@@ -260,7 +270,10 @@ phase_migrate() {
 
 phase_restart() {
   require_at_target
+  local worker_before
+  worker_before="$(pm2_status "$WORKER_APP")"
   echo "Before: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP")"
+  echo "WORKER_BEFORE=$worker_before"
   if ! pm2 restart "$API_APP" >/dev/null 2>&1; then
     die "pm2 restart $API_APP failed." "The tree and the database are already at the new version."
   fi
@@ -282,17 +295,28 @@ phase_restart() {
   fi
   echo "RESTART_HEALTH=$(printf '%s' "$body" | redact)"
 
-  if ! pm2 restart "$WORKER_APP" >/dev/null 2>&1; then
-    die "pm2 restart $WORKER_APP failed (the API is restarted and healthy)."
+  # Only a worker that was running is restarted; a stopped (or missing) one is
+  # left exactly as it was, so a deploy never starts what Evoni switched off.
+  if [ "$worker_before" = "online" ]; then
+    if ! pm2 restart "$WORKER_APP" >/dev/null 2>&1; then
+      echo "WORKER_AFTER=$(pm2_status "$WORKER_APP")"
+      die "pm2 restart $WORKER_APP failed (the API is restarted and healthy)."
+    fi
+    sleep 5
+    local worker
+    worker="$(pm2_state "$WORKER_APP")"
+    case "$worker" in
+      online*) ;;
+      *) echo "WORKER_AFTER=$(pm2_status "$WORKER_APP")"
+         die "$WORKER_APP is not online after its restart ($worker). The API is restarted and healthy." ;;
+    esac
+    echo "WORKER_ACTION=restarted"
+  else
+    echo "WORKER_ACTION=left-$worker_before"
+    echo "$WORKER_APP was $worker_before before the deploy, so it was left as it was (not started)."
   fi
-  sleep 5
-  local worker
-  worker="$(pm2_state "$WORKER_APP")"
-  case "$worker" in
-    online*) ;;
-    *) die "$WORKER_APP is not online after its restart ($worker). The API is restarted and healthy." ;;
-  esac
-  echo "After: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $worker"
+  echo "After: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP")"
+  echo "WORKER_AFTER=$(pm2_status "$WORKER_APP")"
   echo "RESTART_HEAD=$(git rev-parse HEAD)"
   echo "RESTART_OK=1"
 }
