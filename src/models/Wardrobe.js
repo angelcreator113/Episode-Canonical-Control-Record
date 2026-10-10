@@ -137,6 +137,55 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
+      // Real-world source (Task #2872): what the piece is and where it was
+      // bought in the real world. Nothing in-world reads these; brand, price,
+      // purchase_link, website, color and size above stay the LalaVerse values.
+      real_brand: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      real_retailer: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      real_product_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      real_color: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      real_size: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      real_price_paid: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      real_list_price: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      real_product_url: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      affiliate_url: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      real_order_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      real_source: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Where the real-world record came from: gmail, amazon_export or manual',
+      },
+
       // Metadata
       color: {
         type: DataTypes.STRING(100),
