@@ -6,7 +6,12 @@ Source: Evoni's design canvas and the "Prime Studios Public Website Redesign Blu
 
 ### Purpose and rules
 - Public, logged-out page that says what Prime Studios makes. Positioning: Prime Studios is the creator, Styling Adventures with Lala is the flagship, LalaVerse is the destination.
-- It is static. It makes no calls to the app's API and shows no private production data. Images are exported files in the frontend's public assets, not fetched from the media service.
+- It shows no private production data. Bundled images in the frontend's public assets are its defaults. **Amended 2026-10-10 (was "It is static. It makes no calls to the app's API"):** the page now makes one read, `GET /api/v1/public/site-content`.
+  - That route needs no sign-in, takes no writes and is rate-limited.
+  - It returns only the Website slots Evoni has published, field by field (`websiteSlotService.publicContent`).
+  - The media it names lives in the public site location (`SITE_PUBLIC_*`, served through the CDN once it is set up), never the studio's media service.
+  - With nothing published, or if the read fails, the page keeps its bundled defaults.
+  - Contract: `docs/reads/2026-10-10-website-content-read.md` §1 and §4. Built in #2833 (endpoint and admin) and #2838 (the page). Go-live steps: `docs/WEBSITE_GO_LIVE.md`.
 - "Enter Studio" goes to the existing login route. Do not change authentication.
 - Never present an episode as published unless it is. Episode 1 is a draft, so Featured Production ships in its fallback state.
 - Do not reveal author-only canon (for example, who JustAWoman is to Lala).
@@ -20,15 +25,23 @@ Source: Evoni's design canvas and the "Prime Studios Public Website Redesign Blu
 | orchid | #AD79B6 | accents and small labels only (white text on it fails WCAG AA) |
 | ice | #B7DFEA | cool contrast |
 | champagne | #D6B77C | premium details, closing button |
-| plum | #30253D | headings, dark sections, primary buttons |
+| plum | #30253D | headings, body text, primary buttons |
+| lavender | #E4DAF1 | feature sections: hero, Featured Production |
+| lavender deep | #CFBFE6 | closing section and footer; the Featured Production frame |
 Display font: Cormorant Garamond (fallback Lora, Georgia). Body and buttons: DM Sans (fallback system sans). Primary buttons are plum with ivory text; secondary buttons are ivory with a plum outline.
+
+**Amended 2026-10-10 (lavender), Evoni's request:** the feature sections that were plum with ivory text are soft lavender with plum text. The hero and Featured Production use lavender; the closing section and footer use lavender deep. Plum stays the colour of headings, text and primary buttons. Contrast holds WCAG AA:
+- plum on lavender is 10.70:1
+- plum on lavender deep is 8.40:1
+
+Shipped in #2826 (`site-tokens.css`: `--site-lavender`, `--site-lavender-deep`, and the `--site-feature-*` roles; the pairs are checked in `siteTokens.test.js`).
 
 ### Sections (desktop 1440 canvas, 1200px content width)
 1. Sticky nav, 76px: "Prime Studios" wordmark; Our World, Productions, Collaborate; outlined "Enter Studio" button on the right.
-2. Hero, about 760px: the LalaVerse map artwork full-bleed, with a plum gradient from the left so text reads. Text is real text, never baked into the image. Eyebrow "AN ORIGINAL ENTERTAINMENT UNIVERSE"; heading "Where Fashion Becomes a World."; the blueprint's hero paragraph; buttons "Explore Our Universe" (ivory) and "Watch Our Vision" (outline). Until a vision video exists, "Watch Our Vision" scrolls to Featured Production.
+2. Hero, about 760px: the LalaVerse map artwork full-bleed, with a lavender wash from the left so the plum text reads (was a plum gradient; amended 2026-10-10). Text is real text, never baked into the image. Eyebrow "AN ORIGINAL ENTERTAINMENT UNIVERSE"; heading "Where Fashion Becomes a World."; the blueprint's hero paragraph; buttons "Explore Our Universe" (ivory) and "Watch Our Vision" (outline). Until a vision video exists, "Watch Our Vision" scrolls to Featured Production.
 3. Flagship: two columns; left a 4:5 portrait slot for approved Lala art [placeholder until supplied]; right eyebrow "Our flagship production", heading "Styling Adventures with Lala", italic tagline, the blueprint paragraph, button "Discover the Show".
 4. World pillars on white: heading "Fashion is just the beginning."; three cards with a 4:3 image and text: Fashion With Meaning (Lala's closet scene set image), Characters With Lives ([placeholder] approved character art), Places Worth Exploring (Lala's home scene set image).
-5. Featured Production on plum: 16:9 frame showing the map dimmed with "First look coming soon" and a line that a 30-second clip or a YouTube video appears there once it is published; heading "Step Inside the Story."; "Watch Featured Video" disabled and labelled soon; "Explore the Production" outline button. Once published, the featured video is EITHER a YouTube link OR an uploaded MP4 clip of 30 seconds max. YouTube uses the privacy-enhanced embed behind a thumbnail-and-play facade that loads nothing from YouTube until tapped; captions come from YouTube. Uploaded clips need a poster and, if anyone speaks, captions; respect reduced motion. The Privacy page must mention the YouTube embed.
+5. Featured Production on lavender (was plum; amended 2026-10-10): 16:9 frame showing the map dimmed with "First look coming soon" and a line that a 30-second clip or a YouTube video appears there once it is published; heading "Step Inside the Story."; "Watch Featured Video" disabled and labelled soon; "Explore the Production" outline button. Once published, the featured video is EITHER a YouTube link OR an uploaded MP4 clip of 30 seconds max. YouTube uses the privacy-enhanced embed behind a thumbnail-and-play facade that loads nothing from YouTube until tapped; captions come from YouTube. Uploaded clips need a poster and, if anyone speaks, captions; respect reduced motion. The Privacy page must mention the YouTube embed.
 6. Inside Prime Studios: eyebrow "Inside Prime Studios"; heading "One World. Many Ways In."; line "We aren't simply producing individual episodes. We're building a world where stories can continue, characters can grow, and audiences can discover something new."; four cards, each a 4:5 image or short clip plus heading and line:
    a. A World of Its Own — "LaLaVerse has five cities, a social network its characters really post on, and people who remember what happened last time. Every episode adds to it." (map art)
    b. The Book Series — "Before Lala tells the story in novels, so you can go deeper than the screen allows." (cover art; spoiler-free)
@@ -36,7 +49,7 @@ Display font: Cormorant Garamond (fallback Lora, Georgia). Body and buttons: DM 
    d. Fashion as Storytelling — "Every look is a choice that changes the story. Each episode gets its own style sheet." (closet image, or an approved style sheet later)
    Button "Discover the Studio". Titles are working titles and may change.
 7. Collaborate: heading "There's Room for Your Magic."; three cards (Creative Talent on blush, Brands & Partnerships on champagne tint, Production & Technology on ice) with blueprint copy; button "Explore Collaboration Opportunities".
-8. Closing and footer on plum: "Let's Create Something Unforgettable.", blueprint paragraph, champagne "Start a Conversation" button; footer line "Prime Studios — The Creative Home of LaLaVerse." with Privacy, Terms, Enter Studio.
+8. Closing and footer on lavender deep (was plum; amended 2026-10-10): "Let's Create Something Unforgettable.", blueprint paragraph, champagne "Start a Conversation" button; footer line "Prime Studios — The Creative Home of LaLaVerse." with Privacy, Terms, Enter Studio.
 All copy is the blueprint's final copy.
 
 ### Phone (design separately; check 320, 375, 430)

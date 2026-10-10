@@ -61,12 +61,19 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
       {/* Top row: logo and THE LOOK · Hero · episode, venue, details */}
       <div className="ss-top">
         <div className="ss-col ss-col-left">
-          <div className="ss-logo" aria-label="Styling Adventures with Lala">
-            <span className="ss-logo-styling">Styling</span>
-            <span className="ss-logo-adventures">Adventures</span>
-            <span className="ss-logo-with">with</span>
-            <span className="ss-logo-lala">LALA</span>
-          </div>
+          {sheet.logo ? (
+            // The show's logo from Show Settings, drawn as a background so
+            // the PNG keeps its proportions (html2canvas ignores object-fit).
+            <div className="ss-logo ss-logo-image" role="img" aria-label="Styling Adventures with Lala"
+              style={{ backgroundImage: `url("${sheet.logo}")` }} data-testid="ss-logo-image" />
+          ) : (
+            <div className="ss-logo" aria-label="Styling Adventures with Lala">
+              <span className="ss-logo-styling">Styling</span>
+              <span className="ss-logo-adventures">Adventures</span>
+              <span className="ss-logo-with">with</span>
+              <span className="ss-logo-lala">LALA</span>
+            </div>
+          )}
           <div className="ss-pill">THE LOOK</div>
           <div className="ss-look">
             {['front', 'side', 'back'].map((k) => (

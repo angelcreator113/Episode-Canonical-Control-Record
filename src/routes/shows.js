@@ -503,6 +503,61 @@ router.put('/:id/lala-home', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET    /api/v1/shows/:id/logo
+ * POST   /api/v1/shows/:id/logo   multipart, field "image"
+ * DELETE /api/v1/shows/:id/logo
+ * The show's logo, a show setting stored on Show.metadata.logo
+ * (showLogoService). The POST and DELETE keep every other metadata key.
+ */
+const logoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image');
+const oneLogo = (req, res, next) => logoUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('POST /shows/:id/logo upload rejected:', err.message);
+  return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The logo is 5 MB at most.' : err.message });
+});
+
+router.get('/:id/logo', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readLogo } = require('../services/showLogoService');
+    return res.json({ success: true, logo: readLogo(show.metadata) });
+  } catch (err) {
+    console.error('GET /shows/:id/logo error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/logo', requireAuth, oneLogo, async (req, res) => {
+  const { storeLogo, ShowLogoError } = require('../services/showLogoService');
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const logo = await storeLogo(show.id, req.file);
+    await show.update({ metadata: { ...(show.metadata || {}), logo } });
+    return res.json({ success: true, logo });
+  } catch (err) {
+    console.error('POST /shows/:id/logo error:', err);
+    if (err instanceof ShowLogoError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id/logo', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const rest = { ...(show.metadata || {}) };
+    delete rest.logo;
+    await show.update({ metadata: rest });
+    return res.json({ success: true, logo: null });
+  } catch (err) {
+    console.error('DELETE /shows/:id/logo error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/scene-defaults
  * PUT /api/v1/shows/:id/scene-defaults   Body: { home_set_id?, closet_set_id? }
  * Lala's home set and closet set, saved defaults for the Episode Locations

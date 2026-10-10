@@ -60,18 +60,31 @@ process.stdin.on('end', () => {
       ? `${pre}${line}<<${tag}\n${tag}` : m;
   });
   const POS = '(?:^|[\\n;&|(`]\\s*|\\$\\(\\s*)';
-  const PREFIX = '(?:(?:sudo|nohup|time|nice|setsid|command|builtin)\\s+|env(?:\\s+-\\S+)*\\s+|timeout\\s+\\S+\\s+|[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*';
-  const SYNTAX_ONLY = '-n\\s+[^\\s;&|]*deploy-prod[^\\s;&|]*\\s*(?:$|[;&|\\n])';
-  const deployProdExec = [
-    new RegExp(`${POS}${PREFIX}(?:(?:bash|sh|zsh|dash|ksh)\\s+(?!${SYNTAX_ONLY})|(?:exec|source|\\.)\\s+)[^\\n;&|]*deploy-prod`),
-    // The command word itself must not be an assignment: `S=scripts/deploy-prod.sh`
-    // only names the path (Task #2166); `S=x ./scripts/deploy-prod.sh` still runs it.
-    new RegExp(`${POS}${PREFIX}(?![A-Za-z_][A-Za-z0-9_]*=)[^\\s;&|()<>]*deploy-prod`),
-    /deploy-prod[^\n]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|dash|ksh)\b/,
+  // sudo may carry options with or without a value (`sudo -u ubuntu -H bash …`, Task #2845).
+  const PREFIX = '(?:sudo(?:\\s+-[A-Za-z]+(?:\\s+(?!-)[^\\s;&|]+)?)*\\s+|(?:nohup|time|nice|setsid|command|builtin)\\s+|env(?:\\s+-\\S+)*\\s+|timeout\\s+\\S+\\s+|[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*';
+  // The three execution forms above, for a script whose path matches `name`.
+  const execForms = (name) => {
+    const syntaxOnly = `-n\\s+[^\\s;&|]*${name}[^\\s;&|]*\\s*(?:$|[;&|\\n])`;
+    return [
+      new RegExp(`${POS}${PREFIX}(?:(?:bash|sh|zsh|dash|ksh)\\s+(?!${syntaxOnly})|(?:exec|source|\\.)\\s+)[^\\n;&|]*${name}`),
+      // The command word itself must not be an assignment: `S=scripts/deploy-prod.sh`
+      // only names the path (Task #2166); `S=x ./scripts/deploy-prod.sh` still runs it.
+      new RegExp(`${POS}${PREFIX}(?![A-Za-z_][A-Za-z0-9_]*=)[^\\s;&|()<>]*${name}`),
+      new RegExp(`${name}[^\\n]*\\|\\s*(?:sudo\\s+)?(?:bash|sh|zsh|dash|ksh)\\b`),
+    ];
+  };
+  // Task #2845: the Deploy workflow's scripts, scripts/deploy/workflow-deploy.sh
+  // (on the box) and scripts/deploy/ssm-phase.sh (the runner side, which calls
+  // aws ssm), get the same rule. Only GitHub Actions runs them.
+  const guardedScripts = [
+    [execForms('deploy-prod'), "executing scripts/deploy-prod.sh, Evoni's production deploy. Agent sessions never run it; reading, editing and git commands on it are fine."],
+    [execForms('(?:workflow-deploy|ssm-phase)'), 'executing scripts/deploy/workflow-deploy.sh or scripts/deploy/ssm-phase.sh, the Deploy workflow\'s scripts. Only GitHub Actions runs them, after Evoni approves a run; reading, editing, linting and git commands on them are fine.'],
   ];
-  if (deployProdExec.some((re) => re.test(scanExec))) {
-    process.stderr.write(`[guard] BLOCKED: executing scripts/deploy-prod.sh, Evoni's production deploy. Agent sessions never run it; reading, editing and git commands on it are fine.\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
-    process.exit(2);
+  for (const [res, why] of guardedScripts) {
+    if (res.some((re) => re.test(scanExec))) {
+      process.stderr.write(`[guard] BLOCKED: ${why}\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
+      process.exit(2);
+    }
   }
   for (const [re, why] of rules) {
     if (re.test(scan)) {

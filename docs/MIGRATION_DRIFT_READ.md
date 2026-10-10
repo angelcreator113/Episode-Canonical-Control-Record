@@ -145,6 +145,8 @@ The attested error, "must be owner of table world_events", names a table that on
   ```
 
   That line **masks** a failure, and a PM2 restart follows.
+
+  *Since PR #2843 (2026-10-10):* `deploy-production.yml` and `.github/scripts/deploy-production.sh` were removed, and the Deploy workflow (`.github/workflows/deploy.yml`) replaces them. The text above describes them as they were at this read's basis.
 - **`validate.yml`** runs migrations only against CI's own Postgres.
 
 **What deploys since 08-07 reported** (MEASURED):
