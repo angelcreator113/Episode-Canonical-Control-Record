@@ -553,6 +553,18 @@ router.post('/:id/lookbook/images', validateUUIDParam('id'), requireAuth, (req, 
   }
 });
 
+// A pre-filled venue image (the event's look, set base or an angle) in or
+// out of the Lookbook: { source, ref_id, in_lookbook } (Task #2813).
+router.put('/:id/lookbook/venue', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setVenueImage } = require('../services/episodeLookbookService');
+    return res.json({ success: true, data: await setVenueImage(models, req.params.id, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PUT /:id/lookbook/venue');
+  }
+});
+
 router.patch('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validateUUIDParam('imageId'), requireAuth, async (req, res) => {
   try {
     const models = require('../models');

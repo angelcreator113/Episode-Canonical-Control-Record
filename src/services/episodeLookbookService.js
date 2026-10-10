@@ -11,6 +11,12 @@
  * carry this episode's id (the route's :id), so one episode can never touch
  * another's photos. While the style sheet is approved, the Lookbook is
  * read-only (409 SHEET_APPROVED); reopening arrives with the sheet (#2814).
+ *
+ * Venue is pre-filled from the episode's event (its anchor, as the Wardrobe
+ * and Scenes read it): the event's dressed look on its scene set, the set's
+ * base and its angles. Nothing is copied; a pre-filled image becomes a row
+ * only when she toggles it into the Lookbook (#2813). The two automatic
+ * textures come from the saved look's piece images.
  */
 
 const crypto = require('crypto');
@@ -126,10 +132,119 @@ async function liveImages(models, lookbook) {
   });
 }
 
+const VENUE_SOURCES = Object.freeze(['scene_set_look', 'scene_set_base', 'scene_angle']);
+const refColumn = (source) => ({ scene_set_look: 'scene_set_look_id', scene_set_base: 'scene_set_id', scene_angle: 'scene_angle_id' }[source]);
+
+/**
+ * What the episode's event offers the Lookbook: the venue images (event
+ * look, set base, angles) and the pieces the automatic textures are cut
+ * from. Read-only; a missing event or set gives empty lists.
+ */
+async function lookSources(models, ep) {
+  const { sequelize } = models;
+  const out = { event: null, scene_set: null, venue: [], texture_pieces: [] };
+  let event = null;
+  try {
+    const { listEpisodeEvents } = require('./episodeEventsService');
+    event = (await listEpisodeEvents(models, ep.id)).events[0] || null;
+  } catch (err) {
+    console.error('[Lookbook] reading the episode\'s event failed:', err.message);
+  }
+  if (event) out.event = { id: event.id, name: event.name || null };
+
+  const setId = event && event.scene_set_id;
+  if (setId) {
+    const [[set]] = await sequelize.query(
+      'SELECT id, name, base_still_url FROM scene_sets WHERE id = :setId AND deleted_at IS NULL',
+      { replacements: { setId } });
+    if (set) {
+      out.scene_set = { id: set.id, name: set.name };
+      const [[look]] = await sequelize.query(
+        `SELECT id, image_url FROM scene_set_looks
+          WHERE scene_set_id = :setId AND event_id = :eventId AND status = 'complete'
+            AND image_url IS NOT NULL AND deleted_at IS NULL`,
+        { replacements: { setId, eventId: event.id } });
+      if (look) out.venue.push({ source: 'scene_set_look', ref_id: look.id, label: 'Event look', image_url: look.image_url, scene_set_id: set.id });
+      if (set.base_still_url) out.venue.push({ source: 'scene_set_base', ref_id: set.id, label: 'Set base', image_url: set.base_still_url, scene_set_id: set.id });
+      const [angles] = await sequelize.query(
+        `SELECT id, angle_label, angle_name, COALESCE(enhanced_still_url, still_image_url) AS image_url
+           FROM scene_angles
+          WHERE scene_set_id = :setId AND deleted_at IS NULL
+            AND COALESCE(enhanced_still_url, still_image_url) IS NOT NULL
+          ORDER BY sort_order ASC, created_at ASC`,
+        { replacements: { setId } });
+      for (const a of angles) {
+        out.venue.push({ source: 'scene_angle', ref_id: a.id, label: a.angle_label || a.angle_name || 'Angle', image_url: a.image_url, scene_set_id: set.id });
+      }
+    }
+  }
+
+  try {
+    const { episodeLook } = require('./episodeLookCharges');
+    const look = await episodeLook(sequelize, { episodeId: ep.id, event, showId: ep.show_id || null });
+    out.texture_pieces = (look.pieces || []).filter((p) => p.image_url).slice(0, 2)
+      .map((p) => ({ id: p.id, name: p.name, image_url: p.image_url }));
+  } catch (err) {
+    console.error('[Lookbook] reading the saved look for textures failed:', err.message);
+  }
+  return out;
+}
+
+// Each pre-filled venue image with its stored row's state, if any.
+function venueView(sources, images) {
+  return sources.venue.map((opt) => {
+    const col = refColumn(opt.source);
+    const row = images.find((i) => i.source === opt.source && i[col] === opt.ref_id);
+    return { ...opt, image_id: row ? row.id : null, in_lookbook: row ? row.in_lookbook : false };
+  });
+}
+
 async function getLookbook(models, episodeId) {
   const ep = await loadLiveEpisode(models, episodeId);
   const lookbook = await ensureLookbook(models, ep);
-  return lookbookView(lookbook, await liveImages(models, lookbook));
+  const images = await liveImages(models, lookbook);
+  const sources = await lookSources(models, ep);
+  return {
+    ...lookbookView(lookbook, images),
+    event: sources.event,
+    scene_set: sources.scene_set,
+    venue_options: venueView(sources, images),
+    texture_pieces: sources.texture_pieces,
+  };
+}
+
+/**
+ * Toggle a pre-filled venue image "In lookbook". The image must be one the
+ * episode's event offers right now (never another set's); its row is made
+ * on first toggle, pointing at the set, angle or look (nothing copied).
+ */
+async function setVenueImage(models, episodeId, { source, ref_id: refId, in_lookbook: inLookbook } = {}) {
+  const ep = await loadLiveEpisode(models, episodeId);
+  if (!VENUE_SOURCES.includes(source)) throw new LookbookError(`source is one of: ${VENUE_SOURCES.join(', ')}.`);
+  if (typeof inLookbook !== 'boolean') throw new LookbookError('in_lookbook is true or false.');
+  const lookbook = await ensureLookbook(models, ep);
+  assertDraft(lookbook);
+  const sources = await lookSources(models, ep);
+  const opt = sources.venue.find((o) => o.source === source && o.ref_id === refId);
+  if (!opt) throw new LookbookError("That image is not one of this episode's venue images.", 404, 'VENUE_IMAGE_NOT_FOUND');
+  const col = refColumn(source);
+  const { EpisodeLookbookImage } = models;
+  const existing = await EpisodeLookbookImage.findOne({ where: { lookbook_id: lookbook.id, episode_id: ep.id, source, [col]: refId } });
+  if (existing) {
+    await EpisodeLookbookImage.update({ in_lookbook: inLookbook, category: 'venue' }, { where: { id: existing.id, episode_id: ep.id } });
+  } else {
+    await EpisodeLookbookImage.create({
+      lookbook_id: lookbook.id,
+      episode_id: ep.id,
+      category: 'venue',
+      source,
+      image_url: opt.image_url,
+      scene_set_id: opt.scene_set_id,
+      [col]: refId,
+      in_lookbook: inLookbook,
+    });
+  }
+  return getLookbook(models, episodeId);
 }
 
 // ── Lookbook fields ──
@@ -338,6 +453,9 @@ module.exports = {
   cleanFields,
   getLookbook,
   updateLookbook,
+  setVenueImage,
+  lookSources,
+  VENUE_SOURCES,
   addImages,
   updateImage,
   deleteImage,

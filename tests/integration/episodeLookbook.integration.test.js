@@ -28,6 +28,7 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
   let token;
   const shows = [];
   const savedBuckets = {};
+  const sets = [];
 
   beforeAll(() => {
     // No bucket in tests: uploads are stored as data URLs (the uploadPng rule).
@@ -39,9 +40,14 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
 
   afterAll(async () => {
     for (const [k, v] of Object.entries(savedBuckets)) if (v !== undefined) process.env[k] = v;
+    for (const set of sets) {
+      await run('DELETE FROM scene_angles WHERE scene_set_id = :set', { set });
+      await run('DELETE FROM scene_sets WHERE id = :set', { set });
+    }
     for (const show of shows) {
       await run('DELETE FROM episode_lookbook_images WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
       await run('DELETE FROM episode_lookbooks WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
+      await run('DELETE FROM world_events WHERE show_id = :show', { show });
       await run('DELETE FROM episodes WHERE show_id = :show', { show });
       await run('DELETE FROM shows WHERE id = :show', { show });
     }
@@ -235,5 +241,59 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     ];
     expect(results.map((r) => [r.status, r.body.code])).toEqual(Array(4).fill([409, 'SHEET_APPROVED']));
     expect((await auth(request(app).get(base(ids.ep)))).status).toBe(200);
+  });
+
+  // ── Venue pre-fill (Task #2813) ──
+  async function seedVenue(ids, { otherSet = false } = {}) {
+    const set = uuid(); const other = uuid(); const angle = uuid(); const foreignAngle = uuid(); const event = uuid();
+    sets.push(set, other);
+    for (const [id, name] of [[set, 'Studio by Sable'], [other, 'Elsewhere']]) {
+      await run(`INSERT INTO scene_sets (id, name, scene_type, base_still_url, created_at, updated_at)
+                 VALUES (:id, :name, 'EVENT_LOCATION', :base, NOW(), NOW())`, { id, name, base: `https://cdn.example/${id}.jpg` });
+    }
+    await run(`INSERT INTO scene_angles (id, scene_set_id, angle_name, angle_label, still_image_url, sort_order, created_at, updated_at)
+               VALUES (:angle, :set, 'wide', 'Wide', 'https://cdn.example/wide.jpg', 1, NOW(), NOW()),
+                      (:foreign, :other, 'door', 'Door', 'https://cdn.example/door.jpg', 1, NOW(), NOW())`,
+      { angle, set, other, foreign: foreignAngle });
+    await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, scene_set_id, created_at, updated_at)
+               VALUES (:event, :show, 'Studio Session', 'used', :ep, :set, NOW(), NOW())`, { event, show: ids.show, ep: ids.ep, set: otherSet ? other : set });
+    return { set, other, angle, foreignAngle, event };
+  }
+
+  it("pre-fills Venue from the event's scene set; toggling makes a row that counts", async () => {
+    const ids = await seed();
+    const v = await seedVenue(ids);
+    const res = await auth(request(app).get(base(ids.ep)));
+    expect(res.body.data.event).toEqual({ id: v.event, name: 'Studio Session' });
+    expect(res.body.data.scene_set).toEqual({ id: v.set, name: 'Studio by Sable' });
+    expect(res.body.data.venue_options.map((o) => [o.source, o.ref_id, o.label, o.in_lookbook])).toEqual([
+      ['scene_set_base', v.set, 'Set base', false],
+      ['scene_angle', v.angle, 'Wide', false],
+    ]);
+    const on = await auth(request(app).put(`${base(ids.ep)}/venue`)).send({ source: 'scene_angle', ref_id: v.angle, in_lookbook: true });
+    expect(on.status).toBe(200);
+    const opt = on.body.data.venue_options.find((o) => o.ref_id === v.angle);
+    expect(opt.in_lookbook).toBe(true);
+    expect(on.body.data.images.venue.map((i) => [i.source, i.scene_angle_id, i.image_url])).toEqual([['scene_angle', v.angle, 'https://cdn.example/wide.jpg']]);
+    expect(on.body.data.readiness.missing).not.toContain('venue');
+    const off = await auth(request(app).put(`${base(ids.ep)}/venue`)).send({ source: 'scene_angle', ref_id: v.angle, in_lookbook: false });
+    expect(off.body.data.venue_options.find((o) => o.ref_id === v.angle).in_lookbook).toBe(false);
+    expect(off.body.data.images.venue).toHaveLength(1);
+    expect(off.body.data.readiness.missing).toContain('venue');
+  });
+
+  it("refuses a venue image the episode's event does not offer", async () => {
+    const ids = await seed();
+    const v = await seedVenue(ids);
+    const res = await auth(request(app).put(`${base(ids.ep)}/venue`)).send({ source: 'scene_angle', ref_id: v.foreignAngle, in_lookbook: true });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('VENUE_IMAGE_NOT_FOUND');
+    expect((await auth(request(app).put(`${base(ids.ep)}/venue`)).send({ source: 'wardrobe', ref_id: v.angle, in_lookbook: true })).status).toBe(400);
+  });
+
+  it('with no event the venue list is empty', async () => {
+    const ids = await seed();
+    const res = await auth(request(app).get(base(ids.ep)));
+    expect([res.body.data.event, res.body.data.scene_set, res.body.data.venue_options, res.body.data.texture_pieces]).toEqual([null, null, [], []]);
   });
 });
