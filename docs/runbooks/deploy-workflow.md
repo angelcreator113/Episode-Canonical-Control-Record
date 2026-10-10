@@ -22,11 +22,13 @@ It is triggered by every push to `main` (each merged PR), or by **Run workflow**
 | 6 | **Wait** until the snapshot is `available` (up to 60 min) | runner | Nothing on the box changed |
 | 7 | **Deploy**: back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, `vite build` | box | §4, row "Deploy" |
 | 8 | **Migrate**, only if files are pending: `NODE_ENV=production npx sequelize-cli db:migrate` as the migration user from `~/.episode-migrate.env`, then re-check (must be 0 pending) | box | §4, row "Migrate" |
-| 9 | **Restart**: `pm2 restart episode-api-prod-hotfix`; `localhost:3000/health` healthy with the database connected; then `pm2 restart episode-worker` (must be online); the box reports the target SHA | box | §4, row "Restart" |
+| 9 | **Restart**: `pm2 restart episode-api-prod-hotfix`; `localhost:3000/health` healthy with the database connected; then, **only if `episode-worker` was online before the restart**, `pm2 restart episode-worker` (must be online). A stopped or missing worker is left exactly as it was (#2861). The box reports the target SHA | box | §4, row "Restart" |
 | 10 | **Public health**: `HEALTH_URL` healthy with the database connected | runner | §4, row "Public health" |
-| 11 | **Summary** on the run page: commit, box before, snapshot, migrations run, results. On failure, the snapshot name and a pointer here | runner | — |
+| 11 | **Summary** on the run page: commit, box before, snapshot, migrations run, the worker's state before → after (restarted, or left stopped), results. On failure, the snapshot name and a pointer here | runner | — |
 
 It never rolls back by itself, and it never runs `npm ci`. It never reads or prints `.env`, a password, `pm2 describe`/`pm2 env`, or `/_diag/health`, and it never calls Cognito. Box steps run as `ubuntu` through the `PrimeStudios-Deploy` SSM document, which runs only `scripts/deploy/workflow-deploy.sh` taken from the commit being deployed.
+
+**The worker follows Evoni's choice.** A deploy never starts a worker she has stopped, and keeps restarting one that is running. To turn it on, she starts it herself on the box with `pm2 restart episode-worker` (this also starts a stopped process), and later deploys keep it running. To turn it off, she runs `pm2 stop episode-worker`, and later deploys leave it off. Either way, before a `pm2 save`, follow `DEVELOPMENT_WORKFLOW.md` §7.2. Deploy #21 started a worker that had been stopped since late September (`docs/reads/2026-10-10-deploy-21-verification.md` §3 U2), which is why this rule exists.
 
 **Re-running a stopped run** (Evoni: **Re-run jobs** on the run page) is safe. If the box is already at the commit, the plan says "resuming". The run takes a fresh snapshot, rebuilds, migrates anything still pending, and restarts.
 
@@ -235,7 +237,7 @@ Read the step's log: the on-box output says where it stopped and what had alread
 | Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run |
 | Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), or roll back the code (§6) |
 | Migrate | **The database may be partly migrated**; the API still runs the old code | Read the migration error. Usually fix forward: a new PR, merged, then a new run. If the data is damaged, restore from the snapshot (§5) |
-| Restart | New code, possibly unhealthy; the worker may not be restarted | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward |
+| Restart | New code, possibly unhealthy; a worker that was online may not be restarted (a stopped one is never started) | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward |
 | Public health | On-box `/health` was fine; the public URL is not | Check the load balancer and target group; the box itself is up |
 
 ---
@@ -247,7 +249,7 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 1. RDS → Snapshots → **Manual** → the run's `deploy-…` snapshot → **Actions → Restore snapshot**.
 2. Give it a new identifier, and use the same instance class, subnet group, security group and parameter group as the canon instance. Wait for **Available**.
 3. Point production at it, by either:
-   - **Swap names (keeps `DB_HOST`):** rename the current instance (for example to `<id>-broken-<date>`), wait, then rename the restored one to the original identifier. Its endpoint becomes the old one, so `.env` does not change. Then run `pm2 restart episode-api-prod-hotfix episode-worker` and check `/health`.
+   - **Swap names (keeps `DB_HOST`):** rename the current instance (for example to `<id>-broken-<date>`), wait, then rename the restored one to the original identifier. Its endpoint becomes the old one, so `.env` does not change. Then run `pm2 restart episode-api-prod-hotfix` (and `episode-worker` only if it is meant to be running, §1) and check `/health`.
    - **Or change `DB_HOST`** in the server `.env` to the restored endpoint, then `pm2 restart … --update-env` and `pm2 save` (`DEVELOPMENT_WORKFLOW.md` §7.2).
 4. Keep the old instance until the restored one is verified. The restored database has the ledger from before the migration. Roll the code back (§6) to match it, or the next run will migrate again.
 
@@ -259,7 +261,7 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 - **By hand, on the box** (Evoni), when the site must come back before a revert can be merged:
   1. `git reset --hard <Box before SHA from the run summary>`.
   2. `rm -rf frontend/dist && cp -a ~/dist-backup-<…>-<sha12> frontend/dist` (the `DEPLOY_BACKUP` path in the deploy step's log).
-  3. `pm2 restart episode-api-prod-hotfix episode-worker`, then check `/health`.
+  3. `pm2 restart episode-api-prod-hotfix` (and `episode-worker` only if it is meant to be running, §1), then check `/health`.
 
   The database stays migrated; down-migrations are never run automatically. `main` still has the bad commit, so the next run will deploy it again until it is reverted. The next run's plan also requires the box to be a fast-forward of the target, which it will be after a revert.
 
