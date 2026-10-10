@@ -220,6 +220,38 @@
 .site .site-world { background: var(--site-white); }
 .site .site-pillar h3 { margin-top: 20px; }
 
+
+/* 5: Featured Production on plum (Task #2810) */
+.site .site-featured { background: var(--site-plum); color: var(--site-ivory); }
+.site .site-featured h2 { color: var(--site-ivory); }
+.site .site-featured .site-eyebrow { color: var(--site-champagne); }
+.site .site-featured__inner { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 56px; align-items: center; }
+.site .site-featured__frame { position: relative; aspect-ratio: 16 / 9; border-radius: var(--site-radius); overflow: hidden; background: #000; }
+.site .site-featured__frame img,
+.site .site-featured__map { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.45; }
+.site .site-featured__map {
+  background:
+    radial-gradient(ellipse at 70% 35%, rgba(173, 121, 182, 0.9), transparent 60%),
+    radial-gradient(ellipse at 20% 85%, rgba(183, 223, 234, 0.6), transparent 55%),
+    var(--site-plum);
+}
+.site .site-featured__soon {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; text-align: center;
+  background: rgba(48, 37, 61, 0.55);
+}
+.site .site-featured__soon p { margin: 0; max-width: 420px; }
+.site .site-featured__soon .site-featured__soon-title { font: 600 clamp(26px, 3vw, 36px)/1.15 var(--site-font-display); margin-bottom: 10px; }
+.site .site-featured__actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.site .site-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+.site .site-featured__badge {
+  margin-left: 10px; padding: 2px 8px;
+  border-radius: var(--site-radius-pill);
+  background: var(--site-plum); color: var(--site-ivory);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+
 /* 6: Inside Prime Studios */
 .site .site-card--brand h3 { font-size: 22px; }
 .site .site-card--brand p { font-size: 15px; }
@@ -303,6 +335,9 @@
   .site .site-grid--4 { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .site .site-flagship__inner { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .site .site-closing { text-align: left; }
+  .site .site-featured__inner { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .site .site-featured__actions { flex-direction: column; }
+  .site .site-featured__actions .site-btn { width: 100%; }
   .site .site-footer__inner { flex-direction: column; align-items: flex-start; }
 }
 
