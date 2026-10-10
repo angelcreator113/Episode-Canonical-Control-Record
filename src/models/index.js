@@ -93,6 +93,7 @@ let FranchiseKnowledge; // Franchise story knowledge brain
 let FranchiseTechKnowledge; // Franchise tech knowledge (build assistant only)
 let SessionBrief; // Session brief generation
 let PostGenerationReview; // Post-generation franchise review
+let EpisodeLookbook, EpisodeLookbookImage; // The episode's Lookbook (Task #2812)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -351,6 +352,8 @@ try {
 
   SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
+  EpisodeLookbook = require('./EpisodeLookbook')(sequelize, DataTypes);
+  EpisodeLookbookImage = require('./EpisodeLookbookImage')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -528,6 +531,8 @@ const requiredModels = {
   FranchiseTechKnowledge,
   SessionBrief,
   PostGenerationReview,
+  EpisodeLookbook,
+  EpisodeLookbookImage,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2045,6 +2050,8 @@ module.exports.FranchiseTechKnowledge = FranchiseTechKnowledge;
 module.exports.BrainDocument = BrainDocument;
 module.exports.SessionBrief = SessionBrief;
 module.exports.PostGenerationReview = PostGenerationReview;
+module.exports.EpisodeLookbook = EpisodeLookbook;
+module.exports.EpisodeLookbookImage = EpisodeLookbookImage;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
