@@ -259,6 +259,23 @@
   cursor: default;
 }
 
+/* A screen to build links to the Phone Hub at that screen (#2867). */
+.lalas-phone-screen.is-missing a.lalas-phone-screen-btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.lalas-phone-screen.is-missing a.lalas-phone-screen-btn:focus-visible {
+  outline: 2px solid var(--accent-dark);
+  outline-offset: 2px;
+}
+
+.lalas-phone-screen-generate {
+  display: block;
+  font-size: 12px;
+  color: var(--lala-lavender-text);
+}
+
 .lalas-phone-thumb {
   width: 40px;
   height: 40px;

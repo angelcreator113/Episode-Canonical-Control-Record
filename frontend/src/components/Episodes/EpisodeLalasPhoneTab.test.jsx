@@ -354,3 +354,20 @@ describe('EpisodeLalasPhoneTab — feed-moment rows open their screen (#2855)', 
     expect(link.getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
   });
 });
+
+// #2867: a screen to build links to the Phone Hub at that screen.
+describe('EpisodeLalasPhoneTab — To build rows open the Phone Hub at their screen (#2867)', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('the To build row is a link carrying the screen id', async () => {
+    mockGets();
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const camera = (await screen.findByText('Camera', { selector: '.lalas-phone-screen-name' })).closest('li');
+    expect(within(camera).getByText('To build')).toBeTruthy();
+    const link = within(camera).getByRole('link');
+    expect(link.getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab&screen=camera');
+    expect(within(link).getByText('Generate in Phone Hub →')).toBeTruthy();
+  });
+});

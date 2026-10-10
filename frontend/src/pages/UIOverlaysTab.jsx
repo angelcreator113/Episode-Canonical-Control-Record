@@ -258,6 +258,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
   const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const activeScreenRef = useRef(null);  // ref mirror of activeScreen for stable closures
+  // A link can open the Hub at one screen (#2867): ?screen=<id> beside
+  // ?tab=overlays-tab, as the Episode tab's "To build" rows link. Read once,
+  // from the location (the Hub also renders outside a router), and used up
+  // by the first overlay load.
+  const requestedScreenRef = useRef(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('screen') : null,
+  );
   const [hiddenScreens, setHiddenScreens] = useState(() => {
     // Guard against malformed storage (non-array JSON) — earlier bugs wrote
     // strings or objects; if `.includes()` is called on a non-array it throws
@@ -506,6 +513,22 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .then(r => {
         const data = r.data?.data || [];
         setOverlays(data);
+        // A screen named in the link opens in its editor, built or not, in
+        // Build; an id this phone doesn't have says so and falls back to the
+        // home screen below.
+        const wanted = requestedScreenRef.current;
+        if (wanted) {
+          requestedScreenRef.current = null;
+          const target = data.find(o => o.id === wanted && isScreen(o));
+          if (target) {
+            setActiveScreen(target);
+            setActiveTab('screens');
+            setEditorTab('actions');
+            setPanelOpen(true);
+            return;
+          }
+          flash(`No screen "${wanted}" on this phone. Showing the home screen.`, 'error');
+        }
         // Auto-select home screen (or first screen) on initial load if nothing is selected
         if (!activeScreenRef.current) {
           const home = data.find(o => o.is_home && o.generated && o.url)
@@ -515,7 +538,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       })
       .catch(() => setOverlays([]))
       .finally(() => setLoading(false));
-  }, [showId]);
+  }, [showId, flash]);
 
   // While Connect has unsaved zones, the screen being edited is checked as
   // drawn, not as last saved (phone audit, 2026-10-07: health named problems

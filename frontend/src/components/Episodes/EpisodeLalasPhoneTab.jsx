@@ -293,18 +293,36 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                         </li>
                       );
                     })}
-                    {missingScreens.map(s => (
-                      <li key={s.id} className="lalas-phone-screen is-missing">
-                        <div className="lalas-phone-screen-btn" aria-disabled="true">
+                    {missingScreens.map(s => {
+                      const body = (
+                        <>
                           <span className="lalas-phone-thumb" />
                           <span className="lalas-phone-screen-body">
                             <span className="lalas-phone-screen-name">{s.name}</span>
                             <span className="lalas-phone-screen-source">Screen · not generated yet</span>
+                            {studioPath && <span className="lalas-phone-screen-generate">Generate in Phone Hub →</span>}
                           </span>
                           <span className="lalas-phone-state is-missing">To build</span>
-                        </div>
-                      </li>
-                    ))}
+                        </>
+                      );
+                      // A screen to build opens in the Phone Hub at that
+                      // screen (#2867: ?screen=<id>), not the Hub's default view.
+                      return (
+                        <li key={s.id} className="lalas-phone-screen is-missing">
+                          {studioPath ? (
+                            <Link
+                              to={`${studioPath}&screen=${encodeURIComponent(s.id)}`}
+                              className="lalas-phone-screen-btn"
+                              title={`Generate ${s.name} in the Phone Hub`}
+                            >
+                              {body}
+                            </Link>
+                          ) : (
+                            <div className="lalas-phone-screen-btn" aria-disabled="true">{body}</div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </>
