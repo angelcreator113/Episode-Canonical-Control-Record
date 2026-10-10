@@ -51,7 +51,7 @@ Acceptance checks
 - [ ] Validation output pasted in the PR
 
 Guardrails
-- [x] Needs no host, AWS, database, or Cognito contact
+- [x] Session holds no credentials and contacts no host, AWS, database, or Cognito. Migrations and deploys run only through the approved Deploy workflow.
 - [ ] Inside the locked sequence / explicitly waived by Evoni
 ```
 
