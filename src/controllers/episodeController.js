@@ -551,6 +551,13 @@ module.exports = {
       lockedKept = locks.changed;
     }
 
+    // The style sheet entry in Distribution (Task #2878) is written only by
+    // its own routes; a save of the platform copy carries it over.
+    if (updateData.distribution_metadata !== undefined) {
+      const { keepStyleSheet } = require('../services/styleSheetDistributionService');
+      updateData.distribution_metadata = await keepStyleSheet(Episode.sequelize, episode.id, updateData.distribution_metadata);
+    }
+
     await episode.update(updateData);
 
     // Published: the episode's draft feed posts go live at this point in

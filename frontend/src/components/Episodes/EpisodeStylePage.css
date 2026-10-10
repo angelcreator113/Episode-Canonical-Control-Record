@@ -186,3 +186,11 @@
   .esp2-layout { grid-template-columns: minmax(0, 1fr); }
   .esp2-panel { position: static; }
 }
+
+/* Send to Distribution (Task #2878) */
+.esp2-send { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-top: 8px; }
+.esp2-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; color: var(--text-primary); cursor: pointer; }
+.esp2-check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.esp2-link { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.esp2-link:disabled { color: var(--text-secondary); cursor: not-allowed; }
+.esp2-link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 2px; }

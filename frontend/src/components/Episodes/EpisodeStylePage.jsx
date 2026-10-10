@@ -15,8 +15,8 @@
  * data only). Reloads keep the page in place, and tapping never scrolls it.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Shirt, Trash2, Upload } from 'lucide-react';
-import api from '../../services/api';
+import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, Trash2, Upload } from 'lucide-react';
+import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 import { lookbookApi } from '../../lib/lookbookApi';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
@@ -327,7 +327,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
             </ul>
           </section>
 
-          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} />
+          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} onOpenTab={onOpenTab} />
         </aside>
       </div>
     </div>
@@ -491,36 +491,36 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
 }
 
 // Each export size as a download, enabled only while the sheet is approved
-// and up to date; the server refuses the rest (409).
-function ShareExport({ episodeId, episodeNumber, canExport, approved, stale }) {
+// and up to date; the server refuses the rest (409). Send to Distribution
+// puts every size in the episode's Distribution with a caption draft (Task #2878).
+function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onOpenTab }) {
   const [busySize, setBusySize] = useState(null);
   const [error, setError] = useState(null);
+  const [withLinks, setWithLinks] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(null);
   const download = async (size) => {
     setBusySize(size);
     setError(null);
     try {
-      const res = await api.get(`/api/v1/episodes/${episodeId}/style-sheet/export/${size}`, { responseType: 'blob' });
-      const disposition = res.headers?.['content-disposition'] || '';
-      const n = episodeNumber != null ? String(episodeNumber).padStart(2, '0') : 'episode';
-      const name = /filename="([^"]+)"/.exec(disposition)?.[1] || `style-sheet-episode-${n}-${size}.${size === 'pdf' ? 'pdf' : 'png'}`;
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadStyleSheetExport(episodeId, size, episodeNumber);
     } catch (err) {
       console.error('[StylePage] export failed:', err);
-      let msg = err?.message || 'The export could not be made.';
-      const data = err?.response?.data;
-      if (data && typeof data.text === 'function') {
-        try { msg = JSON.parse(await data.text()).error || msg; } catch (parseErr) { console.error('[StylePage] export error body unreadable:', parseErr); }
-      } else if (data?.error) msg = data.error;
-      setError(msg);
+      setError(await styleSheetError(err, 'The export could not be made.'));
     } finally {
       setBusySize(null);
+    }
+  };
+  const send = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      setSent(await styleSheetDistributionApi.send(episodeId, withLinks));
+    } catch (err) {
+      console.error('[StylePage] send to Distribution failed:', err);
+      setError(await styleSheetError(err, 'The style sheet could not be sent to Distribution.'));
+    } finally {
+      setSending(false);
     }
   };
   return (
@@ -542,6 +542,23 @@ function ShareExport({ episodeId, episodeNumber, canExport, approved, stale }) {
           </li>
         ))}
       </ul>
+      <div className="esp2-send">
+        <label className="esp2-check" htmlFor="esp2-send-links">
+          <input id="esp2-send-links" type="checkbox" checked={withLinks} disabled={!canExport || sending} onChange={(e) => setWithLinks(e.target.checked)} />
+          <span>Include Shop the Look links</span>
+        </label>
+        <button type="button" className="esp2-btn esp2-btn-primary" disabled={!canExport || sending} onClick={send} data-testid="esp2-send-distribution">
+          {sending ? <Loader2 size={16} className="esp2-spin" aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}
+          Send to Distribution
+        </button>
+      </div>
+      {sent?.sent && (
+        <p className="esp2-hint" role="status" data-testid="esp2-sent">
+          Sent: {sent.items.length} sizes and a caption draft are in Distribution.
+          {sent.disclosure ? ' The affiliate disclosure is added.' : ''}{' '}
+          <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('distribution')}>Open Distribution</button>
+        </p>
+      )}
     </section>
   );
 }

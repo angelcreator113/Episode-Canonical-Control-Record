@@ -21,6 +21,12 @@ describe('Release helpers', () => {
     expect(goLive({})).toBeNull();
   });
 
+  test('the style sheet sent to Distribution is neither a schedule nor platform copy (Task #2878)', () => {
+    const ep = { status: 'draft', distribution_metadata: { style_sheet: { caption: 'Episode 01', scheduled_time: '2026-11-01T18:00' } } };
+    expect(goLive(ep)).toBeNull();
+    expect(readiness(ep, []).find((r) => r.key === 'copy').state).toBe('todo');
+  });
+
   test('a day reads as that calendar day; a time shows with it', () => {
     expect(formatWhen('2026-10-20T00:00:00.000Z')).toBe('Oct 20, 2026');
     expect(formatWhen('2026-10-20')).toBe('Oct 20, 2026');
