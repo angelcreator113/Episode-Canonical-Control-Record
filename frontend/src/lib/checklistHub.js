@@ -60,7 +60,7 @@ export const SECTION_GUIDE = {
   world: { text: 'The event, its venue, the venue image and the invitation.', open: { label: 'Open the event package', event: true } },
   scene: { text: 'Where each beat happens. Starts from the event’s venue.', open: { label: 'Open Scenes', tab: 'scenes' } },
   wardrobe: { text: "Lala's closet and her look for the event. Beat 8 needs it.", open: { label: 'Open Wardrobe', tab: 'wardrobe' } },
-  lookbook: { text: "The episode's photos for the style sheet, and the sheet's status (Draft or Approved).", open: { label: 'Open Lookbook', tab: 'lookbook' } },
+  lookbook: { text: "The episode's style sheet, ready x of 12, and its status (Draft or Approved).", open: { label: 'Open Style Page', tab: 'lookbook' } },
   overlays: { text: 'Screens Lala looks at during the episode.', open: { label: 'Open Phone', tab: 'phone' } },
   onscreen: { text: 'What sits on top of the video: the title overlay and the overlays placed on the timeline.', open: { label: 'Open Overlays', tab: 'overlays' } },
   social: { text: 'The social checklist and the episode title.', open: { label: 'Open Assets', tab: 'assets' } },

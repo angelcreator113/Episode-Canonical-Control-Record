@@ -34,9 +34,11 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
   });
 });
 
-describe('the Lookbook tab (Task #2813)', () => {
-  test('sits between Wardrobe and Phone under Production', () => {
-    const subs = EP_TABS.find((t) => t.key === 'production').subs.map((s) => s.key);
-    expect(subs.slice(subs.indexOf('wardrobe'), subs.indexOf('wardrobe') + 3)).toEqual(['wardrobe', 'lookbook', 'phone']);
+describe('the Style Page tab (was Lookbook; Tasks #2813, #2876)', () => {
+  test('sits between Wardrobe and Phone under Production, keeping its key for links', () => {
+    const subs = EP_TABS.find((t) => t.key === 'production').subs;
+    const keys = subs.map((s) => s.key);
+    expect(keys.slice(keys.indexOf('wardrobe'), keys.indexOf('wardrobe') + 3)).toEqual(['wardrobe', 'lookbook', 'phone']);
+    expect(subs.find((s) => s.key === 'lookbook').label).toBe('Style Page');
   });
 });

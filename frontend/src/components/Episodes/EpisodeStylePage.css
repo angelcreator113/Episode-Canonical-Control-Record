@@ -1,0 +1,181 @@
+/* Production → Style Page (was Lookbook; Task #2876). The sheet on the left
+   is the editor; the panel on the right edits the spot you tap. Colours only
+   through tokens (the sheet keeps its own printed colours). */
+
+.esp2-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  color: var(--lala-ink);
+  /* Tapping a control never scrolls the page: no anchor jumps, and the
+     layout keeps its size while a save runs. */
+  overflow-anchor: none;
+}
+.esp2-page.is-dragging { outline: 2px dashed var(--lala-lavender-line); outline-offset: -4px; }
+
+.esp2-loading { flex-direction: row; align-items: center; gap: 8px; color: var(--text-secondary); }
+.esp2-spin { animation: esp2-spin 1s linear infinite; }
+@keyframes esp2-spin { to { transform: rotate(360deg); } }
+
+.esp2-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.esp2-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.esp2-title { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 24px; font-weight: 600; }
+.esp2-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.esp2-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+.esp2-pill.is-draft { background: var(--lala-parchment-2); color: var(--text-secondary); }
+.esp2-pill.is-approved { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.esp2-pill.is-stale { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
+
+.esp2-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.esp2-error {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.esp2-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.esp2-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.esp2-btn-primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+.esp2-btn:focus-visible, .esp2-chip:focus-visible, .esp2-thumb:focus-visible, .esp2-icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.esp2-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
+/* Sheet left, panel right; on a phone the sheet is on top. */
+.esp2-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 20px; align-items: start; }
+.esp2-sheet-col { min-width: 0; }
+.esp2-sheet-frame { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 6px 18px var(--lala-lavender-line); }
+.esp2-sheet-scale { position: absolute; top: 0; left: 0; transform-origin: top left; }
+
+.esp2-panel {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius, 8px);
+}
+.esp2-panel-empty { margin: 0; font-size: 14px; color: var(--text-secondary); }
+
+/* A steady height: switching spots never shortens the panel, which would
+   make the episode header re-measure and the page move. */
+.esp2-spot { display: flex; flex-direction: column; gap: 12px; min-height: 340px; }
+.esp2-spot-title { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 18px; font-weight: 600; }
+.esp2-hint { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.esp2-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.esp2-current { display: flex; align-items: center; gap: 10px; }
+.esp2-current img { width: 72px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--lala-parchment-3); }
+
+.esp2-tray-label { margin: 0 0 6px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; }
+.esp2-count { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.esp2-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.esp2-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 3px;
+  border: 2px solid var(--lala-parchment-3);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.esp2-thumb img { width: 56px; height: 56px; object-fit: cover; border-radius: 5px; }
+.esp2-thumb.is-in { border-color: var(--primary); color: var(--text-primary); }
+.esp2-thumb:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.esp2-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.esp2-field input, .esp2-field textarea {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 16px;
+}
+
+.esp2-pieces { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.esp2-pieces li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--lala-parchment-3); border-radius: 6px; background: var(--surface-card); }
+.esp2-pieces li.is-needed { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
+.esp2-piece-slot { font-weight: 600; }
+
+.esp2-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.esp2-swatch input { width: 44px; height: 44px; padding: 0; border: 1px solid var(--border-medium); border-radius: 50%; background: none; cursor: pointer; }
+
+/* Readiness: the bar and one chip per item; a chip opens its spot. */
+.esp2-ready { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); }
+.esp2-ready-label { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text-secondary); }
+.esp2-bar { height: 8px; border-radius: 999px; background: var(--lala-parchment-2); overflow: hidden; }
+.esp2-bar span { display: block; height: 100%; background: var(--primary); }
+.esp2-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.esp2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.esp2-chip.is-ready { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.esp2-chip.is-selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.esp2-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.esp2-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .esp2-layout { grid-template-columns: minmax(0, 1fr); }
+  .esp2-panel { position: static; }
+}

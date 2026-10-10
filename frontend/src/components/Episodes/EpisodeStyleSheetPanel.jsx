@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, Eye, Loader2, Lock, RotateCcw, Upload } from 'lucide-react';
 import api from '../../services/api';
-import { lookbookApi } from './EpisodeLookbookTab';
+import { lookbookApi } from '../../lib/lookbookApi';
 import StyleSheetTemplate, { SHEET_HEIGHT, SHEET_WIDTH } from './StyleSheetTemplate';
 import { extractPalette } from '../../lib/stylePalette';
 import './EpisodeStyleSheetPanel.css';

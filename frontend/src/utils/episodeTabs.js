@@ -18,8 +18,9 @@ export const EP_TABS = [
     { key: 'checklist', label: 'Checklist' },
     { key: 'scenes', label: 'Scenes' },
     { key: 'wardrobe', label: 'Wardrobe' },
-    // The episode's photos for the style sheet (Task #2813).
-    { key: 'lookbook', label: 'Lookbook' },
+    // The Style Page (was Lookbook; Task #2876): the style sheet as its
+    // own editor. The key stays 'lookbook' so links keep working.
+    { key: 'lookbook', label: 'Style Page' },
     { key: 'phone', label: 'Phone' },
     // P15: every on-screen piece of the episode.
     { key: 'overlays', label: 'Overlays' },

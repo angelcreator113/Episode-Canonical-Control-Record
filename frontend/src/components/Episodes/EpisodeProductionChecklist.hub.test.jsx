@@ -84,28 +84,45 @@ describe('Checklist hub', () => {
     expect((await within(world).findByText('Open the event package')).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
   });
 
-  test('the Lookbook card: x of 11 photos in and the style sheet status, opening the Lookbook (Task #2815)', async () => {
+  // The Style Page card (was Lookbook; Tasks #2815, #2876): "Style sheet
+  // ready x of 12" from the shared rule (lib/styleReadiness), the sheet's
+  // status, and a link to the Style Page.
+  const img = () => ({ id: Math.random().toString(36).slice(2), source: 'upload', in_lookbook: true });
+  const FIVE = ['#A01428', '#B8962E', '#D4AF93', '#BB6573', '#E3D4AD'].map((hex) => ({ hex }));
+
+  test('the Style Page card: ready x of 12 from the shared rule, the sheet status, opening the Style Page', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/lookbook') {
-        return { data: { data: { sheet_status: 'draft', readiness: { done: 7, total: 11, missing: ['side', 'back', 'lips', 'inspo'] } } } };
+        return { data: { data: { sheet_status: 'draft', hair_name: '', images: { front: [img()], hero: [img()], venue: [img()], inspo: [img()] } } } };
+      }
+      if (url === '/api/v1/episodes/ep-1/style-sheet') {
+        return { data: { data: { wardrobe: { state: 'chosen', columns: [{ key: 'body', needed: true }] }, palette: null, palette_sources: [] } } };
       }
       return { data: {} };
     });
     const onOpenTab = vi.fn();
     render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala' }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
     const card = await screen.findByTestId('checklist-section-lookbook');
-    expect(card.textContent).toContain('Lookbook');
-    await within(card).findByText('7 of 11 ready · missing: side, back, lips, inspo');
-    expect(within(card).getByText('Style sheet photos in (11 of 11)')).toBeTruthy();
+    expect(card.textContent).toContain('Style Page');
+    await within(card).findByText('Style sheet ready 4 of 12 · missing: Side, Back, Hair, Nails, Beauty, Wardrobe, Palette, Tagline');
+    expect(within(card).getByText('Style sheet ready (12 of 12)')).toBeTruthy();
     expect(within(card).getByText('Style sheet approved')).toBeTruthy();
     expect(within(card).getByText('Draft')).toBeTruthy();
-    fireEvent.click(within(card).getByRole('button', { name: 'Open Lookbook' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'Open Style Page' }));
     expect(onOpenTab).toHaveBeenCalledWith('lookbook');
   });
 
-  test('the Lookbook card is complete when all 11 are in and the sheet is approved', async () => {
+  test('the Style Page card is complete when all 12 are ready and the sheet is approved', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url === '/api/v1/episodes/ep-1/lookbook') return { data: { data: { sheet_status: 'approved', readiness: { done: 11, total: 11, missing: [] } } } };
+      if (url === '/api/v1/episodes/ep-1/lookbook') {
+        return { data: { data: {
+          sheet_status: 'approved', hair_name: 'soft glam waves', nails_name: 'crimson almond', tagline: 'A line.',
+          images: { front: [img()], side: [img()], back: [img()], hero: [img()], hair: [img()], nails: [img()], eyes: [img()], venue: [img()], inspo: [img()] },
+        } } };
+      }
+      if (url === '/api/v1/episodes/ep-1/style-sheet') {
+        return { data: { data: { wardrobe: { state: 'locked', columns: [{ key: 'body', needed: false }] }, palette: FIVE } } };
+      }
       return { data: {} };
     });
     render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala' }} showId="show-1" onOpenTab={vi.fn()} /></MemoryRouter>);
