@@ -233,6 +233,30 @@ async function uploadMedia(models, slotKey, file) {
   return adminView(slotKey, await updateSlot(models, row, changes, { backToDraft: true }));
 }
 
+/**
+ * The site's logo from a show's logo (Show Settings): its PNG is copied into
+ * the public site location as the logo slot's image, as a draft. It is a
+ * copy, not a link: a later change in Show Settings does not reach the site
+ * until this is done again, and publishing stays a separate step.
+ */
+async function useShowLogo(models, showId) {
+  requireStorage();
+  if (!showId) throw new WebsiteSlotError('Choose a show.', 400, 'NO_SHOW');
+  const { readLogo, logoBytes } = require('./showLogoService');
+  const show = await models.Show.findByPk(showId);
+  if (!show) throw new WebsiteSlotError('Show not found.', 404, 'SHOW_NOT_FOUND');
+  const logo = readLogo(show.metadata);
+  if (!logo) throw new WebsiteSlotError('That show has no logo yet. Add one in Show Settings.', 400, 'NO_SHOW_LOGO');
+  let buffer;
+  try {
+    buffer = await logoBytes(logo);
+  } catch (err) {
+    console.error('[WebsiteSlots] the show logo could not be read:', err.message);
+    throw new WebsiteSlotError(err.status ? err.message : "The show's logo could not be read. Try again.", 400, 'LOGO_UNREADABLE');
+  }
+  return uploadMedia(models, 'logo', { buffer, mimetype: 'image/png', originalname: 'show-logo.png', size: buffer.length });
+}
+
 /** Point a video slot at a YouTube video (stored as its id). */
 async function setYoutube(models, slotKey, youtubeUrl) {
   assertSlotKey(slotKey);
@@ -347,6 +371,7 @@ async function publicContent(models) {
 }
 
 module.exports = {
+  useShowLogo,
   SLOT_KEYS,
   SLOT_MEDIA,
   MAX_CLIP_SECONDS,

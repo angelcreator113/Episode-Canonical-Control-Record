@@ -60,7 +60,7 @@ Images (and posters) are at most 5 MB. A clip is at most 30 seconds and 25 MB. C
 
 ## Still open (not blocking go-live)
 
-- **Logo slot.** The Website page shows the logo toggle disabled, because Show Settings has no logo field yet.
+- **Logo slot.** On the Website page, "Use the logo from Show Settings" copies a show's logo into the public site storage as a draft. Like any upload, it needs the storage above. It is a copy, so after a later change in Show Settings, use it again. Deciding whether the site's logo should be the show's logo or a Prime Studios mark is Evoni's call.
 - **W1 questions:**
   - Should an existing CloudFront distribution be reused?
   - Are the size caps right?

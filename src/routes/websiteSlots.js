@@ -48,6 +48,15 @@ router.post('/:slotKey/media', ...admin, oneFile, async (req, res) => {
   }
 });
 
+// The site's logo from a show's logo in Show Settings (a copy, as a draft).
+router.post('/logo/from-show', ...admin, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await svc().useShowLogo(models(), req.body?.show_id) });
+  } catch (err) {
+    return sendSlotError(res, err, 'POST /logo/from-show');
+  }
+});
+
 router.put('/:slotKey/youtube', ...admin, async (req, res) => {
   try {
     return res.json({ success: true, data: await svc().setYoutube(models(), req.params.slotKey, req.body && req.body.url) });

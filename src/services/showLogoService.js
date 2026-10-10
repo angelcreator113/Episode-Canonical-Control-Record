@@ -64,10 +64,41 @@ async function storeLogo(showId, file) {
   return { url, width: info.width, height: info.height, updated_at: new Date().toISOString() };
 }
 
+// Hosts a stored logo may be read back from: the studio bucket only. The
+// URL sits in Show.metadata, which PUT /shows/:id writes as given, so any
+// other address is refused rather than fetched.
+function studioBucketHosts() {
+  const bucket = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
+  if (!bucket) return [];
+  const region = process.env.AWS_REGION || 'us-east-1';
+  return [`${bucket}.s3.${region}.amazonaws.com`, `${bucket}.s3.amazonaws.com`];
+}
+
+/** The stored logo's PNG bytes: a data URL, or the studio bucket's object. */
+async function logoBytes(logo) {
+  const url = String(logo?.url || '');
+  const dataUrl = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(url);
+  if (dataUrl) return Buffer.from(dataUrl[1], 'base64');
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (err) {
+    console.error('[ShowLogo] the stored logo address is not a URL:', err.message);
+    throw new ShowLogoError("The show's logo could not be read. Upload it again in Show Settings.", 400, 'LOGO_UNREADABLE');
+  }
+  if (parsed.protocol !== 'https:' || !studioBucketHosts().includes(parsed.host)) {
+    throw new ShowLogoError("The show's logo is not in the studio's storage. Upload it again in Show Settings.", 400, 'LOGO_UNREADABLE');
+  }
+  const axios = require('axios');
+  const res = await axios.get(parsed.href, { responseType: 'arraybuffer', timeout: 15000, maxContentLength: MAX_LOGO_BYTES, maxRedirects: 0 });
+  return Buffer.from(res.data);
+}
+
 module.exports = {
   ShowLogoError,
   readLogo,
   storeLogo,
+  logoBytes,
   LOGO_TYPES,
   MAX_LOGO_BYTES,
 };

@@ -8,7 +8,8 @@
  * Featured production (a YouTube link or a clip of 30 seconds or less, its
  * poster frame, and captions for a clip with speech); Inside Prime Studios
  * (the four brand cards; Fashion as Storytelling can use an approved style
- * sheet instead); Brand (the logo).
+ * sheet instead); Brand (the logo, uploaded or copied from a show's logo
+ * in Show Settings).
  *
  * Each card: preview, status pill (Published, Draft, Default, Empty), alt
  * text (required to publish), Upload/Replace, Publish/Unpublish and
@@ -33,6 +34,7 @@ export const websiteApi = {
   details: (slot, body) => api.patch(`${BASE}/${slot}`, body).then((r) => r.data?.data),
   publish: (slot) => api.post(`${BASE}/${slot}/publish`).then((r) => r.data?.data),
   unpublish: (slot) => api.post(`${BASE}/${slot}/unpublish`).then((r) => r.data?.data),
+  logoFromShow: (showId) => api.post(`${BASE}/logo/from-show`, { show_id: showId }).then((r) => r.data?.data),
 };
 
 // Where each slot shows on the site, for "Preview on site".
@@ -249,6 +251,46 @@ function StyleSheetExtra({ storageReady, busy, run, setNote }) {
   );
 }
 
+// The site's logo from a show's logo in Show Settings: the server copies it
+// into the public site storage as a draft. A copy, not a link: a later change
+// in Show Settings reaches the site only when this is used again.
+function ShowLogoExtra({ storageReady, busy, run, setNote }) {
+  const [shows, setShows] = useState(null);
+  const [choice, setChoice] = useState('');
+
+  const loadShows = async () => {
+    try {
+      const res = await api.get('/api/v1/shows');
+      const rows = (res.data?.data || res.data?.shows || []).map((sh) => ({ id: sh.id, label: sh.name || 'Untitled show' }));
+      setShows(rows);
+      if (rows.length === 1) setChoice(rows[0].id);
+    } catch (err) {
+      console.error('[Website] shows could not be read:', err);
+      setNote('The shows could not be read.');
+    }
+  };
+
+  return (
+    <div className="wsa-extra">
+      {shows === null ? (
+        <button type="button" className="wsa-btn wsa-btn-quiet" disabled={busy || !storageReady} onClick={loadShows}>Use the logo from Show Settings</button>
+      ) : (
+        <div className="wsa-row">
+          <label className="wsa-field" htmlFor="wsa-logo-show">
+            <span>Show whose logo to use</span>
+            <select id="wsa-logo-show" value={choice} disabled={busy} onChange={(e) => setChoice(e.target.value)}>
+              <option value="">Choose a show</option>
+              {shows.map((sh) => <option key={sh.id} value={sh.id}>{sh.label}</option>)}
+            </select>
+          </label>
+          <button type="button" className="wsa-btn" disabled={busy || !choice} onClick={() => run(() => websiteApi.logoFromShow(choice))}>Use this show's logo</button>
+        </div>
+      )}
+      <p className="wsa-hint">A copy, saved as a draft: add alt text and publish it. A later change in Show Settings needs this again.</p>
+    </div>
+  );
+}
+
 function StyleSheetCapture({ sheet, captureRef }) {
   const [Template, setTemplate] = useState(null);
   useEffect(() => { import('../components/Episodes/StyleSheetTemplate').then((m) => setTemplate(() => m.default)); }, []);
@@ -331,15 +373,7 @@ export default function WebsiteAdmin() {
               let extra = null;
               if (key === 'featured_video') extra = <FeaturedExtra slot={slot} storageReady={data.storage_ready} busy={busy} run={run} />;
               if (key === 'brand_fashion') extra = <StyleSheetExtra storageReady={data.storage_ready} busy={busy} run={run} setNote={setNote} />;
-              if (key === 'logo') {
-                extra = (
-                  <label className="wsa-check is-disabled">
-                    <input type="checkbox" disabled aria-describedby="wsa-logo-why" />
-                    Use the logo from Show Settings
-                    <span id="wsa-logo-why" className="wsa-hint"> (Show Settings now has the show's logo, but the site's logo is Prime Studios'. Upload it here until you decide which the site uses.)</span>
-                  </label>
-                );
-              }
+              if (key === 'logo') extra = <ShowLogoExtra storageReady={data.storage_ready} busy={busy} run={run} setNote={setNote} />;
               return <SlotCard key={key} slot={slot} label={label} storageReady={data.storage_ready} busy={busy} run={run} extra={extra} />;
             })}
           </div>
