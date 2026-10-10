@@ -29,6 +29,13 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # A push whose changed files are ALL docs (docs/** or any .md) queues no
+    # run (#2862). A push that also touches anything else (code, migrations,
+    # package files, scripts, this workflow) still deploys. No runtime code
+    # reads a .md file. Run workflow (workflow_dispatch) is unaffected.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +44,9 @@ permissions:
 
 # One deploy at a time. A running deploy is never cancelled (it may be
 # mid-migration); a newer pending run replaces an older pending one.
+# A run waiting for approval already holds the group, so it is not replaced:
+# at most one waits for approval and one (the newest) is pending behind it.
+# Seen on 2026-10-10: #22 waiting, #23 cancelled the moment #24 was queued.
 concurrency:
   group: production-deploy
   cancel-in-progress: false

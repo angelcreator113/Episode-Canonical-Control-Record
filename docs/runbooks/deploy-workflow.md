@@ -10,7 +10,15 @@
 
 ## 1. What a run does
 
-It is triggered by every push to `main` (each merged PR), or by **Run workflow** on the Actions tab (browser). The job waits in the `production` environment until Evoni approves it. If several pushes land while one run waits, only the newest pending run is kept. A running deploy is never cancelled.
+It is triggered by a push to `main` (each merged PR) that changes something other than docs, or by **Run workflow** on the Actions tab (browser). The job waits in the `production` environment until Evoni approves it. A running deploy is never cancelled.
+
+**Which merges queue a run (#2862).** A merge whose changed files are *all* docs (`docs/**`, or any `.md` file anywhere) queues no run, so it needs no approval. A merge that touches anything else queues one: code, a migration, a package file, a script, or the workflow itself, even alongside docs. Docs-only changes reach the box with the next code deploy, because each deploy fast-forwards to its commit. **Queue:**
+- At most one run waits for approval.
+- At most one, the newest, is pending behind it. A newer push cancels the older pending run.
+- The waiting run is not replaced. Approving it deploys its own, older commit, and the pending run then deploys the newest.
+- To skip straight to the newest, reject the waiting run on its page; the pending one then waits for approval.
+
+On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was queued.
 
 | # | Step | Where | If it fails |
 |---|---|---|---|
