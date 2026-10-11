@@ -84,8 +84,8 @@ export function scriptInputs({ brief = null, plan = null, outfit = [], event = n
 // Only what the episode's data holds: the event package's deliverables
 // (what Lala owes for the deal) and goals (canon_consequences.automation.
 // relationship_goals), and the brief's forward hook. Nothing is written in.
-// An item is ticked when the script mentions it: most of its key words (at
-// least two, or its one key word) appear in one beat; the first such beat
+// An item is ticked when the script mentions it: its key words (all of one
+// or two, three quarters of more) appear in one beat; the first such beat
 // is named. The script writer is told which beats to put them in
 // (services/scriptCareerService) but writes no tag, so the words are the
 // only trace.
@@ -98,7 +98,9 @@ export const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 
 export function mentionedIn(beats = [], text) {
   const keys = keyWords(text);
   if (!keys.length) return null;
-  const need = keys.length === 1 ? 1 : Math.max(2, Math.ceil(keys.length / 2));
+  // One or two key words: all of them; more: three quarters, so a shared
+  // name alone (the host's) does not tick a deliverable.
+  const need = keys.length <= 2 ? keys.length : Math.ceil(keys.length * 0.75);
   for (const b of beats) {
     const have = new Set(words((b.lines || []).join(' ')));
     if (keys.filter((k) => have.has(k)).length >= need) return b.number;

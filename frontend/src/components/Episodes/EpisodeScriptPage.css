@@ -328,14 +328,14 @@
   .esp.has-beatlist .esp-beat:not(.is-open) { display: none; }
   .esp.has-beatlist .esp-order-hint { display: none; }
   .esp-mobilebar {
-    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; /* above the episode's sticky header (50) */
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
     background: var(--surface-card); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -4px 16px rgba(48, 37, 61, 0.08);
   }
   .esp.has-beatlist .esp-savebar { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .esp.has-beatlist .esp-side { display: none; }
   .esp.has-beatlist.is-context-open .esp-side {
-    display: flex; position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 21;
+    display: flex; position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 56;
     max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px;
     background: var(--surface-bg); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -8px 24px rgba(48, 37, 61, 0.14);
   }

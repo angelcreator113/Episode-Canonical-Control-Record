@@ -32,6 +32,12 @@ describe('must cover', () => {
     expect(mustCover({ beats, deliverables: null, event: null, brief: null })).toEqual([]);
     expect(mustCover()).toEqual([]);
   });
+  test('a shared name alone does not tick an item', () => {
+    const b = [{ number: 4, lines: ['Lala: "A message from STUDIO BY SABLE."'] }];
+    expect(mentionedIn(b, 'Instagram reel for STUDIO BY SABLE')).toBeNull();
+    expect(mentionedIn(b, 'Follow up with STUDIO BY SABLE')).toBeNull();
+  });
+
   test('a mention needs most key words in one beat', () => {
     expect(keyWords('The Instagram reel for the brand')).toEqual(['instagram', 'reel', 'brand']);
     expect(mentionedIn(beats, 'Instagram reel')).toBe(12);
