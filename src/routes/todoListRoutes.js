@@ -58,6 +58,22 @@ router.post('/episodes/:episodeId/todo/generate-career', requireAuth, async (req
   }
 });
 
+// POST /episodes/:episodeId/todo/use-shopping-list (Task #2883): the event's
+// approved shopping list applied to this episode's wardrobe tasks, the same
+// tasks Start Episode makes. Refused while the list is a Draft; applying
+// again adds nothing new (eventDocumentsService.useShoppingListInEpisode).
+router.post('/episodes/:episodeId/todo/use-shopping-list', requireAuth, async (req, res) => {
+  try {
+    const models = req.app.get('models') || require('../models');
+    const { useShoppingListInEpisode } = require('../services/eventDocumentsService');
+    const data = await useShoppingListInEpisode(models, req.params.episodeId);
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[TodoList] use shopping list failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;

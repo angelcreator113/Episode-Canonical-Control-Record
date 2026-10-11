@@ -357,6 +357,75 @@ function careerPlanGoals(doc) {
     }));
 }
 
+// ─── "Use in episode": the approved list applied to an episode (Task #2883) ──
+//
+// The same tasks Start Episode makes (shoppingListTasks), applied to an
+// episode already started. Each task keeps its from_event_document tag
+// ({ type, version }), the link to the list; the todo list needs nothing
+// more. A Draft list is refused. Applying again adds nothing new:
+//   - a list line already on the episode (same slot and label) keeps its
+//     task, completed or not;
+//   - a new line is added;
+//   - an open task the list does not hold (the standard slots, a line an
+//     earlier version had) gives way to the list, as at Start Episode;
+//   - a completed task the list does not hold is kept: done work is never lost.
+
+const taskKey = (t) => `${String(t?.slot || '').trim().toLowerCase()}|${String(t?.label || '').trim().toLowerCase()}`;
+
+async function useShoppingListInEpisode(models, episodeId) {
+  const { sequelize } = models;
+  const [[episode]] = await sequelize.query(
+    'SELECT id, show_id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId } });
+  if (!episode) throw new EventDocumentError(404, 'Episode not found');
+
+  const { listEpisodeEvents } = require('./episodeEventsService');
+  const anchor = (await listEpisodeEvents(models, episodeId)).events[0] || null;
+  if (!anchor) throw new EventDocumentError(404, 'This episode has no event, so it has no shopping list.');
+  const [[event]] = await sequelize.query('SELECT * FROM world_events WHERE id = :id', { replacements: { id: anchor.id } });
+  if (!event) throw new EventDocumentError(404, 'Event not found');
+
+  const doc = readDocuments(event).shopping_list;
+  if (!doc) throw new EventDocumentError(404, 'The event has no shopping list yet. Draft and approve it in the Event Package.');
+  if (doc.status !== 'approved') throw new EventDocumentError(409, 'Approve the shopping list in the Event Package before using it in the episode.');
+  const listTasks = shoppingListTasks(doc);
+  if (!listTasks.length) throw new EventDocumentError(409, 'The approved shopping list has no lines.');
+
+  const [[row]] = await sequelize.query(
+    'SELECT id, tasks, deleted_at FROM episode_todo_lists WHERE episode_id = :episodeId',
+    { replacements: { episodeId } });
+  const live = row && !row.deleted_at;
+  const existing = live ? (parseJSON(row.tasks, []) || []) : [];
+  const byKey = new Map(existing.map((t) => [taskKey(t), t]));
+  const listKeys = new Set(listTasks.map(taskKey));
+
+  const tasks = listTasks.map((t) => {
+    const had = byKey.get(taskKey(t));
+    return had ? { ...t, completed: had.completed === true } : t;
+  });
+  const keptDone = existing.filter((t) => t.completed === true && !listKeys.has(taskKey(t)));
+  const next = [...tasks, ...keptDone];
+  const added = listTasks.filter((t) => !byKey.has(taskKey(t))).length;
+  const removed = existing.filter((t) => t.completed !== true && !listKeys.has(taskKey(t))).length;
+  const changed = !live || added > 0 || removed > 0
+    || JSON.stringify(next.map((t) => [taskKey(t), t.from_event_document?.version ?? null])) !== JSON.stringify(existing.map((t) => [taskKey(t), t.from_event_document?.version ?? null]));
+
+  if (changed) {
+    if (row) {
+      await sequelize.query(
+        `UPDATE episode_todo_lists SET tasks = CAST(:tasks AS jsonb), event_id = :eventId, deleted_at = NULL, updated_at = NOW()
+          WHERE id = :id AND episode_id = :episodeId`,
+        { replacements: { tasks: JSON.stringify(next), eventId: event.id, id: row.id, episodeId } });
+    } else {
+      await sequelize.query(
+        `INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, status, created_at, updated_at)
+         VALUES (:id, :episodeId, :showId, :eventId, CAST(:tasks AS jsonb), 'generated', NOW(), NOW())`,
+        { replacements: { id: require('crypto').randomUUID(), episodeId, showId: episode.show_id || null, eventId: event.id, tasks: JSON.stringify(next) } });
+    }
+  }
+  return { added, removed, kept_done: keptDone.length, version: doc.version, tasks: next };
+}
+
 module.exports = {
   DOC_TYPES,
   HISTORY_MAX,
@@ -372,4 +441,5 @@ module.exports = {
   approvedDocument,
   shoppingListTasks,
   careerPlanGoals,
+  useShoppingListInEpisode,
 };
