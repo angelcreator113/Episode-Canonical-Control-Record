@@ -2486,9 +2486,9 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    // Pull existing wardrobe items for financial calculation
+    // The chosen look's pieces for the money estimate, not the whole closet (Task #1919).
     const episodeGenerator = require('../services/episodeGeneratorService');
-    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId);
+    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event });
     const result = await episodeGenerator.generateEpisodeFromEvent(event, models, {
       showId,
       wardrobeItems,
@@ -2750,7 +2750,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     }
 
     const episodeGenerator = require('../services/episodeGeneratorService');
-    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId);
+    const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event: anchor });
     const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems });
     const newEpisodeId = result?.episode?.id;
 

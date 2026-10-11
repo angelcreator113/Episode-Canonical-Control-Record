@@ -236,7 +236,7 @@ function planTermsRebuild({ event, deliverables, briefEventMetadata, socialTasks
       .map((t) => (t.deliverable_id && doneBefore.get(t.deliverable_id) ? { ...t, completed: true } : t));
   }
 
-  const financials = calculateFinancials(event, wardrobeItems || []);
+  const financials = calculateFinancials(event, wardrobeItems ?? null);
   return {
     eventMetadata,
     socialTasks: tasks,
@@ -378,7 +378,7 @@ async function relockTerms(sequelize, { showId, eventId, user }) {
 
     const deliverables = await listEventDeliverables(sequelize, eventId, { transaction });
     const costs = await listEventCosts(sequelize, eventId, { transaction });
-    const wardrobeItems = await loadFinancialWardrobeItems(sequelize, showId, { transaction });
+    const wardrobeItems = await loadFinancialWardrobeItems(sequelize, showId, { transaction, event, episodeId });
     const affordabilityWarning = await computeAffordabilityWarning(sequelize, showId, event, { transaction, episodeId });
     const [briefRows] = await sequelize.query(
       `SELECT id, event_metadata FROM episode_briefs
