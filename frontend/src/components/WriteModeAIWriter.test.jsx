@@ -25,7 +25,16 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+// The shared refresh and sign-out (Task #1902): controlled here, so the
+// stream's auth contract is visible without a real refresh call.
+vi.mock('../utils/authSession', async (importOriginal) => ({
+  ...(await importOriginal()),
+  refreshAccessTokenOnce: vi.fn(),
+  wipeSessionAndRedirect: vi.fn(),
+}));
+
 import apiClient from '../services/api';
+import { refreshAccessTokenOnce, wipeSessionAndRedirect } from '../utils/authSession';
 import WriteModeAIWriter, {
   aiWriterRewriteOptionsApi,
   aiWriterProseCritiqueApi,
@@ -83,8 +92,8 @@ describe('WriteModeAIWriter — Track 6 CP11 non-streaming helpers', () => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe('WriteModeAIWriter — Pattern G locked streaming site', () => {
-  test('source still contains raw fetch on action.endpoint (streaming kickoff)', () => {
-    expect(SOURCE).toMatch(/await fetch\(action\.endpoint/);
+  test('source still opens the stream with fetch on action.endpoint, through authedFetch (Task #1902)', () => {
+    expect(SOURCE).toMatch(/await authedFetch\(action\.endpoint/);
   });
 
   test('source still calls res.body.getReader() (SSE stream consumption)', () => {
@@ -152,6 +161,8 @@ describe('WriteModeAIWriter — action stream authenticates (Task #1894)', () =>
 
   beforeEach(() => {
     Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(refreshAccessTokenOnce).mockReset();
+    vi.mocked(wipeSessionAndRedirect).mockReset();
     localStorage.clear();
     localStorage.setItem('authToken', 'tok-1894');
     fetchMock = vi.fn();
@@ -183,7 +194,7 @@ describe('WriteModeAIWriter — action stream authenticates (Task #1894)', () =>
     expect(init.headers.Authorization).toBe('Bearer tok-1894');
   });
 
-  test('401 shows the auth error, not "No content returned"', async () => {
+  test('401 with no code: signed out (Task #1902); in DEV the auth error shows, not "No content returned"', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -196,6 +207,25 @@ describe('WriteModeAIWriter — action stream authenticates (Task #1894)', () =>
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('Your session has expired — sign in again.');
     expect(screen.queryByText(/No content returned/)).toBeNull();
+    expect(wipeSessionAndRedirect).toHaveBeenCalledTimes(1);
+    expect(refreshAccessTokenOnce).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('refresh fails (Task #1902): no retry, signed out', async () => {
+    vi.mocked(refreshAccessTokenOnce).mockRejectedValue(new Error('refresh refused'));
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ code: 'AUTH_INVALID_TOKEN' }),
+    });
+    renderWriter();
+    fireEvent.click(screen.getByLabelText('Continue the moment'));
+
+    await screen.findByRole('alert');
+    expect(refreshAccessTokenOnce).toHaveBeenCalledTimes(1);
+    expect(wipeSessionAndRedirect).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
