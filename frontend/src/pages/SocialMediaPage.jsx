@@ -1,41 +1,57 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import {
+  Calendar, Clapperboard, Compass, Heart, Home, ImagePlus, Inbox, MapPin, MessageCircle,
+  PlusSquare, Repeat2, Search, Sparkles, User, Users,
+} from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
+import { useAuth } from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
+import { DREAM_CITIES } from '../data/dreamCities';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
-import { posterOf, whenLabel, initial, toneOf } from '../lib/pulsePosts';
-import { PostCard, RequestPost } from '../components/Admin/PulseReviewPost';
+import { posterOf, whenLabel, initial } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
 
 // Moved to lib/pulsePosts and components/Admin/PulseReviewPost (Task 2925);
-// re-exported for the page's existing callers and tests.
+// re-exported for existing callers.
 export { posterOf, whenLabel } from '../lib/pulsePosts';
 export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReviewPost';
 
 /**
- * Social Media (the Feed project; redesigned 2026-10-04 to Evoni's mock:
- * a 2009 profile-and-wall, "lalaverse" on a purple banner). Posts is
- * Lala's wall: her profile on the left, the wall in the middle (status,
- * "What's on your mind?", the live posts with their comments), requests,
- * upcoming events and people she may know on the right. Friends lists
- * Lala's friends; profiles are made in one place, World Studio's Feed tab
- * (2026-10-11), which every profile link here opens. The Episode's own
- * Lala's Phone tab is untouched.
+ * The Pulse (docs/design/2026-10-the-pulse.md §2, §3; Task 2926): LalaVerse's
+ * social network, what Lala sees and what the audience sees. Nothing behind
+ * the curtain appears here (§1, §2 rule 5): drafts, releases, reactions
+ * moderation, beats, episode links and story labels are in Admin › The
+ * Pulse › Review (Task 2925).
  *
- * Deep links: ?tab=posts|people; the old ?layer= and ?profile= links
- * (with no ?tab=) open Friends, as they always did.
+ * The frame follows Evoni's mockup: a header with the cover, "The Pulse" and
+ * Lala's avatar and followers; navigation on the left; the feed in the
+ * middle; upcoming events and people on the right. On a phone: one column
+ * and a bottom bar (Home, Explore, Create, Inbox, Profile).
+ *
+ * Admins see a Director toggle. Director view shows each empty image spot as
+ * a dashed "+ Add" that opens Admin › The Pulse › Uploads, and the links into
+ * the studio; Lala's view leaves empty spots out (§2 rule 4).
+ *
+ * Views (?tab=): posts (Feed, default), events, people (Characters), profile.
+ * The old ?layer= and ?profile= links open Characters, as they always did.
  */
 
 /** World Studio's Feed tab, where Feed profiles are made, on the LalaVerse; at one profile when given. */
 export const profileHome = (p) => `/world-studio?tab=feed&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
+const UPLOADS = '/admin?tab=pulse&sub=uploads';
 export const TABS = [
-  { key: 'posts', label: 'Home' },
-  { key: 'people', label: 'Friends' },
+  { key: 'posts', label: 'Feed' },
+  { key: 'events', label: 'Events' },
+  { key: 'people', label: 'Characters' },
+  { key: 'profile', label: 'Profile' },
 ];
+const PAGE = 50;
+
 /**
- * An event's day and time as the event has them (2026-10-11): "Thu, Nov 12 ·
- * 6:30 PM". A date stored as YYYY-MM-DD reads as a day; any other text is
- * shown as typed. Nothing when the event has neither.
+ * An event's day and time as the event has them: "Thu, Nov 12 · 6:30 PM". A
+ * date stored as YYYY-MM-DD reads as a day; any other text is shown as typed.
  */
 export function eventWhen(date, time) {
   const t = typeof time === 'string' && time.trim() ? time.trim() : null;
@@ -47,14 +63,6 @@ export function eventWhen(date, time) {
   }
   return [d, t].filter(Boolean).join(' · ');
 }
-const WALL_TABS = [
-  { key: 'wall', label: 'Wall' },
-  { key: 'drafts', label: 'Drafts' },
-  { key: 'events', label: 'Events' },
-  // Deleted posts are kept (soft delete) and shown here, to the signed-in author only (2026-10-11).
-  { key: 'deleted', label: 'Deleted' },
-];
-const PAGE = 50;
 
 export function tabFromParams(params) {
   const tab = params.get('tab');
@@ -63,307 +71,366 @@ export function tabFromParams(params) {
   return 'posts';
 }
 
-const Tile = ({ name, size = 'sm', tone = 'c' }) => <span className={`sm-tile sm-tile-${size} sm-tone-${tone}`} aria-hidden="true">{initial(name)}</span>;
+/** A Dream City's name from its key (social_profiles.city), else null. */
+export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
 
-function Box({ title, action, children, testId }) {
+function Avatar({ name, url, size = 40 }) {
+  const style = { width: size, height: size };
+  return url
+    ? <img className="pl-avatar" src={url} alt="" style={style} />
+    : <span className="pl-avatar pl-avatar-initial" style={{ ...style, fontSize: Math.round(size * 0.42) }} aria-hidden="true">{initial(name)}</span>;
+}
+
+/** A spot Director view shows as "+ Add …" (opening Uploads) and Lala's view leaves out. */
+function AddSpot({ director, label, className = '' }) {
+  if (!director) return null;
   return (
-    <section className="sm-box" data-testid={testId}>
-      <h3 className="sm-box-title">{title}{action && <span className="sm-box-action">{action}</span>}</h3>
-      {children}
+    <Link className={`pl-add-spot ${className}`} to={UPLOADS}>
+      <ImagePlus size={18} aria-hidden="true" /> + Add {label}
+    </Link>
+  );
+}
+
+/** One post as Lala sees it: who, when, where, the words, the photo, the counts and a first comment. */
+export function PulsePost({ post }) {
+  const who = posterOf(post);
+  const city = cityName(post.socialProfile?.city);
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+  const when = whenLabel(post.posted_at);
+  return (
+    <article className="pl-post" data-testid="pl-post">
+      <header className="pl-post-head">
+        <Avatar name={who.name} url={post.author_portrait_url} size={46} />
+        <div>
+          <p className="pl-post-name">{who.name}</p>
+          {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
+        </div>
+      </header>
+      {post.content_text && <p className="pl-post-text">{post.content_text}</p>}
+      {post.image_url && <img className="pl-post-photo" src={post.image_url} alt={post.image_description || ''} />}
+      <p className="pl-post-actions">
+        <span><Heart size={16} aria-hidden="true" /> <span className="pl-sr">Likes</span>{post.likes ?? 0}</span>
+        <span><MessageCircle size={16} aria-hidden="true" /> <span className="pl-sr">Comments</span>{post.comments_count ?? comments.length}</span>
+        <span><Repeat2 size={16} aria-hidden="true" /> <span className="pl-sr">Shares</span>{post.shares ?? 0}</span>
+      </p>
+      {comments.slice(0, 2).map((c) => (
+        <div key={c.id} className="pl-comment">
+          <Avatar name={c.display_name || c.handle} url={c.portrait_url} size={32} />
+          <p><b>{c.display_name || c.handle}</b> {c.text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
+function PulseHeader({ cover, lala, search, onSearch, director, showSearch }) {
+  const owner = lala?.profile || null;
+  const name = owner?.display_name || 'Lala';
+  return (
+    <header className="pl-header" data-testid="pl-header">
+      {cover?.url
+        ? <img className="pl-cover" src={cover.url} alt={cover.alt || ''} data-testid="pl-cover" />
+        : <div className="pl-cover pl-cover-empty" aria-hidden="true" />}
+      <div className="pl-header-inner">
+        <p className="pl-wordmark"><span>LaLaVerse</span><small>Social</small></p>
+        <div className="pl-title">
+          <h1><span className="pl-title-the">The</span> Pulse</h1>
+          <p className="pl-tagline">Every city has a story.</p>
+        </div>
+        <div className="pl-header-side">
+          {showSearch && (
+            <label className="pl-search">
+              <Search size={16} aria-hidden="true" />
+              <span className="pl-sr">Search posts</span>
+              <input type="search" placeholder="Search The Pulse" value={search} onChange={(e) => onSearch(e.target.value)} />
+            </label>
+          )}
+          <p className="pl-me">
+            <Avatar name={name} url={lala?.portrait_url} size={36} />
+            {owner?.follower_count_approx && <span className="pl-followers" data-testid="pl-followers">{owner.follower_count_approx} followers</span>}
+          </p>
+        </div>
+      </div>
+      {!cover?.url && <AddSpot director={director} label="cover" className="pl-add-cover" />}
+    </header>
+  );
+}
+
+const NAV = [
+  { key: 'posts', label: 'Feed', Icon: Home },
+  { key: 'cities', label: 'Dream Cities', Icon: MapPin },
+  { key: 'events', label: 'Events', Icon: Calendar },
+  { key: 'stories', label: 'Stories', Icon: Sparkles },
+  { key: 'people', label: 'Characters', Icon: Users },
+  { key: 'messages', label: 'Messages', Icon: MessageCircle },
+];
+const EXPLORE = ['Trending', 'Fashion', 'Beauty', 'Music', 'Lifestyle', 'Creator Hub'];
+const LIVE = new Set(TABS.map((t) => t.key));
+
+function LeftNav({ tab, onTab }) {
+  return (
+    <nav className="pl-nav" aria-label="The Pulse">
+      <ul>
+        {NAV.map(({ key, label, Icon }) => (
+          <li key={key}>
+            {LIVE.has(key) ? (
+              <button type="button" className={tab === key ? 'pl-nav-item active' : 'pl-nav-item'} aria-current={tab === key ? 'page' : undefined} onClick={() => onTab(key)}>
+                <Icon size={18} aria-hidden="true" /> {label}
+              </button>
+            ) : (
+              <span className="pl-nav-item quiet" aria-disabled="true" title="Coming to The Pulse"><Icon size={18} aria-hidden="true" /> {label}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="pl-nav-label">Explore</p>
+      <ul className="pl-explore">
+        {EXPLORE.map((label) => <li key={label}><span aria-disabled="true" title="Coming to The Pulse">{label}</span></li>)}
+      </ul>
+    </nav>
+  );
+}
+
+function Composer({ show, lala, director, onShared }) {
+  const owner = lala?.profile || null;
+  const ownerName = owner?.display_name || owner?.creator_name || 'Lala';
+  const ownerHandle = owner?.handle || 'lala';
+  const [text, setText] = useState('');
+  const [kind, setKind] = useState('update');
+  const [friendId, setFriendId] = useState('');
+  const [people, setPeople] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (kind !== 'friends' || people.length) return;
+    api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100')
+      .then((r) => setPeople((r.data?.profiles || []).filter((p) => !p.is_justawoman_record && p.handle !== ownerHandle)))
+      .catch((err) => console.error('[ThePulse] people could not be read:', err.response?.status || err.message));
+  }, [kind, people.length, ownerHandle]);
+
+  const friend = people.find((p) => String(p.id) === String(friendId));
+  const composed = kind === 'update' ? text.trim()
+    : kind === 'status' ? relationshipText({ kind: 'status', status: text })
+      : relationshipText({ kind: 'friends', withName: friend ? (friend.display_name || friend.handle) : '' });
+
+  const share = async () => {
+    if (!composed || !show?.id) return;
+    setBusy(true); setError(null); setNote(null);
+    try {
+      // Lala's posts always wait for Evoni (spec §7): a draft with the
+      // current story time, released from Admin › The Pulse › Review.
+      await api.post('/api/v1/feed-posts', {
+        show_id: show.id, content_text: composed, poster_handle: ownerHandle,
+        poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse',
+        status: 'draft',
+        ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
+      });
+      setText(''); setFriendId(''); setKind('update');
+      setNote(director ? 'Saved as a draft in Admin › The Pulse › Review.' : 'Sent.');
+      onShared?.();
+    } catch (err) {
+      console.error('[ThePulse] share failed:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'That could not be sent.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <form className="pl-composer" id="pl-composer" onSubmit={(e) => { e.preventDefault(); share(); }}>
+      <Avatar name={ownerName} url={lala?.portrait_url} size={38} />
+      <div className="pl-composer-body">
+        {kind === 'friends' ? (
+          <select aria-label="Now friends with" value={friendId} onChange={(e) => setFriendId(e.target.value)}>
+            <option value="">Now friends with…</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.display_name || p.handle}</option>)}
+          </select>
+        ) : (
+          <textarea aria-label={kind === 'status' ? 'Relationship status' : "What's happening in LaLaVerse?"}
+            placeholder={kind === 'status' ? "It's complicated" : "What's happening in LaLaVerse?"}
+            rows={kind === 'status' ? 1 : 2} value={text} onChange={(e) => setText(e.target.value)} />
+        )}
+        {kind === 'status' && (
+          <p className="pl-chips">{STATUSES.map((s) => <button key={s} type="button" className="pl-chip" onClick={() => setText(s)}>{s}</button>)}</p>
+        )}
+        <div className="pl-composer-row">
+          <span className="pl-kinds" role="group" aria-label="What to share">
+            <label><input type="radio" name="pl-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Post</label>
+            <label><input type="radio" name="pl-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
+            <label><input type="radio" name="pl-kind" checked={kind === 'friends'} onChange={() => setKind('friends')} /> Friends</label>
+          </span>
+          <button type="submit" className="pl-button" disabled={busy || !composed}>{busy ? 'Sending…' : 'Share'}</button>
+        </div>
+        {note && <p className="pl-note" role="status">{note}</p>}
+        {error && <p className="pl-error" role="alert">{error}</p>}
+      </div>
+    </form>
+  );
+}
+
+function Feed({ show, lala, director, search }) {
+  const [posts, setPosts] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async (offset = 0) => {
+    if (!show?.id) return;
+    setLoading(true); setError(null);
+    try {
+      const qs = new URLSearchParams({ show_id: show.id, status: 'live', with: 'comments', limit: String(PAGE), offset: String(offset) });
+      const r = await api.get(`/api/v1/feed-posts?${qs}`);
+      const page = r.data?.data || [];
+      setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
+      setHasMore(Boolean(r.data?.hasMore));
+    } catch (err) {
+      console.error('[ThePulse] posts could not be read:', err.response?.status || err.message);
+      setError('The Pulse could not be loaded.');
+    } finally { setLoading(false); }
+  }, [show?.id]);
+  useEffect(() => { load(0); }, [load]);
+
+  const q = search.trim().toLowerCase();
+  const visible = q
+    ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
+    : posts;
+
+  return (
+    <>
+      <Composer show={show} lala={lala} director={director} />
+      {error && <p className="pl-error" role="alert">{error}</p>}
+      {loading && posts.length === 0 && <p className="pl-quiet">Loading…</p>}
+      {!loading && !error && posts.length === 0 && <p className="pl-empty" data-testid="pl-empty">Nothing posted yet.</p>}
+      {!loading && posts.length > 0 && visible.length === 0 && <p className="pl-empty">No posts match “{search.trim()}”.</p>}
+      {visible.map((p) => <PulsePost key={p.id} post={p} />)}
+      {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
+    </>
+  );
+}
+
+function EventsView({ events }) {
+  return (
+    <section className="pl-card" aria-labelledby="pl-events-heading" data-testid="pl-events">
+      <h2 id="pl-events-heading" className="pl-card-title">Upcoming Events</h2>
+      {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
+      <ul className="pl-events">{events.map((e) => <EventRow key={e.id} event={e} />)}</ul>
     </section>
   );
 }
 
-function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
-  // Lala's profile column (2026-10-11): her profile, portrait, home city,
-  // career level and friends, each from its owner (GET /social-profiles/lala;
-  // docs/reads/2026-10-11-feed-wiring-read.md). null: not read yet; false: could not be.
-  const [lala, setLala] = useState(null);
-  const [relPosts, setRelPosts] = useState([]);
-  // The LalaVerse's people, for the composer's friend picker and People You May Know.
-  const [friends, setFriends] = useState({ list: [], total: 0 });
-  const [events, setEvents] = useState([]);
-  const [mayKnow, setMayKnow] = useState([]);
-  const [posts, setPosts] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  // Lala's own drafts from the wall, and the posts an episode drafted, which
-  // wait for approval in Requests (Evoni, 2026-10-11): counted apart.
-  const [wallDrafts, setWallDrafts] = useState(0);
-  const [toApprove, setToApprove] = useState({ list: [], total: 0 });
-  const draftsTotal = wallDrafts + toApprove.total;
-  const [pending, setPending] = useState([]);
-  const [wallTab, setWallTab] = useState('wall');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [draftText, setDraftText] = useState('');
-  // What the composer shares: a status update, or a relationship change
-  // (a post too, docs/FEED_POSTS.md rule 8).
-  const [kind, setKind] = useState('update');
-  const [friendId, setFriendId] = useState('');
-  const [sharing, setSharing] = useState(false);
-
-  const loadPosts = useCallback(async (offset = 0, status = wallTab === 'drafts' ? 'draft' : 'live') => {
-    if (!show?.id) return;
-    setLoading(true); setError(null);
-    try {
-      const qs = new URLSearchParams({ show_id: show.id, status, with: 'comments', limit: String(PAGE), offset: String(offset) });
-      const r = wallTab === 'deleted'
-        ? await api.get(`/api/v1/feed-posts/deleted?show_id=${encodeURIComponent(show.id)}&limit=200`)
-        : await api.get(`/api/v1/feed-posts?${qs}`);
-      const page = r.data?.data || [];
-      setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
-      setTotal(r.data?.total ?? page.length);
-      setHasMore(Boolean(r.data?.hasMore));
-    } catch (err) {
-      console.error('[SocialMedia] posts load failed:', err.response?.status || err.message);
-      setError(err.response?.data?.error || 'The wall could not be loaded.');
-    } finally { setLoading(false); }
-  }, [show?.id, wallTab]);
-
-  const loadSides = useCallback(async () => {
-    if (!show?.id) return;
-    const safe = async (p, fallback) => { try { return await p; } catch (err) { console.error('[SocialMedia] side load failed:', err.response?.status || err.message); return fallback; } };
-    const [who, ppl, ev, drafts, pend, rel, epDrafts] = await Promise.all([
-      safe(api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}`), null),
-      safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=12'), null),
-      // The events she is going to and the guests she may know (2026-10-11).
-      safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${encodeURIComponent(show.id)}`), null),
-      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&from=wall&limit=1`), null),
-      safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${show.id}`), null),
-      // Her relationship posts (docs/FEED_POSTS.md rule 8), not only the wall's first page.
-      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&post_type=relationship&status=live&limit=50`), null),
-      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&from=episode&with=comments&limit=20`), null),
-    ]);
-    setLala(who?.data?.data || false);
-    setRelPosts(rel?.data?.data || []);
-    const list = (ppl?.data?.profiles || []).filter((p) => !p.is_justawoman_record);
-    setFriends({ list, total: ppl?.data?.pagination?.total ?? ppl?.data?.total ?? list.length });
-    setEvents(Array.isArray(ev?.data?.data?.upcoming) ? ev.data.data.upcoming : []);
-    setMayKnow(Array.isArray(ev?.data?.data?.may_know) ? ev.data.data.may_know : []);
-    setWallDrafts(drafts?.data?.total ?? 0);
-    const epList = Array.isArray(epDrafts?.data?.data) ? epDrafts.data.data : [];
-    setToApprove({ list: epList, total: epDrafts?.data?.total ?? epList.length });
-    setPending(pend?.data?.data || []);
-  }, [show?.id]);
-
-  useEffect(() => { loadPosts(0); }, [loadPosts]);
-  useEffect(() => { loadSides(); }, [loadSides]);
-  useEffect(() => { if (tabRequest?.tab) setWallTab(tabRequest.tab); }, [tabRequest]);
-  useEffect(() => { onInbox?.(draftsTotal + pending.length); }, [draftsTotal, pending.length, onInbox]);
-
-  const owner = lala?.profile || null;
-  const ownerName = owner?.display_name || owner?.creator_name || 'Lala';
-  const ownerHandle = owner?.handle || 'lala';
-  const status = useMemo(() => posts.find((p) => wallTab === 'wall' && (p.poster_handle || p.socialProfile?.handle) === ownerHandle) || null, [posts, ownerHandle, wallTab]);
-
-  const friendPicked = friends.list.find((p) => String(p.id) === String(friendId));
-  const composed = kind === 'update' ? draftText.trim()
-    : kind === 'status' ? relationshipText({ kind: 'status', status: draftText })
-      : relationshipText({ kind: 'friends', withName: friendPicked ? (friendPicked.display_name || friendPicked.handle) : '' });
-  const share = async () => {
-    if (!composed || !show?.id) return;
-    setSharing(true); setError(null);
-    try {
-      await api.post('/api/v1/feed-posts', {
-        show_id: show.id, content_text: composed, poster_handle: ownerHandle,
-        poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse',
-        // A draft with the current story time (2026-10-11); Release makes it live.
-        status: 'draft',
-        ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
-      });
-      setDraftText(''); setFriendId(''); setKind('update');
-      if (wallTab !== 'drafts') setWallTab('drafts'); else await loadPosts(0, 'draft');
-      await loadSides();
-    } catch (err) { setError(err.response?.data?.error || 'The post could not be shared.'); }
-    finally { setSharing(false); }
-  };
-
-  if (showLoaded && !show) return <p className="sm-empty" data-testid="sm-no-show">Pick a show first. The wall belongs to a show.</p>;
-
-  const q = search.trim().toLowerCase();
-  const visible = q ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q)) : posts;
-  const relationship = latestStatus([...posts, ...relPosts], ownerHandle) || owner?.relationship_status || null;
-  const peopleLink = profileHome;
-  // Each event opens its Event Package.
-  const eventLink = (e) => `/shows/${show?.id}/events/${e.id}`;
-
+function EventRow({ event }) {
+  const when = eventWhen(event.date, event.time);
   return (
-    <div className="sm-wall">
-      <aside className="sm-left">
-        {lala?.portrait_url
-          ? <img className="sm-portrait" src={lala.portrait_url} alt={ownerName} data-testid="sm-portrait" />
-          : <Tile name={ownerName} size="xl" tone="l" />}
-        <Link className="sm-small-link" to={peopleLink(owner)}>Edit My Profile</Link>
-        <Box title="Information" testId="sm-info">
-          <dl className="sm-dl">
-            {lala?.home_city && <><dt>Current City</dt><dd data-testid="sm-city">{lala.home_city}</dd></>}
-            {relationship && <><dt>Relationship Status</dt><dd data-testid="sm-rel-status">{relationship}</dd></>}
-            {lala?.career && <><dt>Career level</dt><dd data-testid="sm-career">{lala.career.label}</dd></>}
-            {owner?.follower_count_approx && <><dt>Followers</dt><dd>{owner.follower_count_approx}</dd></>}
-          </dl>
-          {lala && !lala.home_city && !relationship && !lala.career && <p className="sm-muted">Nothing set yet. Her home city is in Show Settings.</p>}
-        </Box>
-        <Box title="Friends" action={<Link to="/pulse?tab=people">See all</Link>} testId="sm-friends">
-          {lala?.friends ? (
-            <>
-              <p className="sm-muted" data-testid="sm-friends-count">{lala.friends.total} friend{lala.friends.total === 1 ? '' : 's'}</p>
-              <div className="sm-friend-grid">
-                {lala.friends.list.map((p) => (
-                  <Link key={p.id} to={peopleLink(p)} className="sm-friend" data-testid="sm-friend"><Tile name={p.display_name || p.handle} size="lg" tone={toneOf(p.handle)} /><span>{p.display_name || p.handle}</span></Link>
-                ))}
-                {lala.friends.total === 0 && <p className="sm-muted">No friends yet. A friend is a LalaVerse profile whose link to Lala is Direct.</p>}
-              </div>
-            </>
-          ) : <p className="sm-muted">{lala === null ? 'Loading…' : 'Friends could not be read.'}</p>}
-        </Box>
-      </aside>
-
-      <main className="sm-center">
-        <h1 className="sm-owner">{ownerName}</h1>
-        <p className="sm-status" data-testid="sm-status">
-          {status ? <>{status.content_text} <small>{whenLabel(status.posted_at)}</small></> : <em>has not posted yet.</em>}
-        </p>
-        <nav className="sm-wall-tabs" role="tablist" aria-label="Wall sections">
-          {WALL_TABS.map((t) => (
-            <button key={t.key} type="button" role="tab" aria-selected={wallTab === t.key} className={wallTab === t.key ? 'active' : ''} onClick={() => setWallTab(t.key)}>
-              {t.label}{t.key === 'drafts' && draftsTotal > 0 ? ` (${draftsTotal})` : ''}
-            </button>
-          ))}
-        </nav>
-
-        {wallTab !== 'events' && wallTab !== 'deleted' && (
-          <form className="sm-composer" onSubmit={(e) => { e.preventDefault(); share(); }}>
-            <label htmlFor="sm-composer-text" className="sm-composer-label">
-              {kind === 'update' ? <>What&apos;s on your mind?</> : kind === 'status' ? 'Relationship status' : 'Now friends with'}
-            </label>
-            {kind === 'friends' ? (
-              <select id="sm-composer-text" className="sm-composer-select" value={friendId} onChange={(e) => setFriendId(e.target.value)}>
-                <option value="">Pick a friend…</option>
-                {friends.list.filter((p) => p.handle !== ownerHandle).map((p) => <option key={p.id} value={p.id}>{p.display_name || p.handle}</option>)}
-              </select>
-            ) : (
-              <>
-                <textarea id="sm-composer-text" rows={kind === 'status' ? 1 : 2} value={draftText} onChange={(e) => setDraftText(e.target.value)} placeholder={kind === 'status' ? "It's complicated" : ''} />
-                {kind === 'status' && <p className="sm-muted">{STATUSES.map((s) => <button key={s} type="button" className="sm-mini sm-status-pick" onClick={() => setDraftText(s)}>{s}</button>)}</p>}
-              </>
-            )}
-            <div className="sm-composer-row">
-              <span className="sm-composer-kinds" role="group" aria-label="What to share">
-                <label><input type="radio" name="sm-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Status</label>
-                <label><input type="radio" name="sm-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
-                <label><input type="radio" name="sm-kind" checked={kind === 'friends'} onChange={() => setKind('friends')} /> Friends</label>
-              </span>
-              <span className="sm-muted">Saves as a draft. Release it when it&apos;s time.</span>
-              <button type="submit" className="sm-btn" disabled={sharing || !composed}>{sharing ? 'Sharing…' : 'Share'}</button>
-            </div>
-          </form>
-        )}
-
-        {error && <p className="sm-error" role="alert">{error}</p>}
-        <p className="sm-count" data-testid="sm-count">
-          {loading && posts.length === 0 ? 'Loading the wall…' : wallTab === 'events' ? `${events.length} upcoming event${events.length === 1 ? '' : 's'}` : `${total} ${wallTab === 'drafts' ? 'draft' : wallTab === 'deleted' ? 'deleted post' : 'post'}${total === 1 ? '' : 's'}${show?.name ? ` · ${show.name}` : ''}`}
-        </p>
-
-        {wallTab === 'events' ? (
-          <ul className="sm-events" data-testid="sm-events">
-            {events.map((e) => <li key={e.id}><Link to={eventLink(e)}><b>{e.name}</b></Link><br /><span className="sm-muted">{[e.venue, eventWhen(e.date, e.time), e.episode?.number != null ? `Episode ${e.episode.number}` : null].filter(Boolean).join(' · ')}</span></li>)}
-            {events.length === 0 && <li className="sm-muted">No upcoming events. An event shows here once one of Lala&apos;s episodes is made from it.</li>}
-          </ul>
-        ) : (
-          <>
-            {!loading && !error && posts.length === 0 && (
-              <div className="sm-empty" data-testid="sm-empty">
-                {wallTab === 'drafts'
-                  ? <p>No drafts. A draft is a post shared here, or written inside an episode, that is not live yet. Release it when it&apos;s time.</p>
-                  : wallTab === 'deleted'
-                    ? <p>No deleted posts. A deleted post is kept here and can be restored.</p>
-                    : <><p>Nothing on the wall yet.</p><p>Share something above, or generate posts from an episode. Each one is what a character said, once, with its likes and comments.</p></>}
-              </div>
-            )}
-            {visible.map((p) => <PostCard key={p.id} post={p} showId={show?.id} onChange={() => { loadPosts(0); loadSides(); }} />)}
-            {hasMore && !loading && <button type="button" className="sm-btn sm-more" onClick={() => loadPosts(posts.length)}>Older posts</button>}
-          </>
-        )}
-      </main>
-
-      <aside className="sm-right">
-        <Box title="Requests" testId="sm-requests">
-          <ul className="sm-plain">
-            <li data-testid="sm-to-approve-count">{toApprove.total} post{toApprove.total === 1 ? '' : 's'} to approve</li>
-            <li><button type="button" className="sm-link-btn" onClick={() => setWallTab('drafts')}>{wallDrafts} draft post{wallDrafts === 1 ? '' : 's'}</button></li>
-            <li>{pending.length} reaction{pending.length === 1 ? '' : 's'} to approve</li>
-          </ul>
-          {toApprove.list.map((p) => <RequestPost key={p.id} post={p} onChange={() => { loadPosts(0); loadSides(); }} />)}
-          {toApprove.total > toApprove.list.length && <p className="sm-muted">Showing {toApprove.list.length} of {toApprove.total}; the rest are under Drafts.</p>}
-          {pending.slice(0, 3).map((c) => <p key={c.id} className="sm-muted sm-pending">@{c.handle}: “{c.text}”{c.post?.poster_handle ? ` on @${c.post.poster_handle}'s post` : ''}</p>)}
-        </Box>
-        <Box title="Upcoming Events" testId="sm-upcoming">
-          {events.slice(0, 2).map((e) => (
-            <p key={e.id} className="sm-event" data-testid="sm-upcoming-event">
-              <Link to={eventLink(e)}><b>{e.name}</b></Link>
-              {e.venue && <><br /><span className="sm-muted">{e.venue}</span></>}
-              {eventWhen(e.date, e.time) && <><br /><span className="sm-muted">{eventWhen(e.date, e.time)}</span></>}
-            </p>
-          ))}
-          {events.length === 0 && <p className="sm-muted">None planned.</p>}
-        </Box>
-        <Box title="People You May Know" testId="sm-may-know">
-          {mayKnow.map((p) => <p key={p.id} className="sm-person" data-testid="sm-may-know-person"><Tile name={p.display_name || p.handle} tone={toneOf(p.handle)} /><span><b>{p.display_name || p.handle}</b><br /><Link to={peopleLink(p)}>See profile</Link></span></p>)}
-          {mayKnow.length === 0 && (events.some((e) => e.guest_count > 0)
-            ? <p className="sm-muted">Everyone here already knows Lala.</p>
-            : <p className="sm-muted">No one to meet yet: her upcoming events have no guest lists.</p>)}
-        </Box>
-      </aside>
-    </div>
+    <li className="pl-event" data-testid="pl-event">
+      <b>{event.name}</b>
+      {(event.venue || when) && <span className="pl-meta">{[event.venue, when].filter(Boolean).join(' · ')}</span>}
+    </li>
   );
 }
 
-/**
- * The Friends tab (2026-10-11): Lala's friends only, the LalaVerse profiles
- * whose link to her is Direct (GET /social-profiles/lala?friends=all). Each
- * opens its profile where profiles are made; so does "Add people".
- */
-function FriendsTab({ show, showLoaded }) {
+function CharactersView({ show, director }) {
   const [friends, setFriends] = useState(null);
   useEffect(() => {
     if (!show?.id) return undefined;
     let cancelled = false;
     api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all`)
       .then((res) => { if (!cancelled) setFriends(res?.data?.data?.friends || false); })
-      .catch((err) => { console.error('[SocialMedia] friends load failed:', err.response?.status || err.message); if (!cancelled) setFriends(false); });
+      .catch((err) => { console.error('[ThePulse] friends could not be read:', err.response?.status || err.message); if (!cancelled) setFriends(false); });
     return () => { cancelled = true; };
   }, [show?.id]);
 
-  if (showLoaded && !show) return <p className="sm-empty" data-testid="sm-no-show">Pick a show first. Friends belong to Lala&apos;s show.</p>;
   return (
-    <section className="sm-friends-tab" data-testid="sm-friends-tab">
-      <div className="sm-friends-head">
-        <h2 className="sm-friends-title">Friends{friends ? ` (${friends.total})` : ''}</h2>
-        <Link className="sm-btn" to={profileHome()} data-testid="sm-add-people">Add people</Link>
+    <section className="pl-card" aria-labelledby="pl-people-heading" data-testid="pl-people">
+      <div className="pl-card-head">
+        <h2 id="pl-people-heading" className="pl-card-title">Lala's friends{friends ? ` (${friends.total})` : ''}</h2>
+        {director && <Link className="pl-studio-link" to={profileHome()} data-testid="pl-add-people">Add people in World Studio</Link>}
       </div>
-      {friends === null && <p className="sm-muted">Loading friends…</p>}
-      {friends === false && <p className="sm-error" role="alert">Friends could not be read.</p>}
-      {friends && friends.total === 0 && (
-        <div className="sm-empty" data-testid="sm-friends-empty">
-          <p>Lala has no friends here yet.</p>
-          <p>A friend is a LalaVerse profile whose link to Lala is Direct. Make or edit profiles in <Link to={profileHome()}>World Studio › Feed</Link>.</p>
-        </div>
-      )}
+      {friends === null && <p className="pl-quiet">Loading…</p>}
+      {friends === false && <p className="pl-error" role="alert">Friends could not be read.</p>}
+      {friends && friends.total === 0 && <p className="pl-quiet" data-testid="pl-friends-empty">No friends yet.</p>}
       {friends && friends.total > 0 && (
-        <ul className="sm-friends-list">
+        <ul className="pl-people">
           {friends.list.map((p) => (
-            <li key={p.id}>
-              <Link to={profileHome(p)} className="sm-friend-row" data-testid="sm-friends-row">
-                <Tile name={p.display_name || p.handle} size="md" tone={toneOf(p.handle)} />
-                <span><b>{p.display_name || p.handle}</b>{p.handle && <small>@{String(p.handle).replace(/^@/, '')}</small>}</span>
-              </Link>
+            <li key={p.id} className="pl-person" data-testid="pl-friend">
+              <Avatar name={p.display_name || p.handle} size={40} />
+              <span><b>{p.display_name || p.handle}</b>{p.handle && <small className="pl-meta">@{String(p.handle).replace(/^@/, '')}</small>}</span>
+              {director && <Link className="pl-studio-link" to={profileHome(p)}>Open profile</Link>}
             </li>
           ))}
         </ul>
       )}
-      {friends && friends.total > friends.list.length && <p className="sm-muted">Showing {friends.list.length} of {friends.total}.</p>}
+      {friends && friends.total > friends.list.length && <p className="pl-quiet">Showing {friends.list.length} of {friends.total}.</p>}
     </section>
+  );
+}
+
+function ProfileView({ lala, relationship, director }) {
+  const owner = lala?.profile || null;
+  const name = owner?.display_name || 'Lala';
+  const friends = lala?.friends;
+  return (
+    <section className="pl-card" aria-labelledby="pl-profile-heading" data-testid="pl-profile">
+      <div className="pl-profile-head">
+        <Avatar name={name} url={lala?.portrait_url} size={88} />
+        <div>
+          <h2 id="pl-profile-heading" className="pl-card-title">{name}</h2>
+          {owner?.handle && <p className="pl-meta">@{String(owner.handle).replace(/^@/, '')}</p>}
+        </div>
+      </div>
+      <dl className="pl-facts">
+        {lala?.home_city && <><dt>Lives in</dt><dd data-testid="pl-city">{lala.home_city}</dd></>}
+        {relationship && <><dt>Relationship</dt><dd data-testid="pl-rel-status">{relationship}</dd></>}
+        {lala?.career && <><dt>Career</dt><dd data-testid="pl-career">{lala.career.label}</dd></>}
+        {owner?.follower_count_approx && <><dt>Followers</dt><dd>{owner.follower_count_approx}</dd></>}
+      </dl>
+      {friends && friends.total > 0 && (
+        <>
+          <p className="pl-nav-label">Friends · {friends.total}</p>
+          <ul className="pl-friend-grid">
+            {friends.list.map((p) => <li key={p.id} data-testid="pl-profile-friend"><Avatar name={p.display_name || p.handle} size={44} /><span>{p.display_name || p.handle}</span></li>)}
+          </ul>
+        </>
+      )}
+      {director && <Link className="pl-studio-link" to={profileHome(owner)}>Edit Lala's profile in World Studio</Link>}
+    </section>
+  );
+}
+
+function RightColumn({ events, mayKnow }) {
+  return (
+    <>
+      <section className="pl-card" aria-labelledby="pl-upcoming-heading" data-testid="pl-upcoming">
+        <h2 id="pl-upcoming-heading" className="pl-card-title">Upcoming Events</h2>
+        {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
+        <ul className="pl-events">{events.slice(0, 3).map((e) => <EventRow key={e.id} event={e} />)}</ul>
+      </section>
+      {mayKnow.length > 0 && (
+        <section className="pl-card" aria-labelledby="pl-may-know-heading" data-testid="pl-may-know">
+          <h2 id="pl-may-know-heading" className="pl-card-title">People you may know</h2>
+          <ul className="pl-people">
+            {mayKnow.map((p) => <li key={p.id} className="pl-person" data-testid="pl-may-know-person"><Avatar name={p.display_name || p.handle} size={36} /><b>{p.display_name || p.handle}</b></li>)}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+function BottomNav({ tab, onTab, onCreate }) {
+  const item = (key, label, Icon, onClick, disabled = false) => (
+    <button type="button" className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined}
+      onClick={onClick} disabled={disabled} title={disabled ? 'Coming to The Pulse' : undefined}>
+      <Icon size={20} aria-hidden="true" /><span>{label}</span>
+    </button>
+  );
+  return (
+    <nav className="pl-bottom" aria-label="The Pulse on a phone">
+      {item('posts', 'Home', Home, () => onTab('posts'))}
+      {item('events', 'Explore', Compass, () => onTab('events'))}
+      {item('create', 'Create', PlusSquare, onCreate)}
+      {item('inbox', 'Inbox', Inbox, undefined, true)}
+      {item('profile', 'Profile', User, () => onTab('profile'))}
+    </nav>
   );
 }
 
@@ -371,31 +438,90 @@ export default function SocialMediaPage() {
   const [params, setParams] = useSearchParams();
   const tab = tabFromParams(params);
   const { show, loaded } = useActiveShow();
+  const { user } = useAuth();
+  const admin = isAdmin(user);
+  const [directorOn, setDirectorOn] = useState(false);
+  const director = admin && directorOn;
   const [search, setSearch] = useState('');
-  const [inbox, setInbox] = useState(0);
-  const [tabRequest, setTabRequest] = useState(null);
+  const [cover, setCover] = useState(null);
+  const [lala, setLala] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [mayKnow, setMayKnow] = useState([]);
+  const [relPosts, setRelPosts] = useState([]);
+  const createRequest = useRef(false);
 
-  const switchTab = (key) => setParams((prev) => { const next = new URLSearchParams(prev); next.set('tab', key); return next; });
-  const openInbox = () => { if (tab !== 'posts') switchTab('posts'); setTabRequest({ tab: 'drafts', at: Date.now() }); };
+  const switchTab = (key) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', key);
+    next.delete('layer');
+    next.delete('profile');
+    return next;
+  });
+
+  useEffect(() => {
+    if (!show?.id) return;
+    const id = encodeURIComponent(show.id);
+    const safe = async (p, label) => {
+      try { return await p; } catch (err) { console.error(`[ThePulse] ${label} could not be read:`, err.response?.status || err.message); return null; }
+    };
+    let alive = true;
+    (async () => {
+      const [c, who, side, rel] = await Promise.all([
+        safe(api.get(`/api/v1/shows/${show.id}/pulse-cover`), 'cover'),
+        safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}`), "Lala's profile"),
+        safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
+        safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50`), 'relationship posts'),
+      ]);
+      if (!alive) return;
+      setCover(c?.data?.cover || null);
+      setLala(who?.data?.data || false);
+      setEvents(Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : []);
+      setMayKnow(Array.isArray(side?.data?.data?.may_know) ? side.data.data.may_know : []);
+      setRelPosts(rel?.data?.data || []);
+    })();
+    return () => { alive = false; };
+  }, [show?.id]);
+
+  useEffect(() => {
+    if (tab === 'posts' && createRequest.current) {
+      createRequest.current = false;
+      document.getElementById('pl-composer')?.querySelector('textarea, select')?.focus();
+    }
+  }, [tab]);
+  const onCreate = () => {
+    if (tab === 'posts') document.getElementById('pl-composer')?.querySelector('textarea, select')?.focus();
+    else { createRequest.current = true; switchTab('posts'); }
+  };
+
+  const owner = lala?.profile || null;
+  const relationship = useMemo(() => latestStatus(relPosts, owner?.handle || 'lala') || owner?.relationship_status || null, [relPosts, owner]);
 
   return (
-    <div className="sm-page">
-      <header className="sm-banner">
-        <span className="sm-wordmark">lalaverse</span>
-        <nav className="sm-nav" role="tablist" aria-label="The Pulse sections">
-          <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => switchTab('posts')}>Home</button>
-          <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => { switchTab('posts'); setTabRequest({ tab: 'wall', at: Date.now() }); }}>Profile</button>
-          <button type="button" role="tab" aria-selected={tab === 'people'} className={tab === 'people' ? 'active' : ''} onClick={() => switchTab('people')}>Friends</button>
-          <button type="button" className="sm-inbox" onClick={openInbox} title="Draft posts and reactions waiting for approval">Inbox{inbox > 0 ? ` (${inbox})` : ''}</button>
-        </nav>
-        {tab === 'posts' && <input className="sm-search" type="search" aria-label="Search posts" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />}
-        <span className="sm-banner-right">The Pulse</span>
-      </header>
-      {tab === 'posts' && <Wall show={show} showLoaded={loaded} search={search} tabRequest={tabRequest} onInbox={setInbox} />}
-      {tab === 'people' && <FriendsTab show={show} showLoaded={loaded} />}
-      <footer className="sm-footer">
-        lalaverse · one post, one place · <Link to={profileHome()}>People</Link>{show?.id && <> · <Link to={`/shows/${show.id}/feed-timeline`}>Timeline &amp; generation</Link></>}
-      </footer>
+    <div className={director ? 'pl-page pl-director' : 'pl-page'} data-testid="pl-page">
+      <PulseHeader cover={cover} lala={lala} search={search} onSearch={setSearch} director={director} showSearch={tab === 'posts'} />
+      {admin && (
+        <div className="pl-toggle-bar">
+          <button type="button" className={director ? 'pl-toggle on' : 'pl-toggle'} aria-pressed={director} onClick={() => setDirectorOn((v) => !v)} data-testid="pl-director-toggle">
+            <Clapperboard size={16} aria-hidden="true" />
+            {director ? 'Director view: empty spots shown' : "Lala's screen (what the audience sees)"}
+          </button>
+        </div>
+      )}
+      {loaded && !show ? (
+        <p className="pl-empty pl-no-show" data-testid="pl-no-show">Nothing here yet.</p>
+      ) : (
+        <div className="pl-grid">
+          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /></aside>
+          <main className="pl-center">
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} />}
+            {tab === 'events' && <EventsView events={events} />}
+            {tab === 'people' && <CharactersView show={show} director={director} />}
+            {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
+          </main>
+          <aside className="pl-right"><RightColumn events={events} mayKnow={mayKnow} /></aside>
+        </div>
+      )}
+      <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />
     </div>
   );
 }
