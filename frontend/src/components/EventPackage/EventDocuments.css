@@ -8,6 +8,7 @@
 .evd-muted { color: var(--lala-ink-muted); font-size: 13px; }
 .evd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .evd-grid.has-lead { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.evd-grid.is-single { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1100px) { .evd-grid.has-lead { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .evd-card {
   display: flex;

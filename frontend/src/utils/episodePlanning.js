@@ -20,20 +20,25 @@
  */
 import { describeEventOrganizer } from './eventOrganizer';
 import { resolveEventVenueAndDate } from './eventReadiness';
+import { closetBeat } from '../lib/scriptMoments';
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
+// "; Beat n needs it" when the script has a closet beat, else nothing
+// (Task #2880: the beat is the script's, never a fixed number).
+const needsIt = (beat) => (beat ? `; Beat ${beat} needs it` : '');
+
 /** The Look item from the outfit locked on the Wardrobe tab. */
-function lockedLook(outfit, planned) {
+function lockedLook(outfit, planned, beat) {
   if (outfit.length) {
     const names = outfit.map((p) => p?.name).filter(Boolean);
     const shown = names.slice(0, 3).join(', ');
     const more = names.length > 3 ? ` +${names.length - 3}` : '';
-    return { key: 'look', label: 'Look', done: true, detail: `${outfit.length} piece${outfit.length === 1 ? '' : 's'} locked${shown ? `: ${shown}${more}` : ''}`, fix: null };
+    return { key: 'look', label: 'Look', done: true, beat, detail: `${outfit.length} piece${outfit.length === 1 ? '' : 's'} locked${shown ? `: ${shown}${more}` : ''}`, fix: null };
   }
   return {
-    key: 'look', label: 'Look', done: false,
-    detail: planned ? 'Planned in the event, not locked on the Wardrobe tab yet; Beat 8 needs it' : 'Not chosen yet; Beat 8 needs it',
+    key: 'look', label: 'Look', done: false, beat,
+    detail: planned ? `Planned in the event, not locked on the Wardrobe tab yet${needsIt(beat)}` : `Not chosen yet${needsIt(beat)}`,
     fix: 'wardrobe',
   };
 }
@@ -63,6 +68,7 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
   const pieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
   const hasLook = pieces.length > 0 || !!event.outfit_set_id;
   const stakes = text(event.narrative_stakes) || text(event.fail_consequence);
+  const beat = closetBeat(episode?.script_content);
 
   const items = [
     {
@@ -84,11 +90,11 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
         : 'No venue',
       fix: hasVenue && !hasSet ? 'package' : null,
     },
-    Array.isArray(outfit) ? lockedLook(outfit, hasLook) : {
-      key: 'look', label: 'Look', done: hasLook,
+    Array.isArray(outfit) ? lockedLook(outfit, hasLook, beat) : {
+      key: 'look', label: 'Look', done: hasLook, beat,
       detail: hasLook
         ? (pieces.length ? `${pieces.length} piece${pieces.length === 1 ? '' : 's'} chosen` : 'Outfit set chosen')
-        : 'Not chosen yet; Beat 8 needs it',
+        : `Not chosen yet${needsIt(beat)}`,
       fix: hasLook ? null : 'wardrobe',
     },
     {

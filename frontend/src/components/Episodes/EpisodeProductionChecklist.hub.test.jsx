@@ -1,7 +1,8 @@
 /**
  * Production → Checklist as a hub (Evoni's Episode mock, 2026-10-05): the
  * progress card, the episode timeline from the production coverage (a row
- * per kind of piece, a column per beat, Lala's look on Beat 8), and a card
+ * per kind of piece, a column per beat, Lala's look in the script's closet
+ * beat), and a card
  * per section with where it is worked on.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -20,9 +21,10 @@ const COVERAGE = { covered: 0, total: 2, beats: [
   { number: 8, name: 'Transformation Loop', indicators: { environment: ind('required', false), host: ind('not_required', false), character: ind('required', null), interface: ind('required', true) } },
 ] };
 
-const renderHub = () => {
+const SCRIPT = '## BEAT: 1 · Opening Ritual\nPrime: "Hi."\n## BEAT: 8 · Transformation Loop\n[UI:OPEN ClosetCategory Outfit]\n';
+const renderHub = (episode = {}) => {
   const onOpenTab = vi.fn();
-  render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala' }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
+  render(<MemoryRouter><EpisodeProductionChecklist episode={{ id: 'ep-1', show_id: 'show-1', title: 'Gala', script_content: SCRIPT, ...episode }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
   return { onOpenTab };
 };
 
@@ -44,7 +46,7 @@ describe('Checklist hub', () => {
     expect(within(summary).getByTestId('checklist-count').textContent).toMatch(/^\d+ of 24$/);
   });
 
-  test('the timeline: a cell per beat per row, and Lala\'s look on Beat 8', async () => {
+  test('the timeline: a cell per beat per row, and Lala\'s look in the script\'s closet beat', async () => {
     renderHub();
     const states = async (key) => [...(await screen.findByTestId(`episode-timeline-row-${key}`)).querySelectorAll('.ckh-cell')].map((c) => c.dataset.state);
     expect(await states('environment')).toEqual(['ready', 'missing']);
@@ -53,6 +55,14 @@ describe('Checklist hub', () => {
     expect(await states('interface')).toEqual(['unused', 'ready']);
     expect(await states('look')).toEqual(['unused', 'missing']);
     expect(screen.getByTestId('episode-timeline-open').getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    expect(screen.getByTestId('checklist-section-wardrobe').textContent).toContain("Lala's closet and her look for the event. Beat 8 needs it.");
+  });
+
+  test('a script with no closet beat names no beat (Task #2880)', async () => {
+    renderHub({ script_content: '' });
+    const row = await screen.findByTestId('episode-timeline-row-look');
+    expect([...row.querySelectorAll('.ckh-cell')].map((c) => c.dataset.state)).toEqual(['unused', 'unused']);
+    expect(screen.getByTestId('checklist-section-wardrobe').textContent).not.toMatch(/Beat \d/);
   });
 
   test('the Overlays card: the title overlay and placed overlays, opening Production → Overlays', async () => {

@@ -54,7 +54,8 @@ function ShoppingPaper({ doc, event, outfitPieces, balance }) {
       <div className="evd-paper-total" data-testid="evd-shopping-total">
         Total 🪙 {coins(total)}{balance != null ? ` / ${coins(balance)} coins` : ''}
       </div>
-      <div className="evd-paper-note">comfy enough to stand all night!!</div>
+      {/* The list's own note when it has one (no line written in for her; the Wardrobe shopping list, 2026-10-11). */}
+      {typeof doc?.note === 'string' && doc.note.trim() && <div className="evd-paper-note" data-testid="evd-paper-note">{doc.note.trim()}</div>}
     </div>
   );
 }
@@ -168,7 +169,9 @@ function Editor({ type, doc, onCancel, onSave, saving }) {
 // paragraph when the page already explains the documents. layout="wide"
 // lays each document out as one wide card, its paper on the left (the
 // episode's Overlays tab, one card per overlay; Evoni, 2026-10-07).
-export default function EventDocuments({ showId, eventId, event, outfitPieces = [], balance = null, lead = null, intro = true, layout = 'grid' }) {
+// only: one document type ('shopping_list' on the episode's Wardrobe tab,
+// 2026-10-11), with its same footer.
+export default function EventDocuments({ showId, eventId, event, outfitPieces = [], balance = null, lead = null, intro = true, layout = 'grid', only = null }) {
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
@@ -221,9 +224,9 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
       {error && <p className="evd-error" role="alert">{error}</p>}
       {!docs && !error && <p className="evd-muted">Loading documents…</p>}
       {(docs || lead) && (
-        <div className={`evd-grid${lead ? ' has-lead' : ''}`}>
+        <div className={`evd-grid${lead ? ' has-lead' : ''}${only ? ' is-single' : ''}`}>
           {lead}
-          {docs && DOCS.map(({ type, title, from }) => {
+          {docs && DOCS.filter((d) => !only || d.type === only).map(({ type, title, from }) => {
             const doc = docs[type];
             const state = docState(doc);
             const isBusy = (a) => busy === `${type}:${a}`;

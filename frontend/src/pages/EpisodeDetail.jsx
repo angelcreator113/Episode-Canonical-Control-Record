@@ -36,6 +36,7 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
+import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
 import './EpisodeDetail.css';
@@ -878,6 +879,8 @@ const EpisodeDetail = () => {
                     episodeId={episodeId}
                     showId={episode?.show_id || episode?.showId}
                     event={selectedEvent}
+                    // The script's closet beat, the beat the look chip names (Task #2880).
+                    closetBeat={closetBeat(episode?.script_content)}
                     // One coin balance (Evoni, 2026-10-07): the game reads Lala's
                     // ledger balance, the number Money and the header show, not
                     // the separately stored character coins.

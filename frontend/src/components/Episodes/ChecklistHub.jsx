@@ -28,7 +28,7 @@ export function ProductionSummary({ done, total, loading, onRefresh }) {
   );
 }
 
-export function EpisodeTimeline({ episodeId, lookReady, version = 0 }) {
+export function EpisodeTimeline({ episodeId, lookReady, lookBeat = null, version = 0 }) {
   const [coverage, setCoverage] = useState(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -39,7 +39,7 @@ export function EpisodeTimeline({ episodeId, lookReady, version = 0 }) {
       .catch((err) => { console.error('[ChecklistHub] coverage load failed:', err); if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [episodeId, version]);
-  const grid = timelineGrid(coverage, { lookReady });
+  const grid = timelineGrid(coverage, { lookReady, lookBeat });
   return (
     <section className="ckh-timeline" data-testid="episode-timeline">
       <div className="ckh-timeline-head">

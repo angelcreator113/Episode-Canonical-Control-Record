@@ -45,6 +45,22 @@ beforeEach(() => {
 });
 
 describe('EventDocuments', () => {
+  // The episode's Wardrobe tab shows the shopping list on its own, with the
+  // same footer, and no note written in for her (Task #2880).
+  test('only="shopping_list": the list alone, its footer, and its own note or none', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: PLAN } } });
+    const { unmount } = render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" />);
+    const shop = await screen.findByTestId('evd-shopping_list');
+    expect(screen.queryByTestId('evd-career_plan')).toBeNull();
+    for (const name of [/Edit/, /Redraft/, /Approve/]) expect(within(shop).getByRole('button', { name })).toBeTruthy();
+    expect(screen.queryByTestId('evd-paper-note')).toBeNull();
+    expect(screen.getByTestId('evd-shopping-paper').textContent).not.toMatch(/comfy enough/);
+    unmount();
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, note: ' Her own note. ' }, career_plan: null } } });
+    render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" />);
+    expect((await screen.findByTestId('evd-paper-note')).textContent).toBe('Her own note.');
+  });
+
   test('nothing drafted: both cards say so and offer Draft', async () => {
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
