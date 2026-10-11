@@ -823,6 +823,10 @@ app.use('/api/v1/website-slots', websiteSlotRoutes);
 const publicSiteRoutes = trackRouteLoad('publicSite', () => require('./routes/publicSite'));
 app.use('/api/v1/public', publicSiteRoutes);
 
+// Lala's everyday fits on The Pulse (Task #2922): requireAuth on every route.
+const pulseFitRoutes = trackRouteLoad('pulseFits', () => require('./routes/pulseFits'));
+app.use('/api/v1/pulse-fits', pulseFitRoutes);
+
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
 try {

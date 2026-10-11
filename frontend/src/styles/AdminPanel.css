@@ -696,3 +696,63 @@
   padding: 0.375rem 0.625rem;
   font-size: 0.8125rem;
 }
+
+/* Uploads › Lala's everyday fits (Task #2922) */
+.pulse-fits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 1rem;
+}
+
+.pulse-fit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pulse-fit img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--lala-radius);
+  background: var(--lala-parchment-2);
+}
+
+.pulse-add-spot.tall {
+  aspect-ratio: 2 / 3;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.pulse-fit-caption {
+  margin: 0;
+  font-family: 'Lora', serif;
+}
+
+.pulse-fit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pulse-fit-fields input {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  font: inherit;
+}
+
+.pulse-fit-new {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pulse-fit .pulse-actions .pulse-btn {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+}

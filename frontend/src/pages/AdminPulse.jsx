@@ -9,7 +9,8 @@
  * is a dashed "+ Add cover" spot. Uploads › Dream Cities: each city's
  * images and colours, saved on the city (components/Admin/PulseCitiesCard).
  * Uploads › Characters: profile and cover photos, saved on the character
- * (components/Admin/PulseCharactersCard).
+ * (components/Admin/PulseCharactersCard). Uploads › Lala's everyday fits:
+ * the show's fits (components/Admin/PulseFitsCard).
  * Styles: styles/AdminPanel.css.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,6 +20,7 @@ import api from '../services/api';
 import AdminShowGate from '../components/Admin/AdminShowGate';
 import PulseCitiesCard from '../components/Admin/PulseCitiesCard';
 import PulseCharactersCard from '../components/Admin/PulseCharactersCard';
+import PulseFitsCard from '../components/Admin/PulseFitsCard';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review', comingIn: 'Phase 5 brings Review: posts, numbers and reveals waiting for you.' },
@@ -156,6 +158,7 @@ function PulseUploads() {
           <CoverCard key={showId} showId={showId} />
           <PulseCitiesCard />
           <PulseCharactersCard />
+          <PulseFitsCard key={`fits-${showId}`} showId={showId} />
         </div>
       )}
     </AdminShowGate>
