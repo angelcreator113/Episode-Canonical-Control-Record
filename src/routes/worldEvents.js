@@ -4909,6 +4909,15 @@ router.get('/world/:showId/balance', requireAuth, async (req, res) => {
     const { checkAffordability } = require('../services/financialPressureService');
 
     const balance = await getCurrentBalance(models.sequelize, showId);
+    // ?episode_id=: also the balance before that episode, which the Script
+    // tab's "True at beat N" card starts from (Task #2882).
+    const episodeId = typeof req.query.episode_id === 'string' ? req.query.episode_id : null;
+    if (episodeId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(episodeId)) {
+      return res.status(400).json({ success: false, error: 'episode_id must be a UUID' });
+    }
+    const balanceBeforeEpisode = episodeId
+      ? await require('../services/financialTransactionService').getBalanceBeforeEpisode(models.sequelize, showId, episodeId)
+      : undefined;
 
     // Get pending event (next ready event) for affordability check
     let affordability = null;
@@ -4920,7 +4929,7 @@ router.get('/world/:showId/balance', requireAuth, async (req, res) => {
       if (nextEvent) affordability = checkAffordability(nextEvent, balance);
     } catch { /* non-blocking */ }
 
-    return res.json({ success: true, balance, affordability });
+    return res.json({ success: true, balance, affordability, ...(episodeId ? { balance_before_episode: balanceBeforeEpisode } : {}) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

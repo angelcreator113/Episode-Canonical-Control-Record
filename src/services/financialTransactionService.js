@@ -101,6 +101,33 @@ async function getCurrentBalance(sequelize, showId) {
 }
 
 /**
+ * Lala's balance before an episode (Task #2882, Evoni's choice of 2026-10-11:
+ * the "True at beat N" card counts the script's coin changes from here). It
+ * is the balance now less this episode's own counted ledger rows, so it stays
+ * true after the episode is completed. Rows that carry no episode_id are not
+ * the episode's and stay in. Returns null when the ledger cannot be read:
+ * the card then says the coins were not read, never a made-up number.
+ */
+async function getBalanceBeforeEpisode(sequelize, showId, episodeId) {
+  try {
+    const now = await getCurrentBalance(sequelize, showId);
+    const [row] = await sequelize.query(
+      `SELECT COALESCE(
+          SUM(CASE WHEN type = 'income' OR type = 'reward' THEN amount ELSE 0 END) -
+          SUM(CASE WHEN type = 'expense' OR type = 'deduction' THEN amount ELSE 0 END),
+          0) AS net
+        FROM financial_transactions ft
+       WHERE ft.show_id = :showId AND ft.episode_id = :episodeId AND ${countedLedgerRows('ft')}`,
+      { replacements: { showId, episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    return wholeCoins(now - (parseFloat(row?.net) || 0));
+  } catch (err) {
+    console.error('[FinancialTx] getBalanceBeforeEpisode: the ledger could not be read:', err.message);
+    return null;
+  }
+}
+
+/**
  * Seed the starting balance as a real transaction row. Idempotent: if a
  * 'seed' transaction already exists for this show, returns it without making
  * a duplicate. Call this from show-creation or the first-time someone opens
@@ -757,6 +784,7 @@ async function getFinancialLedger(showId, sequelize, options = {}) {
 
 module.exports = {
   getCurrentBalance,
+  getBalanceBeforeEpisode,
   getStartingBalance,
   seedStartingBalance,
   getFinancialGoals,

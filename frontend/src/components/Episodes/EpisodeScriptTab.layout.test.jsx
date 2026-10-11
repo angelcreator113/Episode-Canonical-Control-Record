@@ -34,7 +34,7 @@ beforeEach(() => {
   outfit = [];
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(api.get).mockImplementation(async (url) => {
-    if (url === '/api/v1/world/show-1/balance') return { data: { success: true, balance } };
+    if (url === '/api/v1/world/show-1/balance?episode_id=ep-1') return { data: { success: true, balance: 999, balance_before_episode: balance } };
     if (url === '/api/v1/wardrobe/outfit/ep-1') return { data: { items: outfit } };
     if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: [{ beat_number: 11, sceneSet: { name: "STUDIO BY SABLE's Studio" } }] } };
     if (url === '/api/v1/ui-overlays/show-1/frame') return { data: { success: true, frame_url: null } };
@@ -92,6 +92,25 @@ describe('Script tab layout', () => {
     await waitFor(() => expect(screen.getByTestId('script-chip-look').textContent).toBe('Dressed · 2 pieces'));
     expect(screen.getByTestId('script-chip-coins').textContent).toBe('Coins not read');
     expect(screen.getByTestId('script-chip-room').textContent).toBe('No one speaks yet');
+  });
+
+  test('True at Beat N: coins from the balance before the episode and the script, the look from the closet beat', async () => {
+    outfit = [{ id: 'w1', name: 'Crimson Satin Ballerina Pump' }];
+    renderTab(['## BEAT: 1 · Opening Ritual', 'Prime: "Hi."', '[STAT: coins +50]', '## BEAT: 8 · Transformation Loop', '[UI:OPEN Closet]', '## BEAT: 11 · Event Outcome', 'Lala: "We did."', '[STAT: coins -120]'].join('\n'));
+    const card = await screen.findByTestId('script-beat-state');
+    expect(card.textContent).toContain('True at Beat 1');
+    await waitFor(() => expect(within(card).getByTestId('script-truth-coins').textContent).toContain('470 coins'));
+    expect(within(card).getByTestId('script-truth-coins').textContent).toContain('420 before the episode, +50 in the script so far');
+    await waitFor(() => expect(within(card).getByTestId('script-truth-wearing').textContent.trim()).toBe('WearingGetting dressed at Beat 8'));
+    expect(screen.getByTestId('script-chip-look').textContent).toBe('Getting dressed at Beat 8');
+    expect(within(card).getByTestId('script-truth-room').textContent.trim()).toBe('In the roomSpeaking: Prime');
+    expect(within(card).getByTestId('script-truth-time').textContent.trim()).toBe('Story timeStory time not set');
+    fireEvent.click(screen.getByTestId('script-pill-11'));
+    await waitFor(() => expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-coins').textContent).toContain('350 coins'));
+    expect(screen.getByTestId('script-chip-coins').textContent).toBe('Lala has 350 coins');
+    expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-wearing').textContent.trim()).toBe('Wearing1 piece: Crimson Satin Ballerina Pump');
+    expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-where').textContent.trim()).toBe("WhereSTUDIO BY SABLE's Studio");
+    expect(screen.getByTestId('script-beat-state').textContent).not.toMatch(/stress/i);
   });
 
   test('the bottom bar opens the line adder or the phone picker in the open beat, and the context panel', async () => {

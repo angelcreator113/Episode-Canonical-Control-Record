@@ -78,6 +78,19 @@ const BALANCE = 1665;
     expect(res.body.balance).toBe(BALANCE);
   });
 
+  it('the balance before an episode: the balance now less its own rows (Task #2882)', async () => {
+    // The live episode earned 100 and spent 50: before it, 1665 − 50 = 1615.
+    const res = await get(`/api/v1/world/${ids.show}/balance?episode_id=${ids.liveEp}`);
+    expect(res.status).toBe(200);
+    expect(res.body.balance).toBe(BALANCE);
+    expect(res.body.balance_before_episode).toBe(1615);
+    // A deleted episode's rows are not counted now, so before it is the balance now.
+    expect((await get(`/api/v1/world/${ids.show}/balance?episode_id=${ids.deletedEp}`)).body.balance_before_episode).toBe(BALANCE);
+    expect((await get(`/api/v1/world/${ids.show}/balance?episode_id=${uuid()}`)).body.balance_before_episode).toBe(BALANCE);
+    expect((await get(`/api/v1/world/${ids.show}/balance`)).body).not.toHaveProperty('balance_before_episode');
+    expect((await get(`/api/v1/world/${ids.show}/balance?episode_id=nope`)).status).toBe(400);
+  });
+
   it('Producer Mode Overview, Characters, Wardrobe, Production, Evaluate: GET /characters/lala/state', async () => {
     const res = await get(`/api/v1/characters/lala/state?show_id=${ids.show}`);
     expect(res.status).toBe(200);
