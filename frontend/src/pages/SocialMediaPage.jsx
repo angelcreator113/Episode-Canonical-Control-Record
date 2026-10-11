@@ -517,7 +517,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
           </dl>
           {lala && !lala.home_city && !relationship && !lala.career && <p className="sm-muted">Nothing set yet. Her home city is in Show Settings.</p>}
         </Box>
-        <Box title="Friends" action={<Link to="/feed?tab=people">See all</Link>} testId="sm-friends">
+        <Box title="Friends" action={<Link to="/pulse?tab=people">See all</Link>} testId="sm-friends">
           {lala?.friends ? (
             <>
               <p className="sm-muted" data-testid="sm-friends-count">{lala.friends.total} friend{lala.friends.total === 1 ? '' : 's'}</p>
@@ -695,14 +695,14 @@ export default function SocialMediaPage() {
     <div className="sm-page">
       <header className="sm-banner">
         <span className="sm-wordmark">lalaverse</span>
-        <nav className="sm-nav" role="tablist" aria-label="Social Media sections">
+        <nav className="sm-nav" role="tablist" aria-label="The Pulse sections">
           <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => switchTab('posts')}>Home</button>
           <button type="button" role="tab" aria-selected={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => { switchTab('posts'); setTabRequest({ tab: 'wall', at: Date.now() }); }}>Profile</button>
           <button type="button" role="tab" aria-selected={tab === 'people'} className={tab === 'people' ? 'active' : ''} onClick={() => switchTab('people')}>Friends</button>
           <button type="button" className="sm-inbox" onClick={openInbox} title="Draft posts and reactions waiting for approval">Inbox{inbox > 0 ? ` (${inbox})` : ''}</button>
         </nav>
         {tab === 'posts' && <input className="sm-search" type="search" aria-label="Search posts" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />}
-        <span className="sm-banner-right">Social Media</span>
+        <span className="sm-banner-right">The Pulse</span>
       </header>
       {tab === 'posts' && <Wall show={show} showLoaded={loaded} search={search} tabRequest={tabRequest} onInbox={setInbox} />}
       {tab === 'people' && <FriendsTab show={show} showLoaded={loaded} />}

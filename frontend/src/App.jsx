@@ -113,7 +113,12 @@ const BookToWriteRedirect = () => {
 // locks it); any other route to /feed keeps today's default layer.
 // /feed is Social Media (2026-10-04): Posts by default, People (the
 // profile generator) as a tab; its old ?layer= links still open People.
+// It is The Pulse at /pulse (Task #2912); /feed redirects with its query.
 const SocialMediaPage = lazy(() => import('./pages/SocialMediaPage'));
+function PulseRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/pulse${search}`} replace />;
+}
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
@@ -509,8 +514,10 @@ function AppContent() {
           {/* Book Scene Studio — Intimate scene generation + reader */}
           <Route path="/scene-studio" element={<SceneStudio />} />
 
-          {/* The Feed — Parasocial Creator Profile Generator */}
-          <Route path="/feed" element={<SocialMediaPage />} />
+          {/* The Pulse (formerly Social Media at /feed; docs/design/2026-10-the-pulse.md).
+              Old /feed links, query included, redirect here. */}
+          <Route path="/pulse" element={<SocialMediaPage />} />
+          <Route path="/feed" element={<PulseRedirect />} />
 
           {/* Narrative Pressure Dashboard — Feed Nervous System */}
           <Route path="/pressure" element={<NarrativePressureDashboard />} />
@@ -607,7 +614,7 @@ function AppContent() {
             '/storyteller': 'Storyteller Book Editor',
             '/world-studio': 'World Studio',
             '/scene-studio': 'Book Scene Studio',
-            '/feed': 'Social Media',
+            '/pulse': 'The Pulse',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',
             '/feed-relationships': 'Feed Relationship Map',

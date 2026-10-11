@@ -618,7 +618,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
               {postsLoading ? (
                 <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading posts...</div>
               ) : posts.length === 0 ? (
-                <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No posts for this show yet (Social Media › Posts)</div>
+                <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No posts for this show yet (The Pulse › Posts)</div>
               ) : (
                 <select
                   aria-label="Post"

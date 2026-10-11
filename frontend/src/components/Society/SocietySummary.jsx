@@ -49,7 +49,7 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
 
   const ladder = careerLadder(data?.reputation);
   const roles = legendGroups.reduce((n, g) => n + (g.roles?.length || 0), 0);
-  const feedTab = show?.id ? `/shows/${show.id}/world?tab=feed` : '/feed';
+  const feedTab = show?.id ? `/shows/${show.id}/world?tab=feed` : '/pulse';
 
   return (
     <div className="soc" data-testid="society-summary">
