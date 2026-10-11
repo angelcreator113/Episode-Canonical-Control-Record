@@ -1,21 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Calendar, Clapperboard, Compass, Heart, Home, ImagePlus, Inbox, MapPin, MessageCircle,
-  PlusSquare, Repeat2, Search, Sparkles, User, Users,
+  Calendar, Camera, Clapperboard, Compass, Home, ImagePlus, Inbox, MapPin, MessageCircle,
+  PlusSquare, Search, Sparkles, User, Users, X,
 } from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
-import { DREAM_CITIES } from '../data/dreamCities';
+import { loadCities } from '../lib/pulseCities';
+import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
+import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
+import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
-import { posterOf, whenLabel, initial } from '../lib/pulsePosts';
+import { posterOf } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
 
 // Moved to lib/pulsePosts and components/Admin/PulseReviewPost (Task 2925);
 // re-exported for existing callers.
 export { posterOf, whenLabel } from '../lib/pulsePosts';
+export { cityName, PulsePost };
 export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReviewPost';
 
 /**
@@ -40,7 +44,6 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
 
 /** World Studio's Feed tab, where Feed profiles are made, on the LalaVerse; at one profile when given. */
 export const profileHome = (p) => `/world-studio?tab=feed&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
-const UPLOADS = '/admin?tab=pulse&sub=uploads';
 export const TABS = [
   { key: 'posts', label: 'Feed' },
   { key: 'events', label: 'Events' },
@@ -49,36 +52,11 @@ export const TABS = [
 ];
 const PAGE = 50;
 
-/**
- * An event's day and time as the event has them: "Thu, Nov 12 · 6:30 PM". A
- * date stored as YYYY-MM-DD reads as a day; any other text is shown as typed.
- */
-export function eventWhen(date, time) {
-  const t = typeof time === 'string' && time.trim() ? time.trim() : null;
-  let d = typeof date === 'string' && date.trim() ? date.trim() : null;
-  const m = d && d.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) {
-    const day = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-    if (!Number.isNaN(day.getTime())) d = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  }
-  return [d, t].filter(Boolean).join(' · ');
-}
-
 export function tabFromParams(params) {
   const tab = params.get('tab');
   if (tab && TABS.some((t) => t.key === tab)) return tab;
   if (params.get('layer') || params.get('profile')) return 'people';
   return 'posts';
-}
-
-/** A Dream City's name from its key (social_profiles.city), else null. */
-export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
-
-function Avatar({ name, url, size = 40 }) {
-  const style = { width: size, height: size };
-  return url
-    ? <img className="pl-avatar" src={url} alt="" style={style} />
-    : <span className="pl-avatar pl-avatar-initial" style={{ ...style, fontSize: Math.round(size * 0.42) }} aria-hidden="true">{initial(name)}</span>;
 }
 
 /** A spot Director view shows as "+ Add …" (opening Uploads) and Lala's view leaves out. */
@@ -88,38 +66,6 @@ function AddSpot({ director, label, className = '' }) {
     <Link className={`pl-add-spot ${className}`} to={UPLOADS}>
       <ImagePlus size={18} aria-hidden="true" /> + Add {label}
     </Link>
-  );
-}
-
-/** One post as Lala sees it: who, when, where, the words, the photo, the counts and a first comment. */
-export function PulsePost({ post }) {
-  const who = posterOf(post);
-  const city = cityName(post.socialProfile?.city);
-  const comments = Array.isArray(post.comments) ? post.comments : [];
-  const when = whenLabel(post.posted_at);
-  return (
-    <article className="pl-post" data-testid="pl-post">
-      <header className="pl-post-head">
-        <Avatar name={who.name} url={post.author_portrait_url} size={46} />
-        <div>
-          <p className="pl-post-name">{who.name}</p>
-          {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
-        </div>
-      </header>
-      {post.content_text && <p className="pl-post-text">{post.content_text}</p>}
-      {post.image_url && <img className="pl-post-photo" src={post.image_url} alt={post.image_description || ''} />}
-      <p className="pl-post-actions">
-        <span><Heart size={16} aria-hidden="true" /> <span className="pl-sr">Likes</span>{post.likes ?? 0}</span>
-        <span><MessageCircle size={16} aria-hidden="true" /> <span className="pl-sr">Comments</span>{post.comments_count ?? comments.length}</span>
-        <span><Repeat2 size={16} aria-hidden="true" /> <span className="pl-sr">Shares</span>{post.shares ?? 0}</span>
-      </p>
-      {comments.slice(0, 2).map((c) => (
-        <div key={c.id} className="pl-comment">
-          <Avatar name={c.display_name || c.handle} url={c.portrait_url} size={32} />
-          <p><b>{c.display_name || c.handle}</b> {c.text}</p>
-        </div>
-      ))}
-    </article>
   );
 }
 
@@ -254,6 +200,10 @@ function Composer({ show, lala, director, onShared }) {
           <p className="pl-chips">{STATUSES.map((s) => <button key={s} type="button" className="pl-chip" onClick={() => setText(s)}>{s}</button>)}</p>
         )}
         <div className="pl-composer-row">
+          <span className="pl-quiet-tools">
+            <span aria-disabled="true" title="Photos are coming to The Pulse"><Camera size={16} aria-hidden="true" /> Photo</span>
+            <span aria-disabled="true" title="Places are coming to The Pulse"><MapPin size={16} aria-hidden="true" /> Location</span>
+          </span>
           <span className="pl-kinds" role="group" aria-label="What to share">
             <label><input type="radio" name="pl-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Post</label>
             <label><input type="radio" name="pl-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
@@ -268,11 +218,12 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search }) {
+function Feed({ show, lala, director, search, cities }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [person, setPerson] = useState(null); // { handle, name } the feed is filtered to
 
   const load = useCallback(async (offset = 0) => {
     if (!show?.id) return;
@@ -290,18 +241,35 @@ function Feed({ show, lala, director, search }) {
   }, [show?.id]);
   useEffect(() => { load(0); }, [load]);
 
+  const owner = lala?.profile || null;
+  const lalaHandle = owner?.handle || 'lala';
+  const people = useMemo(() => recentPosters(posts, { lalaHandle }), [posts, lalaHandle]);
+  const lalaStory = { handle: lalaHandle, name: owner?.display_name || 'Lala', photo: lala?.portrait_url || null, city: lala?.home_city || null };
+  const pick = (handle, name) => setPerson((cur) => (cur?.handle === handle ? null : { handle, name }));
+
   const q = search.trim().toLowerCase();
+  const byPerson = person ? posts.filter((p) => (p.poster_handle || p.socialProfile?.handle) === person.handle) : posts;
   const visible = q
-    ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
-    : posts;
+    ? byPerson.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
+    : byPerson;
 
   return (
     <>
+      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} />
+      <CityStrip cities={cities} />
       <Composer show={show} lala={lala} director={director} />
+      {person && (
+        <p className="pl-filter" data-testid="pl-filter">
+          Showing {person.name}
+          <button type="button" aria-label={`Show everyone, not only ${person.name}`} onClick={() => setPerson(null)}><X size={14} aria-hidden="true" /></button>
+        </p>
+      )}
       {error && <p className="pl-error" role="alert">{error}</p>}
       {loading && posts.length === 0 && <p className="pl-quiet">Loading…</p>}
       {!loading && !error && posts.length === 0 && <p className="pl-empty" data-testid="pl-empty">Nothing posted yet.</p>}
-      {!loading && posts.length > 0 && visible.length === 0 && <p className="pl-empty">No posts match “{search.trim()}”.</p>}
+      {!loading && posts.length > 0 && visible.length === 0 && (
+        <p className="pl-empty">{q ? `No posts match “${search.trim()}”.` : `Nothing from ${person?.name} yet.`}</p>
+      )}
       {visible.map((p) => <PulsePost key={p.id} post={p} />)}
       {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
     </>
@@ -313,18 +281,8 @@ function EventsView({ events }) {
     <section className="pl-card" aria-labelledby="pl-events-heading" data-testid="pl-events">
       <h2 id="pl-events-heading" className="pl-card-title">Upcoming Events</h2>
       {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
-      <ul className="pl-events">{events.map((e) => <EventRow key={e.id} event={e} />)}</ul>
+      <ul className="pl-events">{events.map((e) => <UpcomingRow key={e.id} event={e} />)}</ul>
     </section>
-  );
-}
-
-function EventRow({ event }) {
-  const when = eventWhen(event.date, event.time);
-  return (
-    <li className="pl-event" data-testid="pl-event">
-      <b>{event.name}</b>
-      {(event.venue || when) && <span className="pl-meta">{[event.venue, when].filter(Boolean).join(' · ')}</span>}
-    </li>
   );
 }
 
@@ -396,14 +354,12 @@ function ProfileView({ lala, relationship, director }) {
   );
 }
 
-function RightColumn({ events, mayKnow }) {
+function RightColumn({ cities, trending, events, mayKnow, director }) {
   return (
     <>
-      <section className="pl-card" aria-labelledby="pl-upcoming-heading" data-testid="pl-upcoming">
-        <h2 id="pl-upcoming-heading" className="pl-card-title">Upcoming Events</h2>
-        {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
-        <ul className="pl-events">{events.slice(0, 3).map((e) => <EventRow key={e.id} event={e} />)}</ul>
-      </section>
+      <CitiesCard cities={cities} director={director} />
+      <TrendingCard topics={trending} director={director} />
+      <UpcomingCard events={events} />
       {mayKnow.length > 0 && (
         <section className="pl-card" aria-labelledby="pl-may-know-heading" data-testid="pl-may-know">
           <h2 id="pl-may-know-heading" className="pl-card-title">People you may know</h2>
@@ -447,6 +403,9 @@ export default function SocialMediaPage() {
   const [lala, setLala] = useState(null);
   const [events, setEvents] = useState([]);
   const [mayKnow, setMayKnow] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [trending, setTrending] = useState([]);
+  const [fit, setFit] = useState(null);
   const [relPosts, setRelPosts] = useState([]);
   const createRequest = useRef(false);
 
@@ -466,11 +425,13 @@ export default function SocialMediaPage() {
     };
     let alive = true;
     (async () => {
-      const [c, who, side, rel] = await Promise.all([
+      const [c, who, side, rel, trend, latest] = await Promise.all([
         safe(api.get(`/api/v1/shows/${show.id}/pulse-cover`), 'cover'),
         safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}`), "Lala's profile"),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
         safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50`), 'relationship posts'),
+        safe(api.get(`/api/v1/feed-enhanced/${id}/trending`), 'trending'),
+        safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}`), 'latest fit'),
       ]);
       if (!alive) return;
       setCover(c?.data?.cover || null);
@@ -478,9 +439,19 @@ export default function SocialMediaPage() {
       setEvents(Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : []);
       setMayKnow(Array.isArray(side?.data?.data?.may_know) ? side.data.data.may_know : []);
       setRelPosts(rel?.data?.data || []);
+      setTrending(Array.isArray(trend?.data?.data) ? trend.data.data : []);
+      setFit(latest?.data?.latest || null);
     })();
     return () => { alive = false; };
   }, [show?.id]);
+
+  useEffect(() => {
+    let alive = true;
+    loadCities()
+      .then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
+      .catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (tab === 'posts' && createRequest.current) {
@@ -511,14 +482,14 @@ export default function SocialMediaPage() {
         <p className="pl-empty pl-no-show" data-testid="pl-no-show">Nothing here yet.</p>
       ) : (
         <div className="pl-grid">
-          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /></aside>
+          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
           </main>
-          <aside className="pl-right"><RightColumn events={events} mayKnow={mayKnow} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />
