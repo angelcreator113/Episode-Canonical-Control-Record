@@ -26,6 +26,7 @@ function makeSequelize(socialProfileRows) {
   return {
     QueryTypes,
     query: jest.fn(async (sql, options = {}) => {
+      if (/SELECT \(SELECT COALESCE/.test(sql)) return [[{ id: 'ev-1' }]]; // the episode's event id (utils/episodeEventSql)
       if (/FROM social_profiles/.test(sql)) {
         const ids = options.replacements.ids;
         return [socialProfileRows.filter(r => ids.includes(r.id))];
@@ -45,7 +46,7 @@ function makeModels(event, socialProfileRows) {
     FranchiseKnowledge: null,
     WorldEvent: {
       CURRENT_ATTRIBUTES: ['id', 'name', 'canon_consequences'],
-      findOne: async () => ({ toJSON: () => event }),
+      findByPk: async () => ({ toJSON: () => event }),
     },
     WorldLocation: null,
     Opportunity: null,

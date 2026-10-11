@@ -83,10 +83,10 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
   ctx.show = show || {};
   ctx.showDefaults = show?.distribution_defaults ? (typeof show.distribution_defaults === 'string' ? JSON.parse(show.distribution_defaults) : show.distribution_defaults) : {};
 
-  // Event
+  // Event: the episode's one event (utils/episodeEventSql; Task #1917)
   const [event] = await sequelize.query(
     `SELECT name, event_type, host, host_brand, prestige, dress_code, venue_name, cost_coins, payment_amount, is_paid, narrative_stakes, outfit_pieces, outfit_score, canon_consequences
-     FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+     FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
   ctx.event = event || null;

@@ -22,6 +22,7 @@ const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
+const { episodeEventId } = require('../utils/episodeEventSql');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -105,11 +106,12 @@ async function loadScriptContext(episodeId, showId, models) {
     }],
   }).then(plans => plans.map(p => p.toJSON())).catch(() => []);
 
-  // 3. Event data
+  // 3. Event data: the episode's event, the brief's else the first stamped
+  // (utils/episodeEventSql; Task #1917).
   context.event = null;
   try {
-    context.event = await WorldEvent.findOne({
-      where: { used_in_episode_id: episodeId },
+    const eventId = await episodeEventId(sequelize, episodeId);
+    context.event = eventId && await WorldEvent.findByPk(eventId, {
       // context.event is passed wholesale into the wardrobe-intelligence
       // pipeline (getWardrobeIntelligence -> scoreOutfitForEvent and
       // several evaluate* helpers), which reads many of the event's

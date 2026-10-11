@@ -109,13 +109,13 @@ async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   }
 
   // Build the AI prompt
-  // Load linked event for this episode (if any)
+  // Load the episode's event, if any (utils/episodeEventSql; Task #1917)
   let eventContext = '';
   try {
     const sequelize = require('../models').sequelize;
     const [events] = await sequelize.query(
       `SELECT name, event_type, location_hint, dress_code, prestige, strictness, scene_set_id
-       FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+       FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
       { replacements: { episodeId } }
     );
     if (events.length > 0) {

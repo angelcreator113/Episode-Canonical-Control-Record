@@ -86,11 +86,11 @@ async function groundedScriptInputs(episodeId, showId, models) {
       .catch((rulesErr) => { console.error('[GroundedScript] Brain rules selection failed:', rulesErr.message); return []; });
   }
 
-  // 4. Load Event data
+  // 4. Load Event data: the episode's event (utils/episodeEventSql; Task #1917)
   let eventData = null;
   try {
     const [rows] = await sequelize.query(
-      `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+      `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
       { replacements: { episodeId } }
     );
     eventData = rows?.[0] || null;
