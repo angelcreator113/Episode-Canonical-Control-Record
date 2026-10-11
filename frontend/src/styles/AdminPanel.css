@@ -510,3 +510,142 @@
 @keyframes pulse-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Uploads › Dream Cities (Task #2920) */
+.pulse-cities {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 1rem;
+}
+
+.pulse-city {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-top: 4px solid var(--lala-gold);
+  border-radius: var(--lala-radius);
+  background: var(--lala-surface);
+}
+
+.pulse-city-head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pulse-city-spots {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.pulse-city-spot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pulse-spot-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lala-ink-muted);
+}
+
+.pulse-city-spot .pulse-add-spot {
+  min-height: 96px;
+  font-size: 0.875rem;
+}
+
+.pulse-add-spot.round {
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  border-radius: 50%;
+}
+
+.pulse-city-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--lala-radius);
+}
+
+.pulse-city-bubble {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.pulse-city .pulse-actions .pulse-btn {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+}
+
+.pulse-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pulse-inline input[type='text'] {
+  flex: 1 1 140px;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  font: inherit;
+}
+
+.pulse-swatches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.pulse-swatches li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse-swatch {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  border: 1px solid var(--lala-parchment-3);
+}
+
+.pulse-hex {
+  width: 7.5rem;
+  min-height: 44px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.875rem;
+}
+
+.pulse-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: none;
+  color: var(--lala-ink-muted);
+  cursor: pointer;
+}
+
+.pulse-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

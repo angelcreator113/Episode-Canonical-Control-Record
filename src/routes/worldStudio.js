@@ -3857,6 +3857,38 @@ router.post('/world/map/upload', requireAuth, mapUpload.single('image'), async (
   }
 });
 
+/*
+ * POST /world/dream-cities/:key/image?kind=image|bubble   multipart, field "image"
+ * A Dream City's image or story-bubble image (Admin › The Pulse › Uploads;
+ * Task #2920). Stores the file (pulseImageService) and returns { url }; the
+ * Uploads tab saves it on the city in the DREAM_CITIES override
+ * (page_content world_infrastructure), so nothing is kept here.
+ */
+const DREAM_CITY_IMAGE_KINDS = {
+  image: { maxSide: 2400, minSide: 400, label: 'The city image' },
+  bubble: { maxSide: 800, minSide: 120, label: 'The story-bubble image' },
+};
+const cityImageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } }).single('image');
+router.post('/world/dream-cities/:key/image', requireAuth, (req, res, next) => cityImageUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('[dream-cities] upload rejected:', err.message);
+  return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The image is 15 MB at most.' : err.message });
+}), async (req, res) => {
+  const { storePulseImage, PulseImageError } = require('../services/pulseImageService');
+  try {
+    const { key } = req.params;
+    if (!/^[a-z][a-z_]{1,40}$/.test(key)) return res.status(400).json({ success: false, error: 'Unknown city.', code: 'BAD_CITY' });
+    const kind = DREAM_CITY_IMAGE_KINDS[req.query.kind || 'image'];
+    if (!kind) return res.status(400).json({ success: false, error: 'kind is image or bubble.', code: 'BAD_KIND' });
+    const stored = await storePulseImage(req.file, { keyPrefix: `world/dream-cities/${key}/${req.query.kind || 'image'}`, ...kind });
+    return res.json({ success: true, ...stored });
+  } catch (err) {
+    console.error('[dream-cities] image upload error:', err);
+    if (err instanceof PulseImageError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /world/map — get current map image URL
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/map', optionalAuth, async (req, res) => {

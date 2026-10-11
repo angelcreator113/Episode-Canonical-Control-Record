@@ -4,15 +4,11 @@
  * { url, width, height, alt, updated_at }. Admin › The Pulse › Uploads sets,
  * captions and removes it; The Pulse's header shows it.
  *
- * PNG, JPEG or WebP, up to 15 MB. No SVG: it can carry script. The upload is
- * stored as a JPEG at most 2400px on its long side. Storage is the studio's
- * (uploadPng: S3_PRIMARY_BUCKET or AWS_S3_BUCKET), as for the show's logo;
- * it is not the public site location.
+ * PNG, JPEG or WebP, up to 15 MB, stored as a JPEG at most 2400px on its
+ * long side in the studio's storage (pulseImageService).
  */
-const crypto = require('crypto');
+const { IMAGE_TYPES: COVER_TYPES, MAX_IMAGE_BYTES: MAX_COVER_BYTES } = require('./pulseImageService');
 
-const COVER_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const MAX_COVER_BYTES = 15 * 1024 * 1024;
 const MAX_COVER_SIDE = 2400;
 const MIN_COVER_SIDE = 400;
 const MAX_ALT_LENGTH = 300;
@@ -49,32 +45,16 @@ function readAlt(value) {
 
 /** Checks, resizes and stores an uploaded file; returns the cover to save. */
 async function storePulseCover(showId, file, alt = '') {
-  if (!file || !file.buffer || !file.buffer.length) throw new PulseCoverError('Choose an image to upload.');
-  if (!COVER_TYPES.includes(file.mimetype)) throw new PulseCoverError('The cover must be a PNG, JPEG or WebP image.', 400, 'WRONG_TYPE');
-  if (file.buffer.length > MAX_COVER_BYTES) throw new PulseCoverError('The cover is 15 MB at most.', 400, 'TOO_LARGE');
-
-  const sharp = require('sharp');
-  let meta;
+  const { storePulseImage, PulseImageError } = require('./pulseImageService');
   try {
-    meta = await sharp(file.buffer).metadata();
+    const { url, width, height } = await storePulseImage(file, {
+      keyPrefix: `shows/pulse-covers/${showId}`, maxSide: MAX_COVER_SIDE, minSide: MIN_COVER_SIDE, label: 'The cover',
+    });
+    return { url, width, height, alt, updated_at: new Date().toISOString() };
   } catch (err) {
-    console.error('[PulseCover] the image could not be read:', err.message);
-    throw new PulseCoverError('That file could not be read as an image.', 400, 'UNREADABLE');
+    if (err instanceof PulseImageError) throw new PulseCoverError(err.message, err.status, err.code);
+    throw err;
   }
-  if (!meta.width || !meta.height || Math.max(meta.width, meta.height) < MIN_COVER_SIDE) {
-    throw new PulseCoverError(`The cover must be at least ${MIN_COVER_SIDE}px on its long side.`, 400, 'TOO_SMALL');
-  }
-
-  const { data, info } = await sharp(file.buffer)
-    .rotate()
-    .resize({ width: MAX_COVER_SIDE, height: MAX_COVER_SIDE, fit: 'inside', withoutEnlargement: true })
-    .flatten({ background: '#FAF7F0' })
-    .jpeg({ quality: 86 })
-    .toBuffer({ resolveWithObject: true });
-
-  const { uploadPng } = require('./episodeTitleOverlayService');
-  const url = await uploadPng(data, `shows/pulse-covers/${showId}/${crypto.randomUUID()}.jpg`, 'image/jpeg');
-  return { url, width: info.width, height: info.height, alt, updated_at: new Date().toISOString() };
 }
 
 module.exports = {
