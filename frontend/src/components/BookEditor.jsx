@@ -46,6 +46,9 @@ export const confirmVoiceType = (lineId, voiceType) =>
 // required for the request to survive page navigation per CZ-5 contract.
 // Token is read inline (Path D shape) rather than via apiClient's request
 // interceptor because the interceptor only runs on apiClient calls.
+// Not on authedFetch (Task #1902, by design): it fires as the page unloads,
+// so it cannot await a token refresh and a retry, and a sign-out redirect
+// would fight the navigation already under way.
 export const sendKeepaliveBeforeUnload = (chapterId, text) => {
   const token = localStorage.getItem('authToken');
   return fetch(`${API}/chapters/${chapterId}/save-draft`, {
