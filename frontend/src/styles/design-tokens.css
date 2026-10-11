@@ -272,6 +272,37 @@
   --lala-radius: 8px;
 
   /* ════════════════════════════════════════════════════════════
+     THE PULSE — LalaVerse's social network (pages/SocialMediaPage;
+     docs/design/2026-10-the-pulse.md; Evoni's mockup, Task 2926).
+     Text tokens are AA on the card and the soft fill; pink and
+     violet are decoration only, never text.
+  */
+  --pulse-ink:        #2B2238;  /* body text, 15.1:1 on card */
+  --pulse-heading:    #3A1F45;  /* headings, 14.4:1 */
+  --pulse-muted:      #7A6A80;  /* meta, 5.0:1 on card, 4.65:1 on soft */
+  --pulse-link:       #7D2E8F;  /* links, 7.9:1 */
+  --pulse-rose:       #B2508A;  /* rose text and numbers, 4.76:1 */
+  --pulse-tag:        #A3407A;  /* #tags, 5.88:1 */
+  --pulse-button:     #9A3E74;  /* primary button under white, 6.33:1 */
+  --pulse-card:       #FFFFFF;
+  --pulse-line:       #F0E3F1;  /* card borders */
+  --pulse-soft:       #FAF5FB;  /* comment and event rows */
+  --pulse-pink:       #E0559A;  /* decoration: rings, dots, active nav */
+  --pulse-violet:     #8F6FD6;  /* decoration: rings, gradients */
+  --pulse-blush:      #F2A9CB;  /* active nav, left stop */
+  --pulse-lilac:      #D7B8F0;  /* active nav, right stop */
+  --pulse-dash:       #D7A9C6;  /* dashed "+ Add" spots, nav dots */
+  --pulse-bg-1:       #FDE6F1;  /* page wash */
+  --pulse-bg-2:       #F6EEFB;
+  --pulse-bg-3:       #F3EEF8;
+  --pulse-glass:      rgba(255, 255, 255, 0.75);  /* frame pieces only, never post cards */
+  --pulse-glass-line: rgba(255, 255, 255, 0.85);
+  --pulse-shadow:     0 4px 18px rgba(120, 60, 140, 0.08);
+  --pulse-shadow-lg:  0 8px 30px rgba(120, 60, 140, 0.15);
+  --pulse-director:   #FFF4D6;  /* Director view bar */
+  --pulse-director-ink: #5C4400; /* 8.4:1 on the bar */
+
+  /* ════════════════════════════════════════════════════════════
      ZONE COLORS — Phone Hub Zones tab
      ════════════════════════════════════════════════════════════
      Color-code the three zone types so creators can see all of a
