@@ -136,28 +136,43 @@ async function syncProfileToRegistry(profile, models) {
     social_synced_at: new Date(),
   };
 
-  // Also sync aesthetic if character doesn't have one
-  if (p.aesthetic_dna && Object.keys(p.aesthetic_dna).length > 0) {
-    const existing = character.aesthetic_dna || {};
-    if (!existing.visual_style) {
-      updates.aesthetic_dna = { ...existing, ...p.aesthetic_dna };
-    }
-  }
+  // F-Reg-2 fix group 2 (v1.2 R2), row 74: re-read the character under a row
+  // lock and compute the aesthetic merge from that row, so a visual style
+  // written since linkedCharacter's read is kept rather than overwritten with
+  // the stale copy (#2183's shape). The full update runs in a savepoint, so
+  // its safe-fields retry still runs in the same transaction.
+  const sequelize = RegistryCharacter.sequelize;
+  const locked = await sequelize.transaction(async (transaction) => {
+    const row = await RegistryCharacter.findByPk(character.id, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!row) return null;
 
-  // Apply updates — use try-catch for columns that may not exist
-  try {
-    await character.update(updates);
-  } catch (err) {
-    // Strip fields that don't exist in DB and retry
-    console.warn('[RegistrySync] Full update failed, trying safe fields:', err.message);
-    const safeUpdates = {
-      feed_profile_id: updates.feed_profile_id,
-      social_presence: true,
-      follower_tier: updates.follower_tier,
-    };
+    // Also sync aesthetic if character doesn't have one
+    if (p.aesthetic_dna && Object.keys(p.aesthetic_dna).length > 0) {
+      const existing = row.aesthetic_dna || {};
+      if (!existing.visual_style) {
+        updates.aesthetic_dna = { ...existing, ...p.aesthetic_dna };
+      }
+    }
+
+    // Apply updates — use try-catch for columns that may not exist
     try {
-      await character.update(safeUpdates);
-    } catch { /* non-blocking */ }
+      await sequelize.transaction({ transaction }, (savepoint) => row.update(updates, { transaction: savepoint }));
+    } catch (err) {
+      // Strip fields that don't exist in DB and retry
+      console.warn('[RegistrySync] Full update failed, trying safe fields:', err.message);
+      const safeUpdates = {
+        feed_profile_id: updates.feed_profile_id,
+        social_presence: true,
+        follower_tier: updates.follower_tier,
+      };
+      try {
+        await row.update(safeUpdates, { transaction });
+      } catch { /* non-blocking */ }
+    }
+    return row;
+  });
+  if (!locked) {
+    return { synced: false, reason: 'No linked registry character' };
   }
 
   const fieldsUpdated = Object.keys(updates).length;
