@@ -112,6 +112,34 @@
 .pl-friend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .pl-friend-grid li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; text-align: center; }
 
+/* Side cards (Task 2928): cities tinted with their colours, trending, date tiles, the latest fit */
+.pl-cities, .pl-trending, .pl-city-strip { list-style: none; margin: 0; padding: 0; }
+.pl-city { display: flex; align-items: center; gap: 12px; padding: 8px; margin-top: 8px; border-radius: 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--city-a, var(--pulse-lilac)) 18%, var(--pulse-card)), color-mix(in srgb, var(--city-b, var(--pulse-blush)) 12%, var(--pulse-card))); }
+.pl-city-image { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 72px; height: 52px; border-radius: 12px; object-fit: cover; }
+.pl-city-name-tile { padding: 4px; box-sizing: border-box; background: linear-gradient(135deg, color-mix(in srgb, var(--city-a, var(--pulse-lilac)) 45%, var(--pulse-card)), color-mix(in srgb, var(--city-c, var(--pulse-blush)) 45%, var(--pulse-card))); font-family: 'Cormorant Garamond', serif; font-size: 13px; font-weight: 700; line-height: 1.1; text-align: center; color: var(--pulse-heading); }
+.pl-page a.pl-city-add { gap: 4px; min-height: 44px; border: 2px dashed var(--pulse-dash); box-sizing: border-box; background: var(--pulse-card); font-size: 12px; font-weight: 700; color: var(--pulse-rose); text-decoration: none; }
+.pl-city-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-city-text b { display: flex; align-items: center; gap: 6px; color: var(--pulse-heading); }
+.pl-city-text small { color: var(--pulse-muted); font-size: 12px; }
+.pl-city-dot { flex-shrink: 0; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--city-a, var(--pulse-pink)), var(--city-b, var(--pulse-violet))); }
+.pl-city-strip { display: none; }
+.pl-trending li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--pulse-line); }
+.pl-trending li:first-child { border-top: none; }
+.pl-trend-rank { width: 20px; font-size: 18px; font-weight: 700; color: var(--pulse-rose); text-align: center; }
+.pl-trend-text { display: flex; flex-direction: column; min-width: 0; }
+.pl-trend-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-trend-text small { font-size: 12px; color: var(--pulse-muted); }
+.pl-card-foot { margin: 10px 0 0; font-size: 12px; color: var(--pulse-muted); }
+.pl-event-tiled { flex-direction: row; align-items: center; gap: 12px; }
+.pl-event-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-date-tile { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 48px; height: 52px; border-radius: 12px; background: var(--pulse-card); border: 1px solid var(--pulse-line); line-height: 1.1; }
+.pl-date-tile small { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--pulse-rose); }
+.pl-date-tile b { font-size: 20px; color: var(--pulse-heading); }
+.pl-date-tile-empty { border-style: dashed; }
+.pl-fit-photo { display: block; width: 100%; aspect-ratio: 4 / 5; border-radius: 16px; object-fit: cover; }
+.pl-fit-caption { margin: 8px 0 0; font-family: 'Great Vibes', cursive; font-size: 24px; line-height: 1.2; color: var(--pulse-rose); text-align: center; }
+.pl-fit .pl-add-spot { width: 100%; justify-content: center; box-sizing: border-box; border-radius: 16px; min-height: 120px; }
+
 /* Stories row (frame: glass) */
 .pl-stories { padding: 12px 10px; border-radius: 22px; background: var(--pulse-glass); border: 1px solid var(--pulse-glass-line); box-shadow: var(--pulse-shadow); overflow-x: auto; }
 .pl-stories ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
@@ -172,6 +200,9 @@
   .pl-card-title { font-size: 20px !important; }
   .pl-photos-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pl-quiet-tools { display: none; }
+  .pl-cities-card { display: none; }
+  .pl-city-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0; }
+  .pl-city-strip li { flex-shrink: 0; display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--city-a, var(--pulse-lilac)) 18%, var(--pulse-card)); font-size: 13px; font-weight: 700; color: var(--pulse-heading); white-space: nowrap; }
   .pl-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--pulse-card); border-top: 1px solid var(--pulse-line); box-shadow: var(--pulse-shadow-lg); }
   .pl-bottom button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px; border: none; background: transparent; font: inherit; font-size: 11px; font-weight: 700; color: var(--pulse-muted); cursor: pointer; }
   .pl-bottom button.active { color: var(--pulse-rose); }
