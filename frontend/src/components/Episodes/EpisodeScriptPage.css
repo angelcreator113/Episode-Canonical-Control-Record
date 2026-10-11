@@ -121,9 +121,10 @@
 .esp-beat-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
 .esp-beat.is-locked .esp-beat-head { background: var(--lala-gold-soft); }
 .esp-beat-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
+/* "BEAT n" before the beat's name (Task #2881). */
 .esp-beat-num {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 28px; height: 28px; border-radius: 50%;
+  height: 26px; padding: 0 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
   background: color-mix(in srgb, var(--beat-color, var(--lala-lavender)) 12%, transparent);
   color: var(--beat-color, var(--lala-lavender-text));
   font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
@@ -284,3 +285,61 @@
 .esp-moment.is-icon .esp-moment-thumb { width: 40px; height: 40px; border-radius: 10px; }
 .esp-moment.is-icon .esp-moment-thumb img { object-fit: contain; }
 .esp-moment-opens { font-size: 11px; color: var(--lala-ink-muted); }
+
+/* ── The beat list, pills, context chips and bottom bar (Task #2881) ──
+   Wide: the beat list, the beats, the context side panel. Narrower: the
+   beats as pills above them. Phone width: one column, the open beat only,
+   the context as chips and a panel the bottom bar opens. */
+.esp.has-beatlist { grid-template-columns: 150px minmax(0, 1.7fr) minmax(240px, 1fr); }
+.esp-beatlist { position: sticky; top: 12px; align-self: start; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.esp-beatlist-items { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.esp-beatlist-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 8px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--lala-ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.esp-beatlist-btn:hover { background: var(--lala-lavender-soft); }
+.esp-beatlist-btn.is-open { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); font-weight: 700; }
+.esp-beatlist-btn:focus-visible, .esp-pill:focus-visible, .esp-mobilebar-btn:focus-visible, .esp-side-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.esp-beatlist-num { flex: none; min-width: 22px; font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-lavender-text); }
+.esp-beatlist-name { flex: 1; min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+.esp-beatlist-phone { flex: none; color: var(--lala-lavender-text); }
+.esp-beatlist-legend { display: flex; align-items: center; gap: 4px; margin: 4px 0 0; font-size: 11px; color: var(--lala-ink-muted); }
+.esp-saved-state { color: var(--success-text); }
+
+.esp-pills, .esp-chips, .esp-mobilebar, .esp-side-close { display: none; }
+.esp-pills { gap: 6px; margin: 0 0 10px; padding: 2px 2px 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.esp-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-ink); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.esp-pill.is-open { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); font-weight: 700; }
+.esp-chips { flex-wrap: wrap; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
+.esp-chips li { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-mobilebar-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.esp-mobilebar-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.esp-mobilebar-btn.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.esp-side-close { align-self: flex-end; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 1179px) {
+  .esp.has-beatlist { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+  .esp-beatlist { display: none; }
+  .esp-pills { display: flex; }
+}
+@media (max-width: 900px) {
+  .esp.has-beatlist { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .esp.has-beatlist { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .esp-chips { display: flex; }
+  .esp.has-beatlist .esp-beat:not(.is-open) { display: none; }
+  .esp.has-beatlist .esp-order-hint { display: none; }
+  .esp-mobilebar {
+    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface-card); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -4px 16px rgba(48, 37, 61, 0.08);
+  }
+  .esp.has-beatlist .esp-savebar { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .esp.has-beatlist .esp-side { display: none; }
+  .esp.has-beatlist.is-context-open .esp-side {
+    display: flex; position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 21;
+    max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px;
+    background: var(--surface-bg); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -8px 24px rgba(48, 37, 61, 0.14);
+  }
+  .esp.is-context-open .esp-side-close { display: inline-flex; }
+  /* Every control on the tab is at least a 44px tap target at phone width. */
+  .esp button { min-height: 44px; }
+}

@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -144,5 +144,20 @@ describe("the script's closet beat (Task #2880)", () => {
   });
   test('a name-only header is numbered by its place', () => {
     expect(closetBeat(S('## BEAT: OPENING', 'x', '## BEAT: TRANSFORMATION', '[UI:OPEN ClosetCategory Outfit]'))).toBe(2);
+  });
+});
+
+describe('the Script tab beat list (Task #2881)', () => {
+  const on = { screens: [{ id: 'mail', name: 'Mail' }], overlays: [{ key: 'invite', label: 'Invitation' }] };
+  test('a phone moment: the phone itself, or one of its screens', () => {
+    expect(hasPhoneMoment(['[UI:SHOW phone]'], on)).toBe(true);
+    expect(hasPhoneMoment(['Prime: "Hi."', '[UI:OPEN Mail]'], on)).toBe(true);
+    expect(hasPhoneMoment(['[UI:DISPLAY Invitation]'], on)).toBe(false);
+    expect(hasPhoneMoment(['Prime: "No moment."'], on)).toBe(false);
+    expect(hasPhoneMoment(['[UI:OPEN Unknown]'], on)).toBe(false);
+  });
+  test('who speaks, in order; Me is Prime; UI lines and narration are no one', () => {
+    expect(beatSpeakers(['Me: "Hi."', '[UI:OPEN Mail]', 'Lala: "Hey."', 'Prime: "Again."', '(She smiles.)', 'A narration line.'])).toEqual(['Prime', 'Lala']);
+    expect(beatSpeakers([])).toEqual([]);
   });
 });

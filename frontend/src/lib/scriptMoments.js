@@ -289,3 +289,26 @@ export function closetBeat(scriptText) {
   if (opens) return opens.number;
   return beats.some((b) => b.number === CLOSET_CANON) ? CLOSET_CANON : null;
 }
+
+/**
+ * Whether a beat has a phone moment of its own (Task #2881: the Script tab's
+ * beat list marks it): a line that brings up Lala's phone, opens one of its
+ * screens or taps one of its icons. A phone carried in from an earlier beat
+ * is not this beat's moment.
+ */
+const PHONE_KINDS = new Set(['phone', 'device', 'icon']);
+export function hasPhoneMoment(lines = [], on = {}) {
+  return beatOnScreen(lines, on).used.some((u) => PHONE_KINDS.has(u.kind));
+}
+
+/** Who speaks in a beat, in the order they first speak ("Me" is Prime). */
+export function beatSpeakers(lines = []) {
+  const seen = [];
+  for (const line of lines) {
+    const m = String(line || '').match(/^\s*([A-Z][A-Za-z]+):\s*\S/);
+    if (!m) continue;
+    const who = m[1] === 'Me' ? 'Prime' : m[1];
+    if (!seen.includes(who)) seen.push(who);
+  }
+  return seen;
+}
