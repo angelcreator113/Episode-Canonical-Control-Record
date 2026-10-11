@@ -67,10 +67,12 @@ const CP3_FILES = [
 // .../documents, PUT .../documents/:type and POST .../documents/:type/approve
 // (requireAuth) and POST .../documents/:type/draft (requireAuth +
 // aiRateLimiter, D4 pattern); no other CP3-zone route changed.
+// worldStudio.js 36: +1 for POST /world/dream-cities/:key/image (a Dream
+// City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
   'worldEvents.js': 80,
-  'worldStudio.js': 35,
+  'worldStudio.js': 36,
   'worldTemperatureRoutes.js': 3,
 };
 
@@ -263,7 +265,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(matches.length).toBe(18);
     });
 
-    test('Tier 1 — exactly 34 mutation handlers use requireAuth (22 POST + 6 PUT + 7 DELETE excl. line 2483)', () => {
+    test('Tier 1 — exactly 35 mutation handlers use requireAuth (23 POST + 6 PUT + 7 DELETE excl. line 2483)', () => {
       // Mutations are POST/PUT/DELETE with requireAuth
       const postPattern = /router\.post\([^)]*,\s*requireAuth,/g;
       const putPattern = /router\.put\([^)]*,\s*requireAuth,/g;
@@ -271,16 +273,16 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       const postCount = (src.match(postPattern) || []).length;
       const putCount = (src.match(putPattern) || []).length;
       const deleteCount = (src.match(deletePattern) || []).length;
-      expect(postCount).toBe(21); // 22 POST minus 1 Tier 3
+      expect(postCount).toBe(22); // 23 POST minus 1 Tier 3 (+1 dream-cities image, Task #2920)
       expect(putCount).toBe(6);
       expect(deleteCount).toBe(7);
-      expect(postCount + putCount + deleteCount).toBe(34);
+      expect(postCount + putCount + deleteCount).toBe(35);
     });
 
-    test('Tier 3 + Tier 4 + Tier 1 cover all 53 worldStudio handlers', () => {
+    test('Tier 3 + Tier 4 + Tier 1 cover all 54 worldStudio handlers', () => {
       const handlerPattern = /^router\.(get|post|put|delete|patch)\(/gm;
       const matches = src.match(handlerPattern) || [];
-      expect(matches.length).toBe(53);
+      expect(matches.length).toBe(54); // +1 dream-cities image (Task #2920)
     });
 
     test('F-AUTH-5 site at line ~2624 preserved (req.user?.id || req.ip || null)', () => {
@@ -334,14 +336,15 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
   });
 
   describe('CP3 zone aggregate consumer counts', () => {
-    // 123, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
-    test('CP3 zone contains 123 total requireAuth references across 4 files (4 imports + 119 handlers)', () => {
+    // 123, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above;
+    // 124 with worldStudio.js POST /world/dream-cities/:key/image (Task #2920).
+    test('CP3 zone contains 124 total requireAuth references across 4 files (4 imports + 120 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(123);
+      expect(total).toBe(124);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
