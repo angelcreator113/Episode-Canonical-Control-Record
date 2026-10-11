@@ -72,8 +72,10 @@ function answer(sql, opts = {}) {
   if (/FROM episodes WHERE id = :episodeId/.test(sql)) {
     return out([{ id: EPISODE_ID, show_id: SHOW_ID, title: 'Ep', episode_number: 3, evaluation_status: 'draft' }]);
   }
-  if (/FROM world_events WHERE used_in_episode_id = :episodeId ORDER BY prestige DESC/.test(sql)) {
-    const evs = EVENTS.filter((e) => e.used_in_episode_id === r.episodeId).sort((a, b) => b.prestige - a.prestige);
+  // The episode's event (utils/episodeEventSql, Task #1917): no brief here,
+  // so the first event stamped with the episode.
+  if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) {
+    const evs = EVENTS.filter((e) => e.used_in_episode_id === r.episodeId);
     return out(evs.slice(0, 1));
   }
   if (/FROM world_events\s+WHERE id = :eventId AND \(show_id = :showId OR show_id IS NULL\)/.test(sql)) {

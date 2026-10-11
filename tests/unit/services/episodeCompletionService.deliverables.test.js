@@ -90,7 +90,7 @@ function makeSequelize() {
         evaluation_status: 'draft', evaluation_json: null, total_income: 500, total_expenses: 0,
       }];
     }
-    if (/FROM world_events WHERE used_in_episode_id = :episodeId/.test(sql)) {
+    if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) {
       return [{
         id: EVENT_ID, show_id: SHOW_ID, name: 'Maison Belle Gala', prestige: 7, dress_code: 'black tie',
         used_in_episode_id: EPISODE_ID, is_paid: true, payment_amount: 500,

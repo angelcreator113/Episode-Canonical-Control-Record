@@ -435,9 +435,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     };
   }
 
-  // 2. Load event linked to episode
+  // 2. Load the episode's event: its brief's, else the first stamped (Task #1917)
   const [event] = await sequelize.query(
-    `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+    `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 

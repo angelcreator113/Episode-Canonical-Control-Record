@@ -297,7 +297,7 @@ describe('completeEpisode step 19 — the completion part runs with the real tie
       if (/FROM episodes WHERE id = :episodeId/.test(sql)) {
         return [{ id: episodeId, title: 'Ep', episode_number: 1, show_id: SHOW_ID, evaluation_status: evaluationStatus, evaluation_json: null }];
       }
-      if (/SELECT \* FROM world_events WHERE used_in_episode_id/.test(sql)) return event ? [event] : [];
+      if (/SELECT \* FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) return event ? [event] : [];
       if (/SELECT \* FROM character_state/.test(sql)) {
         return [{ id: 'state-lala', coins: 900, reputation: 3, brand_trust: 2, influence: 2, stress: 1 }];
       }

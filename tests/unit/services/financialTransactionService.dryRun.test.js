@@ -26,7 +26,7 @@ function makeSequelize() {
   const query = jest.fn(async (sql, opts = {}) => {
     statements.push(sql);
     if (/SELECT COUNT\(\*\) as cnt FROM financial_transactions/.test(sql)) return [{ cnt: 0 }];
-    if (/FROM world_events WHERE used_in_episode_id/.test(sql)) return [EVENT];
+    if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) return [EVENT];
     if (opts.type === 'SELECT') return [];
     return [[], 0];
   });
