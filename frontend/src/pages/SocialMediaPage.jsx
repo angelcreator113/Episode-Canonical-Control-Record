@@ -38,7 +38,6 @@ const WALL_TABS = [
   { key: 'events', label: 'Events' },
 ];
 const PAGE = 50;
-const CITY_NAMES = { nova_prime: 'Nova Prime', velour_city: 'Velour City', the_drift: 'The Drift', solenne: 'Solenne', cascade_row: 'Cascade Row', dazzle_district: 'Dazzle District', radiance_row: 'Radiance Row', echo_park: 'Echo Park', ascent_tower: 'Ascent Tower', maverick_harbor: 'Maverick Harbor' };
 
 export function tabFromParams(params) {
   const tab = params.get('tab');
@@ -292,7 +291,12 @@ function Box({ title, action, children, testId }) {
 }
 
 function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
-  const [owner, setOwner] = useState(null);
+  // Lala's profile column (2026-10-11): her profile, portrait, home city,
+  // career level and friends, each from its owner (GET /social-profiles/lala;
+  // docs/reads/2026-10-11-feed-wiring-read.md). null: not read yet; false: could not be.
+  const [lala, setLala] = useState(null);
+  const [relPosts, setRelPosts] = useState([]);
+  // The LalaVerse's people, for the composer's friend picker and People You May Know.
   const [friends, setFriends] = useState({ list: [], total: 0 });
   const [events, setEvents] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -329,15 +333,17 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const loadSides = useCallback(async () => {
     if (!show?.id) return;
     const safe = async (p, fallback) => { try { return await p; } catch (err) { console.error('[SocialMedia] side load failed:', err.response?.status || err.message); return fallback; } };
-    const [who, ppl, ev, drafts, pend] = await Promise.all([
-      safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&search=lala&limit=5'), null),
+    const [who, ppl, ev, drafts, pend, rel] = await Promise.all([
+      safe(api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}`), null),
       safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=12'), null),
       safe(api.get(`/api/v1/calendar/events?series_id=${show.id}`), null),
       safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&limit=1`), null),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${show.id}`), null),
+      // Her relationship posts (docs/FEED_POSTS.md rule 8), not only the wall's first page.
+      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&post_type=relationship&status=live&limit=50`), null),
     ]);
-    const candidates = who?.data?.profiles || [];
-    setOwner(candidates.find((p) => /^lala$/i.test(p.handle || '') || /^lala\b/i.test(p.display_name || '')) || candidates[0] || null);
+    setLala(who?.data?.data || false);
+    setRelPosts(rel?.data?.data || []);
     const list = (ppl?.data?.profiles || []).filter((p) => !p.is_justawoman_record);
     setFriends({ list, total: ppl?.data?.pagination?.total ?? ppl?.data?.total ?? list.length });
     const all = Array.isArray(ev?.data?.events) ? ev.data.events : [];
@@ -353,6 +359,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   useEffect(() => { if (tabRequest?.tab) setWallTab(tabRequest.tab); }, [tabRequest]);
   useEffect(() => { onInbox?.(draftsTotal + pending.length); }, [draftsTotal, pending.length, onInbox]);
 
+  const owner = lala?.profile || null;
   const ownerName = owner?.display_name || owner?.creator_name || 'Lala';
   const ownerHandle = owner?.handle || 'lala';
   const status = useMemo(() => posts.find((p) => wallTab === 'wall' && (p.poster_handle || p.socialProfile?.handle) === ownerHandle) || null, [posts, ownerHandle, wallTab]);
@@ -380,31 +387,38 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
 
   const q = search.trim().toLowerCase();
   const visible = q ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q)) : posts;
-  const friendTiles = friends.list.filter((p) => p.handle !== ownerHandle).slice(0, 6);
+  const relationship = latestStatus([...posts, ...relPosts], ownerHandle) || owner?.relationship_status || null;
   const mayKnow = friends.list.filter((p) => p.handle !== ownerHandle).slice(6, 8);
   const peopleLink = (p) => `/feed?tab=people&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
 
   return (
     <div className="sm-wall">
       <aside className="sm-left">
-        <Tile name={ownerName} size="xl" tone="l" />
+        {lala?.portrait_url
+          ? <img className="sm-portrait" src={lala.portrait_url} alt={ownerName} data-testid="sm-portrait" />
+          : <Tile name={ownerName} size="xl" tone="l" />}
         <Link className="sm-small-link" to={peopleLink(owner)}>Edit My Profile</Link>
         <Box title="Information" testId="sm-info">
           <dl className="sm-dl">
-            <dt>Current City</dt><dd>{owner?.city ? CITY_NAMES[owner.city] || owner.city : (owner?.geographic_base || '[City]')}</dd>
-            <dt>Relationship Status</dt><dd data-testid="sm-rel-status">{latestStatus(posts, ownerHandle) || owner?.relationship_status || '[Status]'}</dd>
-            <dt>Works at</dt><dd>{owner?.content_category ? owner.content_category.replace(/_/g, ' ') : 'Styling, everywhere'}</dd>
+            {lala?.home_city && <><dt>Current City</dt><dd data-testid="sm-city">{lala.home_city}</dd></>}
+            {relationship && <><dt>Relationship Status</dt><dd data-testid="sm-rel-status">{relationship}</dd></>}
+            {lala?.career && <><dt>Career level</dt><dd data-testid="sm-career">{lala.career.label}</dd></>}
             {owner?.follower_count_approx && <><dt>Followers</dt><dd>{owner.follower_count_approx}</dd></>}
           </dl>
+          {lala && !lala.home_city && !relationship && !lala.career && <p className="sm-muted">Nothing set yet. Her home city is in Show Settings.</p>}
         </Box>
         <Box title="Friends" action={<Link to="/feed?tab=people&layer=lalaverse">See all</Link>} testId="sm-friends">
-          <p className="sm-muted">[{friends.total}] friends</p>
-          <div className="sm-friend-grid">
-            {friendTiles.map((p) => (
-              <Link key={p.id} to={peopleLink(p)} className="sm-friend"><Tile name={p.display_name || p.handle} size="lg" tone={toneOf(p.handle)} /><span>{p.display_name || p.handle}</span></Link>
-            ))}
-            {friendTiles.length === 0 && <p className="sm-muted">No friends yet. Generate profiles under Friends.</p>}
-          </div>
+          {lala?.friends ? (
+            <>
+              <p className="sm-muted" data-testid="sm-friends-count">{lala.friends.total} friend{lala.friends.total === 1 ? '' : 's'}</p>
+              <div className="sm-friend-grid">
+                {lala.friends.list.map((p) => (
+                  <Link key={p.id} to={peopleLink(p)} className="sm-friend" data-testid="sm-friend"><Tile name={p.display_name || p.handle} size="lg" tone={toneOf(p.handle)} /><span>{p.display_name || p.handle}</span></Link>
+                ))}
+                {lala.friends.total === 0 && <p className="sm-muted">No friends yet. A friend is a LalaVerse profile whose link to Lala is Direct.</p>}
+              </div>
+            </>
+          ) : <p className="sm-muted">{lala === null ? 'Loading…' : 'Friends could not be read.'}</p>}
         </Box>
       </aside>
 

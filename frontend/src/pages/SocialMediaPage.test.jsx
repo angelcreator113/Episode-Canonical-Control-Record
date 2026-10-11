@@ -32,19 +32,28 @@ const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><SocialMed
 
 let drafts;
 let posts;
+let lalaColumn;
+let relPosts;
 beforeEach(() => {
+  lalaColumn = {
+    profile: LALA, portrait_url: null, home_city: 'Echo Park', career: { tier: 1, label: 'Emerging' },
+    friends: { total: 2, list: [{ id: 2, handle: 'marcus.k', display_name: 'Marcus' }, { id: 4, handle: 'bestie', display_name: 'Bestie' }] },
+  };
+  relPosts = [];
   Object.values(api).forEach((fn) => fn.mockReset());
   posts = [...POSTS];
   drafts = [{ id: 'd1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2', comments: [] }];
   vi.mocked(api.get).mockImplementation(async (url) => {
     const u = new URL(url, 'http://x');
     if (url.includes('/shows')) return { data: { data: [SHOW] } };
+    if (url.startsWith('/api/v1/social-profiles/lala?')) return { data: { data: lalaColumn } };
     if (url.includes('/social-profiles')) {
       const list = u.searchParams.get('search') === 'lala' ? [LALA] : PEOPLE;
       return { data: { profiles: list, pagination: { total: list.length } } };
     }
     if (url.includes('/calendar/events')) return { data: { events: EVENTS } };
     if (url.includes('/comments/pending')) return { data: { data: [{ id: 'c9', handle: 'rival', text: 'cute.', post: { poster_handle: 'lala' } }], count: 1 } };
+    if (url.includes('/feed-posts') && u.searchParams.get('post_type') === 'relationship') return { data: { data: relPosts, total: relPosts.length } };
     if (url.includes('/feed-posts')) {
       const data = u.searchParams.get('status') === 'draft' ? drafts : posts;
       return { data: { data, total: data.length, hasMore: false } };
@@ -92,10 +101,15 @@ describe('the wall', () => {
     expect(items[1].querySelector('a[href="/episodes/ep-1"]')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Lala' })).toBeTruthy();
     expect(screen.getByTestId('sm-status').textContent).toContain('is deciding between the gold heels');
-    expect(screen.getByTestId('sm-info').textContent).toContain('Dazzle District');
     expect(screen.getByTestId('sm-info').textContent).toContain("it's complicated");
-    expect(screen.getByTestId('sm-friends').textContent).toContain('[9] friends');
-    expect(screen.getByTestId('sm-friends').textContent).toContain('Marcus');
+    await waitFor(() => expect(screen.getByTestId('sm-city').textContent).toBe('Echo Park'));
+    expect(screen.getByTestId('sm-career').textContent).toBe('Emerging');
+    expect(screen.getByTestId('sm-friends-count').textContent).toBe('2 friends');
+    expect(screen.getAllByTestId('sm-friend').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['MMarcus', '/feed?tab=people&layer=lalaverse&profile=2'], ['BBestie', '/feed?tab=people&layer=lalaverse&profile=4'],
+    ]);
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/social-profiles/lala?show_id=${SHOW.id}`);
+    expect(document.body.textContent).not.toMatch(/\[City\]|\[Status\]|Styling, everywhere|\[\d+\] friends/);
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 draft post');
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 reaction to approve');
     expect(screen.getByTestId('sm-upcoming').textContent).toContain('Dazzle Gala');
@@ -145,6 +159,27 @@ describe('the wall', () => {
       show_id: SHOW.id, post_type: 'relationship', content_text: 'changed her relationship status to "Single."', poster_handle: 'lala', status: 'live',
     })));
     await waitFor(() => expect(screen.getByTestId('sm-rel-status').textContent).toBe('Single'));
+  });
+
+  test('the profile column: her portrait, an older relationship post, and nothing made up when nothing is set', async () => {
+    lalaColumn = { ...lalaColumn, portrait_url: 'https://x/lala.png', home_city: null, career: null, profile: { ...LALA, relationship_status: null } };
+    relPosts = [{ id: 'r1', poster_handle: 'lala', post_type: 'relationship', content_text: 'changed her relationship status to "Engaged."', status: 'live', posted_at: '2026-01-01T00:00:00Z' }];
+    renderAt('/feed');
+    expect((await screen.findByTestId('sm-portrait')).getAttribute('src')).toBe('https://x/lala.png');
+    await waitFor(() => expect(screen.getByTestId('sm-rel-status').textContent).toBe('Engaged'));
+    expect(screen.queryByTestId('sm-city')).toBeNull();
+    expect(screen.queryByTestId('sm-career')).toBeNull();
+  });
+
+  test('the profile column says so when it could not be read', async () => {
+    const get = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/social-profiles/lala?')) throw Object.assign(new Error('boom'), { response: { status: 500 } });
+      return get(url);
+    });
+    renderAt('/feed');
+    await waitFor(() => expect(screen.getByTestId('sm-friends').textContent).toContain('Friends could not be read.'));
+    expect(screen.getByRole('heading', { name: 'Lala' })).toBeTruthy();
   });
 
   test('Friends shares "and X are now friends." with the picked friend', async () => {

@@ -1,0 +1,91 @@
+'use strict';
+
+/**
+ * Lala's profile column on the Feed page (Task #2747;
+ * docs/reads/2026-10-11-feed-wiring-read.md §1). One read, each value
+ * from its one owner, or null when there is none:
+ *
+ *   profile     Lala's Feed profile: the one her registry character links
+ *               (registry_characters.feed_profile_id, utils/registryLink),
+ *               else the LalaVerse profile whose handle is exactly 'lala'.
+ *               The page used a text search, which could pick another
+ *               "Lala…" profile.
+ *   portrait    her registry character's portrait_url.
+ *   home_city   the show's lala_home city (Show Settings; utils/lalaHome).
+ *   career      her career tier from her reputation (character_state,
+ *               utils/careerTiers): { tier, label }.
+ *   friends     the LalaVerse profiles she knows directly
+ *               (social_profiles.lala_relationship = 'direct'; Evoni's
+ *               choice of 2026-10-11), the first six and the total.
+ *
+ * Relationship status is not here: it is her newest relationship post
+ * (docs/FEED_POSTS.md rule 8), which the page reads with the posts.
+ * Reads only; writes nothing.
+ */
+
+const { readLalaHome } = require('../utils/lalaHome');
+const { CAREER_TIERS, careerTierFromReputation } = require('../utils/careerTiers');
+
+const FRIENDS_SHOWN = 6;
+
+async function one(sequelize, sql, replacements, label) {
+  try {
+    const [rows] = await sequelize.query(sql, { replacements });
+    return rows?.[0] || null;
+  } catch (err) {
+    console.error(`[LalaFeedProfile] ${label} read failed:`, err.message);
+    return null;
+  }
+}
+
+/** Lala's registry character (her portrait, her Feed link), the newest live one. */
+const lalaCharacter = (sequelize) => one(sequelize,
+  `SELECT id, feed_profile_id, portrait_url FROM registry_characters
+    WHERE character_key = 'lala' AND deleted_at IS NULL
+    ORDER BY (feed_profile_id IS NULL), updated_at DESC LIMIT 1`, {}, 'registry character');
+
+async function lalaProfile(sequelize, linkedId) {
+  const cols = 'id, handle, display_name, follower_count_approx, relationship_status';
+  if (linkedId) {
+    const linked = await one(sequelize, `SELECT ${cols} FROM social_profiles WHERE id = :id AND deleted_at IS NULL`, { id: linkedId }, 'linked profile');
+    if (linked) return linked;
+  }
+  return one(sequelize,
+    `SELECT ${cols} FROM social_profiles
+      WHERE deleted_at IS NULL AND feed_layer = 'lalaverse' AND LOWER(handle) = 'lala'
+      ORDER BY id LIMIT 1`, {}, 'lala profile');
+}
+
+async function friendsOf(sequelize, ownerId) {
+  const where = `deleted_at IS NULL AND feed_layer = 'lalaverse' AND lala_relationship = 'direct'
+    AND COALESCE(is_justawoman_record, false) = false AND (CAST(:owner AS INTEGER) IS NULL OR id <> CAST(:owner AS INTEGER))`;
+  try {
+    const [list] = await sequelize.query(
+      `SELECT id, handle, display_name FROM social_profiles WHERE ${where}
+        ORDER BY LOWER(COALESCE(display_name, handle)) LIMIT ${FRIENDS_SHOWN}`, { replacements: { owner: ownerId || null } });
+    const [[count]] = await sequelize.query(`SELECT COUNT(*)::int AS n FROM social_profiles WHERE ${where}`, { replacements: { owner: ownerId || null } });
+    return { total: count?.n || 0, list };
+  } catch (err) {
+    console.error('[LalaFeedProfile] friends read failed:', err.message);
+    return null;
+  }
+}
+
+async function getLalaFeedProfile(models, showId) {
+  const { sequelize } = models;
+  const character = await lalaCharacter(sequelize);
+  const profile = await lalaProfile(sequelize, character?.feed_profile_id);
+  const show = await one(sequelize, 'SELECT metadata FROM shows WHERE id = :showId AND deleted_at IS NULL', { showId }, 'show');
+  const state = await one(sequelize,
+    `SELECT reputation FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`, { showId }, 'character state');
+  const tier = state && state.reputation !== null && state.reputation !== undefined ? careerTierFromReputation(state.reputation) : null;
+  return {
+    profile,
+    portrait_url: character?.portrait_url || null,
+    home_city: readLalaHome(show?.metadata)?.city || null,
+    career: tier ? { tier, label: CAREER_TIERS[tier].label } : null,
+    friends: await friendsOf(sequelize, profile?.id),
+  };
+}
+
+module.exports = { getLalaFeedProfile, FRIENDS_SHOWN };

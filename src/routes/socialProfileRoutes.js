@@ -2961,6 +2961,24 @@ router.post('/relationships/suggestions/accept', requireAuth, async (req, res) =
 // ── GET /:id ─────────────────────────────────────────────────────────────────
 // IMPORTANT: This catch-all must be the LAST GET route registered.
 // Named routes like GET /network, GET /templates must come before this.
+// GET /api/v1/social-profiles/lala?show_id= — Lala's profile column on the
+// Feed page (Task #2747): her profile, portrait, home city, career level and
+// friends, each from its one owner (services/lalaFeedProfile). Before /:id.
+router.get('/lala', requireAuth, async (req, res) => {
+  const { show_id: showId } = req.query;
+  if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {
+    return res.status(400).json({ error: 'show_id must be a UUID' });
+  }
+  try {
+    const db = req.app.locals.db || require('../models');
+    const { getLalaFeedProfile } = require('../services/lalaFeedProfile');
+    return res.json({ data: await getLalaFeedProfile(db, showId) });
+  } catch (err) {
+    console.error('[SocialProfiles] Lala profile error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
