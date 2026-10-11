@@ -81,7 +81,18 @@ const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
 const EpisodeScriptWriterPage = lazy(() => import('./pages/EpisodeScriptWriterPage'));
 const FeedTimelinePage = lazy(() => import('./pages/FeedTimelinePage'));
 const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'));
-const ShowSettings = lazy(() => import('./pages/ShowSettings'));
+// A show's settings are Admin's Show settings tab (Task #2914); the old
+// /shows/:id/settings address opens it on that show, its ?tab= as ?sub=.
+function ShowSettingsRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  const old = new URLSearchParams(search);
+  const next = new URLSearchParams();
+  next.set('tab', 'show-settings');
+  next.set('show', id);
+  for (const [k, v] of old) next.set(k === 'tab' ? 'sub' : k, v);
+  return <Navigate to={`/admin?${next.toString()}`} replace />;
+}
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 // Redirect from /book/:id → WriteMode (first chapter)
@@ -376,7 +387,7 @@ function AppContent() {
           <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
           <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
-          <Route path="/shows/:id/settings" element={<ShowSettings />} />
+          <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
 
