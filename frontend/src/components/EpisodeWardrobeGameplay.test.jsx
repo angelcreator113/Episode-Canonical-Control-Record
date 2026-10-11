@@ -89,6 +89,16 @@ async function renderGame(props = {}, readyText = 'Sage Corset Midi') {
       {...props}
     />
   );
+  // The right column shows the shopping list until the closet is opened
+  // (Task #2880); the tests below browse it. An empty Body slot opens it on
+  // Body; with a dress already worn, Open full closet and back to For This
+  // Event, which lands on Body too.
+  await screen.findByTestId('look-header');
+  if (screen.queryByTestId('slot-state-body')) fireEvent.click(screen.getByTestId('slot-body'));
+  else if (screen.queryByRole('button', { name: 'Open full closet' })) {
+    fireEvent.click(screen.getByRole('button', { name: 'Open full closet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'For This Event' }));
+  }
   await screen.findByText(readyText);
   return utils;
 }
@@ -125,9 +135,21 @@ describe('EpisodeWardrobeGameplay — garment images', () => {
     expect(screen.getByAltText('Rose Gown').getAttribute('src')).toBe(PROCESSED);
   });
 
-  test('an item with a thumbnail and s3_url shows the thumbnail', async () => {
+  // Producer Mode's order (Evoni, 2026-10-11): the thumbnail is cut before
+  // the background is removed, so it would cover the slot's colour backdrop.
+  test('an item with a thumbnail and s3_url shows s3_url, on its backdrop', async () => {
     await renderGame();
-    expect(screen.getByAltText('Ivory Slip').getAttribute('src')).toBe(THUMB);
+    const img = screen.getByAltText('Ivory Slip');
+    expect(img.getAttribute('src')).toBe(RAW);
+    expect(img.parentElement.className).toMatch(/wa-wd-backdrop bd-/);
+  });
+
+  test('the thumbnail is the last resort', async () => {
+    const { resolveWardrobeCutoutUrl } = await import('../utils/wardrobeImage');
+    expect(resolveWardrobeCutoutUrl({ thumbnail_url: THUMB })).toBe(THUMB);
+    expect(resolveWardrobeCutoutUrl({ thumbnail_url: THUMB, image_url: RAW })).toBe(RAW);
+    expect(resolveWardrobeCutoutUrl({ s3_url: RAW, s3_url_processed: PROCESSED, primary_image_variant: 'original' })).toBe(RAW);
+    expect(resolveWardrobeCutoutUrl({})).toBeNull();
   });
 
   test('an item with no image shows the category emoji', async () => {
@@ -1022,5 +1044,77 @@ describe('EpisodeWardrobeGameplay — empty slots say Needed or Not chosen (#285
     await waitFor(() => expect(within(screen.getByTestId('slot-body')).getByText('Silk Gown')).toBeTruthy());
     expect(screen.queryByTestId('slot-state-body')).toBeNull();
     expect(screen.getByTestId('slot-state-shoes').textContent).toBe('Needed');
+  });
+});
+
+// Task #2880: the look on the left, the event's shopping list on the right;
+// the closet takes the right column while a piece is picked. The beat chip
+// is the script's closet beat; After payday adds the deal's pay.
+describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
+  const SHOP = { type: 'shopping_list', status: 'draft', version: 1, source: 'draft', history: [], items: [{ slot: 'dress', label: 'Find a statement piece' }] };
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockApi();
+    const base = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => {
+      if (url === '/api/v1/world/show-1/events/ev-1/documents') return Promise.resolve({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+      if (url === '/api/v1/world/show-1/events/ev-1/financial-forecast') return Promise.resolve({ data: { success: true, data: { income: { total: 250 } } } });
+      return base(url);
+    });
+  });
+  const renderPlain = (props = {}) => render(
+    <EpisodeWardrobeGameplay episodeId="ep-1" showId="show-1" event={{ id: 'ev-1', name: 'Garden Gala' }} characterState={{ coins: 500, reputation: 3 }} {...props} />,
+  );
+
+  test('the shopping list is on the right, alone and read-only (approved in the Event Package); the closet is not', async () => {
+    renderPlain();
+    const right = await screen.findByTestId('wardrobe-right');
+    const shop = await within(right).findByTestId('evd-shopping_list');
+    expect(within(right).queryByTestId('evd-career_plan')).toBeNull();
+    expect(within(shop).queryAllByRole('button')).toHaveLength(0);
+    expect(within(shop).getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
+    expect(screen.queryByTestId('wardrobe-closet')).toBeNull();
+    // The look comes first in the page order (one column at phone width).
+    const cols = screen.getByTestId('wardrobe-columns').children;
+    expect(cols[0].dataset.testid).toBe('wardrobe-left');
+    expect(cols[1].dataset.testid).toBe('wardrobe-right');
+  });
+
+  test('a slot opens the closet in the right column; Back returns to the list', async () => {
+    renderPlain();
+    await screen.findByTestId('evd-shopping_list');
+    fireEvent.click(screen.getByTestId('slot-shoes'));
+    const closet = await screen.findByTestId('wardrobe-closet');
+    expect(within(closet).getByRole('button', { name: 'For This Event' })).toBeTruthy();
+    expect(screen.queryByTestId('wardrobe-shopping-list')).toBeNull();
+    fireEvent.click(within(closet).getByTestId('closet-back'));
+    expect(await screen.findByTestId('wardrobe-shopping-list')).toBeTruthy();
+    expect(screen.queryByTestId('wardrobe-closet')).toBeNull();
+    // Open full closet opens it too, on the whole closet.
+    fireEvent.click(screen.getByRole('button', { name: 'Open full closet' }));
+    expect(within(await screen.findByTestId('wardrobe-closet')).getByRole('button', { name: 'Full Closet' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test("the chip names the script's closet beat, and no beat without one", async () => {
+    const { unmount } = renderPlain({ closetBeat: 9 });
+    expect((await screen.findByTestId('look-chip')).textContent).toBe('Beat 9 needs it');
+    unmount();
+    renderPlain();
+    await screen.findByTestId('look-header');
+    expect(screen.queryByTestId('look-chip')).toBeNull();
+    expect(screen.getByTestId('look-header').textContent).not.toMatch(/Beat \d/);
+  });
+
+  test('After payday: the coins after the look plus what the deal pays', async () => {
+    renderPlain();
+    expect((await screen.findByTestId('look-payday')).textContent).toBe('After payday 750');
+    expect(screen.getByTestId('look-cost').textContent).toContain('Look costs 🪙 0 · Lala has 500');
+  });
+
+  test('no event linked: an honest empty list', async () => {
+    renderPlain({ event: {} });
+    expect((await screen.findByTestId('wardrobe-shopping-list')).textContent).toBe('No event is linked to this episode, so there is no shopping list.');
+    expect(screen.queryByTestId('look-payday')).toBeNull();
   });
 });

@@ -103,7 +103,8 @@ describe('Episode Overview summary', () => {
     await screen.findByTestId('episode-planning');
     const banner = screen.getByTestId('overview-next-step');
     expect(banner.textContent).toContain('Generate the script');
-    expect(banner.textContent).toContain("The brief is done. Lala's look can wait, but Beat 8 will need it.");
+    // No script yet, so no beat is named (Task #2880).
+    expect(banner.textContent).toContain("The brief is done. Lala's look can wait.");
     fireEvent.click(screen.getByTestId('overview-next-step-go'));
     expect(onOpenTab).toHaveBeenCalledWith('scripts');
   });

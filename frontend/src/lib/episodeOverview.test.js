@@ -28,8 +28,11 @@ describe('episodeOverview', () => {
 
   test('the next step: the script, then production, then results', () => {
     expect(nextStep({ hasScript: false, brief: FULL, plan: PLAN })).toMatchObject({
-      title: 'Generate the script', why: "The brief is done. Lala's look can wait, but Beat 8 will need it.", tab: 'scripts',
+      title: 'Generate the script', why: "The brief is done. Lala's look can wait.", tab: 'scripts',
     });
+    // The beat is the script's closet beat when the plan has one (Task #2880).
+    const withBeat = { ...PLAN, items: PLAN.items.map((i) => (i.key === 'look' ? { ...i, beat: 9 } : i)) };
+    expect(nextStep({ hasScript: false, brief: FULL, plan: withBeat }).why).toBe("The brief is done. Lala's look can wait, but Beat 9 will need it.");
     expect(nextStep({ hasScript: false, brief: { ...FULL, forward_hook: '' } }).why).toBe('The brief is missing forward hook; the script fills the gap and flags it.');
     expect(nextStep({ hasScript: true, checks: { done: 16, total: 21 } })).toMatchObject({ title: 'Work through production', why: '5 production checks left.', tab: 'checklist' });
     expect(nextStep({ hasScript: true, checks: { done: 21, total: 21 } })).toMatchObject({ tab: 'results' });

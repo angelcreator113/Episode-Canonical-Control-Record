@@ -31,12 +31,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
-import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
+import { resolveWardrobeCutoutUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import { lookTotal, pieceChargeText } from '../lib/lookCharge';
+import EventDocuments from './EventPackage/EventDocuments';
 import '../styles/wardrobe-backdrop.css';
+import './EpisodeWardrobeGameplay.css';
 
 // ─── CONSTANTS ───
 
@@ -98,7 +100,8 @@ const SCORE_DEBOUNCE_MS = 350;
 // image if it fails to load. Keyed by URL so a new URL gets a fresh attempt.
 
 function GarmentImage({ item, fallback, size, height, radius = 8 }) {
-  const url = resolveWardrobeImageUrl(item);
+  // Producer Mode's order, so the piece sits on its backdrop (not the thumbnail's own background).
+  const url = resolveWardrobeCutoutUrl(item);
   return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} backdrop={backdropFor(item)} />;
 }
 
@@ -143,7 +146,9 @@ function GarmentImageInner({ url, name, fallback, size, height, radius, backdrop
 
 // ─── MAIN COMPONENT ───
 
-export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete, onCoinsChange }) {
+// closetBeat: the script's closet beat (lib/scriptMoments closetBeat), the
+// beat the look chip names; null when the script has none (Task #2880).
+export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, closetBeat = null, onOutfitComplete, onCoinsChange }) {
   const [pool, setPool] = useState([]);
   const [poolBreakdown, setPoolBreakdown] = useState({});
   const [loading, setLoading] = useState(false);
@@ -164,6 +169,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // v3: Browse modes, closet, search, todo, history, Lala Suggests
   const [browseMode, setBrowseMode] = useState('pool'); // pool | closet | search
+  // The right column (Task #2880): the event's shopping list, or the closet
+  // while she picks a piece (a slot, "+ Add another", Open full closet).
+  const [closetOpen, setClosetOpen] = useState(false);
+  // What the event's deal pays at Complete (GET financial-forecast), for
+  // "After payday"; null until it loads, or when the event has no forecast.
+  const [dealPays, setDealPays] = useState(null);
   const [closetItems, setClosetItems] = useState([]);
   const [closetLoading, setClosetLoading] = useState(false);
   // W3: how many pieces the closet holds (the server's total), and a load error.
@@ -244,6 +255,22 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
+
+  // The deal's pay, as the Look Builder reads it (its income total).
+  useEffect(() => {
+    if (!showId || !event?.id) { setDealPays(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/world/${showId}/events/${event.id}/financial-forecast`)
+      .then((r) => {
+        const total = (r?.data?.data || r?.data)?.income?.total;
+        if (!cancelled) setDealPays(Number.isFinite(Number(total)) && total != null ? Number(total) : null);
+      })
+      .catch((err) => {
+        console.error('[Wardrobe] deal forecast failed to load:', err);
+        if (!cancelled) setDealPays(null);
+      });
+    return () => { cancelled = true; };
+  }, [showId, event?.id]);
 
   // ─── Restore slot picks (backend locked outfit OR localStorage draft) ───
   useEffect(() => {
@@ -707,7 +734,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h3 style={W.lookTitle}>Lala's look</h3>
-            <span style={W.lookChip}>{outfitLocked ? 'Locked' : 'Beat 8 needs it'}</span>
+            {(outfitLocked || closetBeat) && (
+              <span style={W.lookChip} data-testid="look-chip">{outfitLocked ? 'Locked' : `Beat ${closetBeat} needs it`}</span>
+            )}
             <span style={W.eventName}>for {event.name || 'Untitled Event'}</span>
           </div>
           <div style={W.eventTags}>
@@ -720,7 +749,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           <div style={{ fontSize: 11, color: 'var(--lala-ink-muted)', fontWeight: 600 }}>Lala has</div>
           <div style={{ fontSize: 22, fontWeight: 800, color: coins < 100 ? 'var(--danger-text)' : 'var(--lala-ink)' }}>{Number(coins).toLocaleString()} coins</div>
           {!outfitLocked && (
-            <button type="button" style={W.linkBtn} onClick={() => { setBrowseMode('closet'); setActiveSlot(ALL_GROUP.key); loadCloset(); }}>Open full closet</button>
+            <button type="button" style={W.linkBtn} className="ewg-tap" onClick={() => { setBrowseMode('closet'); setActiveSlot(ALL_GROUP.key); setClosetOpen(true); loadCloset(); }}>Open full closet</button>
           )}
         </div>
       </div>
@@ -803,6 +832,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         </details>
       )}
 
+      {/* ═══ THE LOOK AND ITS SHOPPING LIST (Task #2880): the look on the
+          left, the event's shopping list on the right; the closet takes the
+          right column only while she picks a piece. One column at phone
+          width, the look first. ═══ */}
+      <div className="ewg-columns" data-testid="wardrobe-columns">
+      <div className="ewg-left" data-testid="wardrobe-left">
       {/* ═══ LOCKED STATE ═══ */}
       {outfitLocked && (
         <div style={W.lockedBanner}>
@@ -826,11 +861,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         </div>
       )}
 
-      {/* ═══ MAIN LAYOUT ═══ */}
       {!outfitLocked && (
-        <div style={W.mainLayout}>
-
-          {/* ──── LEFT: SLOTS ──── */}
           <div style={W.slotsPanel}>
             {/* Confidence */}
             <div style={W.confidenceCard} aria-busy={score.status === 'loading'} data-score-status={score.status}>
@@ -871,7 +902,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               const isActive = activeSlot === slot.key;
               return (
                 <div key={slot.key} data-testid={`slot-${slot.key}`}
-                  onClick={() => (!item || multi) && setActiveSlot(slot.key)}
+                  onClick={() => { if (!item || multi) { setActiveSlot(slot.key); setClosetOpen(true); } }}
                   style={{
                     ...W.slotCard,
                     border: isActive ? '2px solid var(--lala-lavender)' : '1px solid var(--lala-lavender-line)',
@@ -914,7 +945,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       )}
                       {piece && (
                         <button onClick={(e) => { e.stopPropagation(); removeFromSlot(slot.key, piece.id); setActiveSlot(slot.key); }}
-                          aria-label={`Remove ${piece.name}`} style={W.removeBtn}>✕</button>
+                          aria-label={`Remove ${piece.name}`} style={W.removeBtn}><span style={W.removeDot} aria-hidden="true">✕</span></button>
                       )}
                     </div>
                   ))}
@@ -932,9 +963,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             })}
 
             {/* What the look costs Lala (the pieces still to buy), against her coins. */}
+            {/* After payday: the coins after the look plus what the deal pays at Complete. */}
             <div data-testid="look-cost" style={W.costBar}>
               <span>Look costs <strong>🪙 {lookCost.toLocaleString()}</strong> · Lala has <strong>{Number(coins).toLocaleString()}</strong></span>
               <span>After the look <strong style={{ color: coins - lookCost < 0 ? 'var(--danger-text)' : 'var(--lala-ink)' }}>{(coins - lookCost).toLocaleString()}</strong></span>
+              {dealPays != null && (
+                <span data-testid="look-payday">After payday <strong style={{ color: coins - lookCost + dealPays < 0 ? 'var(--danger-text)' : 'var(--lala-ink)' }}>{(coins - lookCost + dealPays).toLocaleString()}</strong></span>
+              )}
             </div>
             <button onClick={lockOutfit} disabled={!canLock || confirming}
               style={{ ...W.lockBtn, opacity: canLock ? 1 : 0.4 }}>
@@ -950,9 +985,28 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               {suggestingOutfit ? '✨ Lala is thinking...' : '✨ Lala Suggests'}
             </button>
           </div>
+      )}
+      </div>
 
-          {/* ──── RIGHT: BROWSE ──── */}
-          <div style={W.browsePanel}>
+      {/* ──── RIGHT: THE SHOPPING LIST, OR THE CLOSET ──── */}
+      <div className="ewg-right" data-testid="wardrobe-right">
+      {!(closetOpen && !outfitLocked) && (
+        <section className="ewg-list" data-testid="wardrobe-shopping-list" aria-label="The event's shopping list">
+          {showId && event?.id ? (
+            // Read here; drafted and approved in the Event Package only (Evoni, 2026-10-11).
+            <EventDocuments showId={showId} eventId={event.id} event={event} intro={false} only="shopping_list"
+              readOnly manageHref={packagePath ? `${packagePath}#epp-sec-documents` : null} />
+          ) : (
+            <p className="ewg-empty">No event is linked to this episode, so there is no shopping list.</p>
+          )}
+        </section>
+      )}
+      {closetOpen && !outfitLocked && (
+          <div style={W.browsePanel} data-testid="wardrobe-closet">
+            <div className="ewg-closet-head">
+              <h4 className="ewg-closet-title">Lala&apos;s closet</h4>
+              <button type="button" className="ewg-back ewg-tap" onClick={() => setClosetOpen(false)} data-testid="closet-back">Back to the shopping list</button>
+            </div>
             {/* Browse mode tabs */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: 'var(--lala-lavender-soft)', border: '1px solid var(--lala-lavender-line)', borderRadius: 999, padding: 4 }}>
               {[
@@ -1144,8 +1198,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
               )}
             </div>
           </div>
-        </div>
       )}
+      </div>
+      </div>
 
       {/* ═══ OUTFIT HISTORY ═══ */}
       {outfitHistory.length > 0 && (
@@ -1262,8 +1317,6 @@ const W = {
   eventTag: { padding: '2px 8px', background: 'var(--lala-lavender-soft)', borderRadius: 999, fontSize: 11, color: 'var(--lala-lavender-text)' },
   lockedBanner: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: 'var(--success-bg)', border: '2px solid var(--success-border)', borderRadius: 12, marginBottom: 12 },
   unlockBtn: { marginLeft: 'auto', padding: '7px 16px', background: 'var(--surface-card)', border: '1px solid var(--lala-lavender-line)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: 'var(--lala-lavender-text)' },
-  // flexWrap: at 375px the browse panel drops under the slots (Task #2377).
-  mainLayout: { display: 'flex', flexWrap: 'wrap', gap: 16, minHeight: 480 },
   // The slots column is 250px beside the browse panel and the full width
   // once it wraps onto its own row at phone width (Evoni, 2026-10-05: it
   // stayed 250px and left half the screen empty). The browse panel's large
@@ -1278,7 +1331,9 @@ const W = {
   // checklist's dashed amber, Not chosen the muted lavender.
   slotNeeded: { display: 'inline-block', margin: '2px 0', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--warning-text)', background: 'var(--warning-bg)', border: '1px dashed var(--warning-border)' },
   slotNotChosen: { display: 'inline-block', margin: '2px 0', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--lala-lavender-text)', background: 'var(--lala-lavender-soft)' },
-  removeBtn: { width: 22, height: 22, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  // A 44px tap target around the 22px dot (Task #2880: 375px, buttons at least 44px).
+  removeBtn: { width: 44, height: 44, flex: 'none', padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  removeDot: { width: 22, height: 22, borderRadius: '50%', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' },
   miniTier: (tier) => ({ padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: (TIER_STYLES[tier] || TIER_STYLES.basic).bg, color: (TIER_STYLES[tier] || TIER_STYLES.basic).color }),
   lockBtn: { padding: '11px 18px', background: 'var(--lala-lavender)', border: 'none', borderRadius: 10, color: 'var(--text-inverse)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 6 },
   browsePanel: { flex: '999 1 280px', minWidth: 0 },

@@ -31,11 +31,14 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
 const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
-  { type: 'shopping_list', title: 'Shopping list', from: 'From the look: the pieces to find, owned or to buy, the total against her coins' },
+  { type: 'shopping_list', title: 'Shopping list', from: 'From the look: the pieces to find, and what the ones still to buy cost' },
   { type: 'career_plan', title: 'Career plan', from: 'From the deal, this event and her active career goals' },
 ];
 
-function ShoppingPaper({ doc, event, outfitPieces, balance }) {
+// A to-do list (Evoni, 2026-10-11): she crosses lines off in the show, so the
+// paper never ticks or strikes a line because a piece is owned, and shows no
+// balance; a piece still to buy keeps its coins, and the total adds them.
+function ShoppingPaper({ doc, event, outfitPieces }) {
   const { lines, total } = shoppingLines(doc, outfitPieces);
   return (
     <div className="evd-paper" data-testid="evd-shopping-paper">
@@ -44,17 +47,18 @@ function ShoppingPaper({ doc, event, outfitPieces, balance }) {
       <div className="evd-paper-by">{documentByline(event)}</div>
       <ul className="evd-paper-lines">
         {lines.map((l, i) => (
-          <li key={`${l.slot}-${i}`} className={l.owned ? 'is-owned' : ''} data-testid={`evd-line-${l.slot}`}>
-            <span className="evd-box" aria-hidden="true">{l.owned ? '✓' : ''}</span>
+          <li key={`${l.slot}-${i}`} data-testid={`evd-line-${l.slot}`}>
+            <span className="evd-box" aria-hidden="true" />
             <span className="evd-line-text">{l.label}</span>
-            {l.piece && <span className="evd-line-cost">{l.owned ? '· owned' : `· 🪙 ${coins(l.cost)}`}</span>}
+            {l.piece && !l.owned && l.cost > 0 && <span className="evd-line-cost">· 🪙 {coins(l.cost)}</span>}
           </li>
         ))}
       </ul>
       <div className="evd-paper-total" data-testid="evd-shopping-total">
-        Total 🪙 {coins(total)}{balance != null ? ` / ${coins(balance)} coins` : ''}
+        Total 🪙 {coins(total)}
       </div>
-      <div className="evd-paper-note">comfy enough to stand all night!!</div>
+      {/* The list's own note when it has one (no line written in for her; the Wardrobe shopping list, 2026-10-11). */}
+      {typeof doc?.note === 'string' && doc.note.trim() && <div className="evd-paper-note" data-testid="evd-paper-note">{doc.note.trim()}</div>}
     </div>
   );
 }
@@ -105,10 +109,10 @@ function CareerCard({ doc, deliverables = [] }) {
 
 // The document's overlay: its image, whether it matches the document, and
 // Make overlay (the approve call draws it again) when an approved one has none.
-function OverlayRow({ type, doc, busy, onMake, lookTotal = null }) {
+function OverlayRow({ type, doc, busy, onMake, lookTotal = null, readOnly = false }) {
   const o = docOverlay(doc, lookTotal);
   if (!o) return null;
-  const canMake = doc.status === 'approved' && o.key !== 'current';
+  const canMake = !readOnly && doc.status === 'approved' && o.key !== 'current';
   return (
     <div className={`evd-overlay is-${o.key}`} data-testid={`evd-overlay-${type}`}>
       <span className="evd-overlay-thumb">
@@ -168,7 +172,11 @@ function Editor({ type, doc, onCancel, onSave, saving }) {
 // paragraph when the page already explains the documents. layout="wide"
 // lays each document out as one wide card, its paper on the left (the
 // episode's Overlays tab, one card per overlay; Evoni, 2026-10-07).
-export default function EventDocuments({ showId, eventId, event, outfitPieces = [], balance = null, lead = null, intro = true, layout = 'grid' }) {
+// only: one document type ('shopping_list' on the episode's Wardrobe tab,
+// 2026-10-11). readOnly (true, or a list of types): no Draft, Edit, Redraft
+// or Approve, only the state and manageHref, where it is worked on (Evoni,
+// 2026-10-11: the shopping list is approved in one place, the Event Package).
+export default function EventDocuments({ showId, eventId, event, outfitPieces = [], lead = null, intro = true, layout = 'grid', only = null, readOnly = false, manageHref = null }) {
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
@@ -201,12 +209,11 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
     }
   }, []);
 
-  // The look the shopping list adds up and Lala's coins, as the server reads
-  // them with the documents (the look Finalize charges, Evoni 2026-10-09);
-  // the caller's pieces and balance only until they load. The episode's
-  // Overlays tab passes neither, so its list read a total of 0.
+  // The look the shopping list adds up, as the server reads it with the
+  // documents (the look Finalize charges, Evoni 2026-10-09); the caller's
+  // pieces only until it loads. The episode's Overlays tab passes none, so
+  // its list read a total of 0.
   const listPieces = docs?.look ? docs.look.pieces : outfitPieces;
-  const listBalance = docs?.balance ?? balance;
   const listTotal = docs?.shopping_list && docs?.look ? shoppingLines(docs.shopping_list, docs.look.pieces).total : null;
 
   return (
@@ -221,12 +228,13 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
       {error && <p className="evd-error" role="alert">{error}</p>}
       {!docs && !error && <p className="evd-muted">Loading documents…</p>}
       {(docs || lead) && (
-        <div className={`evd-grid${lead ? ' has-lead' : ''}`}>
+        <div className={`evd-grid${lead ? ' has-lead' : ''}${only ? ' is-single' : ''}`}>
           {lead}
-          {docs && DOCS.map(({ type, title, from }) => {
+          {docs && DOCS.filter((d) => !only || d.type === only).map(({ type, title, from }) => {
             const doc = docs[type];
             const state = docState(doc);
             const isBusy = (a) => busy === `${type}:${a}`;
+            const ro = readOnly === true || (Array.isArray(readOnly) && readOnly.includes(type));
             return (
               // Not drafted yet: one line, its title, what it comes from and
               // Draft (Evoni's review, item 6); the paper appears once drafted.
@@ -234,7 +242,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                 <h3 className="evd-title">{title}</h3>
                 <p className="evd-from">{from}</p>
                 <div className="evd-stage">
-                  {doc && editing === type && (
+                  {doc && !ro && editing === type && (
                     <Editor
                       type={type} doc={doc} saving={isBusy('edit')}
                       onCancel={() => setEditing(null)}
@@ -242,13 +250,19 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     />
                   )}
                   {doc && editing !== type && type === 'shopping_list' && (
-                    <ShoppingPaper doc={doc} event={event} outfitPieces={listPieces} balance={listBalance} />
+                    <ShoppingPaper doc={doc} event={event} outfitPieces={listPieces} />
                   )}
                   {doc && editing !== type && type === 'career_plan' && <CareerCard doc={doc} deliverables={docs.deliverables || []} />}
                 </div>
                 <div className="evd-actions">
                   <span className={`evd-state is-${state.key}`} data-testid={`evd-state-${type}`}>{state.label}</span>
-                  {!doc ? (
+                  {ro ? (
+                    manageHref && (
+                      <a className="evd-link" href={manageHref} data-testid={`evd-manage-${type}`}>
+                        <ExternalLink size={13} aria-hidden="true" /> {doc ? 'Change it in the Event Package' : 'Draft it in the Event Package'}
+                      </a>
+                    )
+                  ) : !doc ? (
                     <button type="button" className="evd-link" onClick={() => act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type))} disabled={!!busy}>
                       {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <Wand2 size={13} aria-hidden="true" />} Draft
                     </button>
@@ -270,7 +284,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                 </div>
                 {doc && (
                   <OverlayRow
-                    type={type} doc={doc} busy={busy}
+                    type={type} doc={doc} busy={busy} readOnly={ro}
                     lookTotal={type === 'shopping_list' ? listTotal : null}
                     onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type))}
                   />

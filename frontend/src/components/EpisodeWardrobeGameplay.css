@@ -1,0 +1,53 @@
+/*
+ * The Wardrobe tab's look and its shopping list side by side (2026-10-11):
+ * the look on the left, the event's shopping list on the right (the closet
+ * takes that column only while a piece is picked); one column at phone
+ * width with the look first. The rest of the page keeps its inline styles.
+ */
+.ewg-columns {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+}
+.ewg-left,
+.ewg-right { min-width: 0; }
+@media (max-width: 860px) {
+  .ewg-columns { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Every control in the two columns is at least a 44px tap target. */
+.ewg-columns button,
+.ewg-tap { min-height: 44px; }
+.ewg-columns button { min-width: 44px; }
+.ewg-columns button:focus-visible,
+.ewg-tap:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.ewg-closet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.ewg-closet-title { margin: 0; font-family: var(--font-prose); font-size: 17px; font-weight: 600; color: var(--lala-ink); }
+.ewg-back {
+  padding: 8px 14px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ewg-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--lala-lavender-line);
+  border-radius: 14px;
+  color: var(--lala-ink-muted);
+  font-size: 14px;
+}
+.ewg-list .evd-link { min-height: 44px; }
