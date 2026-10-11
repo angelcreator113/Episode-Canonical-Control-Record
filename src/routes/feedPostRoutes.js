@@ -116,6 +116,33 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
+// ── POST MOMENTS IN THE EPISODE SCRIPT (Task #2885) ──────────────────────
+// GET  /api/v1/feed-posts/episodes/:episodeId/script-drafts: each [UI:POST]
+//      line of the saved script with its draft, if it has one.
+// POST the same path: drafts a feed post for each one that has none, linked
+//      to its beat (services/scriptPostDrafts). Saving again drafts nothing twice.
+router.get('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getScriptPostDrafts } = require('../services/scriptPostDrafts');
+    return res.json({ success: true, data: await getScriptPostDrafts(models, req.params.episodeId) });
+  } catch (err) {
+    console.error('[FeedPosts] script drafts read failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { draftScriptPosts } = require('../services/scriptPostDrafts');
+    return res.json({ success: true, data: await draftScriptPosts(models, req.params.episodeId) });
+  } catch (err) {
+    console.error('[FeedPosts] script drafts failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
 // ── PENDING REACTION DRAFTS ACROSS A SHOW (the wall's Requests box) ─────────
 // GET /api/v1/feed-posts/comments/pending?show_id=
 router.get('/comments/pending', requireAuth, async (req, res) => {

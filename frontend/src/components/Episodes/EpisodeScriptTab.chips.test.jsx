@@ -47,10 +47,10 @@ beforeEach(() => {
 });
 
 describe('Script tab: Add chips, must cover, phone check', () => {
-  test('"Add:" has Action, Dialogue, Open a screen and Scroll the feed', () => {
+  test('"Add:" has Action, Dialogue, Open a screen, Scroll the feed, Notification, DM and Post', () => {
     renderTab();
     const chips = screen.getByTestId('script-add-chips-4');
-    expect([...chips.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Action', 'Dialogue', 'Open a screen', 'Scroll the feed']);
+    expect([...chips.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Action', 'Dialogue', 'Open a screen', 'Scroll the feed', 'Notification', 'DM', 'Post']);
   });
 
   test('Action opens the line adder on Action, and writes an action line', async () => {

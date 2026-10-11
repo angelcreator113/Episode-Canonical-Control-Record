@@ -72,6 +72,10 @@ const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n])
 export function resolveMoment(moment, on = {}) {
   const { screens = [], overlays = [], icons = [] } = on;
   if (!moment) return null;
+  // A notification, a DM or a post (Task #2885) names no screen: it is what
+  // the phone shows, with who and the words from the line itself.
+  const message = messageOf(moment);
+  if (message) return message;
   // "ClosetItems x5" names ClosetItems.
   const target = normKey(String(moment.target || '').replace(/\s+x\d+$/i, ''));
   if (!target) return null;
@@ -106,6 +110,32 @@ export function resolveMoment(moment, on = {}) {
 }
 
 const TAP_VERBS = new Set(['CLICK', 'TAP', 'SELECT']);
+
+/**
+ * Notification, DM and Post moments (Task #2885), written
+ * `[UI:NOTIFY Sender: words]`, `[UI:DM Partner: words]`, `[UI:POST words]`
+ * (src/utils/scriptBeatParser reads the same). Returns { kind, name, who,
+ * text, url: null } or null for any other verb.
+ */
+export const MESSAGE_VERBS = { NOTIFY: 'notify', DM: 'dm', POST: 'post' };
+export function messageOf(moment) {
+  const kind = MESSAGE_VERBS[String(moment?.verb || '').toUpperCase()];
+  if (!kind) return null;
+  const target = String(moment.target || '').trim();
+  const at = kind === 'post' ? -1 : target.indexOf(':');
+  const who = at > 0 ? target.slice(0, at).trim() : null;
+  const text = (at > 0 ? target.slice(at + 1) : target).trim();
+  const name = kind === 'post' ? 'Lala posts' : kind === 'dm' ? `DM${who ? ` with ${who}` : ''}` : `Notification${who ? ` from ${who}` : ''}`;
+  return { kind, name, who, text, url: null };
+}
+/** The line a chip writes: `[UI:NOTIFY who: words]`, `[UI:DM who: words]`, `[UI:POST words]`. */
+export function messageLine(kind, who, text) {
+  const verb = Object.keys(MESSAGE_VERBS).find((v) => MESSAGE_VERBS[v] === kind);
+  const words = String(text || '').replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim();
+  const sender = String(who || '').replace(/[[\]:]/g, '').trim();
+  if (!verb || !words) return null;
+  return kind === 'post' || !sender ? `[UI:${verb} ${words}]` : `[UI:${verb} ${sender}: ${words}]`;
+}
 
 /**
  * The icons on Lala's phone (Evoni, 2026-10-09: "instead of lala's phone
@@ -296,7 +326,7 @@ export function closetBeat(scriptText) {
  * screens or taps one of its icons. A phone carried in from an earlier beat
  * is not this beat's moment.
  */
-const PHONE_KINDS = new Set(['phone', 'device', 'icon']);
+const PHONE_KINDS = new Set(['phone', 'device', 'icon', 'notify', 'dm', 'post']);
 export function hasPhoneMoment(lines = [], on = {}) {
   return beatOnScreen(lines, on).used.some((u) => PHONE_KINDS.has(u.kind));
 }
