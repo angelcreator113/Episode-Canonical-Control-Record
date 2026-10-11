@@ -95,6 +95,7 @@ let SessionBrief; // Session brief generation
 let PostGenerationReview; // Post-generation franchise review
 let EpisodeLookbook, EpisodeLookbookImage; // The episode's Lookbook (Task #2812)
 let WebsiteSlot; // The public landing page's media slots (Task #2821)
+let PulseFit; // Lala's everyday fits on The Pulse (Task #2922)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -356,6 +357,7 @@ try {
   EpisodeLookbook = require('./EpisodeLookbook')(sequelize, DataTypes);
   EpisodeLookbookImage = require('./EpisodeLookbookImage')(sequelize, DataTypes);
   WebsiteSlot = require('./WebsiteSlot')(sequelize, DataTypes);
+  PulseFit = require('./PulseFit')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -536,6 +538,7 @@ const requiredModels = {
   EpisodeLookbook,
   EpisodeLookbookImage,
   WebsiteSlot,
+  PulseFit,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2056,6 +2059,7 @@ module.exports.PostGenerationReview = PostGenerationReview;
 module.exports.EpisodeLookbook = EpisodeLookbook;
 module.exports.EpisodeLookbookImage = EpisodeLookbookImage;
 module.exports.WebsiteSlot = WebsiteSlot;
+module.exports.PulseFit = PulseFit;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;

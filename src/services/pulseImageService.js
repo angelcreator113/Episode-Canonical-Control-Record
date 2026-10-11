@@ -3,7 +3,8 @@
  * the type, size and minimum side, turns the image upright, fits it inside
  * `maxSide`, stores it as a JPEG in the studio's storage (uploadPng:
  * S3_PRIMARY_BUCKET or AWS_S3_BUCKET; a data URL when neither is set) and
- * returns { url, width, height }. PNG, JPEG or WebP only: no SVG, which can
+ * returns { url, key, width, height } (key: the object key it was stored
+ * under). PNG, JPEG or WebP only: no SVG, which can
  * carry script. Not the public site location.
  */
 const crypto = require('crypto');
@@ -48,8 +49,9 @@ async function storePulseImage(file, { keyPrefix, maxSide = 2400, minSide = 200,
     .toBuffer({ resolveWithObject: true });
 
   const { uploadPng } = require('./episodeTitleOverlayService');
-  const url = await uploadPng(data, `${keyPrefix}/${crypto.randomUUID()}.jpg`, 'image/jpeg');
-  return { url, width: info.width, height: info.height };
+  const key = `${keyPrefix}/${crypto.randomUUID()}.jpg`;
+  const url = await uploadPng(data, key, 'image/jpeg');
+  return { url, key, width: info.width, height: info.height };
 }
 
 module.exports = { PulseImageError, storePulseImage, IMAGE_TYPES, MAX_IMAGE_BYTES };
