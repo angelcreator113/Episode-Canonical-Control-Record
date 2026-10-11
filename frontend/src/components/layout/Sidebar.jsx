@@ -30,8 +30,7 @@ function buildNav() {
         // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
         { icon: '📱', label: 'Social Media', route: '/feed', hint: 'What was said, and who said it' },
-        // The public landing page's images and video (Task #2822).
-        { icon: '🌐', label: 'Website', route: '/website', hint: 'The public site\'s images and video' },
+        // The Website page is Admin's Website tab (Task #2913); Admin is in the footer.
       ],
     },
     {
@@ -71,9 +70,10 @@ function buildNav() {
 }
 
 
-// Utility rows pinned in the footer, below the zones. Admin's tools index
-// (AdminPanel) reaches CFO Agent, Decision Analytics, AI Costs, Site
-// Organizer, Design Agent, Diagnostics and Recycle Bin.
+// Utility rows pinned in the footer, below the zones. Admin (AdminPanel)
+// has tabs: The Pulse's Social Director, Website and Tools. Its Tools tab
+// reaches CFO Agent, Decision Analytics, AI Costs, Site Organizer, Design
+// Agent, Diagnostics and Recycle Bin.
 const FOOTER_ITEMS = [
   { icon: '🔍', label: 'Search', route: '/search' },
   { icon: '⚙️', label: 'Settings', route: '/settings' },

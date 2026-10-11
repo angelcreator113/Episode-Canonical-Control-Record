@@ -33,8 +33,6 @@ const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
-// The Website page: the landing page's images and video (Task #2822).
-const WebsiteAdmin = lazy(() => import('./pages/WebsiteAdmin'));
 const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
@@ -331,8 +329,9 @@ function AppContent() {
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
           <Route path="/start" element={<SessionStart />} />
-          {/* The Website page and the signed-in preview of the public site (Task #2822). */}
-          <Route path="/website" element={<WebsiteAdmin />} />
+          {/* The Website page is Admin's Website tab (Task #2913); the signed-in
+              preview of the public site stays here (Task #2822). */}
+          <Route path="/website" element={<Navigate to="/admin?tab=website" replace />} />
           <Route path="/site-preview" element={<PublicLanding preview />} />
           
           {/* Universe */}
