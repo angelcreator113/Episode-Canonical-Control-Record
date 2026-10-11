@@ -730,7 +730,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           <div className="eov-grid">
           {hasFeedOrigin && (
             <div className="eov-card">
-              <CardTitle icon={Globe} aside={<Link to="/feed" className="eov-link">Feed <ArrowRight size={14} aria-hidden="true" /></Link>}>{feedOriginName}</CardTitle>
+              <CardTitle icon={Globe} aside={<Link to="/pulse" className="eov-link">The Pulse <ArrowRight size={14} aria-hidden="true" /></Link>}>{feedOriginName}</CardTitle>
               <div className="eov-origin-meta">
                 {feedOriginHandle && <span className="eov-handle">@{String(feedOriginHandle).replace(/^@/, '')}</span>}
                 {automation.content_category && <span className="eov-tag">{automation.content_category}</span>}

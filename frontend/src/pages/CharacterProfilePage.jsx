@@ -518,9 +518,9 @@ function TabOnline({ character, feedProfile }) {
                     <span className="cp-registry-badge" title="Linked to registry character" style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#eef0fb',color:'#6366f1',marginLeft:4}}>Registry</span>
                   )}
                 </div>
-                <a href={`/feed?profile=${feedProfile.id}&layer=${feedProfile.feed_layer}`}
+                <a href={`/pulse?profile=${feedProfile.id}&layer=${feedProfile.feed_layer}`}
                    style={{fontSize:12,fontWeight:600,color:'#6366f1',textDecoration:'none',marginLeft:'auto',whiteSpace:'nowrap'}}>
-                  View in Feed &rarr;
+                  View in The Pulse &rarr;
                 </a>
                 {stateCfg && (
                   <span className="cp-state-badge" style={{ background: stateCfg.bg, color: stateCfg.color }}>

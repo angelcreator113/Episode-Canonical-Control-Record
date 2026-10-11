@@ -1,6 +1,6 @@
 /**
  * The Sidebar's WORLD zone after the LalaVerse hub (2026-10-04): two rows
- * (LalaVerse, Social Media). The Show Bible row is gone (Evoni, 2026-10-04):
+ * (LalaVerse, The Pulse). The Show Bible row is gone (Evoni, 2026-10-04):
  * the Bible is the hub's Bible tab, and LalaVerse is the active row on every
  * hub tab, the Bible tab included.
  */
@@ -22,10 +22,10 @@ const row = (label) => screen.getByText(label).closest('a');
 beforeEach(() => { window.localStorage.clear(); });
 
 describe('Sidebar: the WORLD zone', () => {
-  test('two rows: LalaVerse and Social Media; no Show Bible row', () => {
+  test('two rows: LalaVerse and The Pulse; no Show Bible row', () => {
     renderAt('/');
     expect(row('LalaVerse').getAttribute('href')).toBe('/universe');
-    expect(row('Social Media').getAttribute('href')).toBe('/feed');
+    expect(row('The Pulse').getAttribute('href')).toBe('/pulse');
     for (const gone of ['Show Bible', 'World Dashboard', 'World Foundation', 'Social Systems', 'Culture & Events']) {
       expect(screen.queryByText(gone)).toBeNull();
     }

@@ -29,7 +29,7 @@ function buildNav() {
         // (2026-10-04), not rows here. The Show Bible row is gone too
         // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
-        { icon: '📱', label: 'Social Media', route: '/feed', hint: 'What was said, and who said it' },
+        { icon: '📱', label: 'The Pulse', route: '/pulse', hint: 'Every city has a story' },
         // The public landing page's images and video (Task #2822).
         { icon: '🌐', label: 'Website', route: '/website', hint: 'The public site\'s images and video' },
       ],

@@ -419,7 +419,7 @@ function WorldAdmin() {
   // standalone feed page.
   useEffect(() => {
     if (initialTab === 'feed-timeline') {
-      navigate('/feed?layer=lalaverse', { replace: true });
+      navigate('/pulse?layer=lalaverse', { replace: true });
       return;
     }
     const [main, sub] = resolveTab(initialTab);

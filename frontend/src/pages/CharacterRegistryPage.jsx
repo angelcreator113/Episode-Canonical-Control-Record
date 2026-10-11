@@ -269,7 +269,7 @@ export default function CharacterRegistryPage() {
         <div className="cast-section-head">
           <h2 id="cast-world-heading" className="cast-h2">Lala's world</h2>
           <span className="cast-note">{people.length} feed {people.length === 1 ? 'person' : 'people'}, each one a character</span>
-          <Link to="/feed" className="cast-link">Open in Lala's Feed</Link>
+          <Link to="/pulse" className="cast-link">Open in The Pulse</Link>
         </div>
         {people.length === 0 ? (
           <p className="cast-note">No LalaVerse feed profiles yet. They are made in Lala's Feed.</p>
@@ -277,7 +277,7 @@ export default function CharacterRegistryPage() {
           <ul className="cast-people" data-testid="cast-people">
             {people.map((p) => (
               <li key={p.id}>
-                <Link className="cast-person" to={p.characterId ? `/character/${p.characterId}` : '/feed'}>
+                <Link className="cast-person" to={p.characterId ? `/character/${p.characterId}` : '/pulse'}>
                   <span className="cast-avatar" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
                   <span className="cast-person-text">
                     <strong>{p.name}</strong>
