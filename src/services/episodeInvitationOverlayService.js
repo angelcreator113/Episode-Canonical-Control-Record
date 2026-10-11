@@ -201,7 +201,7 @@ async function loadEpisodeInvitationOverlay(sequelize, { showId, episodeId }) {
             a.metadata::text AS metadata_text
        FROM world_events e
        JOIN assets a ON a.id = e.invitation_asset_id
-      WHERE e.used_in_episode_id = :episodeId
+      WHERE e.id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}
         AND a.episode_id = :episodeId
         AND a.approval_status = 'approved'
         AND a.deleted_at IS NULL

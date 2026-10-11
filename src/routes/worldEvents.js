@@ -5038,7 +5038,7 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
       // bonus and direct chain matching (parent_event_id pointing here).
       const [prevEventRows] = await sequelize.query(
         `SELECT id, host_brand, source_profile_id FROM world_events
-         WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+         WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
         { replacements: { episodeId: fromEpisodeId } }
       );
       prevEvent = prevEventRows?.[0] || null;

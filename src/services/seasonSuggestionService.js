@@ -127,7 +127,7 @@ async function loadSeasonInputs(sequelize, showId) {
     `SELECT ep.id AS episode_id, ep.episode_number, s.slot_number, s.season_number,
             ev.format, ev.host, ev.host_brand, ev.venue_location_id, ev.venue_name
        FROM episodes ep
-       JOIN world_events ev ON ev.used_in_episode_id = ep.id AND ev.deleted_at IS NULL
+       JOIN world_events ev ON ev.id = ${require('../utils/episodeEventSql').episodeEventIdSql('ep.id')}
        LEFT JOIN season_slots s ON s.episode_id = ep.id AND s.deleted_at IS NULL
       WHERE ep.show_id = :showId AND ep.deleted_at IS NULL
       ORDER BY ep.created_at DESC

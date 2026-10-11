@@ -17,7 +17,7 @@ function fakeModels({ existingAsset }) {
   const calls = [];
   const query = jest.fn(async (sql, opts = {}) => {
     calls.push({ sql, opts });
-    if (/FROM world_events WHERE used_in_episode_id/.test(sql)) return [{ id: 'ev-1', name: 'Gala', event_type: 'invite' }];
+    if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) return [{ id: 'ev-1', name: 'Gala', event_type: 'invite' }];
     if (/FROM episode_todo_lists/.test(sql)) return [{ id: 'todo-1', social_tasks: [] }];
     if (/FROM event_deliverables/.test(sql)) return [[]];
     if (/FROM assets/.test(sql)) return existingAsset ? [existingAsset] : [];

@@ -514,9 +514,9 @@ async function placeEpisode(sequelize, showId, slotId, episodeId) {
     if (placed) throw new SeasonSlotError(`"${episode.title}" is already in E${placed.slot_number}`, 409, 'SEASON_EPISODE_PLACED');
 
     const [[event]] = await sequelize.query(
-      'SELECT id FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,
       { replacements: { episodeId }, transaction });
-    const eventId = event ? event.id : null;
+    const eventId = event?.id || null;
     if (eventId) {
       await sequelize.query(
         `UPDATE season_slots SET event_id = NULL, updated_at = NOW()

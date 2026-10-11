@@ -184,8 +184,7 @@ async function loadEpisodeRow(sequelize, episodeId) {
 async function loadAnchorEvent(sequelize, episodeId) {
   const [event] = await sequelize.query(
     `SELECT id, show_id, name, canon_consequences, outfit_pieces, used_in_episode_id FROM world_events
-      WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
-      ORDER BY updated_at DESC LIMIT 1`,
+      WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   return event || null;

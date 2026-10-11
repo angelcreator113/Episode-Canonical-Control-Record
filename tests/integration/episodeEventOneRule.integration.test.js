@@ -8,6 +8,10 @@
  */
 jest.unmock('uuid');
 
+const request = require('supertest');
+const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
+
 const crypto = require('crypto');
 const models = require('../../src/models');
 const { EPISODE_EVENT_ID_SQL, episodeEventId } = require('../../src/utils/episodeEventSql');
@@ -36,6 +40,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
   afterAll(async () => {
     await run('DELETE FROM episode_briefs WHERE show_id = :show', { show });
+    await run('DELETE FROM scene_set_episodes WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show })
+      .catch((err) => console.warn('cleanup scene_set_episodes:', err.message));
     await run('DELETE FROM world_events WHERE show_id = :show', { show });
     await run('DELETE FROM episodes WHERE show_id = :show', { show });
     await run('DELETE FROM shows WHERE id = :show', { show });
@@ -95,5 +101,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const none = await episode();
     expect(await serviceEventId(none)).toBeNull();
     expect(await episodeEventId(sequelize, none)).toBeNull();
+  });
+
+  it('a WorldAdmin reassign (POST .../inject) leaves the episode tabs and the services on one event', async () => {
+    const token = TokenService.generateTokenPair({ id: 'test-user-one-rule', email: 'evoni@one-rule.dev', name: 'One Rule', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const ep = await episode();
+    // The episode's brief names an event whose stamp is gone (an unlink or a
+    // merge cleared it); WorldAdmin's fix injects another event into it.
+    const briefEvent = await event('Started from');
+    await brief(ep, briefEvent);
+    const injected = await event('Injected by WorldAdmin');
+    const inject = await request(app).post(`/api/v1/world/${show}/events/${injected}/inject`)
+      .set('Authorization', `Bearer ${token}`).send({ episode_id: ep });
+    expect(inject.status).toBe(200);
+    expect((await run('SELECT used_in_episode_id FROM world_events WHERE id = :injected', { injected }))[0][0].used_in_episode_id).toBe(ep);
+
+    const tabs = await request(app).get(`/api/v1/episodes/${ep}/events`).set('Authorization', `Bearer ${token}`);
+    expect(tabs.status).toBe(200);
+    expect(await serviceEventId(ep)).toBe(tabs.body.anchor_event_id);
+    expect(await episodeEventId(sequelize, ep)).toBe(tabs.body.anchor_event_id);
   });
 });
