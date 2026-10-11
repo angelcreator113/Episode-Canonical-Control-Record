@@ -2059,7 +2059,6 @@ export default function EventPackagePage() {
             eventId={eventId}
             event={event}
             outfitPieces={outfitPieces}
-            balance={moneyPreview?.balance ?? null}
           />
         </section>
 

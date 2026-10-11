@@ -67,3 +67,25 @@ export function resolveWardrobeImage(item) {
 export function resolveWardrobeImageUrl(item) {
   return resolveWardrobeImage(item).url;
 }
+
+/**
+ * The picture a piece sits on its closet backdrop with (styles/wardrobe-backdrop.css),
+ * in Producer Mode's order (WorldAdmin's resolveItemImageUrl): her chosen
+ * variant, then regenerated, processed, the original (s3_url, or image_url),
+ * and the thumbnail last. The thumbnail is cut from the photo before its
+ * background is removed, so it covered the backdrop on the episode's
+ * Wardrobe tab (Evoni, 2026-10-11: the colour backdrops only showed in
+ * Producer Mode).
+ */
+const CUTOUT_CHAIN = ['s3_url_regenerated', 's3_url_processed', 's3_url', 'image_url', 'thumbnail_url'];
+export function resolveWardrobeCutoutUrl(item) {
+  if (!item || typeof item !== 'object') return null;
+  const pickField = item.primary_image_variant ? VARIANT_FIELDS[item.primary_image_variant] : null;
+  const pickUrl = pickField ? present(item[pickField]) : null;
+  if (pickUrl) return pickUrl;
+  for (const field of CUTOUT_CHAIN) {
+    const url = present(item[field]);
+    if (url) return url;
+  }
+  return null;
+}

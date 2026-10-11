@@ -264,6 +264,33 @@ export const EXPECTED_ON_SCREEN = {
 };
 
 /**
+ * The script's closet beat (Task #2880): the beat whose lines open the closet
+ * (`[UI:OPEN Closet…]`, as the script skeleton writes it), else the beat whose
+ * canonical number is the one that opens it (CLOSET_OPEN). Numbered as the
+ * Script tab numbers beats (a `## BEAT: 8 · …` header, else its place). Null
+ * when the script has no beats, or no beat that opens the closet: then no
+ * beat is named anywhere ("Beat 8 needs it" was written into the pages).
+ */
+const CLOSET_CANON = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'CLOSET_OPEN'));
+export function closetBeat(scriptText) {
+  const script = String(scriptText || '');
+  if (!/##\s*BEAT:/i.test(script)) return null;
+  const sections = script.split(/(?=##\s*BEAT:)/i).filter((s) => /^\s*##\s*BEAT:/i.test(s));
+  const beats = sections.map((section, i) => {
+    const [header, ...lines] = section.split('\n');
+    const label = (header.match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
+    const numbered = Number((label.match(/^(\d{1,2})\b/) || [])[1]);
+    return { number: numbered >= 1 && numbered <= 14 ? numbered : i + 1, lines };
+  });
+  const opens = beats.find((b) => b.lines.some((l) => {
+    const m = parseMoment(l);
+    return m && m.verb === 'OPEN' && normKey(m.target).startsWith('closet');
+  }));
+  if (opens) return opens.number;
+  return beats.some((b) => b.number === CLOSET_CANON) ? CLOSET_CANON : null;
+}
+
+/**
  * Whether a beat has a phone moment of its own (Task #2881: the Script tab's
  * beat list marks it): a line that brings up Lala's phone, opens one of its
  * screens or taps one of its icons. A phone carried in from an earlier beat

@@ -45,6 +45,34 @@ beforeEach(() => {
 });
 
 describe('EventDocuments', () => {
+  test('readOnly for one type: that document has no buttons, the other keeps its own', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: PLAN } } });
+    render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} readOnly={['shopping_list']} manageHref="/x" />);
+    const shop = await screen.findByTestId('evd-shopping_list');
+    expect(within(shop).queryAllByRole('button')).toHaveLength(0);
+    expect(within(screen.getByTestId('evd-career_plan')).getByRole('button', { name: /Approve/ })).toBeTruthy();
+  });
+
+  // The episode's Wardrobe tab shows the shopping list on its own, read-only:
+  // it is approved in the Event Package only (Evoni, 2026-10-11); no note is
+  // written in for her (Task #2880).
+  test('only="shopping_list" readOnly: the list alone, its state and where to change it, its own note or none', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: PLAN } } });
+    const { unmount } = render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" readOnly manageHref="/shows/show-1/events/ev-1#epp-sec-documents" />);
+    const shop = await screen.findByTestId('evd-shopping_list');
+    expect(screen.queryByTestId('evd-career_plan')).toBeNull();
+    expect(within(shop).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft');
+    expect(screen.getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
+    expect(screen.getByTestId('evd-manage-shopping_list').textContent).toContain('Change it in the Event Package');
+    expect(screen.queryByTestId('evd-paper-note')).toBeNull();
+    expect(screen.getByTestId('evd-shopping-paper').textContent).not.toMatch(/comfy enough/);
+    unmount();
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, note: ' Her own note. ' }, career_plan: null } } });
+    render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" />);
+    expect((await screen.findByTestId('evd-paper-note')).textContent).toBe('Her own note.');
+  });
+
   test('nothing drafted: both cards say so and offer Draft', async () => {
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
@@ -56,7 +84,9 @@ describe('EventDocuments', () => {
     expect(api.get).toHaveBeenCalledWith(BASE);
   });
 
-  test('Draft writes the shopping list: each line its piece, owned ticked, the total against her coins', async () => {
+  // A to-do list she crosses off in the show (Evoni, 2026-10-11): nothing is
+  // ticked or struck because a piece is owned, and there is no balance.
+  test('Draft writes the shopping list: each line its piece, nothing marked owned, the total without a balance', async () => {
     api.post.mockResolvedValue({ data: { success: true, data: SHOP } });
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
@@ -66,10 +96,11 @@ describe('EventDocuments', () => {
     expect(within(paper).getByText("Lala's shopping list")).toBeTruthy();
     expect(within(paper).getByText('for Studio by Sable · Nov 12')).toBeTruthy();
     expect(screen.getByTestId('evd-line-dress').textContent).toContain('· 🪙 420');
-    expect(screen.getByTestId('evd-line-jewelry').className).toBe('is-owned');
-    expect(screen.getByTestId('evd-line-jewelry').textContent).toContain('· owned');
+    expect(screen.getByTestId('evd-line-jewelry').className).toBe('');
+    expect(screen.getByTestId('evd-line-jewelry').textContent).toBe('Find earrings');
     expect(screen.getByTestId('evd-line-purse').textContent).not.toContain('🪙');
-    expect(screen.getByTestId('evd-shopping-total').textContent).toBe('Total 🪙 420 / 1,900 coins');
+    for (const li of paper.querySelectorAll('li')) expect(li.querySelector('.evd-box').textContent).toBe('');
+    expect(screen.getByTestId('evd-shopping-total').textContent).toBe('Total 🪙 420');
     expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft');
     expect(within(shop).getByRole('button', { name: /Redraft/ })).toBeTruthy();
   });
@@ -189,7 +220,8 @@ describe('EventDocuments', () => {
       ] },
     } } });
     render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} />);
-    await waitFor(() => expect(screen.getByTestId('evd-shopping-total').textContent).toBe('Total 🪙 570 / 1,500 coins'));
+    // No balance on the list (Evoni, 2026-10-11), even when the server sends one.
+    await waitFor(() => expect(screen.getByTestId('evd-shopping-total').textContent).toBe('Total 🪙 570'));
     // Drawn with 420, the look now costs 570: the image is out of date and can be redrawn.
     expect(screen.getByTestId('evd-overlay-shopping_list').textContent).toContain('Overlay out of date: the look changed');
     expect(screen.getByTestId('evd-make-overlay-shopping_list')).toBeTruthy();

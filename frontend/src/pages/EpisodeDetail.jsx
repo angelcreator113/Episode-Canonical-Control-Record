@@ -20,7 +20,6 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeStylePage = lazy(() => import('../components/Episodes/EpisodeStylePage'));
-const EpisodeStyleSheetPanel = lazy(() => import('../components/Episodes/EpisodeStyleSheetPanel'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -36,6 +35,7 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
+import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
 import './EpisodeDetail.css';
@@ -844,8 +844,6 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {tabKey === 'production.wardrobe' && (
           <div>
-            {/* The style sheet panel (Task #2814): status, readiness, Preview, Approve, Download PNG */}
-            <EpisodeStyleSheetPanel episode={episode} />
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
               <div>
@@ -878,6 +876,8 @@ const EpisodeDetail = () => {
                     episodeId={episodeId}
                     showId={episode?.show_id || episode?.showId}
                     event={selectedEvent}
+                    // The script's closet beat, the beat the look chip names (Task #2880).
+                    closetBeat={closetBeat(episode?.script_content)}
                     // One coin balance (Evoni, 2026-10-07): the game reads Lala's
                     // ledger balance, the number Money and the header show, not
                     // the separately stored character coins.

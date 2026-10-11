@@ -248,6 +248,9 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
                 event={{ id: event.id, name: event.name }}
                 intro={false}
                 layout="wide"
+                // The shopping list is approved in the Event Package only (Evoni, 2026-10-11).
+                readOnly={['shopping_list']}
+                manageHref={`/shows/${event.show_id || showId}/events/${event.id}#epp-sec-documents`}
                 lead={invitation ? <InvitationDocCard piece={invitation} showId={showId} /> : null}
               />
             ) : (
