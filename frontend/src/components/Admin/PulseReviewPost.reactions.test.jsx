@@ -8,10 +8,10 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 
-import api from '../services/api';
-import { PostCard } from './SocialMediaPage';
+import api from '../../services/api';
+import { PostCard } from './PulseReviewPost';
 
 const POST = { id: 'p-1', poster_handle: 'lala', poster_display_name: 'Lala', content_text: 'Gala tonight.', likes: 3, comments_count: 1, status: 'live', comments: [], sample_comments: ['legacy string'] };
 let comments;

@@ -1,8 +1,10 @@
 /**
  * Admin › The Pulse: the Social Director (docs/design/2026-10-the-pulse.md
  * §4; Task #2919). Its sub-tabs are ?sub=: Review, Uploads, Growth,
- * Storylines and Calendar. Uploads is live (from phase 2); the others say
- * which phase brings them. Nothing here shows in The Pulse.
+ * Storylines and Calendar. Review (Task 2925, the feed's director tools,
+ * the default) and Uploads (phase 2) are live; the others say which phase
+ * brings them. Review's tab counts what is waiting. Nothing here shows in
+ * The Pulse.
  *
  * Uploads › Cover: The Pulse's cover image and its alt text, saved to the
  * show (Show.metadata.pulse_cover, /api/v1/shows/:id/pulse-cover). Empty, it
@@ -21,15 +23,16 @@ import AdminShowGate from '../components/Admin/AdminShowGate';
 import PulseCitiesCard from '../components/Admin/PulseCitiesCard';
 import PulseCharactersCard from '../components/Admin/PulseCharactersCard';
 import PulseFitsCard from '../components/Admin/PulseFitsCard';
+import PulseReview, { loadReviewCount } from '../components/Admin/PulseReview';
 
 export const PULSE_TABS = [
-  { key: 'review', label: 'Review', comingIn: 'Phase 5 brings Review: posts, numbers and reveals waiting for you.' },
+  { key: 'review', label: 'Review' },
   { key: 'uploads', label: 'Uploads' },
   { key: 'growth', label: 'Growth', comingIn: "Phase 5 brings Growth: Lala's follower line and her best and worst posts." },
   { key: 'storylines', label: 'Storylines', comingIn: 'Phase 7 brings Storylines: threads planted and paid off across posts.' },
   { key: 'calendar', label: 'Calendar', comingIn: 'Phase 7 brings Calendar: every post, reveal and event in story time.' },
 ];
-const DEFAULT_SUB = 'uploads';
+const DEFAULT_SUB = 'review';
 const subFrom = (value) => (PULSE_TABS.some((t) => t.key === value) ? value : DEFAULT_SUB);
 
 export const coverApi = {
@@ -150,23 +153,32 @@ export function CoverCard({ showId }) {
   );
 }
 
-function PulseUploads() {
+function PulseUploads({ showId }) {
   return (
-    <AdminShowGate>
-      {(showId) => (
-        <div className="pulse-uploads" data-testid="pulse-uploads">
-          <CoverCard key={showId} showId={showId} />
-          <PulseCitiesCard />
-          <PulseCharactersCard />
-          <PulseFitsCard key={`fits-${showId}`} showId={showId} />
-        </div>
-      )}
-    </AdminShowGate>
+    <div className="pulse-uploads" data-testid="pulse-uploads">
+      <CoverCard key={showId} showId={showId} />
+      <PulseCitiesCard />
+      <PulseCharactersCard />
+      <PulseFitsCard key={`fits-${showId}`} showId={showId} />
+    </div>
   );
+}
+
+// Reads Review's count for the sub-tab, whichever sub-tab is open.
+function ReviewCountProbe({ showId, onCount }) {
+  useEffect(() => {
+    let alive = true;
+    loadReviewCount(showId)
+      .then((n) => { if (alive) onCount(n); })
+      .catch((err) => console.error('[PulseDirector] the Review count could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, [showId, onCount]);
+  return null;
 }
 
 export default function PulseDirector() {
   const [params, setParams] = useSearchParams();
+  const [reviewCount, setReviewCount] = useState(null);
   const sub = subFrom(params.get('sub'));
   const current = PULSE_TABS.find((t) => t.key === sub);
   const select = (key) => setParams((prev) => {
@@ -174,6 +186,7 @@ export default function PulseDirector() {
     next.set('sub', key);
     return next;
   }, { replace: true });
+  const onCount = useCallback((n) => setReviewCount(n), []);
 
   return (
     <section className="admin-pulse" aria-labelledby="admin-pulse-heading" data-testid="admin-pulse">
@@ -192,11 +205,21 @@ export default function PulseDirector() {
             className={sub === t.key ? 'pulse-subtab active' : 'pulse-subtab'}
             onClick={() => select(t.key)}
           >
-            {t.label}
+            {t.label}{t.key === 'review' && reviewCount ? ` (${reviewCount})` : ''}
           </button>
         ))}
       </div>
-      {sub === 'uploads' ? <PulseUploads /> : <p className="pulse-coming" data-testid="pulse-coming">{current.comingIn}</p>}
+      {current.comingIn ? <p className="pulse-coming" data-testid="pulse-coming">{current.comingIn}</p> : (
+        <AdminShowGate>
+          {(showId) => (
+            <>
+              {sub !== 'review' && <ReviewCountProbe showId={showId} onCount={onCount} />}
+              {sub === 'review' && <PulseReview key={showId} showId={showId} onCount={onCount} />}
+              {sub === 'uploads' && <PulseUploads showId={showId} />}
+            </>
+          )}
+        </AdminShowGate>
+      )}
     </section>
   );
 }

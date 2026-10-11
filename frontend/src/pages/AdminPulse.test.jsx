@@ -21,11 +21,20 @@ beforeEach(() => {
 });
 
 describe('Social Director sub-tabs', () => {
-  test('Uploads by default, with the cover for the only show; the others say which phase brings them', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { cover: null } });
+  test('Review by default, with its count on the tab; Uploads shows the cover for the only show; the others say which phase brings them', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.includes('/pulse-cover')) return { data: { cover: null } };
+      if (url.includes('/comments/pending')) return { data: { data: [{ id: 'c1', handle: 'fan', text: 'hi' }] } };
+      if (url.includes('/feed-posts')) return { data: { data: [], total: url.includes('from=wall') ? 2 : 0 } };
+      return { data: {} };
+    });
     render(<MemoryRouter initialEntries={['/admin?tab=pulse']}><PulseDirector /></MemoryRouter>);
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Review', 'Uploads', 'Growth', 'Storylines', 'Calendar']);
-    expect(screen.getByRole('tab', { name: 'Uploads' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: /^Review/ }).getAttribute('aria-selected')).toBe('true');
+    await screen.findByTestId('pulse-review');
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Review/ }).textContent).toBe('Review (3)'));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Uploads' }));
     await screen.findByTestId('pulse-cover-add');
     expect(api.get).toHaveBeenCalledWith('/api/v1/shows/show-1/pulse-cover');
 
