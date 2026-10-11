@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -124,5 +124,25 @@ describe("the phone's icons (Task #2801)", () => {
 
   test('no home screen: each icon is its own one tap', () => {
     expect(phoneIcons([{ id: 'mail', name: 'Mail', screen_links: [{ label: 'Letter', target: 'letter' }] }]).map((i) => i.path)).toEqual([['letter']]);
+  });
+});
+
+describe("the script's closet beat (Task #2880)", () => {
+  const S = (...beats) => beats.join('\n');
+  test('the beat whose lines open the closet', () => {
+    expect(closetBeat(S('## BEAT: 1 · Opening Ritual', 'Prime: "Hi."', '## BEAT: 8 · Transformation Loop', '[UI:OPEN ClosetCategory Outfit]'))).toBe(8);
+    expect(closetBeat(S('## BEAT: 1 · Opening Ritual', '## BEAT: 9 · Reminder', '[UI:OPEN closet]'))).toBe(9);
+  });
+  test('else the canonical closet beat, when the script has it', () => {
+    expect(closetBeat(S('## BEAT: 1 · Opening Ritual', '## BEAT: 8 · Transformation Loop', 'Prime: "Getting ready."'))).toBe(8);
+  });
+  test('no beat at all when the script has none', () => {
+    expect(closetBeat('')).toBeNull();
+    expect(closetBeat(null)).toBeNull();
+    expect(closetBeat('Prime: "No headers here."\n[UI:OPEN closet]')).toBeNull();
+    expect(closetBeat(S('## BEAT: 1 · Opening Ritual', '## BEAT: 2 · Login', '[UI:OPEN MailIcon]'))).toBeNull();
+  });
+  test('a name-only header is numbered by its place', () => {
+    expect(closetBeat(S('## BEAT: OPENING', 'x', '## BEAT: TRANSFORMATION', '[UI:OPEN ClosetCategory Outfit]'))).toBe(2);
   });
 });

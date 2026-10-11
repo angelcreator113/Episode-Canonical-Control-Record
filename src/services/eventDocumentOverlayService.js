@@ -8,8 +8,9 @@
  * When a shopping list or a career plan is approved, it is drawn as an image
  * the way the Event Package shows it (EventDocuments' ShoppingPaper and
  * CareerCard): the shopping list on lined pink paper in Lala's handwriting,
- * with each line's piece owned or its coins and the total against her
- * balance; the career plan on a lavender card, This event, Bigger goals and
+ * a to-do list (no line ticked for an owned piece, no balance; Evoni,
+ * 2026-10-11), each piece still to buy with its coins and the total; the
+ * career plan on a lavender card, This event, Bigger goals and
  * what the deal expects of her. Drawn with Canvas (the invitation's
  * approach: fonts from src/assets/fonts), no image model and no cost.
  *
@@ -147,7 +148,7 @@ function wrap(ctx, text, width, maxLines = 2) {
 }
 
 /** Draws the list at height H; returns where its writing ends. */
-function drawShoppingList(ctx, H, { doc, event, balance, pieces }) {
+function drawShoppingList(ctx, H, { doc, event, pieces }) {
   const ROW = 56;
   ctx.fillStyle = COLORS.pinkPaper;
   ctx.fillRect(0, 0, WIDTH, H);
@@ -166,28 +167,27 @@ function drawShoppingList(ctx, H, { doc, event, balance, pieces }) {
   ctx.font = '34px Caveat';
   ctx.fillText(documentByline(event), 110, 182);
 
+  // A to-do list (Evoni, 2026-10-11): she crosses lines off in the show, so
+  // no line is ticked or struck because a piece is owned, and no balance; a
+  // piece still to buy keeps its coins. The note is the list's own, if any.
   const { lines, total } = shoppingLines(doc, pieces || event?.outfit_pieces);
   let y = 182 + ROW;
   for (const l of lines.slice(0, 16)) {
     ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 3;
     ctx.strokeRect(110, y - 30, 30, 30);
-    if (l.owned) { ctx.font = 'bold 34px Caveat'; ctx.fillStyle = COLORS.ink; ctx.fillText('✓', 113, y - 4); }
     ctx.font = '40px Caveat';
     ctx.fillStyle = COLORS.pinkInk;
-    const cost = l.piece ? (l.owned ? ' · owned' : ` · ${coins(l.cost)} coins`) : '';
+    const cost = l.piece && !l.owned && l.cost > 0 ? ` · ${coins(l.cost)} coins` : '';
     const [first] = wrap(ctx, `${l.label}${cost}`, WIDTH - 180, 1);
     ctx.fillText(first, 160, y);
-    if (l.owned) {
-      const w = ctx.measureText(l.label).width;
-      ctx.strokeStyle = COLORS.pinkInk; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(160, y - 12); ctx.lineTo(160 + Math.min(w, WIDTH - 180), y - 12); ctx.stroke();
-    }
     y += ROW;
   }
   ctx.font = 'bold 46px Caveat';
-  ctx.fillText(`Total ${coins(total)} coins${balance != null ? ` / ${coins(balance)}` : ''}`, 110, y + 6);
+  ctx.fillText(`Total ${coins(total)} coins`, 110, y + 6);
+  const note = typeof doc?.note === 'string' ? doc.note.trim() : '';
+  if (!note) return y + 6;
   ctx.font = '34px Caveat';
-  ctx.fillText('comfy enough to stand all night!!', 110, y + ROW + 6);
+  ctx.fillText(note, 110, y + ROW + 6);
   return y + ROW + 6;
 }
 

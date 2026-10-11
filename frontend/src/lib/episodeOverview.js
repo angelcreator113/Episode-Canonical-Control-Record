@@ -51,7 +51,10 @@ export function fromEventItems(plan) {
  */
 export function nextStep({ hasScript, brief = null, plan = null, checks = null }) {
   const look = plan?.items?.find((i) => i.key === 'look');
-  const lookLater = look && !look.done ? " Lala's look can wait, but Beat 8 will need it." : '';
+  // The beat is the script's closet beat (Task #2880), when it has one.
+  const lookLater = look && !look.done
+    ? (look.beat ? ` Lala's look can wait, but Beat ${look.beat} will need it.` : " Lala's look can wait.")
+    : '';
   if (!hasScript) {
     const b = briefState(brief);
     const why = b && !b.complete

@@ -5,7 +5,8 @@ import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
 import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
-import { SECTION_GUIDE, sectionCount } from '../../lib/checklistHub';
+import { SECTION_GUIDE, sectionCount, sectionGuideText } from '../../lib/checklistHub';
+import { closetBeat } from '../../lib/scriptMoments';
 import { styleReadiness } from '../../lib/styleReadiness';
 
 /**
@@ -574,6 +575,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     .filter(i => i.required)
     .every(i => checks[i.id]);
 
+  // The script's closet beat (Task #2880): where the look sits on the
+  // timeline and the beat the Wardrobe card names; none without one.
+  const lookBeat = closetBeat(episode?.script_content);
   const completedCount = Object.values(checks).filter(Boolean).length;
   // Items dim only until the first check lands; a re-check keeps the last
   // answers in place rather than flashing every row.
@@ -596,14 +600,14 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       )}
 
       <ProductionSummary done={completedCount} total={totalCount} loading={loading} onRefresh={checkReadiness} />
-      <EpisodeTimeline episodeId={episode.id} lookReady={!!checks.outfit_picked} version={version} />
+      <EpisodeTimeline episodeId={episode.id} lookReady={!!checks.outfit_picked} lookBeat={lookBeat} version={version} />
 
       <div className="ckh-cards">
       {CHECKLIST_SECTIONS.map(section => (
         (() => {
           const sectionStatus = computeSectionState(section, checks);
           const stateStyle = STATE_STYLES[sectionStatus.state];
-          const guide = SECTION_GUIDE[section.id];
+          const guide = SECTION_GUIDE[section.id] && { ...SECTION_GUIDE[section.id], text: sectionGuideText(section.id, { closetBeat: lookBeat }) };
           // Each action is offered once: no card button where an open item already goes there.
           const itemLabels = new Set(section.items.filter((i) => !checks[i.id]).map((i) => actions[i.id]?.label).filter(Boolean));
           const open = guide?.open && !itemLabels.has(guide.open.label)

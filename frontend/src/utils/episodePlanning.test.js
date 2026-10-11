@@ -103,10 +103,20 @@ describe('episodePlanning', () => {
 
   test('given the locked outfit, Look is it; planned but not locked is still open', () => {
     const locked = byKey(episodePlanning({ episode: {}, event: EVENT, outfit: [{ name: 'Dress' }, { name: 'Heels' }, { name: 'Bag' }, { name: 'Hoops' }] })).look;
-    expect(locked).toEqual({ key: 'look', label: 'Look', done: true, detail: '4 pieces locked: Dress, Heels, Bag +1', fix: null });
+    expect(locked).toEqual({ key: 'look', label: 'Look', done: true, beat: null, detail: '4 pieces locked: Dress, Heels, Bag +1', fix: null });
+    // No script yet: no beat is named (Task #2880).
     const planned = byKey(episodePlanning({ episode: {}, event: EVENT, outfit: [] })).look;
-    expect(planned).toMatchObject({ done: false, fix: 'wardrobe', detail: 'Planned in the event, not locked on the Wardrobe tab yet; Beat 8 needs it' });
+    expect(planned).toMatchObject({ done: false, fix: 'wardrobe', detail: 'Planned in the event, not locked on the Wardrobe tab yet' });
     const none = byKey(episodePlanning({ episode: {}, event: { ...EVENT, outfit_pieces: [] }, outfit: [] })).look;
-    expect(none).toMatchObject({ done: false, detail: 'Not chosen yet; Beat 8 needs it' });
+    expect(none).toMatchObject({ done: false, detail: 'Not chosen yet' });
+  });
+
+  test("the beat that needs the look is the script's closet beat (Task #2880)", () => {
+    const script = (closetAt) => `## BEAT: 1 · Opening Ritual\nPrime: "Hi."\n## BEAT: ${closetAt} · Getting ready\n[UI:OPEN ClosetCategory Outfit]\n`;
+    const look = (episode, outfit) => byKey(episodePlanning({ episode, event: { ...EVENT, outfit_pieces: [] }, outfit })).look;
+    expect(look({ script_content: script(8) }, [])).toMatchObject({ beat: 8, detail: 'Not chosen yet; Beat 8 needs it' });
+    expect(look({ script_content: script(9) }, [])).toMatchObject({ beat: 9, detail: 'Not chosen yet; Beat 9 needs it' });
+    expect(look({ script_content: script(9) })).toMatchObject({ beat: 9, detail: 'Not chosen yet; Beat 9 needs it' });
+    expect(look({ script_content: '## BEAT: 1 · Opening Ritual\nPrime: "Hi."' }, [])).toMatchObject({ beat: null, detail: 'Not chosen yet' });
   });
 });
