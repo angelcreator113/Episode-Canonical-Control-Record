@@ -152,29 +152,40 @@ async function computeAffordabilityWarning(sequelize, showId, event, { transacti
 }
 
 /**
- * The wardrobe rows calculateFinancials prices the outfit from, as the
- * generate routes load them. A failed read logs and returns [].
+ * The pieces calculateFinancials prices the outfit from: the chosen look
+ * only (Task #1919). It read every item in the show's closet, so a new
+ * episode's expenses carried the whole wardrobe's value. The look is the one
+ * Finalize charges (episodeLookCharges loadLookPieces: the episode's locked
+ * or linked pieces, else the event's outfit_pieces), each at what Finalize
+ * charges for it (lookCharges: an owned, already-bought, gifted or borrowed
+ * piece costs nothing; a rental costs its rental price). Returns the charged
+ * pieces as { id, name, coin_cost, acquisition_type }, [] when the chosen
+ * look costs nothing, and null when no outfit is chosen: the outfit cost is
+ * then absent, not 0 and not the closet.
  */
-async function loadFinancialWardrobeItems(sequelize, showId, { transaction } = {}) {
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { showId }, transaction }
-    );
-    return rows || [];
-  } catch (wardrobeErr) {
-    console.error('[EpisodeGenerator] Wardrobe read for financials failed (outfit cost 0):', wardrobeErr.message);
-    return [];
-  }
+async function loadFinancialWardrobeItems(sequelize, showId, { transaction = null, event = null, episodeId = null } = {}) {
+  const { loadLookPieces, boughtPieceIds, lookCharges } = require('./episodeLookCharges');
+  const pieces = await loadLookPieces(sequelize, { episodeId, event, transaction });
+  if (!pieces.length) return null;
+  const bought = await boughtPieceIds(sequelize, { showId, episodeId, pieces });
+  return lookCharges(pieces, bought).map((c) => ({
+    id: c.piece.id, name: c.piece.name || null, coin_cost: c.amount, acquisition_type: c.piece.acquisition_type || null,
+  }));
 }
 
-function calculateFinancials(event, wardrobeItems = []) {
+/**
+ * The episode's estimated money from its event's terms and its chosen look.
+ * `wardrobeItems` null means no outfit is chosen: outfit_cost is null and
+ * outfit_chosen false, and the expenses are the event's cost alone.
+ */
+function calculateFinancials(event, wardrobeItems = null) {
   const eventIncome = parseFloat(event.payment_amount) || 0;
   const eventExpense = parseFloat(event.cost_coins) || 0;
-  const outfitCost = wardrobeItems.reduce((sum, item) => {
+  const outfitChosen = Array.isArray(wardrobeItems);
+  const outfitCost = outfitChosen ? wardrobeItems.reduce((sum, item) => {
     if (item.acquisition_type === 'gifted' || item.acquisition_type === 'borrowed') return sum;
     return sum + (parseFloat(item.coin_cost) || parseFloat(item.price) || 0);
-  }, 0);
+  }, 0) : null;
 
   // Estimate content revenue from social tasks
   const contentRevenue = event.event_type === 'brand_deal'
@@ -185,10 +196,11 @@ function calculateFinancials(event, wardrobeItems = []) {
     event_income: eventIncome,
     event_expense: eventExpense,
     outfit_cost: outfitCost,
+    outfit_chosen: outfitChosen,
     content_revenue: contentRevenue,
     total_income: eventIncome + contentRevenue,
-    total_expenses: eventExpense + outfitCost,
-    net_profit: (eventIncome + contentRevenue) - (eventExpense + outfitCost),
+    total_expenses: eventExpense + (outfitCost || 0),
+    net_profit: (eventIncome + contentRevenue) - (eventExpense + (outfitCost || 0)),
   };
 }
 
@@ -975,7 +987,7 @@ Return ONLY JSON.` }],
   ];
 
   // Financial summary
-  const financials = calculateFinancials(event, options.wardrobeItems || []);
+  const financials = calculateFinancials(event, options.wardrobeItems ?? null);
 
   let todoList = null;
   try {
