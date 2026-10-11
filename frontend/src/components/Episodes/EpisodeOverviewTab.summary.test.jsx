@@ -25,7 +25,9 @@ const EVENT = {
   outfit_pieces: [], narrative_stakes: 'Her first red carpet',
   canon_consequences: { automation: { guest_profiles: [{ profile_id: 1, display_name: 'Maya Chen', featured: true }] } },
 };
-const EPISODE = { id: 'ep-1', show_id: 'show-1', title: 'Gala Night', description: 'Lala arrives late.', total_income: 439 };
+// Stored totals as Start Episode once wrote them: the whole closet in the expenses (Task #1919).
+const EPISODE = { id: 'ep-1', show_id: 'show-1', title: 'Gala Night', description: 'Lala arrives late.', total_income: 439, total_expenses: 5100 };
+let money;
 let brief;
 
 const renderTab = (props = {}) => {
@@ -42,7 +44,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   brief = { episode_id: 'ep-1', event_id: 'ev-1', episode_archetype: 'Redemption', designed_intent: 'pass', narrative_purpose: 'Her first credit', forward_hook: 'A second invite' };
   vi.mocked(getEpisodeEvents).mockResolvedValue({ events: [EVENT] });
+  money = { projection: { projected_balance: 2239, posted_net: 0, projected_net: 339, open_count: 2, conditional: [] }, look: { pieces: 0 } };
   vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url === '/api/v1/world/show-1/episodes/ep-1/money') return { data: { data: money } };
     if (url === '/api/v1/episode-brief/ep-1') return { data: { data: brief } };
     if (url === '/api/v1/world/show-1/events/ev-1') {
       return { data: { success: true, event: EVENT, sourceProfile: null, sceneSet: null, venueLocation: { id: 'loc-1', name: 'Club Noir' } } };
@@ -114,9 +118,13 @@ describe('Episode Overview summary', () => {
     await screen.findByTestId('episode-planning');
     expect(screen.getByTestId('overview-tile-checklist').textContent).toContain('16 / 21');
     expect(screen.getByTestId('overview-tile-prestige').textContent).toContain('3 / 10');
-    // 1,900 now plus the episode's estimated 439.
-    expect(screen.getByTestId('overview-tile-coins').textContent).toContain('2,339');
-    expect(screen.getByTestId('overview-tile-coins').textContent).toContain('estimate');
+    // The Money plan's projected balance, not 1,900 + 439 − 5,100 from the stored columns (Task #1919).
+    await waitFor(() => expect(screen.getByTestId('overview-tile-coins').textContent).toContain('2,239'));
+    expect(screen.getByTestId('overview-tile-coins').textContent).toContain('outfit not chosen');
+    expect(screen.getByTestId('overview-tile-coins').textContent).not.toMatch(/−?2,761|-2,761/);
+    expect(screen.getByTestId('episode-money-card-no-outfit').textContent).toContain('Outfit not chosen');
+    // One read of the plan, shared by the tile and the Money card.
+    expect(vi.mocked(api.get).mock.calls.filter((c) => c[0] === '/api/v1/world/show-1/episodes/ep-1/money')).toHaveLength(1);
     expect(screen.getByTestId('overview-tile-look').textContent).toContain('Not chosen');
     fireEvent.click(within(screen.getByTestId('overview-tile-coins')).getByText('Open Money'));
     expect(onOpenTab).toHaveBeenCalledWith('money');

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { briefState, fromEventItems, nextStep, coinsAfter } from './episodeOverview';
+import { briefState, fromEventItems, nextStep, coinsAfterPlan } from './episodeOverview';
 
 const PLAN = { items: [
   { key: 'event', label: 'Event', done: true, detail: 'Gala', fix: null },
@@ -38,9 +38,13 @@ describe('episodeOverview', () => {
     expect(nextStep({ hasScript: true, checks: { done: 21, total: 21 } })).toMatchObject({ tab: 'results' });
   });
 
-  test('coins after the episode add the estimate until it is accepted', () => {
-    expect(coinsAfter({ balance: 1900, net: 439 })).toBe(2339);
-    expect(coinsAfter({ balance: 1900, net: 439, accepted: true })).toBe(1900);
-    expect(coinsAfter({ balance: null, net: 10 })).toBeNull();
+  test('coins after the episode come from the Money plan, never the stored columns (Task #1919)', () => {
+    const plan = (over = {}) => ({ projection: { projected_balance: 2300, open_count: 2 }, look: { pieces: 3 }, ...over });
+    expect(coinsAfterPlan(plan())).toEqual({ value: '2,300', note: 'estimate' });
+    expect(coinsAfterPlan(plan({ look: { pieces: 0 } }))).toEqual({ value: '2,300', note: 'outfit not chosen' });
+    expect(coinsAfterPlan(plan({ projection: { projected_balance: 2300, open_count: 0 } }))).toEqual({ value: '2,300', note: null });
+    expect(coinsAfterPlan(plan({ look: { pieces: 0 } }), { accepted: true })).toEqual({ value: '2,300', note: null });
+    expect(coinsAfterPlan(null)).toEqual({ value: '—', note: null });
+    expect(coinsAfterPlan(false)).toEqual({ value: '—', note: 'could not be read' });
   });
 });
