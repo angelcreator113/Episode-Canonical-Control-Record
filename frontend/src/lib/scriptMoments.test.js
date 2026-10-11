@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers, phoneCheck } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -159,5 +159,32 @@ describe('the Script tab beat list (Task #2881)', () => {
   test('who speaks, in order; Me is Prime; UI lines and narration are no one', () => {
     expect(beatSpeakers(['Me: "Hi."', '[UI:OPEN Mail]', 'Lala: "Hey."', 'Prime: "Again."', '(She smiles.)', 'A narration line.'])).toEqual(['Prime', 'Lala']);
     expect(beatSpeakers([])).toEqual([]);
+  });
+});
+
+describe("the open beat's phone check (Task #2884)", () => {
+  const screens = [
+    { id: 'home', name: 'Home', is_home: true, screen_links: [{ label: 'Mail', target: 'mail' }] },
+    { id: 'mail', name: 'Mail', screen_links: [{ label: 'Reply', target: 'reply' }] },
+    { id: 'reply', name: 'Reply' },
+  ];
+  const on = { screens, icons: phoneIcons(screens), overlays: [{ key: 'invite', label: 'Invitation', image_url: null }, { key: 'title', label: 'Show Title', image_url: 'https://x/t.png' }] };
+  test('taps that follow the phone are real paths', () => {
+    const r = phoneCheck(['[UI:CLICK Mail]', 'Lala: "A message."', '[UI:CLICK Reply]'], on);
+    expect(r.moments).toBe(2);
+    expect(r.taps.map((t) => [t.name, t.ok])).toEqual([['Mail', true], ['Reply', true]]);
+    expect(r.missing).toEqual([]);
+  });
+  test('a tap on an icon that is not on the screen showing says where it is', () => {
+    const r = phoneCheck(['[UI:CLICK Reply]'], on);
+    expect(r.taps).toEqual([{ i: 0, name: 'Reply', ok: false, why: 'Reply is on Mail, but the phone shows Home' }]);
+  });
+  test('opening a screen by name moves the phone there', () => {
+    expect(phoneCheck(['[UI:OPEN Mail]', '[UI:CLICK Reply]'], on).taps[0].ok).toBe(true);
+  });
+  test('what is not made yet: an unknown tap, an unknown screen, an overlay with no picture', () => {
+    const r = phoneCheck(['[UI:CLICK Wallet]', '[UI:OPEN Closet]', '[UI:DISPLAY Invitation]', '[UI:DISPLAY Show Title]', '[UI:HIDE Something]'], on);
+    expect(r.missing.map((m) => m.name)).toEqual(['Wallet', 'Closet', 'Invitation']);
+    expect(phoneCheck(['Prime: "No moments."'], on).moments).toBe(0);
   });
 });
