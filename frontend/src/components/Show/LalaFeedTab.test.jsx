@@ -43,7 +43,7 @@ describe("Lala's Feed tab", () => {
     const sees = screen.getByTestId('feed-lala-sees');
     expect(sees.textContent).toContain('Wait, she sewed that??');
     expect(sees.textContent).toContain('2 hours ago');
-    expect(within(sees).getByText('Open the full page').getAttribute('href')).toBe('/feed?layer=lalaverse');
+    expect(within(sees).getByText('Open the full page').getAttribute('href')).toBe('/feed');
   });
 
   test('Approve posts a draft live now, and the feed reloads', async () => {

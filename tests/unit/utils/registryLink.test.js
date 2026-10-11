@@ -27,17 +27,17 @@ describe('linkedCharacter', () => {
 describe('withRegistryLinks', () => {
   test('each profile carries its registry entry\'s id, the newest entry should two claim it; unlinked ones carry null', async () => {
     const RegistryCharacter = { findAll: jest.fn(async () => [
-      { id: 'rc-new', feed_profile_id: 1 }, { id: 'rc-old', feed_profile_id: 1 }, { id: 'rc-2', feed_profile_id: 2 },
+      { id: 'rc-new', feed_profile_id: 1, selected_name: 'Marcus Kane', display_name: 'Marcus' }, { id: 'rc-old', feed_profile_id: 1 }, { id: 'rc-2', feed_profile_id: 2, display_name: 'Two' },
     ]) };
     const instance = { toJSON: () => ({ id: 2, handle: '@two' }) };
     const out = await withRegistryLinks({ RegistryCharacter }, [{ id: 1, handle: '@one' }, instance, { id: 3, handle: '@three' }]);
     expect(out).toEqual([
-      { id: 1, handle: '@one', registry_character_id: 'rc-new' },
-      { id: 2, handle: '@two', registry_character_id: 'rc-2' },
-      { id: 3, handle: '@three', registry_character_id: null },
+      { id: 1, handle: '@one', registry_character_id: 'rc-new', registry_character_name: 'Marcus Kane' },
+      { id: 2, handle: '@two', registry_character_id: 'rc-2', registry_character_name: 'Two' },
+      { id: 3, handle: '@three', registry_character_id: null, registry_character_name: null },
     ]);
     expect(RegistryCharacter.findAll).toHaveBeenCalledWith({
-      where: { feed_profile_id: [1, 2, 3] }, attributes: ['id', 'feed_profile_id'], order: [['updated_at', 'DESC']], raw: true,
+      where: { feed_profile_id: [1, 2, 3] }, attributes: ['id', 'feed_profile_id', 'selected_name', 'display_name'], order: [['updated_at', 'DESC']], raw: true,
     });
   });
 
@@ -52,7 +52,7 @@ describe('withRegistryLinks', () => {
     expect(await withRegistryLinks({ RegistryCharacter }, [])).toEqual([]);
     expect(await withRegistryLinks({ RegistryCharacter }, null)).toEqual([]);
     expect(RegistryCharacter.findAll).not.toHaveBeenCalled();
-    expect(await withRegistryLinks({}, [{ id: 5 }])).toEqual([{ id: 5, registry_character_id: null }]);
+    expect(await withRegistryLinks({}, [{ id: 5 }])).toEqual([{ id: 5, registry_character_id: null, registry_character_name: null }]);
   });
 });
 

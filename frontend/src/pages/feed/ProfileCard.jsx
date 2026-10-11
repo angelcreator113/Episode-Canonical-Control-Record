@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass } from './feedConstants';
+import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass, profileName, atHandle } from './feedConstants';
 
 export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode, isChecked, onSelect, onToggle, chooseHost, onHostEvent, hosting }) {
   const d = fp(p);
@@ -26,7 +26,8 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: stc.bg, color: stc.color }}>{STATUS_LABELS[p.status] || p.status}</span>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }}>{p.handle}{(p.display_name || d.display_name) && (p.creator_name || d.creator_name) && (p.display_name || d.display_name) !== (p.creator_name || d.creator_name) ? ` · ${p.display_name || d.display_name}` : !p.creator_name && !d.creator_name && (p.display_name || d.display_name) ? ` · ${p.display_name || d.display_name}` : ''}</div>
+        {/* @handle, then the Profile name when it says something the title does not (Task #2761). */}
+        <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }} data-testid="spg-card-handle">{atHandle(p.handle)}{profileName(p) && profileName(p) !== (p.creator_name || d.creator_name) ? ` · ${profileName(p)}` : ''}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 8, background: C.blueLight, color: C.blue }}>{p.platform}</span>
           {/* Multi-platform badges */}

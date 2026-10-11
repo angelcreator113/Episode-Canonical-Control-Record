@@ -142,7 +142,7 @@ function ExportDropdown({ exporting, onExport }) {
 // lalaClass imported from ./feed/feedConstants; auth handled by apiClient interceptor (Track 3)
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab, chooseHost=false }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab, chooseHost=false, initialProfileId=null }) {
   const navigate = useNavigate();
   const [hostingProfileId, setHostingProfileId] = useState(null);
   const [profiles,setProfiles]   = useState([]);
@@ -354,6 +354,17 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       else showToast('Failed to load full profile details','error');
     }catch(err){showToast('Failed to load profile: '+(err.response?.data?.error||err.message),'error');}
   };
+
+  // A link to one profile (?profile=, e.g. a friend on the Feed page; Task
+  // #2761) opens it once, read in full.
+  const openedInitial = useRef(false);
+  useEffect(()=>{
+    if(!initialProfileId||openedInitial.current)return;
+    openedInitial.current=true;
+    fetchProfileDetail(initialProfileId)
+      .then(res=>{if(res.data?.profile)setSelected(res.data.profile);else showToast('That profile could not be found','error');})
+      .catch(err=>{console.error('[SocialProfileGenerator] linked profile load failed:',err);showToast('Failed to load profile: '+(err.response?.data?.error||err.message),'error');});
+  },[initialProfileId]);
 
   const changeFilter = s=>{setFilterStatus(s);setPage(1);setSelectedIds(new Set());};
   const changeSort   = s=>{setSortBy(s);setPage(1);};

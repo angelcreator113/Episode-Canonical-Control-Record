@@ -13,8 +13,11 @@
  *
  *   linkedCharacter(db, profileId, attributes)  the profile's registry character, or null
  *   withRegistryLinks(db, profiles)             plain profile objects carrying
- *                                               registry_character_id, read from the
- *                                               registry entry, as the Feed's pages read it
+ *                                               registry_character_id and
+ *                                               registry_character_name (the person's
+ *                                               name, which the registry owns; Task
+ *                                               #2761), read from the registry entry,
+ *                                               as the Feed's pages read it
  *   LINKED_CHARACTER_JOIN                       raw SQL: joins social_profiles sp to
  *                                               its registry character as rc
  */
@@ -41,7 +44,11 @@ async function linkedCharacter(db, profileId, attributes) {
 
 const plain = (p) => (p && typeof p.toJSON === 'function' ? p.toJSON() : p);
 
-/** Profiles as plain objects, each with registry_character_id from its registry entry, else null. */
+/**
+ * Profiles as plain objects, each with registry_character_id and
+ * registry_character_name (selected_name, else display_name) from its
+ * registry entry, else null.
+ */
 async function withRegistryLinks(db, profiles) {
   const list = (profiles || []).map(plain);
   const ids = list.map((p) => p && p.id).filter((id) => id != null);
@@ -49,14 +56,18 @@ async function withRegistryLinks(db, profiles) {
   if (ids.length && db?.RegistryCharacter) {
     const rows = await db.RegistryCharacter.findAll({
       where: { feed_profile_id: ids },
-      attributes: ['id', 'feed_profile_id'],
+      attributes: ['id', 'feed_profile_id', 'selected_name', 'display_name'],
       order: NEWEST,
       raw: true,
     });
     // Newest first: the first row for a profile is its link.
-    for (const r of rows) if (!byProfile.has(r.feed_profile_id)) byProfile.set(r.feed_profile_id, r.id);
+    for (const r of rows) if (!byProfile.has(r.feed_profile_id)) byProfile.set(r.feed_profile_id, r);
   }
-  return list.map((p) => (p ? { ...p, registry_character_id: byProfile.get(p.id) || null } : p));
+  return list.map((p) => {
+    if (!p) return p;
+    const r = byProfile.get(p.id);
+    return { ...p, registry_character_id: r?.id || null, registry_character_name: r ? (r.selected_name || r.display_name || null) : null };
+  });
 }
 
 module.exports = { linkedCharacter, withRegistryLinks, LINKED_CHARACTER_JOIN };

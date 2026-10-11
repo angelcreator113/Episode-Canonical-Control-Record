@@ -1528,3 +1528,18 @@
   .ws4-tab-group-label { display: none; }
   .ws4-tab-divider { display: none; }
 }
+/* The Feed tab makes profiles for both feeds (Task 2761, 2026-10-11): which one. */
+.ws4-feed-layers { display: flex; gap: 4px; padding: 10px 24px 0; flex-wrap: wrap; }
+.ws4-feed-layer {
+  padding: 6px 14px;
+  font-size: var(--text-sm, 13px);
+  font-weight: 600;
+  color: var(--ws4-muted);
+  background: var(--ws4-surface);
+  border: 1px solid var(--ws4-border);
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 36px;
+}
+.ws4-feed-layer--active { color: var(--ws4-pink); border-color: var(--ws4-pink); }
+@media (max-width: 680px) { .ws4-feed-layers { padding: 10px 16px 0; } }
