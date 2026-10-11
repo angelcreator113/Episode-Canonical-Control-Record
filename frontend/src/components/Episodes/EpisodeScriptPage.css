@@ -361,3 +361,12 @@
 .esp-moment-words { font-family: 'Lora', serif; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
 .esp-moment-drafted { font-size: 11px; font-weight: 600; color: var(--success-text); }
 .esp-picker-where input { width: 100%; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 16px; }
+
+/* True at Beat N (Task #2882): what is true at the open beat, each value
+   the episode's own. */
+.esp-truth { padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
+.esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }
+.esp-truth-list dt { display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp-truth-list dd { margin: 0; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-truth-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--lala-ink-muted); }

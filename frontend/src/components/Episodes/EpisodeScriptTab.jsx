@@ -3,12 +3,13 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
+import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -662,7 +663,8 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [onScreen, setOnScreen] = useState({ screens: [], icons: [], overlays: [], look: [], production: [] });
   // The phone layout (Task #2881): Lala's coins for the context chips (null
   // until read, or when it could not be), the bottom bar's request to the
-  // open beat, and whether the context panel is open.
+  // open beat, and whether the context panel is open. `balance` is the
+  // balance before this episode (Task #2882).
   const [balance, setBalance] = useState(null);
   const [barRequest, setBarRequest] = useState(null);
   const [contextOpen, setContextOpen] = useState(false);
@@ -692,11 +694,17 @@ export default function EpisodeScriptTab({ episode, show }) {
   useEffect(() => {
     if (!showId) return undefined;
     let cancelled = false;
-    api.get(`/api/v1/world/${showId}/balance`)
-      .then((res) => { const b = res?.data?.balance; if (!cancelled) setBalance(Number.isFinite(Number(b)) && b !== null ? Number(b) : null); })
+    // The balance before this episode (Task #2882): the "True at Beat N"
+    // card adds the script's coin changes to it, beat by beat.
+    const url = episodeId ? `/api/v1/world/${showId}/balance?episode_id=${encodeURIComponent(episodeId)}` : `/api/v1/world/${showId}/balance`;
+    api.get(url)
+      .then((res) => {
+        const b = episodeId ? res?.data?.balance_before_episode : res?.data?.balance;
+        if (!cancelled) setBalance(Number.isFinite(Number(b)) && b !== null && b !== undefined ? Number(b) : null);
+      })
       .catch((err) => { console.error('[EpisodeScript] balance load failed:', err); if (!cancelled) setBalance(null); });
     return () => { cancelled = true; };
-  }, [showId]);
+  }, [showId, episodeId]);
   useEffect(() => {
     if (!episodeId) return undefined;
     let cancelled = false;
@@ -1048,6 +1056,11 @@ export default function EpisodeScriptTab({ episode, show }) {
   const phoneBeats = new Set(beats.filter((b) => hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
   const openScene = openBeat ? scenePlan.find((p) => p.beat_number === openBeat.number) : null;
   const inRoom = openBeat ? beatSpeakers(openBeat.lines) : [];
+  // What is true at the open beat (Task #2882; Evoni's choices of 2026-10-11).
+  const truth = openBeat ? beatState(beats, beats.indexOf(openBeat), {
+    balanceBefore: balance, outfit, closetAt: closetBeat(scriptText), scenePlan,
+    event: source?.event || null, episodeNumber: episode?.episode_number ?? null,
+  }) : null;
   const people = scriptPeople({ event: source?.event || null, sourceProfile: source?.sourceProfile || null, beats });
   const onScreenWithDrafts = postDrafts ? { ...onScreen, postDrafts } : onScreen;
   const approvedCount = beats.filter(b => b.approved).length;
@@ -1135,8 +1148,8 @@ export default function EpisodeScriptTab({ episode, show }) {
             ))}
           </div>
           <ul className="esp-chips" data-testid="script-chips">
-            <li data-testid="script-chip-coins"><Coins size={13} aria-hidden="true" />{balance != null ? `Lala has ${balance.toLocaleString()} coins` : 'Coins not read'}</li>
-            <li data-testid="script-chip-look"><Shirt size={13} aria-hidden="true" />{outfit === null ? 'Look not read' : outfit.length ? `Dressed · ${outfit.length} piece${outfit.length === 1 ? '' : 's'}` : 'Not dressed yet'}</li>
+            <li data-testid="script-chip-coins"><Coins size={13} aria-hidden="true" />{truth?.coins.value != null ? `Lala has ${truth.coins.value.toLocaleString()} coins` : 'Coins not read'}</li>
+            <li data-testid="script-chip-look"><Shirt size={13} aria-hidden="true" />{truth?.wearing.beforeCloset ? truth.wearing.text : outfit === null ? 'Look not read' : outfit.length ? `Dressed · ${outfit.length} piece${outfit.length === 1 ? '' : 's'}` : 'Not dressed yet'}</li>
             <li data-testid="script-chip-scene"><MapPin size={13} aria-hidden="true" />{openScene?.scene_set_name || 'No scene set'}</li>
             <li data-testid="script-chip-room"><Users size={13} aria-hidden="true" />{inRoom.length ? inRoom.join(', ') : 'No one speaks yet'}</li>
           </ul>
@@ -1247,6 +1260,18 @@ export default function EpisodeScriptTab({ episode, show }) {
             <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no deliverables or goals, and the brief has no forward hook.</p>
           )}
           <p className="esp-uses-note">From the event package and the brief. Ticked when the script mentions it.</p>
+        </section>
+      )}
+      {hasScript && truth && (
+        <section className="esp-truth" data-testid="script-beat-state">
+          <h3 className="esp-side-title">True at Beat {truth.number}</h3>
+          <dl className="esp-truth-list">
+            <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}</dd></div>
+            <div data-testid="script-truth-wearing"><dt><Shirt size={14} aria-hidden="true" /> Wearing</dt><dd>{truth.wearing.text}</dd></div>
+            <div data-testid="script-truth-where"><dt><MapPin size={14} aria-hidden="true" /> Where</dt><dd>{truth.where}</dd></div>
+            <div data-testid="script-truth-room"><dt><Users size={14} aria-hidden="true" /> In the room</dt><dd>Speaking: {truth.speaking}{truth.cast && <span className="esp-truth-note">Cast: {truth.cast}</span>}</dd></div>
+            <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
+          </dl>
         </section>
       )}
       {hasScript && openBeat && check && (
