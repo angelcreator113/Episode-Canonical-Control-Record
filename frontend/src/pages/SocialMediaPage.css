@@ -112,7 +112,12 @@
   .sm-left { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
   .sm-left .sm-box { flex: 1 1 160px; }
   .sm-tile-xl { width: 90px; height: 110px; font-size: 40px; }
+  .sm-portrait { width: 90px; height: 110px; }
   .sm-search { width: 90px; flex-shrink: 0; }
   .sm-nav { gap: 6px; }
   .sm-banner-right { display: none; }
 }
+
+/* Lala's portrait (the Feed profile column, 2026-10-11): her registry character's, in the initial
+   block's place. */
+.sm-portrait { display: block; width: 140px; height: 180px; object-fit: cover; border-radius: 2px; background: var(--lala-parchment-3); }
