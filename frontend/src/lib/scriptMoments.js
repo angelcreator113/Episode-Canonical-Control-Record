@@ -312,3 +312,52 @@ export function beatSpeakers(lines = []) {
   }
   return seen;
 }
+
+/**
+ * The open beat's phone check (Task #2884): whether each tap is a real path
+ * on Lala's phone, and what the beat names that is not made yet.
+ *
+ * Walking the beat's lines, the phone shows one screen at a time: it starts
+ * on the home screen (or where an earlier beat left it, `startAt`), a tap
+ * goes to the screen its icon opens, and opening a screen by name shows it.
+ * A tap is a real path when its icon sits on the screen showing, or on
+ * every screen; else it names where the icon actually is. A tap on
+ * something that is not an icon on the phone, and any moment whose target
+ * matches no screen or overlay (or one with no picture yet), is listed as
+ * not made yet. Returns { moments, taps: [{ i, name, ok, why }], missing: [{ i, name }] }.
+ */
+export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
+  const screens = on.screens || [];
+  const byId = new Map(screens.map((s) => [s.id, s]));
+  const home = screens.find((s) => s.is_home) || null;
+  const nameOf = (id) => byId.get(id)?.name || id || 'the phone';
+  let at = startAt || home?.id || null;
+  const taps = [];
+  const missing = [];
+  let moments = 0;
+  lines.forEach((line, i) => {
+    const moment = parseMoment(line);
+    if (!moment) return;
+    moments += 1;
+    const shown = resolveMoment(moment, on);
+    const target = String(moment.target || '').replace(/\s+x\d+$/i, '').trim();
+    if (TAP_VERBS.has(moment.verb)) {
+      if (shown?.kind !== 'icon') { missing.push({ i, name: target }); return; }
+      const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
+      const everywhere = icon?.onName === 'Every screen';
+      const ok = !icon || everywhere || !at || icon.on === at;
+      taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}` });
+      if (icon?.opens) at = icon.opens;
+      return;
+    }
+    if (!shown) { if (!OFF_VERBS.has(moment.verb)) missing.push({ i, name: target }); return; }
+    if (shown.kind === 'device') { if (!DEVICE_ON.has(moment.verb)) at = home?.id || null; return; }
+    if (shown.kind === 'phone') {
+      const screen = screens.find((s) => (s.name || s.id) === shown.name);
+      if (screen && !OFF_VERBS.has(moment.verb)) at = screen.id;
+      return;
+    }
+    if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });
+  });
+  return { moments, taps, missing };
+}

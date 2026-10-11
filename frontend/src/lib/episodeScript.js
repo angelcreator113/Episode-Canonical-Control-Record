@@ -78,3 +78,52 @@ export function scriptInputs({ brief = null, plan = null, outfit = [], event = n
     { key: 'career', label: 'Career', ...careerInput(event, deliverables) },
   ];
 }
+
+// ─── "THIS EPISODE MUST COVER" (Task #2884) ─────────────────────────────────
+//
+// Only what the episode's data holds: the event package's deliverables
+// (what Lala owes for the deal) and goals (canon_consequences.automation.
+// relationship_goals), and the brief's forward hook. Nothing is written in.
+// An item is ticked when the script mentions it: most of its key words (at
+// least two, or its one key word) appear in one beat; the first such beat
+// is named. The script writer is told which beats to put them in
+// (services/scriptCareerService) but writes no tag, so the words are the
+// only trace.
+
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
+const words = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+export const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 && !STOP.has(w)))];
+
+/** The first beat (its number) whose lines mention the text, else null. */
+export function mentionedIn(beats = [], text) {
+  const keys = keyWords(text);
+  if (!keys.length) return null;
+  const need = keys.length === 1 ? 1 : Math.max(2, Math.ceil(keys.length / 2));
+  for (const b of beats) {
+    const have = new Set(words((b.lines || []).join(' ')));
+    if (keys.filter((k) => have.has(k)).length >= need) return b.number;
+  }
+  return null;
+}
+
+const deliverableLabel = (d) => String(d?.description || '').trim()
+  || [d?.platform, d?.deliverable_type].filter(Boolean).join(' ').trim();
+
+/**
+ * [{ key, label, source, beat }] in the order: deliverables, goals, the
+ * brief's hook. beat is the number of the beat that mentions it, or null.
+ * `deliverables` null (unread) is treated as none.
+ */
+export function mustCover({ beats = [], deliverables = [], event = null, brief = null } = {}) {
+  const items = [];
+  (Array.isArray(deliverables) ? deliverables : []).forEach((d, n) => {
+    const label = deliverableLabel(d);
+    if (label) items.push({ key: `deliverable-${d.id || n}`, label, source: 'Deliverable' });
+  });
+  relationshipGoalsOf(event).forEach((g, n) => {
+    items.push({ key: `goal-${n}`, label: String(g.label).trim(), source: 'Goal' });
+  });
+  const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
+  if (hook) items.push({ key: 'hook', label: hook, source: 'Forward hook' });
+  return items.map((i) => ({ ...i, beat: mentionedIn(beats, i.label) }));
+}

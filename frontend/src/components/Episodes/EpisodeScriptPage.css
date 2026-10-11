@@ -343,3 +343,15 @@
   /* Every control on the tab is at least a 44px tap target at phone width. */
   .esp button { min-height: 44px; }
 }
+
+/* "Add:" chips, must-cover checklist and phone check (2026-10-11). */
+.esp-add-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.esp-add-label { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp-cover, .esp-phonecheck { padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.esp-cover-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.esp-cover-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-cover-list li svg { flex: none; margin-top: 2px; color: var(--lala-ink-muted); }
+.esp-cover-list li.is-covered svg { color: var(--success-text); }
+.esp-cover-list li.is-gap svg { color: var(--warning-text); }
+.esp-cover-beat { color: var(--lala-lavender-text); }
+.esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }

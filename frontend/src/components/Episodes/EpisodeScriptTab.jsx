@@ -3,12 +3,12 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
-import { scriptInputs } from '../../lib/episodeScript';
+import { scriptInputs, mustCover } from '../../lib/episodeScript';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -206,20 +206,24 @@ function lineLabel(line, on) {
   return text.length > 48 ? `${text.slice(0, 47)}…` : text;
 }
 
-function MomentPicker({ screens, icons = [], overlays, look = [], production = [], lines = [], onScreen, phoneFrame = null, onAdd, onClose }) {
-  const [picked, setPicked] = useState(null);
+// preset (Task #2884): { verb, title } from an "Add:" chip. A phone screen
+// picked gets that verb ("Scroll the feed": SCROLL), and a screen whose name
+// says feed is picked to start with.
+function MomentPicker({ screens, icons = [], overlays, look = [], production = [], lines = [], onScreen, phoneFrame = null, onAdd, onClose, preset = null }) {
+  const presetScreen = preset?.feed ? screens.find((s) => /feed/i.test(s.name || s.id)) : null;
+  const [picked, setPicked] = useState(presetScreen ? { kind: 'phone', key: presetScreen.id, name: presetScreen.name || presetScreen.id, url: presetScreen.url || null } : null);
   // Where it goes: after a line of the beat, or at the end (Task #2793).
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(null);
   const verbs = picked?.kind === 'overlay' ? OVERLAY_VERBS : picked?.kind === 'device' ? DEVICE_VERBS : PHONE_VERBS;
-  const [verb, setVerb] = useState('OPEN');
+  const [verb, setVerb] = useState(preset?.verb || 'OPEN');
   const iconByKey = new Map(icons.map((i) => [i.key, i]));
   // An icon two taps in is the taps that reach it, in order (Task #2801).
   const tapsTo = (icon) => (icon?.path || [icon?.key]).map((k) => iconByKey.get(k)).filter(Boolean);
   const pickedLabel = picked?.kind === 'device' ? `${PHONE_NAME}: ${deviceLabel(verb).toLowerCase()}`
     : picked?.kind === 'icon' ? `Taps ${tapsTo(picked.icon).map((i) => i.name).join(' → ')}`
       : picked ? `${verbLabel(verb)} ${picked.name}` : '';
-  const pick = (item) => { setPicked(item); setVerb(item.kind === 'overlay' ? 'DISPLAY' : item.kind === 'device' ? 'SHOW' : item.kind === 'icon' ? 'CLICK' : 'OPEN'); };
+  const pick = (item) => { setPicked(item); setVerb(item.kind === 'overlay' ? 'DISPLAY' : item.kind === 'device' ? 'SHOW' : item.kind === 'icon' ? 'CLICK' : (preset?.verb || 'OPEN')); };
   const tile = (item) => (
     <button key={`${item.kind}:${item.key}`} type="button"
       className={`esp-pick-tile${picked?.kind === item.kind && picked?.key === item.key ? ' is-picked' : ''}`}
@@ -253,7 +257,7 @@ function MomentPicker({ screens, icons = [], overlays, look = [], production = [
   return (
     <div className="esp-picker" data-testid="script-moment-picker" onClick={(e) => e.stopPropagation()}>
       <div className="esp-picker-head">
-        <span className="esp-picker-title">Add to this beat</span>
+        <span className="esp-picker-title">{preset?.title || 'Add to this beat'}</span>
         <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
       </div>
       <p className="esp-picker-group">Lala&apos;s Phone</p>
@@ -331,8 +335,8 @@ const LINE_KINDS = [
 // Add a line anywhere in a beat (Evoni, 2026-10-09; Task #2795): who it is
 // for, the words, and where it goes. It stays open for the next line, which
 // goes after this one; Save keeps them.
-function LineAdder({ lines = [], onScreen, onAdd, onClose }) {
-  const [kind, setKind] = useState('Lala');
+function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' }) {
+  const [kind, setKind] = useState(initialKind);
   const [text, setText] = useState('');
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(0);
@@ -387,8 +391,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const [zoomed, setZoomed] = useState(false);
   useEffect(() => {
     if (!request || !expanded || beat.approved) return;
-    setAdding(request.kind === 'line');
-    setPicking(request.kind === 'phone');
+    setAdding(request.kind === 'line' ? 'Lala' : false);
+    setPicking(request.kind === 'phone' ? {} : false);
   }, [request, expanded, beat.approved]);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
@@ -479,11 +483,11 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
           <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} />)}</div>
           {adding && !beat.approved && (
-            <LineAdder lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
+            <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {picking && !beat.approved && (
-            <MomentPicker screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
+            <MomentPicker key={`picker-${picking?.verb || 'open'}`} preset={picking?.verb ? picking : null} screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
               onClose={() => setPicking(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
@@ -495,8 +499,16 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
-            {!beat.approved && !adding && <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding(true); }}><Plus size={14} aria-hidden="true" /> Line</button>}
-            {!beat.approved && !picking && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking(true); }}><Smartphone size={14} aria-hidden="true" /> Phone / overlay</button>}
+            {/* "Add:" (Task #2884): one tap to each kind the parser knows. */}
+            {!beat.approved && (
+              <span className="esp-add-chips" role="group" aria-label="Add" data-testid={`script-add-chips-${beat.number}`}>
+                <span className="esp-add-label">Add:</span>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding('action'); }}>Action</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding('Lala'); }}>Dialogue</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking({}); }}>Open a screen</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>
+              </span>
+            )}
             {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={regenerating} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
             <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>
@@ -928,6 +940,10 @@ export default function EpisodeScriptTab({ episode, show }) {
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation })
     : null;
   const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
+  // What the episode must cover, ticked from the script, and the open beat's
+  // phone check (Task #2884).
+  const cover = mustCover({ beats, deliverables, event: source?.event || null, brief });
+  const check = openBeat ? phoneCheck(openBeat.lines, onScreen) : null;
 
   const showBeatList = hasScript && !developerMode && beats.length > 0;
   return (
@@ -1098,6 +1114,47 @@ export default function EpisodeScriptTab({ episode, show }) {
         </ul>
         <p className="esp-uses-note">Amber items won't block generating; the script fills the gap and flags it.</p>
       </section>
+      {hasScript && (
+        <section className="esp-cover" data-testid="script-cover">
+          <h3 className="esp-side-title">This episode must cover</h3>
+          {cover.length ? (
+            <ul className="esp-cover-list">
+              {cover.map((c) => (
+                <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
+                  {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
+                  <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no deliverables or goals, and the brief has no forward hook.</p>
+          )}
+          <p className="esp-uses-note">From the event package and the brief. Ticked when the script mentions it.</p>
+        </section>
+      )}
+      {hasScript && openBeat && check && (
+        <section className="esp-phonecheck" data-testid="script-phone-check">
+          <h3 className="esp-side-title">Phone check · Beat {openBeat.number}</h3>
+          {check.moments === 0 ? (
+            <p className="esp-cover-empty">No phone or overlay moments in this beat.</p>
+          ) : (
+            <ul className="esp-cover-list">
+              {check.taps.map((t) => (
+                <li key={`tap-${t.i}`} className={t.ok ? 'is-covered' : 'is-gap'} data-testid="script-phone-check-tap" data-ok={t.ok ? 'true' : 'false'}>
+                  {t.ok ? <Check size={14} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
+                  <span>{t.ok ? `Tap ${t.name}: a real path` : t.why}</span>
+                </li>
+              ))}
+              {check.missing.map((m) => (
+                <li key={`missing-${m.i}`} className="is-gap" data-testid="script-phone-check-missing">
+                  <AlertTriangle size={14} aria-hidden="true" /><span>Not made yet: {m.name}</span>
+                </li>
+              ))}
+              {!check.taps.length && !check.missing.length && <li className="is-covered"><Check size={14} aria-hidden="true" /><span>Every screen and overlay it names is made.</span></li>}
+            </ul>
+          )}
+        </section>
+      )}
       <section className="esp-voice" data-testid="script-voice">
         <h3 className="esp-side-title">Voice</h3>
         <p>Lala's voice signature and the cast's voices come from their profiles.</p>
