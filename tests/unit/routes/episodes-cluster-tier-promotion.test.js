@@ -78,7 +78,9 @@ const REQUIRE_AUTH_COUNTS = {
   // +3 for GET /:id/style-sheet, POST /:id/style-sheet/approve and
   // POST /:id/style-sheet/reopen (Task #2814, requireAuth).
   // +1 for GET /:id/style-sheet/export/:size (style sheet exports, Task #2877).
-  'episodes.js': 105,
+  // +4 for GET, POST, PATCH and DELETE /:id/style-sheet/distribution (the
+  // sheet in Distribution, Task #2878, requireAuth).
+  'episodes.js': 109,
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
   // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
   // +1 for GET /:episodeId/dressed-angles (S8, §8(dd), requireAuth).
@@ -290,8 +292,9 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // -3 for episodes.js task-list overlay routes, retired (Evoni, 2026-10-07);
     // +1 for episodes.js PUT /:id/script-locks (locked script beats, 2026-10-08);
     // +3 for shows.js GET, POST and DELETE /:id/logo (the show's logo);
-    // +1 for episodes.js GET /:id/style-sheet/export/:size (Task #2877).
-    test('CP2 zone contains 298 total requireAuth references across 22 files', () => {
+    // +1 for episodes.js GET /:id/style-sheet/export/:size (Task #2877);
+    // +4 for episodes.js /:id/style-sheet/distribution GET, POST, PATCH, DELETE (Task #2878).
+    test('CP2 zone contains 302 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -305,7 +308,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +5 for episodes.js Lookbook GET, PUT, POST images, PATCH and DELETE image (Task #2812).
     // +1 for episodes.js PUT /:id/lookbook/venue (Task #2813).
     // +3 for episodes.js style sheet GET, approve and reopen (Task #2814).
-      expect(total).toBe(298);
+      expect(total).toBe(302);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {

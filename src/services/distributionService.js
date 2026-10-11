@@ -310,9 +310,12 @@ async function generateDistribution(episodeId, showId, sequelize, options = {}) 
 
   // Save to episode
   try {
+    // Generating replaces the platform copy; the style sheet entry (Task #2878) stays.
+    const { keepStyleSheet } = require('./styleSheetDistributionService');
+    const toSave = await keepStyleSheet(sequelize, episodeId, metadata);
     await sequelize.query(
       `UPDATE episodes SET distribution_metadata = :metadata, updated_at = NOW() WHERE id = :episodeId`,
-      { replacements: { metadata: JSON.stringify(metadata), episodeId } }
+      { replacements: { metadata: JSON.stringify(toSave), episodeId } }
     );
   } catch (err) {
     console.warn('[Distribution] Save failed (non-blocking):', err.message);

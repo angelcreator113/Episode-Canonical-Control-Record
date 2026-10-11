@@ -1,6 +1,7 @@
 // frontend/src/components/Episodes/EpisodeDistributionTab.jsx
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../services/api';
+import StyleSheetDistributionCard from './StyleSheetDistributionCard';
 import './EpisodeDistributionTab.css';
 
 // File-local helpers (fresh — no cross-CP overlap).
@@ -108,26 +109,24 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
         } catch { /* fall through to defaults */ }
       }
 
-      if (data && Object.keys(data).length > 0) {
-        setDistributionData(data);
-      } else {
-        // Initialize with defaults
-        const defaults = {};
-        Object.keys(PLATFORMS).forEach(platformId => {
-          defaults[platformId] = {
-            enabled: false,
-            title: episode.title || '',
-            caption: '',
-            description: '',
-            hashtags: [],
-            scheduled_time: null,
-            status: 'draft',
-            thumbnail_url: null,
-            platform_url: null
-          };
-        });
-        setDistributionData(defaults);
-      }
+      // Defaults for any platform not saved yet. The record can hold only
+      // the style sheet entry (Task #2878), which the server keeps on save.
+      const merged = { ...(data || {}) };
+      Object.keys(PLATFORMS).forEach(platformId => {
+        if (merged[platformId]) return;
+        merged[platformId] = {
+          enabled: false,
+          title: episode.title || '',
+          caption: '',
+          description: '',
+          hashtags: [],
+          scheduled_time: null,
+          status: 'draft',
+          thumbnail_url: null,
+          platform_url: null
+        };
+      });
+      setDistributionData(merged);
     } catch (error) {
       console.error('Error loading distribution data:', error);
     }
@@ -248,6 +247,9 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
           </button>
         </div>
       </div>
+
+      {/* The approved style sheet, sent from the Style Page (Task #2878) */}
+      <StyleSheetDistributionCard episodeId={episode.id} episodeNumber={episode.episode_number} />
       
       {/* Platform Selector */}
       <div className="platform-selector">

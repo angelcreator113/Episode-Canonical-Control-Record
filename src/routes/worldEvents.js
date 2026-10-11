@@ -4719,10 +4719,13 @@ router.put('/world/:showId/episodes/:episodeId/distribution', requireAuth, async
     const { episodeId } = req.params;
     const { distribution_metadata } = req.body;
     const models = req.app?.get?.('models') || require('../models');
+    // The style sheet entry (Task #2878) is written only by its own routes.
+    const { keepStyleSheet } = require('../services/styleSheetDistributionService');
+    const metadata = await keepStyleSheet(models.sequelize, episodeId, distribution_metadata);
 
     await models.sequelize.query(
-      `UPDATE episodes SET distribution_metadata = :metadata, updated_at = NOW() WHERE id = :episodeId`,
-      { replacements: { metadata: JSON.stringify(distribution_metadata), episodeId } }
+      `UPDATE episodes SET distribution_metadata = :metadata, updated_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL`,
+      { replacements: { metadata: JSON.stringify(metadata), episodeId } }
     );
 
     return res.json({ success: true, message: 'Distribution metadata saved' });

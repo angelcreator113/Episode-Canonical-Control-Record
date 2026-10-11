@@ -21,6 +21,7 @@ const crypto = require('crypto');
 const { LookbookError, getLookbook } = require('./episodeLookbookService');
 
 const MAX_SIDE = 900;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_BYTES = 15 * 1024 * 1024;
 
@@ -314,6 +315,8 @@ async function buildStyleSheet(models, episodeId) {
       front: firstImage(lb, 'front'), side: firstImage(lb, 'side'), back: firstImage(lb, 'back'), hero: firstImage(lb, 'hero'),
     },
     wardrobe: { state: wardrobe.state, columns },
+    // The saved look's wardrobe rows, for Shop the Look in Distribution (Task #2878).
+    wardrobe_piece_ids: [...new Set(wardrobe.pieces.map((p) => String(p.id ?? '')).filter((id) => UUID_RE.test(id)))],
     beauty: {
       eyes: await inline(firstImage(lb, 'eyes')?.image_url),
       lips: await inline(firstImage(lb, 'lips')?.image_url),

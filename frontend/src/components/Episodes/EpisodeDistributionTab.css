@@ -871,3 +871,70 @@
 .episode-distribution-tab .header-left { flex: 1 1 auto; min-width: min(260px, 100%); }
 .episode-distribution-tab .header-actions { flex-wrap: wrap; }
 .episode-distribution-tab .btn-generate, .episode-distribution-tab .btn-save { white-space: nowrap; }
+
+/* ==================== STYLE SHEET (Task #2878) ==================== */
+
+.episode-distribution-tab .ssd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 1.25rem;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+.episode-distribution-tab .ssd-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.episode-distribution-tab .ssd-title { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text-primary); }
+.episode-distribution-tab .ssd-sent,
+.episode-distribution-tab .ssd-hint,
+.episode-distribution-tab .ssd-count { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-error {
+  margin: 0; padding: 8px 12px; border: 1px solid var(--danger-border); border-radius: 6px;
+  background: var(--danger-bg); color: var(--danger-text); font-size: 13px;
+}
+.episode-distribution-tab .ssd-warning {
+  margin: 0; padding: 8px 12px; border: 1px solid var(--warning-border); border-radius: 6px;
+  background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
+}
+.episode-distribution-tab .ssd-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.episode-distribution-tab .ssd-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 14px;
+  border: 1px solid var(--border-medium); border-radius: 8px; background: var(--surface-card); color: var(--text-primary);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.episode-distribution-tab .ssd-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.episode-distribution-tab .ssd-btn:focus-visible,
+.episode-distribution-tab .ssd-check input:focus-visible,
+.episode-distribution-tab .ssd-field textarea:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.episode-distribution-tab .ssd-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--text-inverse); }
+.episode-distribution-tab .ssd-btn-quiet { border-color: transparent; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-item { width: 100%; justify-content: flex-start; text-align: left; }
+.episode-distribution-tab .ssd-item-text { display: flex; flex-direction: column; gap: 2px; }
+.episode-distribution-tab .ssd-item-detail { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-disclosure {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 8px 12px;
+  border: 1px solid var(--border-light); border-radius: 6px; background: var(--surface-bg); color: var(--text-primary); font-size: 14px;
+}
+.episode-distribution-tab .ssd-locked { font-size: 12px; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.episode-distribution-tab .ssd-field textarea {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border-medium); border-radius: 8px;
+  background: var(--surface-card); color: var(--text-primary); font: inherit; font-weight: 400; line-height: 1.5; resize: vertical;
+}
+.episode-distribution-tab .ssd-count { align-self: flex-end; font-weight: 400; }
+.episode-distribution-tab .ssd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.episode-distribution-tab .ssd-actions-end { justify-content: flex-end; }
+.episode-distribution-tab .ssd-links { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.episode-distribution-tab .ssd-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; color: var(--text-primary); cursor: pointer; }
+.episode-distribution-tab .ssd-check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.episode-distribution-tab .ssd-link-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.episode-distribution-tab .ssd-link-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 14px; color: var(--text-primary); }
+.episode-distribution-tab .ssd-link-url { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 13px; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-badge {
+  padding: 1px 8px; border: 1px solid var(--warning-border); border-radius: 999px;
+  background: var(--warning-bg); color: var(--warning-text); font-size: 12px; font-weight: 600;
+}
+.episode-distribution-tab .ssd-spin { animation: ssd-spin 1s linear infinite; }
+@keyframes ssd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .episode-distribution-tab .ssd-spin { animation: none; } }

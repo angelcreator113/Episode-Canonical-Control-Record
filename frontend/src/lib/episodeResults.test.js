@@ -25,6 +25,8 @@ describe('episodeResults', () => {
   test('share: teaser, platform copy, feed posts', () => {
     expect(shareState({ teaser: ' One coat. ', distribution_metadata: { youtube: { title: 'x' }, tiktok: {} } }, [{ status: 'live' }, { status: 'draft' }]))
       .toEqual({ teaser: 'One coat.', platforms: ['youtube'], posts: 2, live: 1 });
+    // The style sheet sent to Distribution (Task #2878) is not a platform.
+    expect(shareState({ distribution_metadata: { style_sheet: { caption: 'Episode 01' } } }).platforms).toEqual([]);
     expect(signedCoins(-40)).toBe('−40');
   });
 });

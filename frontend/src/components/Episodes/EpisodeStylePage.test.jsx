@@ -236,6 +236,34 @@ describe('Style Page', () => {
     expect(screen.getByTestId('esp2-export-sheet').disabled).toBe(true);
   });
 
+  test('Send to Distribution is off while Draft', async () => {
+    await renderPage();
+    expect(screen.getByTestId('esp2-send-distribution').disabled).toBe(true);
+    expect(screen.getByLabelText('Include Shop the Look links').disabled).toBe(true);
+  });
+
+  test('Send to Distribution sends every size, with Shop the Look links when ticked, and links to Distribution', async () => {
+    const { onOpenTab } = await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    api.post.mockResolvedValue({ data: { data: {
+      sent: true, items: EXPORT_SIZES.map((e) => ({ size: e.size })), disclosure: 'Some links are affiliate links; I may earn a commission.',
+    } } });
+    fireEvent.click(screen.getByLabelText('Include Shop the Look links'));
+    fireEvent.click(screen.getByTestId('esp2-send-distribution'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SHEET_URL}/distribution`, { include_shop_links: true }));
+    const status = await screen.findByTestId('esp2-sent');
+    expect(status.textContent).toMatch(/Sent: 6 sizes and a caption draft are in Distribution\. The affiliate disclosure is added\./);
+    fireEvent.click(within(status).getByRole('button', { name: 'Open Distribution' }));
+    expect(onOpenTab).toHaveBeenCalledWith('distribution');
+  });
+
+  test('a refused send shows the server\'s message', async () => {
+    await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.post.mockRejectedValue({ response: { data: { error: 'Approve the style sheet before sending it to Distribution.' } } });
+    fireEvent.click(screen.getByTestId('esp2-send-distribution'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Approve the style sheet before sending it to Distribution.');
+  });
+
   test('a failed save shows its message and keeps the page', async () => {
     await renderPage();
     api.post.mockRejectedValue({ response: { data: { error: 'Only PNG, JPEG or WebP.' } } });

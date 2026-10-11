@@ -22,10 +22,15 @@ export function nextRelease(episodes) {
   return [...(episodes || [])].filter((e) => !isReleased(e) && !isArchived(e)).sort(byNumber)[0] || null;
 }
 
+// The platforms' entries in the episode's distribution; the style sheet sent
+// there (Task #2878) is not platform copy or a schedule.
+const platformEntries = (ep) => Object.entries(ep?.distribution_metadata || {})
+  .filter(([key]) => key !== 'style_sheet').map(([, value]) => value);
+
 /** When the episode goes live: its air date, else the earliest platform schedule in its distribution. */
 export function goLive(ep) {
   if (ep?.air_date) return ep.air_date;
-  const times = Object.values(ep?.distribution_metadata || {})
+  const times = platformEntries(ep)
     .map((p) => p?.scheduled_time).filter(Boolean).sort();
   return times[0] || null;
 }
@@ -42,7 +47,7 @@ export function formatWhen(value) {
 }
 
 const titleApproved = (ep) => Boolean(ep?.title_approved_at) && ep?.title_approved_value === ep?.title;
-const copyWritten = (ep) => Object.values(ep?.distribution_metadata || {})
+const copyWritten = (ep) => platformEntries(ep)
   .some((p) => p && (p.title || p.description || p.caption));
 
 /**

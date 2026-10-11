@@ -635,6 +635,51 @@ router.post('/:id/style-sheet/reopen', validateUUIDParam('id'), requireAuth, asy
   }
 });
 
+// ==================== STYLE SHEET IN DISTRIBUTION (Task #2878) ====================
+// Send the approved sheet's export sizes to the episode's Distribution with a
+// caption draft; edit the caption and the Shop the Look toggle; take it out.
+// Stored in episodes.distribution_metadata.style_sheet. Nothing is posted.
+router.get('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getStyleSheetDistribution } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await getStyleSheetDistribution(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/style-sheet/distribution');
+  }
+});
+
+router.post('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { sendStyleSheetToDistribution } = require('../services/styleSheetDistributionService');
+    const includeShopLinks = Boolean(req.body && req.body.include_shop_links);
+    return res.json({ success: true, data: await sendStyleSheetToDistribution(models, req.params.id, { includeShopLinks }, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution');
+  }
+});
+
+router.patch('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { updateStyleSheetDistribution } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await updateStyleSheetDistribution(models, req.params.id, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PATCH /:id/style-sheet/distribution');
+  }
+});
+
+router.delete('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { removeStyleSheetFromDistribution } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await removeStyleSheetFromDistribution(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'DELETE /:id/style-sheet/distribution');
+  }
+});
+
 // ==================== EPISODE OVERLAYS (P15) ====================
 // Production's Overlays tab: every on-screen piece the episode owns (title
 // overlay, framed card, invitation, task-list overlay) with its preview,

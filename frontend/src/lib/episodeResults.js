@@ -60,12 +60,12 @@ export function statRows(state, evaluation) {
   }));
 }
 
-/** Share: the teaser, the platform copy and the feed posts, each with its state. */
+/** Share: the teaser, the platform copy and the feed posts, each with its state. The style sheet sent to Distribution (Task #2878) is not a platform. */
 export function shareState(episode, posts = []) {
   const teaser = typeof episode?.teaser === 'string' && episode.teaser.trim() ? episode.teaser.trim() : null;
   let dm = episode?.distribution_metadata || null;
   if (typeof dm === 'string') { try { dm = JSON.parse(dm); } catch (err) { console.error('[Results] distribution_metadata parse failed:', err); dm = null; } }
-  const platforms = dm && typeof dm === 'object' ? Object.keys(dm).filter((k) => dm[k] && (dm[k].title || dm[k].description || dm[k].caption)) : [];
+  const platforms = dm && typeof dm === 'object' ? Object.keys(dm).filter((k) => k !== 'style_sheet' && dm[k] && (dm[k].title || dm[k].description || dm[k].caption)) : [];
   const live = (posts || []).filter((p) => p.status === 'live').length;
   return { teaser, platforms, posts: (posts || []).length, live };
 }
