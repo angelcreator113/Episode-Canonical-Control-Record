@@ -11,6 +11,7 @@ import { isAdmin } from '../utils/authGroups';
 import { loadCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
+import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
@@ -43,7 +44,6 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
 
 /** World Studio's Feed tab, where Feed profiles are made, on the LalaVerse; at one profile when given. */
 export const profileHome = (p) => `/world-studio?tab=feed&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
-const UPLOADS = '/admin?tab=pulse&sub=uploads';
 export const TABS = [
   { key: 'posts', label: 'Feed' },
   { key: 'events', label: 'Events' },
@@ -51,21 +51,6 @@ export const TABS = [
   { key: 'profile', label: 'Profile' },
 ];
 const PAGE = 50;
-
-/**
- * An event's day and time as the event has them: "Thu, Nov 12 · 6:30 PM". A
- * date stored as YYYY-MM-DD reads as a day; any other text is shown as typed.
- */
-export function eventWhen(date, time) {
-  const t = typeof time === 'string' && time.trim() ? time.trim() : null;
-  let d = typeof date === 'string' && date.trim() ? date.trim() : null;
-  const m = d && d.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) {
-    const day = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-    if (!Number.isNaN(day.getTime())) d = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  }
-  return [d, t].filter(Boolean).join(' · ');
-}
 
 export function tabFromParams(params) {
   const tab = params.get('tab');
@@ -233,12 +218,11 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search }) {
+function Feed({ show, lala, director, search, cities }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [cities, setCities] = useState([]);
   const [person, setPerson] = useState(null); // { handle, name } the feed is filtered to
 
   const load = useCallback(async (offset = 0) => {
@@ -257,14 +241,6 @@ function Feed({ show, lala, director, search }) {
   }, [show?.id]);
   useEffect(() => { load(0); }, [load]);
 
-  useEffect(() => {
-    let alive = true;
-    loadCities()
-      .then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
-      .catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
-    return () => { alive = false; };
-  }, []);
-
   const owner = lala?.profile || null;
   const lalaHandle = owner?.handle || 'lala';
   const people = useMemo(() => recentPosters(posts, { lalaHandle }), [posts, lalaHandle]);
@@ -280,6 +256,7 @@ function Feed({ show, lala, director, search }) {
   return (
     <>
       <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} />
+      <CityStrip cities={cities} />
       <Composer show={show} lala={lala} director={director} />
       {person && (
         <p className="pl-filter" data-testid="pl-filter">
@@ -304,18 +281,8 @@ function EventsView({ events }) {
     <section className="pl-card" aria-labelledby="pl-events-heading" data-testid="pl-events">
       <h2 id="pl-events-heading" className="pl-card-title">Upcoming Events</h2>
       {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
-      <ul className="pl-events">{events.map((e) => <EventRow key={e.id} event={e} />)}</ul>
+      <ul className="pl-events">{events.map((e) => <UpcomingRow key={e.id} event={e} />)}</ul>
     </section>
-  );
-}
-
-function EventRow({ event }) {
-  const when = eventWhen(event.date, event.time);
-  return (
-    <li className="pl-event" data-testid="pl-event">
-      <b>{event.name}</b>
-      {(event.venue || when) && <span className="pl-meta">{[event.venue, when].filter(Boolean).join(' · ')}</span>}
-    </li>
   );
 }
 
@@ -387,14 +354,12 @@ function ProfileView({ lala, relationship, director }) {
   );
 }
 
-function RightColumn({ events, mayKnow }) {
+function RightColumn({ cities, trending, events, mayKnow, director }) {
   return (
     <>
-      <section className="pl-card" aria-labelledby="pl-upcoming-heading" data-testid="pl-upcoming">
-        <h2 id="pl-upcoming-heading" className="pl-card-title">Upcoming Events</h2>
-        {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
-        <ul className="pl-events">{events.slice(0, 3).map((e) => <EventRow key={e.id} event={e} />)}</ul>
-      </section>
+      <CitiesCard cities={cities} director={director} />
+      <TrendingCard topics={trending} director={director} />
+      <UpcomingCard events={events} />
       {mayKnow.length > 0 && (
         <section className="pl-card" aria-labelledby="pl-may-know-heading" data-testid="pl-may-know">
           <h2 id="pl-may-know-heading" className="pl-card-title">People you may know</h2>
@@ -438,6 +403,9 @@ export default function SocialMediaPage() {
   const [lala, setLala] = useState(null);
   const [events, setEvents] = useState([]);
   const [mayKnow, setMayKnow] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [trending, setTrending] = useState([]);
+  const [fit, setFit] = useState(null);
   const [relPosts, setRelPosts] = useState([]);
   const createRequest = useRef(false);
 
@@ -457,11 +425,13 @@ export default function SocialMediaPage() {
     };
     let alive = true;
     (async () => {
-      const [c, who, side, rel] = await Promise.all([
+      const [c, who, side, rel, trend, latest] = await Promise.all([
         safe(api.get(`/api/v1/shows/${show.id}/pulse-cover`), 'cover'),
         safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}`), "Lala's profile"),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
         safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50`), 'relationship posts'),
+        safe(api.get(`/api/v1/feed-enhanced/${id}/trending`), 'trending'),
+        safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}`), 'latest fit'),
       ]);
       if (!alive) return;
       setCover(c?.data?.cover || null);
@@ -469,9 +439,19 @@ export default function SocialMediaPage() {
       setEvents(Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : []);
       setMayKnow(Array.isArray(side?.data?.data?.may_know) ? side.data.data.may_know : []);
       setRelPosts(rel?.data?.data || []);
+      setTrending(Array.isArray(trend?.data?.data) ? trend.data.data : []);
+      setFit(latest?.data?.latest || null);
     })();
     return () => { alive = false; };
   }, [show?.id]);
+
+  useEffect(() => {
+    let alive = true;
+    loadCities()
+      .then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
+      .catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (tab === 'posts' && createRequest.current) {
@@ -502,14 +482,14 @@ export default function SocialMediaPage() {
         <p className="pl-empty pl-no-show" data-testid="pl-no-show">Nothing here yet.</p>
       ) : (
         <div className="pl-grid">
-          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /></aside>
+          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
           </main>
-          <aside className="pl-right"><RightColumn events={events} mayKnow={mayKnow} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

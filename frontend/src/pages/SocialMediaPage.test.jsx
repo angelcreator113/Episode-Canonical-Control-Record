@@ -18,7 +18,7 @@ let USER;
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: USER }) }));
 
 import api from '../services/api';
-import SocialMediaPage, { tabFromParams, posterOf, whenLabel, eventWhen, cityName } from './SocialMediaPage';
+import SocialMediaPage, { tabFromParams, posterOf, whenLabel, cityName } from './SocialMediaPage';
 
 const SHOW = { id: '7b1d2c3e-4f50-4a61-8b72-93c4d5e6f708', name: 'Styling Adventures with Lala' };
 const LALA = { id: 1, handle: 'lala', display_name: 'Lala', relationship_status: "it's complicated", follower_count_approx: '12k' };
@@ -36,12 +36,16 @@ const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><SocialMed
 
 let posts;
 let cover;
+let trending;
+let fit;
 let lalaColumn;
 beforeEach(() => {
   USER = { name: 'Viewer', groups: ['viewer'] };
   Object.values(api).forEach((fn) => fn.mockReset());
   posts = [...POSTS];
   cover = null;
+  trending = [{ topic: '#VelvetSeason', post_count: 2 }];
+  fit = null;
   lalaColumn = {
     profile: LALA, portrait_url: 'https://cdn/lala.jpg', home_city: 'Echo Park', career: { tier: 1, label: 'Emerging' },
     friends: { total: 2, list: [{ id: 2, handle: 'marcus.k', display_name: 'Marcus' }, { id: 4, handle: 'bestie', display_name: 'Bestie' }] },
@@ -53,6 +57,8 @@ beforeEach(() => {
     if (url.startsWith('/api/v1/social-profiles/lala?')) return { data: { data: lalaColumn } };
     if (url.includes('/social-profiles')) return { data: { profiles: [LALA, { id: 2, handle: 'marcus.k', display_name: 'Marcus' }] } };
     if (url.includes('post_type=relationship')) return { data: { data: [] } };
+    if (url.includes('/feed-enhanced/') && url.endsWith('/trending')) return { data: { success: true, data: trending } };
+    if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { success: true, latest: fit } };
     if (url.includes('/feed-posts')) return { data: { data: posts, total: posts.length, hasMore: false } };
     return { data: {} };
   });
@@ -69,13 +75,11 @@ describe('helpers', () => {
     expect(tabFromParams(new URLSearchParams('layer=lalaverse'))).toBe('people');
     expect(tabFromParams(new URLSearchParams('profile=12&layer=real_world'))).toBe('people');
   });
-  test('posterOf, whenLabel, eventWhen and cityName', () => {
+  test('posterOf, whenLabel and cityName', () => {
     expect(posterOf(POSTS[0])).toEqual({ name: 'Lala', handle: 'lala', platform: '' });
     const now = new Date('2026-10-04T15:00:00');
     expect(whenLabel(new Date('2026-10-04T14:59:30'), now)).toBe('Just now');
     expect(whenLabel(new Date('2026-10-03T23:42:00'), now)).toMatch(/^Yesterday at 11:42/);
-    expect(eventWhen('2026-11-12', '6:30 PM')).toBe('Thu, Nov 12 · 6:30 PM');
-    expect(eventWhen(null, null)).toBe('');
     expect(cityName('dazzle_district')).toBe('Dazzle District');
     expect(cityName('nowhere')).toBeNull();
   });
@@ -126,7 +130,7 @@ describe("Lala's view", () => {
     expect(document.querySelector('a[href^="/world-studio"]')).toBeNull();
     expect(screen.queryByTestId('pl-director-toggle')).toBeNull();
     expect(screen.queryByText(/\+ Add cover/)).toBeNull();
-    expect(screen.getByTestId('pl-upcoming').textContent).toBe("Upcoming EventsWearable Experiments Studio SessionSTUDIO BY SABLE's Studio · Thu, Nov 12 · 6:30 PM");
+    expect(screen.getByTestId('pl-upcoming').textContent).toBe("Upcoming EventsNov 12Wearable Experiments Studio SessionSTUDIO BY SABLE's Studio · 6:30 PM");
   });
 
   test('search narrows the feed, and says so when nothing matches', async () => {
@@ -227,5 +231,30 @@ describe('Director view (admins only)', () => {
     fireEvent.change(screen.getByLabelText("What's happening in LaLaVerse?"), { target: { value: 'hi' } });
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     expect((await screen.findByRole('status')).textContent).toBe('Saved as a draft in Admin › The Pulse › Review.');
+  });
+});
+
+describe('The sides (Task 2928)', () => {
+  test('Trending reads live-post counts; the latest fit sits under the navigation; no footer or "+ Add" in Lala’s view', async () => {
+    fit = { source: 'fit', image_url: 'https://cdn/fit.jpg', image_alt: 'Denim', caption: 'Sunday denim' };
+    renderAt('/pulse');
+    expect((await screen.findByTestId('pl-fit-photo')).closest('aside').className).toBe('pl-left');
+    await waitFor(() => expect(screen.getAllByTestId('pl-trend')).toHaveLength(1));
+    expect(screen.getByTestId('pl-trend').textContent).toBe('1#VelvetSeason2 posts');
+    expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toEqual(expect.arrayContaining([
+      `/api/v1/feed-enhanced/${SHOW.id}/trending`, `/api/v1/pulse-fits/latest?show_id=${SHOW.id}`,
+    ]));
+    expect(screen.queryByTestId('pl-trending-foot')).toBeNull();
+    expect(document.body.textContent).not.toContain('+ Add');
+  });
+
+  test('Director view: "+ Add Lala’s latest fit" when there is none, and the trending footer', async () => {
+    USER = { name: 'Evoni', groups: ['admin'] };
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    expect(screen.queryByTestId('pl-fit')).toBeNull();
+    fireEvent.click(screen.getByTestId('pl-director-toggle'));
+    expect(screen.getByRole('link', { name: /\+ Add Lala's latest fit/ }).getAttribute('href')).toBe('/admin?tab=pulse&sub=uploads');
+    await waitFor(() => expect(screen.getByTestId('pl-trending-foot').textContent).toBe('Counted from approved posts'));
   });
 });
