@@ -40,8 +40,7 @@ async function episodeEvent(sequelize, episodeId) {
   if (!episodeId) return null;
   const [[event]] = await sequelize.query(
     `SELECT id, show_id, name FROM world_events
-      WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
-      ORDER BY updated_at DESC LIMIT 1`,
+      WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId } });
   return event || null;
 }

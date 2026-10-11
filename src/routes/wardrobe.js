@@ -1311,13 +1311,13 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    // Auto-lookup event from episode if caller didn't supply prestige
+    // Auto-lookup the episode's event if caller didn't supply prestige: its
+    // brief's, else the first stamped (utils/episodeEventSql; Task #1917)
     if (episode_id && !prestige) {
-      const ev = await models.WorldEvent.findOne({
+      const evId = await require('../utils/episodeEventSql').episodeEventId(models.sequelize, episode_id);
+      const ev = evId && await models.WorldEvent.findByPk(evId, {
         attributes: ['name', 'event_type', 'dress_code', 'dress_code_keywords',
           'prestige', 'strictness', 'host_brand'],
-        where: { used_in_episode_id: episode_id },
-        paranoid: false,
         raw: true,
       });
 
@@ -2219,7 +2219,7 @@ router.get('/outfit-history/:showId', requireAuth, async (req, res) => {
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
        JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
-       LEFT JOIN world_events we ON we.used_in_episode_id = e.id
+       LEFT JOIN world_events we ON we.id = ${require('../utils/episodeEventSql').episodeEventIdSql('e.id')}
        WHERE e.show_id = :showId AND ew.deleted_at IS NULL
        ORDER BY e.episode_number ASC, w.clothing_category ASC`,
       { replacements: { showId } }

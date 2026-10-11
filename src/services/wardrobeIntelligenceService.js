@@ -832,7 +832,7 @@ async function detectRepeats(wardrobeItems, showId, models, context = {}) {
                 we.name as event_name, we.prestige as event_prestige
          FROM episode_wardrobe ew
          JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
-         LEFT JOIN world_events we ON we.used_in_episode_id = e.id
+         LEFT JOIN world_events we ON we.id = ${require('../utils/episodeEventSql').episodeEventIdSql('e.id')}
          WHERE ew.wardrobe_id = :wardrobeId AND ew.deleted_at IS NULL AND e.show_id = :showId
            AND (:currentEventId IS NULL OR we.id IS DISTINCT FROM :currentEventId)
          ORDER BY e.episode_number DESC`,
