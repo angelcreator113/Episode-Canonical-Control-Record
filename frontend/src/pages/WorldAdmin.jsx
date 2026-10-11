@@ -1763,7 +1763,7 @@ The revised event should feel like a completely different experience from the si
             <div className="wa-hero-links">
               {/* The show menu: the show's own settings live here, not on a separate show page. */}
               <Link className="wa-hero-link" to={`/shows/${showId}/edit`}>Edit show</Link>
-              <Link className="wa-hero-link" to={`/shows/${showId}/settings`}>Settings</Link>
+              <Link className="wa-hero-link" to={`/admin?tab=show-settings&show=${encodeURIComponent(showId)}`}>Settings</Link>
             </div>
           </header>
         );
