@@ -31,12 +31,16 @@ const TABS = [
   { key: 'advanced', icon: '🔧',  label: 'Advanced'  },
 ];
 
-export default function ShowSettings() {
-  const { id: showId }          = useParams();
+// Inside Admin › Show settings (Task #2914) the show comes as a prop and its
+// own tab is ?sub= (Admin's tabs own ?tab=); at /shows/:id/settings, from
+// the route and ?tab=.
+export default function ShowSettings({ showId: showIdProp, tabParam = 'tab' } = {}) {
+  const { id: routeShowId }     = useParams();
+  const showId                  = showIdProp || routeShowId;
   const navigate                = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'config');
+  const [activeTab, setActiveTabState] = useState(searchParams.get(tabParam) || 'config');
   const [show, setShow]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -53,7 +57,11 @@ export default function ShowSettings() {
 
   function setTab(tab) {
     setActiveTabState(tab);
-    setSearchParams({ tab });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set(tabParam, tab);
+      return next;
+    });
   }
 
   function showToast(msg, type = 'success') {

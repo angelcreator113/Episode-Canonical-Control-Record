@@ -33,8 +33,6 @@ const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
-// The Website page: the landing page's images and video (Task #2822).
-const WebsiteAdmin = lazy(() => import('./pages/WebsiteAdmin'));
 const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
@@ -83,7 +81,18 @@ const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
 const EpisodeScriptWriterPage = lazy(() => import('./pages/EpisodeScriptWriterPage'));
 const FeedTimelinePage = lazy(() => import('./pages/FeedTimelinePage'));
 const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'));
-const ShowSettings = lazy(() => import('./pages/ShowSettings'));
+// A show's settings are Admin's Show settings tab (Task #2914); the old
+// /shows/:id/settings address opens it on that show, its ?tab= as ?sub=.
+function ShowSettingsRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  const old = new URLSearchParams(search);
+  const next = new URLSearchParams();
+  next.set('tab', 'show-settings');
+  next.set('show', id);
+  for (const [k, v] of old) next.set(k === 'tab' ? 'sub' : k, v);
+  return <Navigate to={`/admin?${next.toString()}`} replace />;
+}
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 // Redirect from /book/:id → WriteMode (first chapter)
@@ -336,8 +345,9 @@ function AppContent() {
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
           <Route path="/start" element={<SessionStart />} />
-          {/* The Website page and the signed-in preview of the public site (Task #2822). */}
-          <Route path="/website" element={<WebsiteAdmin />} />
+          {/* The Website page is Admin's Website tab (Task #2913); the signed-in
+              preview of the public site stays here (Task #2822). */}
+          <Route path="/website" element={<Navigate to="/admin?tab=website" replace />} />
           <Route path="/site-preview" element={<PublicLanding preview />} />
           
           {/* Universe */}
@@ -377,7 +387,7 @@ function AppContent() {
           <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
           <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
-          <Route path="/shows/:id/settings" element={<ShowSettings />} />
+          <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
 

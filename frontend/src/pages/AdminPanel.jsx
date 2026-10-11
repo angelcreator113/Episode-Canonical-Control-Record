@@ -1,17 +1,49 @@
 /**
  * Admin Panel Page
- * User roles management interface, plus the admin tools index — the
- * doorway to the admin and diagnostic pages (docs/SIDEBAR_PROPOSAL.md §5).
+ * One page with tabs (The Pulse spec, docs/design/2026-10-the-pulse.md §1;
+ * Task #2913): The Pulse (the Social Director's home), Website (the public
+ * site's images and video, formerly its own sidebar row at /website), Show
+ * settings (the active show's settings, formerly /shows/:id/settings; Task
+ * #2914) and Tools (the admin tools index — the doorway to the admin and diagnostic
+ * pages, docs/SIDEBAR_PROPOSAL.md §5 — and the user roles table; Evoni,
+ * 2026-10-11). ?tab= selects one; the default is The Pulse.
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Stethoscope, Trash2, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import WebsiteAdmin from './WebsiteAdmin';
+import ShowSettings from './ShowSettings';
+import showService from '../services/showService';
+import { activeShowId, rememberShow } from '../utils/activeShow';
 import '../styles/AdminPanel.css';
+
+// Admin's tabs, in order. The first is the default.
+export const TABS = [
+  { key: 'pulse', label: 'The Pulse' },
+  { key: 'website', label: 'Website' },
+  { key: 'show-settings', label: 'Show settings' },
+  { key: 'tools', label: 'Tools' },
+];
+const tabFrom = (value) => (TABS.some((t) => t.key === value) ? value : TABS[0].key);
+
+// Admin › The Pulse: the Social Director's home. Its sub-tabs arrive from
+// phase 2 of the spec on; until then it says what comes here.
+function PulseDirector() {
+  return (
+    <section className="admin-pulse" aria-labelledby="admin-pulse-heading" data-testid="admin-pulse">
+      <h2 id="admin-pulse-heading">Social Director</h2>
+      <p className="admin-subtitle">
+        Review, Uploads, Growth, Storylines and Calendar arrive here. Nothing on this tab shows in The Pulse.
+      </p>
+      <Link className="admin-pulse-link" to="/pulse">Open The Pulse</Link>
+    </section>
+  );
+}
 
 // Admin tools index — each entry is a route in App.jsx.
 const ADMIN_TOOLS = [
@@ -31,8 +63,86 @@ const ADMIN_TOOLS = [
     desc: 'Restores soft-deleted items, grouped by type.' },
 ];
 
+// Admin › Show settings: the show in ?show=, else the active show (the one
+// last opened, else the only one); with several shows and nothing to go on,
+// a picker. The show's own Config/Advanced tab is ?sub= here.
+function AdminShowSettings() {
+  const [params, setParams] = useSearchParams();
+  const [shows, setShows] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    showService.getAllShows()
+      .then((list) => { if (alive) setShows(list || []); })
+      .catch((err) => {
+        console.error('[Admin] shows could not be loaded:', err);
+        if (alive) setError('The shows could not be loaded.');
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const pick = (id) => {
+    rememberShow(id);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('show', id);
+      next.delete('sub');
+      return next;
+    }, { replace: true });
+  };
+
+  if (error) return <p className="admin-subtitle" role="alert">{error}</p>;
+  if (!shows) return <LoadingSpinner />;
+  if (shows.length === 0) return <p className="admin-subtitle">No shows yet. <Link to="/shows">Create one</Link> first.</p>;
+
+  const ids = new Set(shows.map((sh) => String(sh.id)));
+  const asked = params.get('show');
+  const showId = asked && ids.has(asked) ? asked : activeShowId({ shows });
+  const nameOf = (sh) => sh.name || sh.title || 'Untitled show';
+
+  if (!showId) {
+    return (
+      <section className="admin-show-pick" aria-labelledby="admin-show-pick-heading" data-testid="admin-show-pick">
+        <h2 id="admin-show-pick-heading">Which show?</h2>
+        <ul className="admin-tools-list">
+          {shows.map((sh) => (
+            <li key={sh.id}>
+              <button type="button" className="admin-tool" onClick={() => pick(String(sh.id))}>
+                <span className="admin-tool-text"><span className="admin-tool-label">{nameOf(sh)}</span></span>
+                <ChevronRight className="admin-tool-chevron" size={16} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      {shows.length > 1 && (
+        <label className="admin-show-switch">
+          Show{' '}
+          <select value={showId} onChange={(e) => pick(e.target.value)} data-testid="admin-show-select">
+            {shows.map((sh) => <option key={sh.id} value={String(sh.id)}>{nameOf(sh)}</option>)}
+          </select>
+        </label>
+      )}
+      <ShowSettings key={showId} showId={showId} tabParam="sub" />
+    </>
+  );
+}
+
 const AdminPanel = () => {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const tab = tabFrom(params.get('tab'));
+  const selectTab = (key) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', key);
+    return next;
+  }, { replace: true });
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -95,9 +205,8 @@ const AdminPanel = () => {
           >
             ← Back
           </button>
-          <h1>Admin Panel</h1>
+          <h1>Admin</h1>
         </div>
-        <p className="admin-subtitle">Manage user roles and permissions</p>
 
         {error && (
           <ErrorMessage
@@ -105,6 +214,30 @@ const AdminPanel = () => {
             onDismiss={() => setError(null)}
           />
         )}
+
+        <div className="admin-tabs" role="tablist" aria-label="Admin sections">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              id={`admin-tab-${t.key}`}
+              aria-selected={tab === t.key}
+              aria-controls={`admin-panel-${t.key}`}
+              className={tab === t.key ? 'admin-tab active' : 'admin-tab'}
+              onClick={() => selectTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div role="tabpanel" id={`admin-panel-${tab}`} aria-labelledby={`admin-tab-${tab}`} className="admin-tabpanel">
+        {tab === 'pulse' && <PulseDirector />}
+        {tab === 'website' && <WebsiteAdmin />}
+        {tab === 'show-settings' && <AdminShowSettings />}
+        {tab === 'tools' && (<>
+        <p className="admin-subtitle">Manage user roles and permissions</p>
 
         <section className="admin-tools" aria-labelledby="admin-tools-heading">
           <h2 id="admin-tools-heading" className="admin-tools-heading">Admin tools</h2>
@@ -211,6 +344,8 @@ const AdminPanel = () => {
           >
             ← Back to Episodes
           </button>
+        </div>
+        </>)}
         </div>
       </div>
     </div>
