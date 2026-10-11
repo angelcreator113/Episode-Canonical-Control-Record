@@ -3,16 +3,17 @@
  * is Lala's wall for the active show (her profile, status and friends on
  * the left; the live posts with their comments in the middle; requests,
  * upcoming events and people she may know on the right); Drafts and Events
- * are wall tabs; "What's on your mind?" posts as Lala, live; the banner
+ * are wall tabs; "What's on your mind?" saves Lala's draft, which Release
+ * makes live (Task #2748); Deleted keeps deleted posts; the banner
  * search narrows the wall; the old profile generator is the Friends tab,
  * which the old ?layer= links still open.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('./SocialProfileGenerator', () => ({ // must never mount here (Task #2761)
   default: ({ defaultFeedLayer, embedded }) => <div data-testid="people">people layer={defaultFeedLayer || 'none'} embedded={String(embedded)}</div>,
 }));
@@ -32,6 +33,7 @@ const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><SocialMed
 
 let drafts;
 let posts;
+let deleted;
 let lalaColumn;
 let relPosts;
 beforeEach(() => {
@@ -42,6 +44,7 @@ beforeEach(() => {
   relPosts = [];
   Object.values(api).forEach((fn) => fn.mockReset());
   posts = [...POSTS];
+  deleted = [];
   drafts = [{ id: 'd1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2', comments: [] }];
   vi.mocked(api.get).mockImplementation(async (url) => {
     const u = new URL(url, 'http://x');
@@ -52,6 +55,7 @@ beforeEach(() => {
       return { data: { profiles: list, pagination: { total: list.length } } };
     }
     if (url.includes('/calendar/events')) return { data: { events: EVENTS } };
+    if (url.includes('/feed-posts/deleted')) return { data: { data: deleted, count: deleted.length } };
     if (url.includes('/comments/pending')) return { data: { data: [{ id: 'c9', handle: 'rival', text: 'cute.', post: { poster_handle: 'lala' } }], count: 1 } };
     if (url.includes('/feed-posts') && u.searchParams.get('post_type') === 'relationship') return { data: { data: relPosts, total: relPosts.length } };
     if (url.includes('/feed-posts')) {
@@ -61,9 +65,32 @@ beforeEach(() => {
     return { data: {} };
   });
   vi.mocked(api.post).mockImplementation(async (url, body) => {
-    const post = { id: 'p3', post_type: body.post_type || 'post', poster_handle: body.poster_handle, poster_display_name: body.poster_display_name, content_text: body.content_text, status: 'live', posted_at: new Date().toISOString(), comments: [] };
-    posts.unshift(post);
+    const restore = url.match(/\/feed-posts\/(\w+)\/restore$/);
+    if (restore) {
+      const post = deleted.find((p) => p.id === restore[1]);
+      deleted = deleted.filter((p) => p !== post);
+      const back = { ...post, deleted_at: null };
+      (back.status === 'draft' ? drafts : posts).unshift(back);
+      return { data: { data: back } };
+    }
+    const live = body.status === 'live';
+    const post = { id: 'p3', post_type: body.post_type || 'post', poster_handle: body.poster_handle, poster_display_name: body.poster_display_name, content_text: body.content_text, status: body.status, posted_at: live ? new Date().toISOString() : null, story_order: 7, comments: [] };
+    (live ? posts : drafts).unshift(post);
     return { data: { data: post } };
+  });
+  vi.mocked(api.put).mockImplementation(async (url, body) => {
+    const id = url.split('/').pop();
+    const post = drafts.find((p) => p.id === id);
+    Object.assign(post, body);
+    if (body.status === 'live') { drafts = drafts.filter((p) => p !== post); post.posted_at = new Date().toISOString(); posts.unshift(post); }
+    return { data: { data: post } };
+  });
+  vi.mocked(api.delete).mockImplementation(async (url) => {
+    const id = url.split('/').pop();
+    const post = drafts.find((p) => p.id === id);
+    drafts = drafts.filter((p) => p !== post);
+    deleted.unshift({ ...post, deleted_at: new Date().toISOString() });
+    return { data: { success: true } };
   });
 });
 
@@ -139,13 +166,46 @@ describe('the wall', () => {
     expect(screen.getAllByTestId('sm-post')).toHaveLength(1);
   });
 
-  test('"What\'s on your mind?" posts as Lala, live, and the wall shows it', async () => {
+  test('"What\'s on your mind?" saves a draft, not a live post; Release makes it live on the wall', async () => {
     renderAt('/feed');
     await screen.findAllByTestId('sm-post');
+    expect(screen.getByText("Saves as a draft. Release it when it's time.")).toBeTruthy();
+    expect(screen.queryByText(/live on the feed/)).toBeNull();
     fireEvent.change(screen.getByLabelText("What's on your mind?"), { target: { value: 'is not doing this again.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ show_id: SHOW.id, content_text: 'is not doing this again.', poster_handle: 'lala', social_profile_id: 1, status: 'live' })));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ show_id: SHOW.id, content_text: 'is not doing this again.', poster_handle: 'lala', social_profile_id: 1, status: 'draft' })));
+    // It lands on Drafts, and Requests counts it.
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Drafts/ }).getAttribute('aria-selected')).toBe('true'));
     await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('is not doing this again.'));
+    await waitFor(() => expect(screen.getByTestId('sm-requests').textContent).toContain('2 draft posts'));
+    fireEvent.click(within(screen.getAllByTestId('sm-post')[0]).getByRole('button', { name: 'Release' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p3', { status: 'live' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Wall' }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('is not doing this again.'));
+    expect(within(screen.getAllByTestId('sm-post')[0]).queryByRole('button', { name: 'Release' })).toBeNull();
+  });
+
+  test('a draft can be edited and deleted; Deleted keeps it and Restore brings it back', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt('/feed?tab=posts');
+    await screen.findAllByTestId('sm-post');
+    fireEvent.click(screen.getByRole('tab', { name: /Drafts/ }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('Not yet.'));
+    const card = screen.getAllByTestId('sm-post')[0];
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(within(card).getByLabelText('Edit the draft'), { target: { value: 'Not yet. Soon.' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/d1', { content_text: 'Not yet. Soon.' }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('Not yet. Soon.'));
+    fireEvent.click(within(screen.getAllByTestId('sm-post')[0]).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/feed-posts/d1'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Deleted' }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toMatch(/deleted/));
+    expect(screen.queryByLabelText("What's on your mind?")).toBeNull();
+    fireEvent.click(within(screen.getAllByTestId('sm-post')[0]).getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts/d1/restore'));
+    await waitFor(() => expect(screen.getByTestId('sm-empty').textContent).toContain('No deleted posts'));
+    confirm.mockRestore();
   });
 
   test('Relationship shares a relationship post; the Info box reads the newest one', async () => {
@@ -156,8 +216,13 @@ describe('the wall', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Single' }));
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({
-      show_id: SHOW.id, post_type: 'relationship', content_text: 'changed her relationship status to "Single."', poster_handle: 'lala', status: 'live',
+      show_id: SHOW.id, post_type: 'relationship', content_text: 'changed her relationship status to "Single."', poster_handle: 'lala', status: 'draft',
     })));
+    // A draft changes nothing until it is released.
+    await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('Single'));
+    expect(screen.getByTestId('sm-rel-status').textContent).toBe("it's complicated");
+    fireEvent.click(within(screen.getAllByTestId('sm-post')[0]).getByRole('button', { name: 'Release' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Wall' }));
     await waitFor(() => expect(screen.getByTestId('sm-rel-status').textContent).toBe('Single'));
   });
 

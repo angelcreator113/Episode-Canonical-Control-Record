@@ -438,6 +438,9 @@ router.put('/:postId', requireAuth, async (req, res) => {
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
+    // Release (Task #2748): a draft going live with no posted_at is posted
+    // now, as publishEpisodePosts does; its story time stays as stamped.
+    if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
 
     await post.update(updates);
     return res.json({ data: post });

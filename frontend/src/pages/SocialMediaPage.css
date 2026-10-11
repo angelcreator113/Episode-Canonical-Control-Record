@@ -132,3 +132,9 @@
 .sm-friend-row b, .sm-friend-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-friend-row small { color: var(--text-secondary); }
 .sm-friends-head .sm-btn { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; color: var(--text-inverse); text-decoration: none; }
+
+/* Draft actions and editing (2026-10-11): Release, Edit, Delete; Restore under Deleted. */
+.sm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 0; }
+.sm-actions .sm-btn { min-height: 32px; padding: 4px 12px; }
+.sm-edit { display: flex; flex-direction: column; gap: 6px; }
+.sm-edit textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 3px; }

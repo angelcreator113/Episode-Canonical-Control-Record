@@ -38,6 +38,8 @@ const WALL_TABS = [
   { key: 'wall', label: 'Wall' },
   { key: 'drafts', label: 'Drafts' },
   { key: 'events', label: 'Events' },
+  // Deleted posts are kept (soft delete) and shown here, to the signed-in author only (2026-10-11).
+  { key: 'deleted', label: 'Deleted' },
 ];
 const PAGE = 50;
 
@@ -237,6 +239,24 @@ export function PostCard({ post, onChange, showId }) {
   const who = posterOf(post);
   const [open, setOpen] = useState(false);
   const [beatOpen, setBeatOpen] = useState(false);
+  // A draft is edited, released or deleted here; a deleted post is restored
+  // (2026-10-11). A live post has no edit button (2009 rule, feedPostStatus).
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(post.content_text || '');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const isDeleted = !!post.deleted_at;
+  const isDraft = post.status === 'draft' && !isDeleted;
+  const act = async (label, call) => {
+    setBusy(true); setActionError(null);
+    try { await call(); setEditing(false); onChange?.(); }
+    catch (err) { console.error(`[SocialMedia] ${label} failed:`, err.response?.status || err.message); setActionError(err.response?.data?.error || `${label} failed.`); }
+    finally { setBusy(false); }
+  };
+  const release = () => act('Release', () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' }));
+  const saveEdit = () => act('Save', () => api.put(`/api/v1/feed-posts/${post.id}`, { content_text: text.trim() }));
+  const remove = () => { if (window.confirm('Delete this draft? It is kept under Deleted and can be restored.')) act('Delete', () => api.delete(`/api/v1/feed-posts/${post.id}`)); };
+  const restore = () => act('Restore', () => api.post(`/api/v1/feed-posts/${post.id}/restore`));
   const records = Array.isArray(post.comments) ? post.comments : [];
   const legacy = records.length === 0 && Array.isArray(post.sample_comments) ? post.sample_comments : [];
   const likes = post.likes ?? 0;
@@ -245,13 +265,24 @@ export function PostCard({ post, onChange, showId }) {
     <article className="sm-item" data-testid="sm-post">
       <Tile name={who.name} size="md" tone={who.handle === 'lala' ? 'l' : toneOf(who.handle)} />
       <div className="sm-item-body">
+        {editing ? (
+          <div className="sm-edit">
+            <textarea aria-label="Edit the draft" rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+            <span className="sm-actions">
+              <button type="button" className="sm-btn" disabled={busy || !text.trim() || text.trim() === post.content_text} onClick={saveEdit}>Save</button>
+              <button type="button" className="sm-link-btn" onClick={() => { setEditing(false); setText(post.content_text || ''); }}>Cancel</button>
+            </span>
+          </div>
+        ) : (
         <p className="sm-item-text">
           <b className="sm-name">{who.name}</b>{' '}
           {post.content_text}
           {post.image_description && !post.image_url && <span className="sm-album"> [photo: {post.image_description}]</span>}
         </p>
+        )}
         {post.image_url && <img className="sm-item-image" src={post.image_url} alt={post.image_description || ''} />}
         <p className="sm-item-meta">
+          {isDeleted && <><span className="sm-badge">deleted</span> · </>}
           {post.status === 'draft' && <><span className="sm-badge">draft</span> · </>}
           <span>{whenLabel(post.posted_at) || 'undated'}</span>
           {storyLabel(postOrder(post)) && <> · <span className="sm-story" title="Story time: when this happens in Lala's world">{storyLabel(postOrder(post))}</span></>}
@@ -260,6 +291,17 @@ export function PostCard({ post, onChange, showId }) {
           {post.narrative_function && <> · <span className="sm-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
           {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
         </p>
+        {(isDraft || isDeleted) && !editing && (
+          <p className="sm-actions" data-testid="sm-post-actions">
+            {isDraft && <>
+              <button type="button" className="sm-btn" disabled={busy} onClick={release}>Release</button>
+              <button type="button" className="sm-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
+              <button type="button" className="sm-link-btn" disabled={busy} onClick={remove}>Delete</button>
+            </>}
+            {isDeleted && <button type="button" className="sm-btn" disabled={busy} onClick={restore}>Restore</button>}
+          </p>
+        )}
+        {actionError && <p className="sm-error" role="alert">{actionError}</p>}
         {(likes > 0 || commentsN > 0) && (
           <p className="sm-item-likes">
             {likes > 0 && <span>[{likes}] like this.</span>}{likes > 0 && commentsN > 0 && ' '}
@@ -321,7 +363,9 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
     setLoading(true); setError(null);
     try {
       const qs = new URLSearchParams({ show_id: show.id, status, with: 'comments', limit: String(PAGE), offset: String(offset) });
-      const r = await api.get(`/api/v1/feed-posts?${qs}`);
+      const r = wallTab === 'deleted'
+        ? await api.get(`/api/v1/feed-posts/deleted?show_id=${encodeURIComponent(show.id)}&limit=200`)
+        : await api.get(`/api/v1/feed-posts?${qs}`);
       const page = r.data?.data || [];
       setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
       setTotal(r.data?.total ?? page.length);
@@ -376,11 +420,14 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
     try {
       await api.post('/api/v1/feed-posts', {
         show_id: show.id, content_text: composed, poster_handle: ownerHandle,
-        poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse', status: 'live',
+        poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse',
+        // A draft with the current story time (2026-10-11); Release makes it live.
+        status: 'draft',
         ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
       });
       setDraftText(''); setFriendId(''); setKind('update');
-      if (wallTab !== 'wall') setWallTab('wall'); else await loadPosts(0, 'live');
+      if (wallTab !== 'drafts') setWallTab('drafts'); else await loadPosts(0, 'draft');
+      await loadSides();
     } catch (err) { setError(err.response?.data?.error || 'The post could not be shared.'); }
     finally { setSharing(false); }
   };
@@ -437,7 +484,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
           ))}
         </nav>
 
-        {wallTab !== 'events' && (
+        {wallTab !== 'events' && wallTab !== 'deleted' && (
           <form className="sm-composer" onSubmit={(e) => { e.preventDefault(); share(); }}>
             <label htmlFor="sm-composer-text" className="sm-composer-label">
               {kind === 'update' ? <>What&apos;s on your mind?</> : kind === 'status' ? 'Relationship status' : 'Now friends with'}
@@ -459,7 +506,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
                 <label><input type="radio" name="sm-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
                 <label><input type="radio" name="sm-kind" checked={kind === 'friends'} onChange={() => setKind('friends')} /> Friends</label>
               </span>
-              <span className="sm-muted">Posts as {ownerName}, live on the feed.</span>
+              <span className="sm-muted">Saves as a draft. Release it when it&apos;s time.</span>
               <button type="submit" className="sm-btn" disabled={sharing || !composed}>{sharing ? 'Sharing…' : 'Share'}</button>
             </div>
           </form>
@@ -467,7 +514,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
 
         {error && <p className="sm-error" role="alert">{error}</p>}
         <p className="sm-count" data-testid="sm-count">
-          {loading && posts.length === 0 ? 'Loading the wall…' : wallTab === 'events' ? `${events.length} upcoming event${events.length === 1 ? '' : 's'}` : `${total} ${wallTab === 'drafts' ? 'draft' : 'post'}${total === 1 ? '' : 's'}${show?.name ? ` · ${show.name}` : ''}`}
+          {loading && posts.length === 0 ? 'Loading the wall…' : wallTab === 'events' ? `${events.length} upcoming event${events.length === 1 ? '' : 's'}` : `${total} ${wallTab === 'drafts' ? 'draft' : wallTab === 'deleted' ? 'deleted post' : 'post'}${total === 1 ? '' : 's'}${show?.name ? ` · ${show.name}` : ''}`}
         </p>
 
         {wallTab === 'events' ? (
@@ -480,8 +527,10 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
             {!loading && !error && posts.length === 0 && (
               <div className="sm-empty" data-testid="sm-empty">
                 {wallTab === 'drafts'
-                  ? <p>No drafts. A draft is a post written inside an episode that is not published yet.</p>
-                  : <><p>Nothing on the wall yet.</p><p>Share something above, or generate posts from an episode. Each one is what a character said, once, with its likes and comments.</p></>}
+                  ? <p>No drafts. A draft is a post shared here, or written inside an episode, that is not live yet. Release it when it&apos;s time.</p>
+                  : wallTab === 'deleted'
+                    ? <p>No deleted posts. A deleted post is kept here and can be restored.</p>
+                    : <><p>Nothing on the wall yet.</p><p>Share something above, or generate posts from an episode. Each one is what a character said, once, with its likes and comments.</p></>}
               </div>
             )}
             {visible.map((p) => <PostCard key={p.id} post={p} showId={show?.id} onChange={() => { loadPosts(0); loadSides(); }} />)}
