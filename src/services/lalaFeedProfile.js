@@ -91,4 +91,10 @@ async function getLalaFeedProfile(models, showId, { allFriends = false } = {}) {
   };
 }
 
-module.exports = { getLalaFeedProfile, FRIENDS_SHOWN, FRIENDS_ALL };
+/** Lala's own Feed profile id (as getLalaFeedProfile finds her), or null. */
+async function lalaProfileId(sequelize) {
+  const character = await lalaCharacter(sequelize);
+  return (await lalaProfile(sequelize, character?.feed_profile_id))?.id || null;
+}
+
+module.exports = { getLalaFeedProfile, lalaProfileId, FRIENDS_SHOWN, FRIENDS_ALL };

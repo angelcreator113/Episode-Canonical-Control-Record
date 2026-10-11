@@ -2964,6 +2964,26 @@ router.post('/relationships/suggestions/accept', requireAuth, async (req, res) =
 // GET /api/v1/social-profiles/lala?show_id=[&friends=all] — Lala's profile column on the
 // Feed page (Task #2747): her profile, portrait, home city, career level and
 // friends, each from its one owner (services/lalaFeedProfile). Before /:id.
+// GET /api/v1/social-profiles/lala/sidebar?show_id= — the Feed page's right
+// column (Task #2750): the events Lala is going to (tied to her unpublished
+// episodes) and the people on their guest lists she may know
+// (services/feedSidebar).
+router.get('/lala/sidebar', requireAuth, async (req, res) => {
+  const { show_id: showId } = req.query;
+  if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {
+    return res.status(400).json({ error: 'show_id must be a UUID' });
+  }
+  try {
+    const db = req.app.locals.db || require('../models');
+    const { lalaProfileId } = require('../services/lalaFeedProfile');
+    const { getFeedSidebar } = require('../services/feedSidebar');
+    return res.json({ data: await getFeedSidebar(db, showId, { lalaProfileId: await lalaProfileId(db.sequelize) }) });
+  } catch (err) {
+    console.error('[SocialProfiles] Feed sidebar error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/lala', requireAuth, async (req, res) => {
   const { show_id: showId } = req.query;
   if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {
