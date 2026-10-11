@@ -18,6 +18,39 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
+/**
+ * Adds author_portrait_url to each post and portrait_url to each of its
+ * comments, from the registry character linked to the author's profile
+ * (registry_characters.feed_profile_id; Task #2924). One query for the page.
+ * A missing link, or a failed read, leaves the photo null.
+ */
+async function withAuthorPortraits(models, posts) {
+  const ids = new Set();
+  for (const post of posts) {
+    if (post.social_profile_id) ids.add(post.social_profile_id);
+    for (const c of post.comments || []) if (c.social_profile_id) ids.add(c.social_profile_id);
+  }
+  let byProfile = new Map();
+  if (ids.size && models.RegistryCharacter) {
+    try {
+      const rows = await models.RegistryCharacter.findAll({
+        where: { feed_profile_id: [...ids] },
+        attributes: ['feed_profile_id', 'portrait_url', 'updated_at'],
+        order: [['updated_at', 'DESC']],
+      });
+      byProfile = new Map();
+      for (const r of rows) if (r.portrait_url && !byProfile.has(r.feed_profile_id)) byProfile.set(r.feed_profile_id, r.portrait_url);
+    } catch (err) {
+      console.error('[feed-posts] author portraits could not be read:', err.message);
+    }
+  }
+  return posts.map((post) => ({
+    ...post,
+    author_portrait_url: byProfile.get(post.social_profile_id) || null,
+    ...(post.comments ? { comments: post.comments.map((c) => ({ ...c, portrait_url: byProfile.get(c.social_profile_id) || null })) } : {}),
+  }));
+}
+
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
@@ -59,7 +92,7 @@ router.get('/', optionalAuth, async (req, res) => {
           model: SocialProfile,
           as: 'socialProfile',
           attributes: ['id', 'handle', 'display_name', 'platform', 'archetype',
-            'follower_tier', 'aesthetic_dna'],
+            'follower_tier', 'aesthetic_dna', 'city'],
           required: false,
         }] : []),
         // The post's episode number, for its story time (services/storyClock.js).
@@ -74,8 +107,12 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const total = await FeedPost.count({ where, distinct: true, col: 'id' });
 
+    // Authors' photos for The Pulse (Task #2924): a post's or comment's
+    // profile links to a registry character, whose portrait_url is the photo.
+    const data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
+
     return res.json({
-      data: posts,
+      data,
       count: posts.length,
       total,
       hasMore: (parseInt(offset, 10) || 0) + posts.length < total,

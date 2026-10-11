@@ -72,6 +72,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const early = res.body.fit;
     expect(early).toMatchObject({ caption: 'Coffee run', image_alt: 'Lala in a pink trench', story_date: '2026-03-01', width: 1333, height: 2000 });
     expect(early.image_url).toMatch(/^data:image\/jpeg;base64,/);
+    expect(Number.isNaN(Date.parse(early.created_at))).toBe(false);
 
     const late = (await post({ show_id: ids.show, story_date: '2026-04-15' })).body.fit;
     const undated = (await post({ show_id: ids.show })).body.fit;
