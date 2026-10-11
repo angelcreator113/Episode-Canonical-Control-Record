@@ -2961,7 +2961,7 @@ router.post('/relationships/suggestions/accept', requireAuth, async (req, res) =
 // ── GET /:id ─────────────────────────────────────────────────────────────────
 // IMPORTANT: This catch-all must be the LAST GET route registered.
 // Named routes like GET /network, GET /templates must come before this.
-// GET /api/v1/social-profiles/lala?show_id= — Lala's profile column on the
+// GET /api/v1/social-profiles/lala?show_id=[&friends=all] — Lala's profile column on the
 // Feed page (Task #2747): her profile, portrait, home city, career level and
 // friends, each from its one owner (services/lalaFeedProfile). Before /:id.
 router.get('/lala', requireAuth, async (req, res) => {
@@ -2972,7 +2972,8 @@ router.get('/lala', requireAuth, async (req, res) => {
   try {
     const db = req.app.locals.db || require('../models');
     const { getLalaFeedProfile } = require('../services/lalaFeedProfile');
-    return res.json({ data: await getLalaFeedProfile(db, showId) });
+    // ?friends=all: every friend, for the Friends tab (Task #2761).
+    return res.json({ data: await getLalaFeedProfile(db, showId, { allFriends: req.query.friends === 'all' }) });
   } catch (err) {
     console.error('[SocialProfiles] Lala profile error:', err);
     return res.status(500).json({ error: err.message });

@@ -35,7 +35,7 @@ export const SETUP_STEPS = [
   { num: 3, key: 'calendar', icon: '📅', title: 'Culture & Events', short: 'yearly rhythm, awards, micro events', route: '/universe?tab=culture', description: 'The yearly rhythm — events, awards, micro events that auto-spawn world events.', feeds: ['Events Library', 'Feed activity', 'Episode planning'] },
   { num: 4, key: 'memory', icon: '📜', title: 'Cultural Memory', short: 'history and what people remember', route: '/universe?tab=culture&sub=history', description: 'How the world remembers — legends, feuds, archives. Gives depth.', feeds: ['Character dialogue', 'Feed posts', 'Story depth'] },
   { num: 5, key: 'locations', icon: '📍', title: 'Locations & Venues', short: 'where things happen', route: '/universe?tab=world&sub=locations', description: 'The map — venues, properties, scene sets. Events need venues.', feeds: ['Event venues', 'Scene Sets', 'HOME_BASE'] },
-  { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', short: 'the people with a voice', route: '/feed?tab=people&layer=lalaverse', description: "Create Lala's social world — influencers, rivals, friends.", feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
+  { num: 6, key: 'feed', icon: '👥', title: 'Generate Feed', short: 'the people with a voice', route: '/world-studio?tab=feed&layer=lalaverse', description: "Create Lala's social world — influencers, rivals, friends.", feeds: ['Event hosts', 'Guest lists', 'Social drama'] },
   { num: 7, key: 'events', icon: '🎉', title: 'Create World Events', short: 'the moments episodes are made from', route: '/universe?tab=culture&sub=events', description: 'Calendar events auto-spawn world events with hosts and guest lists.', feeds: ['Episode injection', 'Scene creation'] },
 ];
 

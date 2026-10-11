@@ -13,7 +13,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
-vi.mock('./SocialProfileGenerator', () => ({
+vi.mock('./SocialProfileGenerator', () => ({ // must never mount here (Task #2761)
   default: ({ defaultFeedLayer, embedded }) => <div data-testid="people">people layer={defaultFeedLayer || 'none'} embedded={String(embedded)}</div>,
 }));
 
@@ -106,7 +106,7 @@ describe('the wall', () => {
     expect(screen.getByTestId('sm-career').textContent).toBe('Emerging');
     expect(screen.getByTestId('sm-friends-count').textContent).toBe('2 friends');
     expect(screen.getAllByTestId('sm-friend').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['MMarcus', '/feed?tab=people&layer=lalaverse&profile=2'], ['BBestie', '/feed?tab=people&layer=lalaverse&profile=4'],
+      ['MMarcus', '/world-studio?tab=feed&layer=lalaverse&profile=2'], ['BBestie', '/world-studio?tab=feed&layer=lalaverse&profile=4'],
     ]);
     expect(api.get).toHaveBeenCalledWith(`/api/v1/social-profiles/lala?show_id=${SHOW.id}`);
     expect(document.body.textContent).not.toMatch(/\[City\]|\[Status\]|Styling, everywhere|\[\d+\] friends/);
@@ -199,11 +199,27 @@ describe('the wall', () => {
     expect(screen.getByRole('heading', { name: 'Lala' })).toBeTruthy();
   });
 
-  test('Friends embeds the profile generator; the old ?layer=lalaverse link lands there', async () => {
+  test('Friends lists her friends only, each opening its profile in World Studio; the old ?layer= link lands there', async () => {
     renderAt('/feed?layer=lalaverse');
-    expect((await screen.findByTestId('people')).textContent).toBe('people layer=lalaverse embedded=true');
+    const tab = await screen.findByTestId('sm-friends-tab');
+    expect(screen.queryByTestId('people')).toBeNull();
+    await waitFor(() => expect(screen.getAllByTestId('sm-friends-row')).toHaveLength(2));
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/social-profiles/lala?show_id=${SHOW.id}&friends=all`);
+    expect(screen.getAllByTestId('sm-friends-row').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['MMarcus@marcus.k', '/world-studio?tab=feed&layer=lalaverse&profile=2'], ['BBestie@bestie', '/world-studio?tab=feed&layer=lalaverse&profile=4'],
+    ]);
+    expect(tab.textContent).toContain('Friends (2)');
+    expect(screen.getByTestId('sm-add-people').getAttribute('href')).toBe('/world-studio?tab=feed&layer=lalaverse');
     expect(screen.queryByTestId('sm-post')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     await screen.findAllByTestId('sm-post');
+  });
+
+  test('Friends with none says what a friend is and where to make one', async () => {
+    lalaColumn = { ...lalaColumn, friends: { total: 0, list: [] } };
+    renderAt('/feed?tab=people');
+    const empty = await screen.findByTestId('sm-friends-empty');
+    expect(empty.textContent).toContain('Direct');
+    expect(empty.querySelector('a').getAttribute('href')).toBe('/world-studio?tab=feed&layer=lalaverse');
   });
 });

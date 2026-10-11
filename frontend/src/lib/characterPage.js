@@ -88,7 +88,8 @@ export function showUpRows(appearances, feedProfile) {
     rows.push({
       kind: 'feed', label: 'Feed', title: lalaTie(feed.lala_relationship) || 'On the feed',
       sub: plural(feed.posts || 0, 'post'),
-      to: feedProfile?.id ? `/feed?profile=${feedProfile.id}&layer=${feedProfile.feed_layer || 'lalaverse'}` : '/feed',
+      // Its profile where Feed profiles are made, World Studio's Feed tab (Task #2761).
+      to: feedProfile?.id ? `/world-studio?tab=feed&layer=${feedProfile.feed_layer === 'real_world' ? 'real_world' : 'lalaverse'}&profile=${feedProfile.id}` : '/feed',
     });
   }
   return rows;

@@ -164,6 +164,22 @@ export const ENHANCED_API = '/api/v1/feed-enhanced';
 // ── Helpers ────────────────────────────────────────────────────────────
 export function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
 export function fp(p) { return p?.full_profile||p||{}; }
+
+/**
+ * Names on a Feed profile (Task #2761). The registry character owns the
+ * person's name. The profile's display_name is its "Profile name": it may be
+ * a brand or stage name, and defaults to the linked character's name
+ * (registry_character_name, from utils/registryLink). The handle is separate
+ * and shows as @handle.
+ */
+export function profileName(p) {
+  const d = fp(p);
+  return p?.display_name || d.display_name || p?.registry_character_name || '';
+}
+export function atHandle(handle) {
+  const h = String(handle || '').trim().replace(/^@+/, '');
+  return h ? `@${h}` : '';
+}
 // Track 4 final cleanup: getToken() and authHeaders() exports removed.
 // Auth header injection is centralized in the apiClient request interceptor
 // (services/api.js). Deletion verified zero importers via grep prior to commit.

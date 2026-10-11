@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
@@ -7,20 +7,22 @@ import { BEATS, beatName } from '../lib/canonicalBeats';
 import { postOrder, storyLabel } from '../lib/storyClock';
 import './SocialMediaPage.css';
 
-const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
-
 /**
  * Social Media (the Feed project; redesigned 2026-10-04 to Evoni's mock:
  * a 2009 profile-and-wall, "lalaverse" on a purple banner). Posts is
  * Lala's wall: her profile on the left, the wall in the middle (status,
  * "What's on your mind?", the live posts with their comments), requests,
- * upcoming events and people she may know on the right. People embeds
- * the profile generator unchanged (the old /feed page). The Episode's
- * own Lala's Phone tab is untouched.
+ * upcoming events and people she may know on the right. Friends lists
+ * Lala's friends; profiles are made in one place, World Studio's Feed tab
+ * (2026-10-11), which every profile link here opens. The Episode's own
+ * Lala's Phone tab is untouched.
  *
  * Deep links: ?tab=posts|people; the old ?layer= and ?profile= links
- * (with no ?tab=) open People, as they always did.
+ * (with no ?tab=) open Friends, as they always did.
  */
+
+/** World Studio's Feed tab, where Feed profiles are made, on the LalaVerse; at one profile when given. */
+export const profileHome = (p) => `/world-studio?tab=feed&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
 export const TABS = [
   { key: 'posts', label: 'Home' },
   { key: 'people', label: 'Friends' },
@@ -389,7 +391,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const visible = q ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q)) : posts;
   const relationship = latestStatus([...posts, ...relPosts], ownerHandle) || owner?.relationship_status || null;
   const mayKnow = friends.list.filter((p) => p.handle !== ownerHandle).slice(6, 8);
-  const peopleLink = (p) => `/feed?tab=people&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
+  const peopleLink = profileHome;
 
   return (
     <div className="sm-wall">
@@ -407,7 +409,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
           </dl>
           {lala && !lala.home_city && !relationship && !lala.career && <p className="sm-muted">Nothing set yet. Her home city is in Show Settings.</p>}
         </Box>
-        <Box title="Friends" action={<Link to="/feed?tab=people&layer=lalaverse">See all</Link>} testId="sm-friends">
+        <Box title="Friends" action={<Link to="/feed?tab=people">See all</Link>} testId="sm-friends">
           {lala?.friends ? (
             <>
               <p className="sm-muted" data-testid="sm-friends-count">{lala.friends.total} friend{lala.friends.total === 1 ? '' : 's'}</p>
@@ -509,11 +511,58 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   );
 }
 
+/**
+ * The Friends tab (2026-10-11): Lala's friends only, the LalaVerse profiles
+ * whose link to her is Direct (GET /social-profiles/lala?friends=all). Each
+ * opens its profile where profiles are made; so does "Add people".
+ */
+function FriendsTab({ show, showLoaded }) {
+  const [friends, setFriends] = useState(null);
+  useEffect(() => {
+    if (!show?.id) return undefined;
+    let cancelled = false;
+    api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all`)
+      .then((res) => { if (!cancelled) setFriends(res?.data?.data?.friends || false); })
+      .catch((err) => { console.error('[SocialMedia] friends load failed:', err.response?.status || err.message); if (!cancelled) setFriends(false); });
+    return () => { cancelled = true; };
+  }, [show?.id]);
+
+  if (showLoaded && !show) return <p className="sm-empty" data-testid="sm-no-show">Pick a show first. Friends belong to Lala&apos;s show.</p>;
+  return (
+    <section className="sm-friends-tab" data-testid="sm-friends-tab">
+      <div className="sm-friends-head">
+        <h2 className="sm-friends-title">Friends{friends ? ` (${friends.total})` : ''}</h2>
+        <Link className="sm-btn" to={profileHome()} data-testid="sm-add-people">Add people</Link>
+      </div>
+      {friends === null && <p className="sm-muted">Loading friends…</p>}
+      {friends === false && <p className="sm-error" role="alert">Friends could not be read.</p>}
+      {friends && friends.total === 0 && (
+        <div className="sm-empty" data-testid="sm-friends-empty">
+          <p>Lala has no friends here yet.</p>
+          <p>A friend is a LalaVerse profile whose link to Lala is Direct. Make or edit profiles in <Link to={profileHome()}>World Studio › Feed</Link>.</p>
+        </div>
+      )}
+      {friends && friends.total > 0 && (
+        <ul className="sm-friends-list">
+          {friends.list.map((p) => (
+            <li key={p.id}>
+              <Link to={profileHome(p)} className="sm-friend-row" data-testid="sm-friends-row">
+                <Tile name={p.display_name || p.handle} size="md" tone={toneOf(p.handle)} />
+                <span><b>{p.display_name || p.handle}</b>{p.handle && <small>@{String(p.handle).replace(/^@/, '')}</small>}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {friends && friends.total > friends.list.length && <p className="sm-muted">Showing {friends.list.length} of {friends.total}.</p>}
+    </section>
+  );
+}
+
 export default function SocialMediaPage() {
   const [params, setParams] = useSearchParams();
   const tab = tabFromParams(params);
   const { show, loaded } = useActiveShow();
-  const layer = params.get('layer');
   const [search, setSearch] = useState('');
   const [inbox, setInbox] = useState(0);
   const [tabRequest, setTabRequest] = useState(null);
@@ -535,13 +584,9 @@ export default function SocialMediaPage() {
         <span className="sm-banner-right">Social Media</span>
       </header>
       {tab === 'posts' && <Wall show={show} showLoaded={loaded} search={search} tabRequest={tabRequest} onInbox={setInbox} />}
-      {tab === 'people' && (
-        <Suspense fallback={<p className="sm-empty">Loading people…</p>}>
-          <SocialProfileGenerator embedded defaultFeedLayer={layer === 'lalaverse' ? 'lalaverse' : undefined} />
-        </Suspense>
-      )}
+      {tab === 'people' && <FriendsTab show={show} showLoaded={loaded} />}
       <footer className="sm-footer">
-        lalaverse · one post, one place · <Link to="/feed?tab=people&layer=lalaverse">People</Link>{show?.id && <> · <Link to={`/shows/${show.id}/feed-timeline`}>Timeline &amp; generation</Link></>}
+        lalaverse · one post, one place · <Link to={profileHome()}>People</Link>{show?.id && <> · <Link to={`/shows/${show.id}/feed-timeline`}>Timeline &amp; generation</Link></>}
       </footer>
     </div>
   );

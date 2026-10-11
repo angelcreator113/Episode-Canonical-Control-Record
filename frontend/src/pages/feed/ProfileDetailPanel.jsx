@@ -3,6 +3,7 @@ import apiClient from '../../services/api';
 import {
   API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
+  profileName, atHandle,
 } from './feedConstants';
 
 // Local Spinner, as in FeedViews.jsx. It stayed behind in
@@ -77,7 +78,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
   const lColor = lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight;
 
   const startEdit = ()=>{
-    setDraft({ handle:p.handle||'', display_name:p.display_name||d.display_name||'', platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'' });
+    setDraft({ handle:p.handle||'', display_name:profileName(p), platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'' });
     setEditing(true);
   };
 
@@ -121,9 +122,10 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
       <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
           <div>
-            <div style={{fontSize:20,fontWeight:700,color:C.ink,marginBottom:2}}>{p.handle}</div>
+            <div style={{fontSize:20,fontWeight:700,color:C.ink,marginBottom:2}} data-testid="spg-detail-handle">{atHandle(p.handle)}</div>
             <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-              {(p.display_name||d.display_name)&&<span style={{fontSize:13,color:C.inkMid}}>{p.display_name||d.display_name}</span>}
+              {profileName(p)&&<span style={{fontSize:13,color:C.inkMid}} data-testid="spg-detail-profile-name" title="Profile name">{profileName(p)}</span>}
+              {p.registry_character_name&&p.registry_character_name!==profileName(p)&&<span style={{fontSize:11,color:C.inkLight}} data-testid="spg-detail-character">Character: {p.registry_character_name}</span>}
               <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
               {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
               {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
@@ -174,7 +176,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
             {editing ? (
               <div style={{gridColumn:'1/-1'}}>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
-                  {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
+                  {inp('Handle','handle')}{inp('Profile name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
                 </div>
                 {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
                 {/* Social Intelligence */}

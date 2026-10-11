@@ -58,7 +58,7 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
           <div className="soc-head">
             <h2 id="soc-arch-heading" className="soc-title">Archetypes in the Feed</h2>
             {data?.archetypes && <span className="soc-sub">{plural(data.archetypes.total, 'LalaVerse profile')}</span>}
-            <Link className="soc-link" to="/feed?tab=people&layer=lalaverse">See the people →</Link>
+            <Link className="soc-link" to="/world-studio?tab=feed&layer=lalaverse">See the people →</Link>
           </div>
           {!data ? <p className="soc-note">Counting the profiles…</p>
             : !data.archetypes ? <p className="soc-note">The Feed profiles could not be read just now.</p>

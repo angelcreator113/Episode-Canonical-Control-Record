@@ -34,7 +34,7 @@ describe('the character page', () => {
       ['Place', "Lives at STUDIO BY SABLE's Studio", '1 resident · 3 scene sets', '/universe?tab=world&sub=locations'],
       ['Episode', 'In Episode 1', 'I Designed My Outfit', '/episodes/ep1'],
       ["Lala's goal", 'Follow up with STUDIO BY SABLE after the event', 'From the event deal', '/episodes/ep1'],
-      ['Feed', 'Friends with Lala', '4 posts', '/feed?profile=7&layer=lalaverse'],
+      ['Feed', 'Friends with Lala', '4 posts', '/world-studio?tab=feed&layer=lalaverse&profile=7'],
     ]);
     expect(showUpRows({ linked: false })).toEqual([]);
   });

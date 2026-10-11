@@ -27,6 +27,8 @@ const { readLalaHome } = require('../utils/lalaHome');
 const { CAREER_TIERS, careerTierFromReputation } = require('../utils/careerTiers');
 
 const FRIENDS_SHOWN = 6;
+// The Friends tab lists them all (Task #2761), up to this many.
+const FRIENDS_ALL = 200;
 
 async function one(sequelize, sql, replacements, label) {
   try {
@@ -56,13 +58,13 @@ async function lalaProfile(sequelize, linkedId) {
       ORDER BY id LIMIT 1`, {}, 'lala profile');
 }
 
-async function friendsOf(sequelize, ownerId) {
+async function friendsOf(sequelize, ownerId, limit) {
   const where = `deleted_at IS NULL AND feed_layer = 'lalaverse' AND lala_relationship = 'direct'
     AND COALESCE(is_justawoman_record, false) = false AND (CAST(:owner AS INTEGER) IS NULL OR id <> CAST(:owner AS INTEGER))`;
   try {
     const [list] = await sequelize.query(
       `SELECT id, handle, display_name FROM social_profiles WHERE ${where}
-        ORDER BY LOWER(COALESCE(display_name, handle)) LIMIT ${FRIENDS_SHOWN}`, { replacements: { owner: ownerId || null } });
+        ORDER BY LOWER(COALESCE(display_name, handle)) LIMIT :limit`, { replacements: { owner: ownerId || null, limit } });
     const [[count]] = await sequelize.query(`SELECT COUNT(*)::int AS n FROM social_profiles WHERE ${where}`, { replacements: { owner: ownerId || null } });
     return { total: count?.n || 0, list };
   } catch (err) {
@@ -71,7 +73,8 @@ async function friendsOf(sequelize, ownerId) {
   }
 }
 
-async function getLalaFeedProfile(models, showId) {
+/** `allFriends`: every friend (the Friends tab), not the column's first six. */
+async function getLalaFeedProfile(models, showId, { allFriends = false } = {}) {
   const { sequelize } = models;
   const character = await lalaCharacter(sequelize);
   const profile = await lalaProfile(sequelize, character?.feed_profile_id);
@@ -84,8 +87,8 @@ async function getLalaFeedProfile(models, showId) {
     portrait_url: character?.portrait_url || null,
     home_city: readLalaHome(show?.metadata)?.city || null,
     career: tier ? { tier, label: CAREER_TIERS[tier].label } : null,
-    friends: await friendsOf(sequelize, profile?.id),
+    friends: await friendsOf(sequelize, profile?.id, allFriends ? FRIENDS_ALL : FRIENDS_SHOWN),
   };
 }
 
-module.exports = { getLalaFeedProfile, FRIENDS_SHOWN };
+module.exports = { getLalaFeedProfile, FRIENDS_SHOWN, FRIENDS_ALL };

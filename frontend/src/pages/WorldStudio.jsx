@@ -668,6 +668,11 @@ export default function WorldStudio() {
   /* ── Top-level studio tabs ─────────────────────────────────────────── */
   const [searchParams] = useSearchParams();
   const [studioTab, setStudioTab] = useState(() => searchParams.get('tab') || 'characters');
+  // The one home for making Feed profiles (Task #2761): the Feed tab makes
+  // them for both layers. ?layer= picks one (real world by default, as
+  // before); ?profile= opens one profile, as a friend's link from the Feed page does.
+  const [feedLayer, setFeedLayer] = useState(() => (searchParams.get('layer') === 'lalaverse' ? 'lalaverse' : 'real_world'));
+  const linkedProfileId = searchParams.get('profile') || null;
 
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
@@ -1197,8 +1202,15 @@ export default function WorldStudio() {
       {/* ── Feed tab ────────────────────────────────────────────── */}
       {studioTab === 'feed' && (
         <div className="ws4-feed-tab">
+          <div className="ws4-feed-layers" role="tablist" aria-label="Which feed">
+            {[['lalaverse', 'LalaVerse'], ['real_world', 'Real world']].map(([key, label]) => (
+              <button key={key} type="button" role="tab" aria-selected={feedLayer === key} data-testid={`ws4-feed-layer-${key}`}
+                className={`ws4-feed-layer${feedLayer === key ? ' ws4-feed-layer--active' : ''}`} onClick={() => setFeedLayer(key)}>{label}</button>
+            ))}
+          </div>
           <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
-            <SocialProfileGenerator embedded={true} worldTag={worldTag} defaultFeedLayer="real_world" />
+            <SocialProfileGenerator key={feedLayer} embedded={true} worldTag={worldTag} defaultFeedLayer={feedLayer}
+              initialProfileId={linkedProfileId} />
           </Suspense>
         </div>
       )}

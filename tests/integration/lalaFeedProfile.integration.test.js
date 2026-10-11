@@ -87,6 +87,21 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(d.friends.total).toBeGreaterThanOrEqual(2);
   });
 
+  it('?friends=all lists every friend, beyond the column\'s six (Task #2761)', async () => {
+    const extra = [];
+    for (let i = 0; i < 6; i += 1) {
+      const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, lala_relationship, created_at, updated_at)
+        VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', 'direct', NOW(), NOW()) RETURNING id`, { handle: `aaa-more-${i}-${tag}`, display: `AAA More ${i} ${tag}` });
+      extra.push(row.id); profiles[`more${i}`] = row.id;
+    }
+    const six = (await get(`/api/v1/social-profiles/lala?show_id=${ids.show}`)).body.data.friends;
+    const all = (await get(`/api/v1/social-profiles/lala?show_id=${ids.show}&friends=all`)).body.data.friends;
+    expect(six.list).toHaveLength(6);
+    expect(all.list.length).toBe(Math.min(all.total, 200));
+    expect(all.list.map((p) => p.id)).toEqual(expect.arrayContaining([...extra, profiles.friendA, profiles.friendB]));
+    expect(all.list[0]).toHaveProperty('handle');
+  });
+
   it('a show with no home city and no state says so with nulls', async () => {
     const d = (await get(`/api/v1/social-profiles/lala?show_id=${ids.bare}`)).body.data;
     expect(d.home_city).toBeNull();

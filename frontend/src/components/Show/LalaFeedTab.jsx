@@ -234,7 +234,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
             ))}
             {live && !live.length && <p className="wa-lf-empty pad">Her feed is quiet.</p>}
           </div>
-          <Link className="wa-lf-link" to="/feed?layer=lalaverse">Open the full page</Link>
+          <Link className="wa-lf-link" to="/feed">Open the full page</Link>
         </aside>
       </div>
     </div>
