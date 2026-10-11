@@ -26,7 +26,16 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+// The shared refresh and sign-out (Task #1902): controlled here, so the
+// stream's auth contract is visible without a real refresh call.
+vi.mock('../utils/authSession', async (importOriginal) => ({
+  ...(await importOriginal()),
+  refreshAccessTokenOnce: vi.fn(),
+  wipeSessionAndRedirect: vi.fn(),
+}));
+
 import apiClient from '../services/api';
+import { refreshAccessTokenOnce, wipeSessionAndRedirect } from '../utils/authSession';
 import AppAssistant, {
   amberSpeakApi,
   assistantCommandApi,
@@ -84,8 +93,8 @@ describe('AppAssistant — Track 6 CP11 non-streaming helpers', () => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe('AppAssistant — Pattern G locked streaming site', () => {
-  test('source still contains raw fetch on STREAM_API', () => {
-    expect(SOURCE).toMatch(/await fetch\(STREAM_API/);
+  test('source still opens the stream with fetch on STREAM_API, through authedFetch (Task #1902)', () => {
+    expect(SOURCE).toMatch(/await authedFetch\(STREAM_API/);
   });
 
   test('source still calls res.body.getReader() (SSE stream consumption)', () => {
@@ -145,6 +154,8 @@ describe('AppAssistant — stream authenticates (Task #1894)', () => {
 
   beforeEach(() => {
     Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(refreshAccessTokenOnce).mockReset();
+    vi.mocked(wipeSessionAndRedirect).mockReset();
     sessionStorage.clear();
     localStorage.clear();
     localStorage.setItem('authToken', 'tok-1894');
@@ -183,7 +194,7 @@ describe('AppAssistant — stream authenticates (Task #1894)', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  test('401: one fetch, no assistantCommandApi fallback, auth error shown', async () => {
+  test('401 with no code: signed out (Task #1902), one fetch, no refresh, no fallback; the message stays for DEV', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -193,10 +204,50 @@ describe('AppAssistant — stream authenticates (Task #1894)', () => {
     render(<AppAssistant />);
     await sendToAmber('open the feed');
 
+    // wipeSessionAndRedirect is mocked, as in DEV where it is skipped, so the
+    // in-chat message shows; in production the page has gone to /login.
     expect(await screen.findByText(/session has expired/i)).toBeTruthy();
+    expect(wipeSessionAndRedirect).toHaveBeenCalledTimes(1);
+    expect(refreshAccessTokenOnce).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(apiClient.post).not.toHaveBeenCalled();
     expect(errSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('expired token (Task #1902): renewed once, the POST retried once with the new token, the reply streams', async () => {
+    vi.mocked(refreshAccessTokenOnce).mockImplementation(async () => {
+      localStorage.setItem('authToken', 'tok-new');
+      return 'tok-new';
+    });
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 401, body: null, json: async () => ({ code: 'AUTH_INVALID_TOKEN' }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: sseBody(['data: {"type":"token","text":"Renewed and on it."}\n', 'data: {"type":"done"}\n']),
+      });
+    render(<AppAssistant />);
+    await sendToAmber('open the feed');
+
+    expect(await screen.findByText('Renewed and on it.')).toBeTruthy();
+    expect(refreshAccessTokenOnce).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok-1894');
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer tok-new');
+    expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+    expect(wipeSessionAndRedirect).not.toHaveBeenCalled();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  test('403 AUTH_GROUP_REQUIRED: no refresh, no sign-out, the auth message (a permission code passes through)', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 403, body: null, json: async () => ({ code: 'AUTH_GROUP_REQUIRED' }) });
+    render(<AppAssistant />);
+    await sendToAmber('open the feed');
+
+    expect(await screen.findByText(/session has expired/i)).toBeTruthy();
+    expect(refreshAccessTokenOnce).not.toHaveBeenCalled();
+    expect(wipeSessionAndRedirect).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('non-auth failure (500) still falls back to assistantCommandApi', async () => {

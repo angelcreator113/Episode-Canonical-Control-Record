@@ -25,6 +25,7 @@ import { ContinuityGuard } from '../components/ContinuityGuard';
 import { MemoryCard, MEMORY_STYLES } from '../components/MemoryConfirmation';
 
 
+import { authedFetch } from '../utils/authedFetch';
 import './WriteMode.css';
 
 const API = '/api/v1';
@@ -972,17 +973,16 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       // via fetch() + res.body.getReader() to stream Claude
       // AI generation output incrementally. axios (apiClient)
       // does not support response-body streaming in browsers,
-      // so this site cannot migrate to apiClient. Auth is
-      // injected inline from localStorage. Tracked in fix
+      // so this site cannot migrate to apiClient. authedFetch
+      // (utils/authedFetch, Task #1902) attaches the token and
+      // follows apiClient's contract: an expired token is
+      // renewed and the POST retried once (requireAuth refused
+      // it before any Claude call began). Tracked in fix
       // plan v2.10 §4.6 + §9.11 as a "can't-migrate-to-axios"
       // exception class.
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      const res = await fetch(`${API}/memories/voice-to-story`, {
+      const res = await authedFetch(`${API}/memories/voice-to-story`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           spoken,
           existing_prose:  prose,
@@ -1137,17 +1137,16 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       // via fetch() + res.body.getReader() to stream Claude
       // AI generation output incrementally. axios (apiClient)
       // does not support response-body streaming in browsers,
-      // so this site cannot migrate to apiClient. Auth is
-      // injected inline from localStorage. Tracked in fix
+      // so this site cannot migrate to apiClient. authedFetch
+      // (utils/authedFetch, Task #1902) attaches the token and
+      // follows apiClient's contract: an expired token is
+      // renewed and the POST retried once (requireAuth refused
+      // it before any Claude call began). Tracked in fix
       // plan v2.10 §4.6 + §9.11 as a "can't-migrate-to-axios"
       // exception class.
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      const res = await fetch(`${API}/memories/story-continue`, {
+      const res = await authedFetch(`${API}/memories/story-continue`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           current_prose:  prose.trim() || `[Opening scene — ${chapter?.scene_goal || chapter?.chapter_notes || chapter?.title || 'begin the chapter'}]`,
           chapter_title:  chapter?.title || 'Untitled Chapter',

@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
-import { readAuthToken } from '../utils/authToken';
+import { authedFetch } from '../utils/authedFetch';
 import AmberPromptLibrary from './AmberPromptLibrary';
 import './AppAssistant.css';
 
@@ -213,21 +213,20 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       // The AbortController.signal here also depends on raw fetch — apiClient
       // wraps cancellation differently (CancelToken / AbortController via
       // adapter). The route is behind requireAuth, which reads only the
-      // Authorization header, so this fetch attaches `Authorization: Bearer`
-      // itself (WriteMode generateProse's inline-Bearer pattern; token from
-      // utils/authToken, never in the URL). One POST, no automatic retry —
-      // each call starts a billed Claude call. A 401/403 is surfaced in the
-      // chat and does NOT fall back; the fallback non-streaming POST a few
-      // lines below (apiClient, assistantCommandApi) is for other non-OK
-      // statuses only. Task #1894.
+      // Authorization header. authedFetch (utils/authedFetch, Task #1902)
+      // attaches `Authorization: Bearer` (never in the URL) and follows
+      // apiClient's contract: an expired token is renewed and the POST
+      // retried once (requireAuth refused it before any Claude call began);
+      // a failed renewal signs the user out. Otherwise one POST, no
+      // automatic retry — each call starts a billed Claude call. A 401/403
+      // that still comes back (a permission code, or DEV where sign-out is
+      // skipped) is surfaced in the chat and does NOT fall back; the
+      // fallback non-streaming POST below (apiClient, assistantCommandApi)
+      // is for other non-OK statuses only. Task #1894.
       // ───────────────────────────────────────────────────────────────────
-      const token = readAuthToken();
-      const res = await fetch(STREAM_API, {
+      const res = await authedFetch(STREAM_API, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: controller.signal,
       });

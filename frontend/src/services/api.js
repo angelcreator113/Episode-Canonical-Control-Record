@@ -1,4 +1,7 @@
 import axios from 'axios';
+import {
+  refreshAccessTokenOnce, wipeSessionAndRedirect, PASS_THROUGH_CODES, SESSION_FAIL_CODES,
+} from '../utils/authSession';
 
 // Create axios instance with environment-aware base URL
 const apiClient = axios.create({
@@ -50,38 +53,10 @@ apiClient.interceptors.request.use(
 //  - 401 with no code / unknown code — treated as session failure for safety.
 //  - All other errors — pass through unchanged.
 
-// Inline refresh helper avoids circular import with authService and uses bare axios
-// so the refresh request itself bypasses this interceptor (no recursion risk).
-const refreshAccessToken = async () => {
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) throw new Error('No refresh token in storage');
-  const baseURL = apiClient.defaults.baseURL || '';
-  const res = await axios.post(`${baseURL}/api/v1/auth/refresh`, { refreshToken });
-  const newToken = res.data?.data?.accessToken;
-  if (!newToken) throw new Error('No accessToken in refresh response');
-  localStorage.setItem('authToken', newToken);
-  return newToken;
-};
-
-const wipeSessionAndRedirect = () => {
-  // Skip in DEV — keeps hot-reload from kicking devs to /login on every restart.
-  if (import.meta.env.DEV) return;
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-  window.location.href = '/login';
-};
-
-const PASS_THROUGH_CODES = new Set([
-  'AUTH_INVALID_FORMAT',
-  'AUTH_GROUP_REQUIRED',
-  'AUTH_ROLE_REQUIRED',
-]);
-
-const SESSION_FAIL_CODES = new Set([
-  'AUTH_REQUIRED',
-  'AUTH_MISSING_TOKEN',
-]);
+// The refresh (single-flight) and the session wipe live in utils/authSession,
+// shared with authedFetch so the raw stream requests follow this same
+// contract (Task #1902). Re-exported here for callers of this module.
+export { refreshAccessTokenOnce, wipeSessionAndRedirect };
 
 apiClient.interceptors.response.use(
   (response) => response,
@@ -108,7 +83,7 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
       try {
-        await refreshAccessToken();
+        await refreshAccessTokenOnce();
         originalConfig._retried = true;
         // Request interceptor re-reads localStorage and re-attaches the new token.
         return apiClient(originalConfig);

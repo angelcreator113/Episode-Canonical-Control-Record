@@ -18,7 +18,7 @@
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import apiClient from '../services/api';
-import { readAuthToken } from '../utils/authToken';
+import { authedFetch } from '../utils/authedFetch';
 
 // File-local helpers for non-streaming sites. The streaming-fetch site
 // at runAction (line 251 + 259 getReader pair) is a Pattern G locked
@@ -278,20 +278,20 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       // Locked alongside BookEditor:55 keepalive + WriteMode:980/1145 SSE
       // streaming sites. Inline raw fetch + interceptor-bypass-by-design.
       // Auth: /ai-writer-action is behind requireAuth, which reads only the
-      // Authorization header, so this fetch attaches `Authorization: Bearer`
-      // itself (WriteMode generateProse's inline-Bearer pattern; token from
-      // utils/authToken, never in the URL). One POST, no automatic retry —
-      // each call starts a billed Claude call; the manual Retry (retryRef)
-      // is unchanged. A 401/403 sets an auth error instead of falling into
-      // the JSON branch's "No content returned". Task #1894.
+      // Authorization header. authedFetch (utils/authedFetch, Task #1902)
+      // attaches `Authorization: Bearer` (never in the URL) and follows
+      // apiClient's contract: an expired token is renewed and the POST
+      // retried once (requireAuth refused it before any Claude call began);
+      // a failed renewal signs the user out. Otherwise one POST, no
+      // automatic retry — each call starts a billed Claude call; the manual
+      // Retry (retryRef) is unchanged. A 401/403 that still comes back (a
+      // permission code, or DEV where sign-out is skipped) sets an auth
+      // error instead of falling into the JSON branch's "No content
+      // returned". Task #1894.
       // ───────────────────────────────────────────────────────────────────
-      const token = readAuthToken();
-      const res = await fetch(action.endpoint, {
+      const res = await authedFetch(action.endpoint, {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
 
