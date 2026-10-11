@@ -5,8 +5,9 @@
  *
  *   draft — written but not on the feed. A post created inside an episode
  *           (its Feed generation, a ripple reply to one, a financial post
- *           tied to it) starts here and goes live when the episode is
- *           published. Freely editable.
+ *           tied to it) starts here and waits for approval (Requests on the Feed
+ *           page; Evoni, 2026-10-11, Task #2749); publishing the episode no
+ *           longer puts it live. Freely editable.
  *   live  — on the feed, at its posted_at in story time. It is 2009: a
  *           live post has no edit button; it can only be deleted.
  *
@@ -26,18 +27,4 @@ function statusWhere(requested) {
   return { status: requested };
 }
 
-/**
- * The episode was published: its draft posts go live at that point in
- * story time (a draft with no posted_at gets the publish moment).
- * Returns the number of posts that went live.
- */
-async function publishEpisodePosts(models, episodeId, { publishedAt = new Date() } = {}) {
-  const { FeedPost } = models;
-  if (!FeedPost || !episodeId) return 0;
-  const where = { episode_id: episodeId, status: 'draft' };
-  await FeedPost.update({ posted_at: publishedAt }, { where: { ...where, posted_at: null } });
-  const [count] = await FeedPost.update({ status: 'live' }, { where });
-  return count;
-}
-
-module.exports = { STATUSES, LOCKED_MESSAGE, isLive, statusWhere, publishEpisodePosts };
+module.exports = { STATUSES, LOCKED_MESSAGE, isLive, statusWhere };

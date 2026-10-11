@@ -75,7 +75,7 @@ describe('Script tab: Notification, DM and Post', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalled());
     expect(vi.mocked(api.put).mock.calls[0][1].script_content).toContain('Marcus: "Did you see it?"\n[UI:POST Studio night, statement look.]');
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(DRAFTS));
-    expect((await screen.findByTestId('script-post-drafted')).textContent).toContain("Draft created in Lala's Feed");
+    expect((await screen.findByTestId('script-post-drafted')).textContent).toBe('✓ Draft in Lala’s Feed, waiting for approval');
   });
 
   test('saving a script with no Post line drafts nothing', async () => {
@@ -85,9 +85,15 @@ describe('Script tab: Notification, DM and Post', () => {
     expect(api.post).not.toHaveBeenCalledWith(DRAFTS);
   });
 
+  test('an approved Post reads as live', async () => {
+    drafts = [{ beat: 4, text: 'Out now.', post_id: 'p9', status: 'live' }];
+    renderTab(`${SCRIPT.split('\n## BEAT: 12')[0]}\n[UI:POST Out now.]`);
+    expect((await screen.findByTestId('script-post-drafted')).textContent).toBe('✓ Live in Lala’s Feed');
+  });
+
   test('a Post already drafted reads as drafted on load', async () => {
     drafts = [{ beat: 4, text: 'Out now.', post_id: 'p9', status: 'draft' }];
     renderTab(`${SCRIPT.split('\n## BEAT: 12')[0]}\n[UI:POST Out now.]`);
-    expect((await screen.findByTestId('script-post-drafted')).textContent).toContain('Draft created');
+    expect((await screen.findByTestId('script-post-drafted')).textContent).toContain('waiting for approval');
   });
 });

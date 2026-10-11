@@ -67,6 +67,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await auth(request(app).put(`/api/v1/feed-posts/${draft.id}`)).send({ content_text: 'Too late.' })).status).toBe(409);
   });
 
+  it('?from=episode lists the posts an episode drafted, ?from=wall the rest (Task #2749)', async () => {
+    const epId = crypto.randomUUID();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:id, :showId, 'Ep', 1, 'draft', NOW(), NOW())`, { id: epId, showId });
+    const fromEpisode = await models.FeedPost.create({ show_id: showId, episode_id: epId, poster_handle: 'rival', content_text: 'Some people peak early.', status: 'draft', timeline_position: 'after_episode' });
+    const ids = async (from) => (await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft&from=${from}`))).body.data.map((p) => p.id);
+    expect(await ids('episode')).toEqual([fromEpisode.id]);
+    expect(await ids('wall')).not.toContain(fromEpisode.id);
+    expect((await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&from=nope`))).status).toBe(400);
+    // Publishing the episode leaves its draft a draft: it waits for approval.
+    const published = await auth(request(app).put(`/api/v1/episodes/${epId}`)).send({ status: 'published' });
+    expect(published.status).toBe(200);
+    const [[ep]] = await run('SELECT status FROM episodes WHERE id = :epId', { epId });
+    expect(ep.status).toBe('published');
+    expect((await models.FeedPost.findByPk(fromEpisode.id)).status).toBe('draft');
+    await run('DELETE FROM feed_posts WHERE episode_id = :epId', { epId });
+    await run('DELETE FROM episodes WHERE id = :epId', { epId });
+  });
+
   it('a deleted post is kept, listed for the signed-in author only', async () => {
     const draft = (await auth(request(app).post('/api/v1/feed-posts')).send({ show_id: showId, content_text: 'Never mind.', status: 'draft' })).body.data;
     expect((await auth(request(app).delete(`/api/v1/feed-posts/${draft.id}`))).status).toBe(200);

@@ -185,7 +185,7 @@ function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumb
           <span className="esp-moment-what">{shown.name}</span>
           {shown.text && <span className="esp-moment-words">&ldquo;{shown.text}&rdquo;</span>}
           {shown.kind === 'post' && (draft
-            ? <span className="esp-moment-drafted" data-testid="script-post-drafted">✓ Draft created in Lala&apos;s Feed</span>
+            ? <span className="esp-moment-drafted" data-testid="script-post-drafted">{draft.status === 'live' ? '✓ Live in Lala\u2019s Feed' : '✓ Draft in Lala\u2019s Feed, waiting for approval'}</span>
             : <span className="esp-moment-opens" data-testid="script-post-pending">Drafted in Lala&apos;s Feed when the script is saved</span>)}
           {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
         </span>
@@ -442,7 +442,7 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose 
       )}
       <textarea className="esp-line-input esp-adder-text" data-testid="script-message-text" aria-label="The words" rows={3} value={text}
         placeholder={info.placeholder} onChange={(e) => setText(e.target.value)} />
-      {kind === 'post' && <p className="esp-picker-empty">Saving the script drafts this post in Lala&apos;s Feed; it goes live when the episode publishes.</p>}
+      {kind === 'post' && <p className="esp-picker-empty">Saving the script drafts this post in Lala&apos;s Feed; it goes live when you approve it there (Requests).</p>}
       <div className="esp-picker-do">
         <label className="esp-picker-where">
           <span>Put it after</span>
@@ -680,7 +680,7 @@ export default function EpisodeScriptTab({ episode, show }) {
     return () => { cancelled = true; };
   }, [episodeId]);
   // A saved script drafts its new Post lines in Lala's Feed (as drafts; they
-  // go live when the episode publishes). A failure says so; the script stays saved.
+  // wait for approval in Requests). A failure says so; the script stays saved.
   const syncPostDrafts = useCallback(async () => {
     try {
       const res = await api.post(`/api/v1/feed-posts/episodes/${episodeId}/script-drafts`);
