@@ -27,12 +27,20 @@ export const TABS = [
   { key: 'posts', label: 'Home' },
   { key: 'people', label: 'Friends' },
 ];
-/** "[Day], [time]" for the 2009 sidebar: "Mon, Oct 6, 2:33am". */
-export function eventWhen(ts) {
-  if (!ts) return '[Day], [time]';
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return '[Day], [time]';
-  return `${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '')}`;
+/**
+ * An event's day and time as the event has them (2026-10-11): "Thu, Nov 12 ·
+ * 6:30 PM". A date stored as YYYY-MM-DD reads as a day; any other text is
+ * shown as typed. Nothing when the event has neither.
+ */
+export function eventWhen(date, time) {
+  const t = typeof time === 'string' && time.trim() ? time.trim() : null;
+  let d = typeof date === 'string' && date.trim() ? date.trim() : null;
+  const m = d && d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const day = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    if (!Number.isNaN(day.getTime())) d = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  return [d, t].filter(Boolean).join(' · ');
 }
 const WALL_TABS = [
   { key: 'wall', label: 'Wall' },
@@ -343,6 +351,7 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   // The LalaVerse's people, for the composer's friend picker and People You May Know.
   const [friends, setFriends] = useState({ list: [], total: 0 });
   const [events, setEvents] = useState([]);
+  const [mayKnow, setMayKnow] = useState([]);
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -382,7 +391,8 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
     const [who, ppl, ev, drafts, pend, rel] = await Promise.all([
       safe(api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}`), null),
       safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=12'), null),
-      safe(api.get(`/api/v1/calendar/events?series_id=${show.id}`), null),
+      // The events she is going to and the guests she may know (2026-10-11).
+      safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${encodeURIComponent(show.id)}`), null),
       safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&limit=1`), null),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${show.id}`), null),
       // Her relationship posts (docs/FEED_POSTS.md rule 8), not only the wall's first page.
@@ -392,10 +402,8 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
     setRelPosts(rel?.data?.data || []);
     const list = (ppl?.data?.profiles || []).filter((p) => !p.is_justawoman_record);
     setFriends({ list, total: ppl?.data?.pagination?.total ?? ppl?.data?.total ?? list.length });
-    const all = Array.isArray(ev?.data?.events) ? ev.data.events : [];
-    const now = Date.now();
-    const upcoming = all.filter((e) => !e.start_datetime || new Date(e.start_datetime).getTime() >= now - 86400000);
-    setEvents((upcoming.length ? upcoming : all).slice(0, 3));
+    setEvents(Array.isArray(ev?.data?.data?.upcoming) ? ev.data.data.upcoming : []);
+    setMayKnow(Array.isArray(ev?.data?.data?.may_know) ? ev.data.data.may_know : []);
     setDraftsTotal(drafts?.data?.total ?? 0);
     setPending(pend?.data?.data || []);
   }, [show?.id]);
@@ -437,8 +445,9 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const q = search.trim().toLowerCase();
   const visible = q ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q)) : posts;
   const relationship = latestStatus([...posts, ...relPosts], ownerHandle) || owner?.relationship_status || null;
-  const mayKnow = friends.list.filter((p) => p.handle !== ownerHandle).slice(6, 8);
   const peopleLink = profileHome;
+  // Each event opens its Event Package.
+  const eventLink = (e) => `/shows/${show?.id}/events/${e.id}`;
 
   return (
     <div className="sm-wall">
@@ -519,8 +528,8 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
 
         {wallTab === 'events' ? (
           <ul className="sm-events" data-testid="sm-events">
-            {events.map((e) => <li key={e.id}><b>{e.title}</b><br /><span className="sm-muted">{[e.location_name || e.lalaverse_district, eventWhen(e.start_datetime)].filter(Boolean).join(' · ')}</span></li>)}
-            {events.length === 0 && <li className="sm-muted">No upcoming events. Plan one under LalaVerse › Culture.</li>}
+            {events.map((e) => <li key={e.id}><Link to={eventLink(e)}><b>{e.name}</b></Link><br /><span className="sm-muted">{[e.venue, eventWhen(e.date, e.time), e.episode?.number != null ? `Episode ${e.episode.number}` : null].filter(Boolean).join(' · ')}</span></li>)}
+            {events.length === 0 && <li className="sm-muted">No upcoming events. An event shows here once one of Lala&apos;s episodes is made from it.</li>}
           </ul>
         ) : (
           <>
@@ -548,12 +557,20 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
           {pending.slice(0, 3).map((c) => <p key={c.id} className="sm-muted sm-pending">@{c.handle}: “{c.text}”{c.post?.poster_handle ? ` on @${c.post.poster_handle}'s post` : ''}</p>)}
         </Box>
         <Box title="Upcoming Events" testId="sm-upcoming">
-          {events.slice(0, 2).map((e) => <p key={e.id} className="sm-event"><b>{e.title}</b><br /><span className="sm-muted">{e.location_name || e.lalaverse_district || ''}</span><br /><span className="sm-muted">{eventWhen(e.start_datetime)}</span></p>)}
+          {events.slice(0, 2).map((e) => (
+            <p key={e.id} className="sm-event" data-testid="sm-upcoming-event">
+              <Link to={eventLink(e)}><b>{e.name}</b></Link>
+              {e.venue && <><br /><span className="sm-muted">{e.venue}</span></>}
+              {eventWhen(e.date, e.time) && <><br /><span className="sm-muted">{eventWhen(e.date, e.time)}</span></>}
+            </p>
+          ))}
           {events.length === 0 && <p className="sm-muted">None planned.</p>}
         </Box>
         <Box title="People You May Know" testId="sm-may-know">
-          {mayKnow.map((p) => <p key={p.id} className="sm-person"><Tile name={p.display_name || p.handle} tone={toneOf(p.handle)} /><span><b>{p.display_name || p.handle}</b><br /><Link to={peopleLink(p)}>Add as friend</Link></span></p>)}
-          {mayKnow.length === 0 && <p className="sm-muted">Everyone here already knows Lala.</p>}
+          {mayKnow.map((p) => <p key={p.id} className="sm-person" data-testid="sm-may-know-person"><Tile name={p.display_name || p.handle} tone={toneOf(p.handle)} /><span><b>{p.display_name || p.handle}</b><br /><Link to={peopleLink(p)}>See profile</Link></span></p>)}
+          {mayKnow.length === 0 && (events.some((e) => e.guest_count > 0)
+            ? <p className="sm-muted">Everyone here already knows Lala.</p>
+            : <p className="sm-muted">No one to meet yet: her upcoming events have no guest lists.</p>)}
         </Box>
       </aside>
     </div>

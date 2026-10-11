@@ -28,12 +28,14 @@ const POSTS = [
   { id: 'p1', poster_handle: 'lala', poster_display_name: 'Lala', content_text: 'is deciding between the gold heels and the ones that actually let me walk.', likes: 3, comments_count: 1, status: 'live', posted_at: new Date(Date.now() - 2 * 3600000).toISOString(), comments: [{ id: 'c1', handle: 'marcus.k', display_name: 'Marcus', text: 'which part, the jacket or the person I was with' }] },
   { id: 'p2', poster_handle: 'rival', poster_display_name: 'The Rival', content_text: 'Some people peak early.', likes: 0, status: 'live', narrative_function: 'shade', episode_id: 'ep-1', socialProfile: null, comments: [] },
 ];
-const EVENTS = [{ id: 'e1', title: 'Dazzle Gala', location_name: 'Dazzle District', start_datetime: new Date(Date.now() + 86400000).toISOString() }];
+const EVENTS = [{ id: 'e1', name: 'Wearable Experiments Studio Session', date: '2026-11-12', time: '6:30 PM', venue: "STUDIO BY SABLE's Studio", episode: { id: 'ep-1', number: 1 }, guest_count: 3 }];
+const MAY_KNOW = [{ id: 21, handle: 'nia', display_name: 'Nia' }];
 const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><SocialMediaPage /></MemoryRouter>);
 
 let drafts;
 let posts;
 let deleted;
+let sidebar;
 let lalaColumn;
 let relPosts;
 beforeEach(() => {
@@ -45,16 +47,17 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   posts = [...POSTS];
   deleted = [];
+  sidebar = { upcoming: EVENTS, may_know: MAY_KNOW };
   drafts = [{ id: 'd1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2', comments: [] }];
   vi.mocked(api.get).mockImplementation(async (url) => {
     const u = new URL(url, 'http://x');
     if (url.includes('/shows')) return { data: { data: [SHOW] } };
+    if (url.startsWith('/api/v1/social-profiles/lala/sidebar?')) return { data: { data: sidebar } };
     if (url.startsWith('/api/v1/social-profiles/lala?')) return { data: { data: lalaColumn } };
     if (url.includes('/social-profiles')) {
       const list = u.searchParams.get('search') === 'lala' ? [LALA] : PEOPLE;
       return { data: { profiles: list, pagination: { total: list.length } } };
     }
-    if (url.includes('/calendar/events')) return { data: { events: EVENTS } };
     if (url.includes('/feed-posts/deleted')) return { data: { data: deleted, count: deleted.length } };
     if (url.includes('/comments/pending')) return { data: { data: [{ id: 'c9', handle: 'rival', text: 'cute.', post: { poster_handle: 'lala' } }], count: 1 } };
     if (url.includes('/feed-posts') && u.searchParams.get('post_type') === 'relationship') return { data: { data: relPosts, total: relPosts.length } };
@@ -111,8 +114,9 @@ describe('helpers', () => {
     expect(whenLabel(new Date('2026-10-03T23:42:00'), now)).toMatch(/^Yesterday at 11:42/);
     expect(whenLabel(new Date('2026-09-30T09:02:00'), now)).toMatch(/^Wednesday at 9:02/);
     expect(whenLabel(null)).toBeNull();
-    expect(eventWhen(new Date('2026-10-06T02:33:00'))).toMatch(/^Tue, Oct 6, 2:33am$/);
-    expect(eventWhen(null)).toBe('[Day], [time]');
+    expect(eventWhen('2026-11-12', '6:30 PM')).toBe('Thu, Nov 12 · 6:30 PM');
+    expect(eventWhen('the night of the gala', null)).toBe('the night of the gala');
+    expect(eventWhen(null, null)).toBe('');
   });
 });
 
@@ -139,8 +143,12 @@ describe('the wall', () => {
     expect(document.body.textContent).not.toMatch(/\[City\]|\[Status\]|Styling, everywhere|\[\d+\] friends/);
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 draft post');
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 reaction to approve');
-    expect(screen.getByTestId('sm-upcoming').textContent).toContain('Dazzle Gala');
-    expect(screen.getByTestId('sm-may-know').textContent).toContain('P8');
+    await waitFor(() => expect(screen.getByTestId('sm-upcoming-event').textContent).toBe("Wearable Experiments Studio SessionSTUDIO BY SABLE's StudioThu, Nov 12 · 6:30 PM"));
+    expect(screen.getByTestId('sm-upcoming-event').querySelector('a').getAttribute('href')).toBe(`/shows/${SHOW.id}/events/e1`);
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/social-profiles/lala/sidebar?show_id=${SHOW.id}`);
+    expect(api.get.mock.calls.some((c) => c[0].includes('/calendar/events'))).toBe(false);
+    expect(screen.getByTestId('sm-may-know-person').textContent).toContain('Nia');
+    expect(screen.getByTestId('sm-may-know-person').querySelector('a').getAttribute('href')).toBe('/world-studio?tab=feed&layer=lalaverse&profile=21');
     // The Inbox count reaches the page header through the wall's onInbox effect, one
     // render after the wall itself; wait for it rather than read it at once.
     expect(await screen.findByRole('button', { name: 'Inbox (2)' })).toBeTruthy();
@@ -159,7 +167,8 @@ describe('the wall', () => {
     expect(screen.getByTestId('sm-post').textContent).toMatch(/draft/i);
     expect(api.get.mock.calls.some((c) => c[0].includes('status=draft') && c[0].includes('with=comments'))).toBe(true);
     fireEvent.click(screen.getByRole('tab', { name: 'Events' }));
-    expect((await screen.findByTestId('sm-events')).textContent).toContain('Dazzle Gala');
+    expect((await screen.findByTestId('sm-events')).textContent).toContain('Wearable Experiments Studio Session');
+    expect(screen.getByTestId('sm-events').textContent).toContain('Episode 1');
     fireEvent.click(screen.getByRole('tab', { name: 'Wall' }));
     await waitFor(() => expect(screen.getAllByTestId('sm-post')).toHaveLength(2));
     fireEvent.change(screen.getByLabelText('Search posts'), { target: { value: 'rival' } });
@@ -278,6 +287,13 @@ describe('the wall', () => {
     expect(screen.queryByTestId('sm-post')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     await screen.findAllByTestId('sm-post');
+  });
+
+  test('the right column with nothing to show says why, never "None" placeholders', async () => {
+    sidebar = { upcoming: [{ ...EVENTS[0], guest_count: 0 }], may_know: [] };
+    renderAt('/feed');
+    await waitFor(() => expect(screen.getByTestId('sm-may-know').textContent).toContain('her upcoming events have no guest lists'));
+    expect(screen.getByTestId('sm-may-know').textContent).not.toContain('already knows Lala');
   });
 
   test('Friends with none says what a friend is and where to make one', async () => {
