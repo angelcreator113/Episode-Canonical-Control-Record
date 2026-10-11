@@ -16,16 +16,22 @@
  * Use it where a service read `WHERE used_in_episode_id = :episodeId`:
  *   `SELECT ... FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`
  * with an `episodeId` replacement. It yields NULL when the episode has no
- * event, so the query finds nothing.
+ * event, so the query finds nothing. A query over many episodes joins on
+ * episodeEventIdSql('<episodes alias>.id'), the same rule per row:
+ *   `LEFT JOIN world_events we ON we.id = ${episodeEventIdSql('e.id')}`
  */
-const EPISODE_EVENT_ID_SQL = `(SELECT COALESCE(
+function episodeEventIdSql(episodeRef = ':episodeId') {
+  return `(SELECT COALESCE(
     (SELECT eb_w.id FROM episode_briefs eb_b
        JOIN world_events eb_w ON eb_w.id = eb_b.event_id AND eb_w.deleted_at IS NULL
-      WHERE eb_b.episode_id = :episodeId AND eb_b.deleted_at IS NULL
+      WHERE eb_b.episode_id = ${episodeRef} AND eb_b.deleted_at IS NULL
       ORDER BY eb_b.created_at DESC LIMIT 1),
     (SELECT st_w.id FROM world_events st_w
-      WHERE st_w.used_in_episode_id = :episodeId AND st_w.deleted_at IS NULL
+      WHERE st_w.used_in_episode_id = ${episodeRef} AND st_w.deleted_at IS NULL
       ORDER BY st_w.created_at ASC LIMIT 1)))`;
+}
+
+const EPISODE_EVENT_ID_SQL = episodeEventIdSql();
 
 /**
  * The episode's event id by the same rule, for readers that then load the
@@ -37,4 +43,4 @@ async function episodeEventId(sequelize, episodeId) {
   return rows?.[0]?.id || null;
 }
 
-module.exports = { EPISODE_EVENT_ID_SQL, episodeEventId };
+module.exports = { EPISODE_EVENT_ID_SQL, episodeEventIdSql, episodeEventId };

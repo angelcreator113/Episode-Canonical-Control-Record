@@ -1342,11 +1342,12 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
 
   const showId = episode.show_id;
 
-  // Look up linked world_event for this episode
+  // Look up the episode's event: its brief's, else the first stamped
+  // (utils/episodeEventSql; Task #1917)
   let worldEvent = null;
   try {
     const [weRows] = await sequelize.query(
-      `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+      `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
       { replacements: { episodeId: id } }
     );
     if (weRows && weRows.length > 0) worldEvent = weRows[0];

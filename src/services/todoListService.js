@@ -513,11 +513,10 @@ async function uploadTodoAsset(buffer, episodeId) {
 async function generateEpisodeTodoList(episodeId, showId, models) {
   const { sequelize } = models;
 
-  // Load linked event (world_events has no deleted_at column)
+  // Load the episode's event: its brief's, else the first stamped
+  // (utils/episodeEventSql; Task #1917)
   const [event] = await sequelize.query(
-    `SELECT we.* FROM world_events we
-     WHERE we.used_in_episode_id = :episodeId
-     LIMIT 1`,
+    `SELECT we.* FROM world_events we WHERE we.id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
 
@@ -802,7 +801,8 @@ async function generateCareerList(episodeId, showId, models) {
   const { sequelize } = models;
 
   const [event] = await sequelize.query(
-    'SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1',
+    // The episode's event (utils/episodeEventSql; Task #1917)
+    `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
 

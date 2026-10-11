@@ -1,12 +1,12 @@
 /**
- * POST /wardrobe/browse-pool: the episode -> event lookup includes
- * soft-deleted events (Task #1838).
+ * POST /wardrobe/browse-pool: the episode -> event lookup.
  *
- * The raw world_events SELECT this lookup replaced (d5746ca7b, F-Stats-1
- * PR 4e) had no deleted_at predicate. WorldEvent is paranoid, and in
- * Sequelize 6 `.unscoped()` clears default and named scopes but NOT the
- * paranoid predicate; only `paranoid: false` does. So the lookup must
- * generate SQL with no deleted_at.
+ * Task #1838 kept this lookup including soft-deleted events, as the raw
+ * world_events SELECT it replaced (d5746ca7b, F-Stats-1 PR 4e) did.
+ * Task #1917 (§8(w) P2) supersedes that: the lookup reads the episode's one
+ * event (utils/episodeEventSql: the brief's live event, else the first live
+ * stamped one), the same event the episode's tabs show, so a deleted event
+ * is no longer this episode's event here either.
  *
  * No database: the real WorldEvent model is loaded with the app's define on
  * a Sequelize instance whose query() is stubbed to record the generated SQL,
@@ -27,13 +27,16 @@ function buildModels() {
     define: appConfig.test.define,
   });
   sequelize.query = async (sql) => {
-    captured.push(typeof sql === 'string' ? sql : sql.query);
+    const text = typeof sql === 'string' ? sql : sql.query;
+    captured.push(text);
+    // The episode's event id (utils/episodeEventSql episodeEventId).
+    if (/^SELECT \(SELECT COALESCE/.test(text)) return [[{ id: 'ev-1' }]];
     return [];
   };
   const WorldEvent = require(path.join(SRC, 'models', 'WorldEvent.js'))(sequelize);
   // Stop the handler right after the lookup; only the lookup's SQL matters.
   const Wardrobe = { findAll: async () => { throw new Error('stop after lookup'); } };
-  return { WorldEvent, Wardrobe, Sequelize };
+  return { WorldEvent, Wardrobe, Sequelize, sequelize };
 }
 
 const mockModels = buildModels();
@@ -66,7 +69,7 @@ describe('POST /wardrobe/browse-pool event lookup', () => {
     expect(mockModels.WorldEvent.options.paranoid).toBe(true);
   });
 
-  it('generates a world_events lookup with no deleted_at predicate', async () => {
+  it('reads the episode\'s one event, then loads that event by id as a live row', async () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const req = { body: { show_id: 'show-1', episode_id: 'ep-1' } };
     const res = { status() { return this; }, json() { return this; } };
@@ -74,9 +77,13 @@ describe('POST /wardrobe/browse-pool event lookup', () => {
     await browsePoolHandler()(req, res);
     errSpy.mockRestore();
 
+    const rule = captured.filter((sql) => /^SELECT \(SELECT COALESCE/.test(sql));
+    expect(rule).toHaveLength(1);
+    expect(rule[0]).toMatch(/eb_b\.episode_id = :episodeId/);
+    expect(rule[0]).toMatch(/st_w\.deleted_at IS NULL/);
     const lookup = captured.filter((sql) => /FROM "world_events"/.test(sql));
     expect(lookup).toHaveLength(1);
-    expect(lookup[0]).toMatch(/"used_in_episode_id" = 'ep-1'/);
-    expect(lookup[0]).not.toMatch(/deleted_at/);
+    expect(lookup[0]).toMatch(/"id" = 'ev-1'/);
+    expect(lookup[0]).not.toMatch(/used_in_episode_id/);
   });
 });

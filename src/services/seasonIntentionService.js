@@ -367,7 +367,7 @@ async function startedEpisodeContext(sequelize, episodeId) {
     { replacements: { episodeId } });
   const [[event]] = await sequelize.query(
     `SELECT name, event_type, host, venue_name, dress_code, description FROM world_events
-      WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId } });
   const script = String(episode?.script_content || '').trim();
   return {
