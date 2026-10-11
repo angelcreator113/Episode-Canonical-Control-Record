@@ -51,6 +51,29 @@ async function withAuthorPortraits(models, posts) {
   }));
 }
 
+/**
+ * A post as Lala sees it at a story moment (Task #2939): a teaser keeps its
+ * author and time, loses its words and comments, and flags its photos
+ * (teaser: true) so The Pulse blurs them as a "first look"; a post photo's
+ * own reveal flags (teaser) or removes (hidden) the photos alone; comments
+ * by characters Lala has not met yet are left out.
+ */
+function applyPostReveal(post, reveals) {
+  const out = { ...post };
+  if (Array.isArray(out.comments)) out.comments = out.comments.filter((c) => !reveals.hiddenProfiles.has(c.social_profile_id));
+  const photo = reveals.stateOf('image', post.id, 'post_photo');
+  if (photo === 'hidden') { out.image_url = null; out.image_urls = []; }
+  if (photo === 'teaser') out.photo_teaser = true;
+  if (reveals.stateOf('post', post.id) === 'teaser') {
+    out.teaser = true;
+    out.photo_teaser = true;
+    out.content_text = null;
+    out.trending_topic = null;
+    out.comments = [];
+  }
+  return out;
+}
+
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
@@ -86,6 +109,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // story order is no later than it, and those of unknown story time;
     // newest story time first. Without it, nothing changes.
     let order = [['posted_at', 'DESC'], ['sort_order', 'ASC']];
+    let reveals = null;
     if (at !== undefined) {
       if (at === 'present' && !show_id) return res.status(400).json({ error: 'at=present needs show_id' });
       const clock = require('../services/storyClock');
@@ -95,8 +119,23 @@ router.get('/', optionalAuth, async (req, res) => {
         throw err;
       }
       const storyOrder = clock.postOrderSql('FeedPost');
-      where[require('sequelize').Op.and] = [sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`)];
+      const { Op } = require('sequelize');
+      const and = [sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`)];
       order = [[sequelize.literal(`${storyOrder} DESC NULLS LAST`)], ['posted_at', 'DESC'], ['sort_order', 'ASC']];
+      // Reveals at that moment (Task #2939, services/pulseReveals.js): a
+      // hidden post, and the posts of a character Lala has not met yet, are
+      // left out here, so they never reach the browser.
+      if (show_id) {
+        const models = require('../models');
+        const { lalaProfileId } = require('../services/lalaFeedProfile');
+        reveals = await require('../services/pulseReveals').revealsAt(models, show_id, atOrder, { lalaProfileId: await lalaProfileId(sequelize) });
+        const hiddenPosts = reveals.hiddenIds('post');
+        if (hiddenPosts.length) and.push({ id: { [Op.notIn]: hiddenPosts } });
+        if (reveals.hiddenProfiles.size) {
+          and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
+        }
+      }
+      where[Op.and] = and;
     }
 
     const posts = await FeedPost.findAll({
@@ -126,7 +165,8 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // Authors' photos for The Pulse (Task #2924): a post's or comment's
     // profile links to a registry character, whose portrait_url is the photo.
-    const data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
+    let data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
+    if (reveals) data = data.map((p) => applyPostReveal(p, reveals));
 
     return res.json({
       data,

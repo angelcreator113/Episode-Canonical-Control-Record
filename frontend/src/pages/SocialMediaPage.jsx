@@ -12,6 +12,8 @@ import { loadCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
+import { RevealChip } from '../components/Pulse/PulseReveal';
+import { revealKey, loadRevealLabels, loadCityStates } from '../lib/pulseReveals';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
@@ -69,14 +71,16 @@ function AddSpot({ director, label, className = '' }) {
   );
 }
 
-function PulseHeader({ cover, lala, search, onSearch, director, showSearch }) {
+function PulseHeader({ cover, lala, search, onSearch, director, showSearch, coverLabel }) {
   const owner = lala?.profile || null;
   const name = owner?.display_name || 'Lala';
   return (
     <header className="pl-header" data-testid="pl-header">
       {cover?.url
-        ? <img className="pl-cover" src={cover.url} alt={cover.alt || ''} data-testid="pl-cover" />
+        ? <img className={cover.teaser ? 'pl-cover pl-blurred' : 'pl-cover'} src={cover.url} alt={cover.teaser ? '' : (cover.alt || '')} data-testid="pl-cover" />
         : <div className="pl-cover pl-cover-empty" aria-hidden="true" />}
+      {cover?.teaser && <span className="pl-first-look-label pl-cover-first-look" data-testid="pl-cover-first-look">First look</span>}
+      {director && coverLabel && <span className="pl-cover-chip"><RevealChip label={coverLabel} /></span>}
       <div className="pl-header-inner">
         <p className="pl-wordmark"><span>LaLaVerse</span><small>Social</small></p>
         <div className="pl-title">
@@ -218,7 +222,7 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search, cities }) {
+function Feed({ show, lala, director, search, cities, labels, cityStates }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -256,7 +260,7 @@ function Feed({ show, lala, director, search, cities }) {
 
   return (
     <>
-      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} />
+      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} cityStates={cityStates} />
       <CityStrip cities={cities} />
       <Composer show={show} lala={lala} director={director} />
       {person && (
@@ -271,7 +275,10 @@ function Feed({ show, lala, director, search, cities }) {
       {!loading && posts.length > 0 && visible.length === 0 && (
         <p className="pl-empty">{q ? `No posts match “${search.trim()}”.` : `Nothing from ${person?.name} yet.`}</p>
       )}
-      {visible.map((p) => <PulsePost key={p.id} post={p} />)}
+      {visible.map((p) => (
+        <PulsePost key={p.id} post={p}
+          revealLabel={director ? (labels?.get(revealKey('post', p.id)) || labels?.get(revealKey('image', p.id, 'post_photo'))) : null} />
+      ))}
       {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
     </>
   );
@@ -292,11 +299,12 @@ function CharactersView({ show, director }) {
   useEffect(() => {
     if (!show?.id) return undefined;
     let cancelled = false;
-    api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all`)
+    // Lala's view leaves out friends she has not met yet (Task 2939).
+    api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all${director ? '' : '&at=present'}`)
       .then((res) => { if (!cancelled) setFriends(res?.data?.data?.friends || false); })
       .catch((err) => { console.error('[ThePulse] friends could not be read:', err.response?.status || err.message); if (!cancelled) setFriends(false); });
     return () => { cancelled = true; };
-  }, [show?.id]);
+  }, [show?.id, director]);
 
   return (
     <section className="pl-card" aria-labelledby="pl-people-heading" data-testid="pl-people">
@@ -355,12 +363,12 @@ function ProfileView({ lala, relationship, director }) {
   );
 }
 
-function RightColumn({ cities, trending, events, mayKnow, director }) {
+function RightColumn({ cities, trending, events, mayKnow, director, labels, cityStates }) {
   return (
     <>
-      <CitiesCard cities={cities} director={director} />
+      <CitiesCard cities={cities} director={director} states={cityStates} labels={labels} />
       <TrendingCard topics={trending} director={director} />
-      <UpcomingCard events={events} />
+      <UpcomingCard events={events} labels={director ? labels : null} />
       {mayKnow.length > 0 && (
         <section className="pl-card" aria-labelledby="pl-may-know-heading" data-testid="pl-may-know">
           <h2 id="pl-may-know-heading" className="pl-card-title">People you may know</h2>
@@ -407,6 +415,8 @@ export default function SocialMediaPage() {
   const [cities, setCities] = useState([]);
   const [trending, setTrending] = useState([]);
   const [fit, setFit] = useState(null);
+  const [labels, setLabels] = useState(null); // Director view: each item's reveal label
+  const [cityStates, setCityStates] = useState({}); // Lala's view: the cities' image states
   const [relPosts, setRelPosts] = useState([]);
   const createRequest = useRef(false);
 
@@ -430,8 +440,8 @@ export default function SocialMediaPage() {
     let alive = true;
     (async () => {
       const [c, who, side, rel, trend, latest] = await Promise.all([
-        safe(api.get(`/api/v1/shows/${show.id}/pulse-cover`), 'cover'),
-        safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}`), "Lala's profile"),
+        safe(api.get(`/api/v1/shows/${show.id}/pulse-cover${director ? '' : '?at=present'}`), 'cover'),
+        safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}${atParam}`), "Lala's profile"),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}${atParam}`), 'events'),
         safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50${atParam}`), 'relationship posts'),
         safe(api.get(`/api/v1/feed-enhanced/${id}/trending`), 'trending'),
@@ -457,6 +467,20 @@ export default function SocialMediaPage() {
     return () => { alive = false; };
   }, []);
 
+  // Reveals (Task 2939): Director view reads each item's reveal label for its
+  // chip; Lala's view reads the cities' image states (the rest is applied by
+  // the server in each read).
+  useEffect(() => {
+    if (!show?.id) return undefined;
+    let alive = true;
+    setLabels(null);
+    setCityStates({});
+    const read = director ? loadRevealLabels(show.id).then((m) => { if (alive) setLabels(m); })
+      : loadCityStates(show.id).then((c) => { if (alive) setCityStates(c); });
+    read.catch((err) => console.error('[ThePulse] reveals could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, [show?.id, director]);
+
   useEffect(() => {
     if (tab === 'posts' && createRequest.current) {
       createRequest.current = false;
@@ -473,7 +497,8 @@ export default function SocialMediaPage() {
 
   return (
     <div className={director ? 'pl-page pl-director' : 'pl-page'} data-testid="pl-page">
-      <PulseHeader cover={cover} lala={lala} search={search} onSearch={setSearch} director={director} showSearch={tab === 'posts'} />
+      <PulseHeader cover={cover} lala={lala} search={search} onSearch={setSearch} director={director} showSearch={tab === 'posts'}
+        coverLabel={labels?.get(revealKey('image', show?.id, 'cover'))} />
       {admin && (
         <div className="pl-toggle-bar">
           <button type="button" className={director ? 'pl-toggle on' : 'pl-toggle'} aria-pressed={director} onClick={() => setDirectorOn((v) => !v)} data-testid="pl-director-toggle">
@@ -486,14 +511,14 @@ export default function SocialMediaPage() {
         <p className="pl-empty pl-no-show" data-testid="pl-no-show">Nothing here yet.</p>
       ) : (
         <div className="pl-grid">
-          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} /></aside>
+          <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
           </main>
-          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

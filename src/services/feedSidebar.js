@@ -95,10 +95,15 @@ async function peopleToMeet(sequelize, events, lalaProfileId) {
  */
 async function getFeedSidebar(models, showId, { lalaProfileId = null, at } = {}) {
   const { sequelize } = models;
-  const events = await upcomingEvents(sequelize, showId, at);
-  const mayKnow = await peopleToMeet(sequelize, events, lalaProfileId);
+  // Reveals at that moment (Task #2939): a hidden event is left out, a
+  // teaser shows its name only; people Lala has not met yet are left out.
+  const reveals = await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId });
+  const events = (await upcomingEvents(sequelize, showId, at)).filter((ev) => reveals.stateOf('event', ev.id) !== 'hidden');
+  const mayKnow = (await peopleToMeet(sequelize, events, lalaProfileId)).filter((p) => !reveals.hiddenProfiles.has(p.id));
   return {
-    upcoming: events.map(({ guests, ...ev }) => ({ ...ev, guest_count: guests.length })),
+    upcoming: events.map(({ guests, ...ev }) => (reveals.stateOf('event', ev.id) === 'teaser'
+      ? { id: ev.id, name: ev.name, date: null, time: null, venue: null, episode: ev.episode, guest_count: 0, teaser: true }
+      : { ...ev, guest_count: guests.length })),
     may_know: mayKnow,
   };
 }

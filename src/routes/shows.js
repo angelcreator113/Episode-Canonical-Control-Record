@@ -578,7 +578,20 @@ router.get('/:id/pulse-cover', requireAuth, async (req, res) => {
     const show = await getShow().findByPk(req.params.id);
     if (!show) return res.status(404).json({ error: 'Show not found' });
     const { readPulseCover } = require('../services/pulseCoverService');
-    return res.json({ success: true, cover: readPulseCover(show.metadata) });
+    let cover = readPulseCover(show.metadata);
+    // ?at= (Task #2939): the cover's reveal at that story moment; hidden leaves it out, a teaser is flagged to blur.
+    if (cover && req.query.at !== undefined) {
+      const models = require('../models');
+      let at;
+      try { at = await require('../services/storyClock').resolveAt(models, show.id, req.query.at); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+      const state = (await require('../services/pulseReveals').revealsAt(models, show.id, at)).stateOf('image', show.id, 'cover');
+      if (state === 'hidden') cover = null;
+      else if (state === 'teaser') cover = { ...cover, teaser: true };
+    }
+    return res.json({ success: true, cover });
   } catch (err) {
     console.error('GET /shows/:id/pulse-cover error:', err);
     return res.status(500).json({ error: err.message });

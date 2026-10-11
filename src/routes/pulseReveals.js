@@ -7,6 +7,9 @@
  *                          resolved now and its label (requireAuth)
  *   GET    /met?show_id=   the episode each Feed profile meets Lala in:
  *                          derived, and any set override (requireAuth)
+ *   GET    /state?show_id=&at=  the Dream Cities' image states at a story
+ *                          moment, for The Pulse to blur or leave out
+ *                          (their URLs come from page-content; Task #2939)
  *   PUT    /               upsert one item's reveal (requireAuth + ADMIN)
  *                          { show_id, item_type, item_id, image_kind?,
  *                            event_id?, episode_id?, moment, at?, mode? }
@@ -82,6 +85,30 @@ router.get('/met', requireAuth, async (req, res) => {
     return res.json({ success: true, met });
   } catch (err) {
     console.error('[PulseReveals] GET met error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/state', requireAuth, async (req, res) => {
+  try {
+    const showId = String(req.query.show_id || '');
+    if (!UUID_RE.test(showId)) return badShow(res);
+    const db = getModels();
+    let at;
+    try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at ?? 'present'); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+      throw err;
+    }
+    const view = await require('../services/pulseReveals').revealsAt(db, showId, at);
+    // Only the cities' images: everything else is applied in its own read.
+    const cities = {};
+    for (const [key, state] of view.states) {
+      const [type, kind, id] = key.split(':');
+      if (type === 'image' && (kind === 'city' || kind === 'city_bubble')) cities[`${kind}:${id}`] = state;
+    }
+    return res.json({ success: true, at, cities });
+  } catch (err) {
+    console.error('[PulseReveals] GET state error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

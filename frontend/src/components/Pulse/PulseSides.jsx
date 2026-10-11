@@ -12,12 +12,17 @@
  *   LatestFitCard   Lala's latest fit, the caption in script.
  * Director view shows empty image spots as "+ Add" (to Uploads); Lala's view
  * leaves them out. Cities are quiet until phase 7 brings city feeds.
+ * Reveals (Task 2939): before its moment an image is blurred as a "first
+ * look" (or left out when hidden) and an event shows its name only;
+ * Director view shows a "Reveals: …" chip instead.
  * Styles: pages/SocialMediaPage.css (pl-*).
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ImagePlus } from 'lucide-react';
 import { paletteOf } from '../../lib/pulseCities';
+import { revealKey } from '../../lib/pulseReveals';
+import { FirstLook, RevealChip } from './PulseReveal';
 
 export const UPLOADS = '/admin?tab=pulse&sub=uploads';
 export const TRENDING_MAX = 5;
@@ -38,8 +43,14 @@ function AddLink({ label, className = '' }) {
   );
 }
 
-function CityImage({ city, director }) {
-  if (city.image_url) return <img className="pl-city-image" src={city.image_url} alt={city.image_alt || ''} data-testid="pl-city-image" />;
+function CityImage({ city, director, state }) {
+  if (city.image_url && state !== 'hidden') {
+    return (
+      <FirstLook active={state === 'teaser'} className="pl-city-first-look">
+        <img className="pl-city-image" src={city.image_url} alt={state === 'teaser' ? '' : (city.image_alt || '')} data-testid="pl-city-image" />
+      </FirstLook>
+    );
+  }
   if (director) {
     return (
       <Link className="pl-city-image pl-city-add" to={UPLOADS} aria-label={`Add an image for ${city.name}`} data-testid="pl-city-add">
@@ -50,7 +61,8 @@ function CityImage({ city, director }) {
   return <span className="pl-city-image pl-city-name-tile" aria-hidden="true">{city.name}</span>;
 }
 
-export function CitiesCard({ cities, director }) {
+/** states: Lala's view's city image states ({ 'city:<key>': 'teaser' | 'hidden' }); labels: Director view's reveal labels. */
+export function CitiesCard({ cities, director, states = {}, labels = null }) {
   if (!cities.length) return null;
   return (
     <section className="pl-card pl-cities-card" aria-labelledby="pl-cities-heading" data-testid="pl-cities">
@@ -58,10 +70,11 @@ export function CitiesCard({ cities, director }) {
       <ul className="pl-cities">
         {cities.map((c) => (
           <li key={c.key} className="pl-city" style={cityVars(c)} data-testid="pl-city-row">
-            <CityImage city={c} director={director} />
+            <CityImage city={c} director={director} state={states[`city:${c.key}`]} />
             <span className="pl-city-text">
               <b><span className="pl-city-dot" aria-hidden="true" />{c.name}</b>
               {c.subtitle && <small>{c.subtitle}</small>}
+              {director && <RevealChip label={labels?.get(revealKey('image', c.key, 'city'))} />}
             </span>
           </li>
         ))}
@@ -121,7 +134,15 @@ export function dateTile(date) {
 }
 
 // Only these fields of an event ever reach the screen; its episode never does.
-export function UpcomingRow({ event }) {
+export function UpcomingRow({ event, revealLabel = null }) {
+  if (event.teaser) {
+    return (
+      <li className="pl-event pl-event-tiled pl-event-teaser" data-testid="pl-event">
+        <span className="pl-date-tile pl-date-tile-empty" aria-hidden="true" />
+        <span className="pl-event-text"><b>{event.name}</b><span className="pl-meta pl-first-look-text">First look</span></span>
+      </li>
+    );
+  }
   const tile = dateTile(event.date);
   const loose = !tile && typeof event.date === 'string' && event.date.trim() ? event.date.trim() : null;
   const meta = [event.venue, loose, event.time].filter(Boolean).join(' · ');
@@ -133,22 +154,23 @@ export function UpcomingRow({ event }) {
       <span className="pl-event-text">
         <b>{event.name}</b>
         {meta && <span className="pl-meta">{meta}</span>}
+        <RevealChip label={revealLabel} />
       </span>
     </li>
   );
 }
 
-export function UpcomingCard({ events, max = UPCOMING_MAX }) {
+export function UpcomingCard({ events, max = UPCOMING_MAX, labels = null }) {
   return (
     <section className="pl-card" aria-labelledby="pl-upcoming-heading" data-testid="pl-upcoming">
       <h2 id="pl-upcoming-heading" className="pl-card-title">Upcoming Events</h2>
       {events.length === 0 && <p className="pl-quiet">Nothing coming up.</p>}
-      <ul className="pl-events">{events.slice(0, max).map((e) => <UpcomingRow key={e.id} event={e} />)}</ul>
+      <ul className="pl-events">{events.slice(0, max).map((e) => <UpcomingRow key={e.id} event={e} revealLabel={labels?.get(revealKey('event', e.id))} />)}</ul>
     </section>
   );
 }
 
-export function LatestFitCard({ fit, director }) {
+export function LatestFitCard({ fit, director, revealLabel = null }) {
   if (!fit?.image_url) {
     if (!director) return null;
     return (
@@ -161,8 +183,11 @@ export function LatestFitCard({ fit, director }) {
   return (
     <section className="pl-card pl-fit" aria-labelledby="pl-fit-heading" data-testid="pl-fit">
       <h2 id="pl-fit-heading" className="pl-card-title">Check out the latest fit</h2>
-      <img className="pl-fit-photo" src={fit.image_url} alt={fit.image_alt || "Lala's latest fit"} data-testid="pl-fit-photo" />
-      {fit.caption && <p className="pl-fit-caption">{fit.caption}</p>}
+      <FirstLook active={Boolean(fit.teaser)}>
+        <img className="pl-fit-photo" src={fit.image_url} alt={fit.teaser ? '' : (fit.image_alt || "Lala's latest fit")} data-testid="pl-fit-photo" />
+      </FirstLook>
+      {fit.caption && !fit.teaser && <p className="pl-fit-caption">{fit.caption}</p>}
+      {director && <RevealChip label={revealLabel} />}
     </section>
   );
 }
