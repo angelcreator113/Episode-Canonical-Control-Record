@@ -1055,12 +1055,13 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
     <EpisodeWardrobeGameplay episodeId="ep-1" showId="show-1" event={{ id: 'ev-1', name: 'Garden Gala' }} characterState={{ coins: 500, reputation: 3 }} {...props} />,
   );
 
-  test('the shopping list is on the right, alone, with its footer; the closet is not', async () => {
+  test('the shopping list is on the right, alone and read-only (approved in the Event Package); the closet is not', async () => {
     renderPlain();
     const right = await screen.findByTestId('wardrobe-right');
     const shop = await within(right).findByTestId('evd-shopping_list');
     expect(within(right).queryByTestId('evd-career_plan')).toBeNull();
-    expect(within(shop).getByRole('button', { name: /Approve/ })).toBeTruthy();
+    expect(within(shop).queryAllByRole('button')).toHaveLength(0);
+    expect(within(shop).getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
     expect(screen.queryByTestId('wardrobe-closet')).toBeNull();
     // The look comes first in the page order (one column at phone width).
     const cols = screen.getByTestId('wardrobe-columns').children;

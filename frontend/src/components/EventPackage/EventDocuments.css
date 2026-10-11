@@ -78,7 +78,6 @@
   color: var(--lala-ink);
 }
 .evd-line-text { min-width: 0; overflow-wrap: anywhere; }
-.evd-paper-lines li.is-owned .evd-line-text { text-decoration: line-through; }
 .evd-line-cost { white-space: nowrap; }
 .evd-paper-total { margin-top: 4px; font-size: 22px; font-weight: 600; line-height: 30px; }
 .evd-paper-note { font-size: 17px; line-height: 30px; }

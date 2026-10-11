@@ -20,7 +20,6 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeStylePage = lazy(() => import('../components/Episodes/EpisodeStylePage'));
-const EpisodeStyleSheetPanel = lazy(() => import('../components/Episodes/EpisodeStyleSheetPanel'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -845,8 +844,6 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {tabKey === 'production.wardrobe' && (
           <div>
-            {/* The style sheet panel (Task #2814): status, readiness, Preview, Approve, Download PNG */}
-            <EpisodeStyleSheetPanel episode={episode} />
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
               <div>

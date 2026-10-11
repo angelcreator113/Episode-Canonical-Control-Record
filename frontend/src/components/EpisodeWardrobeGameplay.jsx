@@ -992,7 +992,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       {!(closetOpen && !outfitLocked) && (
         <section className="ewg-list" data-testid="wardrobe-shopping-list" aria-label="The event's shopping list">
           {showId && event?.id ? (
-            <EventDocuments showId={showId} eventId={event.id} event={event} balance={coins} intro={false} only="shopping_list" />
+            // Read here; drafted and approved in the Event Package only (Evoni, 2026-10-11).
+            <EventDocuments showId={showId} eventId={event.id} event={event} intro={false} only="shopping_list"
+              readOnly manageHref={packagePath ? `${packagePath}#epp-sec-documents` : null} />
           ) : (
             <p className="ewg-empty">No event is linked to this episode, so there is no shopping list.</p>
           )}
