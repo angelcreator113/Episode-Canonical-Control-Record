@@ -71,13 +71,14 @@ describe('Task #1640 follow-up — every previously-unrestricted WorldEvent quer
   });
 
   test('episodeScriptWriterService.js — the wardrobe-context lookup scopes attributes', () => {
-    const block = SCRIPT_WRITER_SRC.match(/context\.event = await WorldEvent\.findOne\(\{[\s\S]*?\}\)\.then/);
+    // Task #1917: by the episode's event id (utils/episodeEventSql), then findByPk.
+    const block = SCRIPT_WRITER_SRC.match(/context\.event = eventId && await WorldEvent\.findByPk\(eventId, \{[\s\S]*?\}\)\.then/);
     expect(block).not.toBeNull();
     expect(block[0]).toMatch(/attributes:\s*WorldEvent\.CURRENT_ATTRIBUTES/);
   });
 
   test('feedPostGeneratorService.js — the feed-post context lookup scopes attributes', () => {
-    const block = FEED_POST_SRC.match(/event = await WorldEvent\.findOne\(\{[\s\S]*?\}\);/);
+    const block = FEED_POST_SRC.match(/event = eventId && await WorldEvent\.findByPk\(eventId, \{[\s\S]*?\}\);/);
     expect(block).not.toBeNull();
     expect(block[0]).toMatch(/attributes:\s*\[/);
   });

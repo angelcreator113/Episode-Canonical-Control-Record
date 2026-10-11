@@ -10,10 +10,11 @@ jest.unmock('uuid');
 
 const crypto = require('crypto');
 const models = require('../../src/models');
-const { EPISODE_EVENT_ID_SQL } = require('../../src/utils/episodeEventSql');
+const { EPISODE_EVENT_ID_SQL, episodeEventId } = require('../../src/utils/episodeEventSql');
 const { listEpisodeEvents } = require('../../src/services/episodeEventsService');
 const { findSourceEvent } = require('../../src/services/episodeMoneyService');
 const { loadScoringEvent } = require('../../src/services/outfitScoreContext');
+const { gatherEpisodeContext } = require('../../src/services/distributionService');
 
 const { sequelize } = models;
 
@@ -69,6 +70,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await listEpisodeEvents(models, ep)).anchor_event_id).toBe(briefEvent);
     expect((await findSourceEvent(sequelize, ep)).id).toBe(briefEvent);
     expect((await loadScoringEvent(sequelize, { episodeId: ep, showId: show })).id).toBe(briefEvent);
+    // The script writer and the feed posts load by this id; distribution reads the SQL.
+    expect(await episodeEventId(sequelize, ep)).toBe(briefEvent);
+    expect((await gatherEpisodeContext(ep, show, sequelize)).event.name).toBe('The brief\'s event');
     expect(moved).not.toBe(briefEvent);
   });
 
@@ -88,6 +92,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const stamped = await event('Stamped', { stampedOn: ep });
     await brief(ep, gone);
     expect(await serviceEventId(ep)).toBe(stamped);
-    expect(await serviceEventId(await episode())).toBeNull();
+    const none = await episode();
+    expect(await serviceEventId(none)).toBeNull();
+    expect(await episodeEventId(sequelize, none)).toBeNull();
   });
 });

@@ -27,4 +27,14 @@ const EPISODE_EVENT_ID_SQL = `(SELECT COALESCE(
       WHERE st_w.used_in_episode_id = :episodeId AND st_w.deleted_at IS NULL
       ORDER BY st_w.created_at ASC LIMIT 1)))`;
 
-module.exports = { EPISODE_EVENT_ID_SQL };
+/**
+ * The episode's event id by the same rule, for readers that then load the
+ * event through the WorldEvent model with their own attribute scope.
+ * Resolves null when the episode has no event.
+ */
+async function episodeEventId(sequelize, episodeId) {
+  const [rows] = await sequelize.query(`SELECT ${EPISODE_EVENT_ID_SQL} AS id`, { replacements: { episodeId } });
+  return rows?.[0]?.id || null;
+}
+
+module.exports = { EPISODE_EVENT_ID_SQL, episodeEventId };

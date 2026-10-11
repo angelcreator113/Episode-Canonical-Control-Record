@@ -178,11 +178,12 @@ describe('episodeScriptWriterService.loadScriptContext — the host in the scrip
       EpisodeBrief: { findOne: async () => null },
       ScenePlan: { findAll: async () => [] },
       SceneSet: {}, SceneAngle: {}, FranchiseKnowledge: null, WorldLocation: null, Opportunity: null,
-      WorldEvent: { CURRENT_ATTRIBUTES: ['id'], findOne: async () => ({ toJSON: () => event }) },
+      WorldEvent: { CURRENT_ATTRIBUTES: ['id'], findByPk: async () => ({ toJSON: () => event }) },
       Episode: { findByPk: async () => null },
       sequelize: {
         QueryTypes,
         query: jest.fn(async (sql, options = {}) => {
+          if (/SELECT \(SELECT COALESCE/.test(sql)) return [[{ id: 'ev-1' }]]; // the episode's event id (utils/episodeEventSql)
           if (/FROM social_profiles/.test(sql)) {
             asked.push(...options.replacements.ids);
             return [options.replacements.ids.map(id => PROFILES[id]).filter(Boolean)];

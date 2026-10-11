@@ -37,10 +37,11 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
 
   let event = null;
   try {
-    // Scoped to exactly what's read below: the event-context prompt string
-    // and the outfit_pieces check.
-    event = await WorldEvent.findOne({
-      where: { used_in_episode_id: episodeId },
+    // The episode's event: the brief's, else the first stamped
+    // (utils/episodeEventSql; Task #1917). Scoped to exactly what's read
+    // below: the event-context prompt string and the outfit_pieces check.
+    const eventId = await require('../utils/episodeEventSql').episodeEventId(sequelize, episodeId);
+    event = eventId && await WorldEvent.findByPk(eventId, {
       attributes: ['id', 'name', 'event_type', 'prestige', 'dress_code', 'host', 'outfit_pieces'],
     });
   } catch { /* skip */ }
