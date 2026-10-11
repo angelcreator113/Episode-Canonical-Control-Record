@@ -29,12 +29,20 @@ const S = {
   chip: { display: 'inline-block', padding: '1px 8px', marginRight: 4, borderRadius: 999, border: '1px solid var(--lala-gold)', color: 'var(--lala-gold-text)', fontFamily: "'DM Mono', monospace", fontSize: 10 },
 };
 
-export default function EpisodeMoneyCard({ showId, episodeId }) {
-  const [money, setMoney] = useState(null);
-  const [failed, setFailed] = useState(false);
+/**
+ * `money`: the plan when the caller has already read it (the Overview reads
+ * it for its coins tile, Task #1919): null while it loads, false when it
+ * could not be read. Left out, the card reads it itself.
+ */
+export default function EpisodeMoneyCard({ showId, episodeId, money: given }) {
+  const [own, setMoney] = useState(null);
+  const [ownFailed, setFailed] = useState(false);
+  const shared = given !== undefined;
+  const money = shared ? (given || null) : own;
+  const failed = shared ? given === false : ownFailed;
 
   useEffect(() => {
-    if (!showId || !episodeId) return undefined;
+    if (shared || !showId || !episodeId) return undefined;
     let cancelled = false;
     setMoney(null);
     setFailed(false);
@@ -45,7 +53,7 @@ export default function EpisodeMoneyCard({ showId, episodeId }) {
         if (!cancelled) setFailed(true);
       });
     return () => { cancelled = true; };
-  }, [showId, episodeId]);
+  }, [shared, showId, episodeId]);
 
   if (!showId || !episodeId) return null;
 
@@ -79,6 +87,9 @@ export default function EpisodeMoneyCard({ showId, episodeId }) {
                 <span key={c.tier} style={S.chip}>+ up to {coins(c.amount)} if {String(c.tier).toUpperCase()}</span>
               ))}
             </div>
+          )}
+          {money.look?.pieces === 0 && (
+            <div style={S.note} data-testid="episode-money-card-no-outfit">Outfit not chosen: its cost is not in the projection yet.</div>
           )}
           <div style={S.note} data-testid="episode-money-card-open">
             {open === 0
