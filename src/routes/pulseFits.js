@@ -6,6 +6,7 @@
  * /api/v1/pulse-fits; every route requireAuth.
  *
  *   GET    /?show_id=     the show's fits, newest story date first (undated last)
+ *   GET    /latest?show_id=  The Pulse's "Check out the latest fit" (Task #2924)
  *   POST   /              multipart: image, show_id, caption?, image_alt?, story_date?
  *   PATCH  /:id           { caption?, image_alt?, story_date? }
  *   DELETE /:id           soft delete (paranoid)
@@ -64,7 +65,7 @@ const shape = (fit) => ({
   story_date: fit.story_date,
   width: fit.width,
   height: fit.height,
-  created_at: fit.created_at,
+  created_at: fit.createdAt || fit.created_at || null,
 });
 
 router.get('/', async (req, res) => {
@@ -79,6 +80,53 @@ router.get('/', async (req, res) => {
     return res.json({ success: true, fits: fits.map(shape) });
   } catch (err) {
     console.error('[PulseFits] GET error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * The latest fit: the newer of (a) the show's newest everyday fit and (b) the
+ * front photo (else the hero photo) on the Style Page of its latest episode
+ * that has happened (status 'published', the rule storyClock.presentOrder
+ * uses). Read only: it never creates a Lookbook row.
+ *
+ * Interim rule until phase 4's story clock: an everyday fit's story_date is a
+ * calendar date and an episode is a story position, so the two are compared
+ * by when they were added (created_at). Both candidates are returned.
+ */
+router.get('/latest', async (req, res) => {
+  try {
+    const showId = String(req.query.show_id || '');
+    if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
+    const { PulseFit, sequelize } = getModels();
+    const fitRow = await PulseFit.findOne({
+      where: { show_id: showId },
+      order: [[sequelize.literal('story_date DESC NULLS LAST')], ['created_at', 'DESC']],
+    });
+    const [[episodeRow]] = await sequelize.query(
+      `SELECT i.image_url, i.category, i.created_at, e.episode_number
+         FROM episode_lookbook_images i
+         JOIN episodes e ON e.id = i.episode_id
+        WHERE e.show_id = :showId AND e.status = 'published' AND e.deleted_at IS NULL
+          AND e.episode_number IS NOT NULL
+          AND i.deleted_at IS NULL AND i.in_lookbook = true AND i.image_url IS NOT NULL
+          AND i.category IN ('front', 'hero')
+        ORDER BY e.episode_number DESC, (i.category = 'front') DESC, i.sort_order ASC, i.created_at DESC
+        LIMIT 1`, { replacements: { showId } });
+
+    const fit = fitRow ? {
+      source: 'fit', image_url: fitRow.image_url, image_alt: fitRow.image_alt, caption: fitRow.caption,
+      story_date: fitRow.story_date, added_at: fitRow.createdAt || fitRow.created_at,
+    } : null;
+    const episode = episodeRow ? {
+      source: 'episode', image_url: episodeRow.image_url, image_alt: null, caption: null,
+      episode_number: episodeRow.episode_number, added_at: episodeRow.created_at,
+    } : null;
+    let latest = fit || episode;
+    if (fit && episode) latest = new Date(fit.added_at) >= new Date(episode.added_at) ? fit : episode;
+    return res.json({ success: true, latest, fit, episode });
+  } catch (err) {
+    console.error('[PulseFits] GET latest error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

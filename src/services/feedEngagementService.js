@@ -361,13 +361,15 @@ async function computeFeedMomentum(showId, models) {
 // ── TRENDING TOPICS ACROSS SHOW ─────────────────────────────────────────────
 
 /**
- * Aggregate trending hashtags/topics across all feed posts for a show.
+ * Aggregate trending hashtags/topics across a show's live feed posts. Drafts
+ * are not counted: The Pulse's trending is counted from approved, live posts
+ * (The Pulse spec §2 rule 1, §8; Task #2924).
  */
 async function getTrendingTopics(showId, models) {
   const { FeedPost } = models;
 
   const posts = await FeedPost.findAll({
-    where: { show_id: showId, deleted_at: null },
+    where: { show_id: showId, deleted_at: null, status: 'live' },
     attributes: ['content_text', 'trending_topic', 'likes', 'comments_count', 'shares', 'event_id', 'narrative_function'],
     order: [['posted_at', 'DESC']],
     limit: 200,

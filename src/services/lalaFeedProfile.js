@@ -40,9 +40,9 @@ async function one(sequelize, sql, replacements, label) {
   }
 }
 
-/** Lala's registry character (her portrait, her Feed link), the newest live one. */
+/** Lala's registry character (her portrait and cover, her Feed link), the newest live one. */
 const lalaCharacter = (sequelize) => one(sequelize,
-  `SELECT id, feed_profile_id, portrait_url FROM registry_characters
+  `SELECT id, feed_profile_id, portrait_url, cover_url FROM registry_characters
     WHERE character_key = 'lala' AND deleted_at IS NULL
     ORDER BY (feed_profile_id IS NULL), updated_at DESC LIMIT 1`, {}, 'registry character');
 
@@ -85,6 +85,7 @@ async function getLalaFeedProfile(models, showId, { allFriends = false } = {}) {
   return {
     profile,
     portrait_url: character?.portrait_url || null,
+    cover_url: character?.cover_url || null,
     home_city: readLalaHome(show?.metadata)?.city || null,
     career: tier ? { tier, label: CAREER_TIERS[tier].label } : null,
     friends: await friendsOf(sequelize, profile?.id, allFriends ? FRIENDS_ALL : FRIENDS_SHOWN),
