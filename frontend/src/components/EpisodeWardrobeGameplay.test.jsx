@@ -1072,7 +1072,8 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
     const right = await screen.findByTestId('wardrobe-right');
     const shop = await within(right).findByTestId('evd-shopping_list');
     expect(within(right).queryByTestId('evd-career_plan')).toBeNull();
-    expect(within(shop).queryAllByRole('button')).toHaveLength(0);
+    // Read-only: no Draft, Edit, Redraft or Approve; only "Use in episode" (Task #2883).
+    expect(within(shop).queryAllByRole('button').map((b) => b.textContent)).toEqual(['Use in episode']);
     expect(within(shop).getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
     expect(screen.queryByTestId('wardrobe-closet')).toBeNull();
     // The look comes first in the page order (one column at phone width).
@@ -1110,6 +1111,55 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
     renderPlain();
     expect((await screen.findByTestId('look-payday')).textContent).toBe('After payday 750');
     expect(screen.getByTestId('look-cost').textContent).toContain('Look costs 🪙 0 · Lala has 500');
+  });
+
+  // Task #2883: the approved list into the episode's tasks, once.
+  test('"Use in episode" is off while the list is a Draft', async () => {
+    renderPlain();
+    const btn = await screen.findByTestId('use-list-in-episode');
+    expect(btn.disabled).toBe(true);
+  });
+
+  test('"Use in episode" on an approved list adds its tasks, says so, and reloads the list', async () => {
+    const base = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url === '/api/v1/world/show-1/events/ev-1/documents'
+      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: null } } })
+      : base(url)));
+    const basePost = api.post.getMockImplementation();
+    api.post.mockImplementation((url, ...rest) => (url === '/api/v1/episodes/ep-1/todo/use-shopping-list'
+      ? Promise.resolve({ data: { success: true, data: { added: 1, removed: 0 } } })
+      : basePost(url, ...rest)));
+    renderPlain();
+    const btn = await screen.findByTestId('use-list-in-episode');
+    await waitFor(() => expect(btn.disabled).toBe(false));
+    const todoCalls = () => api.get.mock.calls.filter(([u]) => u === '/api/v1/episodes/ep-1/todo').length;
+    const before = todoCalls();
+    fireEvent.click(btn);
+    expect((await screen.findByTestId('use-list-result')).textContent).toBe('In the episode: 1 task added.');
+    expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/todo/use-shopping-list');
+    await waitFor(() => expect(todoCalls()).toBe(before + 1));
+  });
+
+  test('"Use in episode" twice: nothing new, and a refusal shows its reason', async () => {
+    const base = api.get.getMockImplementation();
+    api.get.mockImplementation((url) => (url === '/api/v1/world/show-1/events/ev-1/documents'
+      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: null } } })
+      : base(url)));
+    const basePost = api.post.getMockImplementation();
+    let n = 0;
+    api.post.mockImplementation((url, ...rest) => {
+      if (url !== '/api/v1/episodes/ep-1/todo/use-shopping-list') return basePost(url, ...rest);
+      n += 1;
+      return n === 1 ? Promise.resolve({ data: { data: { added: 0, removed: 0 } } }) : Promise.reject({ response: { data: { error: 'Approve the shopping list in the Event Package before using it in the episode.' } } });
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPlain();
+    const btn = await screen.findByTestId('use-list-in-episode');
+    await waitFor(() => expect(btn.disabled).toBe(false));
+    fireEvent.click(btn);
+    expect((await screen.findByTestId('use-list-result')).textContent).toBe('Already in the episode; nothing new to add.');
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByTestId('use-list-result').textContent).toMatch(/Approve the shopping list/));
   });
 
   test('no event linked: an honest empty list', async () => {

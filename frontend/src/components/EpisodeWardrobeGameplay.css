@@ -51,3 +51,8 @@
   font-size: 14px;
 }
 .ewg-list .evd-link { min-height: 44px; }
+
+/* "Use in episode" (2026-10-11): the approved list into the episode's tasks. */
+.ewg-use-list { font-weight: 700; }
+.ewg-used { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--success-bg); color: var(--success-text); font-size: 13px; }
+.ewg-used.is-error { background: var(--danger-bg); color: var(--danger-text); }

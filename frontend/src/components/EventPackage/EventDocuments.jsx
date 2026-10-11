@@ -176,7 +176,9 @@ function Editor({ type, doc, onCancel, onSave, saving }) {
 // 2026-10-11). readOnly (true, or a list of types): no Draft, Edit, Redraft
 // or Approve, only the state and manageHref, where it is worked on (Evoni,
 // 2026-10-11: the shopping list is approved in one place, the Event Package).
-export default function EventDocuments({ showId, eventId, event, outfitPieces = [], lead = null, intro = true, layout = 'grid', only = null, readOnly = false, manageHref = null }) {
+// footerExtra(type, doc): more for a document's footer (the Wardrobe tab's
+// "Use in episode", 2026-10-11).
+export default function EventDocuments({ showId, eventId, event, outfitPieces = [], lead = null, intro = true, layout = 'grid', only = null, readOnly = false, manageHref = null, footerExtra = null }) {
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
@@ -256,6 +258,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                 </div>
                 <div className="evd-actions">
                   <span className={`evd-state is-${state.key}`} data-testid={`evd-state-${type}`}>{state.label}</span>
+                  {footerExtra && footerExtra(type, doc)}
                   {ro ? (
                     manageHref && (
                       <a className="evd-link" href={manageHref} data-testid={`evd-manage-${type}`}>

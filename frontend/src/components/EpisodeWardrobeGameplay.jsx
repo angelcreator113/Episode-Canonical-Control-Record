@@ -380,12 +380,33 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   };
 
   // ─── v3: Load todo list ───
-  useEffect(() => {
+  const loadTodo = useCallback(() => {
     if (!episodeId) return;
     api.get(`/api/v1/episodes/${episodeId}/todo`).then(res => {
       setTodoList(res.data?.data || null);
-    }).catch(() => {});
+    }).catch((err) => console.error('[Wardrobe] todo list load failed:', err));
   }, [episodeId]);
+  useEffect(() => { loadTodo(); }, [loadTodo]);
+
+  // "Use in episode" (Task #2883): the approved shopping list becomes the
+  // episode's wardrobe tasks, the same Start Episode makes; again adds nothing.
+  const [usingList, setUsingList] = useState(false);
+  const [usedList, setUsedList] = useState(null);
+  const useListInEpisode = async () => {
+    setUsingList(true);
+    setUsedList(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/use-shopping-list`);
+      const d = res.data?.data || {};
+      setUsedList({ ok: true, text: d.added || d.removed ? `In the episode: ${d.added} task${d.added === 1 ? '' : 's'} added${d.removed ? `, ${d.removed} replaced` : ''}.` : 'Already in the episode; nothing new to add.' });
+      loadTodo();
+    } catch (err) {
+      console.error('[Wardrobe] use shopping list failed:', err);
+      setUsedList({ ok: false, text: err.response?.data?.error || 'The shopping list could not be used in the episode.' });
+    } finally {
+      setUsingList(false);
+    }
+  };
 
   // ─── v3: Load outfit history ───
   useEffect(() => {
@@ -995,10 +1016,18 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           {showId && event?.id ? (
             // Read here; drafted and approved in the Event Package only (Evoni, 2026-10-11).
             <EventDocuments showId={showId} eventId={event.id} event={event} intro={false} only="shopping_list"
-              readOnly manageHref={packagePath ? `${packagePath}#epp-sec-documents` : null} />
+              readOnly manageHref={packagePath ? `${packagePath}#epp-sec-documents` : null}
+              footerExtra={(type, doc) => type === 'shopping_list' && (
+                <button type="button" className="evd-link ewg-use-list" disabled={doc?.status !== 'approved' || usingList}
+                  title={doc?.status === 'approved' ? undefined : 'Approve it in the Event Package first'}
+                  onClick={useListInEpisode} data-testid="use-list-in-episode">
+                  {usingList ? 'Adding…' : 'Use in episode'}
+                </button>
+              )} />
           ) : (
             <p className="ewg-empty">No event is linked to this episode, so there is no shopping list.</p>
           )}
+          {usedList && <p className={`ewg-used${usedList.ok ? '' : ' is-error'}`} role={usedList.ok ? 'status' : 'alert'} data-testid="use-list-result">{usedList.text}</p>}
         </section>
       )}
       {closetOpen && !outfitLocked && (
