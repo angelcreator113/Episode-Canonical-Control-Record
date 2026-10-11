@@ -18,9 +18,13 @@
    `20261004150000`) is `draft` or `live`. A post created inside an episode starts as a
    draft: the episode's Feed generation (`feedPostGeneratorService`), a ripple reply to
    a draft (`feedEngagementService`), a financial post tied to an episode
-   (`financialFeedService`). When the episode's status becomes `published`
-   (`episodeController.updateEpisode`), `publishEpisodePosts` dates the undated drafts
-   at that moment and sets them live. A scrapped episode's drafts never go live.
+   (`financialFeedService`), Lala's `[UI:POST]` lines in the script
+   (`scriptPostDrafts`). Every draft waits for approval (Evoni, 2026-10-11, Task #2749:
+   "nothing reaches the Wall until approved"): publishing the episode no longer sets
+   its drafts live. The Feed page's Requests lists an episode's drafts as "posts to
+   approve" (`GET /feed-posts?status=draft&from=episode`), with Approve, Edit and
+   Discard; Approve is `PUT /feed-posts/:id` `status: 'live'`, which posts it then if it
+   has no `posted_at`. A discarded or scrapped episode's drafts never go live.
 3. **It is 2009: no edit button.** `PUT /feed-posts/:id` refuses a live post with 409
    (`LOCKED_MESSAGE`). A live post can only be deleted (soft delete, `deleted_at`). A
    draft is edited freely, and can be set live by hand (`status: 'live'`), never back.

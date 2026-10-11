@@ -560,17 +560,10 @@ module.exports = {
 
     await episode.update(updateData);
 
-    // Published: the episode's draft feed posts go live at this point in
-    // story time (services/feedPostStatus.js, docs/FEED_POSTS.md).
-    if (updateData.status === 'published' && oldValues.status !== 'published') {
-      try {
-        const { publishEpisodePosts } = require('../services/feedPostStatus');
-        const went = await publishEpisodePosts(require('../models'), id);
-        if (went > 0) console.log(`[Episode] ${id} published: ${went} feed post(s) went live`);
-      } catch (feedErr) {
-        console.error('[Episode] publishing the feed posts failed (non-blocking):', feedErr.message);
-      }
-    }
+    // Publishing no longer puts the episode's draft feed posts live (Evoni,
+    // 2026-10-11, Task #2749: "nothing reaches the Wall until approved").
+    // They wait under the Feed page's Requests, "posts to approve", until
+    // each is approved (PUT /feed-posts/:id { status: 'live' }).
 
     // Log activity (existing logger) - wrapped in try-catch to prevent failures
     try {

@@ -8,7 +8,7 @@
  *
  * What the data does not hold, the board does not claim: there is no stored
  * "final cut done" flag (an episode's status stands in for it), feed posts
- * are only draft or live (drafts go live when the episode is published), and
+ * are only draft or live (drafts wait for approval in Requests), and
  * a held payout is not recorded.
  */
 import { rowDeltas, episodeTier } from './castContinuity';

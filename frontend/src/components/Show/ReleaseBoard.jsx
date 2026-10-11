@@ -99,7 +99,7 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
               })}
             </ul>
           )}
-          {posts?.some((p) => p.status !== 'live') && <p className="wa-rel-note">Drafts go live when the episode is published.</p>}
+          {posts?.some((p) => p.status !== 'live') && <p className="wa-rel-note">Drafts wait for approval under Requests in Lala&apos;s Feed.</p>}
         </section>
 
         <section className="wa-rel-card wa-rel-calendar" data-testid="release-calendar">

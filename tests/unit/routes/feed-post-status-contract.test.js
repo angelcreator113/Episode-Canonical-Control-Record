@@ -6,7 +6,7 @@
 // with 409 (2009: no edit button) and only accepts draft|live; posts
 // created inside an episode start as drafts (the generator, a ripple
 // reply to a draft, a financial post tied to an episode); publishing the
-// episode sets them live.
+// episode no longer sets them live: they wait for approval (Task #2749).
 
 const fs = require('fs');
 const path = require('path');
@@ -38,10 +38,10 @@ describe('feed post status contract', () => {
     expect(fin).toMatch(/timeline_position, status, created_at, updated_at/);
     expect(fin).toMatch(/status: post\.episode_id \? 'draft' : 'live'/);
   });
-  test('publishing the episode sets its drafts live', () => {
+  test('publishing the episode leaves its drafts waiting for approval (Task #2749)', () => {
     const ctl = read('src', 'controllers', 'episodeController.js');
-    expect(ctl).toMatch(/if \(updateData\.status === 'published' && oldValues\.status !== 'published'\) \{[\s\S]*?publishEpisodePosts\(require\('\.\.\/models'\), id\)/);
-    expect(ctl).toMatch(/console\.error\('\[Episode\] publishing the feed posts failed/);
+    expect(ctl).not.toMatch(/publishEpisodePosts/);
+    expect(ctl).toMatch(/nothing reaches the Wall until approved/);
   });
   test('the model declares the column', () => {
     expect(read('src', 'models', 'FeedPost.js')).toMatch(/status: \{\s*type: DataTypes\.STRING\(16\), allowNull: false, defaultValue: 'live',\s*validate: \{ isIn: \[\['draft', 'live'\]\] \}/);

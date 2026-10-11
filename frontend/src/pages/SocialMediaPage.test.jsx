@@ -48,7 +48,7 @@ beforeEach(() => {
   posts = [...POSTS];
   deleted = [];
   sidebar = { upcoming: EVENTS, may_know: MAY_KNOW };
-  drafts = [{ id: 'd1', poster_handle: 'lala', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2', comments: [] }];
+  drafts = [{ id: 'd1', poster_handle: 'rival', poster_display_name: 'The Rival', content_text: 'Not yet.', status: 'draft', episode_id: 'ep-2', episode: { id: 'ep-2', episode_number: 2 }, comments: [] }];
   vi.mocked(api.get).mockImplementation(async (url) => {
     const u = new URL(url, 'http://x');
     if (url.includes('/shows')) return { data: { data: [SHOW] } };
@@ -62,7 +62,9 @@ beforeEach(() => {
     if (url.includes('/comments/pending')) return { data: { data: [{ id: 'c9', handle: 'rival', text: 'cute.', post: { poster_handle: 'lala' } }], count: 1 } };
     if (url.includes('/feed-posts') && u.searchParams.get('post_type') === 'relationship') return { data: { data: relPosts, total: relPosts.length } };
     if (url.includes('/feed-posts')) {
-      const data = u.searchParams.get('status') === 'draft' ? drafts : posts;
+      const from = u.searchParams.get('from');
+      const pick = (list) => (from === 'episode' ? list.filter((p) => p.episode_id) : from === 'wall' ? list.filter((p) => !p.episode_id) : list);
+      const data = pick(u.searchParams.get('status') === 'draft' ? drafts : posts);
       return { data: { data, total: data.length, hasMore: false } };
     }
     return { data: {} };
@@ -141,7 +143,8 @@ describe('the wall', () => {
     ]);
     expect(api.get).toHaveBeenCalledWith(`/api/v1/social-profiles/lala?show_id=${SHOW.id}`);
     expect(document.body.textContent).not.toMatch(/\[City\]|\[Status\]|Styling, everywhere|\[\d+\] friends/);
-    expect(screen.getByTestId('sm-requests').textContent).toContain('1 draft post');
+    await waitFor(() => expect(screen.getByTestId('sm-to-approve-count').textContent).toBe('1 post to approve'));
+    expect(screen.getByTestId('sm-requests').textContent).toContain('0 draft posts');
     expect(screen.getByTestId('sm-requests').textContent).toContain('1 reaction to approve');
     await waitFor(() => expect(screen.getByTestId('sm-upcoming-event').textContent).toBe("Wearable Experiments Studio SessionSTUDIO BY SABLE's StudioThu, Nov 12 · 6:30 PM"));
     expect(screen.getByTestId('sm-upcoming-event').querySelector('a').getAttribute('href')).toBe(`/shows/${SHOW.id}/events/e1`);
@@ -186,7 +189,8 @@ describe('the wall', () => {
     // It lands on Drafts, and Requests counts it.
     await waitFor(() => expect(screen.getByRole('tab', { name: /Drafts/ }).getAttribute('aria-selected')).toBe('true'));
     await waitFor(() => expect(screen.getAllByTestId('sm-post')[0].textContent).toContain('is not doing this again.'));
-    await waitFor(() => expect(screen.getByTestId('sm-requests').textContent).toContain('2 draft posts'));
+    await waitFor(() => expect(screen.getByTestId('sm-requests').textContent).toContain('1 draft post'));
+    expect(screen.getByTestId('sm-to-approve-count').textContent).toBe('1 post to approve');
     fireEvent.click(within(screen.getAllByTestId('sm-post')[0]).getByRole('button', { name: 'Release' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p3', { status: 'live' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Wall' }));
@@ -287,6 +291,36 @@ describe('the wall', () => {
     expect(screen.queryByTestId('sm-post')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     await screen.findAllByTestId('sm-post');
+  });
+
+  test('Requests: an episode\'s posts wait for approval; Approve puts one live, Edit changes it, Discard keeps it under Deleted', async () => {
+    drafts.push({ id: 'd2', poster_handle: 'marcus.k', poster_display_name: 'Marcus', content_text: 'See you there.', status: 'draft', episode_id: 'ep-2', episode: { id: 'ep-2', episode_number: 2 }, comments: [] });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt('/feed');
+    await waitFor(() => expect(screen.getAllByTestId('sm-request-post')).toHaveLength(2));
+    expect(api.get.mock.calls.some((c) => c[0].includes('status=draft') && c[0].includes('from=episode'))).toBe(true);
+    const [first, second] = screen.getAllByTestId('sm-request-post');
+    expect(first.textContent).toContain('The Rival Not yet.');
+    expect(first.querySelector('a').getAttribute('href')).toBe('/episodes/ep-2');
+    expect(first.textContent).toContain('Episode 2');
+    // Not on the Wall until approved.
+    expect(screen.getAllByTestId('sm-post').map((p) => p.textContent).join(' ')).not.toContain('Not yet.');
+
+    fireEvent.click(within(second).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(within(second).getByLabelText('Edit the post'), { target: { value: 'See you there, Lala.' } });
+    fireEvent.click(within(second).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/d2', { content_text: 'See you there, Lala.' }));
+
+    fireEvent.click(within(screen.getAllByTestId('sm-request-post')[0]).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/d1', { status: 'live' }));
+    await waitFor(() => expect(screen.getAllByTestId('sm-post').map((p) => p.textContent).join(' ')).toContain('Not yet.'));
+    await waitFor(() => expect(screen.getByTestId('sm-to-approve-count').textContent).toBe('1 post to approve'));
+
+    fireEvent.click(within(screen.getAllByTestId('sm-request-post')[0]).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/feed-posts/d2'));
+    await waitFor(() => expect(screen.getByTestId('sm-to-approve-count').textContent).toBe('0 posts to approve'));
+    expect(deleted.map((p) => p.id)).toEqual(['d2']);
+    confirm.mockRestore();
   });
 
   test('the right column with nothing to show says why, never "None" placeholders', async () => {

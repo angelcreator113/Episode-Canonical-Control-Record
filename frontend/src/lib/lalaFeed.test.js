@@ -33,7 +33,7 @@ describe("Lala's Feed helpers", () => {
 
   test('when a draft goes live', () => {
     expect(goesLive(drafts[0])).toBe('Goes live when you approve it');
-    expect(goesLive(drafts[1], [{ id: 'e1', episode_number: 4 }])).toBe('Goes live with Episode 4');
+    expect(goesLive(drafts[1], [{ id: 'e1', episode_number: 4 }])).toBe('From Episode 4 · goes live when you approve it');
     expect(goesLive(live[0])).toBeNull();
   });
 
