@@ -12,6 +12,8 @@
  *              date, then episode order. Each with its date, time and venue
  *              as the event has them (the automation copy when the column
  *              is empty), and its episode.
+ *              As of a story moment (`at`, Task #2937): the events whose
+ *              episode has not ended by then (After, episode * 10 + 7).
  *   mayKnow    the people on those events' guest lists
  *              (canon_consequences.automation.guest_profiles) who are not
  *              Lala's friends (lala_relationship 'direct'; Task #2747) and
@@ -30,19 +32,25 @@ const parse = (v) => {
 };
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-async function upcomingEvents(sequelize, showId) {
+// Upcoming: an event of an unpublished episode; as of a story moment
+// (Task #2937), an event whose episode has not ended by then (its After,
+// episode_number * 10 + 7, is later), or of an unnumbered episode.
+const UPCOMING_NOW = `COALESCE(ep.status, 'draft') NOT IN ('published', 'archived')`;
+const UPCOMING_AT = `COALESCE(ep.status, 'draft') <> 'archived' AND (ep.episode_number IS NULL OR ep.episode_number * 10 + 7 > :at)`;
+
+async function upcomingEvents(sequelize, showId, at) {
   const [rows] = await sequelize.query(
     `SELECT DISTINCT ON (we.id) we.id, we.name, we.event_date, we.event_time, we.venue_name, we.canon_consequences,
             ep.id AS episode_id, ep.episode_number, ep.title AS episode_title
        FROM world_events we
        JOIN episodes ep ON ep.deleted_at IS NULL AND ep.show_id = we.show_id
-        AND COALESCE(ep.status, 'draft') NOT IN ('published', 'archived')
+        AND ${Number.isInteger(at) ? UPCOMING_AT : UPCOMING_NOW}
         AND (ep.id = we.used_in_episode_id OR EXISTS (
               SELECT 1 FROM episode_briefs eb
                WHERE eb.episode_id = ep.id AND eb.event_id = we.id AND eb.deleted_at IS NULL))
       WHERE we.show_id = :showId AND we.deleted_at IS NULL AND COALESCE(we.status, 'draft') <> 'archived'
       ORDER BY we.id, ep.episode_number`,
-    { replacements: { showId } });
+    { replacements: { showId, at: Number.isInteger(at) ? at : null } });
   return rows.map((r) => {
     const auto = parse(r.canon_consequences)?.automation || {};
     return {
@@ -81,10 +89,13 @@ async function peopleToMeet(sequelize, events, lalaProfileId) {
   return ids.map((id) => byId.get(id)).filter(Boolean).slice(0, MAY_KNOW_MAX);
 }
 
-/** { upcoming: [...], may_know: [...] } for the show; `lalaProfileId` is left out of may_know. */
-async function getFeedSidebar(models, showId, { lalaProfileId = null } = {}) {
+/**
+ * { upcoming: [...], may_know: [...] } for the show; `lalaProfileId` is left
+ * out of may_know; `at` (a story order) reads it as of that moment.
+ */
+async function getFeedSidebar(models, showId, { lalaProfileId = null, at } = {}) {
   const { sequelize } = models;
-  const events = await upcomingEvents(sequelize, showId);
+  const events = await upcomingEvents(sequelize, showId, at);
   const mayKnow = await peopleToMeet(sequelize, events, lalaProfileId);
   return {
     upcoming: events.map(({ guests, ...ev }) => ({ ...ev, guest_count: guests.length })),

@@ -242,7 +242,7 @@ describe('The sides (Task 2928)', () => {
     await waitFor(() => expect(screen.getAllByTestId('pl-trend')).toHaveLength(1));
     expect(screen.getByTestId('pl-trend').textContent).toBe('1#VelvetSeason2 posts');
     expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toEqual(expect.arrayContaining([
-      `/api/v1/feed-enhanced/${SHOW.id}/trending`, `/api/v1/pulse-fits/latest?show_id=${SHOW.id}`,
+      `/api/v1/feed-enhanced/${SHOW.id}/trending`, `/api/v1/pulse-fits/latest?show_id=${SHOW.id}&at=present`,
     ]));
     expect(screen.queryByTestId('pl-trending-foot')).toBeNull();
     expect(document.body.textContent).not.toContain('+ Add');
@@ -256,5 +256,32 @@ describe('The sides (Task 2928)', () => {
     fireEvent.click(screen.getByTestId('pl-director-toggle'));
     expect(screen.getByRole('link', { name: /\+ Add Lala's latest fit/ }).getAttribute('href')).toBe('/admin?tab=pulse&sub=uploads');
     await waitFor(() => expect(screen.getByTestId('pl-trending-foot').textContent).toBe('Counted from approved posts'));
+  });
+});
+
+describe('The story clock (Task 2937)', () => {
+  const calls = () => vi.mocked(api.get).mock.calls.map(([u]) => u);
+  const feedCalls = () => calls().filter((u) => u.startsWith('/api/v1/feed-posts?') && u.includes('with=comments'));
+
+  test("Lala's view reads The Pulse as of the present: posts, events, the latest fit and relationship posts", async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/pulse-fits/latest?'))).toBe(true));
+    expect(feedCalls().every((u) => u.includes('at=present'))).toBe(true);
+    for (const prefix of ['/api/v1/social-profiles/lala/sidebar?', '/api/v1/pulse-fits/latest?']) {
+      expect(calls().filter((u) => u.startsWith(prefix)).every((u) => u.endsWith('&at=present'))).toBe(true);
+    }
+    expect(calls().filter((u) => u.includes('post_type=relationship')).every((u) => u.includes('at=present'))).toBe(true);
+  });
+
+  test('Director view reads everything live, with no story moment', async () => {
+    USER = { name: 'Evoni', groups: ['admin'] };
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    vi.mocked(api.get).mockClear();
+    fireEvent.click(screen.getByTestId('pl-director-toggle'));
+    await waitFor(() => expect(feedCalls().length).toBeGreaterThan(0));
+    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/social-profiles/lala/sidebar?'))).toBe(true));
+    expect(calls().some((u) => u.includes('at='))).toBe(false);
   });
 });

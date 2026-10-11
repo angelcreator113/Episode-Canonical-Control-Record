@@ -4,8 +4,11 @@
  * tests/unit/constants/frontend-story-clock.test.js keeps the phases in
  * step.
  */
-export const PHASES = { before_episode: 1, during_episode: 5, after_episode: 7, next_day: 8, week_later: 9 };
-const PHASE_LABELS = { 1: 'Before', 5: 'During', 7: 'After', 8: 'The day after', 9: 'A week after' };
+export const PHASES = { before_episode: 1, announced: 2, invitation_sent: 3, lala_arrives: 4, during_episode: 5, after_episode: 7, next_day: 8, week_later: 9 };
+const PHASE_LABELS = {
+  1: 'Before', 2: 'Announced', 3: 'Invitation sent', 4: 'Lala arrives',
+  5: 'During', 7: 'After', 8: 'The day after', 9: 'A week after',
+};
 
 /** The post's story order: stamped, else from its episode (post.episode.episode_number), else null. */
 export function postOrder(post) {
