@@ -1,0 +1,83 @@
+/**
+ * One post on The Pulse as Lala sees it (Task 2927; spec §3 Centre, §8
+ * "Comments count"): the author's photo (else their initial), name, time and
+ * city; the words with #tags styled; a photo grid for one to four photos;
+ * likes, comments and shares; the first live comment with its author's photo,
+ * and "View N more" only when N more live comments exist. Nothing behind the
+ * curtain. Styles: pages/SocialMediaPage.css (pl-*).
+ */
+import React, { useState } from 'react';
+import { Heart, MessageCircle, Repeat2 } from 'lucide-react';
+import { posterOf, whenLabel, initial } from '../../lib/pulsePosts';
+import { DREAM_CITIES } from '../../data/dreamCities';
+
+/** A Dream City's name from its key (social_profiles.city), else null. */
+export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
+
+export function Avatar({ name, url, size = 40 }) {
+  const style = { width: size, height: size };
+  return url
+    ? <img className="pl-avatar" src={url} alt="" style={style} />
+    : <span className="pl-avatar pl-avatar-initial" style={{ ...style, fontSize: Math.round(size * 0.42) }} aria-hidden="true">{initial(name)}</span>;
+}
+
+/** The words, with each #tag in its own styled span. */
+export function TaggedText({ text }) {
+  const parts = String(text || '').split(/(#[\p{L}\p{N}_]+)/u);
+  return parts.map((part, i) => (/^#[\p{L}\p{N}_]+$/u.test(part)
+    ? <span key={i} className="pl-tag">{part}</span>
+    : <React.Fragment key={i}>{part}</React.Fragment>));
+}
+
+/** The post's photos: image_urls when a post has several, else its one image_url. */
+export const photosOf = (post) => {
+  const many = Array.isArray(post.image_urls) ? post.image_urls.filter(Boolean) : [];
+  return (many.length ? many : [post.image_url].filter(Boolean)).slice(0, 4);
+};
+
+export default function PulsePost({ post }) {
+  const [allComments, setAllComments] = useState(false);
+  const who = posterOf(post);
+  const city = cityName(post.socialProfile?.city);
+  // With ?with=comments the list holds the post's live comments; their number
+  // is the count (spec §8: the count is the real comments).
+  const comments = Array.isArray(post.comments) ? post.comments : null;
+  const commentCount = comments ? comments.length : (post.comments_count ?? 0);
+  const shown = comments ? (allComments ? comments : comments.slice(0, 1)) : [];
+  const more = comments ? comments.length - shown.length : 0;
+  const photos = photosOf(post);
+  const when = whenLabel(post.posted_at);
+  return (
+    <article className="pl-post" data-testid="pl-post">
+      <header className="pl-post-head">
+        <Avatar name={who.name} url={post.author_portrait_url} size={46} />
+        <div>
+          <p className="pl-post-name">{who.name}</p>
+          {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
+        </div>
+      </header>
+      {post.content_text && <p className="pl-post-text"><TaggedText text={post.content_text} /></p>}
+      {photos.length > 0 && (
+        <div className={`pl-photos pl-photos-${photos.length}`} data-testid="pl-photos">
+          {photos.map((src, i) => <img key={src} src={src} alt={i === 0 ? (post.image_description || '') : ''} />)}
+        </div>
+      )}
+      <p className="pl-post-actions">
+        <span><Heart size={16} aria-hidden="true" /> <span className="pl-sr">Likes</span>{post.likes ?? 0}</span>
+        <span><MessageCircle size={16} aria-hidden="true" /> <span className="pl-sr">Comments</span>{commentCount}</span>
+        <span><Repeat2 size={16} aria-hidden="true" /> <span className="pl-sr">Shares</span>{post.shares ?? 0}</span>
+      </p>
+      {shown.map((c) => (
+        <div key={c.id} className="pl-comment" data-testid="pl-comment">
+          <Avatar name={c.display_name || c.handle} url={c.portrait_url} size={32} />
+          <p><b>{c.display_name || c.handle}</b> {c.text}</p>
+        </div>
+      ))}
+      {more > 0 && (
+        <button type="button" className="pl-more-comments" onClick={() => setAllComments(true)}>
+          View {more} more {more === 1 ? 'comment' : 'comments'}
+        </button>
+      )}
+    </article>
+  );
+}
