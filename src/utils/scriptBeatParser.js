@@ -39,6 +39,8 @@ const UI_ACTION_TYPES = [
   'notification', 'voice_activate', 'scroll', 'add', 'remove',
   'check_item', 'set_background', 'play_sfx', 'play_music', 'stop_music',
   'hover', 'select', 'pulse', 'check',
+  // Lala's phone receives a DM, or she posts (Task #2885).
+  'dm', 'post',
 ];
 
 const UI_ACTION_DURATIONS = {
@@ -47,6 +49,7 @@ const UI_ACTION_DURATIONS = {
   add: 0.6, remove: 0.4, check_item: 0.5, set_background: 0.8,
   play_sfx: 0.0, play_music: 0.0, stop_music: 0.0,
   hover: 0.4, select: 0.6, pulse: 0.5, check: 0.5,
+  dm: 0.8, post: 1.0,
 };
 
 const BEAT_DEFAULTS = {
@@ -477,6 +480,8 @@ function normalizeUiAction(raw) {
     'playmusic': 'play_music', 'play_music': 'play_music',
     'stopmusic': 'stop_music', 'stop_music': 'stop_music',
     'hover': 'hover', 'select': 'select', 'pulse': 'pulse',
+    // [UI:NOTIFY Sender: text], [UI:DM Partner: text], [UI:POST text] (Task #2885).
+    'notify': 'notification', 'dm': 'dm', 'post': 'post',
   };
   return map[normalized] || normalized;
 }
@@ -491,6 +496,14 @@ function parseUiMetadata(actionType, target) {
     const match = target.match(/^(.+)\s+x(\d+)$/i);
     if (match) { meta.target = match[1]; meta.scrollCount = parseInt(match[2]); }
   }
+  // A notification or a DM: who it is from (or with), then the words after
+  // the first colon. A post: its words (Task #2885).
+  if (actionType === 'notification' || actionType === 'dm') {
+    const at = target.indexOf(':');
+    if (at > 0) { meta[actionType === 'dm' ? 'with' : 'from'] = target.slice(0, at).trim(); meta.text = target.slice(at + 1).trim(); }
+    else if (target) meta.text = target;
+  }
+  if (actionType === 'post' && target) meta.text = target;
   if (actionType === 'pulse') {
     const match = target.match(/^(.+)\s+x(\d+)$/i);
     if (match) { meta.target = match[1]; meta.pulseCount = parseInt(match[2]); }

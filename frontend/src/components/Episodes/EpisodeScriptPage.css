@@ -355,3 +355,9 @@
 .esp-cover-list li.is-gap svg { color: var(--warning-text); }
 .esp-cover-beat { color: var(--lala-lavender-text); }
 .esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
+
+/* Notifications, DMs and Lala's posts in a beat (Task #2885): the words, and
+   a post's draft in her Feed. */
+.esp-moment-words { font-family: 'Lora', serif; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-moment-drafted { font-size: 11px; font-weight: 600; color: var(--success-text); }
+.esp-picker-where input { width: 100%; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 16px; }

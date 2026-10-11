@@ -20,6 +20,8 @@
  */
 import { briefState } from './episodeOverview';
 import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
+import { describeEventOrganizer } from '../utils/eventOrganizer';
+import { beatSpeakers } from './scriptMoments';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -128,4 +130,25 @@ export function mustCover({ beats = [], deliverables = [], event = null, brief =
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   if (hook) items.push({ key: 'hook', label: hook, source: 'Forward hook' });
   return items.map((i) => ({ ...i, beat: mentionedIn(beats, i.label) }));
+}
+
+/**
+ * Who a Notification or DM can be from or with (Task #2885): the episode's
+ * own people. The event's host, its guests (featured first), then everyone
+ * who speaks in the script, each named once. Nothing is made up: an episode
+ * with no event and no speakers has nobody to offer, and the name is typed.
+ */
+export function scriptPeople({ event = null, sourceProfile = null, beats = [] } = {}) {
+  const out = [];
+  const add = (name) => {
+    const n = typeof name === 'string' ? name.trim() : '';
+    if (n && !out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  };
+  if (event) {
+    add(describeEventOrganizer(event, sourceProfile).name);
+    const guests = (event.canon_consequences?.automation?.guest_profiles || []).filter(Boolean);
+    [...guests.filter((g) => g.featured), ...guests.filter((g) => !g.featured)].forEach((g) => add(g.display_name || g.handle));
+  }
+  for (const b of beats) beatSpeakers(b?.lines || []).forEach((who) => { if (who !== 'Lala') add(who); });
+  return out;
 }

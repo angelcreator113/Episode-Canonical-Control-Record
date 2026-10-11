@@ -3,12 +3,12 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
-import { scriptInputs, mustCover } from '../../lib/episodeScript';
+import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -117,7 +117,7 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -160,7 +160,7 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
           {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
-      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} phoneDown={phoneDown} />}
+      {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} phoneDown={phoneDown} beatNumber={beatNumber} postDrafts={onScreen.postDrafts} />}
       {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
     </div>
@@ -169,7 +169,28 @@ function ScriptLine({ line, beatId, lineIndex, onEdit, onRewrite, rewriting, loc
 
 // A moment on screen in the script: what the phone or an overlay shows, with
 // its picture, so the beat reads the way it will play (Task #2789).
-function MomentCard({ moment, shown, alongside = [], phoneDown = false }) {
+const MESSAGE_ICONS = { notify: Bell, dm: MessageCircle, post: Send };
+function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumber = null, postDrafts = [] }) {
+  // A notification, a DM or a post (Task #2885): who and the words, and for
+  // a post whether its draft is in Lala's Feed.
+  if (shown && MESSAGE_ICONS[shown.kind]) {
+    const MIcon = MESSAGE_ICONS[shown.kind];
+    const draft = shown.kind === 'post' ? (postDrafts || []).find((d) => d.beat === beatNumber && d.text === shown.text && d.post_id) : null;
+    return (
+      <div className={`esp-moment is-${shown.kind}`} data-testid="script-moment">
+        <span className="esp-moment-thumb"><MIcon size={18} aria-hidden="true" /></span>
+        <span className="esp-moment-text">
+          <span className="esp-moment-kind">Lala&apos;s phone</span>
+          <span className="esp-moment-what">{shown.name}</span>
+          {shown.text && <span className="esp-moment-words">&ldquo;{shown.text}&rdquo;</span>}
+          {shown.kind === 'post' && (draft
+            ? <span className="esp-moment-drafted" data-testid="script-post-drafted">✓ Draft created in Lala&apos;s Feed</span>
+            : <span className="esp-moment-opens" data-testid="script-post-pending">Drafted in Lala&apos;s Feed when the script is saved</span>)}
+          {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
+        </span>
+      </div>
+    );
+  }
   const Icon = shown?.kind === 'overlay' ? ImageIcon : Smartphone;
   // The phone itself reads "Lala's phone · Comes on screen" (Task #2797).
   const what = shown?.kind === 'device' ? deviceLabel(moment.verb)
@@ -201,7 +222,7 @@ function lineLabel(line, on) {
   const p = parseLine(line);
   if (!p || p.hidden) return null;
   const shown = p.type === 'moment' ? resolveMoment(p, on) : null;
-  const text = p.type === 'moment' ? `${shown?.kind === 'icon' ? 'Taps' : verbLabel(p.verb)} ${shown?.name || p.target}`
+  const text = p.type === 'moment' ? (shown && ['notify', 'dm', 'post'].includes(shown.kind) ? `${shown.name}: ${shown.text}` : `${shown?.kind === 'icon' ? 'Taps' : verbLabel(p.verb)} ${shown?.name || p.target}`)
     : p.type === 'dialogue' ? `${p.speaker}: ${p.text}` : p.text;
   return text.length > 48 ? `${text.slice(0, 47)}…` : text;
 }
@@ -381,13 +402,72 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' 
   );
 }
 
+// A notification, a DM or a post for this beat (Task #2885). Who it is from
+// or with is typed or picked from the episode's own people (`people`: the
+// event's host and guests, who speaks in the script); a post is Lala's.
+const MESSAGE_KINDS = {
+  notify: { title: 'Add a notification', who: 'From', placeholder: 'What the notification says' },
+  dm: { title: 'Add a DM', who: 'With', placeholder: 'What the message says' },
+  post: { title: 'Add a post', who: null, placeholder: 'What Lala posts' },
+};
+function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose }) {
+  const info = MESSAGE_KINDS[kind];
+  const [who, setWho] = useState('');
+  const [text, setText] = useState('');
+  const [after, setAfter] = useState('end');
+  const [added, setAdded] = useState(0);
+  const line = messageLine(kind, info.who ? who : null, text);
+  const listId = `esp-people-${kind}`;
+  const add = () => {
+    if (!line) return;
+    const at = after === 'end' ? null : Number(after);
+    onAdd(line, at);
+    setText('');
+    setAdded((n) => n + 1);
+    if (at !== null) setAfter(String(at + 1));
+  };
+  return (
+    <div className="esp-picker esp-adder" data-testid={`script-message-adder-${kind}`} onClick={(e) => e.stopPropagation()}>
+      <div className="esp-picker-head">
+        <span className="esp-picker-title">{info.title}</span>
+        <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
+      </div>
+      {info.who && (
+        <label className="esp-picker-where">
+          <span>{info.who}</span>
+          <input type="text" list={listId} value={who} onChange={(e) => setWho(e.target.value)} data-testid="script-message-who" aria-label={info.who} />
+          <datalist id={listId}>{people.map((p) => <option key={p} value={p} />)}</datalist>
+        </label>
+      )}
+      <textarea className="esp-line-input esp-adder-text" data-testid="script-message-text" aria-label="The words" rows={3} value={text}
+        placeholder={info.placeholder} onChange={(e) => setText(e.target.value)} />
+      {kind === 'post' && <p className="esp-picker-empty">Saving the script drafts this post in Lala&apos;s Feed; it goes live when the episode publishes.</p>}
+      <div className="esp-picker-do">
+        <label className="esp-picker-where">
+          <span>Put it after</span>
+          <select data-testid="script-message-where" value={after} onChange={(e) => setAfter(e.target.value)}>
+            {lines.map((l, i) => { const label = lineLabel(l, onScreen); return label ? <option key={i} value={String(i)}>{label}</option> : null; })}
+            <option value="end">The end of the beat</option>
+          </select>
+        </label>
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-message-add" disabled={!line} onClick={add}>Add</button>
+      </div>
+      <div className="esp-picker-foot">
+        {added > 0 && <span className="esp-picker-added" role="status">{added === 1 ? 'Added' : `${added} added`}</span>}
+        <button type="button" className="esp-btn is-small" onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 // request: { kind: 'line' | 'phone', n } from the phone's bottom bar (Task
 // #2881), opening this beat's line adder or phone picker as its own buttons do.
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [] }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [messaging, setMessaging] = useState(null);
   const [zoomed, setZoomed] = useState(false);
   useEffect(() => {
     if (!request || !expanded || beat.approved) return;
@@ -481,10 +561,14 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           )}
           {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
-          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} />)}</div>
+          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />)}</div>
           {adding && !beat.approved && (
             <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
+          )}
+          {messaging && !beat.approved && (
+            <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen}
+              onClose={() => setMessaging(null)} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {picking && !beat.approved && (
             <MomentPicker key={`picker-${picking?.verb || 'open'}`} preset={picking?.verb ? picking : null} screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
@@ -503,10 +587,17 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             {!beat.approved && (
               <span className="esp-add-chips" role="group" aria-label="Add" data-testid={`script-add-chips-${beat.number}`}>
                 <span className="esp-add-label">Add:</span>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding('action'); }}>Action</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setAdding('Lala'); }}>Dialogue</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking({}); }}>Open a screen</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('action'); }}>Action</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('Lala'); }}>Dialogue</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>
+                {/* Task #2885: a notification, a DM or a post. */}
+                {Object.keys(MESSAGE_KINDS).map((k) => (
+                  <button key={k} type="button" className="esp-moment-btn" data-testid={`script-add-${k}-${beat.number}`}
+                    onClick={e => { e.stopPropagation(); setAdding(false); setPicking(false); setMessaging(k); }}>
+                    {k === 'notify' ? 'Notification' : k === 'dm' ? 'DM' : 'Post'}
+                  </button>
+                ))}
               </span>
             )}
             {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={regenerating} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
@@ -575,6 +666,29 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [balance, setBalance] = useState(null);
   const [barRequest, setBarRequest] = useState(null);
   const [contextOpen, setContextOpen] = useState(false);
+  // Lala's posts in the script (Task #2885): each Post line's draft in her
+  // Feed, as the server has it (null: not read yet, or could not be).
+  const [postDrafts, setPostDrafts] = useState(null);
+  useEffect(() => {
+    if (!episodeId) return undefined;
+    let cancelled = false;
+    api.get(`/api/v1/feed-posts/episodes/${episodeId}/script-drafts`)
+      .then((res) => { if (!cancelled) setPostDrafts(Array.isArray(res?.data?.data) ? res.data.data : null); })
+      .catch((err) => { console.error('[EpisodeScript] post drafts load failed:', err); if (!cancelled) setPostDrafts(null); });
+    return () => { cancelled = true; };
+  }, [episodeId]);
+  // A saved script drafts its new Post lines in Lala's Feed (as drafts; they
+  // go live when the episode publishes). A failure says so; the script stays saved.
+  const syncPostDrafts = useCallback(async () => {
+    try {
+      const res = await api.post(`/api/v1/feed-posts/episodes/${episodeId}/script-drafts`);
+      setPostDrafts(Array.isArray(res?.data?.data) ? res.data.data : null);
+      return true;
+    } catch (err) {
+      console.error('[EpisodeScript] post drafts sync failed:', err);
+      return false;
+    }
+  }, [episodeId]);
   useEffect(() => {
     if (!showId) return undefined;
     let cancelled = false;
@@ -745,10 +859,11 @@ export default function EpisodeScriptTab({ episode, show }) {
       setSavedScript(stored);
       setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000);
       if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'error', 5000);
+      if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
     }
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
     finally { setSaving(false); }
-  }, [episodeId, scriptText]);
+  }, [episodeId, scriptText, syncPostDrafts]);
 
   const handleEditLine = (beatId, lineIndex, newText) => {
     if (beats.find(b => b.id === beatId)?.approved) return;
@@ -889,7 +1004,7 @@ export default function EpisodeScriptTab({ episode, show }) {
       }
       const script = res.data.script || res.data.script_text || '';
       setScriptText(script); setDevScript(script);
-      if (res.data.saved !== false) setSavedScript(script);
+      if (res.data.saved !== false) { setSavedScript(script); if (/\[UI:\s*POST\s/i.test(script)) syncPostDrafts(); }
       // The server saves as part of success (audit GATE-03). Generated but
       // not saved: keep the draft here and say so; Save keeps it without
       // another generation.
@@ -933,6 +1048,8 @@ export default function EpisodeScriptTab({ episode, show }) {
   const phoneBeats = new Set(beats.filter((b) => hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
   const openScene = openBeat ? scenePlan.find((p) => p.beat_number === openBeat.number) : null;
   const inRoom = openBeat ? beatSpeakers(openBeat.lines) : [];
+  const people = scriptPeople({ event: source?.event || null, sourceProfile: source?.sourceProfile || null, beats });
+  const onScreenWithDrafts = postDrafts ? { ...onScreen, postDrafts } : onScreen;
   const approvedCount = beats.filter(b => b.approved).length;
   const allApproved = beats.length > 0 && approvedCount === beats.length;
   const hasScript = !!scriptText?.trim();
@@ -1036,7 +1153,7 @@ export default function EpisodeScriptTab({ episode, show }) {
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreen} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
