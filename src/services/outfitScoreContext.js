@@ -17,9 +17,13 @@
  * without writing them.
  */
 
-// The event completion scores against: the episode's highest-prestige event.
-const EPISODE_EVENT_SQL =
-  'SELECT * FROM world_events WHERE used_in_episode_id = :episodeId ORDER BY prestige DESC NULLS LAST LIMIT 1';
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
+
+// The event completion scores against: the episode's event, the one its
+// brief names, else the first stamped (utils/episodeEventSql; Task #1917).
+// It was the highest-prestige stamped event, which after a reassign could be
+// another event than the one the screens show.
+const EPISODE_EVENT_SQL = `SELECT * FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`;
 
 // Lala's state, canonical character_key 'lala' (F-Sec-3 decision; Task #1816).
 const LALA_STATE_SQL =

@@ -16,6 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { careerTierFromReputation } = require('../utils/careerTiers');
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
@@ -317,30 +318,24 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
  * Returns { opportunities_advanced }.
  */
 async function onEpisodeCompleted(episodeId, showId, models) {
-  const { Episode, WorldEvent, Opportunity, sequelize } = models;
+  const { Episode, Opportunity, sequelize } = models;
   const result = { opportunities_advanced: [] };
 
   const episode = await Episode.findByPk(episodeId);
   if (!episode) return result;
 
-  // Find the world event linked to this episode
+  // The episode's event: the one its brief names, else the first stamped
+  // (utils/episodeEventSql; Task #1917). The stamp alone could name another
+  // event after a reassign.
   let event = null;
-  if (WorldEvent) {
-    // Scoped to the only field this function actually reads (event.id, at
-    // the opportunity lookup below). event.opportunity_id is also read
-    // there, but that column isn't declared on the model at this basis
-    // (see WorldEvent.js's own comment) so it was already never populated
-    // via this query — not changed by this scoping.
-    event = await WorldEvent.findOne({ where: { used_in_episode_id: episodeId }, attributes: ['id'] });
-  }
-  if (!event) {
-    try {
-      const [rows] = await sequelize.query(
-        `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
-        { replacements: { episodeId } }
-      );
-      event = rows?.[0];
-    } catch { /* no event */ }
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT * FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`,
+      { replacements: { episodeId } }
+    );
+    event = rows?.[0] || null;
+  } catch (eventErr) {
+    console.error('[CareerPipeline] episode event read failed (no event):', eventErr.message);
   }
 
   // Find the opportunity linked to the event or episode

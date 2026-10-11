@@ -63,8 +63,11 @@ describe('Task #1640 follow-up — every previously-unrestricted WorldEvent quer
     expect(matches.length).toBe(2);
   });
 
-  test('careerPipelineService.js — the completion-cascade lookup scopes attributes to [\'id\']', () => {
-    expect(CAREER_PIPELINE_SRC).toMatch(/WorldEvent\.findOne\(\{ where: \{ used_in_episode_id: episodeId \}, attributes: \['id'\] \}\)/);
+  test('careerPipelineService.js — the completion-cascade lookup no longer goes through the WorldEvent model', () => {
+    // Task #1917: it reads the episode's one event with raw SQL
+    // (utils/episodeEventSql), so it requests no model columns at all.
+    expect(CAREER_PIPELINE_SRC).not.toMatch(/WorldEvent\.findOne\(/);
+    expect(CAREER_PIPELINE_SRC).toMatch(/FROM world_events WHERE id = \$\{EPISODE_EVENT_ID_SQL\}/);
   });
 
   test('episodeScriptWriterService.js — the wardrobe-context lookup scopes attributes', () => {

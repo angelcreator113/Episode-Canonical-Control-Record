@@ -64,7 +64,7 @@ function makeSequelize({ look = LOOK, lookError = null, eventPieces = EVENT_PIEC
     if (/FROM episodes WHERE id = :episodeId/.test(sql)) {
       return [{ id: EPISODE_ID, title: 'Ep', episode_number: 3, show_id: SHOW_ID, evaluation_status: 'draft' }];
     }
-    if (/FROM world_events WHERE used_in_episode_id = :episodeId/.test(sql)) {
+    if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) {
       return [{ id: 'ev-1', show_id: SHOW_ID, name: 'Gala', prestige: 7, dress_code: 'black tie', outfit_pieces: eventPieces }];
     }
     if (/SELECT \* FROM character_state/.test(sql)) {

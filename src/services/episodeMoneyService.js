@@ -26,29 +26,21 @@
 
 const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 const { wholeCoins } = require('../utils/wholeCoins');
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 
 const INCOME_TYPES = new Set(['income', 'reward']);
 
 /**
  * The episode's source event (§8(w) P2): the event its live brief names, else
- * the event whose used_in_episode_id points at it.
+ * the first event stamped with it (utils/episodeEventSql, the one rule every
+ * service reads by; Task #1917).
  */
 async function findSourceEvent(sequelize, episodeId) {
-  const [fromBrief] = await sequelize.query(
-    `SELECT w.* FROM episode_briefs b
-       JOIN world_events w ON w.id = b.event_id
-      WHERE b.episode_id = :episodeId AND b.deleted_at IS NULL AND w.deleted_at IS NULL
-      ORDER BY b.created_at DESC LIMIT 1`,
+  const [event] = await sequelize.query(
+    `SELECT * FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
-  if (fromBrief) return fromBrief;
-  const [fromEvent] = await sequelize.query(
-    `SELECT * FROM world_events
-      WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
-      ORDER BY updated_at DESC LIMIT 1`,
-    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-  );
-  return fromEvent || null;
+  return event || null;
 }
 
 /**
