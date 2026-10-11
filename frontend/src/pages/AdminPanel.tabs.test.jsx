@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import AdminPanel from './AdminPanel';
 
@@ -31,14 +31,15 @@ const renderAt = (url) => render(
     <Routes><Route path="/admin" element={<><AdminPanel /><SearchSpy /></>} /></Routes>
   </MemoryRouter>,
 );
-const tab = (name) => screen.getByRole('tab', { name });
+const adminTabs = () => within(screen.getByRole('tablist', { name: 'Admin sections' }));
+const tab = (name) => adminTabs().getByRole('tab', { name });
 
 describe('Admin tabs', () => {
   beforeEach(() => { window.localStorage.clear(); SHOWS = []; });
 
   test('four tabs; The Pulse is the default', () => {
     renderAt('/admin');
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['The Pulse', 'Website', 'Show settings', 'Tools']);
+    expect(adminTabs().getAllByRole('tab').map((t) => t.textContent)).toEqual(['The Pulse', 'Website', 'Show settings', 'Tools']);
     expect(tab('The Pulse').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('admin-pulse')).toBeTruthy();
     expect(screen.getByText('Open The Pulse').getAttribute('href')).toBe('/pulse');

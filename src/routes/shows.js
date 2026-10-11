@@ -558,6 +558,83 @@ router.delete('/:id/logo', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET    /api/v1/shows/:id/pulse-cover
+ * POST   /api/v1/shows/:id/pulse-cover   multipart, field "image", optional "alt"
+ * PATCH  /api/v1/shows/:id/pulse-cover   Body: { alt }
+ * DELETE /api/v1/shows/:id/pulse-cover
+ * The Pulse's cover image and its alt text, a show setting stored on
+ * Show.metadata.pulse_cover (pulseCoverService; Task #2919). Every write
+ * keeps the other metadata keys.
+ */
+const coverUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } }).single('image');
+const oneCover = (req, res, next) => coverUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('POST /shows/:id/pulse-cover upload rejected:', err.message);
+  return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The cover is 15 MB at most.' : err.message });
+});
+
+router.get('/:id/pulse-cover', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readPulseCover } = require('../services/pulseCoverService');
+    return res.json({ success: true, cover: readPulseCover(show.metadata) });
+  } catch (err) {
+    console.error('GET /shows/:id/pulse-cover error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/pulse-cover', requireAuth, oneCover, async (req, res) => {
+  const { storePulseCover, readAlt, PulseCoverError } = require('../services/pulseCoverService');
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const alt = readAlt(req.body?.alt);
+    if (alt.error) return res.status(400).json({ success: false, error: alt.error, code: 'BAD_ALT' });
+    const cover = await storePulseCover(show.id, req.file, alt.value);
+    await show.update({ metadata: { ...(show.metadata || {}), pulse_cover: cover } });
+    return res.json({ success: true, cover });
+  } catch (err) {
+    console.error('POST /shows/:id/pulse-cover error:', err);
+    if (err instanceof PulseCoverError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/pulse-cover', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { readPulseCover, readAlt } = require('../services/pulseCoverService');
+    const current = readPulseCover(show.metadata);
+    if (!current) return res.status(404).json({ success: false, error: 'There is no cover yet. Upload one first.', code: 'NO_COVER' });
+    const alt = readAlt(req.body?.alt);
+    if (alt.error) return res.status(400).json({ success: false, error: alt.error, code: 'BAD_ALT' });
+    const cover = { ...show.metadata.pulse_cover, alt: alt.value, updated_at: new Date().toISOString() };
+    await show.update({ metadata: { ...(show.metadata || {}), pulse_cover: cover } });
+    return res.json({ success: true, cover: readPulseCover({ pulse_cover: cover }) });
+  } catch (err) {
+    console.error('PATCH /shows/:id/pulse-cover error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id/pulse-cover', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const rest = { ...(show.metadata || {}) };
+    delete rest.pulse_cover;
+    await show.update({ metadata: rest });
+    return res.json({ success: true, cover: null });
+  } catch (err) {
+    console.error('DELETE /shows/:id/pulse-cover error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/scene-defaults
  * PUT /api/v1/shows/:id/scene-defaults   Body: { home_set_id?, closet_set_id? }
  * Lala's home set and closet set, saved defaults for the Episode Locations
