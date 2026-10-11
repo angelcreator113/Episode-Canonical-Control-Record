@@ -135,9 +135,21 @@ describe('EpisodeWardrobeGameplay — garment images', () => {
     expect(screen.getByAltText('Rose Gown').getAttribute('src')).toBe(PROCESSED);
   });
 
-  test('an item with a thumbnail and s3_url shows the thumbnail', async () => {
+  // Producer Mode's order (Evoni, 2026-10-11): the thumbnail is cut before
+  // the background is removed, so it would cover the slot's colour backdrop.
+  test('an item with a thumbnail and s3_url shows s3_url, on its backdrop', async () => {
     await renderGame();
-    expect(screen.getByAltText('Ivory Slip').getAttribute('src')).toBe(THUMB);
+    const img = screen.getByAltText('Ivory Slip');
+    expect(img.getAttribute('src')).toBe(RAW);
+    expect(img.parentElement.className).toMatch(/wa-wd-backdrop bd-/);
+  });
+
+  test('the thumbnail is the last resort', async () => {
+    const { resolveWardrobeCutoutUrl } = await import('../utils/wardrobeImage');
+    expect(resolveWardrobeCutoutUrl({ thumbnail_url: THUMB })).toBe(THUMB);
+    expect(resolveWardrobeCutoutUrl({ thumbnail_url: THUMB, image_url: RAW })).toBe(RAW);
+    expect(resolveWardrobeCutoutUrl({ s3_url: RAW, s3_url_processed: PROCESSED, primary_image_variant: 'original' })).toBe(RAW);
+    expect(resolveWardrobeCutoutUrl({})).toBeNull();
   });
 
   test('an item with no image shows the category emoji', async () => {

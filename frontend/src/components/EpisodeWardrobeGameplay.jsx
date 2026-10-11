@@ -31,7 +31,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
-import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
+import { resolveWardrobeCutoutUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
@@ -100,7 +100,8 @@ const SCORE_DEBOUNCE_MS = 350;
 // image if it fails to load. Keyed by URL so a new URL gets a fresh attempt.
 
 function GarmentImage({ item, fallback, size, height, radius = 8 }) {
-  const url = resolveWardrobeImageUrl(item);
+  // Producer Mode's order, so the piece sits on its backdrop (not the thumbnail's own background).
+  const url = resolveWardrobeCutoutUrl(item);
   return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} backdrop={backdropFor(item)} />;
 }
 

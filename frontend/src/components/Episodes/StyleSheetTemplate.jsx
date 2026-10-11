@@ -139,7 +139,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
         </div>
 
         <div className="ss-col ss-col-centre">
-          <div className="ss-hero">
+          <div className="ss-look-hero">
             <div className="ss-spot-wrap">
               <Photo src={sheet.look?.hero} label={edit ? '' : 'Hero'} />
               <SpotButton edit={edit} spot="hero" label="Hero" filled={Boolean(sheet.look?.hero)} />
@@ -150,7 +150,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
         <div className="ss-col ss-col-right">
           {sheet.episode?.label && <div className="ss-episode">{sheet.episode.label}</div>}
           <h1 className="ss-event-name">{ev.name || 'Event to come'}</h1>
-          {venue.chip && <div className="ss-chip">{venue.chip}</div>}
+          {venue.chip && <div className="ss-venue-chip">{venue.chip}</div>}
           <figure className="ss-venue">
             <div className="ss-spot-wrap">
               <Photo src={venue.image} label={edit ? '' : 'Venue'} className="ss-frame" />
@@ -200,7 +200,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
 
       {/* Bottom row: palette · beauty · inspo */}
       <div className="ss-bottom">
-        <section className="ss-panel ss-spot-wrap">
+        <section className="ss-sheet-panel ss-spot-wrap">
           <SpotButton edit={edit} spot="palette" label="Palette" filled />
           <div className="ss-pill ss-pill-centre">COLOR PALETTE</div>
           <div className="ss-swatches">
@@ -212,7 +212,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           <p className="ss-mood-words">{mood.length ? mood.join(' · ') : ''}</p>
         </section>
 
-        <section className="ss-panel">
+        <section className="ss-sheet-panel">
           <div className="ss-pill ss-pill-centre">BEAUTY DETAILS</div>
           <div className="ss-beauty">
             {[['eyes', 'Eyes'], ['lips', 'Lips'], ['skin', 'Skin'], ['nails', 'Nails']].map(([k, label]) => (
@@ -227,7 +227,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
           </div>
         </section>
 
-        <section className="ss-panel">
+        <section className="ss-sheet-panel">
           <div className="ss-pill ss-pill-centre">KEY INSPO</div>
           <div className="ss-inspo">
             {[0, 1].map((i) => (
