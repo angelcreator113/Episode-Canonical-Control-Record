@@ -114,6 +114,11 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    // Cover photo (Task #2921); the profile photo is portrait_url.
+    cover_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
 
     /* ── Section 1: Core Identity additions ── */
     canon_tier: {

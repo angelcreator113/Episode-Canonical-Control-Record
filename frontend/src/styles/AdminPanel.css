@@ -649,3 +649,50 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Uploads › Characters (Task #2921) */
+.pulse-field input[type='search'] {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  font: inherit;
+}
+
+.pulse-characters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 1rem;
+}
+
+.pulse-character {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  background: var(--lala-surface);
+}
+
+.pulse-character h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pulse-character-spots {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.pulse-character .pulse-add-spot {
+  min-height: 96px;
+  font-size: 0.875rem;
+}
+
+.pulse-character .pulse-actions .pulse-btn {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+}

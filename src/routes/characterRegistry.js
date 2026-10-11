@@ -70,7 +70,7 @@ router.get('/registries', requireAuth, async (req, res) => {
     }
     const { count, rows: registries } = await CharacterRegistry.findAndCountAll({
       ...(showId !== undefined ? { where: { show_id: showId } } : {}),
-      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
+      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order', 'portrait_url', 'cover_url'] }],
       order: [['created_at', 'DESC']],
       limit,
       offset,
@@ -1259,6 +1259,60 @@ router.post('/characters/:id/portrait', requireAuth, portraitUpload.single('port
     return res.json({ success: true, portrait_url });
   } catch (err) {
     console.error('[CharacterRegistry] POST portrait error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST   /characters/:id/photo?kind=portrait|cover   multipart, field "image"
+ * DELETE /characters/:id/photo?kind=portrait|cover
+ * The character's profile photo (portrait_url) or cover photo (cover_url),
+ * set from Admin › The Pulse › Uploads › Characters (Task #2921). Stored in
+ * the studio's storage (pulseImageService), not on this server's disk; the
+ * disk portrait routes above and below are unchanged.
+ */
+const PHOTO_KINDS = {
+  portrait: { field: 'portrait_url', maxSide: 1200, minSide: 200, label: 'The profile photo' },
+  cover: { field: 'cover_url', maxSide: 2400, minSide: 400, label: 'The cover photo' },
+};
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } }).single('image');
+const onePhoto = (req, res, next) => photoUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('[CharacterRegistry] photo upload rejected:', err.message);
+  return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The photo is 15 MB at most.' : err.message });
+});
+
+router.post('/characters/:id/photo', requireAuth, onePhoto, async (req, res) => {
+  const { storePulseImage, PulseImageError } = require('../services/pulseImageService');
+  try {
+    const kind = PHOTO_KINDS[req.query.kind];
+    if (!kind) return res.status(400).json({ success: false, error: 'kind is portrait or cover.', code: 'BAD_KIND' });
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { url } = await storePulseImage(req.file, { keyPrefix: `characters/${character.id}/${req.query.kind}`, ...kind });
+    character[kind.field] = url;
+    await character.save();
+    return res.json({ success: true, [kind.field]: url });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST photo error:', err);
+    if (err instanceof PulseImageError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/characters/:id/photo', requireAuth, async (req, res) => {
+  try {
+    const kind = PHOTO_KINDS[req.query.kind];
+    if (!kind) return res.status(400).json({ success: false, error: 'kind is portrait or cover.', code: 'BAD_KIND' });
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    character[kind.field] = null;
+    await character.save();
+    return res.json({ success: true, [kind.field]: null });
+  } catch (err) {
+    console.error('[CharacterRegistry] DELETE photo error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -4,39 +4,12 @@
  * (lib/pulseCities). Empty image spots are dashed "+ Add" buttons.
  * Styles: styles/AdminPanel.css.
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { ImagePlus, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Loader2, Plus, X } from 'lucide-react';
+import PulseImageSpot from './PulseImageSpot';
 import { HEX, hasSavedPalette, loadCities, paletteOf, saveCity, uploadCityImage } from '../../lib/pulseCities';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
-
-function ImageSpot({ label, url, alt, busy, onFile, onRemove, round = false, testId }) {
-  const fileRef = useRef(null);
-  const pick = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) onFile(file);
-  };
-  return (
-    <div className="pulse-city-spot">
-      <span className="pulse-spot-label">{label}</span>
-      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pick} data-testid={`${testId}-file`} />
-      {url ? (
-        <>
-          <img className={round ? 'pulse-city-bubble' : 'pulse-city-image'} src={url} alt={alt || ''} />
-          <div className="pulse-actions">
-            <button type="button" className="pulse-btn" disabled={busy} onClick={() => fileRef.current?.click()}><RefreshCw size={16} aria-hidden="true" /> Replace</button>
-            <button type="button" className="pulse-btn danger" disabled={busy} onClick={onRemove}><Trash2 size={16} aria-hidden="true" /> Remove</button>
-          </div>
-        </>
-      ) : (
-        <button type="button" className={round ? 'pulse-add-spot round' : 'pulse-add-spot'} disabled={busy} onClick={() => fileRef.current?.click()} data-testid={`${testId}-add`}>
-          <ImagePlus size={18} aria-hidden="true" /> + Add {label.toLowerCase()}
-        </button>
-      )}
-    </div>
-  );
-}
 
 function CityCard({ city, onSaved }) {
   const [busy, setBusy] = useState(false);
@@ -78,9 +51,9 @@ function CityCard({ city, onSaved }) {
         {city.subtitle && <span className="pulse-hint">{city.subtitle}</span>}
       </header>
       <div className="pulse-city-spots">
-        <ImageSpot label="Image" url={city.image_url} alt={city.image_alt} busy={busy}
+        <PulseImageSpot label="Image" url={city.image_url} alt={city.image_alt} busy={busy}
           onFile={setImage('image_url', 'image')} onRemove={clear({ image_url: null, image_alt: '' })} testId={`city-${city.key}-image`} />
-        <ImageSpot label="Story bubble" url={city.bubble_image_url} alt="" round busy={busy}
+        <PulseImageSpot label="Story bubble" url={city.bubble_image_url} alt="" round busy={busy}
           onFile={setImage('bubble_image_url', 'bubble')} onRemove={clear({ bubble_image_url: null })} testId={`city-${city.key}-bubble`} />
       </div>
       {city.image_url && (

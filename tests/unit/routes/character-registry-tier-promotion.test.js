@@ -24,9 +24,11 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
-  test('every handler line carries requireAuth (37 router.<verb> definitions)', () => {
+  // 39: +2 for POST and DELETE /characters/:id/photo (profile and cover
+  // photos from The Pulse Uploads, Task #2921), both requireAuth.
+  test('every handler line carries requireAuth (39 router.<verb> definitions)', () => {
     const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
-    expect(handlers.length).toBe(37);
+    expect(handlers.length).toBe(39);
     handlers.forEach((line) => {
       expect(line).toMatch(/\brequireAuth\b/);
     });
