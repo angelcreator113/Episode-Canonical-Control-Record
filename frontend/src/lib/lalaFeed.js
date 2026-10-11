@@ -2,18 +2,20 @@
  * Producer Mode → Lala's Feed (Evoni's redesign, 2026-10-05: "bring the
  * feed back"). Pure helpers over the show's feed posts
  * (GET /api/v1/feed-posts?show_id=&status=). A post is a draft or live
- * (services/feedPostStatus.js); a draft tied to an episode goes live when
- * that episode is published, any other draft when Evoni approves it.
+ * (services/feedPostStatus.js); every draft goes live when Evoni approves it
+ * (Requests on the Feed page; publishing an episode no longer does, Task #2749).
  */
 
 export const FEED_VIEWS = [
   { key: 'queue', label: 'Queue' },
-  { key: 'scheduled', label: 'Scheduled' },
+  // An episode's drafts wait for approval too (Evoni, 2026-10-11, Task
+  // #2749); publishing the episode no longer puts them live.
+  { key: 'scheduled', label: 'From episodes' },
   { key: 'live', label: 'Live' },
   { key: 'deleted', label: 'Deleted' },
 ];
 
-/** The posts a view lists: Queue the drafts waiting on approval, Scheduled the drafts going out with an episode, Live the posted ones, Deleted the deleted ones. */
+/** The posts a view lists: Queue the wall's drafts waiting on approval, From episodes the episodes' drafts (waiting on approval too), Live the posted ones, Deleted the deleted ones. */
 export function postsFor(view, drafts, live, deleted) {
   if (view === 'deleted') return deleted || [];
   if (view === 'live') return live || [];
@@ -38,12 +40,12 @@ export function postOrigin(post) {
   return isLalasPost(post) ? 'Drafted in her voice' : 'Drafted from their profile and voice';
 }
 
-/** When a draft goes out: with its episode, or once approved. */
+/** When a draft goes out: once approved, whether or not it came from an episode (Task #2749). */
 export function goesLive(post, episodes = []) {
   if (post?.status === 'live') return null;
   if (!post?.episode_id) return 'Goes live when you approve it';
   const ep = episodes.find((e) => e.id === post.episode_id);
-  return `Goes live with Episode ${ep?.episode_number ?? '?'}`;
+  return `From Episode ${ep?.episode_number ?? '?'} · goes live when you approve it`;
 }
 
 /** "2 hours ago" style, for What Lala sees. */

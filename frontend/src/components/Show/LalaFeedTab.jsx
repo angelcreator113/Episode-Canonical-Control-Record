@@ -1,7 +1,8 @@
 /**
  * Producer Mode → Lala's Feed (Evoni's redesign, 2026-10-05: "bring the
  * feed back"; the Sidebar's Social Media page stays). Queue: drafts waiting
- * on approval; Scheduled: drafts going out with an episode's release; Live:
+ * on approval; From episodes: an episode's drafts, also waiting on approval
+ * (2026-10-11: publishing no longer puts them live); Live:
  * what is posted; Deleted: what was deleted, to restore. Approve posts a
  * draft now; Edit, Redraft in their voice (with an undo) and Delete work on
  * drafts only (a live post is locked, services/feedPostStatus.js; a live
@@ -51,7 +52,7 @@ function PostCard({ post, episodes, busy, onApprove, onSave, onDelete, onRedraft
         {!deleted && draft && !editing && (
           <>
             <button type="button" className="wa-lf-primary" disabled={busy} onClick={() => onApprove(post)} data-testid={`feed-approve-${post.id}`}>
-              {post.episode_id ? 'Post now' : 'Approve'}
+              Approve
             </button>
             <button type="button" className="wa-lf-secondary" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
             <button type="button" className="wa-lf-link-btn" disabled={busy} onClick={() => onRedraft(post)} data-testid={`feed-redraft-${post.id}`}>
@@ -127,7 +128,8 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
     setDrafts(d);
     setLive(l);
     setDeletedPosts(x);
-    onCountChanged?.(d.filter((p) => !p.episode_id).length);
+    // Every draft waits for approval now, an episode's too (2026-10-11).
+    onCountChanged?.(d.length);
   }, [showId, onCountChanged]);
   useEffect(() => { load(); }, [load]);
 
@@ -176,7 +178,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
 
   const shown = postsFor(view, drafts, live, deletedPosts);
   const counts = { queue: postsFor('queue', drafts, live).length, scheduled: postsFor('scheduled', drafts, live).length, live: (live || []).length, deleted: (deletedPosts || []).length };
-  const heading = { queue: 'Waiting for your approval', scheduled: 'Going out with a release', live: 'On her feed', deleted: 'Deleted posts' }[view];
+  const heading = { queue: 'Waiting for your approval', scheduled: 'From episodes, waiting for your approval', live: 'On her feed', deleted: 'Deleted posts' }[view];
 
   return (
     <div className="wa-lf" data-testid="lala-feed">
@@ -208,7 +210,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
           <h3 className="wa-lf-section">{heading} {drafts != null && <span>{shown.length} {view === 'live' || view === 'deleted' ? `post${shown.length === 1 ? '' : 's'}` : `draft${shown.length === 1 ? '' : 's'}`}</span>}</h3>
           {drafts == null ? <p className="wa-lf-empty">Loading the feed…</p> : shown.length === 0 ? (
             <p className="wa-lf-empty">
-              {{ queue: 'Nothing waiting for approval.', scheduled: 'No drafts going out with an episode. An episode\'s feed posts are made on its feed timeline.', live: 'Nothing posted yet.', deleted: 'Nothing deleted.' }[view]}
+              {{ queue: 'Nothing waiting for approval.', scheduled: 'No episode drafts waiting. An episode\'s feed posts are made on its feed timeline.', live: 'Nothing posted yet.', deleted: 'Nothing deleted.' }[view]}
             </p>
           ) : (
             <ul className="wa-lf-list">

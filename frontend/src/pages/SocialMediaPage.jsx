@@ -333,6 +333,51 @@ export function PostCard({ post, onChange, showId }) {
   );
 }
 
+/**
+ * A post an episode drafted, waiting for approval in Requests (Evoni,
+ * 2026-10-11: nothing reaches the Wall until approved): who, the words and
+ * the episode, with Approve (it goes live), Edit and Discard (kept under
+ * Deleted).
+ */
+function RequestPost({ post, onChange }) {
+  const who = posterOf(post);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(post.content_text || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const act = async (label, call) => {
+    setBusy(true); setError(null);
+    try { await call(); setEditing(false); onChange?.(); }
+    catch (err) { console.error(`[SocialMedia] ${label} failed:`, err.response?.status || err.message); setError(err.response?.data?.error || `${label} failed.`); }
+    finally { setBusy(false); }
+  };
+  const episodeNumber = post.episode?.episode_number;
+  return (
+    <div className="sm-request" data-testid="sm-request-post">
+      <p className="sm-request-text"><b>{who.name}</b> {editing ? null : post.content_text}</p>
+      {editing && <textarea aria-label="Edit the post" rows={3} value={text} onChange={(e) => setText(e.target.value)} />}
+      <p className="sm-muted">{post.episode_id ? <Link to={`/episodes/${post.episode_id}`}>{episodeNumber != null ? `Episode ${episodeNumber}` : 'Its episode'}</Link> : null}</p>
+      <p className="sm-actions">
+        {editing ? (
+          <>
+            <button type="button" className="sm-btn" disabled={busy || !text.trim() || text.trim() === post.content_text}
+              onClick={() => act('Save', () => api.put(`/api/v1/feed-posts/${post.id}`, { content_text: text.trim() }))}>Save</button>
+            <button type="button" className="sm-link-btn" onClick={() => { setEditing(false); setText(post.content_text || ''); }}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="sm-btn" disabled={busy} onClick={() => act('Approve', () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' }))}>Approve</button>
+            <button type="button" className="sm-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
+            <button type="button" className="sm-link-btn" disabled={busy}
+              onClick={() => { if (window.confirm('Discard this post? It is kept under Deleted and can be restored.')) act('Discard', () => api.delete(`/api/v1/feed-posts/${post.id}`)); }}>Discard</button>
+          </>
+        )}
+      </p>
+      {error && <p className="sm-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
 function Box({ title, action, children, testId }) {
   return (
     <section className="sm-box" data-testid={testId}>
@@ -355,7 +400,11 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [draftsTotal, setDraftsTotal] = useState(0);
+  // Lala's own drafts from the wall, and the posts an episode drafted, which
+  // wait for approval in Requests (Evoni, 2026-10-11): counted apart.
+  const [wallDrafts, setWallDrafts] = useState(0);
+  const [toApprove, setToApprove] = useState({ list: [], total: 0 });
+  const draftsTotal = wallDrafts + toApprove.total;
   const [pending, setPending] = useState([]);
   const [wallTab, setWallTab] = useState('wall');
   const [loading, setLoading] = useState(true);
@@ -388,15 +437,16 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
   const loadSides = useCallback(async () => {
     if (!show?.id) return;
     const safe = async (p, fallback) => { try { return await p; } catch (err) { console.error('[SocialMedia] side load failed:', err.response?.status || err.message); return fallback; } };
-    const [who, ppl, ev, drafts, pend, rel] = await Promise.all([
+    const [who, ppl, ev, drafts, pend, rel, epDrafts] = await Promise.all([
       safe(api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}`), null),
       safe(api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=12'), null),
       // The events she is going to and the guests she may know (2026-10-11).
       safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${encodeURIComponent(show.id)}`), null),
-      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&limit=1`), null),
+      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&from=wall&limit=1`), null),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${show.id}`), null),
       // Her relationship posts (docs/FEED_POSTS.md rule 8), not only the wall's first page.
       safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&post_type=relationship&status=live&limit=50`), null),
+      safe(api.get(`/api/v1/feed-posts?show_id=${show.id}&status=draft&from=episode&with=comments&limit=20`), null),
     ]);
     setLala(who?.data?.data || false);
     setRelPosts(rel?.data?.data || []);
@@ -404,7 +454,9 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
     setFriends({ list, total: ppl?.data?.pagination?.total ?? ppl?.data?.total ?? list.length });
     setEvents(Array.isArray(ev?.data?.data?.upcoming) ? ev.data.data.upcoming : []);
     setMayKnow(Array.isArray(ev?.data?.data?.may_know) ? ev.data.data.may_know : []);
-    setDraftsTotal(drafts?.data?.total ?? 0);
+    setWallDrafts(drafts?.data?.total ?? 0);
+    const epList = Array.isArray(epDrafts?.data?.data) ? epDrafts.data.data : [];
+    setToApprove({ list: epList, total: epDrafts?.data?.total ?? epList.length });
     setPending(pend?.data?.data || []);
   }, [show?.id]);
 
@@ -551,9 +603,12 @@ function Wall({ show, showLoaded, search, tabRequest, onInbox }) {
       <aside className="sm-right">
         <Box title="Requests" testId="sm-requests">
           <ul className="sm-plain">
-            <li><button type="button" className="sm-link-btn" onClick={() => setWallTab('drafts')}>{draftsTotal} draft post{draftsTotal === 1 ? '' : 's'}</button></li>
+            <li data-testid="sm-to-approve-count">{toApprove.total} post{toApprove.total === 1 ? '' : 's'} to approve</li>
+            <li><button type="button" className="sm-link-btn" onClick={() => setWallTab('drafts')}>{wallDrafts} draft post{wallDrafts === 1 ? '' : 's'}</button></li>
             <li>{pending.length} reaction{pending.length === 1 ? '' : 's'} to approve</li>
           </ul>
+          {toApprove.list.map((p) => <RequestPost key={p.id} post={p} onChange={() => { loadPosts(0); loadSides(); }} />)}
+          {toApprove.total > toApprove.list.length && <p className="sm-muted">Showing {toApprove.list.length} of {toApprove.total}; the rest are under Drafts.</p>}
           {pending.slice(0, 3).map((c) => <p key={c.id} className="sm-muted sm-pending">@{c.handle}: “{c.text}”{c.post?.poster_handle ? ` on @${c.post.poster_handle}'s post` : ''}</p>)}
         </Box>
         <Box title="Upcoming Events" testId="sm-upcoming">

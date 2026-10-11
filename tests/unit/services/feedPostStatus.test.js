@@ -2,7 +2,7 @@
  * services/feedPostStatus — draft and live (the Feed project, step 2,
  * 2026-10-04; docs/FEED_POSTS.md).
  */
-const { statusWhere, isLive, publishEpisodePosts, LOCKED_MESSAGE, STATUSES } = require('../../../src/services/feedPostStatus');
+const { statusWhere, isLive, LOCKED_MESSAGE, STATUSES } = require('../../../src/services/feedPostStatus');
 
 describe('statusWhere', () => {
   test('live by default, all for both, one of the two by name, else an error', () => {
@@ -25,17 +25,6 @@ describe('isLive and the lock', () => {
   });
 });
 
-describe('publishEpisodePosts', () => {
-  test('dates the undated drafts at the publish moment, then sets the episode\'s drafts live', async () => {
-    const update = jest.fn(async () => [3]);
-    const at = new Date('2026-09-20T20:00:00Z');
-    const went = await publishEpisodePosts({ FeedPost: { update } }, 'ep-1', { publishedAt: at });
-    expect(went).toBe(3);
-    expect(update).toHaveBeenNthCalledWith(1, { posted_at: at }, { where: { episode_id: 'ep-1', status: 'draft', posted_at: null } });
-    expect(update).toHaveBeenNthCalledWith(2, { status: 'live' }, { where: { episode_id: 'ep-1', status: 'draft' } });
-  });
-  test('nothing to do without a model or an episode', async () => {
-    expect(await publishEpisodePosts({}, 'ep-1')).toBe(0);
-    expect(await publishEpisodePosts({ FeedPost: { update: jest.fn() } }, null)).toBe(0);
-  });
+test('publishing no longer releases drafts: there is no release-all (Task #2749)', () => {
+  expect(require('../../../src/services/feedPostStatus')).not.toHaveProperty('publishEpisodePosts');
 });

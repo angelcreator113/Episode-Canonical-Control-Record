@@ -22,7 +22,7 @@ const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKE
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat } = req.query;
+    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from } = req.query;
     const { FeedPost, SocialProfile, FeedComment, Episode } = require('../models');
 
     if (!show_id && !episode_id) {
@@ -35,6 +35,12 @@ router.get('/', optionalAuth, async (req, res) => {
     const where = { deleted_at: null, ...scoped };
     if (show_id) where.show_id = show_id;
     if (episode_id) where.episode_id = episode_id;
+    // ?from=episode|wall: the posts written inside an episode, or on the wall
+    // (Requests counts them apart, Task #2749).
+    if (from !== undefined) {
+      if (from !== 'episode' && from !== 'wall') return res.status(400).json({ error: 'from must be episode or wall' });
+      if (!episode_id) where.episode_id = from === 'episode' ? { [require('sequelize').Op.ne]: null } : null;
+    }
     if (profile_id) where.social_profile_id = profile_id;
     if (narrative_function) where.narrative_function = narrative_function;
     // ?post_type= (e.g. 'relationship', docs/FEED_POSTS.md rule 8).
@@ -439,7 +445,8 @@ router.put('/:postId', requireAuth, async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
     // Release (Task #2748): a draft going live with no posted_at is posted
-    // now, as publishEpisodePosts does; its story time stays as stamped.
+    // now (approving an episode's post, Task #2749, does the same); its story
+    // time stays as stamped.
     if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
 
     await post.update(updates);

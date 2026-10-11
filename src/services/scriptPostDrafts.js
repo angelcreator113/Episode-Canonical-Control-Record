@@ -4,8 +4,8 @@
  * Post moments in the episode script draft feed posts (Task #2885).
  *
  * A beat's `[UI:POST words]` line is Lala posting. Each one drafts one
- * FeedPost: status draft (it goes live when the episode publishes,
- * services/feedPostStatus), the episode's own, by Lala (her social profile,
+ * FeedPost: status draft (it waits for approval under the Feed page's
+ * Requests, Task #2749; services/feedPostStatus), the episode's own, by Lala (her social profile,
  * else the 'lala' handle the wall uses), its words exactly as
  * the script has them. Its story time is the beat's: a beat happens during
  * its episode, so the post carries episode_id with timeline_position

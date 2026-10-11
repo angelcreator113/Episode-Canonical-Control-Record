@@ -38,8 +38,9 @@ describe("Lala's Feed tab", () => {
     expect(card.textContent).toContain('Goes live when you approve it');
     expect(screen.queryByTestId('feed-post-d2')).toBeNull();
     expect(screen.getByTestId('feed-view-queue').textContent).toBe('Queue1');
-    expect(screen.getByTestId('feed-view-scheduled').textContent).toBe('Scheduled1');
-    expect(onCountChanged).toHaveBeenCalledWith(1);
+    expect(screen.getByTestId('feed-view-scheduled').textContent).toBe('From episodes1');
+    // Both drafts wait for approval, the episode's too (Task 2749).
+    expect(onCountChanged).toHaveBeenCalledWith(2);
     const sees = screen.getByTestId('feed-lala-sees');
     expect(sees.textContent).toContain('Wait, she sewed that??');
     expect(sees.textContent).toContain('2 hours ago');
@@ -60,9 +61,9 @@ describe("Lala's Feed tab", () => {
     fireEvent.click(screen.getByTestId('feed-view-scheduled'));
     const card = screen.getByTestId('feed-post-d2');
     expect(card.textContent).toContain('Episode 1');
-    expect(card.textContent).toContain('Goes live with Episode 1');
+    expect(card.textContent).toContain('From Episode 1 · goes live when you approve it');
     expect(card.textContent).toContain('Drafted from their profile and voice');
-    expect(within(card).getByTestId('feed-approve-d2').textContent).toBe('Post now');
+    expect(within(card).getByTestId('feed-approve-d2').textContent).toBe('Approve');
     fireEvent.click(within(card).getByText('Edit'));
     fireEvent.change(within(card).getByLabelText("Edit @stable's post"), { target: { value: 'Our pump. Her design.' } });
     fireEvent.click(within(card).getByText('Save'));

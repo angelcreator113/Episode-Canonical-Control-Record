@@ -80,7 +80,7 @@ describe('the wall\'s routes (2026-10-04)', () => {
 describe('relationship posts (docs/FEED_POSTS.md rule 8)', () => {
   test('the list filters by ?post_type= and refuses a long or odd value', () => {
     const list = slice("router.get('/', optionalAuth", "router.post('/', requireAuth");
-    expect(list).toMatch(/const \{ show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat \} = req\.query/);
+    expect(list).toMatch(/const \{ show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat(, from)? \} = req\.query/);
     expect(list).toMatch(/if \(typeof post_type !== 'string' \|\| post_type\.length > 30\) return res\.status\(400\)/);
     expect(list).toMatch(/where\.post_type = post_type;/);
   });
