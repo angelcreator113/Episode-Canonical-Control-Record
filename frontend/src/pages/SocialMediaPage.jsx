@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Calendar, Clapperboard, Compass, Heart, Home, ImagePlus, Inbox, MapPin, MessageCircle,
-  PlusSquare, Repeat2, Search, Sparkles, User, Users,
+  Calendar, Camera, Clapperboard, Compass, Home, ImagePlus, Inbox, MapPin, MessageCircle,
+  PlusSquare, Search, Sparkles, User, Users, X,
 } from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
-import { DREAM_CITIES } from '../data/dreamCities';
+import { loadCities } from '../lib/pulseCities';
+import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
+import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
-import { posterOf, whenLabel, initial } from '../lib/pulsePosts';
+import { posterOf } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
 
 // Moved to lib/pulsePosts and components/Admin/PulseReviewPost (Task 2925);
 // re-exported for existing callers.
 export { posterOf, whenLabel } from '../lib/pulsePosts';
+export { cityName, PulsePost };
 export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReviewPost';
 
 /**
@@ -71,16 +74,6 @@ export function tabFromParams(params) {
   return 'posts';
 }
 
-/** A Dream City's name from its key (social_profiles.city), else null. */
-export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
-
-function Avatar({ name, url, size = 40 }) {
-  const style = { width: size, height: size };
-  return url
-    ? <img className="pl-avatar" src={url} alt="" style={style} />
-    : <span className="pl-avatar pl-avatar-initial" style={{ ...style, fontSize: Math.round(size * 0.42) }} aria-hidden="true">{initial(name)}</span>;
-}
-
 /** A spot Director view shows as "+ Add …" (opening Uploads) and Lala's view leaves out. */
 function AddSpot({ director, label, className = '' }) {
   if (!director) return null;
@@ -88,38 +81,6 @@ function AddSpot({ director, label, className = '' }) {
     <Link className={`pl-add-spot ${className}`} to={UPLOADS}>
       <ImagePlus size={18} aria-hidden="true" /> + Add {label}
     </Link>
-  );
-}
-
-/** One post as Lala sees it: who, when, where, the words, the photo, the counts and a first comment. */
-export function PulsePost({ post }) {
-  const who = posterOf(post);
-  const city = cityName(post.socialProfile?.city);
-  const comments = Array.isArray(post.comments) ? post.comments : [];
-  const when = whenLabel(post.posted_at);
-  return (
-    <article className="pl-post" data-testid="pl-post">
-      <header className="pl-post-head">
-        <Avatar name={who.name} url={post.author_portrait_url} size={46} />
-        <div>
-          <p className="pl-post-name">{who.name}</p>
-          {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
-        </div>
-      </header>
-      {post.content_text && <p className="pl-post-text">{post.content_text}</p>}
-      {post.image_url && <img className="pl-post-photo" src={post.image_url} alt={post.image_description || ''} />}
-      <p className="pl-post-actions">
-        <span><Heart size={16} aria-hidden="true" /> <span className="pl-sr">Likes</span>{post.likes ?? 0}</span>
-        <span><MessageCircle size={16} aria-hidden="true" /> <span className="pl-sr">Comments</span>{post.comments_count ?? comments.length}</span>
-        <span><Repeat2 size={16} aria-hidden="true" /> <span className="pl-sr">Shares</span>{post.shares ?? 0}</span>
-      </p>
-      {comments.slice(0, 2).map((c) => (
-        <div key={c.id} className="pl-comment">
-          <Avatar name={c.display_name || c.handle} url={c.portrait_url} size={32} />
-          <p><b>{c.display_name || c.handle}</b> {c.text}</p>
-        </div>
-      ))}
-    </article>
   );
 }
 
@@ -254,6 +215,10 @@ function Composer({ show, lala, director, onShared }) {
           <p className="pl-chips">{STATUSES.map((s) => <button key={s} type="button" className="pl-chip" onClick={() => setText(s)}>{s}</button>)}</p>
         )}
         <div className="pl-composer-row">
+          <span className="pl-quiet-tools">
+            <span aria-disabled="true" title="Photos are coming to The Pulse"><Camera size={16} aria-hidden="true" /> Photo</span>
+            <span aria-disabled="true" title="Places are coming to The Pulse"><MapPin size={16} aria-hidden="true" /> Location</span>
+          </span>
           <span className="pl-kinds" role="group" aria-label="What to share">
             <label><input type="radio" name="pl-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Post</label>
             <label><input type="radio" name="pl-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
@@ -273,6 +238,8 @@ function Feed({ show, lala, director, search }) {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cities, setCities] = useState([]);
+  const [person, setPerson] = useState(null); // { handle, name } the feed is filtered to
 
   const load = useCallback(async (offset = 0) => {
     if (!show?.id) return;
@@ -290,18 +257,42 @@ function Feed({ show, lala, director, search }) {
   }, [show?.id]);
   useEffect(() => { load(0); }, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    loadCities()
+      .then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
+      .catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, []);
+
+  const owner = lala?.profile || null;
+  const lalaHandle = owner?.handle || 'lala';
+  const people = useMemo(() => recentPosters(posts, { lalaHandle }), [posts, lalaHandle]);
+  const lalaStory = { handle: lalaHandle, name: owner?.display_name || 'Lala', photo: lala?.portrait_url || null, city: lala?.home_city || null };
+  const pick = (handle, name) => setPerson((cur) => (cur?.handle === handle ? null : { handle, name }));
+
   const q = search.trim().toLowerCase();
+  const byPerson = person ? posts.filter((p) => (p.poster_handle || p.socialProfile?.handle) === person.handle) : posts;
   const visible = q
-    ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
-    : posts;
+    ? byPerson.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
+    : byPerson;
 
   return (
     <>
+      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} />
       <Composer show={show} lala={lala} director={director} />
+      {person && (
+        <p className="pl-filter" data-testid="pl-filter">
+          Showing {person.name}
+          <button type="button" aria-label={`Show everyone, not only ${person.name}`} onClick={() => setPerson(null)}><X size={14} aria-hidden="true" /></button>
+        </p>
+      )}
       {error && <p className="pl-error" role="alert">{error}</p>}
       {loading && posts.length === 0 && <p className="pl-quiet">Loading…</p>}
       {!loading && !error && posts.length === 0 && <p className="pl-empty" data-testid="pl-empty">Nothing posted yet.</p>}
-      {!loading && posts.length > 0 && visible.length === 0 && <p className="pl-empty">No posts match “{search.trim()}”.</p>}
+      {!loading && posts.length > 0 && visible.length === 0 && (
+        <p className="pl-empty">{q ? `No posts match “${search.trim()}”.` : `Nothing from ${person?.name} yet.`}</p>
+      )}
       {visible.map((p) => <PulsePost key={p.id} post={p} />)}
       {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
     </>

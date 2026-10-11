@@ -173,6 +173,19 @@ describe("Lala's view", () => {
     expect(screen.getAllByTestId('pl-profile-friend')).toHaveLength(2);
   });
 
+  test('stories: Lala, recent posters and the five cities; tapping a person filters the feed, x shows everyone', async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    const stories = within(screen.getByTestId('pl-stories'));
+    expect(stories.getAllByTestId('pl-story-person').map((b) => b.querySelector('b').textContent)).toEqual(['Lala']);
+    expect(stories.getAllByTestId('pl-story-city')).toHaveLength(5);
+    fireEvent.click(stories.getAllByTestId('pl-story-person')[0]);
+    expect(screen.getByTestId('pl-filter').textContent).toBe('Showing Lala');
+    expect(screen.getAllByTestId('pl-post')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Show everyone, not only Lala' }));
+    expect(screen.getAllByTestId('pl-post')).toHaveLength(2);
+  });
+
   test('the old ?layer= link opens Characters', async () => {
     renderAt('/pulse?layer=lalaverse');
     expect(await screen.findByTestId('pl-people')).toBeTruthy();
