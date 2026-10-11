@@ -9,10 +9,10 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 
-import api from '../services/api';
-import { PostCard } from './SocialMediaPage';
+import api from '../../services/api';
+import { PostCard } from './PulseReviewPost';
 
 const EPISODES = [{ id: 'ep-1', episode_number: 1, title: 'Gala Night' }, { id: 'ep-2', episode_number: 2, title: 'Fittings' }];
 let used;

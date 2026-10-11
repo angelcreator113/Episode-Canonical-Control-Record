@@ -1,0 +1,70 @@
+/* The feed's director tools (Task 2925): Admin › The Pulse › Review, and
+   The Pulse until its frame issue. Studio tokens only, no hex literals. */
+.prv-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lala-parchment-2); font-size: 14px; line-height: 1.45; color: var(--text-primary); }
+.prv-item-body { min-width: 0; flex: 1; }
+.prv-item-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.prv-name { color: var(--lala-lavender-text); }
+.prv-album { color: var(--text-secondary); }
+.prv-item-image { max-width: 100%; margin: 6px 0; display: block; border-radius: 6px; border: 1px solid var(--lala-parchment-3); }
+.prv-item-meta { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; }
+.prv-item-meta a, .prv-link-btn { color: var(--lala-lavender-text); }
+.prv-link-btn { background: none; border: none; padding: 0; min-height: 32px; font: inherit; font-size: inherit; cursor: pointer; }
+.prv-link-btn:hover { text-decoration: underline; }
+.prv-fn { color: var(--text-secondary); }
+.prv-story { color: var(--lala-lavender-text); font-weight: 600; }
+.prv-item-likes { margin: 4px 0 0; padding: 2px 8px; background: var(--lala-parchment-2); color: var(--text-secondary); font-size: 12px; border-radius: 4px; }
+
+/* Initial tiles */
+.prv-tile { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--text-primary); background: var(--lala-parchment-3); border-radius: 50%; flex-shrink: 0; }
+.prv-tile-sm { width: 24px; height: 24px; font-size: 11px; }
+.prv-tile-md { width: 40px; height: 40px; font-size: 16px; }
+.prv-tone-l { background: var(--lala-lavender-light); }
+.prv-tone-c { background: var(--success-bg); }
+.prv-tone-d { background: var(--info-bg); }
+.prv-tone-e { background: var(--warning-bg); }
+.prv-tone-f { background: var(--accent-subtle); }
+
+/* Comments and reactions */
+.prv-comments { margin: 6px 0 0; padding: 0; list-style: none; }
+.prv-comments li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; margin-top: 4px; background: var(--lala-lavender-soft); border-radius: 6px; font-size: 13px; }
+.prv-comments li small { color: var(--text-secondary); margin-left: 4px; }
+.prv-legacy li { background: var(--lala-parchment-2); }
+.prv-drafts li { background: var(--warning-bg); }
+.prv-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 0 4px; border: 1px dashed var(--warning-border); color: var(--warning-text); background: var(--warning-bg); border-radius: 3px; }
+.prv-voice { color: var(--text-secondary); }
+.prv-mini { margin-left: auto; min-height: 32px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.prv-mini + .prv-mini { margin-left: 4px; }
+.prv-approve { border-color: var(--lala-lavender); color: var(--lala-lavender-text); }
+.prv-reactions { margin-top: 6px; }
+.prv-reactors { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.prv-reactors-pick { display: flex; flex-wrap: wrap; gap: 10px; color: var(--text-secondary); font-size: 13px; }
+.prv-note { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; }
+.prv-muted { color: var(--text-secondary); margin: 2px 0; font-size: 12px; }
+
+/* Use in a beat */
+.prv-beat { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--lala-lavender-line); background: var(--lala-lavender-soft); border-radius: 6px; }
+.prv-composer-select { font: inherit; font-size: 13px; min-height: 40px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }
+.prv-beat-select { flex: 1 1 140px; }
+
+/* Buttons, actions, editing, errors */
+.prv-btn { min-height: 36px; padding: 4px 14px; border-radius: 6px; border: 1px solid var(--lala-lavender-dark); background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.prv-btn:disabled { opacity: 0.6; cursor: default; }
+.prv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 6px 0 0; }
+.prv-edit { display: flex; flex-direction: column; gap: 6px; }
+.prv-edit textarea, .prv-request textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; }
+.prv-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+
+/* An episode's post waiting for approval */
+.prv-request { padding: 10px 0; border-top: 1px solid var(--lala-parchment-3); font-size: 14px; }
+.prv-request-text { margin: 0; overflow-wrap: anywhere; }
+
+/* Admin › The Pulse › Review sections */
+.prv-review { display: flex; flex-direction: column; gap: 1.25rem; }
+.prv-section { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 8px; padding: 0.875rem 1rem; }
+.prv-section-title { margin: 0 0 0.5rem; font-size: 1rem; }
+.prv-count { color: var(--text-secondary); font-weight: 400; }
+.prv-plain { list-style: none; margin: 0; padding: 0; }
+.prv-pending { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--lala-parchment-2); font-size: 14px; overflow-wrap: anywhere; }
+.prv-pending:first-child { border-top: none; }
+.prv-deleted { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 8px; padding: 0.75rem 1rem; }
+.prv-deleted summary { min-height: 32px; cursor: pointer; font-weight: 600; }
