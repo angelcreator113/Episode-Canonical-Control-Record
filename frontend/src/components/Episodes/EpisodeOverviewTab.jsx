@@ -11,7 +11,7 @@ import EpisodeMoneyCard from './EpisodeMoneyCard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
-import { fromEventItems, nextStep, coinsAfter } from '../../lib/episodeOverview';
+import { fromEventItems, nextStep, coinsAfterPlan } from '../../lib/episodeOverview';
 import './EpisodeOverviewSections.css';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
@@ -117,6 +117,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // Net P&L number on the stat strip has a "where did it come from" view
   // right next to it.
   const [ledger, setLedger] = useState({ transactions: [], loading: true });
+  // The episode's Money plan (GET /world/:showId/episodes/:id/money), the one
+  // honest estimate (Task #1919): the event's terms and the chosen look only,
+  // no closet and no fee that is not earned. null: not read yet; false: could not be.
+  const [money, setMoney] = useState(null);
   // EpisodeBrief snapshot + editable creative fields. Loaded alongside the
   // rest of the context. The `draft` mirror lets us debounce edits to
   // textareas without firing a PUT on every keystroke (saved on blur).
@@ -180,6 +184,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       // Episode-scoped ledger. Skipping when no showId — the endpoint
       // requires it, and a draft episode without a show wouldn't have
       // transactions anyway.
+      api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
+        .then((r) => setMoney(r?.data?.data || false))
+        .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); setMoney(false); });
       api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
         .then(({ data }) => {
           // Only the rows that count toward Lala's balance: a voided row
@@ -419,25 +426,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // when an episode has no transactions yet (draft episodes never finalized).
   const ledgerIncome = ledger.transactions.filter(t => ['income', 'reward'].includes(t.type));
   const ledgerExpense = ledger.transactions.filter(t => ['expense', 'deduction'].includes(t.type));
-  const ledgerIncomeTotal = ledgerIncome.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-  const ledgerExpenseTotal = ledgerExpense.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const hasFinancials = ledger.transactions.length > 0;
-  // Episode P&L — when the episode has real ledger transactions, prefer
-  // those (post-completion truth). Otherwise fall back to the columns
-  // populated at generation time, which are predictions until the
-  // creator hits Complete and finalizeEpisodeFinancials runs. The
-  // distinction matters: the columns can show +500 from a paid event
-  // that hasn't actually been credited yet.
+  // Whether Complete was accepted: the Money plan then reads what posted.
   const isAccepted = episode.evaluation_status === 'accepted';
-  const colIncome = parseFloat(episode.total_income) || 0;
-  const colExpenses = parseFloat(episode.total_expenses) || 0;
-  const income = hasFinancials ? ledgerIncomeTotal : colIncome;
-  const expenses = hasFinancials ? ledgerExpenseTotal : colExpenses;
-  const net = income - expenses;
-  // Show an EST pill when displaying predictions (no ledger rows yet
-  // AND not accepted). When accepted but no ledger rows (rare edge),
-  // the columns ARE the truth from the prior finalize, so no badge.
-  const netIsPrediction = !hasFinancials && !isAccepted && (income !== 0 || expenses !== 0);
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
   const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials || !!showId;
@@ -451,12 +442,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const fromEvent = fromEventItems(plan);
   const hasScript = !!(typeof episode.script_content === 'string' && episode.script_content.trim()) || !!scriptInfo?.exists;
   const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks });
-  const coins = coinsAfter({ balance, net, accepted: isAccepted });
+  // Coins after the episode from the Money plan (Task #1919), never from the
+  // columns Start Episode estimated (which once counted the whole closet).
+  const coinsTile = coinsAfterPlan(money, { accepted: isAccepted });
   const prestige = primaryEvent?.prestige;
   const tiles = [
     { key: 'checklist', label: 'Production checklist', value: checks ? `${checks.done} / ${checks.total}` : '—', link: { label: 'Open Production', tab: 'checklist' } },
     { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
-    { key: 'coins', label: 'Coins after episode', value: coins == null ? '—' : coins.toLocaleString(), link: { label: 'Open Money', tab: 'money' }, note: netIsPrediction ? 'estimate' : null },
+    { key: 'coins', label: 'Coins after episode', value: coinsTile.value, link: { label: 'Open Money', tab: 'money' }, note: coinsTile.note },
     { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
@@ -879,7 +872,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             )}
             {/* The Money card (§8(gg) MB5, Q10): it replaces the ledger list;
                 the Money tab is the one full view. */}
-            {showId && <EpisodeMoneyCard showId={showId} episodeId={episode.id} />}
+            {showId && <EpisodeMoneyCard showId={showId} episodeId={episode.id} money={money} />}
           </SectionBand>
         );
       })()}

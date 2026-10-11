@@ -76,12 +76,23 @@ export function nextStep({ hasScript, brief = null, plan = null, checks = null }
 }
 
 /**
- * Lala's coins once this episode settles: her balance plus the episode's
- * estimated net while it is not accepted (once accepted the ledger already
- * holds it). Null without a balance.
+ * The "Coins after episode" tile from the episode's Money plan (Task #1919):
+ * its projected balance (Lala's balance now, plus what is pending and
+ * planned; a conditional bonus is never counted). The plan prices the
+ * event's terms and the chosen look only, so the tile never carries the
+ * closet or a fee nobody earned. The note says what the number is:
+ *   'outfit not chosen'  no look yet, so no outfit cost is in it;
+ *   'estimate'           lines are still planned or pending;
+ *   nothing              settled (accepted, or nothing open).
+ * `money` is the plan, null while it loads, false when it could not be read.
  */
-export function coinsAfter({ balance, net = 0, accepted = false }) {
-  const b = Number(balance);
-  if (balance == null || !Number.isFinite(b)) return null;
-  return accepted ? b : b + (Number(net) || 0);
+export function coinsAfterPlan(money, { accepted = false } = {}) {
+  if (money === false) return { value: '—', note: 'could not be read' };
+  const p = money?.projection;
+  const b = Number(p?.projected_balance);
+  if (!p || !Number.isFinite(b)) return { value: '—', note: null };
+  let note = null;
+  if (!accepted && money.look?.pieces === 0) note = 'outfit not chosen';
+  else if (!accepted && (p.open_count ?? 0) > 0) note = 'estimate';
+  return { value: b.toLocaleString(), note };
 }
