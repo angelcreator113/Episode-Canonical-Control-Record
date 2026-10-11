@@ -15,8 +15,12 @@
  *    ignores `:` comment lines (server keepalives), joins multi-line data.
  *  - Dispatches each frame to `handlers[eventName]({ data })`, the same
  *    shape an EventSource MessageEvent handler reads (`e.data`).
- *  - 401 / 403: never reconnects. Logs once with console.error, calls
- *    `onAuthError(status)`, and stops. No timer is left behind.
+ *  - Auth (Task #1902): each connection goes through authedFetch, so an
+ *    expired token is renewed and the connection retried once, outside the
+ *    network retries; a failed renewal signs the user out (apiClient's
+ *    contract). A 401 / 403 that still comes back never reconnects: logs
+ *    once with console.error, calls `onAuthError(status)`, and stops. No
+ *    timer is left behind.
  *  - Network drop, stream end, or a non-auth HTTP error: reconnects with
  *    bounded exponential backoff (`maxRetries` attempts); `onError` is told
  *    each time whether a retry is scheduled. When retries run out it stops.
@@ -25,6 +29,7 @@
  */
 
 import { readAuthToken } from './authToken';
+import { authedFetch } from './authedFetch';
 
 // Re-exported so existing importers keep working; the one source is
 // ./authToken (shared with the one-shot POST streams, Task #1894).
@@ -99,18 +104,17 @@ export function openAuthedEventStream(url, {
   const connect = async () => {
     if (closed) return;
     controller = new AbortController();
-    const token = readAuthToken();
     let res;
     try {
-      res = await (fetchImpl || fetch)(url, {
+      // authedFetch attaches the token and, on an expired one, renews it and
+      // reconnects once (Task #1902); that renewal is not one of the
+      // maxRetries network retries, and a second refusal stops below.
+      res = await authedFetch(url, {
         method: 'GET',
-        headers: {
-          Accept: 'text/event-stream',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { Accept: 'text/event-stream' },
         cache: 'no-store',
         signal: controller.signal,
-      });
+      }, { fetchImpl });
     } catch (err) {
       if (closed || err?.name === 'AbortError') return;
       scheduleRetry(err);
