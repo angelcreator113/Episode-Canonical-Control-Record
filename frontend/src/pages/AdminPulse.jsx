@@ -6,13 +6,16 @@
  *
  * Uploads › Cover: The Pulse's cover image and its alt text, saved to the
  * show (Show.metadata.pulse_cover, /api/v1/shows/:id/pulse-cover). Empty, it
- * is a dashed "+ Add cover" spot. Styles: styles/AdminPanel.css.
+ * is a dashed "+ Add cover" spot. Uploads › Dream Cities: each city's
+ * images and colours, saved on the city (components/Admin/PulseCitiesCard).
+ * Styles: styles/AdminPanel.css.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import AdminShowGate from '../components/Admin/AdminShowGate';
+import PulseCitiesCard from '../components/Admin/PulseCitiesCard';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review', comingIn: 'Phase 5 brings Review: posts, numbers and reveals waiting for you.' },
@@ -148,6 +151,7 @@ function PulseUploads() {
       {(showId) => (
         <div className="pulse-uploads" data-testid="pulse-uploads">
           <CoverCard key={showId} showId={showId} />
+          <PulseCitiesCard />
         </div>
       )}
     </AdminShowGate>
