@@ -78,7 +78,7 @@ function applyPostReveal(post, reveals) {
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from, at } = req.query;
+    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from, at, city } = req.query;
     const { FeedPost, SocialProfile, FeedComment, Episode, sequelize } = require('../models');
 
     if (!show_id && !episode_id) {
@@ -104,6 +104,14 @@ router.get('/', optionalAuth, async (req, res) => {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
       where.post_type = post_type;
     }
+    // ?city= (Task #2987): one Dream City's feed, the posts of its profiles
+    // (utils/feedCities.cityPostsSql; a post's city is its poster's).
+    const and = [];
+    if (city !== undefined) {
+      const { DREAM_CITY_KEYS, cityPostsSql } = require('../utils/feedCities');
+      if (!DREAM_CITY_KEYS.includes(city)) return res.status(400).json({ error: `city must be one of ${DREAM_CITY_KEYS.join(', ')}` });
+      and.push(sequelize.literal(cityPostsSql('FeedPost', city)));
+    }
     // ?at= (Task #2937): The Pulse as of a story moment ("present", an
     // order, or ep:<n>:<phase>; services/storyClock.js). Keeps posts whose
     // story order is no later than it, and those of unknown story time;
@@ -120,7 +128,7 @@ router.get('/', optionalAuth, async (req, res) => {
       }
       const storyOrder = clock.postOrderSql('FeedPost');
       const { Op } = require('sequelize');
-      const and = [sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`)];
+      and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`));
       order = [[sequelize.literal(`${storyOrder} DESC NULLS LAST`)], ['posted_at', 'DESC'], ['sort_order', 'ASC']];
       // Reveals at that moment (Task #2939, services/pulseReveals.js): a
       // hidden post, and the posts of a character Lala has not met yet, are
@@ -135,8 +143,8 @@ router.get('/', optionalAuth, async (req, res) => {
           and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
         }
       }
-      where[Op.and] = and;
     }
+    if (and.length) where[require('sequelize').Op.and] = and;
 
     const posts = await FeedPost.findAll({
       where,

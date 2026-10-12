@@ -27,6 +27,18 @@ const DREAM_CITY_CULTURE = Object.freeze({
   maverick_harbor: 'Creator economy & counter-culture. Content houses, podcast networks, collab spaces, underground scenes. Collaborative, entrepreneurial, anti-algorithm. Fame is suspicious here.',
 });
 
+/**
+ * City feeds (Task #2987; The Pulse spec §3 "each Dream City has its own feed
+ * and local trends"): a post's city is its poster's social_profiles.city, read
+ * through the poster, never copied onto the post. The clause keeps the posts
+ * of a Dream City's profiles; `alias` is the query's name for feed_posts, and
+ * the key must already be one of DREAM_CITY_KEYS (it is inlined).
+ */
+function cityPostsSql(alias, cityKey) {
+  if (!DREAM_CITY_KEYS.includes(cityKey)) throw new Error(`Unknown Dream City: ${cityKey}`);
+  return `"${alias}"."social_profile_id" IN (SELECT sp.id FROM social_profiles sp WHERE sp.city = '${cityKey}' AND sp.deleted_at IS NULL)`;
+}
+
 // July's mapping, old city → DREAM city.
 const LEGACY_TO_DREAM = Object.freeze({
   nova_prime: 'dazzle_district',
@@ -48,4 +60,4 @@ function randomFeedCity(random = Math.random) {
   return DREAM_CITY_KEYS[Math.min(DREAM_CITY_KEYS.length - 1, Math.floor(random() * DREAM_CITY_KEYS.length))];
 }
 
-module.exports = { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, LEGACY_TO_DREAM, feedCity, randomFeedCity };
+module.exports = { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, LEGACY_TO_DREAM, feedCity, randomFeedCity, cityPostsSql };

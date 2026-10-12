@@ -61,7 +61,7 @@ beforeEach(() => {
     if (url.startsWith('/api/v1/social-profiles/lala?')) return { data: { data: lalaColumn } };
     if (url.includes('/social-profiles')) return { data: { profiles: [LALA, { id: 2, handle: 'marcus.k', display_name: 'Marcus' }] } };
     if (url.includes('post_type=relationship')) return { data: { data: [] } };
-    if (url.includes('/feed-enhanced/') && url.endsWith('/trending')) return { data: { success: true, data: trending } };
+    if (url.includes('/feed-enhanced/') && /\/trending(\?|$)/.test(url)) return { data: { success: true, data: trending } };
     if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { success: true, latest: fit } };
     if (url.startsWith('/api/v1/pulse-reveals/state?')) return { data: { success: true, at: 17, cities: cityStates } };
     if (url.startsWith('/api/v1/pulse-reveals?')) return { data: { success: true, reveals: revealRows } };
@@ -102,9 +102,9 @@ describe("Lala's view", () => {
     expect((await screen.findByTestId('pl-followers')).textContent).toBe('12k followers');
     const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
     expect(nav.getByRole('button', { name: /Feed/ }).getAttribute('aria-current')).toBe('page');
-    // Messages is live (Task 2985); Dream Cities is still coming.
+    // Messages (Task 2985) and Dream Cities (Task 2987) are live.
     expect(nav.getByRole('button', { name: /Messages/ })).toBeTruthy();
-    expect(nav.getByText('Dream Cities').closest('[aria-disabled="true"]')).toBeTruthy();
+    expect(nav.getByRole('button', { name: /Dream Cities/ })).toBeTruthy();
     expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(false);
   });
 
@@ -250,7 +250,7 @@ describe('The sides (Task 2928)', () => {
     await waitFor(() => expect(screen.getAllByTestId('pl-trend')).toHaveLength(1));
     expect(screen.getByTestId('pl-trend').textContent).toBe('1#VelvetSeason2 posts');
     expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toEqual(expect.arrayContaining([
-      `/api/v1/feed-enhanced/${SHOW.id}/trending`, `/api/v1/pulse-fits/latest?show_id=${SHOW.id}&at=present`,
+      `/api/v1/feed-enhanced/${SHOW.id}/trending?at=present`, `/api/v1/pulse-fits/latest?show_id=${SHOW.id}&at=present`,
     ]));
     expect(screen.queryByTestId('pl-trending-foot')).toBeNull();
     expect(document.body.textContent).not.toContain('+ Add');
@@ -350,3 +350,30 @@ describe('/pulse?at= (Task 2941)', () => {
   });
 });
 
+
+describe('Dream Cities (Task 2987)', () => {
+  test("the nav opens the cities; a city bubble opens that city's feed and trends at the moment; Back returns to the list", async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
+    fireEvent.click(nav.getByRole('button', { name: /Dream Cities/ }));
+    expect(await screen.findByTestId('pl-cityfeed-pick')).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId('pl-cityfeed-pick')).getAllByRole('button')[2]);
+    const page = await screen.findByTestId('pl-cityfeed');
+    const name = page.querySelector('.pl-cityfeed-name').textContent;
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.some(([u]) => u.startsWith(`/api/v1/feed-posts?show_id=${SHOW.id}&city=`) && u.endsWith('&at=present'))).toBe(true));
+    const cityUrl = vi.mocked(api.get).mock.calls.map(([u]) => u).find((u) => u.includes('&city='));
+    const key = new URLSearchParams(cityUrl.split('?')[1]).get('city');
+    expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toContain(`/api/v1/feed-enhanced/${SHOW.id}/trending?city=${key}&at=present`);
+    expect(name.length).toBeGreaterThan(0);
+    fireEvent.click(within(page).getByRole('button', { name: /Dream Cities/ }));
+    expect(await screen.findByTestId('pl-cityfeed-pick')).toBeTruthy();
+  });
+
+  test('a city in the stories row opens its feed from the Feed', async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    fireEvent.click(within(screen.getByTestId('pl-stories')).getAllByTestId('pl-story-city')[0]);
+    expect(await screen.findByTestId('pl-cityfeed')).toBeTruthy();
+  });
+});

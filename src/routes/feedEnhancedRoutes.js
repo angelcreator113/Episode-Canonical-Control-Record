@@ -19,7 +19,18 @@ router.get('/:showId/trending', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getTrendingTopics } = require('../services/feedEngagementService');
-    const topics = await getTrendingTopics(req.params.showId, models);
+    // ?at= and ?city= (Task #2987): trends as of a story moment, and one Dream City's local trends.
+    let at = null;
+    if (req.query.at !== undefined && req.query.at !== '') {
+      try { at = await require('../services/storyClock').resolveAt(models, req.params.showId, String(req.query.at)); } catch (atErr) {
+        if (atErr.status === 400) return res.status(400).json({ error: atErr.message });
+        throw atErr;
+      }
+    }
+    const city = req.query.city === undefined ? null : String(req.query.city);
+    const { DREAM_CITY_KEYS } = require('../utils/feedCities');
+    if (city !== null && !DREAM_CITY_KEYS.includes(city)) return res.status(400).json({ error: `city must be one of ${DREAM_CITY_KEYS.join(', ')}` });
+    const topics = await getTrendingTopics(req.params.showId, models, { at: Number.isInteger(at) ? at : null, city });
     return res.json({ success: true, data: topics, count: topics.length });
   } catch (err) {
     console.error('[FeedEnhanced] Trending error:', err);
