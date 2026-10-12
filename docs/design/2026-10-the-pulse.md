@@ -42,7 +42,7 @@ Sub-tabs:
 ## 5. Reveals
 - Applies to **images, posts, character profiles and events**.
 - Each item has a reveal moment on its event's timeline: **Announced → Invitation sent → Lala arrives → During → After the episode**, or a specific story time.
-- Before its moment an item is **hidden** or shown as a **teaser** (blurred or tightly cropped, labelled "first look").
+- Before its moment an item is **hidden** or shown as a **teaser**, labelled "first look". A teaser is **cropped by default** to a deliberate detail (fabric, an accessory, part of a venue), fitting SAL's visual style; it is **blurred** when concealing the full reveal matters. Either way it is cut from the existing image, with no new generation (Evoni, 2026-10-12; `docs/reads/2026-10-12-pulse-decisions-read.md` §4).
 - A character's profile stays hidden until the episode where Lala meets them.
 
 ## 6. Who knows what
@@ -50,16 +50,16 @@ Sub-tabs:
 - Drafts that break this are flagged to Review, never auto-published.
 
 ## 7. Posting engine
-- **Voice Profiles** generate automatically from the Deep Profile when a character reaches the posting lifecycle stage (Active or Alive [decide]) and regenerate when the profile or Living State changes significantly. They are built from concrete habits (case, punctuation, emoji, sentence length, topics, phrases they would never use) plus a shared list of banned AI-sounding phrases. Evoni's edits and pinned posts become voice examples.
+- **Voice Profiles** generate automatically from the Deep Profile when a character reaches the **Active** lifecycle stage (Evoni, 2026-10-12; `docs/reads/2026-10-12-pulse-decisions-read.md` §1) and regenerate when the profile or Living State changes significantly. They are built from concrete habits (case, punctuation, emoji, sentence length, topics, phrases they would never use) plus a shared list of banned AI-sounding phrases. Evoni's edits and pinned posts become voice examples.
 - **Living State vs public persona.** A character's private feelings shape what they post but are never stated in posts unless they choose to reveal them.
-- **Who may post:** revealed characters at the posting lifecycle stage only.
+- **Who may post:** revealed characters at **Active** or later, and the worker posts for a character only once Evoni has **approved their voice**. **Alive** characters also take part in ongoing conversations (DMs), relationships and event reactions.
 - **Event-triggered posting:** when an event or scene happens, the engine decides who would post (attended, closeness to Lala, temperament: oversharer vs lurker) and drafts posts and comment threads.
 - **Ambient posts:** a scheduled worker drafts occasional posts between events from each character's Living State.
 - **Relationship-shaped reactions:** who reacts to a post, and how, comes from the Relationship Map and each voice.
 - **Slang spreads** through relationships over time.
 - **Quality gate:** a second check scores each draft for voice match and canon (story clock, reveals, who knows what). Passing everyday posts by other characters auto-publish; anything else goes to Review.
 - **Always to Review:** Lala's posts, posts or comments about Lala, anything that reveals story, anything flagged by the gate.
-- **Cost control:** a daily generation cap; jobs run through a queue, never in a live request.
+- **Cost control:** **20 AI text-generation requests per show per day**, 5 for automated work and 15 for manual work. A request is one drafting call and may draft a small batch of posts or replies. Regenerations count; the quality check and viewing saved content do not. Image generation has its own budget. Jobs run through a queue (Evoni, 2026-10-12; `docs/reads/2026-10-12-pulse-decisions-read.md` §3).
 
 ## 8. Numbers
 - **Followers are canon** per character, changed only with a recorded cause (episode result, a post, an event, an override).
@@ -69,7 +69,7 @@ Sub-tabs:
 - **Comments count** equals real drafted comments; "view N more" appears only when those N exist.
 - **Trending counts** come from approved, live posts with the tag.
 - **Episode follower change:** proposed when an episode is completed, from its result and its posts; approved by Evoni; recorded in her stats and the Decision Log.
-- **Influence** is set from Lala's follower tier [decide the tier cut-offs after real data exists].
+- **Audience tier** comes from the follower count: Emerging 0, Nano 1,000, Micro 10,000, Mid-tier 50,000, Macro 250,000, Mega 1,000,000. It is separate from Lala's **Influence** stat: followers measure audience size; Influence measures her ability to affect the world (Evoni, 2026-10-12; `docs/reads/2026-10-12-pulse-decisions-read.md` §2).
 
 ## 9. Relationships respond to the social world
 - Repeated interactions (or ignored ones) adjust Relationship Map closeness by small amounts, each change recorded with its cause, proposed and approved like numbers.
@@ -93,8 +93,8 @@ Sub-tabs:
 8. **Public extras:** audience voting and weekly recap.
 Each phase is split into issues small enough for one phone-reviewable PR, each starting with a read when it touches data it has not measured.
 
-## 13. Open decisions [decide]
-- Posting lifecycle stage (Active or Alive).
-- Influence tier cut-offs.
-- Daily generation cap.
-- Whether teasers default to blurred or cropped.
+## 13. Decisions (settled by Evoni, 2026-10-12; `docs/reads/2026-10-12-pulse-decisions-read.md`)
+- **Posting lifecycle stage:** Active posts (after Evoni approves the voice); Alive also converses, relates and reacts to events (§7).
+- **Audience tiers:** six tiers by follower count, separate from Influence (§8).
+- **Daily generation cap:** 20 text requests per show, 5 automated and 15 manual; images budgeted separately (§7).
+- **Teasers:** cropped to a detail by default; blurred when concealment matters (§5).
