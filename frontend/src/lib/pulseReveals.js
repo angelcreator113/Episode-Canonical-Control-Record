@@ -22,8 +22,8 @@ export async function loadRevealLabels(showId) {
   return map;
 }
 
-/** Lala's view: { 'city:<key>' | 'city_bubble:<key>': 'teaser' | 'hidden' } at the present. */
-export async function loadCityStates(showId) {
-  const res = await api.get(`/api/v1/pulse-reveals/state?show_id=${encodeURIComponent(showId)}&at=present`);
+/** Lala's view: { 'city:<key>' | 'city_bubble:<key>': 'teaser' | 'hidden' } at the present (or `at`, a story order). */
+export async function loadCityStates(showId, at = 'present') {
+  const res = await api.get(`/api/v1/pulse-reveals/state?show_id=${encodeURIComponent(showId)}&at=${encodeURIComponent(at)}`);
   return res.data?.cities || {};
 }
