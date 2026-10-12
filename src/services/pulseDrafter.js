@@ -237,4 +237,4 @@ async function draftCommentAndRoute(db, args) {
   return { comment, gate, review, published: review.length === 0 };
 }
 
-module.exports = { MODELS, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError };
+module.exports = { MODELS, knowsLine, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError };

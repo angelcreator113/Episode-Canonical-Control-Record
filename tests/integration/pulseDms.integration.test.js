@@ -5,7 +5,8 @@
  *   request never drafts; the pair keeps one thread;
  * - the queue's handler drafts in the sender's voice from the conversation
  *   so far, with Living State only as private context, gates it, and leaves
- *   it a draft (every DM waits for Evoni);
+ *   it a draft (every DM waits for Evoni); it is told the events the sender
+ *   knows by then (Task #2982), as the post drafter is;
  * - the next message defaults to the other one in the conversation;
  * - approve, edit, reject (admin only, once); with ?at= only live messages at
  *   or before the moment show, without the gate or drafts.
@@ -37,7 +38,8 @@ const SECRET = 'still not over the brand deal falling through';
 
 (shouldSkip ? describe.skip : describe)('The Pulse DMs (Task #2984)', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { show: uuid(), reg: uuid(), ep1: uuid() };
+  const ids = { show: uuid(), reg: uuid(), ep1: uuid(), gala: uuid() };
+  const GALA = `Gala ${tag}`;
   const p = {};
   const c = {};
   let lala;
@@ -63,6 +65,9 @@ const SECRET = 'still not over the brand deal falling through';
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
                VALUES (:ep1, :show, 'One', 1, 'published', NOW(), NOW())`, ids);
     await run(`INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg, 'DMs registry', :show, NOW(), NOW())`, ids);
+    // The gala (Ep 1), no guests: only Lala was there.
+    await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, cost_coins, prestige, created_at, updated_at)
+               VALUES (:gala, :show, :name, 'used', :ep1, 0, 5, NOW(), NOW())`, { ...ids, name: GALA });
     lala = await lalaProfileId(sequelize);
     if (!lala) {
       const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, created_at, updated_at)
@@ -97,6 +102,7 @@ const SECRET = 'still not over the brand deal falling through';
     await run('DELETE FROM pulse_voices WHERE registry_character_id IN (:a)', { a: Object.values(c) });
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
+    await run('DELETE FROM world_events WHERE show_id = :show', ids);
     await run('DELETE FROM episodes WHERE show_id = :show', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: [p.marcus, p.nia, ...(madeLala ? [lala] : [])] });
     await run('DELETE FROM shows WHERE id = :show', ids);
@@ -131,6 +137,8 @@ const SECRET = 'still not over the brand deal falling through';
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('(nothing yet: you write first)');
     expect(prompt).toContain('What the conversation is about: the gala afterparty.');
+    // What she knows by then: she was at the gala.
+    expect(prompt).toContain(`Events they know about by now: ${GALA} (you were there). Name no other event.`);
     expect(prompt).toMatch(/PRIVATE \(shapes the mood only; never state/);
   });
 
@@ -145,6 +153,8 @@ const SECRET = 'still not over the brand deal falling through';
     expect(reply.gate_json.flags.map((f) => f.code)).toContain('private_state');
     expect(reply.gate_json.review).toEqual(['dm', 'gate']);
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('Them: u up? still thinking about tonight');
+    // Marcus was not there, and no one close to him was: he knows of none.
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('They know of no events yet: name none.');
     expect((await as(admin, request(app).post(`/api/v1/pulse-dms/${threadId}/next`)).send({ sender_profile_id: p.nia })).status).toBe(400);
   });
 
