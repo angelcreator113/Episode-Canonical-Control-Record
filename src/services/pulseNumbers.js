@@ -24,8 +24,10 @@
  *
  *   propose(db, post)        the post's row, made once
  *   proposeLater(post)       propose after the response; never throws
- *   numbersAt(row, at)       the canon numbers shown at a story moment, on
- *                            the growth curve (for #2955; not in reads yet)
+ *   numbersAt(row, postOrder, at)  the numbers shown at a story moment, on
+ *                            the growth curve (Task #2955)
+ *   applyNumbers(db, posts, at)    GET /feed-posts' likes, shares and viral
+ *                            flags at `at` (none: the final numbers)
  *   decide(row, action, …)   Review's Accept, Adjust (a reason), Make it
  *                            viral, Make it flop (Task #2954); the numbers
  *                            then lock
@@ -44,7 +46,14 @@ const RANDOM_SPREAD = 0.15;     // the random factor is 0.85 to 1.15
 const SPIKE_TIMES = 3;          // over 3× the poster's median waits
 const SPIKE_MIN_POSTS = 3;      // a median needs this many decided posts
 const DECIDED = ['accepted', 'adjusted', 'viral', 'flop'];
-// The growth curve (read §5): share of the canon numbers by story moments since the post's own.
+/**
+ * The growth curve (Task #2955; spec §8 "grow along a curve over about two
+ * days of story time, then settle"; docs/reads/2026-10-12-pulse-numbers-read.md
+ * §5). Story time moves in moments, not hours (services/storyClock.js), so
+ * the curve is the share of the numbers shown by how many story moments
+ * have passed since the post's own: CURVE[0] at its moment, CURVE[1] one
+ * moment later, CURVE[2] (all of it) from two moments on.
+ */
 const CURVE = [0.55, 0.85, 1];
 
 /** The post's kind for its like rate: fit, status, announcement or other. */
@@ -225,18 +234,56 @@ const momentIndex = (order) => {
 };
 
 /**
- * The canon numbers shown at story moment `at`: { likes, shares } on the
- * growth curve, or null when they are not canon yet or the post is not
- * written yet. An unknown story order or `at` shows the full numbers.
+ * The numbers shown at story moment `at` for a post whose story order is
+ * `postOrder` (else the row's): { likes, shares } on the growth curve.
+ * Decided numbers are the locked final ones; a proposal not yet decided
+ * shows its proposed numbers on the same curve, never more. null when the
+ * post is not written yet at `at`. An unknown order or `at` shows them all.
  */
-function numbersAt(row, at) {
-  if (!row || !DECIDED.includes(row.status) || row.final_likes == null) return null;
-  const likes = Number(row.final_likes);
-  const shares = Number(row.final_shares || 0);
-  if (!Number.isInteger(row.story_order) || !Number.isInteger(at)) return { likes, shares };
-  if (at < row.story_order) return null;
-  const share = CURVE[Math.min(CURVE.length - 1, momentIndex(at) - momentIndex(row.story_order))];
+function numbersAt(row, postOrder, at) {
+  if (!row) return null;
+  const decided = DECIDED.includes(row.status) && row.final_likes != null;
+  const likes = Number(decided ? row.final_likes : row.proposed_likes) || 0;
+  const shares = Number(decided ? row.final_shares : row.proposed_shares) || 0;
+  const order = Number.isInteger(postOrder) ? postOrder : row.story_order;
+  if (!Number.isInteger(order) || !Number.isInteger(at)) return { likes, shares };
+  if (at < order) return null;
+  const share = CURVE[Math.min(CURVE.length - 1, momentIndex(at) - momentIndex(order))];
   return { likes: Math.round(likes * share), shares: Math.round(shares * share) };
+}
+
+// viral_reach per viral tier, as feedEngagementService's analysis writes it.
+const REACH_TIMES = { ultra: 20, mega: 10, mid: 5, nano: 2 };
+
+/** is_viral and viral_reach from shown likes: VIRAL_THRESHOLDS on likes alone, at story time (no wall-clock velocity). */
+function viralFor(likes) {
+  const { detectViralTier } = require('./feedEngagementService');
+  const tier = detectViralTier(likes, 0);
+  return { is_viral: Boolean(tier), viral_reach: tier ? Math.floor(likes * REACH_TIMES[tier]) : 0 };
+}
+
+/**
+ * GET /feed-posts' numbers (Task #2955): each post with a numbers row shows
+ * its likes and shares as they stand at story moment `at` (undefined: the
+ * final numbers, the Director view), and its viral flags from them.
+ * comments_count stays the real comments; a post with no row is unchanged.
+ */
+async function applyNumbers(db, posts, at) {
+  const ids = posts.map((p) => p.id);
+  if (!ids.length || !db.PulsePostNumber) return posts;
+  const rows = await db.PulsePostNumber.findAll({ where: { post_id: ids } });
+  if (!rows.length) return posts;
+  const rowOf = new Map(rows.map((r) => [r.post_id, r]));
+  const [orders] = await db.sequelize.query(
+    `SELECT fp.id, ${require('./storyClock').postOrderSql('fp')} AS story_order FROM feed_posts fp WHERE fp.id IN (:ids)`,
+    { replacements: { ids: [...rowOf.keys()] } });
+  const orderOf = new Map(orders.map((o) => [o.id, o.story_order == null ? null : Number(o.story_order)]));
+  return posts.map((post) => {
+    const row = rowOf.get(post.id);
+    if (!row) return post;
+    const shown = numbersAt(row, orderOf.get(post.id), at) || { likes: 0, shares: 0 };
+    return { ...post, likes: shown.likes, shares: shown.shares, ...viralFor(shown.likes) };
+  });
 }
 
 // Review's decisions (Task #2954): Make it viral multiplies the proposal, Make it flop shrinks it.
@@ -289,5 +336,5 @@ async function decide(row, action, { likes, shares, reason, by = null } = {}) {
 
 module.exports = {
   KIND_RATES, TREND_BOOST, EPISODE_TIER, CURVE, SPIKE_TIMES, VIRAL_MULTIPLE, FLOP_FRACTION, ACTIONS,
-  postKind, randomFactor, numbersFrom, isAboutLala, propose, proposeLater, numbersAt, decide, NumbersError,
+  postKind, randomFactor, numbersFrom, isAboutLala, propose, proposeLater, numbersAt, viralFor, applyNumbers, decide, NumbersError,
 };
