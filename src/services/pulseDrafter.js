@@ -144,6 +144,7 @@ async function draftPost(db, { showId, characterId, moment, context = {} } = {})
 async function release(post) {
   await post.update({ status: 'live', posted_at: post.posted_at || new Date() });
   require('./pulseNumbers').proposeLater(post);
+  require('./pulseCloseness').proposeLater(post.id);   // Task #2983
   return post;
 }
 
@@ -229,6 +230,7 @@ async function draftCommentAndRoute(db, args) {
   if (review.length === 0) {
     await comment.update({ status: 'live', posted_at: new Date() });
     await require('./feedCommentDrafter').recountComments(db, post.id);
+    require('./pulseCloseness').proposeLater(post.id);   // Task #2983
   }
   return { comment, gate, review, published: review.length === 0 };
 }
