@@ -10,7 +10,7 @@
 
 ## 1. What a run does
 
-It is triggered by a push to `main` (each merged PR) that changes something other than docs, or by **Run workflow** on the Actions tab (browser). The job waits in the `production` environment until Evoni approves it. A running deploy is never cancelled.
+It runs only when Evoni starts it: **Run workflow** on the Actions tab, on `main` (browser; GitHub Mobile cannot start it). A merge no longer queues a run (Evoni, 2026-10-12): before that, each merge queued one, and a newer merge cancelled the one waiting for approval. A run deploys the head of `main` at the moment it starts. The job waits in the `production` environment until Evoni approves it. A running deploy is never cancelled.
 
 **Which merges queue a run (#2862).** A merge whose changed files are *all* docs (`docs/**`, or any `.md` file anywhere) queues no run, so it needs no approval. A merge that touches anything else queues one: code, a migration, a package file, a script, or the workflow itself, even alongside docs. Docs-only changes reach the box with the next code deploy, because each deploy fast-forwards to its commit. **Queue:**
 - At most one run waits for approval.
@@ -220,7 +220,7 @@ If a run starts after #2863 merges but before step 1, it stops at **Check config
 ### 2.4 Turn it on and approve the first run
 
 1. Add the variable `DEPLOY_ENABLED` = `true`.
-2. Start a run: merge a PR, or use Actions → **Deploy** → **Run workflow** on `main` (browser).
+2. Start a run: Actions → **Deploy** → **Run workflow** on `main` (browser). Merging a PR does not start one.
 3. Approve it (§3) and watch the steps. **Evoni's approval of this first run is when the Rule 7 decision takes effect** (decision item 7).
 
 To turn the workflow off at any time, set `DEPLOY_ENABLED` to anything but `true`, or delete it.

@@ -28,6 +28,7 @@ export const CONTENT_TYPES = [
   { key: 'feed_post', label: 'One Post', icon: '📌', desc: 'A single post, drawn live from the feed (the post lives in one place)', group: 'social' },
   { key: 'profile_header', label: 'Profile Header', icon: '👤', desc: 'Name, handle, avatar, bio', group: 'social' },
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
+  { key: 'pulse_messages', label: "Lala's Messages", icon: '💌', desc: 'Lala\u2019s DMs on The Pulse as of this beat\u2019s story time: approved messages only, never drafts', group: 'messages' },
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
   { key: 'relationship_changes', label: 'Relationship Changes', icon: '💞', desc: '"changed her relationship status", "are now friends", from the feed', group: 'social' },
@@ -125,6 +126,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMe
       return <FeedPostsRenderer showId={showId} episodeId={episodeId} config={config} />;
     case 'pulse_feed':
       return <PulseFeedRenderer showId={showId} storyAt={storyAt} config={config} />;
+    case 'pulse_messages':
+      return <PulseMessagesRenderer showId={showId} storyAt={storyAt} config={config} />;
     case 'feed_post':
       return <SinglePostRenderer config={config} />;
     case 'profile_header':
@@ -317,6 +320,73 @@ export function PulseFeedRenderer({ showId, storyAt = null, config = {} }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Lala's Messages (The Pulse spec §3 "Lala's DMs are canon conversations
+// … they can appear on Lala's Phone"; Tasks 2984-2986) ──
+// The same read as The Pulse › Messages: Lala's conversations with only the
+// approved messages at or before the beat's order (GET /api/v1/pulse-dms?at=
+// &profile_id=lala), never drafts. A zone may pin its own order
+// (content_config.at) and one conversation (content_config.handle, the other
+// one's handle) to show as bubbles; otherwise it lists the conversations.
+export const pulseMessagesUrl = (showId, at) =>
+  `/api/v1/pulse-dms?show_id=${encodeURIComponent(showId)}&at=${encodeURIComponent(at ?? 'present')}&profile_id=lala`;
+
+export function PulseMessagesRenderer({ showId, storyAt = null, config = {} }) {
+  const at = Number.isInteger(config.at) ? config.at : (Number.isInteger(storyAt) ? storyAt : null);
+  const url = showId ? pulseMessagesUrl(showId, at) : null;
+  const { data, loading } = useContentData(url);
+
+  if (loading) return <ZoneLoader />;
+  const me = data?.profile_id ?? null;
+  const threads = Array.isArray(data?.threads) ? data.threads : [];
+  const otherOf = (t) => (t.profiles || []).find((p) => Number(p.id) !== Number(me)) || {};
+  const nameOf = (p) => p.display_name || (p.handle ? `@${p.handle}` : 'someone');
+  const wanted = String(config.handle || '').replace(/^@/, '').toLowerCase();
+  const thread = wanted ? threads.find((t) => String(otherOf(t).handle || '').toLowerCase() === wanted) : null;
+  const header = (
+    <div style={{ padding: '3px 5px', fontSize: 8, fontWeight: 700, color: '#fff', background: config.bg || 'rgba(0,0,0,0.55)' }}>
+      {thread ? nameOf(otherOf(thread)) : 'Messages'}{at !== null && storyLabel(at) ? ` · ${storyLabel(at)}` : ''}
+    </div>
+  );
+
+  if (wanted) {
+    const messages = (thread?.messages || []).slice(-(config.max_items || 8));
+    return (
+      <div data-testid="pulse-messages-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {header}
+        {!messages.length && <ZoneEmpty label="No messages yet" />}
+        {messages.map((m) => {
+          const mine = Number(m.sender_profile_id) === Number(me);
+          return (
+            <div key={m.id} data-testid="pulse-messages-bubble" data-mine={mine ? 'true' : 'false'} style={{
+              alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '80%', margin: '0 3px', padding: '3px 5px', borderRadius: 6,
+              background: mine ? 'rgba(232,160,180,0.75)' : 'rgba(255,255,255,0.12)', fontSize: 8, color: '#fff', lineHeight: 1.3, overflowWrap: 'anywhere',
+            }}>{m.text}</div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const shown = threads.filter((t) => (t.messages || []).length).slice(0, config.max_items || 5);
+  return (
+    <div data-testid="pulse-messages-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {header}
+      {!shown.length && <ZoneEmpty label="No messages yet" />}
+      {shown.map((t) => {
+        const last = t.messages[t.messages.length - 1];
+        return (
+          <div key={t.id} data-testid="pulse-messages-row" style={{ padding: '4px 5px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: config.bg || 'rgba(0,0,0,0.4)' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(otherOf(t))}</div>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {Number(last.sender_profile_id) === Number(me) ? 'You: ' : ''}{last.text}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

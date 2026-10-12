@@ -28,15 +28,10 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
-    # A push whose changed files are ALL docs (docs/** or any .md) queues no
-    # run (#2862). A push that also touches anything else (code, migrations,
-    # package files, scripts, this workflow) still deploys. No runtime code
-    # reads a .md file. Run workflow (workflow_dispatch) is unaffected.
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
+  # Manual only (Evoni, 2026-10-12): a merge to main no longer queues a run.
+  # She starts each deploy herself with Run workflow on main (browser), so a
+  # run is never queued behind, or cancelled by, the next merge. It deploys
+  # the head of main at that moment, and still waits for her approval.
   workflow_dispatch:
 
 permissions:
@@ -48,6 +43,8 @@ permissions:
 # A run waiting for approval already holds the group, so it is not replaced:
 # at most one waits for approval and one (the newest) is pending behind it.
 # Seen on 2026-10-10: #22 waiting, #23 cancelled the moment #24 was queued.
+# While every merge queued a run, runs #82-#92 (2026-10-12) were all
+# cancelled this way before they were approved.
 concurrency:
   group: production-deploy
   cancel-in-progress: false
