@@ -110,10 +110,10 @@ router.get('/', optionalAuth, async (req, res) => {
     // newest story time first. Without it, nothing changes.
     let order = [['posted_at', 'DESC'], ['sort_order', 'ASC']];
     let reveals = null;
+    let atOrder;
     if (at !== undefined) {
       if (at === 'present' && !show_id) return res.status(400).json({ error: 'at=present needs show_id' });
       const clock = require('../services/storyClock');
-      let atOrder;
       try { atOrder = await clock.resolveAt(require('../models'), show_id, at); } catch (err) {
         if (err.status === 400) return res.status(400).json({ error: err.message });
         throw err;
@@ -167,6 +167,9 @@ router.get('/', optionalAuth, async (req, res) => {
     // profile links to a registry character, whose portrait_url is the photo.
     let data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
     if (reveals) data = data.map((p) => applyPostReveal(p, reveals));
+    // Likes and shares as they stand at the story moment, on the growth
+    // curve; without ?at=, the final numbers (Task #2955, services/pulseNumbers.js).
+    data = await require('../services/pulseNumbers').applyNumbers(require('../models'), data, atOrder);
 
     return res.json({
       data,
