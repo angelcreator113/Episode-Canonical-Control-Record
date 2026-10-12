@@ -102,8 +102,10 @@ describe("Lala's view", () => {
     expect((await screen.findByTestId('pl-followers')).textContent).toBe('12k followers');
     const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
     expect(nav.getByRole('button', { name: /Feed/ }).getAttribute('aria-current')).toBe('page');
-    expect(nav.getByText('Messages').closest('[aria-disabled="true"]')).toBeTruthy();
-    expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(true);
+    // Messages (Task 2985) and Dream Cities (Task 2987) are live.
+    expect(nav.getByRole('button', { name: /Messages/ })).toBeTruthy();
+    expect(nav.getByRole('button', { name: /Dream Cities/ })).toBeTruthy();
+    expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(false);
   });
 
   test('posts: who, when and city, the words, photo, likes, comments and shares, a first comment', async () => {

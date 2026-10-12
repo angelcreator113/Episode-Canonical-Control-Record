@@ -223,6 +223,8 @@ router.post('/', requireAuth, async (req, res) => {
     res.json({ data: post });
     // A post created live has its numbers proposed after the response (Task #2953).
     require('../services/pulseNumbers').proposeLater(post);
+    // …and the closeness changes it causes (Task #2983).
+    if (post.status === 'live') require('../services/pulseCloseness').proposeLater(post.id);
     return undefined;
   } catch (err) {
     console.error('[FeedPosts] Create error:', err);
@@ -426,7 +428,10 @@ router.post('/:postId/comments', requireAuth, async (req, res) => {
       handle: handle.trim().replace(/^@/, ''), display_name: display_name || null, text: text.trim(),
       status: status || 'draft', posted_at: status === 'live' ? new Date() : null, sort_order: existing, ai_generated: false,
     });
-    if (comment.status === 'live') await recountComments(models, post.id);
+    if (comment.status === 'live') {
+      await recountComments(models, post.id);
+      require('../services/pulseCloseness').proposeLater(post.id);   // Task #2983
+    }
     return res.json({ data: comment });
   } catch (err) {
     console.error('[FeedComments] Create error:', err);
@@ -466,7 +471,10 @@ router.patch('/comments/:commentId', requireAuth, async (req, res) => {
     }
     if (status === 'live') { updates.status = 'live'; updates.posted_at = comment.posted_at || new Date(); }
     await comment.update(updates);
-    if (comment.status === 'live') await recountComments(models, comment.feed_post_id);
+    if (comment.status === 'live') {
+      await recountComments(models, comment.feed_post_id);
+      require('../services/pulseCloseness').proposeLater(comment.feed_post_id);   // Task #2983
+    }
     return res.json({ data: comment });
   } catch (err) {
     console.error('[FeedComments] Update error:', err);
@@ -562,6 +570,7 @@ router.put('/:postId', requireAuth, async (req, res) => {
     res.json({ data: post });
     // A draft going live has its numbers proposed after the response, never failing the release (Task #2953).
     if (released) require('../services/pulseNumbers').proposeLater(post);
+    if (released) require('../services/pulseCloseness').proposeLater(post.id);
     return undefined;
   } catch (err) {
     return res.status(500).json({ error: err.message });
