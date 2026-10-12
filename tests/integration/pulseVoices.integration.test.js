@@ -145,4 +145,25 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     expect(removed.body.voice.examples.map((e) => e.kind)).toEqual(['edit']);
     expect((await as(admin, request(app).delete(`/api/v1/pulse-voices/${voice.id}/examples/${pinned.body.example.id}`))).status).toBe(404);
   });
+
+  test('Pin a post as an example of its poster\'s voice (Task #2972): admin only, once, and only with a voice', async () => {
+    const postId = uuid();
+    const otherId = uuid();
+    await run(`INSERT INTO feed_posts (id, show_id, poster_handle, social_profile_id, content_text, status, created_at, updated_at) VALUES
+      (:postId, :show, :h, :pid, 'beige again? ok', 'live', NOW(), NOW()),
+      (:otherId, :show, :h2, :pid2, 'no voice here', 'live', NOW(), NOW())`,
+    { postId, otherId, show: ids.show, h: `marcus-${tag}`, pid: p.marcus, h2: `nia-${tag}`, pid2: p.nia });
+    const pin = (body, token = admin) => as(token, request(app).post('/api/v1/pulse-voices/pin')).send(body);
+    expect((await pin({ post_id: postId }, editor)).status).toBe(403);
+    expect((await pin({ post_id: 'x' })).status).toBe(400);
+    expect((await pin({ post_id: uuid() })).status).toBe(404);
+    const res = await pin({ post_id: postId });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ handle: `marcus-${tag}`, example: { kind: 'pinned', post_id: postId, text: 'beige again? ok' } });
+    expect((await pin({ post_id: postId })).status).toBe(409);
+    const noVoice = await pin({ post_id: otherId });
+    expect(noVoice.status).toBe(409);
+    expect(noVoice.body.error).toBe(`@nia-${tag} has no Voice Profile yet. Build it in Voices first.`);
+    await run('DELETE FROM feed_posts WHERE id IN (:postId, :otherId)', { postId, otherId });
+  });
 });

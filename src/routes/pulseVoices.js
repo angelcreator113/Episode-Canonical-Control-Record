@@ -12,6 +12,8 @@
  *   POST   /:id/examples { text, kind?, post_id? }  a pinned post or an
  *                                     edit as an example (ADMIN)
  *   DELETE /:id/examples/:exampleId   (ADMIN)
+ *   POST   /pin { post_id }           pins a post as an example of its
+ *                                     poster's voice (ADMIN; Task #2972)
  */
 const express = require('express');
 const { requireAuth, authorize } = require('../middleware/auth');
@@ -66,6 +68,30 @@ router.get('/', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[PulseVoices] GET error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/pin', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const postId = String(req.body?.post_id || '');
+    if (!UUID_RE.test(postId)) return res.status(400).json({ success: false, error: 'post_id must be a post id.' });
+    const db = getModels();
+    const post = await db.FeedPost.findByPk(postId);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+    const voice = post.social_profile_id
+      ? await db.PulseVoice.findOne({ where: { social_profile_id: post.social_profile_id } })
+      : null;
+    if (!voice) {
+      return res.status(409).json({ success: false, error: `@${post.poster_handle} has no Voice Profile yet. Build it in Voices first.` });
+    }
+    const example = await require('../services/pulseVoices').addExample(voice, {
+      text: post.content_text, kind: 'pinned', postId: post.id, by: byOf(req),
+    });
+    return res.status(201).json({ success: true, example, voice: shape(voice), handle: post.poster_handle });
+  } catch (err) {
+    if (sendKnown(res, err)) return undefined;
+    console.error('[PulseVoices] pin error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

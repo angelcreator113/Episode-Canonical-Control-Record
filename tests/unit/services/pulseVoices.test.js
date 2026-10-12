@@ -71,14 +71,19 @@ describe('normalizeHabits', () => {
     });
     expect(habits).toEqual({
       case: 'lowercase', punctuation: 'no full stops', emoji: { use: 'often', favorites: ['✨', '💅'] },
-      sentence_length: 'short', topics: Array.from({ length: 10 }, (_, i) => `t${i}`), never_says: ['synergy'],
+      sentence_length: 'short', temperament: 'regular', topics: Array.from({ length: 10 }, (_, i) => `t${i}`), never_says: ['synergy'],
       signature_phrases: ['ate and left no crumbs'],
     });
   });
 
+  test('temperament: oversharer, regular or lurker (Task #2970)', () => {
+    expect(normalizeHabits({ temperament: 'Lurker' }).temperament).toBe('lurker');
+    expect(normalizeHabits({ temperament: 'chatty' }).temperament).toBe('regular');
+  });
+
   test('defaults for anything missing or unknown', () => {
     expect(normalizeHabits({ case: 'shouting', emoji: 'often' })).toEqual({
-      case: 'sentence', punctuation: '', emoji: { use: 'often', favorites: [] }, sentence_length: 'short', topics: [], never_says: [], signature_phrases: [],
+      case: 'sentence', punctuation: '', emoji: { use: 'often', favorites: [] }, sentence_length: 'short', temperament: 'regular', topics: [], never_says: [], signature_phrases: [],
     });
   });
 });

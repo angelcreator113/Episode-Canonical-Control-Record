@@ -940,3 +940,37 @@
 .pulse-engine-status-done { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .pulse-engine-status-failed, .pulse-engine-status-skipped { background: var(--danger-bg); color: var(--danger-text); }
 .pulse-engine-why { flex-basis: 100%; color: var(--lala-ink-muted); font-size: 12px; }
+
+/* Admin › The Pulse › Voices (Task 2972): each posting character's Voice Profile */
+.pulse-voices { display: flex; flex-direction: column; gap: 12px; }
+.pulse-voices-muted { margin: 0; color: var(--lala-ink-muted); font-size: 12px; }
+.pulse-voices-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pulse-voices-card { padding: 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius); background: var(--surface-card); min-width: 0; }
+.pulse-voices-head { display: flex; align-items: center; gap: 10px; }
+.pulse-voices-photo { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.pulse-voices-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--lala-parchment-3); color: var(--lala-ink); font-weight: 800; }
+.pulse-voices-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; color: var(--lala-ink); }
+.pulse-voices-state { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.pulse-voices-state-ok { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.pulse-voices-state-stale { background: var(--warning-bg); color: var(--warning-text); }
+.pulse-voices-state-none { background: var(--lala-parchment-2); color: var(--lala-ink); }
+.pulse-voices-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+.pulse-voices-btn { min-height: 36px; padding: 4px 14px; border-radius: 6px; border: 1px solid var(--lala-lavender-dark); background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.pulse-voices-btn:disabled { opacity: 0.6; cursor: default; }
+.pulse-voices-link { background: none; border: none; padding: 0; min-height: 32px; font: inherit; font-size: 13px; color: var(--lala-lavender-text); cursor: pointer; }
+.pulse-voices-link:hover { text-decoration: underline; }
+.pulse-voices-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+.pulse-voices-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--lala-parchment-2); }
+.pulse-voices-habits { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; font-size: 13px; color: var(--lala-ink); }
+.pulse-voices-habits select, .pulse-voices-habits input, .pulse-voices-add textarea { box-sizing: border-box; width: 100%; min-height: 40px; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--lala-ink); }
+.pulse-voices-examples h4 { margin: 0 0 6px; font-size: 14px; }
+.pulse-voices-examples ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.pulse-voices-examples li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--lala-parchment-2); font-size: 14px; overflow-wrap: anywhere; }
+.pulse-voices-examples li:first-child { border-top: none; }
+.pulse-voices-kind { padding: 1px 6px; border-radius: 999px; background: var(--lala-parchment-2); color: var(--lala-ink); font-size: 11px; font-weight: 700; }
+.pulse-voices-text { flex: 1 1 200px; min-width: 0; color: var(--lala-ink); }
+.pulse-voices-add { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--lala-ink); }
+.pulse-voices-add .pulse-voices-btn { align-self: flex-start; }
+.pulse-voices-banned { padding: 8px 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius); background: var(--surface-card); font-size: 13px; }
+.pulse-voices-banned summary { min-height: 32px; cursor: pointer; font-weight: 600; }
+.pulse-voices-banned p { margin: 6px 0 0; color: var(--lala-ink-muted); overflow-wrap: anywhere; }

@@ -17,6 +17,10 @@
  *     post (gate_json), then publishes an everyday post by another character
  *     that passed, or leaves the draft for Review. Returns
  *     { post, gate, review, published }.
+ *   draftCommentAndRoute(db, { postId, characterId })   (Task #2970)
+ *     a comment in voice on a post, as a feed_comments draft, through the
+ *     same gate; it goes live only when it passed, is not about Lala, is
+ *     not Lala's, and its post is already live.
  *
  * Called by the queue's handlers (#2970 events, #2971 ambient), never in a
  * request. Each call counts toward the daily draft cap through its job.
@@ -146,4 +150,75 @@ async function draftAndRoute(db, args) {
   return { post, gate, review, published: review.length === 0 };
 }
 
-module.exports = { MODELS, draftPost, draftAndRoute, release, DraftError };
+/** Drafts one comment in voice on a post; returns { comment, post, voice, privateState }. */
+async function draftComment(db, { postId, characterId }) {
+  const post = await db.FeedPost.findByPk(postId);
+  if (!post) throw new DraftError(`Post ${postId} not found.`);
+  const { character, profile, voice } = await loadPoster(db, characterId);
+  if (Number(post.social_profile_id) === Number(profile.id)) throw new DraftError('A character does not comment on their own post here.');
+  const { BANNED_PHRASES } = require('./pulseVoices');
+  const examples = (voice.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
+  const prompt = `You write one comment on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
+
+Write exactly in this voice:
+${JSON.stringify(voice.habits_json || {}, null, 2)}
+Things they really wrote:
+${examples}
+
+The post, by @${post.poster_handle}:
+${post.content_text}
+
+PRIVATE (shapes the mood only; never state, quote or hint at it directly):
+${JSON.stringify(character.living_state || {})}
+
+Rules: stay in the world (nothing about a show or a studio); one short comment; never use: ${BANNED_PHRASES.join(', ')}.
+Answer with JSON only: {"text": "the comment"}`;
+  let message;
+  for (const model of MODELS) {
+    try {
+      message = await getClient().messages.create({ model, max_tokens: 300, messages: [{ role: 'user', content: prompt }] });
+      break;
+    } catch (modelErr) {
+      console.warn(`[PulseDrafter] drafting a comment with ${model} failed:`, modelErr.message);
+      if (model === MODELS[MODELS.length - 1]) throw modelErr;
+    }
+  }
+  const raw = (message?.content?.[0]?.text || '').trim();
+  let text;
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    text = String(JSON.parse(match ? match[0] : raw).text || '').trim().slice(0, 1000);
+  } catch (parseErr) {
+    console.error('[PulseDrafter] could not read the comment:', parseErr.message);
+    throw new DraftError('The comment came back in a form that could not be read.');
+  }
+  if (!text) throw new DraftError('The comment came back empty.');
+  const existing = await db.FeedComment.count({ where: { feed_post_id: post.id } });
+  const comment = await db.FeedComment.create({
+    feed_post_id: post.id, show_id: post.show_id, social_profile_id: profile.id,
+    handle: String(profile.handle).replace(/^@/, ''), display_name: profile.display_name || character.display_name,
+    text, status: 'draft', sort_order: existing, ai_generated: true, generation_model: MODELS[0],
+  });
+  return { comment, post, voice, privateState: character.living_state || null };
+}
+
+/** Drafts a comment, gates it as a post at its post's story order, then publishes it or leaves it for Review. */
+async function draftCommentAndRoute(db, args) {
+  const { comment, post, voice, privateState } = await draftComment(db, args);
+  const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+  const gateApi = require('./pulseGate');
+  const asPost = {
+    show_id: post.show_id, social_profile_id: comment.social_profile_id, poster_handle: comment.handle,
+    content_text: comment.text, trending_topic: null, story_order: post.story_order,
+  };
+  const gate = await gateApi.check(db, asPost, { voice, privateState, lalaProfileId });
+  const review = gateApi.reviewReasons(asPost, gate, { lalaProfileId });
+  if (post.status !== 'live') review.push('post_not_live');
+  if (review.length === 0) {
+    await comment.update({ status: 'live', posted_at: new Date() });
+    await require('./feedCommentDrafter').recountComments(db, post.id);
+  }
+  return { comment, gate, review, published: review.length === 0 };
+}
+
+module.exports = { MODELS, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError };
