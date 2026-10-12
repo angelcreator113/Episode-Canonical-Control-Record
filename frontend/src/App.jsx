@@ -10,6 +10,7 @@ import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 // Eager-loaded: critical path pages (login, landing, home)
 import Login from './pages/Login';
 import PublicLanding from './pages/PublicLanding';
+import PublicRecap from './pages/PublicRecap';
 import Home from './pages/Home';
 
 // Dev-only token carrier (Shape A) — ruled at
@@ -295,6 +296,8 @@ function AppContent() {
     return (
       <Routes>
         <Route path="/" element={<PublicLanding />} />
+        <Route path="/pulse-recap" element={<PublicRecap />} />
+        <Route path="/pulse-recap/:id" element={<PublicRecap />} />
         <Route path="/login" element={<Login />} />
         {import.meta.env.DEV && (
           <Route
@@ -349,6 +352,9 @@ function AppContent() {
               preview of the public site stays here (Task #2822). */}
           <Route path="/website" element={<Navigate to="/admin?tab=website" replace />} />
           <Route path="/site-preview" element={<PublicLanding preview />} />
+          {/* The weekly Pulse recap, public (Task #3009): the same page signed in. */}
+          <Route path="/pulse-recap" element={<PublicRecap />} />
+          <Route path="/pulse-recap/:id" element={<PublicRecap />} />
           
           {/* Universe */}
           <Route path="/universe" element={<UniversePage />} />
