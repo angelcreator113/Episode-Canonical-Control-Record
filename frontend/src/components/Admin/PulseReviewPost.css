@@ -68,3 +68,14 @@
 .prv-pending:first-child { border-top: none; }
 .prv-deleted { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 8px; padding: 0.75rem 1rem; }
 .prv-deleted summary { min-height: 32px; cursor: pointer; font-weight: 600; }
+
+/* Episode followers (Task 2956): Lala's proposed change for a completed episode */
+.prv-epf { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--lala-parchment-2); font-size: 14px; overflow-wrap: anywhere; }
+.prv-epf:first-child { border-top: none; }
+.prv-epf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.prv-epf-change { margin: 2px 0; font-size: 15px; }
+.prv-epf-why { margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 12px; }
+.prv-epf-adjust { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 4px; }
+.prv-epf-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-secondary); flex: 1 1 160px; min-width: 0; }
+.prv-epf-reason { flex-basis: 100%; }
+.prv-epf-field input { box-sizing: border-box; width: 100%; min-height: 40px; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }

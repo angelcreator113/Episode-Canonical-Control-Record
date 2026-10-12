@@ -5,6 +5,9 @@
  *   Lala's drafts        posts shared from The Pulse: Release, Edit, Delete
  *   Posts from episodes  drafted inside an episode: Approve, Edit, Discard
  *   Comments waiting     drafted reactions: Approve, Delete
+ *   Episode followers    Lala's follower change for each completed
+ *                        episode: Accept, Adjust (PulseEpisodeFollowers,
+ *                        Task 2956)
  *   Live posts           comments and "Draft reactions", "Use in a beat"
  *   Events               the events of unpublished episodes, each with
  *                        when it is revealed on The Pulse (Task 2940)
@@ -17,19 +20,24 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
 import RevealPicker from './RevealPicker';
+import PulseEpisodeFollowers from './PulseEpisodeFollowers';
 
 const LIMIT = 50;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
 
-/** The count of things waiting for Evoni: drafts, episode posts and comments. */
+/** Lala's proposed episode follower changes, from GET /pulse-followers. */
+const episodeChanges = (r) => (Array.isArray(r?.data?.proposed) ? r.data.proposed.filter((p) => p.cause === 'episode') : []);
+
+/** The count of things waiting for Evoni: drafts, episode posts, comments and episode follower changes. */
 export async function loadReviewCount(showId) {
   const id = encodeURIComponent(showId);
-  const [wall, episode, pending] = await Promise.all([
+  const [wall, episode, pending, followers] = await Promise.all([
     api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=wall&limit=1`),
     api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=episode&limit=1`),
     api.get(`/api/v1/feed-posts/comments/pending?show_id=${id}`),
+    api.get(`/api/v1/pulse-followers?show_id=${id}`),
   ]);
-  return (wall.data?.total ?? 0) + (episode.data?.total ?? 0) + list(pending).length;
+  return (wall.data?.total ?? 0) + (episode.data?.total ?? 0) + list(pending).length + episodeChanges(followers).length;
 }
 
 function PendingComment({ comment, onChange }) {
@@ -73,13 +81,14 @@ export default function PulseReview({ showId, onCount }) {
     const safe = async (p, label) => {
       try { return await p; } catch (err) { console.error(`[PulseReview] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
-    const [wall, episode, pending, live, deleted, side] = await Promise.all([
+    const [wall, episode, pending, live, deleted, side, followers] = await Promise.all([
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=wall&with=comments&limit=${LIMIT}`), 'drafts'),
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=episode&with=comments&limit=${LIMIT}`), 'episode posts'),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${id}`), 'comments'),
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=live&with=comments&limit=20`), 'live posts'),
       safe(api.get(`/api/v1/feed-posts/deleted?show_id=${id}&limit=200`), 'deleted posts'),
       safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
+      safe(api.get(`/api/v1/pulse-followers?show_id=${id}`), 'episode followers'),
     ]);
     if (!wall && !episode && !pending && !live && !deleted) {
       setError('Review could not be loaded.');
@@ -93,9 +102,10 @@ export default function PulseReview({ showId, onCount }) {
       live: list(live),
       deleted: list(deleted),
       events: Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : [],
+      followers: episodeChanges(followers),
     };
     setData(next);
-    onCount?.(next.wall.total + next.episode.total + next.pending.length);
+    onCount?.(next.wall.total + next.episode.total + next.pending.length + next.followers.length);
   }, [showId, onCount]);
 
   useEffect(() => { load(); }, [load]);
@@ -118,6 +128,10 @@ export default function PulseReview({ showId, onCount }) {
       <Section title="Comments waiting" count={data.pending.length} testId="prv-pending"
         empty="No comments waiting. Drafted reactions wait here until approved.">
         <ul className="prv-plain">{data.pending.map((c) => <PendingComment key={c.id} comment={c} onChange={load} />)}</ul>
+      </Section>
+      <Section title="Episode followers" count={data.followers.length} testId="prv-episode-followers"
+        empty="No episode follower changes waiting. Completing an episode proposes Lala's change here.">
+        <PulseEpisodeFollowers rows={data.followers} onChange={load} />
       </Section>
       <Section title="Live posts" testId="prv-live">
         <p className="prv-muted">Draft reactions, delete a comment, or show a post at an episode beat.</p>
