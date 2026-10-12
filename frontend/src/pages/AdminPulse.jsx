@@ -1,11 +1,12 @@
 /**
  * Admin › The Pulse: the Social Director (docs/design/2026-10-the-pulse.md
  * §4; Task #2919). Its sub-tabs are ?sub=: Review, Uploads, Growth,
- * Storylines and Calendar, and Story clock (Task 2941: the scrubber, The
- * Pulse as of any story moment). Review (Task 2925, the feed's director tools,
- * the default), Uploads (phase 2) and Growth (Task 2957: Lala's follower
- * line, best and worst posts, biggest jumps) are live; the others say which
- * phase brings them. Review's tab counts what is waiting. Nothing here shows in
+ * Storylines and Calendar, Story clock (Task 2941: the scrubber, The
+ * Pulse as of any story moment), and Engine (Task 2968: the daily draft cap,
+ * the ambient switch and the posting queue). Review (Task 2925, the feed's
+ * director tools, the default), Uploads (phase 2) and Growth (Task 2957:
+ * Lala's follower line, best and worst posts, biggest jumps) are live; the
+ * others say which phase brings them. Review's tab counts what is waiting. Nothing here shows in
  * The Pulse.
  *
  * Uploads › Cover: The Pulse's cover image and its alt text, saved to the
@@ -31,12 +32,14 @@ import { PulseRevealProvider } from '../components/Admin/PulseRevealContext';
 import RevealPicker from '../components/Admin/RevealPicker';
 import PulseStoryClock from '../components/Admin/PulseStoryClock';
 import PulseGrowth from '../components/Admin/PulseGrowth';
+import PulseEngine from '../components/Admin/PulseEngine';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review' },
   { key: 'uploads', label: 'Uploads' },
   { key: 'story-clock', label: 'Story clock' },
   { key: 'growth', label: 'Growth' },
+  { key: 'engine', label: 'Engine' },
   { key: 'storylines', label: 'Storylines', comingIn: 'Phase 7 brings Storylines: threads planted and paid off across posts.' },
   { key: 'calendar', label: 'Calendar', comingIn: 'Phase 7 brings Calendar: every post, reveal and event in story time.' },
 ];
@@ -227,6 +230,7 @@ export default function PulseDirector() {
               {sub === 'uploads' && <PulseUploads showId={showId} />}
               {sub === 'story-clock' && <PulseStoryClock />}
               {sub === 'growth' && <PulseGrowth key={showId} showId={showId} />}
+              {sub === 'engine' && <PulseEngine key={showId} showId={showId} />}
             </PulseRevealProvider>
           )}
         </AdminShowGate>
