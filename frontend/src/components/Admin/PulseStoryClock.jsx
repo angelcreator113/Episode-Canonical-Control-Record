@@ -20,6 +20,7 @@ import { storyMoments, presentOrder } from '../../lib/storyClock';
 import { loadCities } from '../../lib/pulseCities';
 import { loadCityStates } from '../../lib/pulseReveals';
 import PulsePost from '../Pulse/PulsePost';
+import { pulseFeedUrl } from '../../lib/pulsePosts';
 import { CitiesCard, UpcomingCard, LatestFitCard } from '../Pulse/PulseSides';
 import { FirstLook } from '../Pulse/PulseReveal';
 import '../../pages/SocialMediaPage.css';
@@ -41,7 +42,7 @@ function usePulseAt(showId, at) {
     };
     (async () => {
       const [posts, side, fit, cover, cityStates] = await Promise.all([
-        safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=live&with=comments&limit=${PREVIEW_POSTS}&at=${at}`), 'posts'),
+        safe(api.get(pulseFeedUrl(showId, at, PREVIEW_POSTS)), 'posts'),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}&at=${at}`), 'events'),
         safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}&at=${at}`), 'latest fit'),
         safe(api.get(`/api/v1/shows/${id}/pulse-cover?at=${at}`), 'cover'),
