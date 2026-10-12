@@ -761,6 +761,17 @@ ${narrativeLines.short || ''}`,
     }
   }
 
+  // ── 20. Lala's follower change for the episode (Task #2956) ──
+  // A proposal only, in the follower ledger, for Evoni to accept in Review
+  // (services/pulseFollowers.js); it never fails completion.
+  let followerProposal = null;
+  try {
+    const row = await require('./pulseFollowers').proposeEpisodeChange(require('../models'), { showId, episodeId });
+    if (row) followerProposal = { id: row.id, change: row.change, status: row.status };
+  } catch (followersErr) {
+    console.error('[EpisodeCompletion] Follower change proposal failed (non-blocking):', followersErr?.message);
+  }
+
   return {
     episode_id: episodeId,
     evaluation: {
@@ -780,6 +791,7 @@ ${narrativeLines.short || ''}`,
     career: careerSummary,
     event_sync: eventSync,
     season,
+    follower_proposal: followerProposal,
   };
 }
 

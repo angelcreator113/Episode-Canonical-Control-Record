@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
     status:            { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'proposed' }, // proposed | accepted | rejected
     decided_by:        { type: DataTypes.STRING(255), allowNull: true },
     decided_at:        { type: DataTypes.DATE, allowNull: true },
+    factors_json:      { type: DataTypes.JSONB, allowNull: true },  // why a proposed change is what it is (Task #2956)
   }, {
     sequelize, modelName: 'PulseFollower',
     tableName: 'pulse_followers', underscored: true,
