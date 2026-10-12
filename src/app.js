@@ -726,6 +726,8 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseAmbient').startScheduler(db);
   // Storyline beats (Task #2989): queued hourly once their story moment has come.
   require('./services/pulseStorylines').startScheduler(db);
+  // The weekly recap (Task #3008): each hour, last week's draft if it has none (never AI; never published by itself).
+  require('./services/pulseRecap').startScheduler(db);
 }
 
 // Phase 2 routes
@@ -840,6 +842,9 @@ app.use('/api/v1/public', publicSiteRoutes);
 // Audience polls, public side (Task #3005): no auth; one vote per browser and IP, hashed; its own limiter.
 const publicPollRoutes = trackRouteLoad('publicPolls', () => require('./routes/publicPolls'));
 app.use('/api/v1/public/polls', publicPollRoutes);
+// The weekly Pulse recap, public side (Task #3008): published recaps only; no auth; its own limiter.
+const publicRecapRoutes = trackRouteLoad('publicRecaps', () => require('./routes/publicRecaps'));
+app.use('/api/v1/public/recaps', publicRecapRoutes);
 
 // Lala's everyday fits on The Pulse (Task #2922): requireAuth on every route.
 const pulseFitRoutes = trackRouteLoad('pulseFits', () => require('./routes/pulseFits'));
@@ -871,6 +876,9 @@ app.use('/api/v1/pulse-storylines', pulseStorylineRoutes);
 // Audience polls, Admin side (Task #3005): reads requireAuth; writes requireAuth + ADMIN.
 const pulsePollRoutes = trackRouteLoad('pulsePolls', () => require('./routes/pulsePolls'));
 app.use('/api/v1/pulse-polls', pulsePollRoutes);
+// The weekly Pulse recap, Admin side (Task #3008): reads requireAuth; writes requireAuth + ADMIN.
+const pulseRecapRoutes = trackRouteLoad('pulseRecaps', () => require('./routes/pulseRecaps'));
+app.use('/api/v1/pulse-recaps', pulseRecapRoutes);
 // The Pulse's posting engine settings and queue (Task #2968): reads requireAuth; settings requireAuth + ADMIN.
 const pulseEngineRoutes = trackRouteLoad('pulseEngine', () => require('./routes/pulseEngine'));
 app.use('/api/v1/pulse-engine', pulseEngineRoutes);
