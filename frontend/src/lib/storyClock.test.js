@@ -9,4 +9,9 @@ describe('storyClock (screens)', () => {
     expect(storyLabel(postOrder({ story_order: 7 }))).toBe('Backstory');
     expect(storyLabel(postOrder({}))).toBeNull();
   });
+  test("an event's moments: Announced, Invitation sent, Lala arrives (Task 2937)", () => {
+    expect(storyLabel(32)).toBe('Announced Ep 3');
+    expect(storyLabel(33)).toBe('Invitation sent Ep 3');
+    expect(storyLabel(34)).toBe('Lala arrives Ep 3');
+  });
 });

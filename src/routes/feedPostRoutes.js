@@ -55,8 +55,8 @@ async function withAuthorPortraits(models, posts) {
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from } = req.query;
-    const { FeedPost, SocialProfile, FeedComment, Episode } = require('../models');
+    const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from, at } = req.query;
+    const { FeedPost, SocialProfile, FeedComment, Episode, sequelize } = require('../models');
 
     if (!show_id && !episode_id) {
       return res.status(400).json({ error: 'show_id or episode_id is required' });
@@ -81,10 +81,27 @@ router.get('/', optionalAuth, async (req, res) => {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
       where.post_type = post_type;
     }
+    // ?at= (Task #2937): The Pulse as of a story moment ("present", an
+    // order, or ep:<n>:<phase>; services/storyClock.js). Keeps posts whose
+    // story order is no later than it, and those of unknown story time;
+    // newest story time first. Without it, nothing changes.
+    let order = [['posted_at', 'DESC'], ['sort_order', 'ASC']];
+    if (at !== undefined) {
+      if (at === 'present' && !show_id) return res.status(400).json({ error: 'at=present needs show_id' });
+      const clock = require('../services/storyClock');
+      let atOrder;
+      try { atOrder = await clock.resolveAt(require('../models'), show_id, at); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+      const storyOrder = clock.postOrderSql('FeedPost');
+      where[require('sequelize').Op.and] = [sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`)];
+      order = [[sequelize.literal(`${storyOrder} DESC NULLS LAST`)], ['posted_at', 'DESC'], ['sort_order', 'ASC']];
+    }
 
     const posts = await FeedPost.findAll({
       where,
-      order: [['posted_at', 'DESC'], ['sort_order', 'ASC']],
+      order,
       limit: parseInt(limit, 10) || 50,
       offset: parseInt(offset, 10) || 0,
       include: [

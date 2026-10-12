@@ -230,6 +230,7 @@ function Feed({ show, lala, director, search, cities }) {
     setLoading(true); setError(null);
     try {
       const qs = new URLSearchParams({ show_id: show.id, status: 'live', with: 'comments', limit: String(PAGE), offset: String(offset) });
+      if (!director) qs.set('at', 'present');
       const r = await api.get(`/api/v1/feed-posts?${qs}`);
       const page = r.data?.data || [];
       setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
@@ -238,7 +239,7 @@ function Feed({ show, lala, director, search, cities }) {
       console.error('[ThePulse] posts could not be read:', err.response?.status || err.message);
       setError('The Pulse could not be loaded.');
     } finally { setLoading(false); }
-  }, [show?.id]);
+  }, [show?.id, director]);
   useEffect(() => { load(0); }, [load]);
 
   const owner = lala?.profile || null;
@@ -420,6 +421,9 @@ export default function SocialMediaPage() {
   useEffect(() => {
     if (!show?.id) return;
     const id = encodeURIComponent(show.id);
+    // Lala's view is The Pulse as of the present in story time (Task 2937);
+    // Director view reads everything live.
+    const atParam = director ? '' : '&at=present';
     const safe = async (p, label) => {
       try { return await p; } catch (err) { console.error(`[ThePulse] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
@@ -428,10 +432,10 @@ export default function SocialMediaPage() {
       const [c, who, side, rel, trend, latest] = await Promise.all([
         safe(api.get(`/api/v1/shows/${show.id}/pulse-cover`), 'cover'),
         safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}`), "Lala's profile"),
-        safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
-        safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50`), 'relationship posts'),
+        safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}${atParam}`), 'events'),
+        safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50${atParam}`), 'relationship posts'),
         safe(api.get(`/api/v1/feed-enhanced/${id}/trending`), 'trending'),
-        safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}`), 'latest fit'),
+        safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}${atParam}`), 'latest fit'),
       ]);
       if (!alive) return;
       setCover(c?.data?.cover || null);
@@ -443,7 +447,7 @@ export default function SocialMediaPage() {
       setFit(latest?.data?.latest || null);
     })();
     return () => { alive = false; };
-  }, [show?.id]);
+  }, [show?.id, director]);
 
   useEffect(() => {
     let alive = true;

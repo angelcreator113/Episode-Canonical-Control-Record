@@ -16,6 +16,8 @@ module.exports = (sequelize, DataTypes) => {
     image_alt:  { type: DataTypes.STRING(300), allowNull: true },
     caption:    { type: DataTypes.TEXT, allowNull: true },
     story_date: { type: DataTypes.DATEONLY, allowNull: true },
+    // The story time it was uploaded at (migration 20261011220000; Task #2937).
+    story_order: { type: DataTypes.INTEGER, allowNull: true },
     width:      { type: DataTypes.INTEGER, allowNull: true },
     height:     { type: DataTypes.INTEGER, allowNull: true },
   }, {

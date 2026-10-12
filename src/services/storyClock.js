@@ -8,8 +8,12 @@
  * number and a phase.
  *
  *   order = episode_number * 10 + phase
- *   phase: before_episode 1, during_episode 5, after_episode 7,
+ *   phase: before_episode 1, announced 2, invitation_sent 3,
+ *          lala_arrives 4, during_episode 5, after_episode 7,
  *          next_day 8, week_later 9
+ *   (announced, invitation_sent and lala_arrives are an event's moments
+ *   in its episode: The Pulse spec §5, Task #2937,
+ *   docs/reads/2026-10-11-pulse-story-clock-read.md §5)
  *
  * A post's story time is its episode's number and its timeline_position
  * (during the episode when it has none); a post written on the wall with
@@ -21,8 +25,14 @@
 
 const { Op } = require('sequelize');
 
-const PHASES = { before_episode: 1, during_episode: 5, after_episode: 7, next_day: 8, week_later: 9 };
-const PHASE_LABELS = { 1: 'Before', 5: 'During', 7: 'After', 8: 'The day after', 9: 'A week after' };
+const PHASES = {
+  before_episode: 1, announced: 2, invitation_sent: 3, lala_arrives: 4,
+  during_episode: 5, after_episode: 7, next_day: 8, week_later: 9,
+};
+const PHASE_LABELS = {
+  1: 'Before', 2: 'Announced', 3: 'Invitation sent', 4: 'Lala arrives',
+  5: 'During', 7: 'After', 8: 'The day after', 9: 'A week after',
+};
 
 const orderOf = (episodeNumber, phase = 'during_episode') => {
   if (episodeNumber === null || episodeNumber === undefined || episodeNumber === '') return null;
@@ -72,4 +82,51 @@ function checkAtBeat(order, episodeNumber) {
   return { ok: false, message: `This post happens ${label(order)}; a beat of Ep ${episodeNumber} is earlier in story time. Lala cannot see a post that has not been written yet.` };
 }
 
-module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, checkAtBeat };
+/**
+ * SQL for a feed_posts row's story order (Task #2937), as postOrder:
+ * story_order, else its episode's number * 10 + its timeline_position's
+ * phase (during when none), else NULL (unknown). `alias` is the query's
+ * name for feed_posts.
+ */
+function postOrderSql(alias) {
+  const cases = Object.entries(PHASES).map(([k, v]) => `WHEN '${k}' THEN ${v}`).join(' ');
+  return `COALESCE("${alias}"."story_order", (SELECT e.episode_number * 10 + (CASE "${alias}"."timeline_position" ${cases} ELSE ${PHASES.during_episode} END)
+    FROM episodes e WHERE e.id = "${alias}"."episode_id"))`;
+}
+
+const ORDER_RE = /^\d{1,6}$/;
+const EP_RE = /^ep:(\d{1,5}):([a-z_]+)$/;
+
+/**
+ * A story moment from a query value (Task #2937): an order ("37") or
+ * "ep:<n>:<phase>" ("ep:3:after_episode"); null when it is neither.
+ * "present" needs the show and is resolved by resolveAt.
+ */
+function parseAt(value) {
+  if (typeof value === 'number') return Number.isInteger(value) && value >= 0 ? value : null;
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (ORDER_RE.test(v)) return Number(v);
+  const m = EP_RE.exec(v);
+  if (m && PHASES[m[2]]) return orderOf(Number(m[1]), m[2]);
+  return null;
+}
+
+/**
+ * The query's `at` as an order: undefined when absent (reads unchanged),
+ * the present for "present", else parseAt. Throws a 400-shaped error
+ * when it cannot be read.
+ */
+async function resolveAt(models, showId, value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'present') return presentOrder(models, showId);
+  const order = parseAt(value);
+  if (order === null) {
+    const err = new Error('at must be "present", a story order, or ep:<n>:<phase>');
+    err.status = 400;
+    throw err;
+  }
+  return order;
+}
+
+module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, checkAtBeat, parseAt, resolveAt, postOrderSql };
