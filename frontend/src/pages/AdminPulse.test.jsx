@@ -38,8 +38,8 @@ describe('Social Director sub-tabs', () => {
     await screen.findByTestId('pulse-cover-add');
     expect(api.get).toHaveBeenCalledWith('/api/v1/shows/show-1/pulse-cover');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Growth' }));
-    expect(screen.getByTestId('pulse-coming').textContent).toMatch(/^Phase 5 brings Growth/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Storylines' }));
+    expect(screen.getByTestId('pulse-coming').textContent).toMatch(/^Phase 7 brings Storylines/);
   });
 });
 

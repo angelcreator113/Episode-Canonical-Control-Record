@@ -104,6 +104,22 @@ router.get('/history', requireAuth, async (req, res) => {
   }
 });
 
+// GET /growth?show_id= (Task #2957): Admin › The Pulse › Growth, read only
+// (services/pulseGrowth.js): Lala's follower line, projection, best and
+// worst posts and biggest jumps. Count and tier only; no Influence yet.
+router.get('/growth', requireAuth, async (req, res) => {
+  try {
+    const showId = String(req.query.show_id || '');
+    if (!UUID_RE.test(showId)) return badShow(res);
+    const db = getModels();
+    const growth = await require('../services/pulseGrowth').growthOf(db, showId);
+    return res.json({ success: true, ...growth });
+  } catch (err) {
+    console.error('[PulseFollowers] GET growth error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/starts', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.body?.show_id || '');
