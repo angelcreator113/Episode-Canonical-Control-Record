@@ -13,8 +13,9 @@
  *     defaults to whoever did not write the last message. Never calls AI.
  *   draftMessage(db, { threadId, senderProfileId, at })
  *     one Sonnet call in the sender's Voice Profile: the conversation so far,
- *     the topic, the story moment, the sender's Living State as private
- *     context. The gate runs on it (pulseGate, as a post at its story order)
+ *     the topic, the story moment, the events the sender knows by then
+ *     (pulseKnowledge, as the post drafter), the sender's Living State as
+ *     private context. The gate runs on it (pulseGate, as a post at its story order)
  *     and the message is always left a draft.
  *   decide(message, action, { text, by })   approve | edit (approve with new
  *     text) | reject; deciding again is a 409
@@ -95,7 +96,7 @@ async function senderOf(db, profileId) {
   return { voice, character, profile };
 }
 
-function buildPrompt({ sender, other, history, topic, label }) {
+function buildPrompt({ sender, other, history, topic, label, known }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const name = (p) => `${p.display_name || p.handle} (@${p.handle})`;
   const examples = (sender.voice.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
@@ -109,6 +110,7 @@ Things they really wrote:
 ${examples}
 
 When: ${label || 'now'}.
+${require('./pulseDrafter').knowsLine(known)}
 What the conversation is about: ${topic || 'whatever they would message about'}.
 The conversation so far:
 ${lines}
@@ -134,12 +136,14 @@ async function draftMessage(db, { threadId, senderProfileId, at = null }) {
   const last = history[history.length - 1];
   const order = Number.isInteger(at) ? at : (last ? Number(last.story_order) : Number(thread.opened_story_order));
   const clock = require('./storyClock');
+  // What the sender knows by then (Task #2982): the gate flags a DM naming anything else.
+  const known = await require('./pulseKnowledge').knowledgeLine(db, thread.show_id, senderId, order);
   let message;
   for (const model of MODELS) {
     try {
       message = await getClient().messages.create({
         model, max_tokens: 300,
-        messages: [{ role: 'user', content: buildPrompt({ sender, other: other || { handle: String(otherId) }, history, topic: thread.topic, label: clock.label(order) }) }],
+        messages: [{ role: 'user', content: buildPrompt({ sender, other: other || { handle: String(otherId) }, history, topic: thread.topic, label: clock.label(order), known }) }],
       });
       break;
     } catch (modelErr) {
