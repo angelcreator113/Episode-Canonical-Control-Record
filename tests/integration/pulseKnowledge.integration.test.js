@@ -3,6 +3,8 @@
  * with the Anthropic calls mocked:
  * - there: a guest, and Lala, from the event's During;
  * - told: a close tie of a guest (bestie, not mentor), from the event's After;
+ * - closeness moves with the ledger (Task #2983): a tie that grew close is
+ *   told, one that cooled is not, each from the change's story moment;
  * - public: a live post at or before the moment that names or tags it;
  * - the gate flags a draft naming an event its poster could not know, and it
  *   stays a draft; the drafter is told what the poster knows;
@@ -80,6 +82,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
   afterAll(async () => {
     await new Promise((r) => { setTimeout(r, 300); });
     await run('DELETE FROM feed_comments WHERE show_id = :show', ids);
+    await run('DELETE FROM pulse_closeness WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM social_profile_relationships WHERE source_profile_id IN (:a) OR target_profile_id IN (:a)', { a: [p.marcus, p.kim, p.rio, p.zed] });
@@ -104,6 +107,30 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     expect(await knows('kim', 17)).toEqual({ [ids.gala]: 'told' });
     expect(await knows('rio', 17)).toEqual({});
     expect(await knows('zed', 17)).toEqual({});
+  });
+
+  test('told follows the closeness ledger: grown close is told, cooled is not, from the change on', async () => {
+    const pair = (a, b) => (Number(a) < Number(b) ? [Number(a), Number(b)] : [Number(b), Number(a)]);
+    const accept = async (a, b, at, delta, after) => {
+      const [x, y] = pair(a, b);
+      await models.PulseCloseness.create({ show_id: ids.show, profile_a_id: x, profile_b_id: y, story_order: at, delta, closeness_after: after,
+        cause: 'override', status: 'accepted', decided_by: 'test', decided_at: new Date() });
+    };
+    // Rio (mentor, 0.6) grows to 0.7 at the day after Ep 1; a proposed change never counts.
+    await accept(p.marcus, p.rio, 18, 0.1, 0.7);
+    const [x, y] = pair(p.marcus, p.zed);
+    await models.PulseCloseness.create({ show_id: ids.show, profile_a_id: x, profile_b_id: y, story_order: 17, delta: 0.8, closeness_after: 0.8, cause: 'override', status: 'proposed' });
+    expect(await knows('rio', 17)).toEqual({});
+    expect(await knows('rio', 18)).toEqual({ [ids.gala]: 'told' });
+    expect(await knows('zed', 18)).toEqual({});
+    expect(await knowledge.closeTies(models, p.rio, { showId: ids.show, at: 17 })).toEqual(new Set());
+    expect(await knowledge.closeTies(models, p.rio, { showId: ids.show, at: 18 })).toEqual(new Set([Number(p.marcus)]));
+    // Without a moment, the relationship types alone.
+    expect(await knowledge.closeTies(models, p.rio)).toEqual(new Set());
+    // Kim (bestie, 1) cools to 0.65 at Ep 2's Before: told until then, not after.
+    await accept(p.marcus, p.kim, 21, -0.35, 0.65);
+    expect(await knows('kim', 20)).toEqual({ [ids.gala]: 'told' });
+    expect(await knows('kim', 21)).toEqual({});
   });
 
   test('public: a live post naming it, or tagged with it, at or before the moment', async () => {

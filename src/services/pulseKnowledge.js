@@ -24,8 +24,12 @@
  *     its poster does not know. Events not yet happened or still hidden are
  *     the gate's future_event and unrevealed_event flags, not this.
  *
- * "Close" is a relationship type whose closeness (pulseEventPosting.CLOSENESS)
- * is CLOSE_LINE or more, in social_profile_relationships either way round.
+ * "Close" is a pair whose closeness at the moment is CLOSE_LINE or more: its
+ * closest relationship type (pulseEventPosting.CLOSENESS, in
+ * social_profile_relationships either way round) moved by the pair's accepted
+ * changes in the closeness ledger at or before it (pulseCloseness, Task
+ * #2983). So two characters who grow close are told from then on, and a tie
+ * that cools stops hearing.
  */
 
 const CLOSE_LINE = 0.7;
@@ -52,17 +56,28 @@ async function showEvents(db, showId) {
   }));
 }
 
-/** The Feed profiles close to this one (a relationship type at CLOSE_LINE or more). */
-async function closeTies(db, profileId) {
+/**
+ * The Feed profiles close to this one: closeness CLOSE_LINE or more. With a
+ * show and a story order, each pair's accepted ledger changes at or before it
+ * count (pulseCloseness.ledgerDeltas); without, the relationship types alone.
+ */
+async function closeTies(db, profileId, { showId, at } = {}) {
   const { CLOSENESS } = require('./pulseEventPosting');
+  const me = Number(profileId);
   const [rows] = await db.sequelize.query(
     `SELECT source_profile_id, target_profile_id, relationship_type::text AS type FROM social_profile_relationships
-      WHERE source_profile_id = :id OR target_profile_id = :id`, { replacements: { id: profileId } });
-  const ties = new Set();
+      WHERE source_profile_id = :id OR target_profile_id = :id`, { replacements: { id: me } });
+  const closeness = new Map();
   for (const r of rows) {
-    if ((CLOSENESS[r.type] ?? 0) < CLOSE_LINE) continue;
-    ties.add(Number(r.source_profile_id) === Number(profileId) ? Number(r.target_profile_id) : Number(r.source_profile_id));
+    const other = Number(r.source_profile_id) === me ? Number(r.target_profile_id) : Number(r.source_profile_id);
+    closeness.set(other, Math.max(closeness.get(other) || 0, CLOSENESS[r.type] ?? 0));
   }
+  if (showId && Number.isInteger(at)) {
+    const { ledgerDeltas, clamp } = require('./pulseCloseness');
+    for (const [other, delta] of await ledgerDeltas(db, showId, me, at)) closeness.set(other, clamp((closeness.get(other) || 0) + delta));
+  }
+  const ties = new Set();
+  for (const [other, value] of closeness) if (other !== me && value >= CLOSE_LINE) ties.add(other);
   return ties;
 }
 
@@ -95,7 +110,7 @@ async function knowsAt(db, showId, profileId, at, { lalaProfileId, events } = {}
   const lalaId = lalaProfileId !== undefined ? lalaProfileId : await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const me = Number(profileId);
   const isLala = lalaId != null && me === Number(lalaId);
-  const ties = await closeTies(db, me);
+  const ties = await closeTies(db, me, { showId, at });
   const knows = new Map();
   for (const ev of list) {
     if (ev.episode_number == null) continue;

@@ -38,8 +38,11 @@ describe('Social Director sub-tabs', () => {
     await screen.findByTestId('pulse-cover-add');
     expect(api.get).toHaveBeenCalledWith('/api/v1/shows/show-1/pulse-cover');
 
+    // Storylines (Task 2989) is live: the planner, not a note.
     fireEvent.click(screen.getByRole('tab', { name: 'Storylines' }));
-    expect(screen.getByTestId('pulse-coming').textContent).toMatch(/^Phase 7 brings Storylines/);
+    await screen.findByTestId('pulse-story');
+    expect(screen.queryByTestId('pulse-coming')).toBeNull();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-storylines?show_id=show-1');
 
     // Calendar (Task 2988) is live: the story-time calendar, not a note.
     fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }));

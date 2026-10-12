@@ -35,6 +35,7 @@ import PulseStoryClock from '../components/Admin/PulseStoryClock';
 import PulseGrowth from '../components/Admin/PulseGrowth';
 import PulseEngine from '../components/Admin/PulseEngine';
 import PulseVoices from '../components/Admin/PulseVoices';
+import PulseStorylines from '../components/Admin/PulseStorylines';
 import PulseCalendar from '../components/Admin/PulseCalendar';
 
 export const PULSE_TABS = [
@@ -44,7 +45,7 @@ export const PULSE_TABS = [
   { key: 'growth', label: 'Growth' },
   { key: 'voices', label: 'Voices' },
   { key: 'engine', label: 'Engine' },
-  { key: 'storylines', label: 'Storylines', comingIn: 'Phase 7 brings Storylines: threads planted and paid off across posts.' },
+  { key: 'storylines', label: 'Storylines' },
   { key: 'calendar', label: 'Calendar' },
 ];
 const DEFAULT_SUB = 'review';
@@ -236,6 +237,7 @@ export default function PulseDirector() {
               {sub === 'growth' && <PulseGrowth key={showId} showId={showId} />}
               {sub === 'voices' && <PulseVoices key={showId} showId={showId} />}
               {sub === 'engine' && <PulseEngine key={showId} showId={showId} />}
+              {sub === 'storylines' && <PulseStorylines key={showId} showId={showId} />}
               {sub === 'calendar' && <PulseCalendar key={showId} showId={showId} />}
             </PulseRevealProvider>
           )}
