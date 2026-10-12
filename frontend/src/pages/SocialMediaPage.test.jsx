@@ -325,3 +325,26 @@ describe('Reveals (Task 2939)', () => {
     expect(calls().some((u) => u.startsWith(`/api/v1/pulse-reveals?show_id=${SHOW.id}`))).toBe(true);
   });
 });
+
+describe('/pulse?at= (Task 2941)', () => {
+  const calls = () => vi.mocked(api.get).mock.calls.map(([u]) => u);
+  const feedCalls = () => calls().filter((u) => u.startsWith('/api/v1/feed-posts?') && u.includes('with=comments'));
+
+  test('an admin sees The Pulse as of that story moment, with a way back to now', async () => {
+    USER = { name: 'Evoni', groups: ['admin'] };
+    renderAt('/pulse?at=24');
+    await screen.findAllByTestId('pl-post');
+    expect(screen.getByTestId('pl-at-banner').textContent).toContain('The Pulse as of Lala arrives Ep 2');
+    expect(feedCalls().every((u) => u.includes('at=24'))).toBe(true);
+    expect(calls().filter((u) => u.includes('/pulse-cover')).every((u) => u.endsWith('?at=24'))).toBe(true);
+    expect(screen.getByRole('link', { name: 'Back to now' }).getAttribute('href')).toBe('/pulse');
+  });
+
+  test('anyone else always sees the present', async () => {
+    renderAt('/pulse?at=24');
+    await screen.findAllByTestId('pl-post');
+    expect(screen.queryByTestId('pl-at-banner')).toBeNull();
+    expect(feedCalls().every((u) => u.includes('at=present'))).toBe(true);
+  });
+});
+

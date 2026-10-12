@@ -840,3 +840,51 @@
   font-size: 0.8125rem;
   color: var(--lala-ink-muted);
 }
+
+/* Story clock (Task 2941): the scrubber; the preview below wears The Pulse's own styles */
+.pulse-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pulse-clock h3 {
+  margin: 0;
+}
+
+.pulse-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pulse-clock-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse-clock-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+.pulse-clock-slider input {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--lala-gold-text);
+}
+
+.pulse-clock-now,
+.pulse-clock-open {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--lala-ink);
+}
+
+.pulse-clock-present {
+  color: var(--lala-ink-muted);
+}

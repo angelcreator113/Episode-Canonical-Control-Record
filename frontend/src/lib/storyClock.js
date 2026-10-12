@@ -25,3 +25,27 @@ export function storyLabel(order) {
   if (ep === 0) return 'Backstory';
   return `${PHASE_LABELS[order % 10] || 'During'} Ep ${ep}`;
 }
+
+// The moments Admin › The Pulse › Story clock steps through (Task 2941), in
+// story order: an episode's phases, from before it to a week after.
+const MOMENT_PHASES = ['before_episode', 'announced', 'invitation_sent', 'lala_arrives', 'during_episode', 'after_episode', 'next_day', 'week_later'];
+const BACKSTORY = PHASES.after_episode; // 7: after "episode 0", before episode 1
+
+/** [{ order, label }] for the backstory and every numbered episode's phases, in order. */
+export function storyMoments(episodes) {
+  const numbers = [...new Set((episodes || []).map((e) => e?.episode_number).filter((n) => Number.isInteger(n) && n > 0))].sort((a, b) => a - b);
+  const moments = [{ order: BACKSTORY, label: 'Backstory' }];
+  for (const n of numbers) {
+    for (const phase of MOMENT_PHASES) {
+      const order = n * 10 + PHASES[phase];
+      moments.push({ order, label: storyLabel(order) });
+    }
+  }
+  return moments;
+}
+
+/** The present, as the server reads it: after the latest published episode, else the backstory. */
+export function presentOrder(episodes) {
+  const published = (episodes || []).filter((e) => e?.status === 'published' && Number.isInteger(e.episode_number)).map((e) => e.episode_number);
+  return published.length ? Math.max(...published) * 10 + PHASES.after_episode : BACKSTORY;
+}
