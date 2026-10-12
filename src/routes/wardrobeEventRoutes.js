@@ -11,6 +11,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+// Game responses never carry a piece's real-world source (Task #3020).
+const { withoutRealFields } = require('../utils/wardrobeInWorld');
 
 // ── DRESS CODE → AESTHETIC TAG MAPPING ───────────────────────────────────────
 const DRESS_CODE_TAGS = {
@@ -92,7 +94,7 @@ router.get('/:showId/filter', requireAuth, async (req, res) => {
 
     // Score each item
     const scored = allItems.map(item => {
-      const d = item.toJSON();
+      const d = withoutRealFields(item);
       let score = 0;
       const reasons = [];
 
@@ -311,7 +313,7 @@ router.post('/:episodeId/lock-outfit', requireAuth, async (req, res) => {
             { approval_status: 'approved', approved_at: new Date(), worn_at: new Date() },
             { transaction }
           );
-          locked.push({ link, item: item.toJSON() });
+          locked.push({ link, item: withoutRealFields(item) });
         }
       }
       return locked;
