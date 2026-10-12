@@ -974,3 +974,134 @@
 .pulse-voices-banned { padding: 8px 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius); background: var(--surface-card); font-size: 13px; }
 .pulse-voices-banned summary { min-height: 32px; cursor: pointer; font-weight: 600; }
 .pulse-voices-banned p { margin: 6px 0 0; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+
+/* Admin › The Pulse › Storylines (Task 2989): storylines and their beats in story time. */
+.pulse-story,
+.pulse-story-list,
+.pulse-story-beats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pulse-story h3 {
+  margin: 0;
+}
+
+.pulse-story-list,
+.pulse-story-beats,
+.pulse-story-suggestions ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pulse-story-card {
+  padding: 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  background: var(--surface-card);
+  overflow-wrap: anywhere;
+}
+
+.pulse-story-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse-story-status,
+.pulse-story-kind {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--lala-parchment-2);
+  color: var(--lala-ink);
+  font-size: 0.8rem;
+}
+
+.pulse-story-kind-payoff {
+  background: var(--lala-gold-soft);
+}
+
+.pulse-story-premise {
+  margin: 0.25rem 0;
+  color: var(--lala-ink);
+}
+
+.pulse-story-beats {
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+}
+
+.pulse-story-beat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--lala-parchment-2);
+}
+
+.pulse-story-when {
+  min-width: 8rem;
+  font-weight: 600;
+  color: var(--lala-ink);
+}
+
+.pulse-story-what {
+  flex: 1 1 14rem;
+}
+
+.pulse-story-state {
+  color: var(--lala-ink-muted);
+  font-size: 0.85rem;
+}
+
+.pulse-story-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.pulse-story-new,
+.pulse-story-beat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 560px;
+}
+
+.pulse-story-new label,
+.pulse-story-beat-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pulse-story-new input,
+.pulse-story-new textarea,
+.pulse-story-new select,
+.pulse-story-beat-form input,
+.pulse-story-beat-form select {
+  min-height: 44px;
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+}
+
+.pulse-story-suggestions {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: var(--lala-radius);
+  background: var(--lala-parchment-2);
+}
+
+.pulse-story-suggestions li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.375rem 0;
+}
