@@ -713,6 +713,13 @@ if (process.env.NODE_ENV !== 'test') {
   startFeedScheduler(4, db);
 }
 
+// The Pulse's posting queue worker (Task #2968, services/pulseQueue.js): AI
+// drafting runs only here, never in a request. Off unless the server sets
+// PULSE_ENGINE_ENABLED=true (Evoni's .env change); never in tests.
+if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'test') {
+  require('./services/pulseQueue').start(db);
+}
+
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);
@@ -835,6 +842,9 @@ app.use('/api/v1/pulse-followers', pulseFollowerRoutes);
 // Post numbers in Review (Task #2954): reads requireAuth; decisions requireAuth + ADMIN.
 const pulseNumberRoutes = trackRouteLoad('pulseNumbers', () => require('./routes/pulseNumbers'));
 app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
+// The Pulse's posting engine settings and queue (Task #2968): reads requireAuth; settings requireAuth + ADMIN.
+const pulseEngineRoutes = trackRouteLoad('pulseEngine', () => require('./routes/pulseEngine'));
+app.use('/api/v1/pulse-engine', pulseEngineRoutes);
 
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
