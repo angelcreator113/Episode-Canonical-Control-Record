@@ -44,6 +44,13 @@ export function storyMoments(episodes) {
   return moments;
 }
 
+/** A beat's story order (Task 2986): beats happen during their episode, as services/storyClock.beatOrder; null when the number is unknown. */
+export function beatOrder(episodeNumber) {
+  if (episodeNumber === null || episodeNumber === undefined || episodeNumber === '') return null;
+  const n = Number(episodeNumber);
+  return Number.isInteger(n) ? n * 10 + PHASES.during_episode : null;
+}
+
 /** The present, as the server reads it: after the latest published episode, else the backstory. */
 export function presentOrder(episodes) {
   const published = (episodes || []).filter((e) => e?.status === 'published' && Number.isInteger(e.episode_number)).map((e) => e.episode_number);
