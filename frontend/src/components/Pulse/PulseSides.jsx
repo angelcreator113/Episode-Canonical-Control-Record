@@ -62,7 +62,7 @@ function CityImage({ city, director, state }) {
 }
 
 /** states: Lala's view's city image states ({ 'city:<key>': 'teaser' | 'hidden' }); labels: Director view's reveal labels. */
-export function CitiesCard({ cities, director, states = {}, labels = null }) {
+export function CitiesCard({ cities, director, states = {}, labels = null, onCity = null }) {
   if (!cities.length) return null;
   return (
     <section className="pl-card pl-cities-card" aria-labelledby="pl-cities-heading" data-testid="pl-cities">
@@ -72,7 +72,9 @@ export function CitiesCard({ cities, director, states = {}, labels = null }) {
           <li key={c.key} className="pl-city" style={cityVars(c)} data-testid="pl-city-row">
             <CityImage city={c} director={director} state={states[`city:${c.key}`]} />
             <span className="pl-city-text">
-              <b><span className="pl-city-dot" aria-hidden="true" />{c.name}</b>
+              {onCity ? (
+                <button type="button" className="pl-city-open" onClick={() => onCity(c.key)}><span className="pl-city-dot" aria-hidden="true" />{c.name}</button>
+              ) : <b><span className="pl-city-dot" aria-hidden="true" />{c.name}</b>}
               {c.subtitle && <small>{c.subtitle}</small>}
               {director && <RevealChip label={labels?.get(revealKey('image', c.key, 'city'))} />}
             </span>
@@ -83,13 +85,15 @@ export function CitiesCard({ cities, director, states = {}, labels = null }) {
   );
 }
 
-export function CityStrip({ cities }) {
+export function CityStrip({ cities, onCity = null }) {
   if (!cities.length) return null;
   return (
     <ul className="pl-city-strip" aria-label="Dream Cities" data-testid="pl-city-strip">
       {cities.map((c) => (
-        <li key={c.key} style={cityVars(c)} title="City feeds are coming to The Pulse">
-          <span className="pl-city-dot" aria-hidden="true" />{c.name}
+        <li key={c.key} style={cityVars(c)}>
+          {onCity ? (
+            <button type="button" onClick={() => onCity(c.key)}><span className="pl-city-dot" aria-hidden="true" />{c.name}</button>
+          ) : <><span className="pl-city-dot" aria-hidden="true" />{c.name}</>}
         </li>
       ))}
     </ul>
@@ -102,11 +106,11 @@ export const tagOf = (topic) => {
   return t.startsWith('#') ? t : `#${t.replace(/\s+/g, '')}`;
 };
 
-export function TrendingCard({ topics, director }) {
+export function TrendingCard({ topics, director, title = 'Trending in the Verse' }) {
   const top = (topics || []).filter((t) => t?.topic && t.post_count > 0).slice(0, TRENDING_MAX);
   return (
     <section className="pl-card" aria-labelledby="pl-trending-heading" data-testid="pl-trending">
-      <h2 id="pl-trending-heading" className="pl-card-title">Trending in the Verse</h2>
+      <h2 id="pl-trending-heading" className="pl-card-title">{title}</h2>
       {top.length === 0 && <p className="pl-quiet">Nothing trending yet.</p>}
       <ol className="pl-trending">
         {top.map((t, i) => (
