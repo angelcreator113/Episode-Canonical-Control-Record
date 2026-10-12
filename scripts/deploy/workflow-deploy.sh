@@ -11,7 +11,12 @@
 #   plan    <sha>  read-only: clean tree, fast-forward, no package change,
 #                  nothing pending in the ledger; prints PLAN_* lines. If the
 #                  box is already at <sha> (a re-run), it resumes instead.
+#                  Files pending on the current tree are carried into this
+#                  run only when a workflow deploy put the box there and did
+#                  not finish (Task #2948); otherwise the plan stops.
 #   deploy  <sha>  back up frontend/dist, fast-forward to <sha>, vite build
+#                  with an explicit heap (Task #2948), marking the deploy
+#                  unfinished until the restart succeeds
 #   migrate <sha>  if files are pending: sequelize-cli db:migrate with the
 #                  credential in ~/.episode-migrate.env, then re-check
 #   restart <sha>  pm2 restart the API, /health, then the worker only if it
@@ -33,6 +38,9 @@ API_APP="episode-api-prod-hotfix"
 WORKER_APP="episode-worker"
 HEALTH_URL="http://localhost:3000/health"
 MIGRATE_ENV="$HOME/.episode-migrate.env"
+# "<from> <to>" while a deploy that moved the tree has not yet restarted the
+# API; removed by a successful restart (Task #2948).
+DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
 
 die() {
   printf 'STOPPED (%s): %s\n' "$PHASE" "$1" >&2
@@ -91,7 +99,8 @@ require_at_target() {
   fi
 }
 
-# Runs the read-only ledger check; sets PENDING_RC and prints its result line.
+# Runs the read-only ledger check; sets PENDING_RC and PENDING_FILES (one
+# migration file name per line) and prints its result line.
 pending_check() {
   local out
   set +e
@@ -99,8 +108,48 @@ pending_check() {
   PENDING_RC=$?
   set -e
   printf '%s\n' "$out" | grep -E '^\[pending-migrations\] (OK|FAIL|ERROR|[0-9]+ pending)' | head -1 | redact || true
-  printf '%s\n' "$out" | grep -oE '[0-9]{14}-[A-Za-z0-9_.-]+\.js' | sort -u | sed 's/^/  pending: /' || true
+  PENDING_FILES="$(printf '%s\n' "$out" | grep -oE '[0-9]{14}-[A-Za-z0-9_.-]+\.js' | sort -u || true)"
+  if [ -n "$PENDING_FILES" ]; then printf '%s\n' "$PENDING_FILES" | sed 's/^/  pending: /'; fi
   echo "pending-check exit $PENDING_RC"
+}
+
+# The heap, in MB, for the on-box vite build (Task #2948): about 60% of the
+# box's RAM, at least 1536 and at most 3072. Node's default is about a
+# quarter of RAM, and the build needs more than 768 MB (measured at
+# 0be931f2); Deploy runs 62 and 64 ran out of heap. MEMINFO overrides
+# /proc/meminfo for the tests.
+build_heap_mb() {
+  local kb heap
+  kb="$(awk '/^MemTotal:/ { print $2; exit }' "${MEMINFO:-/proc/meminfo}" 2>/dev/null || true)"
+  if ! printf '%s' "$kb" | grep -qE '^[0-9]+$'; then
+    echo 1536
+    return 0
+  fi
+  heap=$(( kb / 1024 * 6 / 10 ))
+  if [ "$heap" -lt 1536 ]; then heap=1536; fi
+  if [ "$heap" -gt 3072 ]; then heap=3072; fi
+  echo "$heap"
+}
+
+# Prints why the box's current commit $1 was put there by a workflow deploy
+# that did not finish, or returns 1 (Task #2948). The deploy phase marks the
+# deploy unfinished ($DEPLOY_MARKER, "<from> <to>") once it moves the tree,
+# and a successful restart removes the mark. A box moved before the mark
+# existed has only the deploy phase's own dist backup for that commit
+# (~/dist-backup-<time>-<sha12>); with files pending, that backup means its
+# deploy stopped before the migrate phase finished.
+unfinished_deploy_of() {
+  local head="$1" to backup
+  if [ -f "$DEPLOY_MARKER" ]; then
+    to="$(awk '{ print $2; exit }' "$DEPLOY_MARKER" 2>/dev/null || true)"
+    if [ "$to" = "$head" ]; then echo "the deploy marker names $head"; return 0; fi
+    # A mark for another commit: the tree was moved by hand since. Stop.
+    return 1
+  fi
+  for backup in "$HOME"/dist-backup-*-"${head:0:12}"; do
+    if [ -d "$backup" ]; then echo "the deploy's frontend backup ~/${backup#"$HOME"/}"; return 0; fi
+  done
+  return 1
 }
 
 # Prints the pm2 restart count and status of one app, nothing else.
@@ -171,8 +220,20 @@ phase_plan() {
   echo "Ledger before the deploy (the box's current tree):"
   pending_check
   if [ "$PENDING_RC" -ne 0 ]; then
-    die "the pending-migration check on the current tree exited $PENDING_RC, not 0." \
-      "Either the ledger is behind the deployed code or it could not be read. Nothing was changed."
+    local evidence=""
+    # Files pending (exit 1, never 2: an unreadable ledger always stops) on a
+    # commit a workflow deploy put here and did not finish: that deploy
+    # stopped before its migrate phase. They are carried into this run; the
+    # snapshot is taken first as always, and the migrate phase applies them
+    # with this range's files (Task #2948).
+    if [ "$PENDING_RC" -eq 1 ] && [ -n "$PENDING_FILES" ] && evidence="$(unfinished_deploy_of "$old")"; then
+      echo "The box was put at $old by a deploy that did not finish ($evidence)."
+      echo "Its pending migrations are carried into this run:"
+      printf '%s\n' "$PENDING_FILES" | sed 's/^/PLAN_CARRIED=/'
+    else
+      die "the pending-migration check on the current tree exited $PENDING_RC, not 0." \
+        "Either the ledger is behind the deployed code or it could not be read. Nothing was changed."
+    fi
   fi
   echo "PLAN_OK=1"
 }
@@ -197,11 +258,15 @@ phase_deploy() {
     if ! git merge --ff-only --quiet "$TARGET"; then
       die "git merge --ff-only $TARGET was refused." "The tree was not moved."
     fi
+    # Unfinished until the restart phase succeeds (Task #2948).
+    printf '%s %s\n' "$head" "$TARGET" >"$DEPLOY_MARKER"
     echo "Fast-forwarded $head -> $TARGET ($(git diff --name-only "$head" "$TARGET" | wc -l | tr -d ' ') files)."
   fi
 
-  local log="$HOME/vite-build-${TARGET:0:12}.log"
-  if ! (cd frontend && npx vite build) >"$log" 2>&1; then
+  local log="$HOME/vite-build-${TARGET:0:12}.log" heap
+  heap="$(build_heap_mb)"
+  echo "vite build with a ${heap} MB heap."
+  if ! (cd frontend && NODE_OPTIONS="--max-old-space-size=${heap}" npx vite build) >"$log" 2>&1; then
     tail -20 "$log" | redact
     die "the vite build failed (last lines above)." \
       "The tree is at $TARGET and frontend/dist may be partly rebuilt; the API still runs the old code." \
@@ -318,6 +383,8 @@ phase_restart() {
   echo "After: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP")"
   echo "WORKER_AFTER=$(pm2_status "$WORKER_APP")"
   echo "RESTART_HEAD=$(git rev-parse HEAD)"
+  # The deploy is finished: the API runs the tree's code (Task #2948).
+  rm -f "$DEPLOY_MARKER"
   echo "RESTART_OK=1"
 }
 
