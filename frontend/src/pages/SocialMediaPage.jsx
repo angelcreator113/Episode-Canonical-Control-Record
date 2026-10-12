@@ -11,6 +11,7 @@ import { isAdmin } from '../utils/authGroups';
 import { loadCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
+import PulseMessages from '../components/Pulse/PulseMessages';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels, loadCityStates } from '../lib/pulseReveals';
@@ -41,7 +42,8 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
  * a dashed "+ Add" that opens Admin › The Pulse › Uploads, and the links into
  * the studio; Lala's view leaves empty spots out (§2 rule 4).
  *
- * Views (?tab=): posts (Feed, default), events, people (Characters), profile.
+ * Views (?tab=): posts (Feed, default), events, people (Characters), profile,
+ * messages (Lala's DMs at the story moment, Task 2985).
  * The old ?layer= and ?profile= links open Characters, as they always did.
  */
 
@@ -52,6 +54,7 @@ export const TABS = [
   { key: 'events', label: 'Events' },
   { key: 'people', label: 'Characters' },
   { key: 'profile', label: 'Profile' },
+  { key: 'messages', label: 'Messages' },
 ];
 const PAGE = 50;
 
@@ -406,7 +409,7 @@ function BottomNav({ tab, onTab, onCreate }) {
       {item('posts', 'Home', Home, () => onTab('posts'))}
       {item('events', 'Explore', Compass, () => onTab('events'))}
       {item('create', 'Create', PlusSquare, onCreate)}
-      {item('inbox', 'Inbox', Inbox, undefined, true)}
+      {item('messages', 'Inbox', Inbox, () => onTab('messages'))}
       {item('profile', 'Profile', User, () => onTab('profile'))}
     </nav>
   );
@@ -541,6 +544,7 @@ export default function SocialMediaPage() {
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
+            {tab === 'messages' && <PulseMessages show={show} lala={lala} viewAt={viewAt} />}
           </main>
           <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} /></aside>
         </div>
