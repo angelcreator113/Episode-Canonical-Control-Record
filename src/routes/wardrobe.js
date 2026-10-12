@@ -10,6 +10,8 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
 const { itemReach, isForSale, toCharacter } = require('../services/wardrobeReach');
+// Game responses never carry a piece's real-world source (Task #3020).
+const { withoutRealFields, allWithoutRealFields } = require('../utils/wardrobeInWorld');
 const { DecisionLogger } = require('../utils/decisionLogger');
 const { CATEGORY_ALIASES: WARDROBE_CATEGORY_ALIASES } = require('../utils/wardrobeSlots');
 
@@ -351,7 +353,7 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
         order: [['attachment_type', 'ASC'], ['name', 'ASC']],
         raw: true,
       });
-      allPieces = pieces || [];
+      allPieces = allWithoutRealFields(pieces || []);
     }
 
     // Parse JSON fields so frontend gets arrays/objects
@@ -361,7 +363,7 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
       if (typeof val === 'string') { try { return JSON.parse(val); } catch { return fallback; } }
       return fallback;
     };
-    const parsed = (items || []).map(item => ({
+    const parsed = allWithoutRealFields(items || []).map(item => ({
       ...item,
       aesthetic_tags: safeParseJSON(item.aesthetic_tags, []),
       event_types: safeParseJSON(item.event_types, []),
@@ -1342,7 +1344,7 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     host_brand = host_brand || '';
 
     // 1. Fetch all visible wardrobe items for this show
-    const allItems = await models.Wardrobe.findAll({
+    const allItems = allWithoutRealFields(await models.Wardrobe.findAll({
       where: {
         show_id,
         deleted_at: null,
@@ -1350,7 +1352,7 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
       },
       order: [['tier', 'ASC'], ['name', 'ASC']],
       raw: true,
-    });
+    }));
 
     if (allItems.length === 0) {
       await recordBrowsePoolGenerated(models, req, {
@@ -1913,7 +1915,7 @@ router.post('/purchase', requireAuth, async (req, res) => {
       { replacements: { wardrobe_id } }
     );
     if (!items?.length) return res.status(404).json({ error: 'Item not found' });
-    const item = items[0];
+    const item = withoutRealFields(items[0]);
 
     if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0 });
     // Every unowned piece is for sale except brand-exclusive and season-drop
@@ -2274,7 +2276,7 @@ router.get('/:id/pieces', requireAuth, async (req, res) => {
       where: { parent_item_id: req.params.id, deleted_at: null },
       order: [['attachment_type', 'ASC'], ['name', 'ASC']],
     });
-    return res.json({ success: true, pieces: pieces || [] });
+    return res.json({ success: true, pieces: allWithoutRealFields(pieces || []) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
