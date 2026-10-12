@@ -15,6 +15,9 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
+// The browse pool is in-world and is stored on the episode: never with a
+// piece's real-world source (Task #3020).
+const { allWithoutRealFields } = require('../utils/wardrobeInWorld');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -195,12 +198,12 @@ router.post('/world/:showId/browse-pool', requireAuth, async (req, res) => {
         `SELECT * FROM wardrobe WHERE show_id = :showId`,
         { replacements: { showId } }
       );
-      wardrobeItems = items || [];
+      wardrobeItems = allWithoutRealFields(items || []);
     } catch (e) {
       // Try without show_id filter
       try {
         const [items] = await models.sequelize.query(`SELECT * FROM wardrobe LIMIT 100`);
-        wardrobeItems = items || [];
+        wardrobeItems = allWithoutRealFields(items || []);
       } catch (e2) { /* no wardrobe */ }
     }
 
