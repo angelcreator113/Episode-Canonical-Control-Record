@@ -35,6 +35,8 @@ import PulseStoryClock from '../components/Admin/PulseStoryClock';
 import PulseGrowth from '../components/Admin/PulseGrowth';
 import PulseEngine from '../components/Admin/PulseEngine';
 import PulseVoices from '../components/Admin/PulseVoices';
+import PulseStorylines from '../components/Admin/PulseStorylines';
+import PulseCalendar from '../components/Admin/PulseCalendar';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review' },
@@ -43,8 +45,8 @@ export const PULSE_TABS = [
   { key: 'growth', label: 'Growth' },
   { key: 'voices', label: 'Voices' },
   { key: 'engine', label: 'Engine' },
-  { key: 'storylines', label: 'Storylines', comingIn: 'Phase 7 brings Storylines: threads planted and paid off across posts.' },
-  { key: 'calendar', label: 'Calendar', comingIn: 'Phase 7 brings Calendar: every post, reveal and event in story time.' },
+  { key: 'storylines', label: 'Storylines' },
+  { key: 'calendar', label: 'Calendar' },
 ];
 const DEFAULT_SUB = 'review';
 const subFrom = (value) => (PULSE_TABS.some((t) => t.key === value) ? value : DEFAULT_SUB);
@@ -235,6 +237,8 @@ export default function PulseDirector() {
               {sub === 'growth' && <PulseGrowth key={showId} showId={showId} />}
               {sub === 'voices' && <PulseVoices key={showId} showId={showId} />}
               {sub === 'engine' && <PulseEngine key={showId} showId={showId} />}
+              {sub === 'storylines' && <PulseStorylines key={showId} showId={showId} />}
+              {sub === 'calendar' && <PulseCalendar key={showId} showId={showId} />}
             </PulseRevealProvider>
           )}
         </AdminShowGate>

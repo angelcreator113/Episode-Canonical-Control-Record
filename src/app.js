@@ -720,9 +720,12 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseEventPosting').registerHandlers();
   require('./services/pulseAmbient').registerHandlers();
   require('./services/pulseDms').registerHandlers();
+  require('./services/pulseStorylines').registerHandlers();
   require('./services/pulseQueue').start(db);
   // Ambient posts (Task #2971): planned hourly, only for shows whose ambient switch is on.
   require('./services/pulseAmbient').startScheduler(db);
+  // Storyline beats (Task #2989): queued hourly once their story moment has come.
+  require('./services/pulseStorylines').startScheduler(db);
 }
 
 // Phase 2 routes
@@ -850,12 +853,18 @@ app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
 // Closeness changes in Review (Task #2983): reads requireAuth; decisions requireAuth + ADMIN.
 const pulseClosenessRoutes = trackRouteLoad('pulseCloseness', () => require('./routes/pulseCloseness'));
 app.use('/api/v1/pulse-closeness', pulseClosenessRoutes);
+// The Pulse's story-time calendar (Task #2988): read only, requireAuth.
+const pulseCalendarRoutes = trackRouteLoad('pulseCalendar', () => require('./routes/pulseCalendar'));
+app.use('/api/v1/pulse-calendar', pulseCalendarRoutes);
 // Voice Profiles (Task #2967): reads requireAuth; builds and edits requireAuth + ADMIN.
 const pulseVoiceRoutes = trackRouteLoad('pulseVoices', () => require('./routes/pulseVoices'));
 app.use('/api/v1/pulse-voices', pulseVoiceRoutes);
 // DMs on The Pulse (Task #2984): reads requireAuth; drafting (enqueue only) and decisions requireAuth + ADMIN.
 const pulseDmRoutes = trackRouteLoad('pulseDms', () => require('./routes/pulseDms'));
 app.use('/api/v1/pulse-dms', pulseDmRoutes);
+// Storylines on The Pulse (Task #2989): reads requireAuth; planning requireAuth + ADMIN; suggest + aiRateLimiter.
+const pulseStorylineRoutes = trackRouteLoad('pulseStorylines', () => require('./routes/pulseStorylines'));
+app.use('/api/v1/pulse-storylines', pulseStorylineRoutes);
 // The Pulse's posting engine settings and queue (Task #2968): reads requireAuth; settings requireAuth + ADMIN.
 const pulseEngineRoutes = trackRouteLoad('pulseEngine', () => require('./routes/pulseEngine'));
 app.use('/api/v1/pulse-engine', pulseEngineRoutes);
