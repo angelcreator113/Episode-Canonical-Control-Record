@@ -8,7 +8,7 @@
  * the look in one transaction, or none. The episode's Wardrobe tab stays the
  * full styling game (the pool, the score, suggestions).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
@@ -21,9 +21,13 @@ import { restoreLook, lookIds, toggleInLook, toggleSetInLook, setReach, lookRows
  * event's money forecast; toggle(item) adds or removes a piece; save() sends
  * the look. characterState is Lala's { coins, reputation }. items is the
  * closet: toggle(item) brings a piece's matching-set partners in and out
- * with it; remove(item) takes out that one piece.
+ * with it; remove(item) takes out that one piece. startIds (Task #3007, the
+ * audience's pick from the Style Page) starts the draft with those pieces
+ * instead of the saved look, each added as a tap would add it (out of
+ * Lala's reach: left out, and the note says how many); nothing is saved
+ * until Save.
  */
-export function useLookDraft({ episode, showId, characterState, items = [], onSaved }) {
+export function useLookDraft({ episode, showId, characterState, items = [], onSaved, startIds = null }) {
   const episodeId = episode?.id || null;
   const [saved, setSaved] = useState({});
   const [filled, setFilled] = useState({});
@@ -32,6 +36,7 @@ export function useLookDraft({ episode, showId, characterState, items = [], onSa
   const [loading, setLoading] = useState(Boolean(episodeId));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const [loadedFor, setLoadedFor] = useState(null);   // the episode whose saved look is in
 
   const load = useCallback(async () => {
     if (!episodeId) { setSaved({}); setFilled({}); setEvent(null); setForecast(null); setLoading(false); return; }
@@ -58,11 +63,30 @@ export function useLookDraft({ episode, showId, characterState, items = [], onSa
       }
     } finally {
       setLoading(false);
+      setLoadedFor(episodeId);
     }
   }, [episodeId, showId]);
 
   // A new episode starts with no message; a reload after a save keeps the save's.
   useEffect(() => { setMessage(null); load(); }, [load]);
+
+  // The audience's pick (Task #3007): once the saved look and the closet are in, start from the pick, once.
+  const started = useRef(null);
+  const startKey = episodeId && startIds?.length ? `${episodeId}:${startIds.join(',')}` : null;
+  useEffect(() => {
+    if (!startKey || loadedFor !== episodeId || !items.length || started.current === startKey) return;
+    started.current = startKey;
+    let next = {};
+    let left = 0;
+    for (const id of startIds) {
+      const item = items.find((i) => String(i.id) === String(id));
+      if (!item || lookIds(next).has(item.id)) { if (!item) left += 1; continue; }
+      if (setReach(item, items, characterState, next).ok) next = toggleSetInLook(next, item, items, characterState);
+      else left += 1;
+    }
+    setFilled(next);
+    if (left) setMessage({ ok: false, text: `The audience's pick is in the look, not saved yet. ${left === 1 ? '1 piece is' : `${left} pieces are`} out of Lala's reach or gone, so left out.` });
+  }, [startKey, startIds, loadedFor, episodeId, items, characterState]);
 
   const toggle = useCallback((item) => {
     setMessage(null);

@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, Trash2, Upload } from 'lucide-react';
 import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 import { lookbookApi } from '../../lib/lookbookApi';
+import StyleAudiencePick from './StyleAudiencePick';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
 import { styleSheetApi } from './EpisodeStyleSheetPanel';
@@ -301,6 +302,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               swapVenue={swapVenue}
               toggleOption={(o) => run(() => lookbookApi.venue(episodeId, { source: o.source, ref_id: o.ref_id, in_lookbook: !o.in_lookbook }))}
               onOpenTab={onOpenTab}
+              episode={episode}
             />
           ) : (
             <p className="esp2-panel-empty">Tap a spot on the sheet to edit it. Dashed spots are waiting for a photo.</p>
@@ -334,7 +336,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   );
 }
 
-function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, remove, move, saveFields, swapVenue, toggleOption, onOpenTab }) {
+function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode }) {
   const images = lb.images || {};
   const current = info.photo && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
   const inspo = (images.inspo || []).filter((i) => i.source === 'upload');
@@ -466,6 +468,8 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
           <button type="button" className="esp2-btn" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('wardrobe')}>
             <Shirt size={16} aria-hidden="true" /> Open Wardrobe
           </button>
+          {/* The audience's pick (Task #3007): a suggestion, never applied by itself. */}
+          <StyleAudiencePick episode={episode} />
         </>
       )}
 

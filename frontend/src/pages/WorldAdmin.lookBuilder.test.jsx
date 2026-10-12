@@ -25,8 +25,8 @@ const SAFARI_TOP = { id: 'w5', name: 'Safari Shirt', clothing_category: 'top', i
 const SAFARI_PANTS = { id: 'w6', name: 'Safari Trousers', clothing_category: 'bottom', is_owned: true, outfit_set_id: 's1', outfit_set_name: 'Safari set' };
 const CLOSET = [DRESS, SHOES, PEARLS, GIFT, SAFARI_TOP, SAFARI_PANTS];
 
-const renderIt = () => render(
-  <MemoryRouter initialEntries={['/shows/show-1/world?tab=wardrobe-items']}>
+const renderIt = (url = '/shows/show-1/world?tab=wardrobe-items') => render(
+  <MemoryRouter initialEntries={[url]}>
     <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
   </MemoryRouter>,
 );
@@ -71,6 +71,23 @@ describe('Producer Mode look builder', () => {
       episode_id: 'ep-1', show_id: 'show-1', wardrobe_ids: ['w1', 'w2'],
     }));
     await waitFor(() => expect(panel.textContent).toContain('Lala spent 200 coins'));
+  });
+
+  test("the Style Page's Use this look (Task #3007) starts the draft from the audience's pick, unsaved; out of reach is left out", async () => {
+    // Shoes (in reach), pearls (5000 coins, out of reach), the safari top (brings its set's trousers).
+    renderIt('/shows/show-1/world?tab=wardrobe-items&look_episode=ep-1&look_pieces=w2,w3,w5');
+    const panel = await screen.findByTestId('look-builder');
+    await waitFor(() => expect(within(panel).getByTestId('look-row-shoes').textContent).toContain('Crimson Pump'));
+    expect(panel.textContent).not.toContain('Lilac Slip Dress');
+    expect(panel.textContent).toContain('Safari Shirt');
+    expect(panel.textContent).toContain('Safari Trousers');
+    expect(panel.textContent).not.toContain('Pearl Drops');
+    expect(within(panel).getByRole('status').textContent).toMatch(/^The audience's pick is in the look, not saved yet\. 1 piece is out of Lala's reach or gone, so left out\.$/);
+    const lockCalls = () => api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/lock-outfit-atomic');
+    expect(lockCalls()).toHaveLength(0);
+    fireEvent.click(within(panel).getByTestId('look-save'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/wardrobe/lock-outfit-atomic', expect.objectContaining({ episode_id: 'ep-1' })));
+    expect([...lockCalls()[0][1].wardrobe_ids].sort()).toEqual(['w2', 'w5', 'w6']);
   });
 
   test('a piece out of reach cannot go in; Matches dress code filters by the event', async () => {
