@@ -106,7 +106,8 @@ describe('landing page: published media', () => {
     renderAt('/site-preview?drafts=1', true);
     expect((await screen.findByRole('img', { name: 'Draft hero' })).getAttribute('src')).toBe(`${CDN}/hero/draft.png`);
     expect(api.get).toHaveBeenCalledWith('/api/v1/website-slots');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // Not the public site content; the audience poll still reads the public polls (Task #3006).
+    expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual(['/api/v1/public/polls']);
     expect(screen.getByRole('status').textContent).toMatch(/drafts and published media/);
   });
 });

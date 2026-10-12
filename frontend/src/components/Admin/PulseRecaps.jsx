@@ -39,7 +39,14 @@ export function RecapCard({ recap, onChange }) {
   const [candidates, setCandidates] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  useEffect(() => { setTitle(recap.title); setIntro(recap.intro || ''); setPosts(recap.posts); }, [recap]);
+  // A reloaded recap (after Save, Publish ...) replaces the edits, during
+  // render: an effect would run after the first paint and could undo an
+  // edit made before it ran (main's CI, 2026-10-12).
+  const [shown, setShown] = useState(recap);
+  if (shown !== recap) {
+    setShown(recap);
+    setTitle(recap.title); setIntro(recap.intro || ''); setPosts(recap.posts);
+  }
 
   const dropped = recap.status === 'dropped';
   const dirty = title !== recap.title || intro !== (recap.intro || '')

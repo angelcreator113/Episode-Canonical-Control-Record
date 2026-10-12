@@ -30,11 +30,11 @@ beforeEach(() => {
 afterEach(() => { fetchSpy.mockRestore(); vi.clearAllMocks(); });
 
 describe('public landing: sections 3–8', () => {
-  test('sections render in the spec order; the only call is the public site content (Task #2822)', () => {
+  test('sections render in the spec order; the calls are the public site content (Task #2822) and the public polls (Task #3006)', () => {
     renderPage();
     const ids = [...document.querySelectorAll('main > section, main > footer')].map((el) => el.id || el.dataset.testid || el.tagName.toLowerCase());
     expect(ids).toEqual(['site-hero', 'flagship', 'our-world', 'featured-production', 'inside-prime-studios', 'collaborate', 'contact', 'footer']);
-    expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual(['/api/v1/public/site-content']);
+    expect(fetchSpy.mock.calls.map((c) => c[0]).sort()).toEqual(['/api/v1/public/polls', '/api/v1/public/site-content']);
     for (const fn of Object.values(api)) expect(fn).not.toHaveBeenCalled();
   });
 

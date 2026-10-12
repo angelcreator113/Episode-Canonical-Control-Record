@@ -9,7 +9,8 @@
  * its slot when present, else the bundled default. Sections render at once
  * with their defaults and swap in the published media in the same boxes,
  * so nothing shifts while loading. `preview` (the signed-in /site-preview)
- * reads drafts too when ?drafts=1.
+ * reads drafts too when ?drafts=1. Task #3006: an open audience poll (or one
+ * just closed, with its result) shows after the flagship show; none, none.
  */
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -21,6 +22,7 @@ import FeaturedScreening from '../components/site/FeaturedScreening';
 import StudioOverview from '../components/site/StudioOverview';
 import CollaborationSection from '../components/site/CollaborationSection';
 import FinalCallToAction from '../components/site/FinalCallToAction';
+import AudiencePoll from '../components/site/AudiencePoll';
 import { SiteContentContext, fetchPreviewSlots, fetchPublicSlots } from '../components/site/siteMedia';
 
 export default function PublicLanding({ preview = false }) {
@@ -46,6 +48,7 @@ export default function PublicLanding({ preview = false }) {
         )}
         <LandingHero />
         <FlagshipShowSection />
+        <AudiencePoll />
         <WorldPillars />
         <FeaturedScreening />
         <StudioOverview />
