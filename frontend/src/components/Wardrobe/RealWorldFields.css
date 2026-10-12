@@ -1,0 +1,63 @@
+/* Producer Mode → Wardrobe → a piece's editor → "Real world" (Task #3019),
+   in the shape of the editor's "advanced gameplay" fold. Tokens only. */
+
+.wa-real {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--lala-gold-line);
+}
+
+.wa-real summary {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lala-gold-text);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.wa-real-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+
+.wa-real-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.wa-real-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lala-ink);
+}
+
+.wa-real-grid .wa-real-wide {
+  grid-column: span 2;
+}
+
+.wa-real-grid input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+@media (max-width: 480px) {
+  .wa-real-grid { grid-template-columns: 1fr; }
+  .wa-real-grid .wa-real-wide { grid-column: auto; }
+}
