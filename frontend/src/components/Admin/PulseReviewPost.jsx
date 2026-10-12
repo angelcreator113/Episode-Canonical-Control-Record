@@ -234,6 +234,7 @@ export function PostCard({ post, onChange, showId }) {
           {post.narrative_function && <> · <span className="prv-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
           {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
         </p>
+        {isDraft && <GateResult gate={post.gate_json} />}
         {(isDraft || isDeleted) && !editing && (
           <p className="prv-actions" data-testid="sm-post-actions">
             {isDraft && <>
@@ -270,6 +271,37 @@ export function PostCard({ post, onChange, showId }) {
   );
 }
 
+const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate' };
+const FLAG_LABELS = {
+  banned_phrase: 'AI-sounding phrase', private_state: 'Quotes private feelings', unrevealed_character: 'Names someone Lala has not met',
+  unrevealed_event: 'Names a hidden event', future_event: 'Names a later event', voice: 'Off voice',
+};
+
+/**
+ * The quality gate's result on an engine draft (Task 2969,
+ * services/pulseGate.js): the voice score, why it waits for Evoni, and
+ * each flag with its detail. Nothing for posts the engine did not draft.
+ */
+export function GateResult({ gate }) {
+  if (!gate || typeof gate !== 'object') return null;
+  const review = Array.isArray(gate.review) ? gate.review : [];
+  const flags = Array.isArray(gate.flags) ? gate.flags : [];
+  return (
+    <div className={gate.pass ? 'prv-gate prv-gate-pass' : 'prv-gate prv-gate-flagged'} data-testid="prv-gate">
+      <p className="prv-gate-line">
+        <b>Engine draft</b>
+        {typeof gate.voice === 'number' && <> · voice {Math.round(gate.voice * 100)}%</>}
+        {review.length > 0 && <> · waiting: {review.map((r) => REVIEW_LABELS[r] || r).join(', ')}</>}
+      </p>
+      {flags.length > 0 && (
+        <ul className="prv-gate-flags">
+          {flags.map((f, i) => <li key={`${f.code}-${i}`}>{FLAG_LABELS[f.code] || f.code}{f.detail ? `: ${f.detail}` : ''}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * A post an episode drafted, waiting for approval in Requests (Evoni,
  * 2026-10-11: nothing reaches the Wall until approved): who, the words and
@@ -293,6 +325,7 @@ export function RequestPost({ post, onChange }) {
     <div className="prv-request" data-testid="sm-request-post">
       <p className="prv-request-text"><b>{who.name}</b> {editing ? null : post.content_text}</p>
       {editing && <textarea aria-label="Edit the post" rows={3} value={text} onChange={(e) => setText(e.target.value)} />}
+      <GateResult gate={post.gate_json} />
       <p className="prv-muted">{post.episode_id ? <Link to={`/episodes/${post.episode_id}`}>{episodeNumber != null ? `Episode ${episodeNumber}` : 'Its episode'}</Link> : null}</p>
       <p className="prv-actions">
         {editing ? (
