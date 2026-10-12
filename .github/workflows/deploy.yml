@@ -132,6 +132,8 @@ jobs:
             echo "ok=$(get PLAN_OK)"
           } >>"$GITHUB_OUTPUT"
           grep -E '^PLAN_MIGRATION=[0-9A-Za-z._-]+\.js$' "$OUT" | cut -d= -f2- >"$RUNNER_TEMP/migrations.txt" || true
+          # Files pending from a deploy that did not finish, carried into this run (Task #2948).
+          grep -E '^PLAN_CARRIED=[0-9A-Za-z._-]+\.js$' "$OUT" | cut -d= -f2- >"$RUNNER_TEMP/carried.txt" || true
           if [ "$(get PLAN_OK)" != "1" ]; then
             echo "::error::The plan did not finish (no PLAN_OK line). Nothing was changed."
             exit 1
@@ -260,6 +262,11 @@ jobs:
               echo
               echo "Migration files in the range:"
               while IFS= read -r m; do echo "- \`${m}\`"; done <"$RUNNER_TEMP/migrations.txt"
+            fi
+            if [ -s "$RUNNER_TEMP/carried.txt" ]; then
+              echo
+              echo "Carried from a deploy that did not finish (pending on the box's tree before this run):"
+              while IFS= read -r m; do echo "- \`${m}\`"; done <"$RUNNER_TEMP/carried.txt"
             fi
             if [ "$JOB_STATUS" != "success" ]; then
               echo
