@@ -101,6 +101,8 @@ let PulseFollower; // The follower ledger (Task #2952)
 let PulsePostNumber; // Each live post's proposed and canon numbers (Task #2953)
 let PulseVoice; // Each posting character's Voice Profile (Task #2967)
 let PulseJob; // The Pulse's posting queue (Task #2968)
+let PulseDmThread; // DM conversations on The Pulse (Task #2984)
+let PulseDmMessage; // DM messages on The Pulse (Task #2984)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -368,6 +370,8 @@ try {
   PulsePostNumber = require('./PulsePostNumber')(sequelize, DataTypes);
   PulseVoice = require('./PulseVoice')(sequelize, DataTypes);
   PulseJob = require('./PulseJob')(sequelize, DataTypes);
+  PulseDmThread = require('./PulseDmThread')(sequelize, DataTypes);
+  PulseDmMessage = require('./PulseDmMessage')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -554,6 +558,8 @@ const requiredModels = {
   PulsePostNumber,
   PulseVoice,
   PulseJob,
+  PulseDmThread,
+  PulseDmMessage,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2080,6 +2086,8 @@ module.exports.PulseFollower = PulseFollower;
 module.exports.PulsePostNumber = PulsePostNumber;
 module.exports.PulseVoice = PulseVoice;
 module.exports.PulseJob = PulseJob;
+module.exports.PulseDmThread = PulseDmThread;
+module.exports.PulseDmMessage = PulseDmMessage;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
