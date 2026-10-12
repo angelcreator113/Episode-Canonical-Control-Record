@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 
 import api from '../../services/api';
-import PulseRecaps, { moved, weekShort } from './PulseRecaps';
+import PulseRecaps, { RecapCard, moved, weekShort } from './PulseRecaps';
 
 const post = (id, name, likes) => ({ id, poster_handle: name.toLowerCase(), poster_display_name: name, content_text: `${name} says hi`, likes, comments_count: 1 });
 const BIG = post('p1', 'Big', 900);
@@ -71,6 +71,20 @@ describe('the Recaps tab', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-recaps/r1', {
       title: 'The Pulse, week of 28 September', intro: 'What a week.', post_ids: ['p2', 'p3'],
     }));
+  });
+
+  test('an edit stays until the recap is reloaded, and a reloaded recap replaces it', () => {
+    const card = (recap) => <MemoryRouter><ul><RecapCard recap={recap} /></ul></MemoryRouter>;
+    const { rerender } = render(card(DRAFT));
+    const order = () => screen.getAllByTestId('pulse-recap-post').map((li) => li.querySelector('b').textContent);
+    fireEvent.click(screen.getByRole('button', { name: "Move Mid's post up" }));
+    expect(order()).toEqual(['Mid', 'Big']);
+    rerender(card(DRAFT));
+    expect(order()).toEqual(['Mid', 'Big']);
+    rerender(card({ ...DRAFT, title: 'Saved title', posts: [MID, BIG, NEW] }));
+    expect(order()).toEqual(['Mid', 'Big', 'New']);
+    expect(screen.getByLabelText('Title').value).toBe('Saved title');
+    expect(screen.getByRole('button', { name: 'Publish' }).disabled).toBe(false);
   });
 
   test('Publish, Unpublish and Drop call the API; a refusal shows', async () => {
