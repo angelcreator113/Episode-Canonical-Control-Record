@@ -11,6 +11,7 @@ import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 import Login from './pages/Login';
 import PublicLanding from './pages/PublicLanding';
 import PublicRecap from './pages/PublicRecap';
+import PublicShopLook from './pages/PublicShopLook';
 import Home from './pages/Home';
 
 // Dev-only token carrier (Shape A) — ruled at
@@ -298,6 +299,8 @@ function AppContent() {
         <Route path="/" element={<PublicLanding />} />
         <Route path="/pulse-recap" element={<PublicRecap />} />
         <Route path="/pulse-recap/:id" element={<PublicRecap />} />
+        <Route path="/shop-the-look" element={<PublicShopLook />} />
+        <Route path="/shop-the-look/:key" element={<PublicShopLook />} />
         <Route path="/login" element={<Login />} />
         {import.meta.env.DEV && (
           <Route
@@ -355,6 +358,8 @@ function AppContent() {
           {/* The weekly Pulse recap, public (Task #3009): the same page signed in. */}
           <Route path="/pulse-recap" element={<PublicRecap />} />
           <Route path="/pulse-recap/:id" element={<PublicRecap />} />
+          <Route path="/shop-the-look" element={<PublicShopLook />} />
+          <Route path="/shop-the-look/:key" element={<PublicShopLook />} />
           
           {/* Universe */}
           <Route path="/universe" element={<UniversePage />} />

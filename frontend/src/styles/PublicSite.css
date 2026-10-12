@@ -308,6 +308,17 @@
 .site .site-recap__earlier ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .site .site-recap__earlier a { color: inherit; font-weight: 600; }
 
+/* ── Shop the Look (Task #3022): text only until website storage is live; the disclosure first ── */
+.site .site-shop__inner { max-width: 760px; }
+.site .site-shop h1 { margin: 0 0 8px; font-size: clamp(32px, 5vw, 52px); line-height: 1.1; }
+.site .site-shop__date { margin: 0 0 24px; opacity: 0.8; }
+.site .site-shop__disclosure { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--site-radius); background: var(--site-ivory); font-size: 15px; font-weight: 600; }
+.site .site-shop__caption { font-size: 18px; white-space: pre-line; overflow-wrap: anywhere; }
+.site .site-shop__links, .site .site-shop__list { list-style: none; margin: 24px 0; padding: 0; display: grid; gap: 12px; }
+.site .site-shop__link { padding: 14px 18px; border-radius: var(--site-radius); background: var(--site-white); border: 1px solid rgba(48, 37, 61, 0.1); overflow-wrap: anywhere; }
+.site .site-shop__link a, .site .site-shop__list a { color: inherit; font-weight: 600; }
+.site .site-shop__badge { margin-left: 8px; padding: 2px 8px; border-radius: var(--site-radius-pill); background: var(--site-ivory); font-size: 12px; }
+
 /* Tablet */
 @media (max-width: 1100px) {
   .site .site-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

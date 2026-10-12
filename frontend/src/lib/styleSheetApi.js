@@ -44,4 +44,7 @@ export const styleSheetDistributionApi = {
   send: (episodeId, includeShopLinks) => api.post(distUrl(episodeId), { include_shop_links: Boolean(includeShopLinks) }).then((r) => r.data?.data),
   update: (episodeId, changes) => api.patch(distUrl(episodeId), changes).then((r) => r.data?.data),
   remove: (episodeId) => api.delete(distUrl(episodeId)).then((r) => r.data?.data),
+  // Shop the Look on the website (Task #3021): ADMIN only on the server.
+  publish: (episodeId) => api.post(`${distUrl(episodeId)}/site`).then((r) => r.data?.data),
+  takeDown: (episodeId) => api.delete(`${distUrl(episodeId)}/site`).then((r) => r.data?.data),
 };
