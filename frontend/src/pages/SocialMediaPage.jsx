@@ -14,6 +14,7 @@ import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels, loadCityStates } from '../lib/pulseReveals';
+import { storyLabel } from '../lib/storyClock';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
 import './SocialMediaPage.css';
@@ -53,6 +54,18 @@ export const TABS = [
   { key: 'profile', label: 'Profile' },
 ];
 const PAGE = 50;
+
+/** A ?at= story order (Task 2941): a non-negative whole number, else null. */
+export function storyOrderParam(value) {
+  return typeof value === 'string' && /^\d{1,6}$/.test(value) ? Number(value) : null;
+}
+
+const withoutAt = (params) => {
+  const next = new URLSearchParams(params);
+  next.delete('at');
+  const s = next.toString();
+  return s ? `?${s}` : '';
+};
 
 export function tabFromParams(params) {
   const tab = params.get('tab');
@@ -222,7 +235,7 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search, cities, labels, cityStates }) {
+function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -234,7 +247,7 @@ function Feed({ show, lala, director, search, cities, labels, cityStates }) {
     setLoading(true); setError(null);
     try {
       const qs = new URLSearchParams({ show_id: show.id, status: 'live', with: 'comments', limit: String(PAGE), offset: String(offset) });
-      if (!director) qs.set('at', 'present');
+      if (viewAt) qs.set('at', viewAt);
       const r = await api.get(`/api/v1/feed-posts?${qs}`);
       const page = r.data?.data || [];
       setPosts((prev) => (offset === 0 ? page : [...prev, ...page]));
@@ -243,7 +256,7 @@ function Feed({ show, lala, director, search, cities, labels, cityStates }) {
       console.error('[ThePulse] posts could not be read:', err.response?.status || err.message);
       setError('The Pulse could not be loaded.');
     } finally { setLoading(false); }
-  }, [show?.id, director]);
+  }, [show?.id, viewAt]);
   useEffect(() => { load(0); }, [load]);
 
   const owner = lala?.profile || null;
@@ -294,17 +307,17 @@ function EventsView({ events }) {
   );
 }
 
-function CharactersView({ show, director }) {
+function CharactersView({ show, director, viewAt }) {
   const [friends, setFriends] = useState(null);
   useEffect(() => {
     if (!show?.id) return undefined;
     let cancelled = false;
     // Lala's view leaves out friends she has not met yet (Task 2939).
-    api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all${director ? '' : '&at=present'}`)
+    api.get(`/api/v1/social-profiles/lala?show_id=${encodeURIComponent(show.id)}&friends=all${viewAt ? `&at=${viewAt}` : ''}`)
       .then((res) => { if (!cancelled) setFriends(res?.data?.data?.friends || false); })
       .catch((err) => { console.error('[ThePulse] friends could not be read:', err.response?.status || err.message); if (!cancelled) setFriends(false); });
     return () => { cancelled = true; };
-  }, [show?.id, director]);
+  }, [show?.id, viewAt]);
 
   return (
     <section className="pl-card" aria-labelledby="pl-people-heading" data-testid="pl-people">
@@ -407,6 +420,11 @@ export default function SocialMediaPage() {
   const admin = isAdmin(user);
   const [directorOn, setDirectorOn] = useState(false);
   const director = admin && directorOn;
+  // The story moment Lala's view reads at (Task 2941): the present, or for an
+  // admin a ?at= order from Admin › The Pulse › Story clock. Director view
+  // reads everything live (null).
+  const atOverride = admin ? storyOrderParam(params.get('at')) : null;
+  const viewAt = director ? null : (atOverride === null ? 'present' : String(atOverride));
   const [search, setSearch] = useState('');
   const [cover, setCover] = useState(null);
   const [lala, setLala] = useState(null);
@@ -433,14 +451,14 @@ export default function SocialMediaPage() {
     const id = encodeURIComponent(show.id);
     // Lala's view is The Pulse as of the present in story time (Task 2937);
     // Director view reads everything live.
-    const atParam = director ? '' : '&at=present';
+    const atParam = viewAt ? `&at=${viewAt}` : '';
     const safe = async (p, label) => {
       try { return await p; } catch (err) { console.error(`[ThePulse] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
     let alive = true;
     (async () => {
       const [c, who, side, rel, trend, latest] = await Promise.all([
-        safe(api.get(`/api/v1/shows/${show.id}/pulse-cover${director ? '' : '?at=present'}`), 'cover'),
+        safe(api.get(`/api/v1/shows/${show.id}/pulse-cover${viewAt ? `?at=${viewAt}` : ''}`), 'cover'),
         safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}${atParam}`), "Lala's profile"),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}${atParam}`), 'events'),
         safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50${atParam}`), 'relationship posts'),
@@ -457,7 +475,7 @@ export default function SocialMediaPage() {
       setFit(latest?.data?.latest || null);
     })();
     return () => { alive = false; };
-  }, [show?.id, director]);
+  }, [show?.id, viewAt]);
 
   useEffect(() => {
     let alive = true;
@@ -476,10 +494,10 @@ export default function SocialMediaPage() {
     setLabels(null);
     setCityStates({});
     const read = director ? loadRevealLabels(show.id).then((m) => { if (alive) setLabels(m); })
-      : loadCityStates(show.id).then((c) => { if (alive) setCityStates(c); });
+      : loadCityStates(show.id, viewAt).then((c) => { if (alive) setCityStates(c); });
     read.catch((err) => console.error('[ThePulse] reveals could not be read:', err.response?.status || err.message));
     return () => { alive = false; };
-  }, [show?.id, director]);
+  }, [show?.id, director, viewAt]);
 
   useEffect(() => {
     if (tab === 'posts' && createRequest.current) {
@@ -507,15 +525,21 @@ export default function SocialMediaPage() {
           </button>
         </div>
       )}
+      {!director && atOverride !== null && (
+        <p className="pl-at-banner" role="status" data-testid="pl-at-banner">
+          The Pulse as of {storyLabel(atOverride) || `story moment ${atOverride}`}
+          {' '}<Link to={{ search: withoutAt(params) }}>Back to now</Link>
+        </p>
+      )}
       {loaded && !show ? (
         <p className="pl-empty pl-no-show" data-testid="pl-no-show">Nothing here yet.</p>
       ) : (
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} />}
             {tab === 'events' && <EventsView events={events} />}
-            {tab === 'people' && <CharactersView show={show} director={director} />}
+            {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
           </main>
           <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} /></aside>

@@ -29,7 +29,7 @@ describe('Social Director sub-tabs', () => {
       return { data: {} };
     });
     render(<MemoryRouter initialEntries={['/admin?tab=pulse']}><PulseDirector /></MemoryRouter>);
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Review', 'Uploads', 'Growth', 'Storylines', 'Calendar']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Review', 'Uploads', 'Story clock', 'Growth', 'Storylines', 'Calendar']);
     expect(screen.getByRole('tab', { name: /^Review/ }).getAttribute('aria-selected')).toBe('true');
     await screen.findByTestId('pulse-review');
     await waitFor(() => expect(screen.getByRole('tab', { name: /^Review/ }).textContent).toBe('Review (3)'));
