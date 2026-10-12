@@ -11,6 +11,7 @@ import { isAdmin } from '../utils/authGroups';
 import { loadCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
+import PulseCity from '../components/Pulse/PulseCity';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels, loadCityStates } from '../lib/pulseReveals';
@@ -41,7 +42,9 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
  * a dashed "+ Add" that opens Admin › The Pulse › Uploads, and the links into
  * the studio; Lala's view leaves empty spots out (§2 rule 4).
  *
- * Views (?tab=): posts (Feed, default), events, people (Characters), profile.
+ * Views (?tab=): posts (Feed, default), events, people (Characters), profile,
+ * cities (Dream Cities; ?city=<key> opens one city's feed and local trends,
+ * Task 2987).
  * The old ?layer= and ?profile= links open Characters, as they always did.
  */
 
@@ -52,6 +55,7 @@ export const TABS = [
   { key: 'events', label: 'Events' },
   { key: 'people', label: 'Characters' },
   { key: 'profile', label: 'Profile' },
+  { key: 'cities', label: 'Dream Cities' },
 ];
 const PAGE = 50;
 
@@ -235,7 +239,7 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt }) {
+function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt, onCity }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -273,8 +277,8 @@ function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt
 
   return (
     <>
-      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} cityStates={cityStates} />
-      <CityStrip cities={cities} />
+      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} cityStates={cityStates} onCity={onCity} />
+      <CityStrip cities={cities} onCity={onCity} />
       <Composer show={show} lala={lala} director={director} />
       {person && (
         <p className="pl-filter" data-testid="pl-filter">
@@ -376,10 +380,10 @@ function ProfileView({ lala, relationship, director }) {
   );
 }
 
-function RightColumn({ cities, trending, events, mayKnow, director, labels, cityStates }) {
+function RightColumn({ cities, trending, events, mayKnow, director, labels, cityStates, onCity }) {
   return (
     <>
-      <CitiesCard cities={cities} director={director} states={cityStates} labels={labels} />
+      <CitiesCard cities={cities} director={director} states={cityStates} labels={labels} onCity={onCity} />
       <TrendingCard topics={trending} director={director} />
       <UpcomingCard events={events} labels={director ? labels : null} />
       {mayKnow.length > 0 && (
@@ -443,6 +447,16 @@ export default function SocialMediaPage() {
     next.set('tab', key);
     next.delete('layer');
     next.delete('profile');
+    next.delete('city');
+    return next;
+  });
+  // A Dream City's feed (Task 2987): ?tab=cities&city=<key>; null goes back to the list.
+  const openCity = (key) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', 'cities');
+    next.delete('layer');
+    next.delete('profile');
+    if (key) next.set('city', key); else next.delete('city');
     return next;
   });
 
@@ -462,7 +476,8 @@ export default function SocialMediaPage() {
         safe(api.get(`/api/v1/social-profiles/lala?show_id=${id}${atParam}`), "Lala's profile"),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}${atParam}`), 'events'),
         safe(api.get(`/api/v1/feed-posts?show_id=${id}&post_type=relationship&status=live&limit=50${atParam}`), 'relationship posts'),
-        safe(api.get(`/api/v1/feed-enhanced/${id}/trending`), 'trending'),
+        // Trends as of the same story moment as the feed (Task 2987).
+        safe(api.get(`/api/v1/feed-enhanced/${id}/trending${viewAt ? `?at=${viewAt}` : ''}`), 'trending'),
         safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}${atParam}`), 'latest fit'),
       ]);
       if (!alive) return;
@@ -537,12 +552,13 @@ export default function SocialMediaPage() {
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
           </main>
-          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

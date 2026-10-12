@@ -364,12 +364,35 @@ async function computeFeedMomentum(showId, models) {
  * Aggregate trending hashtags/topics across a show's live feed posts. Drafts
  * are not counted: The Pulse's trending is counted from approved, live posts
  * (The Pulse spec §2 rule 1, §8; Task #2924).
+ *
+ * Task #2987: `at` counts only posts at or before that story order (and those
+ * of unknown story time), as GET /feed-posts?at= keeps them, so a later
+ * episode's trend never shows at an earlier moment (spec §2 rule 2); `city`
+ * counts one Dream City's posts (its local trends).
  */
-async function getTrendingTopics(showId, models) {
-  const { FeedPost } = models;
+async function getTrendingTopics(showId, models, { at = null, city = null } = {}) {
+  const { FeedPost, sequelize } = models;
+  const where = { show_id: showId, deleted_at: null, status: 'live' };
+  const and = [];
+  if (Number.isInteger(at)) {
+    const { Op } = require('sequelize');
+    const storyOrder = require('./storyClock').postOrderSql('FeedPost');
+    and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(at)})`));
+    // Reveals at that moment (services/pulseReveals.js), as GET /feed-posts?at=:
+    // a hidden post, or one by a character Lala has not met yet, is not counted.
+    const { lalaProfileId } = require('./lalaFeedProfile');
+    const reveals = await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: await lalaProfileId(sequelize) });
+    const hiddenPosts = reveals.hiddenIds('post');
+    if (hiddenPosts.length) and.push({ id: { [Op.notIn]: hiddenPosts } });
+    if (reveals.hiddenProfiles.size) {
+      and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
+    }
+  }
+  if (city) and.push(sequelize.literal(require('../utils/feedCities').cityPostsSql('FeedPost', city)));
+  if (and.length) where[require('sequelize').Op.and] = and;
 
   const posts = await FeedPost.findAll({
-    where: { show_id: showId, deleted_at: null, status: 'live' },
+    where,
     attributes: ['content_text', 'trending_topic', 'likes', 'comments_count', 'shares', 'event_id', 'narrative_function'],
     order: [['posted_at', 'DESC']],
     limit: 200,
