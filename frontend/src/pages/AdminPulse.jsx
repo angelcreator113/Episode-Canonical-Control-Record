@@ -2,7 +2,8 @@
  * Admin › The Pulse: the Social Director (docs/design/2026-10-the-pulse.md
  * §4; Task #2919). Its sub-tabs are ?sub=: Review, Uploads, Growth,
  * Storylines and Calendar, Story clock (Task 2941: the scrubber, The
- * Pulse as of any story moment), and Engine (Task 2968: the daily draft cap,
+ * Pulse as of any story moment), Voices (Task 2972: each posting
+ * character's Voice Profile) and Engine (Task 2968: the daily draft cap,
  * the ambient switch and the posting queue). Review (Task 2925, the feed's
  * director tools, the default), Uploads (phase 2) and Growth (Task 2957:
  * Lala's follower line, best and worst posts, biggest jumps) are live; the
@@ -33,12 +34,14 @@ import RevealPicker from '../components/Admin/RevealPicker';
 import PulseStoryClock from '../components/Admin/PulseStoryClock';
 import PulseGrowth from '../components/Admin/PulseGrowth';
 import PulseEngine from '../components/Admin/PulseEngine';
+import PulseVoices from '../components/Admin/PulseVoices';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review' },
   { key: 'uploads', label: 'Uploads' },
   { key: 'story-clock', label: 'Story clock' },
   { key: 'growth', label: 'Growth' },
+  { key: 'voices', label: 'Voices' },
   { key: 'engine', label: 'Engine' },
   { key: 'storylines', label: 'Storylines', comingIn: 'Phase 7 brings Storylines: threads planted and paid off across posts.' },
   { key: 'calendar', label: 'Calendar', comingIn: 'Phase 7 brings Calendar: every post, reveal and event in story time.' },
@@ -230,6 +233,7 @@ export default function PulseDirector() {
               {sub === 'uploads' && <PulseUploads showId={showId} />}
               {sub === 'story-clock' && <PulseStoryClock />}
               {sub === 'growth' && <PulseGrowth key={showId} showId={showId} />}
+              {sub === 'voices' && <PulseVoices key={showId} showId={showId} />}
               {sub === 'engine' && <PulseEngine key={showId} showId={showId} />}
             </PulseRevealProvider>
           )}
