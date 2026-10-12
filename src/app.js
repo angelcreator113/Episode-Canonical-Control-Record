@@ -845,6 +845,9 @@ app.use('/api/v1/public/polls', publicPollRoutes);
 // The weekly Pulse recap, public side (Task #3008): published recaps only; no auth; its own limiter.
 const publicRecapRoutes = trackRouteLoad('publicRecaps', () => require('./routes/publicRecaps'));
 app.use('/api/v1/public/recaps', publicRecapRoutes);
+// Shop the Look, public side (Task #3021): published looks only; no auth; its own limiter.
+const publicLookRoutes = trackRouteLoad('publicLooks', () => require('./routes/publicLooks'));
+app.use('/api/v1/public/looks', publicLookRoutes);
 
 // Lala's everyday fits on The Pulse (Task #2922): requireAuth on every route.
 const pulseFitRoutes = trackRouteLoad('pulseFits', () => require('./routes/pulseFits'));

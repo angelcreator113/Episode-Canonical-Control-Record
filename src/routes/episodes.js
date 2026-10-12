@@ -11,7 +11,7 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { requirePermission: _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -677,6 +677,28 @@ router.delete('/:id/style-sheet/distribution', validateUUIDParam('id'), requireA
     return res.json({ success: true, data: await removeStyleSheetFromDistribution(models, req.params.id) });
   } catch (err) {
     return sendLookbookError(res, err, 'DELETE /:id/style-sheet/distribution');
+  }
+});
+
+// Shop the Look on the website (Task #3021): Evoni publishes a sent sheet's
+// links, and takes them down. The public read is routes/publicLooks.js.
+router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { publishStyleSheetToSite } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site');
+  }
+});
+
+router.delete('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { takeDownStyleSheetFromSite } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await takeDownStyleSheetFromSite(models, req.params.id) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'DELETE /:id/style-sheet/distribution/site');
   }
 });
 
