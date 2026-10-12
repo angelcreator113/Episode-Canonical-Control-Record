@@ -25,10 +25,10 @@ On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was que
 | 1 | Check configuration (the `AWS_ROLE_ARN` environment secret and the four variables are set; no value is printed) | runner | Nothing changed |
 | 2 | OIDC: assume the deploy role (no stored keys) | runner | Nothing changed |
 | 3 | Preflight: the instance is `Online` in SSM | runner | Nothing changed |
-| 4 | **Plan**, read-only: clean tree; the target is on `origin/main` and a fast-forward; **no package or lock file changes** (else stop: deploy that range by hand); no existing migration file modified; the ledger has nothing pending for the current code | box | Nothing changed |
+| 4 | **Plan**, read-only: clean tree; the target is on `origin/main` and a fast-forward; **no package or lock file changes** (else stop: deploy that range by hand); no existing migration file modified; the ledger has nothing pending for the current code, unless an earlier deploy that did not finish left them (they are carried into this run; see below) | box | Nothing changed |
 | 5 | **Snapshot**: `deploy-<sha12>-<run id>-<attempt>` of the RDS instance | runner | Nothing on the box changed |
 | 6 | **Wait** until the snapshot is `available` (up to 60 min) | runner | Nothing on the box changed |
-| 7 | **Deploy**: back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, `vite build` | box | §4, row "Deploy" |
+| 7 | **Deploy**: back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, mark the deploy unfinished (`~/.episode-deploy-unfinished`), `vite build` with an explicit heap (about 60% of RAM, 1536–3072 MB; the log names it) | box | §4, row "Deploy" |
 | 8 | **Migrate**, only if files are pending: `NODE_ENV=production npx sequelize-cli db:migrate` as the migration user from `~/.episode-migrate.env`, then re-check (must be 0 pending) | box | §4, row "Migrate" |
 | 9 | **Restart**: `pm2 restart episode-api-prod-hotfix`; `localhost:3000/health` healthy with the database connected; then, **only if `episode-worker` was online before the restart**, `pm2 restart episode-worker` (must be online). A stopped or missing worker is left exactly as it was (#2861). The box reports the target SHA | box | §4, row "Restart" |
 | 10 | **Public health**: `HEALTH_URL` healthy with the database connected | runner | §4, row "Public health" |
@@ -39,6 +39,13 @@ It never rolls back by itself, and it never runs `npm ci`. It never reads or pri
 **The worker follows Evoni's choice.** A deploy never starts a worker she has stopped, and keeps restarting one that is running. To turn it on, she starts it herself on the box with `pm2 restart episode-worker` (this also starts a stopped process), and later deploys keep it running. To turn it off, she runs `pm2 stop episode-worker`, and later deploys leave it off. Either way, before a `pm2 save`, follow `DEVELOPMENT_WORKFLOW.md` §7.2. Deploy #21 started a worker that had been stopped since late September (`docs/reads/2026-10-10-deploy-21-verification.md` §3 U2), which is why this rule exists.
 
 **Re-running a stopped run** (Evoni: **Re-run jobs** on the run page) is safe. If the box is already at the commit, the plan says "resuming". The run takes a fresh snapshot, rebuilds, migrates anything still pending, and restarts.
+
+**A newer run after one that stopped in Deploy (#2948).** A deploy that stops after its fast-forward leaves the box's tree at its commit with that commit's migrations not run, and the API on the old code. A later run for a newer commit then finds files pending on the box's current tree:
+- It carries them into its own run when a workflow deploy put the box there and did not finish. The evidence is the unfinished-deploy mark the Deploy step writes and a successful Restart removes, or, for a box stopped before the mark existed, that deploy's own `~/dist-backup-…-<sha12>` for the current commit.
+- The plan prints "put at … by a deploy that did not finish" and `PLAN_CARRIED=` lines. The run summary lists them under "Carried from a deploy that did not finish".
+- The snapshot is taken first as always, and the Migrate step applies the carried files with the range's own.
+- Anything else still stops in Plan: an unreadable ledger, or files pending with no such evidence, such as code moved by hand.
+- First case: Deploy run 64 (`d0850184`, 2026-10-11) ran out of heap in `vite build`, and runs 65–69 stopped in Plan until this change.
 
 ---
 
@@ -250,7 +257,7 @@ Read the step's log: the on-box output says where it stopped and what had alread
 |---|---|---|
 | Configuration, OIDC, preflight, plan | Nothing changed | Fix the cause (variables, role, SSM, the plan's message), then re-run. A plan that stops on **package files** means: deploy that range by hand (`DEVELOPMENT_WORKFLOW.md` §7.1), then later runs resume normally |
 | Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run |
-| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), or roll back the code (§6) |
+| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box |
 | Migrate | **The database may be partly migrated**; the API still runs the old code | Read the migration error. Usually fix forward: a new PR, merged, then a new run. If the data is damaged, restore from the snapshot (§5) |
 | Restart | New code, possibly unhealthy; a worker that was online may not be restarted (a stopped one is never started) | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward |
 | Public health | On-box `/health` was fine; the public URL is not | Check the load balancer and target group; the box itself is up |
