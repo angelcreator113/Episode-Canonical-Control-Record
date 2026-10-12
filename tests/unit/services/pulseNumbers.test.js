@@ -1,9 +1,10 @@
 /**
  * Post numbers on The Pulse (Task #2953): each factor's part in a proposal,
- * a seed that always gives the same numbers, and the growth curve.
+ * a seed that always gives the same numbers, the growth curve and viral
+ * flags at story time (Task #2955).
  */
 const {
-  postKind, randomFactor, numbersFrom, isAboutLala, numbersAt, KIND_RATES, TREND_BOOST, EPISODE_TIER,
+  postKind, randomFactor, numbersFrom, isAboutLala, numbersAt, viralFor, KIND_RATES, TREND_BOOST, EPISODE_TIER, CURVE,
 } = require('../../../src/services/pulseNumbers');
 
 describe('postKind', () => {
@@ -71,25 +72,55 @@ describe('isAboutLala', () => {
   ])('%s → %s', (text, about) => expect(isAboutLala({ content_text: text })).toBe(about));
 });
 
-describe('numbersAt (the growth curve)', () => {
-  const row = { status: 'accepted', final_likes: 1000, final_shares: 100, story_order: 27 };
+describe('numbersAt (the growth curve, Task #2955)', () => {
+  const row = { status: 'accepted', proposed_likes: 900, proposed_shares: 90, final_likes: 1000, final_shares: 100, story_order: 27 };
 
-  test('55% at its moment, 85% one moment later, all of it from two on', () => {
-    expect(numbersAt(row, 27)).toEqual({ likes: 550, shares: 55 });
-    expect(numbersAt(row, 28)).toEqual({ likes: 850, shares: 85 });
-    expect(numbersAt(row, 29)).toEqual({ likes: 1000, shares: 100 });
-    expect(numbersAt(row, 45)).toEqual({ likes: 1000, shares: 100 });
+  test('CURVE is 55%, 85%, then all of it', () => {
+    expect(CURVE).toEqual([0.55, 0.85, 1]);
+  });
+
+  test('55% at its moment, 85% one moment later, all of it from two on, then settled', () => {
+    expect(numbersAt(row, 27, 27)).toEqual({ likes: 550, shares: 55 });
+    expect(numbersAt(row, 27, 28)).toEqual({ likes: 850, shares: 85 });
+    expect(numbersAt(row, 27, 29)).toEqual({ likes: 1000, shares: 100 });
+    expect(numbersAt(row, 27, 45)).toEqual({ likes: 1000, shares: 100 });
   });
 
   test('a moment is a phase: during to after is one, and a week later to the next episode start is one', () => {
-    expect(numbersAt({ ...row, story_order: 25 }, 27)).toEqual({ likes: 850, shares: 85 });
-    expect(numbersAt({ ...row, story_order: 29 }, 31)).toEqual({ likes: 850, shares: 85 });
+    expect(numbersAt(row, 25, 27)).toEqual({ likes: 850, shares: 85 });
+    expect(numbersAt(row, 29, 31)).toEqual({ likes: 850, shares: 85 });
   });
 
-  test('before the post, nothing; not canon yet, nothing; an unknown moment shows it all', () => {
-    expect(numbersAt(row, 25)).toBeNull();
-    expect(numbersAt({ ...row, status: 'proposed', final_likes: null }, 29)).toBeNull();
-    expect(numbersAt(row, undefined)).toEqual({ likes: 1000, shares: 100 });
-    expect(numbersAt({ ...row, story_order: null }, 27)).toEqual({ likes: 1000, shares: 100 });
+  test("the post's order now wins over the order saved at proposal; with none, the saved one", () => {
+    expect(numbersAt(row, 37, 38)).toEqual({ likes: 850, shares: 85 });
+    expect(numbersAt(row, null, 28)).toEqual({ likes: 850, shares: 85 });
+  });
+
+  test('every decided status shows its final numbers', () => {
+    for (const status of ['adjusted', 'viral', 'flop']) expect(numbersAt({ ...row, status }, 27, 29)).toEqual({ likes: 1000, shares: 100 });
+  });
+
+  test('a proposal not yet decided shows its proposed numbers on the same curve, never more', () => {
+    const waiting = { ...row, status: 'proposed', final_likes: null, final_shares: null };
+    expect(numbersAt(waiting, 27, 27)).toEqual({ likes: 495, shares: 50 });
+    expect(numbersAt(waiting, 27, 28)).toEqual({ likes: 765, shares: 77 });
+    expect(numbersAt(waiting, 27, 29)).toEqual({ likes: 900, shares: 90 });
+  });
+
+  test('before the post, nothing; an unknown moment or order shows it all', () => {
+    expect(numbersAt(row, 27, 25)).toBeNull();
+    expect(numbersAt(row, 27, undefined)).toEqual({ likes: 1000, shares: 100 });
+    expect(numbersAt({ ...row, story_order: null }, null, 27)).toEqual({ likes: 1000, shares: 100 });
+    expect(numbersAt(null, 27, 27)).toBeNull();
+  });
+});
+
+describe('viralFor (story time, likes alone)', () => {
+  test('the existing thresholds, and reach by tier', () => {
+    expect(viralFor(499)).toEqual({ is_viral: false, viral_reach: 0 });
+    expect(viralFor(500)).toEqual({ is_viral: true, viral_reach: 1000 });
+    expect(viralFor(2000)).toEqual({ is_viral: true, viral_reach: 10000 });
+    expect(viralFor(10000)).toEqual({ is_viral: true, viral_reach: 100000 });
+    expect(viralFor(50000)).toEqual({ is_viral: true, viral_reach: 1000000 });
   });
 });
