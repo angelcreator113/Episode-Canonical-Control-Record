@@ -14,13 +14,21 @@
 #                  Files pending on the current tree are carried into this
 #                  run only when a workflow deploy put the box there and did
 #                  not finish (Task #2948); otherwise the plan stops.
-#   deploy  <sha>  back up frontend/dist, fast-forward to <sha>, vite build
-#                  with an explicit heap (Task #2948), marking the deploy
-#                  unfinished until the restart succeeds. It stops first if
-#                  another vite build is still running, prints the box's
-#                  memory, and ends a build that runs past BUILD_TIMEOUT_S
-#                  itself, inside the SSM document's 1800 s (Deploy runs
-#                  80-81 hung in the build until SSM timed them out)
+#   deploy  <sha> [<artifact-url> <sha256>]
+#                  back up frontend/dist, fast-forward to <sha>, and put the
+#                  new frontend in place, marking the deploy unfinished until
+#                  the restart succeeds. With an artifact (the runner's own
+#                  build of <sha>'s frontend, through a presigned S3 link the
+#                  workflow made; Evoni, 2026-10-12, after runs 93-94 found
+#                  the 2 GB box too small to build), it downloads and checks
+#                  it before changing anything, then unpacks it; no build on
+#                  the box. Without one ("none", or an older SSM document
+#                  that passes no third argument): vite build with an
+#                  explicit heap (Task #2948). It stops first if another
+#                  vite build is still running, prints the box's memory, and
+#                  ends a build that runs past BUILD_TIMEOUT_S itself, inside
+#                  the SSM document's 1800 s (Deploy runs 80-81 hung in the
+#                  build until SSM timed them out)
 #   migrate <sha>  if files are pending: sequelize-cli db:migrate with the
 #                  credential in ~/.episode-migrate.env, then re-check
 #   restart <sha>  pm2 restart the API, /health, then the worker only if it
@@ -36,6 +44,11 @@ set -euo pipefail
 
 PHASE="${1:-}"
 TARGET="${2:-}"
+# The runner's build of the frontend (deploy phase only): a presigned S3 link
+# and the archive's sha256, or "none". The link carries a signature, so it is
+# never printed.
+ARTIFACT_URL="${3:-none}"
+ARTIFACT_SHA256="${4:-none}"
 
 APP_DIR="/home/ubuntu/episode-metadata"
 API_APP="episode-api-prod-hotfix"
@@ -65,6 +78,14 @@ redact() {
     -e 's/ip-[0-9]+-[0-9]+-[0-9]+-[0-9]+/[host]/g'
 }
 
+# The artifact arguments: both "none", or an https link to an S3 object (a
+# presigned URL: no quotes, spaces or shell characters) and a sha256.
+artifact_args_ok() {
+  if [ "$ARTIFACT_URL" = "none" ]; then [ "$ARTIFACT_SHA256" = "none" ]; return; fi
+  printf '%s' "$ARTIFACT_URL" | grep -qE '^https://[a-z0-9.-]+\.amazonaws\.com/[A-Za-z0-9/._-]+\?[A-Za-z0-9%&=._~-]+$' \
+    && printf '%s' "$ARTIFACT_SHA256" | grep -qE '^[0-9a-f]{64}$'
+}
+
 if [ -n "${CLAUDECODE:-}" ]; then
   die "CLAUDECODE is set, so this is a Claude Code session. Only the Deploy workflow runs this."
 fi
@@ -74,6 +95,9 @@ case "$PHASE" in
 esac
 if ! printf '%s' "$TARGET" | grep -qE '^[0-9a-f]{40}$'; then
   die "the target must be a full 40-character commit SHA."
+fi
+if ! artifact_args_ok; then
+  die "the frontend artifact must be 'none', or an https S3 link with its 64-character sha256." "Nothing was changed."
 fi
 if [ "$(id -un)" != "ubuntu" ]; then
   die "run as ubuntu (the pm2 owner), not $(id -un)."
@@ -152,6 +176,55 @@ memory_lines() {
   ${FREE_CMD:-free -m} 2>/dev/null | awk '
     /^Mem:/  { print "Memory: " $2 " MB total, " $7 " MB available" }
     /^Swap:/ { print "Swap: " $2 " MB total, " $3 " MB used" }' || true
+}
+
+# Downloads the runner's frontend build to $ARTIFACT_FILE and checks it: its
+# sha256, and that every entry is under dist/ (no absolute path, no ..).
+# Changes nothing in the app. CURL_CMD and SHA256_CMD override for the tests.
+fetch_artifact() {
+  ARTIFACT_FILE="$HOME/frontend-dist-${TARGET:0:12}.tgz"
+  rm -f "$ARTIFACT_FILE"
+  if ! ${CURL_CMD:-curl} -sS --fail --max-time 300 -o "$ARTIFACT_FILE" "$ARTIFACT_URL" 2>/dev/null; then
+    rm -f "$ARTIFACT_FILE"
+    die "the frontend artifact could not be downloaded (the link may have expired)." "Nothing was changed. Run the workflow again."
+  fi
+  local got
+  got="$(${SHA256_CMD:-sha256sum} "$ARTIFACT_FILE" | awk '{ print $1 }')"
+  if [ "$got" != "$ARTIFACT_SHA256" ]; then
+    rm -f "$ARTIFACT_FILE"
+    die "the frontend artifact's sha256 is $got, not the $ARTIFACT_SHA256 the runner built." "Nothing was changed."
+  fi
+  local entries
+  if ! entries="$(tar -tzf "$ARTIFACT_FILE" 2>/dev/null)" || [ -z "$entries" ]; then
+    rm -f "$ARTIFACT_FILE"
+    die "the frontend artifact is not a readable archive." "Nothing was changed."
+  fi
+  # Checked on the captured list: a grep that stops early under pipefail would
+  # hand tar a SIGPIPE and turn the check around.
+  if printf '%s\n' "$entries" | grep -vqE '^(\./)?dist(/|$)' || printf '%s\n' "$entries" | grep -qE '(^/|(^|/)\.\.(/|$))'; then
+    rm -f "$ARTIFACT_FILE"
+    die "the frontend artifact holds something other than dist/." "Nothing was changed."
+  fi
+  if ! printf '%s\n' "$entries" | grep -qxE '(\./)?dist/index\.html'; then
+    rm -f "$ARTIFACT_FILE"
+    die "the frontend artifact has no dist/index.html." "Nothing was changed."
+  fi
+  echo "Frontend artifact: $(wc -c <"$ARTIFACT_FILE" | tr -d ' ') bytes, sha256 ${ARTIFACT_SHA256:0:12}… checked."
+}
+
+# Puts the checked artifact's dist/ in place of frontend/dist.
+install_artifact() {
+  local tmp
+  tmp="$(mktemp -d "$HOME/frontend-dist-new.XXXXXX")"
+  tar -xzf "$ARTIFACT_FILE" -C "$tmp"
+  if [ ! -f "$tmp/dist/index.html" ]; then
+    rm -rf "$tmp"
+    die "the frontend artifact has no dist/index.html." \
+      "The tree is at $TARGET; frontend/dist was not touched; the API still runs the old code."
+  fi
+  rm -rf frontend/dist
+  mv "$tmp/dist" frontend/dist
+  rm -rf "$tmp" "$ARTIFACT_FILE"
 }
 
 # Prints why the box's current commit $1 was put there by a workflow deploy
@@ -270,10 +343,12 @@ phase_deploy() {
       "Probably left by a deploy that timed out; it would starve this build of memory." \
       "Nothing was changed. Evoni stops it by hand, then approves a new run (docs/runbooks/deploy-workflow.md §4)."
   fi
+  # The runner's build is fetched and checked before anything on the box changes.
+  if [ "$ARTIFACT_URL" != "none" ]; then fetch_artifact; fi
   local head
   head="$(git rev-parse HEAD)"
   if [ "$head" = "$TARGET" ]; then
-    echo "The tree is already at $TARGET; rebuilding the frontend only."
+    echo "The tree is already at $TARGET; putting the frontend in place only."
   else
     if ! git merge-base --is-ancestor "$head" "$TARGET"; then
       die "$TARGET is not a fast-forward of $head." "Nothing was changed."
@@ -291,6 +366,13 @@ phase_deploy() {
     # Unfinished until the restart phase succeeds (Task #2948).
     printf '%s %s\n' "$head" "$TARGET" >"$DEPLOY_MARKER"
     echo "Fast-forwarded $head -> $TARGET ($(git diff --name-only "$head" "$TARGET" | wc -l | tr -d ' ') files)."
+  fi
+
+  if [ "$ARTIFACT_URL" != "none" ]; then
+    install_artifact
+    echo "Frontend from the runner's build of $TARGET; no build on the box."
+    echo "DEPLOY_OK=1"
+    return 0
   fi
 
   local log="$HOME/vite-build-${TARGET:0:12}.log" heap

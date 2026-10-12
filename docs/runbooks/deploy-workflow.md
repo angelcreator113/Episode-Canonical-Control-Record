@@ -22,19 +22,22 @@ On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was que
 
 | # | Step | Where | If it fails |
 |---|---|---|---|
+| 0 | **Build** (its own job, before the approval; no AWS credentials): `npm ci` and `vite build` of the commit, packed as `frontend-dist.tgz` with its sha256 and kept as a run artifact for a day | runner | Nothing changed |
 | 1 | Check configuration (the `AWS_ROLE_ARN` environment secret and the four variables are set; no value is printed) | runner | Nothing changed |
 | 2 | OIDC: assume the deploy role (no stored keys) | runner | Nothing changed |
 | 3 | Preflight: the instance is `Online` in SSM | runner | Nothing changed |
 | 4 | **Plan**, read-only: clean tree; the target is on `origin/main` and a fast-forward; **no package or lock file changes** (else stop: deploy that range by hand); no existing migration file modified; the ledger has nothing pending for the current code, unless an earlier deploy that did not finish left them (they are carried into this run; see below) | box | Nothing changed |
 | 5 | **Snapshot**: `deploy-<sha12>-<run id>-<attempt>` of the RDS instance | runner | Nothing on the box changed |
 | 6 | **Wait** until the snapshot is `available` (up to 60 min) | runner | Nothing on the box changed |
-| 7 | **Deploy**: back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, mark the deploy unfinished (`~/.episode-deploy-unfinished`), `vite build` with an explicit heap (about 60% of RAM, 1536–3072 MB; the log names it) for at most 1200 s, after printing the box's memory; it stops first, changing nothing, if another vite build is still running | box | §4, row "Deploy" |
+| 6a | **Hand over the build**, only when `DEPLOY_ARTIFACT_BUCKET` is set (§2.5): check the pack's sha256 against the build job's, upload it to `s3://<bucket>/deploy-builds/`, and make a link to it that expires in 15 minutes (masked in the log) | runner | Nothing on the box changed |
+| 7 | **Deploy**, with the runner's build (§2.5): download the pack through the link and check its sha256 and that it holds only `dist/`, all before anything changes; back up `frontend/dist`, `git merge --ff-only`, mark the deploy unfinished, put the pack's `dist/` in place of `frontend/dist`. No build on the box | box | §4, row "Deploy" |
+| 7 | **Deploy**, without it (as before): back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, mark the deploy unfinished (`~/.episode-deploy-unfinished`), `vite build` with an explicit heap (about 60% of RAM, 1536–3072 MB; the log names it) for at most 1200 s, after printing the box's memory; it stops first, changing nothing, if another vite build is still running | box | §4, row "Deploy" |
 | 8 | **Migrate**, only if files are pending: `NODE_ENV=production npx sequelize-cli db:migrate` as the migration user from `~/.episode-migrate.env`, then re-check (must be 0 pending) | box | §4, row "Migrate" |
 | 9 | **Restart**: `pm2 restart episode-api-prod-hotfix`; `localhost:3000/health` healthy with the database connected; then, **only if `episode-worker` was online before the restart**, `pm2 restart episode-worker` (must be online). A stopped or missing worker is left exactly as it was (#2861). The box reports the target SHA | box | §4, row "Restart" |
 | 10 | **Public health**: `HEALTH_URL` healthy with the database connected | runner | §4, row "Public health" |
 | 11 | **Summary** on the run page: commit, box before, snapshot, migrations run, the worker's state before → after (restarted, or left stopped), results. On failure, the snapshot name and a pointer here | runner | — |
 
-It never rolls back by itself, and it never runs `npm ci`. It never reads or prints `.env`, a password, `pm2 describe`/`pm2 env`, or `/_diag/health`, and it never calls Cognito. Box steps run as `ubuntu` through the `PrimeStudios-Deploy` SSM document, which runs only `scripts/deploy/workflow-deploy.sh` taken from the commit being deployed.
+It never rolls back by itself, and it never runs `npm ci` on the box (only the runner's build job does, for the frontend). It never reads or prints `.env`, a password, `pm2 describe`/`pm2 env`, or `/_diag/health`, and it never calls Cognito. Box steps run as `ubuntu` through the `PrimeStudios-Deploy` SSM document, which runs only `scripts/deploy/workflow-deploy.sh` taken from the commit being deployed.
 
 **The worker follows Evoni's choice.** A deploy never starts a worker she has stopped, and keeps restarting one that is running. To turn it on, she starts it herself on the box with `pm2 restart episode-worker` (this also starts a stopped process), and later deploys keep it running. To turn it off, she runs `pm2 stop episode-worker`, and later deploys leave it off. Either way, before a `pm2 save`, follow `DEVELOPMENT_WORKFLOW.md` §7.2. Deploy #21 started a worker that had been stopped since late September (`docs/reads/2026-10-10-deploy-21-verification.md` §3 U2), which is why this rule exists.
 
@@ -133,6 +136,19 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
 }
 ```
 
+   When the frontend is built on the runner (§2.5), add one more statement to the `Statement` list, with your bucket's name:
+
+```json
+    {
+      "Sid": "HandFrontendBuildToTheBox",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::<ARTIFACT_BUCKET>/deploy-builds/*"
+    }
+```
+
+   `s3:GetObject` is what the 15-minute link the box downloads with is signed with; `s3:PutObject` is the upload. Nothing else in the bucket, and no other bucket.
+
    `rds:AddTagsToResource` is there because RDS asks for it when the instance copies its tags to snapshots. `ssm:GetCommandInvocation` and `ssm:DescribeInstanceInformation` do not support resource-level scoping, hence `*`. The role can run **only** `PrimeStudios-Deploy`, never `AWS-RunShellScript`, so it cannot run arbitrary commands as root.
 
 ### 2.2 AWS: the SSM document and the box
@@ -169,6 +185,8 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
   ]
 }
 ```
+
+   This is the document without the runner's build. §2.5 replaces it with one that has two more parameters.
 
    The two parameters are fixed by `allowedValues` and `allowedPattern`, so nothing else can be passed in. The script always comes from a commit already on `origin/main`, which means a reviewed and merged PR.
 
@@ -225,7 +243,67 @@ If a run starts after #2863 merges but before step 1, it stops at **Check config
 
 To turn the workflow off at any time, set `DEPLOY_ENABLED` to anything but `true`, or delete it.
 
-### 2.5 Afterwards: retire the old path
+### 2.5 Build the frontend on the runner, not the box
+
+The box has about 1.9 GB of memory and no swap. Deploy runs 93–94 (2026-10-12) stopped while `vite build` ran out of room there: run 93's build was stopped at 1200 s, and the box then dropped out of SSM (`ConnectionLost`). With this set up, GitHub's runner builds the frontend (step 0) and the box only unpacks it. Without it, the box builds as before, so nothing changes until Evoni does all of the following, **in this order**:
+
+1. **S3 → Create bucket** (for example `episode-deploy-builds-<ACCOUNT_ID>`), in the same region. Keep **Block all public access** on, default encryption on, versioning off.
+   - **Management → Create lifecycle rule:** prefix `deploy-builds/`, **Expire current versions of objects** after 1 day. Builds are only needed for the 15 minutes the link lasts.
+2. **The deploy role** (§2.1): add the `HandFrontendBuildToTheBox` statement with this bucket's name. The box's own role stays SSM-only (§2.2 step 3); the box downloads through the link and needs no S3 permission and no `aws` CLI.
+3. **Systems Manager → Documents → `PrimeStudios-Deploy` → Actions → Create new version.** Paste the content below, with your bucket name and region in `artifact`'s `allowedPattern`, then **set the new version as the default**. The old workflow still works with it: both new parameters default to `none`.
+
+```json
+{
+  "schemaVersion": "2.2",
+  "description": "Prime Studios production deploy: runs one phase of scripts/deploy/workflow-deploy.sh, taken from a commit on origin/main, as ubuntu.",
+  "parameters": {
+    "phase": {
+      "type": "String",
+      "description": "plan, deploy, migrate or restart",
+      "allowedValues": ["plan", "deploy", "migrate", "restart"]
+    },
+    "sha": {
+      "type": "String",
+      "description": "Full commit SHA on origin/main",
+      "allowedPattern": "^[0-9a-f]{40}$"
+    },
+    "artifact": {
+      "type": "String",
+      "description": "none, or a presigned link to the runner's frontend build in the deploy bucket",
+      "default": "none",
+      "allowedPattern": "^(none|https://<ARTIFACT_BUCKET>\\.s3(\\.<REGION>)?\\.amazonaws\\.com/deploy-builds/[0-9a-f]{40}-[0-9]+-[0-9]+\\.tgz\\?[A-Za-z0-9%&=._~-]+)$"
+    },
+    "artifact_sha256": {
+      "type": "String",
+      "description": "none, or the sha256 of the runner's frontend build",
+      "default": "none",
+      "allowedPattern": "^(none|[0-9a-f]{64})$"
+    }
+  },
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "runPhase",
+      "inputs": {
+        "timeoutSeconds": "1800",
+        "runCommand": [
+          "sudo -u ubuntu -H bash -c 'set -euo pipefail; cd /home/ubuntu/episode-metadata; git fetch --quiet origin main; git merge-base --is-ancestor {{ sha }} origin/main; f=$(mktemp); trap \"rm -f $f\" EXIT; git show {{ sha }}:scripts/deploy/workflow-deploy.sh >\"$f\"; bash \"$f\" {{ phase }} {{ sha }} \"{{ artifact }}\" {{ artifact_sha256 }}'"
+        ]
+      }
+    }
+  ]
+}
+```
+
+   The link is in double quotes because it holds `&` and `?`. Its pattern allows no quote, space, `$` or backtick, so it cannot break out of them. The script on the box checks the link and the sha256 again before it downloads anything.
+4. **Check the box has no untracked frontend settings.** The runner builds from the repository alone. On the box, `ls -a ~/episode-metadata/frontend | grep '^\.env'` should list only `.env.example` and `.env.production`, which are both in the repository. A `.env.local` or `.env.production.local` there means the box's builds used settings the runner's will not: tell the session which variable names it holds (not the values) before going on.
+5. **Settings → Secrets and variables → Actions → Variables:** add `DEPLOY_ARTIFACT_BUCKET` = the bucket's name. The next run uses it.
+
+To go back to building on the box, delete `DEPLOY_ARTIFACT_BUCKET`. The document and the role can stay as they are.
+
+If the variable is set before the document has the new parameters, the Deploy step stops at `send-command` (`InvalidParameters`) with nothing on the box changed: finish step 3, then re-run.
+
+### 2.6 Afterwards: retire the old path
 
 `deploy-production.yml` and `.github/scripts/deploy-production.sh` were removed with this workflow. Once a run has succeeded, Evoni deletes the repository secrets only they used:
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
@@ -257,7 +335,8 @@ Read the step's log: the on-box output says where it stopped and what had alread
 |---|---|---|
 | Configuration, OIDC, preflight, plan | Nothing changed | Fix the cause (variables, role, SSM, the plan's message), then re-run. A plan that stops on **package files** means: deploy that range by hand (`DEVELOPMENT_WORKFLOW.md` §7.1), then later runs resume normally |
 | Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run |
-| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box. "the vite build ran past 1200 s" (or, before that limit existed, SSM status `TimedOut` right after the "vite build with a … MB heap" line, as in runs 80–81): the box was short of memory; the log prints `Memory:` and `Swap:` lines before and after. "a vite build is still running on the box": a build left by a timed-out deploy; nothing was changed. On the box, `pgrep -af 'vite(\.js)? build'` lists it and `kill <pid>` stops it; then approve a new run |
+| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box. "the vite build ran past 1200 s" (or, before that limit existed, SSM status `TimedOut` right after the "vite build with a … MB heap" line, as in runs 80–81): the box was short of memory; the log prints `Memory:` and `Swap:` lines before and after. "a vite build is still running on the box": a build left by a timed-out deploy; nothing was changed. On the box, `pgrep -af 'vite(\.js)? build'` lists it and `kill <pid>` stops it; then approve a new run. With the runner's build (§2.5): "could not be downloaded (the link may have expired)", "sha256 is …, not …", "is not a readable archive", "holds something other than dist/" or "has no dist/index.html" all stop before the backup, with nothing changed: start a new run |
+| Build (step 0) | Nothing changed | Read the build log; it is the same `vite build` a contributor runs. Fix forward by PR |
 | Migrate | **The database may be partly migrated**; the API still runs the old code | Read the migration error. Usually fix forward: a new PR, merged, then a new run. If the data is damaged, restore from the snapshot (§5) |
 | Restart | New code, possibly unhealthy; a worker that was online may not be restarted (a stopped one is never started) | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward |
 | Public health | On-box `/health` was fine; the public URL is not | Check the load balancer and target group; the box itself is up |
@@ -293,4 +372,5 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 
 - **Snapshots:** each run keeps one manual snapshot, and those are billed until deleted. The role cannot delete them. Evoni removes old `deploy-*` snapshots in RDS → Snapshots → Manual. Keep at least the newest few.
 - **Frontend backups:** `~/dist-backup-*` and `~/vite-build-*.log` accumulate in the box's home directory. Remove old ones by hand.
+- **Runner builds (§2.5):** the bucket's lifecycle rule deletes `deploy-builds/` objects after a day, and the run artifact expires after a day. The box deletes its downloaded copy once it is unpacked.
 - **Changing the workflow:** by PR only. The scripts the box runs come from the commit being deployed. A change to `scripts/deploy/workflow-deploy.sh` therefore takes effect on the first run that deploys it.

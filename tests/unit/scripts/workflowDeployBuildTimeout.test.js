@@ -99,7 +99,7 @@ exit 1
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
       ['die', 'redact', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines', 'phase_deploy'].map(fn).join('\n'),
-      `PHASE=deploy; TARGET=${HEAD}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent`,
+      `PHASE=deploy; TARGET=${HEAD}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent; ARTIFACT_URL=none; ARTIFACT_SHA256=none`,
       `cd "${app}"`,
       'phase_deploy',
     ].join('\n')], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, ...env }, encoding: 'utf8' });
