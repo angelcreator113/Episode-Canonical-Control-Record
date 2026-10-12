@@ -116,7 +116,7 @@ describe('the phases call them where they must', () => {
     const deploy = phase('deploy');
     expect(deploy.indexOf('printf \'%s %s\\n\' "$head" "$TARGET" >"$DEPLOY_MARKER"')).toBeGreaterThan(deploy.indexOf('git merge --ff-only --quiet "$TARGET"'));
     expect(deploy).toMatch(/heap="\$\(build_heap_mb\)"/);
-    expect(deploy).toMatch(/NODE_OPTIONS="--max-old-space-size=\$\{heap\}" npx vite build/);
+    expect(deploy).toMatch(/NODE_OPTIONS="--max-old-space-size=\$\{heap\}" timeout -k 30 "\$BUILD_TIMEOUT_S" npx vite build/);
     expect(deploy).not.toMatch(/\(cd frontend && npx vite build\)/);
   });
 

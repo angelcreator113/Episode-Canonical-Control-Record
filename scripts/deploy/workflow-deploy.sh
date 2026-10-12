@@ -16,7 +16,11 @@
 #                  not finish (Task #2948); otherwise the plan stops.
 #   deploy  <sha>  back up frontend/dist, fast-forward to <sha>, vite build
 #                  with an explicit heap (Task #2948), marking the deploy
-#                  unfinished until the restart succeeds
+#                  unfinished until the restart succeeds. It stops first if
+#                  another vite build is still running, prints the box's
+#                  memory, and ends a build that runs past BUILD_TIMEOUT_S
+#                  itself, inside the SSM document's 1800 s (Deploy runs
+#                  80-81 hung in the build until SSM timed them out)
 #   migrate <sha>  if files are pending: sequelize-cli db:migrate with the
 #                  credential in ~/.episode-migrate.env, then re-check
 #   restart <sha>  pm2 restart the API, /health, then the worker only if it
@@ -41,6 +45,10 @@ MIGRATE_ENV="$HOME/.episode-migrate.env"
 # "<from> <to>" while a deploy that moved the tree has not yet restarted the
 # API; removed by a successful restart (Task #2948).
 DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
+# The longest the on-box vite build may run, in seconds. A healthy build takes
+# about 4 minutes (Deploy run 79); the SSM document gives the whole deploy
+# phase 1800 s, so a hung build ends here with a message, not as TimedOut.
+BUILD_TIMEOUT_S=1200
 
 die() {
   printf 'STOPPED (%s): %s\n' "$PHASE" "$1" >&2
@@ -129,6 +137,21 @@ build_heap_mb() {
   if [ "$heap" -lt 1536 ]; then heap=1536; fi
   if [ "$heap" -gt 3072 ]; then heap=3072; fi
   echo "$heap"
+}
+
+# The process ids of vite builds still running on the box, one per line, or
+# nothing. A build a timed-out deploy left behind starves the next one of
+# memory (Deploy runs 80-82).
+running_vite_builds() {
+  pgrep -f -- 'vite(\.js)? build' 2>/dev/null || true
+}
+
+# The box's memory and swap in one line each, in MB (no host, no credential).
+# FREE_CMD overrides `free -m` for the tests.
+memory_lines() {
+  ${FREE_CMD:-free -m} 2>/dev/null | awk '
+    /^Mem:/  { print "Memory: " $2 " MB total, " $7 " MB available" }
+    /^Swap:/ { print "Swap: " $2 " MB total, " $3 " MB used" }' || true
 }
 
 # Prints why the box's current commit $1 was put there by a workflow deploy
@@ -240,6 +263,13 @@ phase_plan() {
 
 phase_deploy() {
   require_clean_tree
+  local stale
+  stale="$(running_vite_builds)"
+  if [ -n "$stale" ]; then
+    die "a vite build is still running on the box (pid $(printf '%s' "$stale" | tr '\n' ' ' | sed 's/ $//'))." \
+      "Probably left by a deploy that timed out; it would starve this build of memory." \
+      "Nothing was changed. Evoni stops it by hand, then approves a new run (docs/runbooks/deploy-workflow.md §4)."
+  fi
   local head
   head="$(git rev-parse HEAD)"
   if [ "$head" = "$TARGET" ]; then
@@ -265,8 +295,20 @@ phase_deploy() {
 
   local log="$HOME/vite-build-${TARGET:0:12}.log" heap
   heap="$(build_heap_mb)"
-  echo "vite build with a ${heap} MB heap."
-  if ! (cd frontend && NODE_OPTIONS="--max-old-space-size=${heap}" npx vite build) >"$log" 2>&1; then
+  memory_lines
+  echo "vite build with a ${heap} MB heap, for at most ${BUILD_TIMEOUT_S} s."
+  local rc=0
+  # timeout signals the build's whole process group (npx and the node under it).
+  (cd frontend && NODE_OPTIONS="--max-old-space-size=${heap}" timeout -k 30 "$BUILD_TIMEOUT_S" npx vite build) >"$log" 2>&1 || rc=$?
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    tail -20 "$log" | redact
+    memory_lines
+    die "the vite build ran past ${BUILD_TIMEOUT_S} s and was stopped (last lines and memory above)." \
+      "A healthy build takes about 4 minutes; a hang like this is usually the box short of memory." \
+      "The tree is at $TARGET and frontend/dist may be partly rebuilt; the API still runs the old code." \
+      "See docs/runbooks/deploy-workflow.md §4, row 'Deploy'."
+  fi
+  if [ "$rc" -ne 0 ]; then
     tail -20 "$log" | redact
     die "the vite build failed (last lines above)." \
       "The tree is at $TARGET and frontend/dist may be partly rebuilt; the API still runs the old code." \
