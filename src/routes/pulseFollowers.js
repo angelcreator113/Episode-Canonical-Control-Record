@@ -12,7 +12,10 @@
  *   POST /starts { show_id }       proposes starting counts for profiles
  *                                  with none (requireAuth + ADMIN)
  *   PUT  /:id/accept               accepts a proposed row (ADMIN)
- *   PUT  /:id/adjust { count, reason }  accepts it at another count (ADMIN)
+ *   PUT  /:id/adjust { count | change, reason }  accepts it at another
+ *                                  count, or with another change (ADMIN);
+ *                                  an episode change also writes Lala's
+ *                                  Decision Log row (Task #2956)
  *   POST /override { show_id, profile_id, change, reason, at? }
  *                                  an accepted change with a reason; `at`
  *                                  defaults to the present (ADMIN)
@@ -39,6 +42,7 @@ const shape = (r) => ({
   status: r.status,
   decided_by: r.decided_by,
   decided_at: r.decided_at,
+  factors: r.factors_json || null,
 });
 
 /** A LedgerError or a 400 from the story clock as its response; false otherwise. */
@@ -141,7 +145,8 @@ async function decideRoute(req, res, adjust) {
     const { decide } = require('../services/pulseFollowers');
     const opts = { by: byOf(req) };
     if (adjust) {
-      opts.adjustTo = Number.isInteger(req.body?.count) ? req.body.count : Number.NaN;
+      if (req.body?.change !== undefined) opts.adjustBy = Number.isInteger(req.body.change) ? req.body.change : Number.NaN;
+      else opts.adjustTo = Number.isInteger(req.body?.count) ? req.body.count : Number.NaN;
       opts.reason = req.body?.reason ?? null;
     }
     await decide(db, row, opts);

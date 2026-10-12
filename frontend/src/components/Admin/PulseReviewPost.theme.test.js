@@ -9,7 +9,7 @@ import { resolve } from 'path';
 import { contrast, readToken } from '../../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'PulseReviewPost.css'), 'utf8');
-const jsx = ['PulseReviewPost.jsx', 'PulseReview.jsx', 'PulseNumbersWaiting.jsx'].map((f) => readFileSync(resolve(__dirname, f), 'utf8')).join('\n');
+const jsx = ['PulseReviewPost.jsx', 'PulseReview.jsx', 'PulseNumbersWaiting.jsx', 'PulseEpisodeFollowers.jsx'].map((f) => readFileSync(resolve(__dirname, f), 'utf8')).join('\n');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 const t = (name) => readToken([tokens, css], name);
