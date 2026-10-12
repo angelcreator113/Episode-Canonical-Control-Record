@@ -718,8 +718,11 @@ if (process.env.NODE_ENV !== 'test') {
 // PULSE_ENGINE_ENABLED=true (Evoni's .env change); never in tests.
 if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'test') {
   require('./services/pulseEventPosting').registerHandlers();
+  require('./services/pulseAmbient').registerHandlers();
   require('./services/pulseDms').registerHandlers();
   require('./services/pulseQueue').start(db);
+  // Ambient posts (Task #2971): planned hourly, only for shows whose ambient switch is on.
+  require('./services/pulseAmbient').startScheduler(db);
 }
 
 // Phase 2 routes
