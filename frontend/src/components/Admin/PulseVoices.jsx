@@ -14,6 +14,12 @@ import api from '../../services/api';
 const CASES = ['lowercase', 'sentence', 'mixed', 'caps for emphasis'];
 const EMOJI = ['never', 'rarely', 'sometimes', 'often'];
 const LENGTHS = ['short', 'medium', 'long'];
+// How readily they post (services/pulseVoices TEMPERAMENTS; pulseEventPosting, pulseAmbient).
+const TEMPERAMENTS = [
+  ['oversharer', 'oversharer: posts about everything'],
+  ['regular', 'regular'],
+  ['lurker', 'lurker: mostly watches and comments'],
+];
 const errorOf = (err, fallback) => err.response?.data?.error || fallback;
 const toList = (text) => String(text || '').split(',').map((s) => s.trim()).filter(Boolean);
 const fromList = (list) => (Array.isArray(list) ? list.join(', ') : '');
@@ -33,6 +39,7 @@ export const habitsToForm = (h = {}) => ({
   emoji_use: h.emoji?.use || 'rarely',
   emoji_favorites: fromList(h.emoji?.favorites),
   sentence_length: h.sentence_length || 'short',
+  temperament: h.temperament || 'regular',
   topics: fromList(h.topics),
   never_says: fromList(h.never_says),
   signature_phrases: fromList(h.signature_phrases),
@@ -42,6 +49,7 @@ export const formToHabits = (f) => ({
   punctuation: f.punctuation.trim(),
   emoji: { use: f.emoji_use, favorites: toList(f.emoji_favorites) },
   sentence_length: f.sentence_length,
+  temperament: f.temperament,
   topics: toList(f.topics),
   never_says: toList(f.never_says),
   signature_phrases: toList(f.signature_phrases),
@@ -72,6 +80,8 @@ function HabitsForm({ voice, onSaved }) {
       <select id={id('case')} value={form.case} onChange={set('case')}>{CASES.map((v) => <option key={v} value={v}>{v}</option>)}</select>
       <label htmlFor={id('length')}>Sentence length</label>
       <select id={id('length')} value={form.sentence_length} onChange={set('sentence_length')}>{LENGTHS.map((v) => <option key={v} value={v}>{v}</option>)}</select>
+      <label htmlFor={id('temperament')}>Temperament</label>
+      <select id={id('temperament')} value={form.temperament} onChange={set('temperament')}>{TEMPERAMENTS.map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select>
       <label htmlFor={id('emoji')}>Emoji</label>
       <select id={id('emoji')} value={form.emoji_use} onChange={set('emoji_use')}>{EMOJI.map((v) => <option key={v} value={v}>{v}</option>)}</select>
       <label htmlFor={id('fav')}>Favourite emoji</label>

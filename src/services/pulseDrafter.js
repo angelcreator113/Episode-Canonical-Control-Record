@@ -9,8 +9,9 @@
  *
  *   draftPost(db, { showId, characterId, moment?, context? })
  *     one Sonnet call: the character's Voice Profile and examples, their
- *     Living State as private context (never stated), the story moment, and
- *     what happened (context.about). Writes a feed_posts DRAFT stamped with
+ *     Living State as private context (never stated), the story moment,
+ *     what happened (context.about), and the events they know about by
+ *     then (pulseKnowledge, Task #2982). Writes a feed_posts DRAFT stamped with
  *     the moment's story order. Returns { post, revealsStory, privateState }.
  *   draftAndRoute(db, { … })
  *     drafts, runs the gate (services/pulseGate.js), keeps the result on the
@@ -55,7 +56,7 @@ async function loadPoster(db, characterId) {
   return { character, profile, voice };
 }
 
-function buildPrompt({ character, profile, voice, label, context }) {
+function buildPrompt({ character, profile, voice, label, context, known = null }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -67,6 +68,7 @@ ${examples}
 
 When: ${label || 'now'}.
 What happened: ${context.about || 'an ordinary day; post about whatever they would.'}
+${knowsLine(known)}
 
 PRIVATE (shapes the mood only; never state, quote or hint at it directly):
 ${JSON.stringify(character.living_state || {})}
@@ -81,17 +83,23 @@ Answer with JSON only:
 {"text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)}`;
 }
 
+/** What the poster knows by now (Task #2982; spec §6), for the prompt. */
+const knowsLine = (known) => (known
+  ? `Events they know about by now: ${known}. Name no other event.`
+  : 'They know of no events yet: name none.');
+
 /** Drafts one post in voice; returns { post, revealsStory, privateState }. */
 async function draftPost(db, { showId, characterId, moment, context = {} } = {}) {
   const { character, profile, voice } = await loadPoster(db, characterId);
   const clock = require('./storyClock');
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
+  const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
   let message;
   for (const model of MODELS) {
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known }) }],
       });
       break;
     } catch (modelErr) {
@@ -158,6 +166,8 @@ async function draftComment(db, { postId, characterId }) {
   const { character, profile, voice } = await loadPoster(db, characterId);
   if (Number(post.social_profile_id) === Number(profile.id)) throw new DraftError('A character does not comment on their own post here.');
   const { BANNED_PHRASES } = require('./pulseVoices');
+  const known = Number.isInteger(post.story_order)
+    ? await require('./pulseKnowledge').knowledgeLine(db, post.show_id, profile.id, post.story_order) : null;
   const examples = (voice.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   const prompt = `You write one comment on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
 
@@ -171,6 +181,8 @@ ${post.content_text}
 
 PRIVATE (shapes the mood only; never state, quote or hint at it directly):
 ${JSON.stringify(character.living_state || {})}
+
+${knowsLine(known)}
 
 Rules: stay in the world (nothing about a show or a studio); one short comment; never use: ${BANNED_PHRASES.join(', ')}.
 Answer with JSON only: {"text": "the comment"}`;
