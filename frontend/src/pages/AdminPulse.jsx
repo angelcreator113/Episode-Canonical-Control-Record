@@ -38,6 +38,7 @@ import PulseVoices from '../components/Admin/PulseVoices';
 import PulseStorylines from '../components/Admin/PulseStorylines';
 import PulseCalendar from '../components/Admin/PulseCalendar';
 import PulsePolls from '../components/Admin/PulsePolls';
+import PulseRecaps from '../components/Admin/PulseRecaps';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review' },
@@ -49,6 +50,7 @@ export const PULSE_TABS = [
   { key: 'storylines', label: 'Storylines' },
   { key: 'calendar', label: 'Calendar' },
   { key: 'polls', label: 'Polls' },
+  { key: 'recaps', label: 'Recaps' },
 ];
 const DEFAULT_SUB = 'review';
 const subFrom = (value) => (PULSE_TABS.some((t) => t.key === value) ? value : DEFAULT_SUB);
@@ -242,6 +244,7 @@ export default function PulseDirector() {
               {sub === 'storylines' && <PulseStorylines key={showId} showId={showId} />}
               {sub === 'calendar' && <PulseCalendar key={showId} showId={showId} />}
               {sub === 'polls' && <PulsePolls key={showId} showId={showId} />}
+              {sub === 'recaps' && <PulseRecaps key={showId} showId={showId} />}
             </PulseRevealProvider>
           )}
         </AdminShowGate>

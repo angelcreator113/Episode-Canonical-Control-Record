@@ -1288,3 +1288,89 @@
   font: inherit;
   font-size: 16px;
 }
+
+/* Admin › The Pulse › Recaps (Task 3009): the weekly Pulse recap. */
+.pulse-recap,
+.pulse-recap-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pulse-recap h3 {
+  margin: 0;
+}
+
+.pulse-recap-cards,
+.pulse-recap-posts,
+.pulse-recap-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pulse-recap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  background: var(--surface-card);
+  overflow-wrap: anywhere;
+}
+
+.pulse-recap-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse-recap-status {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--lala-parchment-2);
+  color: var(--lala-ink);
+  font-size: 0.8rem;
+}
+
+.pulse-recap-status-published {
+  background: var(--lala-gold-soft);
+}
+
+.pulse-recap-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pulse-recap-card input,
+.pulse-recap-card textarea {
+  min-height: 44px;
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+}
+
+.pulse-recap-posts li,
+.pulse-recap-candidates li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--lala-parchment-2);
+}
+
+.pulse-recap-post-text {
+  flex: 1 1 14rem;
+}
+
+.pulse-recap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}

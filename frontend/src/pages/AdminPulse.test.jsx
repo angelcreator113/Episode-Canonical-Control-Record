@@ -29,7 +29,7 @@ describe('Social Director sub-tabs', () => {
       return { data: {} };
     });
     render(<MemoryRouter initialEntries={['/admin?tab=pulse']}><PulseDirector /></MemoryRouter>);
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Review', 'Uploads', 'Story clock', 'Growth', 'Voices', 'Engine', 'Storylines', 'Calendar', 'Polls']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Review', 'Uploads', 'Story clock', 'Growth', 'Voices', 'Engine', 'Storylines', 'Calendar', 'Polls', 'Recaps']);
     expect(screen.getByRole('tab', { name: /^Review/ }).getAttribute('aria-selected')).toBe('true');
     await screen.findByTestId('pulse-review');
     await waitFor(() => expect(screen.getByRole('tab', { name: /^Review/ }).textContent).toBe('Review (3)'));
@@ -54,6 +54,11 @@ describe('Social Director sub-tabs', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Polls' }));
     await screen.findByTestId('pulse-poll');
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-polls?show_id=show-1');
+
+    // Recaps (Task 3009): the weekly Pulse recap.
+    fireEvent.click(screen.getByRole('tab', { name: 'Recaps' }));
+    await screen.findByTestId('pulse-recap');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-recaps?show_id=show-1');
   });
 });
 
