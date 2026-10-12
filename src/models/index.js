@@ -98,6 +98,7 @@ let WebsiteSlot; // The public landing page's media slots (Task #2821)
 let PulseFit; // Lala's everyday fits on The Pulse (Task #2922)
 let PulseReveal; // When an item on The Pulse is revealed (Task #2938)
 let PulseFollower; // The follower ledger (Task #2952)
+let PulsePostNumber; // Each live post's proposed and canon numbers (Task #2953)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -362,6 +363,7 @@ try {
   PulseFit = require('./PulseFit')(sequelize, DataTypes);
   PulseReveal = require('./PulseReveal')(sequelize, DataTypes);
   PulseFollower = require('./PulseFollower')(sequelize, DataTypes);
+  PulsePostNumber = require('./PulsePostNumber')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -545,6 +547,7 @@ const requiredModels = {
   PulseFit,
   PulseReveal,
   PulseFollower,
+  PulsePostNumber,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2068,6 +2071,7 @@ module.exports.WebsiteSlot = WebsiteSlot;
 module.exports.PulseFit = PulseFit;
 module.exports.PulseReveal = PulseReveal;
 module.exports.PulseFollower = PulseFollower;
+module.exports.PulsePostNumber = PulsePostNumber;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
