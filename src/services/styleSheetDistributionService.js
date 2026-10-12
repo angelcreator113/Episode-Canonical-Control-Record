@@ -16,13 +16,26 @@
  * read from the look's wardrobe pieces every time, so the disclosure is
  * there whenever an included link is an affiliate link and cannot be
  * edited away. Nothing is posted anywhere and no external service is called.
+ *
+ * On the website (Task #3021; The Pulse spec §10): Evoni publishes a sent
+ * sheet's Shop the Look with { site: { published_at, published_by, key,
+ * piece_ids } } on the same entry. key is random and is the look's only
+ * public id; piece_ids are the look's wardrobe ids at publishing (ids, never
+ * copies), so the public read takes each piece's links live without
+ * rebuilding the sheet. Sending again keeps the record (with the new look's
+ * pieces); removing the sheet from Distribution takes it down. A published
+ * look shows only while its Shop the Look links are included and there is
+ * at least one.
  */
 
+const crypto = require('crypto');
 const { LookbookError } = require('./episodeLookbookService');
 
 const DISCLOSURE = 'Some links are affiliate links; I may earn a commission.';
 const CAPTION_MAX = 2200;
 const KEY = 'style_sheet';
+const SITE_KEY_RE = /^[A-Za-z0-9_-]{12}$/;
+const PUBLIC_LIST_MAX = 50;
 
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const isObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
@@ -137,6 +150,20 @@ async function view(models, episodeId, entry, sheet) {
     disclosure,
     disclosure_locked: Boolean(disclosure),
     post_text: postText(entry.caption || '', included, disclosure),
+    site: siteView(entry),
+  };
+}
+
+/** The website state of a sent sheet, as the Distribution card shows it. */
+function siteView(entry) {
+  const site = isObject(entry.site) ? entry.site : null;
+  if (!site || !site.key) return { published: false };
+  return {
+    published: true,
+    published_at: site.published_at || null,
+    key: site.key,
+    path: `/shop-the-look/${site.key}`,
+    showing: Boolean(entry.include_shop_links) && (site.piece_ids || []).length > 0,
   };
 }
 
@@ -172,6 +199,10 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
     caption_edited: Boolean(keepCaption),
     include_shop_links: Boolean(includeShopLinks),
   };
+  // Published stays published, now with the look just approved.
+  if (previous && isObject(previous.site) && previous.site.key) {
+    entry.site = { ...previous.site, piece_ids: sheet.wardrobe_piece_ids || [] };
+  }
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
 }
@@ -192,6 +223,104 @@ async function updateStyleSheetDistribution(models, episodeId, body = {}) {
   return view(models, episodeId, entry, await sheetFor(models, episodeId));
 }
 
+/**
+ * Show the sent sheet's Shop the Look on the website (Evoni, 2026-10-12:
+ * only when she publishes it). Needs the links included and at least one
+ * piece with a link. Publishing again keeps the look's public key.
+ */
+async function publishStyleSheetToSite(models, episodeId, user = null) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry) throw new LookbookError('Send the style sheet to Distribution before putting it on the website.', 404, 'NOT_SENT');
+  if (!entry.include_shop_links) throw new LookbookError('Include the Shop the Look links before putting the look on the website.', 409, 'NO_SHOP_LINKS');
+  const sheet = await sheetFor(models, episodeId);
+  if (!(await shopLinks(models, sheet)).length) {
+    throw new LookbookError("None of the look's pieces has a real-world link yet.", 409, 'NO_LINKS');
+  }
+  const previous = isObject(entry.site) ? entry.site : {};
+  entry.site = {
+    published_at: new Date().toISOString(),
+    published_by: user ? String(user.email || user.id || user.sub || '').slice(0, 255) || null : null,
+    key: SITE_KEY_RE.test(previous.key || '') ? previous.key : crypto.randomBytes(9).toString('base64url'),
+    piece_ids: sheet.wardrobe_piece_ids || [],
+  };
+  await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
+  return view(models, episodeId, entry, sheet);
+}
+
+/** Take the look off the website; the sheet stays in Distribution. */
+async function takeDownStyleSheetFromSite(models, episodeId) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry) throw new LookbookError('The style sheet has not been sent to Distribution.', 404, 'NOT_SENT');
+  if (entry.site !== undefined) {
+    delete entry.site;
+    await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
+  }
+  return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * The published looks, read for the public website: newest first, and only
+ * those showing (links included, pieces recorded). Each is the entry, the
+ * episode's number and title, and its site record. Nothing else of the
+ * episode leaves here.
+ */
+async function publishedLooks(sequelize, { key = null } = {}) {
+  // The text match narrows the scan; every hit is parsed and checked below.
+  const like = key ? `%${key.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : '%published_at%';
+  const rows = await sequelize.query(
+    `SELECT title, episode_number, distribution_metadata FROM episodes
+      WHERE deleted_at IS NULL AND distribution_metadata IS NOT NULL
+        AND distribution_metadata::text LIKE :like`,
+    { replacements: { like }, type: sequelize.QueryTypes.SELECT });
+  const looks = [];
+  for (const row of rows) {
+    const entry = parseMetadata(row.distribution_metadata)[KEY];
+    if (!isObject(entry) || !isObject(entry.site)) continue;
+    const { site } = entry;
+    if (!SITE_KEY_RE.test(site.key || '') || (key && site.key !== key)) continue;
+    if (!entry.include_shop_links || !(site.piece_ids || []).length) continue;
+    looks.push({ entry, site, episode: { number: row.episode_number ?? null, title: text(row.title) } });
+  }
+  looks.sort((a, b) => String(b.site.published_at || '').localeCompare(String(a.site.published_at || '')));
+  return looks.slice(0, PUBLIC_LIST_MAX);
+}
+
+const lookTitle = (episode) => {
+  const n = episode.number != null ? `Episode ${episode.number}` : null;
+  return [n, episode.title].filter(Boolean).join(': ') || 'Shop the Look';
+};
+
+/** The website's list: each published look's key, title and date. */
+async function listPublicLooks(models) {
+  return (await publishedLooks(models.sequelize)).map(({ site, episode }) => ({
+    key: site.key, title: lookTitle(episode), published_at: site.published_at || null,
+  }));
+}
+
+/**
+ * One published look for the website, or null: its title, her caption, the
+ * links (label, retailer, url, affiliate), read live from its pieces, and
+ * the disclosure first whenever any of them is an affiliate link. No ids,
+ * no prices.
+ */
+async function publicLook(models, key) {
+  if (!SITE_KEY_RE.test(String(key || ''))) return null;
+  const [look] = await publishedLooks(models.sequelize, { key });
+  if (!look) return null;
+  const links = await shopLinks(models, { wardrobe_piece_ids: look.site.piece_ids });
+  if (!links.length) return null;
+  return {
+    key: look.site.key,
+    title: lookTitle(look.episode),
+    published_at: look.site.published_at || null,
+    caption: text(look.entry.caption) || '',
+    disclosure: links.some((l) => l.affiliate) ? DISCLOSURE : null,
+    links: links.map((l) => ({ label: l.label, retailer: l.retailer, url: l.url, affiliate: l.affiliate })),
+  };
+}
+
 /** Take the style sheet out of Distribution; the platform entries stay. */
 async function removeStyleSheetFromDistribution(models, episodeId) {
   const metadata = await readMetadata(models.sequelize, episodeId);
@@ -206,4 +335,5 @@ async function removeStyleSheetFromDistribution(models, episodeId) {
 module.exports = {
   DISCLOSURE, CAPTION_MAX, captionDraft, postText, keepStyleSheet, parseMetadata,
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
+  publishStyleSheetToSite, takeDownStyleSheetFromSite, listPublicLooks, publicLook,
 };
