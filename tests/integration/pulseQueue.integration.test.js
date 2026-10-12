@@ -139,7 +139,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await job.update({ status: 'running', started_at: new Date(Date.now() - queue.STALE_MS - 1000) });
     expect(await queue.requeueStale(models)).toBe(1);
     expect((await job.reload()).status).toBe('queued');
-    await expect(queue.enqueue(models, { showId: ids.show, kind: 'poll' })).rejects.toThrow('kind must be one of event, ambient, comment.');
+    await expect(queue.enqueue(models, { showId: ids.show, kind: 'poll' })).rejects.toThrow('kind must be one of event, ambient, comment, dm.');
     expect(() => queue.register('poll', () => {})).toThrow('Unknown Pulse job kind: poll');
   });
 });

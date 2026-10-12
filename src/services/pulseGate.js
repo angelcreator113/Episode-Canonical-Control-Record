@@ -17,10 +17,12 @@
  *       unrevealed_character  a character Lala has not met by the post's moment
  *       unrevealed_event    an event still hidden at the post's moment
  *       future_event        an event whose episode comes after the post
+ *       doesnt_know         an event the poster could not know about at the
+ *                           post's moment: not there, not told by a close
+ *                           tie, never posted (pulseKnowledge; spec §6)
  *   reviewReasons(post, gate, { lalaProfileId, revealsStory })  why it goes
  *                       to Review: lala, about_lala, reveals_story, gate
  *
- * "Who knows what" (spec §6) is phase 7; reviewReasons is where it joins.
  */
 
 const MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
@@ -80,16 +82,19 @@ async function canonFlags(db, post, { privateState = null, lalaProfileId } = {})
       const named = profiles.filter((p) => mentions(text, p.handle) || mentions(text, p.display_name));
       if (named.length) flags.push({ code: 'unrevealed_character', detail: named.map((p) => `@${p.handle}`).join(', ') });
     }
-    const [events] = await db.sequelize.query(
-      `SELECT we.id, we.name, e.episode_number FROM world_events we LEFT JOIN episodes e ON e.id = we.used_in_episode_id
-        WHERE we.show_id = :showId AND we.deleted_at IS NULL`, { replacements: { showId: post.show_id } });
+    const knowledge = require('./pulseKnowledge');
+    const events = await knowledge.showEvents(db, post.show_id);
     const hiddenEvents = new Set(view.hiddenIds('event').map(String));
     const { orderOf } = require('./storyClock');
+    const flagged = new Set();
     for (const ev of events) {
       if (!ev.name || !mentions(text, ev.name)) continue;
-      if (hiddenEvents.has(String(ev.id))) flags.push({ code: 'unrevealed_event', detail: ev.name });
-      else if (ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') > at) flags.push({ code: 'future_event', detail: ev.name });
+      if (hiddenEvents.has(ev.id)) { flags.push({ code: 'unrevealed_event', detail: ev.name }); flagged.add(ev.id); }
+      else if (ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') > at) { flags.push({ code: 'future_event', detail: ev.name }); flagged.add(ev.id); }
     }
+    // Who knows what (Task #2982): an event the poster was not at, was not told of, and saw no post about.
+    const unknown = (await knowledge.unknownMentions(db, post, { lalaProfileId: lalaId, events })).filter((ev) => !flagged.has(ev.id));
+    if (unknown.length) flags.push({ code: 'doesnt_know', detail: unknown.map((ev) => ev.name).join(', ') });
   }
   return flags;
 }
@@ -154,4 +159,4 @@ function reviewReasons(post, gate, { lalaProfileId = null, revealsStory = false 
   return reasons;
 }
 
-module.exports = { VOICE_PASS, MIN_PRIVATE, privateLeaks, canonFlags, voiceScore, check, reviewReasons };
+module.exports = { VOICE_PASS, MIN_PRIVATE, mentions, privateLeaks, canonFlags, voiceScore, check, reviewReasons };

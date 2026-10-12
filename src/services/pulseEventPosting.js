@@ -11,7 +11,8 @@
  *     candidates: the show's posting characters with a Voice Profile, not
  *     hidden from Lala at the episode's After (pulseVoices.eligible); each scored from attending (the episode's
  *     event guests, and Lala), closeness to Lala (her relationships in
- *     social_profile_relationships) and temperament (the voice's habit).
+ *     social_profile_relationships, moved by the closeness ledger,
+ *     pulseCloseness, Task #2983) and temperament (the voice's habit).
  *     A small seeded jitter per episode and character keeps a re-run
  *     picking the same people. Lurkers never post; they may comment.
  *     → { posters, commenters, order, about, eventId }
@@ -93,6 +94,11 @@ async function whoPosts(db, { showId, episodeId }) {
   }
   // Who Lala has met by the episode's After, not by now: its guests meet her during it.
   const order = require('./storyClock').orderOf(episode.episode_number ?? 0, 'after_episode');
+  // Closeness moves with interactions (Task #2983): each pair's accepted changes by then.
+  if (lalaId) {
+    const { ledgerDeltas, clamp } = require('./pulseCloseness');
+    for (const [other, delta] of await ledgerDeltas(db, showId, lalaId, order)) closeness.set(other, clamp((closeness.get(other) || 0) + delta));
+  }
   const candidates = (await require('./pulseVoices').eligible(db, showId, { at: order })).filter((c) => c.voice);
   const scored = candidates.map(({ character, profile, voice }) => {
     const profileId = Number(profile.id);
