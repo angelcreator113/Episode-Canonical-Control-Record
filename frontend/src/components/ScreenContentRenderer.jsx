@@ -8,6 +8,8 @@
  *   zones         — array of { id, x, y, w, h, content_type, content_config }
  *   showId        — current show ID for data fetching
  *   episodeId     — optional episode filter
+ *   storyAt       — optional story order of the beat being shown (Task 2986):
+ *                   The Pulse zones read The Pulse as of it, else the present
  *   interactive   — if true, clicking zones triggers navigation/actions
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -15,11 +17,14 @@ import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronRight } fr
 import api from '../services/api';
 import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
 import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationship';
+import { pulseFeedUrl } from '../lib/pulsePosts';
+import { storyLabel } from '../lib/storyClock';
 import PhoneMapView from './phone/PhoneMapView';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
   { key: 'feed_posts', label: 'Feed Posts', icon: '📰', desc: 'Social timeline posts', group: 'social' },
+  { key: 'pulse_feed', label: 'The Pulse', icon: '💗', desc: 'The Pulse as of this beat\u2019s story time: the same posts, numbers and reveals Lala sees then', group: 'social' },
   { key: 'feed_post', label: 'One Post', icon: '📌', desc: 'A single post, drawn live from the feed (the post lives in one place)', group: 'social' },
   { key: 'profile_header', label: 'Profile Header', icon: '👤', desc: 'Name, handle, avatar, bio', group: 'social' },
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
@@ -64,7 +69,7 @@ export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key
 // ── Main renderer — renders all content zones over a screen ──
 // `runtimeContext` is the optional phone-runtime context used to filter zones by
 // their `conditions` array. When absent, all zones render (editor "author view").
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, storyAt = null, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
   if (!zones.length) return null;
 
   // Filter zones by `conditions` when a runtime context is provided. Editor/author
@@ -95,6 +100,7 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, i
             zone={zone}
             showId={showId}
             episodeId={episodeId}
+            storyAt={storyAt}
             screenMeta={screenMeta}
             mapEditable={mapEditable}
           />
@@ -111,12 +117,14 @@ function evaluateZoneConditions(zone, ctx) {
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──
-function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable = false }) {
+function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMeta, mapEditable = false }) {
   const config = zone.content_config || {};
 
   switch (zone.content_type) {
     case 'feed_posts':
       return <FeedPostsRenderer showId={showId} episodeId={episodeId} config={config} />;
+    case 'pulse_feed':
+      return <PulseFeedRenderer showId={showId} storyAt={storyAt} config={config} />;
     case 'feed_post':
       return <SinglePostRenderer config={config} />;
     case 'profile_header':
@@ -263,6 +271,49 @@ function FeedPostsRenderer({ showId, episodeId, config }) {
             <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{post.likes || 0}</span>
             <MessageCircle size={7} color="rgba(255,255,255,0.5)" />
             <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{post.comments_count || 0}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── The Pulse (Task 2986; The Pulse spec §3 "Phone sync: when Lala opens The
+// Pulse on her Phone in an episode, it shows The Pulse as of that beat's story
+// time (same posts, numbers, reveals)") ──
+// The same read as The Pulse and its Story clock (lib/pulsePosts.pulseFeedUrl):
+// live posts at or before the beat's order, numbers on their curve, hidden
+// people and events left out by the server. A zone may pin its own order
+// (content_config.at); without a beat (Producer Mode) it reads the present.
+export function PulseFeedRenderer({ showId, storyAt = null, config = {} }) {
+  const maxPosts = config.max_items || 5;
+  const at = Number.isInteger(config.at) ? config.at : (Number.isInteger(storyAt) ? storyAt : null);
+  const url = showId ? pulseFeedUrl(showId, at, maxPosts) : null;
+  const { data, loading } = useContentData(url);
+
+  if (loading) return <ZoneLoader />;
+  const posts = (data?.data || []).slice(0, maxPosts);
+  return (
+    <div data-testid="pulse-feed-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <div style={{ padding: '3px 5px', fontSize: 8, fontWeight: 700, color: '#fff', background: config.bg || 'rgba(0,0,0,0.55)' }}>
+        The Pulse{at !== null && storyLabel(at) ? ` · ${storyLabel(at)}` : ''}
+      </div>
+      {!posts.length && <ZoneEmpty label="Nothing on The Pulse yet" />}
+      {posts.map((post, i) => (
+        <div key={post.id || i} data-testid="pulse-feed-post" style={{ padding: '4px 5px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: config.bg || 'rgba(0,0,0,0.4)' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {post.poster_display_name || post.poster_handle || 'someone'}
+          </div>
+          {post.content_text && (
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.85)', lineHeight: 1.3, marginBottom: 2, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {post.content_text}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <Heart size={7} color="rgba(255,255,255,0.5)" />
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)' }}>{Number(post.likes || 0).toLocaleString('en-US')}</span>
+            <MessageCircle size={7} color="rgba(255,255,255,0.5)" />
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)' }}>{post.comments_count || 0}</span>
           </div>
         </div>
       ))}

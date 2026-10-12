@@ -22,7 +22,8 @@ vi.mock('../../services/api', () => ({
 vi.mock('../phone-editor/MissionEditor', () => ({ default: () => null }));
 
 // ScreenContentRenderer and PhoneMapView fetch; stub them.
-vi.mock('../ScreenContentRenderer', () => ({ default: () => <div data-testid="content-renderer" /> }));
+const contentRendererProps = vi.fn();
+vi.mock('../ScreenContentRenderer', () => ({ default: (props) => { contentRendererProps(props); return <div data-testid="content-renderer" />; } }));
 vi.mock('../phone/PhoneMapView', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, default: () => <div data-testid="map-view" /> };
@@ -77,6 +78,16 @@ beforeEach(() => {
 });
 
 describe('EpisodeLalasPhoneTab — embedded phone (Task #1994)', () => {
+  test("The Pulse on the phone reads at the episode's beats: the episode's During (Task 2986)", async () => {
+    mockGets();
+    contentRendererProps.mockReset();
+    render(<MemoryRouter><EpisodeLalasPhoneTab episode={{ ...EPISODE, episode_number: 3 }} onPreview={() => {}} /></MemoryRouter>);
+    await phonePane();
+    expect(contentRendererProps).toHaveBeenCalled();
+    expect(contentRendererProps.mock.calls.at(-1)[0]).toMatchObject({ storyAt: 35, episodeId: 'ep-1' });
+  });
+
+
   test('the left pane draws the same phone, in the show\'s skin, from a read-only GET of /frame', async () => {
     mockGets();
     renderTab();

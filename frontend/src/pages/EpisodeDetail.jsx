@@ -38,6 +38,7 @@ import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs
 import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
+import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -988,6 +989,8 @@ const EpisodeDetail = () => {
             missions={phone.missions}
             showId={episode?.show_id || episode?.showId}
             episodeId={episodeId}
+            // The Pulse on the phone shows The Pulse as of this episode's beats (Task 2986).
+            storyAt={beatOrder(episode?.episode_number ?? episode?.episodeNumber)}
             onClose={phone.stop}
           />
         </Suspense>
