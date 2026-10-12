@@ -10,6 +10,9 @@
 #
 # Usage: ssm-phase.sh <plan|deploy|migrate|restart>
 # Needs: EC2_INSTANCE_ID, TARGET_SHA, SSM_DOCUMENT, AWS_REGION (from the workflow env).
+# For deploy, ARTIFACT_URL and ARTIFACT_SHA256 (the runner's frontend build,
+# a presigned S3 link) are passed as the document's artifact parameters when
+# set; the link is never printed. Without them, the box builds as before.
 # Exit: 0 when the phase succeeded on the box; 1 otherwise; 2 when refused
 # inside a Claude Code session (CLAUDECODE set), before any aws call.
 
@@ -31,12 +34,25 @@ esac
 OUT="$RUNNER_TEMP/phase-$PHASE.out"
 MAX_WAIT_S=2100   # the document's own timeout is 1800 s
 
+# The parameters go in a JSON file: a presigned link holds = and &, which the
+# CLI's shorthand syntax would split (and a file keeps it off the command line).
+PARAMS="$RUNNER_TEMP/phase-$PHASE.params.json"
+if [ "$PHASE" = "deploy" ] && [ -n "${ARTIFACT_URL:-}" ]; then
+  : "${ARTIFACT_SHA256:?ARTIFACT_SHA256 is needed with ARTIFACT_URL}"
+  jq -n --arg p "$PHASE" --arg s "$TARGET_SHA" --arg u "$ARTIFACT_URL" --arg h "$ARTIFACT_SHA256" \
+    '{phase: [$p], sha: [$s], artifact: [$u], artifact_sha256: [$h]}' >"$PARAMS"
+  echo "Passing the runner's frontend build (sha256 ${ARTIFACT_SHA256:0:12}…)."
+else
+  jq -n --arg p "$PHASE" --arg s "$TARGET_SHA" '{phase: [$p], sha: [$s]}' >"$PARAMS"
+fi
+
 COMMAND_ID="$(aws ssm send-command \
   --instance-ids "$EC2_INSTANCE_ID" \
   --document-name "$SSM_DOCUMENT" \
   --comment "deploy ${TARGET_SHA:0:12} $PHASE run ${GITHUB_RUN_ID:-local}" \
-  --parameters "phase=$PHASE,sha=$TARGET_SHA" \
+  --parameters "file://$PARAMS" \
   --query "Command.CommandId" --output text)"
+rm -f "$PARAMS"
 echo "SSM command $COMMAND_ID ($PHASE) sent."
 
 STATUS="Pending"

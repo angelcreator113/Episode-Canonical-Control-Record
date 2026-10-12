@@ -50,8 +50,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The frontend is built here, on GitHub's runner, not on the 2 GB box
+  # (Evoni, 2026-10-12: deploy runs 93-94 stopped when the box ran out of
+  # memory building it). This job has no AWS credentials and no environment:
+  # it only builds and packs. The deploy job hands the pack to the box when
+  # DEPLOY_ARTIFACT_BUCKET is set (runbook §2.5); until then the box still
+  # builds, as before.
+  build:
+    name: Build the frontend (on the runner)
+    if: vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npx vite build
+
+      - name: Pack frontend/dist
+        id: pack
+        run: |
+          test -f frontend/dist/index.html
+          tar -C frontend -czf "$RUNNER_TEMP/frontend-dist.tgz" dist
+          sum="$(sha256sum "$RUNNER_TEMP/frontend-dist.tgz" | awk '{ print $1 }')"
+          echo "sha256=${sum}" >>"$GITHUB_OUTPUT"
+          echo "Packed frontend/dist: $(wc -c <"$RUNNER_TEMP/frontend-dist.tgz" | tr -d ' ') bytes, sha256 ${sum}."
+
+      - name: Keep the pack for the deploy job
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-dist.tgz
+          retention-days: 1
+          if-no-files-found: error
+
   deploy:
     name: Deploy to production
+    needs: build
     if: vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
@@ -167,7 +220,42 @@ jobs:
           echo "::error::Snapshot ${SNAP} was not available within 60 minutes. Nothing on the box was changed."
           exit 1
 
-      - name: Deploy (fast-forward and build, on the box)
+      - name: Fetch the runner's frontend build
+        if: vars.DEPLOY_ARTIFACT_BUCKET != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: ${{ runner.temp }}/artifact
+
+      # Uploaded to a private S3 prefix only the deploy role can write; the box
+      # gets a link that expires in 15 minutes (masked in this log) and checks
+      # the sha256 before it changes anything. The box's own role stays
+      # SSM-only: it needs no S3 permission (runbook §2.5).
+      - name: Hand the frontend build to the box (S3, a 15-minute link)
+        if: vars.DEPLOY_ARTIFACT_BUCKET != ''
+        env:
+          BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
+          EXPECTED: ${{ needs.build.outputs.sha256 }}
+        run: |
+          f="$RUNNER_TEMP/artifact/frontend-dist.tgz"
+          got="$(sha256sum "$f" | awk '{ print $1 }')"
+          if [ -z "$EXPECTED" ] || [ "$got" != "$EXPECTED" ]; then
+            echo "::error::The frontend pack's sha256 (${got}) is not the build job's (${EXPECTED:-none}). Nothing was changed on the box."
+            exit 1
+          fi
+          # The prefix is fixed: the role's S3 grant and the SSM document's
+          # allowedPattern both name deploy-builds/.
+          key="deploy-builds/${TARGET_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tgz"
+          aws s3 cp "$f" "s3://${BUCKET}/${key}" --sse AES256 --only-show-errors
+          url="$(aws s3 presign "s3://${BUCKET}/${key}" --expires-in 900)"
+          echo "::add-mask::${url}"
+          {
+            echo "ARTIFACT_URL=${url}"
+            echo "ARTIFACT_SHA256=${got}"
+          } >>"$GITHUB_ENV"
+          echo "Uploaded the frontend pack (sha256 ${got:0:12}…) to s3://${BUCKET}/${key}."
+
+      - name: Deploy (fast-forward and the frontend, on the box)
         run: bash scripts/deploy/ssm-phase.sh deploy
 
       - name: Migrate (on the box, if pending)
