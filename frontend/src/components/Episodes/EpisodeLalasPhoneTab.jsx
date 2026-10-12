@@ -6,6 +6,7 @@ import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import PhonePreviewMode from '../PhonePreviewMode';
 import { isIcon, isScreen } from '../../lib/overlayUtils';
+import { beatOrder } from '../../lib/storyClock';
 import './EpisodeLalasPhoneTab.css';
 
 /**
@@ -199,6 +200,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                 missions={[]}
                 showId={showId}
                 episodeId={episodeId}
+                storyAt={beatOrder(episode?.episode_number ?? episode?.episodeNumber)}
               />
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">

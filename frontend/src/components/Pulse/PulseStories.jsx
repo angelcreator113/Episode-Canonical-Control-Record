@@ -45,7 +45,7 @@ function Bubble({ colors, children }) {
   return <span className="pl-story-ring" style={colors}><span className="pl-story-inner">{children}</span></span>;
 }
 
-export default function PulseStories({ lala, people, cities, active, onPerson, cityStates = {} }) {
+export default function PulseStories({ lala, people, cities, active, onPerson, cityStates = {}, onCity = null }) {
   const lalaName = lala?.name || 'Lala';
   return (
     <section className="pl-stories" aria-label="Stories" data-testid="pl-stories">
@@ -71,17 +71,25 @@ export default function PulseStories({ lala, people, cities, active, onPerson, c
         {cities.map((c) => {
           const [first, second] = paletteOf(c);
           const bubble = cityStates[`city_bubble:${c.key}`];
+          const inner = (
+            <>
+              <Bubble colors={ringVars(first, second)}>
+                {c.bubble_image_url && bubble !== 'hidden'
+                  ? <img src={c.bubble_image_url} alt="" className={bubble === 'teaser' ? 'pl-blurred' : undefined} />
+                  : <span className="pl-story-initial pl-story-city-initial" style={ringVars(first, second)}>{initial(c.name)}</span>}
+              </Bubble>
+              <b>{c.name}</b>
+              {c.subtitle && <small>{c.subtitle}</small>}
+            </>
+          );
           return (
             <li key={c.key}>
-              <span className="pl-story quiet" aria-disabled="true" title="City feeds are coming to The Pulse" data-testid="pl-story-city">
-                <Bubble colors={ringVars(first, second)}>
-                  {c.bubble_image_url && bubble !== 'hidden'
-                    ? <img src={c.bubble_image_url} alt="" className={bubble === 'teaser' ? 'pl-blurred' : undefined} />
-                    : <span className="pl-story-initial pl-story-city-initial" style={ringVars(first, second)}>{initial(c.name)}</span>}
-                </Bubble>
-                <b>{c.name}</b>
-                {c.subtitle && <small>{c.subtitle}</small>}
-              </span>
+              {/* A city opens its own feed (Task 2987) where the page offers it. */}
+              {onCity ? (
+                <button type="button" className="pl-story" onClick={() => onCity(c.key)} data-testid="pl-story-city">{inner}</button>
+              ) : (
+                <span className="pl-story quiet" aria-disabled="true" data-testid="pl-story-city">{inner}</span>
+              )}
             </li>
           );
         })}

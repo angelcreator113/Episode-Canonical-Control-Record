@@ -98,3 +98,14 @@
 .prv-gate-flagged { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
 .prv-gate-line { margin: 0; }
 .prv-gate-flags { margin: 4px 0 0; padding-left: 18px; }
+
+/* DMs in Review (Task 2985) */
+.prv-dm { padding: 12px 0; border-top: 1px solid var(--lala-parchment-2); }
+.prv-dm-messages { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.prv-dm-message { padding: 8px 10px; border-radius: 6px; background: var(--lala-parchment-2); color: var(--text-primary); overflow-wrap: anywhere; }
+.prv-dm-message .prv-num-flag { margin-left: 6px; }
+.prv-dm-is-draft { background: var(--surface-card); border: 1px dashed var(--lala-gold-line); }
+.prv-dm-draft { margin-top: 6px; }
+.prv-dm-draft textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; }
+.prv-dm-start { display: flex; flex-direction: column; gap: 8px; max-width: 520px; margin: 8px 0; }
+.prv-dm-start select, .prv-dm-start input { min-height: 44px; box-sizing: border-box; width: 100%; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }
