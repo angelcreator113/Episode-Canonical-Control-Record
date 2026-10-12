@@ -830,6 +830,8 @@ app.use('/api/v1/pulse-fits', pulseFitRoutes);
 // Reveals on The Pulse (Task #2938): reads requireAuth; writes requireAuth + ADMIN.
 const pulseRevealRoutes = trackRouteLoad('pulseReveals', () => require('./routes/pulseReveals'));
 app.use('/api/v1/pulse-reveals', pulseRevealRoutes);
+const pulseFollowerRoutes = trackRouteLoad('pulseFollowers', () => require('./routes/pulseFollowers'));
+app.use('/api/v1/pulse-followers', pulseFollowerRoutes);
 
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
