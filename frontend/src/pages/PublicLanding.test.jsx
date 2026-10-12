@@ -24,14 +24,13 @@ beforeEach(() => {
 afterEach(() => { fetchSpy.mockRestore(); vi.clearAllMocks(); });
 
 describe('public landing: navigation and hero', () => {
-  test('renders the hero with real text; its one call is the public site content, without credentials (Task #2822)', () => {
+  test('renders the hero with real text; its calls are the public site content, without credentials (Task #2822), and the public polls (Task #3006)', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Where Fashion Becomes a World.' })).toBeTruthy();
     expect(screen.getByText('AN ORIGINAL ENTERTAINMENT UNIVERSE')).toBeTruthy();
     expect(screen.getByText(/At Prime Studios, we create character-driven entertainment/)).toBeTruthy();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0][0]).toBe('/api/v1/public/site-content');
-    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
+    expect(fetchSpy.mock.calls.map((c) => c[0]).sort()).toEqual(['/api/v1/public/polls', '/api/v1/public/site-content']);
+    expect(fetchSpy.mock.calls.find((c) => c[0] === '/api/v1/public/site-content')[1]).toMatchObject({ credentials: 'omit' });
     for (const fn of Object.values(api)) expect(fn).not.toHaveBeenCalled();
   });
 
