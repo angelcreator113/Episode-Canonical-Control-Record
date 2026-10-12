@@ -689,7 +689,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
           )}
 
           {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe grids, the task list) */}
-          {['feed_posts', 'dm_thread', 'notifications', 'feed_notifications', 'relationship_changes', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume', 'task_list'].includes(zone.content_type) && (
+          {['feed_posts', 'dm_thread', 'pulse_messages', 'notifications', 'feed_notifications', 'relationship_changes', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume', 'task_list'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>MAX ITEMS</label>
               <input
@@ -699,6 +699,21 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                 value={config.max_items || ''}
                 onChange={(e) => handleConfigChange('max_items', parseInt(e.target.value) || undefined)}
                 placeholder="e.g. 5"
+                style={fieldStyle}
+              />
+            </div>
+          )}
+
+          {/* Lala's Messages: one conversation as bubbles, by the other one's handle; empty lists them all. */}
+          {zone.content_type === 'pulse_messages' && (
+            <div>
+              <label style={labelStyle} htmlFor={`pulse-msg-handle-${zone.id}`}>CONVERSATION WITH (HANDLE)</label>
+              <input
+                id={`pulse-msg-handle-${zone.id}`}
+                type="text"
+                value={config.handle || ''}
+                onChange={(e) => handleConfigChange('handle', e.target.value.replace(/^@/, '').trim() || undefined)}
+                placeholder="empty: all of Lala's conversations"
                 style={fieldStyle}
               />
             </div>

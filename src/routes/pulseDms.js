@@ -8,7 +8,10 @@
  *                                    or "ep:<n>:<phase>"): live messages at
  *                                    or before it only, nothing behind the
  *                                    curtain. Without: every draft and live
- *                                    message, with the gate (requireAuth)
+ *                                    message, with the gate (requireAuth).
+ *                                    profile_id=lala is Lala's Feed profile
+ *                                    (her Phone, which does not know her id);
+ *                                    the response names the profile read.
  *   POST / { show_id, profile_a_id, profile_b_id, sender_profile_id, story_order?, topic? }
  *                                    opens (or reuses) the pair's thread and
  *                                    queues its next message by the sender
@@ -46,7 +49,11 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
-    const profileId = intOrNull(req.query.profile_id);
+    const isLala = String(req.query.profile_id || '').toLowerCase() === 'lala';
+    const profileId = isLala
+      ? await require('../services/lalaFeedProfile').lalaProfileId(getModels().sequelize)
+      : intOrNull(req.query.profile_id);
+    if (isLala && profileId == null) return res.json({ success: true, at: null, profile_id: null, threads: [] });
     if (Number.isNaN(profileId)) return res.status(400).json({ success: false, error: 'profile_id must be a whole number.' });
     let at = null;
     if (req.query.at !== undefined && req.query.at !== '') {
@@ -59,7 +66,7 @@ router.get('/', requireAuth, async (req, res) => {
       if (!Number.isInteger(at)) at = 0;   // no published episode yet: the very start
     }
     const threads = await require('../services/pulseDms').threadsOf(getModels(), showId, { at, profileId });
-    return res.json({ success: true, at, threads });
+    return res.json({ success: true, at, profile_id: profileId, threads });
   } catch (err) {
     console.error('[PulseDms] GET error:', err);
     return res.status(500).json({ success: false, error: err.message });
