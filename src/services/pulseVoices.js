@@ -79,13 +79,14 @@ function sourceHash(source) {
 const CASES = ['lowercase', 'sentence', 'mixed', 'caps for emphasis'];
 const EMOJI = ['never', 'rarely', 'sometimes', 'often'];
 const LENGTHS = ['short', 'medium', 'long'];
+const TEMPERAMENTS = ['oversharer', 'regular', 'lurker'];
 const str = (v, max = 200) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
 const list = (v, n, max = 80) => (Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, n) : []);
 const oneOf = (v, allowed, fallback) => (allowed.includes(String(v || '').toLowerCase()) ? String(v).toLowerCase() : fallback);
 
 /**
  * The habits' shape: { case, punctuation, emoji: { use, favorites },
- * sentence_length, topics, never_says, signature_phrases }. Unknown keys
+ * sentence_length, temperament, topics, never_says, signature_phrases }. Unknown keys
  * are dropped, lists capped, and a signature phrase that is banned removed.
  */
 function normalizeHabits(raw = {}) {
@@ -95,6 +96,8 @@ function normalizeHabits(raw = {}) {
     punctuation: str(raw.punctuation),
     emoji: { use: oneOf(emoji.use, EMOJI, 'rarely'), favorites: list(emoji.favorites, 8, 16) },
     sentence_length: oneOf(raw.sentence_length, LENGTHS, 'short'),
+    // How readily they post (Task #2970): an oversharer posts about anything, a lurker mostly comments.
+    temperament: oneOf(raw.temperament, TEMPERAMENTS, 'regular'),
     topics: list(raw.topics, 10),
     never_says: list(raw.never_says, 15),
     signature_phrases: list(raw.signature_phrases, 8).filter((p) => findBanned(p).length === 0),
@@ -141,6 +144,7 @@ Answer with JSON only, in this shape:
   "punctuation": "one line: e.g. no full stops, lots of ellipses, double exclamation marks",
   "emoji": { "use": "never" | "rarely" | "sometimes" | "often", "favorites": ["up to 8 emoji"] },
   "sentence_length": "short" | "medium" | "long",
+  "temperament": "oversharer" | "regular" | "lurker" (how readily they post: an oversharer posts about everything, a lurker mostly watches and comments),
   "topics": ["up to 10 things they post about"],
   "never_says": ["up to 15 words or phrases they would never use"],
   "signature_phrases": ["up to 8 phrases or slang they really use"]
@@ -190,10 +194,10 @@ function needsRebuild(voice, source) {
 
 /**
  * The show's posting characters: active/alive, with a Feed profile, and not
- * hidden from Lala at the present story moment (services/pulseReveals.js).
+ * hidden from Lala at the story moment `at` (default the present; services/pulseReveals.js).
  * Each with their voice (or null) and whether it needs a rebuild.
  */
-async function eligible(db, showId) {
+async function eligible(db, showId, { at } = {}) {
   const { sequelize } = db;
   const [rows] = await sequelize.query(
     `SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
@@ -207,9 +211,9 @@ async function eligible(db, showId) {
     `SELECT ${['id', ...PROFILE_FIELDS].map((f) => (f === 'follower_tier' ? 'follower_tier::text AS follower_tier' : f)).join(', ')}
        FROM social_profiles WHERE id IN (:profileIds) AND deleted_at IS NULL`, { replacements: { profileIds } });
   const profileOf = new Map(profiles.map((p) => [Number(p.id), p]));
-  const at = await require('./storyClock').presentOrder(db, showId);
+  const moment = Number.isInteger(at) ? at : await require('./storyClock').presentOrder(db, showId);
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
-  const { hiddenProfiles } = await require('./pulseReveals').revealsAt(db, showId, at, { lalaProfileId: lalaId });
+  const { hiddenProfiles } = await require('./pulseReveals').revealsAt(db, showId, moment, { lalaProfileId: lalaId });
   const voices = await db.PulseVoice.findAll({ where: { registry_character_id: characters.map((c) => c.id) } });
   const voiceOf = new Map(voices.map((v) => [v.registry_character_id, v]));
   const byName = new Map(rows.map((r, i) => [r.id, i]));
@@ -243,6 +247,6 @@ async function removeExample(voice, exampleId) {
 }
 
 module.exports = {
-  BANNED_PHRASES, POSTING_STAGES, MAX_EXAMPLES,
+  BANNED_PHRASES, POSTING_STAGES, MAX_EXAMPLES, TEMPERAMENTS,
   findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild, eligible, buildVoice, addExample, removeExample, VoiceError,
 };

@@ -92,3 +92,9 @@
 .prv-epf-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-secondary); flex: 1 1 160px; min-width: 0; }
 .prv-epf-reason { flex-basis: 100%; }
 .prv-epf-field input { box-sizing: border-box; width: 100%; min-height: 40px; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }
+
+/* The quality gate's result on an engine draft (Task 2969) */
+.prv-gate { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
+.prv-gate-flagged { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
+.prv-gate-line { margin: 0; }
+.prv-gate-flags { margin: 4px 0 0; padding-left: 18px; }

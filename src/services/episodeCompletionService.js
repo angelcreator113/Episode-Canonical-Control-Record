@@ -772,6 +772,17 @@ ${narrativeLines.short || ''}`,
     console.error('[EpisodeCompletion] Follower change proposal failed (non-blocking):', followersErr?.message);
   }
 
+  // ── 21. Who would post about it (Task #2970) ──
+  // Queues the event's posts for the Pulse worker (services/pulseEventPosting.js):
+  // jobs only, never AI in this request; once per episode; only while the
+  // engine is switched on. It never fails completion.
+  let pulsePosts = 0;
+  try {
+    pulsePosts = (await require('./pulseEventPosting').enqueueForEpisode(require('../models'), { showId, episodeId })).length;
+  } catch (postingErr) {
+    console.error('[EpisodeCompletion] Queueing event posts failed (non-blocking):', postingErr?.message);
+  }
+
   return {
     episode_id: episodeId,
     evaluation: {
@@ -792,6 +803,7 @@ ${narrativeLines.short || ''}`,
     event_sync: eventSync,
     season,
     follower_proposal: followerProposal,
+    pulse_posts_queued: pulsePosts,
   };
 }
 

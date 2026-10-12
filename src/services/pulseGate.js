@@ -1,0 +1,157 @@
+'use strict';
+
+/**
+ * The quality gate (Task #2969; The Pulse spec §7 "Quality gate: a second
+ * check scores each draft for voice match and canon (story clock, reveals,
+ * who knows what). Passing everyday posts by other characters auto-publish;
+ * anything else goes to Review"; docs/reads/2026-10-12-pulse-posting-read.md
+ * §3, §7).
+ *
+ *   check(db, post, { voice, privateState })  →  { pass, voice, flags }
+ *     voice             a 0–1 score of the draft against the Voice Profile
+ *                       and its examples (one Haiku call); below
+ *                       VOICE_PASS is a flag
+ *     flags             deterministic canon checks:
+ *       banned_phrase       an AI-sounding phrase (pulseVoices.BANNED_PHRASES)
+ *       private_state       words from the character's Living State, quoted
+ *       unrevealed_character  a character Lala has not met by the post's moment
+ *       unrevealed_event    an event still hidden at the post's moment
+ *       future_event        an event whose episode comes after the post
+ *   reviewReasons(post, gate, { lalaProfileId, revealsStory })  why it goes
+ *                       to Review: lala, about_lala, reveals_story, gate
+ *
+ * "Who knows what" (spec §6) is phase 7; reviewReasons is where it joins.
+ */
+
+const MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
+const VOICE_PASS = 0.6;
+const MIN_PRIVATE = 12;   // a Living State phrase this long, quoted, is a leak
+
+let client = null;
+function getClient() {
+  if (!client) {
+    const Anthropic = require('@anthropic-ai/sdk');
+    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return client;
+}
+
+const norm = (s) => String(s || '').toLowerCase().replace(/[‘’]/g, '\'').replace(/\s+/g, ' ').trim();
+
+/** Every string inside a value (Living State is JSON of any shape). */
+function stringsIn(value, out = []) {
+  if (typeof value === 'string') out.push(value);
+  else if (Array.isArray(value)) value.forEach((v) => stringsIn(v, out));
+  else if (value && typeof value === 'object') Object.values(value).forEach((v) => stringsIn(v, out));
+  return out;
+}
+
+/** Living State phrases quoted in the text (private feelings are never stated). */
+function privateLeaks(text, privateState) {
+  const body = norm(text);
+  return stringsIn(privateState).map(norm).filter((s) => s.length >= MIN_PRIVATE && body.includes(s));
+}
+
+const mentions = (text, name) => {
+  const n = norm(name).replace(/^@/, '');
+  if (n.length < 3) return false;
+  const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9_])@?${esc}(?![a-z0-9_])`, 'i').test(norm(text));
+};
+
+/** The deterministic canon flags for a draft at its story order. */
+async function canonFlags(db, post, { privateState = null, lalaProfileId } = {}) {
+  const { findBanned } = require('./pulseVoices');
+  const text = `${post.content_text || ''}\n${post.trending_topic || ''}`;
+  const flags = [];
+  const banned = findBanned(text);
+  if (banned.length) flags.push({ code: 'banned_phrase', detail: banned.join(', ') });
+  const leaks = privateLeaks(text, privateState);
+  if (leaks.length) flags.push({ code: 'private_state', detail: 'Quotes the character\'s private Living State.' });
+
+  const at = Number.isInteger(post.story_order) ? post.story_order : null;
+  if (at !== null) {
+    const lalaId = lalaProfileId !== undefined ? lalaProfileId : await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+    const view = await require('./pulseReveals').revealsAt(db, post.show_id, at, { lalaProfileId: lalaId });
+    const hidden = [...view.hiddenProfiles].filter((id) => Number(id) !== Number(post.social_profile_id));
+    if (hidden.length) {
+      const [profiles] = await db.sequelize.query(
+        'SELECT handle, display_name FROM social_profiles WHERE id IN (:hidden)', { replacements: { hidden } });
+      const named = profiles.filter((p) => mentions(text, p.handle) || mentions(text, p.display_name));
+      if (named.length) flags.push({ code: 'unrevealed_character', detail: named.map((p) => `@${p.handle}`).join(', ') });
+    }
+    const [events] = await db.sequelize.query(
+      `SELECT we.id, we.name, e.episode_number FROM world_events we LEFT JOIN episodes e ON e.id = we.used_in_episode_id
+        WHERE we.show_id = :showId AND we.deleted_at IS NULL`, { replacements: { showId: post.show_id } });
+    const hiddenEvents = new Set(view.hiddenIds('event').map(String));
+    const { orderOf } = require('./storyClock');
+    for (const ev of events) {
+      if (!ev.name || !mentions(text, ev.name)) continue;
+      if (hiddenEvents.has(String(ev.id))) flags.push({ code: 'unrevealed_event', detail: ev.name });
+      else if (ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') > at) flags.push({ code: 'future_event', detail: ev.name });
+    }
+  }
+  return flags;
+}
+
+/** The draft's voice match, 0–1, against the voice and its examples. */
+async function voiceScore(voice, text) {
+  const examples = (voice?.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none)';
+  const prompt = `Score how well this social post matches the character's voice, from 0 (nothing like them) to 1 (exactly them).
+Voice habits: ${JSON.stringify(voice?.habits_json || {})}
+Posts in their voice:
+${examples}
+
+Post to score:
+${text}
+
+Answer with JSON only: {"score": 0.0, "why": "one short line"}`;
+  let message;
+  for (const model of MODELS) {
+    try {
+      message = await getClient().messages.create({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
+      break;
+    } catch (modelErr) {
+      console.warn(`[PulseGate] scoring with ${model} failed:`, modelErr.message);
+      if (model === MODELS[MODELS.length - 1]) throw modelErr;
+    }
+  }
+  const raw = (message?.content?.[0]?.text || '').trim();
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    const score = Number(parsed.score);
+    return { score: Number.isFinite(score) ? Math.max(0, Math.min(1, Math.round(score * 100) / 100)) : 0, why: String(parsed.why || '').slice(0, 200) };
+  } catch (parseErr) {
+    console.error('[PulseGate] could not read the voice score:', parseErr.message);
+    return { score: 0, why: 'The voice score could not be read.' };
+  }
+}
+
+/** The gate: { pass, voice, voice_why, flags }. */
+async function check(db, post, { voice = null, privateState = null, lalaProfileId } = {}) {
+  const flags = await canonFlags(db, post, { privateState, lalaProfileId });
+  const scored = await voiceScore(voice, post.content_text || '');
+  if (scored.score < VOICE_PASS) flags.push({ code: 'voice', detail: `Voice match ${scored.score} (below ${VOICE_PASS}).` });
+  return { pass: flags.length === 0, voice: scored.score, voice_why: scored.why, flags };
+}
+
+/**
+ * Why a draft goes to Review instead of publishing: Lala's own posts, posts
+ * about Lala, posts that reveal story, and anything the gate flagged. [] means
+ * it is an everyday post by another character that passed: it publishes.
+ */
+function reviewReasons(post, gate, { lalaProfileId = null, revealsStory = false } = {}) {
+  const { isAboutLala } = require('./pulseNumbers');
+  const reasons = [];
+  const isLala = lalaProfileId && post.social_profile_id
+    ? Number(post.social_profile_id) === Number(lalaProfileId)
+    : String(post.poster_handle || '').replace(/^@/, '').toLowerCase() === 'lala';
+  if (isLala) reasons.push('lala');
+  else if (isAboutLala(post)) reasons.push('about_lala');
+  if (revealsStory) reasons.push('reveals_story');
+  if (!gate?.pass) reasons.push('gate');
+  return reasons;
+}
+
+module.exports = { VOICE_PASS, MIN_PRIVATE, privateLeaks, canonFlags, voiceScore, check, reviewReasons };

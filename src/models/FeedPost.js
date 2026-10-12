@@ -82,6 +82,10 @@ module.exports = (sequelize) => {
     // The story time a wall post (no episode) was stamped with: episode
     // number * 10 + phase (migration 20261004180000, services/storyClock.js).
     story_order: { type: DataTypes.INTEGER, allowNull: true },
+
+    // The quality gate's result for an engine draft (migration 20261012060000,
+    // Task #2969, services/pulseGate.js): { pass, voice, flags, review, checked_at }.
+    gate_json: { type: DataTypes.JSONB, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
