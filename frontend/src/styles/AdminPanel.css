@@ -975,6 +975,78 @@
 .pulse-voices-banned summary { min-height: 32px; cursor: pointer; font-weight: 600; }
 .pulse-voices-banned p { margin: 6px 0 0; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
 
+/* Admin › The Pulse › Calendar (Task 2988): story moments by episode. */
+.pulse-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pulse-cal h3,
+.pulse-cal-episode h4 {
+  margin: 0;
+}
+
+.pulse-cal-rows,
+.pulse-cal-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pulse-cal-row {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--lala-parchment-3);
+}
+
+.pulse-cal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.pulse-cal-label {
+  min-width: 9rem;
+  color: var(--lala-ink);
+}
+
+.pulse-cal-counts {
+  flex: 1 1 12rem;
+  color: var(--lala-ink-muted);
+}
+
+.pulse-cal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pulse-cal-actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.pulse-cal-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border-radius: var(--lala-radius);
+  background: var(--lala-parchment-2);
+  overflow-wrap: anywhere;
+}
+
+.pulse-cal-kind {
+  display: inline-block;
+  min-width: 6.75rem;
+  font-weight: 600;
+  color: var(--lala-ink);
+}
+
 /* Admin › The Pulse › Storylines (Task 2989): storylines and their beats in story time. */
 .pulse-story,
 .pulse-story-list,

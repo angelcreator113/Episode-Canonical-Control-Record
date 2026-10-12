@@ -3,6 +3,15 @@
  * The Pulse › Review (components/Admin/PulseReviewPost; Task 2925).
  */
 
+/**
+ * Lala's view of The Pulse's posts at a story moment (Task 2986): the same
+ * read for Admin › The Pulse › Story clock and the Phone's Pulse zone, so a
+ * beat shows exactly what The Pulse shows then. `at` is an order, else the
+ * present.
+ */
+export const pulseFeedUrl = (showId, at, limit = 20) =>
+  `/api/v1/feed-posts?show_id=${encodeURIComponent(showId)}&status=live&with=comments&limit=${limit}&at=${Number.isInteger(at) ? at : 'present'}`;
+
 export const posterOf = (post) => {
   const p = post.socialProfile || {};
   return {

@@ -17,6 +17,8 @@
  *                        playthrough, back, home). Rendered on every screen,
  *                        generated or not.
  *   episodeId          — passed to ScreenContentRenderer.
+ *   storyAt            — the story order of the beat shown (Task 2986), passed
+ *                        to ScreenContentRenderer for The Pulse zones.
  *   showId             — the show, for content zones when the screen does
  *                        not carry its own show_id.
  *   contentInteractive — passed to ScreenContentRenderer as `interactive`.
@@ -139,6 +141,7 @@ export default function PhoneDevice({
   onBack,
   tapLayer,
   episodeId,
+  storyAt = null,
   showId,
   contentInteractive = false,
   icons = [],
@@ -177,6 +180,7 @@ export default function PhoneDevice({
               screenMeta={activeScreen.metadata}
               interactive={contentInteractive}
               episodeId={episodeId}
+              storyAt={storyAt}
             />
             {!tapLayer && (
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} highlightIconKey={highlightIconKey} />

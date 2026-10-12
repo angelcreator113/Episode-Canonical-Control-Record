@@ -43,6 +43,12 @@ describe('Social Director sub-tabs', () => {
     await screen.findByTestId('pulse-story');
     expect(screen.queryByTestId('pulse-coming')).toBeNull();
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-storylines?show_id=show-1');
+
+    // Calendar (Task 2988) is live: the story-time calendar, not a note.
+    fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }));
+    await screen.findByTestId('pulse-cal');
+    expect(screen.queryByTestId('pulse-coming')).toBeNull();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-calendar?show_id=show-1');
   });
 });
 

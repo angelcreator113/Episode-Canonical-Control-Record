@@ -853,6 +853,9 @@ app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
 // Closeness changes in Review (Task #2983): reads requireAuth; decisions requireAuth + ADMIN.
 const pulseClosenessRoutes = trackRouteLoad('pulseCloseness', () => require('./routes/pulseCloseness'));
 app.use('/api/v1/pulse-closeness', pulseClosenessRoutes);
+// The Pulse's story-time calendar (Task #2988): read only, requireAuth.
+const pulseCalendarRoutes = trackRouteLoad('pulseCalendar', () => require('./routes/pulseCalendar'));
+app.use('/api/v1/pulse-calendar', pulseCalendarRoutes);
 // Voice Profiles (Task #2967): reads requireAuth; builds and edits requireAuth + ADMIN.
 const pulseVoiceRoutes = trackRouteLoad('pulseVoices', () => require('./routes/pulseVoices'));
 app.use('/api/v1/pulse-voices', pulseVoiceRoutes);
