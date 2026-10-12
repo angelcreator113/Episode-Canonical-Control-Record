@@ -152,6 +152,18 @@
 .pl-reveal-chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: var(--pulse-director); color: var(--pulse-director-ink); font-size: 11px; font-weight: 700; }
 .pl-cover-chip { position: absolute; left: 16px; bottom: 8px; z-index: 1; }
 
+/* Admin › Story clock's link (Task 2941): The Pulse as of a story moment, for admins only */
+.pl-at-banner { max-width: 1400px; margin: 0 auto 8px; padding: 8px 16px; border-radius: 999px; background: var(--pulse-director); color: var(--pulse-director-ink); font-size: 13px; font-weight: 700; text-align: center; }
+.pl-at-banner a { color: var(--pulse-director-ink); }
+
+/* Admin › Story clock's preview (Task 2941): The Pulse in a card, not a page */
+.pl-page.pl-preview { min-height: 0; padding: 16px; border-radius: 22px; }
+.pl-preview-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.pl-preview-main, .pl-preview-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.pl-preview-cover { border-radius: 22px; }
+.pl-preview .pl-cover { position: static; display: block; width: 100%; height: 160px; object-fit: cover; border-radius: 22px; }
+@media (max-width: 900px) { .pl-preview-grid { grid-template-columns: minmax(0, 1fr); } }
+
 /* Stories row (frame: glass) */
 .pl-stories { padding: 12px 10px; border-radius: 22px; background: var(--pulse-glass); border: 1px solid var(--pulse-glass-line); box-shadow: var(--pulse-shadow); overflow-x: auto; }
 .pl-stories ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
