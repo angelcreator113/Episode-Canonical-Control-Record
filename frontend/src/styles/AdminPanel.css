@@ -756,3 +756,87 @@
   padding: 0.375rem 0.625rem;
   font-size: 0.8125rem;
 }
+
+/* Reveal picker (Task 2940): when an item on The Pulse is revealed */
+.pulse-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pulse-reveal-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--lala-ink-muted);
+}
+
+.pulse-link-btn {
+  min-height: 32px;
+  padding: 0 0.25rem;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--lala-gold-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pulse-reveal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  background: var(--lala-parchment);
+}
+
+.pulse-reveal-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: 0.875rem;
+  color: var(--lala-ink);
+}
+
+.pulse-reveal-form legend {
+  width: 100%;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.pulse-reveal-form fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 44px;
+}
+
+.pulse-reveal-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.pulse-field select {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  font: inherit;
+}
+
+.pulse-met {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--lala-ink-muted);
+}

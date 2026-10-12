@@ -6,7 +6,10 @@
  *   GET    /?show_id=      the show's reveals, each with its story order
  *                          resolved now and its label (requireAuth)
  *   GET    /met?show_id=   the episode each Feed profile meets Lala in:
- *                          derived, and any set override (requireAuth)
+ *                          derived, and any set override (requireAuth);
+ *                          each with the Character Registry character
+ *                          linked to it (registry_character_id), and every
+ *                          linked character, met or not (Task #2940)
  *   GET    /state?show_id=&at=  the Dream Cities' image states at a story
  *                          moment, for The Pulse to blur or leave out
  *                          (their URLs come from page-content; Task #2939)
@@ -70,13 +73,18 @@ router.get('/met', requireAuth, async (req, res) => {
     const derived = await metLala(db, showId);
     const set = await db.PulseReveal.findAll({ where: { show_id: showId, item_type: 'character', source: 'set' } });
     const setBy = new Map(set.map((r) => [Number(r.item_id), r]));
-    const ids = [...new Set([...derived.keys(), ...setBy.keys()])].filter(Number.isInteger).sort((a, b) => a - b);
+    // The registry characters linked to Feed profiles (registry_characters.feed_profile_id; read only).
+    const [linked] = await db.sequelize.query(
+      'SELECT id, feed_profile_id FROM registry_characters WHERE feed_profile_id IS NOT NULL AND deleted_at IS NULL');
+    const characterOf = new Map(linked.map((r) => [Number(r.feed_profile_id), r.id]));
+    const ids = [...new Set([...derived.keys(), ...setBy.keys(), ...characterOf.keys()])].filter(Number.isInteger).sort((a, b) => a - b);
     const met = await Promise.all(ids.map(async (profileId) => {
       const d = derived.get(profileId) || null;
       const s = setBy.get(profileId);
       const setShape = s ? shape(s, await resolveOrder(db, s)) : null;
       return {
         profile_id: profileId,
+        registry_character_id: characterOf.get(profileId) || null,
         derived: d,
         set: setShape,
         episode_number: s ? (setShape.story_order != null ? Math.floor(setShape.story_order / 10) : null) : d?.episode_number ?? null,

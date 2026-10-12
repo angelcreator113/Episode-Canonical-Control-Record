@@ -14,6 +14,7 @@ vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), p
 
 import api from '../../services/api';
 import PulseReview, { loadReviewCount } from './PulseReview';
+import { PulseRevealProvider } from './PulseRevealContext';
 
 const SHOW = 'show-1';
 let drafts;
@@ -32,6 +33,9 @@ beforeEach(() => {
   pending = [{ id: 'c9', handle: 'rival', text: 'cute.', post: { poster_handle: 'lala' } }];
   vi.mocked(api.get).mockImplementation(async (url) => {
     const u = new URL(url, 'http://x');
+    if (url.startsWith('/api/v1/social-profiles/lala/sidebar?')) return { data: { data: { upcoming: [{ id: 'ev1', name: 'The Gala', episode: { number: 2 } }], may_know: [] } } };
+    if (url.startsWith('/api/v1/pulse-reveals?')) return { data: { reveals: [{ id: 'rv1', item_type: 'post', item_id: 'p1', image_kind: null, moment: 'during', episode_id: 'ep-1', mode: 'teaser', label: 'During Ep 1' }] } };
+    if (url.startsWith('/api/v1/episodes?')) return { data: { data: [{ id: 'ep-1', episode_number: 1 }] } };
     if (url.includes('/feed-posts/deleted')) return { data: { data: deleted } };
     if (url.includes('/comments/pending')) return { data: { data: pending } };
     if (url.includes('/feed-posts')) {
@@ -139,5 +143,23 @@ describe('Admin › The Pulse › Review', () => {
     vi.mocked(api.get).mockRejectedValue(new Error('down'));
     render(<MemoryRouter><PulseReview showId={SHOW} /></MemoryRouter>);
     expect((await screen.findByRole('alert')).textContent).toBe('Review could not be loaded.');
+  });
+});
+
+describe('Reveals in Review (Task 2940)', () => {
+  test('each post card carries its reveal, and the events of unpublished episodes are listed with theirs', async () => {
+    render(<MemoryRouter><PulseRevealProvider showId={SHOW}><PulseReview showId={SHOW} /></PulseRevealProvider></MemoryRouter>);
+    await screen.findByTestId('pulse-review');
+    await waitFor(() => expect(screen.getByTestId('reveal-post-p1').textContent).toContain('Reveals: During Ep 1'));
+    expect(screen.getByTestId('reveal-post-d1').textContent).toContain('Always shown');
+    const events = within(screen.getByTestId('prv-events'));
+    expect(events.getByTestId('prv-event').textContent).toContain('The Gala · Ep 2');
+    expect(events.getByTestId('reveal-event-ev1')).toBeTruthy();
+  });
+
+  test('outside the provider the cards show no picker', async () => {
+    render(<MemoryRouter><PulseReview showId={SHOW} /></MemoryRouter>);
+    await screen.findByTestId('pulse-review');
+    expect(screen.queryByTestId('reveal-post-p1')).toBeNull();
   });
 });
