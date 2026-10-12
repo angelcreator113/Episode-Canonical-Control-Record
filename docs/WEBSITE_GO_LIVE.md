@@ -38,6 +38,7 @@ The `website_slots` table comes from `src/migrations/20261010150000-create-websi
 | `SITE_PUBLIC_CDN` | the CloudFront domain, e.g. `dxxxx.cloudfront.net` (with or without `https://`) | **yes if the bucket is private behind OAC**. Without it the app hands out plain S3 object URLs, which only load if the prefix is public. |
 | `AWS_REGION` | the bucket's region | already set; default `us-east-1` |
 | `FFPROBE_BIN` | path to `ffprobe` | no; default `ffprobe` on `PATH` |
+| `POLL_HASH_SALT` | a long random string (`openssl rand -hex 32`); keep it the same once votes exist | **yes for audience polls** (Task #3005): the public vote answers 503 until it is set. Votes' cookie ids and IPs are stored only hashed with it |
 
 Restart the app after editing (Evoni's own PM2 step).
 
