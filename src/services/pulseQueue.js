@@ -26,7 +26,7 @@
  * the draft cap sits inside it.
  */
 
-const KINDS = ['event', 'ambient', 'comment', 'dm'];   // dm: Task #2984
+const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline'];   // dm: Task #2984; storyline: Task #2989
 const DEFAULTS = { daily_draft_cap: 30, ambient_enabled: false };
 const MAX_CAP = 500;
 const BACKOFF_MS = 60 * 1000;            // 1, 4, 9 minutes …

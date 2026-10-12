@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 
 const STATUS_LABELS = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', skipped: 'Skipped' };
-const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM' };
+const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
 export default function PulseEngine({ showId }) {

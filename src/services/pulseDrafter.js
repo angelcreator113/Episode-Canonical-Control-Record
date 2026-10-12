@@ -154,6 +154,8 @@ async function draftAndRoute(db, args) {
   const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const gate = await require('./pulseGate').check(db, post, { voice, privateState, lalaProfileId });
   const review = require('./pulseGate').reviewReasons(post, gate, { lalaProfileId, revealsStory });
+  // A caller may always send a draft to Review (a storyline's payoff, Task #2989).
+  for (const reason of Array.isArray(args.alwaysReview) ? args.alwaysReview : []) if (!review.includes(reason)) review.push(reason);
   await post.update({ gate_json: { ...gate, review, checked_at: new Date().toISOString() } });
   if (review.length === 0) await release(post);
   return { post, gate, review, published: review.length === 0 };
