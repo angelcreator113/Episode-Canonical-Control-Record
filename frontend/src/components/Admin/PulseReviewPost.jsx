@@ -19,6 +19,7 @@ import { BEATS, beatName } from '../../lib/canonicalBeats';
 import { postOrder, storyLabel } from '../../lib/storyClock';
 import { posterOf, whenLabel, initial, toneOf } from '../../lib/pulsePosts';
 import RevealPicker from './RevealPicker';
+import { PinAsExample } from './PulseVoices';
 import './PulseReviewPost.css';
 
 const Tile = ({ name, size = 'sm', tone = 'c' }) => <span className={`prv-tile prv-tile-${size} prv-tone-${tone}`} aria-hidden="true">{initial(name)}</span>;
@@ -233,6 +234,7 @@ export function PostCard({ post, onChange, showId }) {
           {showId && <>{' · '}<button type="button" className="prv-link-btn" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button></>}
           {post.narrative_function && <> · <span className="prv-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
           {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
+          {!isDeleted && post.social_profile_id && post.content_text && <>{' · '}<PinAsExample postId={post.id} /></>}
         </p>
         {(isDraft || isDeleted) && !editing && (
           <p className="prv-actions" data-testid="sm-post-actions">
