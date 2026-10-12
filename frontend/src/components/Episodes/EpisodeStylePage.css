@@ -194,3 +194,8 @@
 .esp2-link { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .esp2-link:disabled { color: var(--text-secondary); cursor: not-allowed; }
 .esp2-link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 2px; }
+
+/* The audience's pick in the Pieces spot (Task #3007). */
+.esp2-audience { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-muted, rgba(184, 150, 46, 0.08)); display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.esp2-audience p { margin: 0; }
+.esp2-audience .esp2-btn { align-self: flex-start; text-decoration: none; }

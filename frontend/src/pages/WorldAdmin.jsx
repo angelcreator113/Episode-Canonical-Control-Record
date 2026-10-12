@@ -1669,10 +1669,18 @@ The revised event should feel like a completely different experience from the si
   // look for the episode in production, against Lala's coins and reputation.
   const lalaState = charState?.state || null;
   const lookCharacter = React.useMemo(() => lalaState || {}, [lalaState]);
-  const lookEpisode = episodesInProduction(episodes)[0] || null;
+  // The Style Page's "Use this look" (Task #3007) names the episode and the
+  // audience's pick: ?look_episode=<id>&look_pieces=<id,id>.
+  const lookEpisodeParam = searchParams.get('look_episode');
+  const lookPiecesParam = searchParams.get('look_pieces');
+  const lookStartIds = React.useMemo(() => (lookPiecesParam ? lookPiecesParam.split(',').filter(Boolean) : null), [lookPiecesParam]);
+  const lookEpisode = (lookEpisodeParam && episodes.find((ep) => ep.id === lookEpisodeParam)) || episodesInProduction(episodes)[0] || null;
   // Loaded only on the closet, so the other tabs do not fetch the outfit, the event and its forecast.
   const onCloset = activeTab === 'wardrobe' && subTab === 'wardrobe-items';
-  const look = useLookDraft({ episode: onCloset ? lookEpisode : null, showId, characterState: lookCharacter, items: wardrobeItems, onSaved: () => loadData() });
+  const look = useLookDraft({
+    episode: onCloset ? lookEpisode : null, showId, characterState: lookCharacter, items: wardrobeItems, onSaved: () => loadData(),
+    startIds: lookEpisode && lookEpisode.id === lookEpisodeParam ? lookStartIds : null,
+  });
   const lookKeywords = dressCodeKeywords(look.event);
 
   if (loading) return (
