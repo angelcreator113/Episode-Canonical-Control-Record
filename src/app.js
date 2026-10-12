@@ -837,6 +837,9 @@ const websiteSlotRoutes = trackRouteLoad('websiteSlots', () => require('./routes
 app.use('/api/v1/website-slots', websiteSlotRoutes);
 const publicSiteRoutes = trackRouteLoad('publicSite', () => require('./routes/publicSite'));
 app.use('/api/v1/public', publicSiteRoutes);
+// Audience polls, public side (Task #3005): no auth; one vote per browser and IP, hashed; its own limiter.
+const publicPollRoutes = trackRouteLoad('publicPolls', () => require('./routes/publicPolls'));
+app.use('/api/v1/public/polls', publicPollRoutes);
 
 // Lala's everyday fits on The Pulse (Task #2922): requireAuth on every route.
 const pulseFitRoutes = trackRouteLoad('pulseFits', () => require('./routes/pulseFits'));
@@ -865,6 +868,9 @@ app.use('/api/v1/pulse-dms', pulseDmRoutes);
 // Storylines on The Pulse (Task #2989): reads requireAuth; planning requireAuth + ADMIN; suggest + aiRateLimiter.
 const pulseStorylineRoutes = trackRouteLoad('pulseStorylines', () => require('./routes/pulseStorylines'));
 app.use('/api/v1/pulse-storylines', pulseStorylineRoutes);
+// Audience polls, Admin side (Task #3005): reads requireAuth; writes requireAuth + ADMIN.
+const pulsePollRoutes = trackRouteLoad('pulsePolls', () => require('./routes/pulsePolls'));
+app.use('/api/v1/pulse-polls', pulsePollRoutes);
 // The Pulse's posting engine settings and queue (Task #2968): reads requireAuth; settings requireAuth + ADMIN.
 const pulseEngineRoutes = trackRouteLoad('pulseEngine', () => require('./routes/pulseEngine'));
 app.use('/api/v1/pulse-engine', pulseEngineRoutes);

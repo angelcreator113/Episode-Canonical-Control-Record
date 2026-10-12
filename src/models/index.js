@@ -106,6 +106,9 @@ let PulseDmThread; // DM conversations on The Pulse (Task #2984)
 let PulseDmMessage; // DM messages on The Pulse (Task #2984)
 let PulseStoryline; // Storylines on The Pulse (Task #2989)
 let PulseStorylineBeat; // Storyline beats (Task #2989)
+let PulsePoll; // Audience polls (Task #3005)
+let PulsePollOption; // Poll options (Task #3005)
+let PulsePollVote; // Poll votes, hashed (Task #3005)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -378,6 +381,9 @@ try {
   PulseDmMessage = require('./PulseDmMessage')(sequelize, DataTypes);
   PulseStoryline = require('./PulseStoryline')(sequelize, DataTypes);
   PulseStorylineBeat = require('./PulseStorylineBeat')(sequelize, DataTypes);
+  PulsePoll = require('./PulsePoll')(sequelize, DataTypes);
+  PulsePollOption = require('./PulsePollOption')(sequelize, DataTypes);
+  PulsePollVote = require('./PulsePollVote')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -569,6 +575,9 @@ const requiredModels = {
   PulseDmMessage,
   PulseStoryline,
   PulseStorylineBeat,
+  PulsePoll,
+  PulsePollOption,
+  PulsePollVote,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2100,6 +2109,9 @@ module.exports.PulseDmThread = PulseDmThread;
 module.exports.PulseDmMessage = PulseDmMessage;
 module.exports.PulseStoryline = PulseStoryline;
 module.exports.PulseStorylineBeat = PulseStorylineBeat;
+module.exports.PulsePoll = PulsePoll;
+module.exports.PulsePollOption = PulsePollOption;
+module.exports.PulsePollVote = PulsePollVote;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
