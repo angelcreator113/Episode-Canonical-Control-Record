@@ -1,0 +1,134 @@
+'use strict';
+
+/**
+ * Who knows what (Task #2982; The Pulse spec §6 "A character can only post or
+ * comment about what they would know at that story time: they were there,
+ * they were told, or it was already posted publicly. Drafts that break this
+ * are flagged to Review, never auto-published";
+ * docs/reads/2026-10-12-pulse-world-depth-read.md §1).
+ *
+ * Evoni, 2026-10-12: "told" is automatic — anyone with a close relationship
+ * to someone who was there knows it from the next story moment.
+ *
+ *   showEvents(db, showId)
+ *     the show's events with their episode number and guests
+ *     (canon_consequences.automation.guest_profiles; Lala is at every event)
+ *   knowsAt(db, showId, profileId, at, { lalaProfileId, events })
+ *     → Map(eventId → 'there' | 'told' | 'public') for the events this
+ *     Feed profile knows at story order `at`:
+ *       there   a guest, or Lala, once the event is happening (its During)
+ *       told    a close tie of a guest or of Lala, from the event's After
+ *       public  a live post at or before `at` names it or is tagged with it
+ *   unknownMentions(db, post, { lalaProfileId, events })
+ *     the events a draft names, already happened by its story order, that
+ *     its poster does not know. Events not yet happened or still hidden are
+ *     the gate's future_event and unrevealed_event flags, not this.
+ *
+ * "Close" is a relationship type whose closeness (pulseEventPosting.CLOSENESS)
+ * is CLOSE_LINE or more, in social_profile_relationships either way round.
+ */
+
+const CLOSE_LINE = 0.7;
+
+const parse = (v) => {
+  if (typeof v !== 'string') return v ?? null;
+  try { return JSON.parse(v); } catch (err) { console.error('[PulseKnowledge] bad JSON:', err.message); return null; }
+};
+const guestIds = (list) => (Array.isArray(list) ? list : [])
+  .map((g) => Number(typeof g === 'object' && g ? (g.profile_id ?? g.social_profile_id ?? g.id) : g))
+  .filter(Number.isInteger);
+
+/** The show's events: { id, name, episode_number, guests: Set<profileId> }. */
+async function showEvents(db, showId) {
+  const [rows] = await db.sequelize.query(
+    `SELECT we.id, we.name, we.canon_consequences, e.episode_number FROM world_events we
+       LEFT JOIN episodes e ON e.id = we.used_in_episode_id
+      WHERE we.show_id = :showId AND we.deleted_at IS NULL`, { replacements: { showId } });
+  return rows.map((r) => ({
+    id: String(r.id),
+    name: r.name,
+    episode_number: r.episode_number == null ? null : Number(r.episode_number),
+    guests: new Set(guestIds(parse(r.canon_consequences)?.automation?.guest_profiles)),
+  }));
+}
+
+/** The Feed profiles close to this one (a relationship type at CLOSE_LINE or more). */
+async function closeTies(db, profileId) {
+  const { CLOSENESS } = require('./pulseEventPosting');
+  const [rows] = await db.sequelize.query(
+    `SELECT source_profile_id, target_profile_id, relationship_type::text AS type FROM social_profile_relationships
+      WHERE source_profile_id = :id OR target_profile_id = :id`, { replacements: { id: profileId } });
+  const ties = new Set();
+  for (const r of rows) {
+    if ((CLOSENESS[r.type] ?? 0) < CLOSE_LINE) continue;
+    ties.add(Number(r.source_profile_id) === Number(profileId) ? Number(r.target_profile_id) : Number(r.source_profile_id));
+  }
+  return ties;
+}
+
+/** The events named by, or tagged on, a live post at or before `at`. */
+async function publicEventIds(db, showId, events, at) {
+  if (!events.length) return new Set();
+  const { postOrderSql } = require('./storyClock');
+  const [posts] = await db.sequelize.query(
+    `SELECT fp.event_id, fp.content_text, fp.trending_topic FROM feed_posts fp
+      WHERE fp.show_id = :showId AND fp.status = 'live' AND fp.deleted_at IS NULL AND ${postOrderSql('fp')} <= :at`,
+    { replacements: { showId, at } });
+  const known = new Set();
+  for (const post of posts) {
+    if (post.event_id) known.add(String(post.event_id));
+    for (const ev of namedIn(`${post.content_text || ''}\n${post.trending_topic || ''}`, events)) known.add(ev.id);
+  }
+  return known;
+}
+
+/** The events whose names appear in a text. */
+function namedIn(text, events) {
+  const { mentions } = require('./pulseGate');
+  return events.filter((ev) => ev.name && mentions(text, ev.name));
+}
+
+/** The events a Feed profile knows at story order `at`, and how. */
+async function knowsAt(db, showId, profileId, at, { lalaProfileId, events } = {}) {
+  const { orderOf } = require('./storyClock');
+  const list = events || await showEvents(db, showId);
+  const lalaId = lalaProfileId !== undefined ? lalaProfileId : await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+  const me = Number(profileId);
+  const isLala = lalaId != null && me === Number(lalaId);
+  const ties = await closeTies(db, me);
+  const knows = new Map();
+  for (const ev of list) {
+    if (ev.episode_number == null) continue;
+    const there = isLala || ev.guests.has(me);
+    if (there && at >= orderOf(ev.episode_number, 'during_episode')) { knows.set(ev.id, 'there'); continue; }
+    const witnesses = [...ev.guests, ...(lalaId != null ? [Number(lalaId)] : [])];
+    if (at >= orderOf(ev.episode_number, 'after_episode') && witnesses.some((w) => ties.has(w))) knows.set(ev.id, 'told');
+  }
+  for (const id of await publicEventIds(db, showId, list, at)) if (!knows.has(id)) knows.set(id, 'public');
+  return knows;
+}
+
+/** The events a draft names, already happened by its story order, that its poster does not know. */
+async function unknownMentions(db, post, { lalaProfileId, events } = {}) {
+  const at = Number.isInteger(post.story_order) ? post.story_order : null;
+  if (at === null || !post.social_profile_id) return [];
+  const list = events || await showEvents(db, post.show_id);
+  const { orderOf } = require('./storyClock');
+  const named = namedIn(`${post.content_text || ''}\n${post.trending_topic || ''}`, list)
+    .filter((ev) => ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') <= at);
+  if (!named.length) return [];
+  const knows = await knowsAt(db, post.show_id, post.social_profile_id, at, { lalaProfileId, events: list });
+  return named.filter((ev) => !knows.has(ev.id));
+}
+
+/** One line for the drafter: what this poster knows at the moment, or null. */
+async function knowledgeLine(db, showId, profileId, at, opts = {}) {
+  if (!Number.isInteger(at) || !profileId) return null;
+  const list = opts.events || await showEvents(db, showId);
+  const knows = await knowsAt(db, showId, profileId, at, { ...opts, events: list });
+  const HOW = { there: 'you were there', told: 'a close friend told you', public: 'it was posted' };
+  const known = list.filter((ev) => knows.has(ev.id)).map((ev) => `${ev.name} (${HOW[knows.get(ev.id)]})`);
+  return known.length ? known.join('; ') : null;
+}
+
+module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine };

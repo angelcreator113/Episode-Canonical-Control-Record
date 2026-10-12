@@ -277,6 +277,7 @@ const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_s
 const FLAG_LABELS = {
   banned_phrase: 'AI-sounding phrase', private_state: 'Quotes private feelings', unrevealed_character: 'Names someone Lala has not met',
   unrevealed_event: 'Names a hidden event', future_event: 'Names a later event', voice: 'Off voice',
+  doesnt_know: "Names an event they couldn't know about yet",
 };
 
 /**

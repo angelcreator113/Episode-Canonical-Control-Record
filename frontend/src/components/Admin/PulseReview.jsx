@@ -11,6 +11,9 @@
  *   Episode followers    Lala's follower change for each completed
  *                        episode: Accept, Adjust (PulseEpisodeFollowers,
  *                        Task 2956)
+ *   Closeness waiting    closeness changes involving Lala, or large:
+ *                        Accept, Adjust, Reject (PulseClosenessWaiting,
+ *                        Task 2983)
  *   DMs waiting          each drafted DM message: Approve, Edit, Reject
  *                        (PulseDmsWaiting, Task 2985)
  *   Conversations        start a DM conversation; draft the next message
@@ -27,6 +30,7 @@ import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
 import RevealPicker from './RevealPicker';
 import PulseNumbersWaiting from './PulseNumbersWaiting';
+import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
 import PulseEpisodeFollowers from './PulseEpisodeFollowers';
 
@@ -34,25 +38,30 @@ const LIMIT = 50;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
 
 const numbersTotal = (r) => r?.data?.total ?? (Array.isArray(r?.data?.numbers) ? r.data.numbers.length : 0);
+const closenessTotal = (r) => r?.data?.total ?? (Array.isArray(r?.data?.changes) ? r.data.changes.length : 0);
 /** Lala's proposed episode follower changes, from GET /pulse-followers. */
 const episodeChanges = (r) => (Array.isArray(r?.data?.proposed) ? r.data.proposed.filter((p) => p.cause === 'episode') : []);
 
-/** The count of things waiting for Evoni: drafts, episode posts, comments, numbers, episode follower changes and DM drafts. */
+/** The count of things waiting for Evoni: drafts, episode posts, comments, numbers, episode follower changes, closeness changes and DM drafts. */
 export async function loadReviewCount(showId) {
   const id = encodeURIComponent(showId);
-  const [wall, episode, pending, numbers, followers, dms] = await Promise.all([
+  const [wall, episode, pending, numbers, followers, closeness, dms] = await Promise.all([
     api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=wall&limit=1`),
     api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=episode&limit=1`),
     api.get(`/api/v1/feed-posts/comments/pending?show_id=${id}`),
     api.get(`/api/v1/pulse-numbers?show_id=${id}&status=proposed`),
     api.get(`/api/v1/pulse-followers?show_id=${id}`),
+    api.get(`/api/v1/pulse-closeness?show_id=${id}&status=proposed`).catch((err) => {
+      console.error('[PulseReview] closeness changes could not be counted:', err.response?.status || err.message);
+      return null;
+    }),
     api.get(`/api/v1/pulse-dms?show_id=${id}`).catch((err) => {
       console.error('[PulseReview] DMs could not be counted:', err.response?.status || err.message);
       return null;
     }),
   ]);
   return (wall.data?.total ?? 0) + (episode.data?.total ?? 0) + list(pending).length + numbersTotal(numbers) + episodeChanges(followers).length
-    + draftsIn(dms?.data?.threads);
+    + closenessTotal(closeness) + draftsIn(dms?.data?.threads);
 }
 
 function PendingComment({ comment, onChange }) {
@@ -96,7 +105,7 @@ export default function PulseReview({ showId, onCount }) {
     const safe = async (p, label) => {
       try { return await p; } catch (err) { console.error(`[PulseReview] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
-    const [wall, episode, pending, live, deleted, side, numbers, followers, dms] = await Promise.all([
+    const [wall, episode, pending, live, deleted, side, numbers, followers, closeness, dms] = await Promise.all([
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=wall&with=comments&limit=${LIMIT}`), 'drafts'),
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=episode&with=comments&limit=${LIMIT}`), 'episode posts'),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${id}`), 'comments'),
@@ -105,6 +114,7 @@ export default function PulseReview({ showId, onCount }) {
       safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
       safe(api.get(`/api/v1/pulse-numbers?show_id=${id}&status=proposed`), 'numbers'),
       safe(api.get(`/api/v1/pulse-followers?show_id=${id}`), 'episode followers'),
+      safe(api.get(`/api/v1/pulse-closeness?show_id=${id}&status=proposed`), 'closeness changes'),
       safe(api.get(`/api/v1/pulse-dms?show_id=${id}`), 'DMs'),
     ]);
     if (!wall && !episode && !pending && !live && !deleted) {
@@ -121,10 +131,11 @@ export default function PulseReview({ showId, onCount }) {
       events: Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : [],
       numbers: { rows: Array.isArray(numbers?.data?.numbers) ? numbers.data.numbers : [], total: numbersTotal(numbers) },
       followers: episodeChanges(followers),
+      closeness: { rows: Array.isArray(closeness?.data?.changes) ? closeness.data.changes : [], total: closenessTotal(closeness) },
       dms: Array.isArray(dms?.data?.threads) ? dms.data.threads : [],
     };
     setData(next);
-    onCount?.(next.wall.total + next.episode.total + next.pending.length + next.numbers.total + next.followers.length + draftsIn(next.dms));
+    onCount?.(next.wall.total + next.episode.total + next.pending.length + next.numbers.total + next.followers.length + next.closeness.total + draftsIn(next.dms));
   }, [showId, onCount]);
 
   useEffect(() => { load(); }, [load]);
@@ -155,6 +166,10 @@ export default function PulseReview({ showId, onCount }) {
       <Section title="Episode followers" count={data.followers.length} testId="prv-episode-followers"
         empty="No episode follower changes waiting. Completing an episode proposes Lala's change here.">
         <PulseEpisodeFollowers rows={data.followers} onChange={load} />
+      </Section>
+      <Section title="Closeness waiting" count={data.closeness.total} testId="prv-closeness"
+        empty="No closeness changes waiting. Changes involving Lala, and large ones, wait here.">
+        <PulseClosenessWaiting changes={data.closeness.rows} total={data.closeness.total} onChange={load} />
       </Section>
       <Section title="DMs waiting" count={draftsIn(data.dms)} testId="prv-dms"
         empty="No DMs waiting. Every message drafted in a conversation waits here.">
