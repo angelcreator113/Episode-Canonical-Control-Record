@@ -832,6 +832,9 @@ const pulseRevealRoutes = trackRouteLoad('pulseReveals', () => require('./routes
 app.use('/api/v1/pulse-reveals', pulseRevealRoutes);
 const pulseFollowerRoutes = trackRouteLoad('pulseFollowers', () => require('./routes/pulseFollowers'));
 app.use('/api/v1/pulse-followers', pulseFollowerRoutes);
+// Post numbers in Review (Task #2954): reads requireAuth; decisions requireAuth + ADMIN.
+const pulseNumberRoutes = trackRouteLoad('pulseNumbers', () => require('./routes/pulseNumbers'));
+app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
 
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
