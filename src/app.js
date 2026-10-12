@@ -847,6 +847,9 @@ app.use('/api/v1/pulse-followers', pulseFollowerRoutes);
 // Post numbers in Review (Task #2954): reads requireAuth; decisions requireAuth + ADMIN.
 const pulseNumberRoutes = trackRouteLoad('pulseNumbers', () => require('./routes/pulseNumbers'));
 app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
+// Closeness changes in Review (Task #2983): reads requireAuth; decisions requireAuth + ADMIN.
+const pulseClosenessRoutes = trackRouteLoad('pulseCloseness', () => require('./routes/pulseCloseness'));
+app.use('/api/v1/pulse-closeness', pulseClosenessRoutes);
 // Voice Profiles (Task #2967): reads requireAuth; builds and edits requireAuth + ADMIN.
 const pulseVoiceRoutes = trackRouteLoad('pulseVoices', () => require('./routes/pulseVoices'));
 app.use('/api/v1/pulse-voices', pulseVoiceRoutes);

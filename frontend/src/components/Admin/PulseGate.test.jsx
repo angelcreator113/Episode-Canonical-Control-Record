@@ -29,6 +29,12 @@ describe('GateResult', () => {
     ]);
   });
 
+  test("who knows what (Task 2982): an event the poster couldn't know about is named", () => {
+    render(<GateResult gate={{ pass: false, voice: 0.9, review: ['gate'], flags: [{ code: 'doesnt_know', detail: 'Starlight Ball' }] }} />);
+    expect(within(screen.getByTestId('prv-gate')).getByRole('listitem').textContent)
+      .toBe("Names an event they couldn't know about yet: Starlight Ball");
+  });
+
   test("a passing draft waiting only because it is Lala's: no flags list", () => {
     render(<GateResult gate={{ pass: true, voice: 0.91, review: ['lala'], flags: [] }} />);
     const gate = screen.getByTestId('prv-gate');
