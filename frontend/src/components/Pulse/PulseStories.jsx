@@ -5,7 +5,8 @@
  * photo, else their initial, with their city. Cities: a ring in the city's
  * first colour around its story-bubble image, else its initial in its
  * colours, with its subtitle. Tapping a person filters the feed to them;
- * a city is quiet until phase 7 brings city feeds.
+ * a city is quiet until phase 7 brings city feeds. A city's story-bubble
+ * image before its reveal (Task 2939) is blurred, or its initial when hidden.
  * Styles: pages/SocialMediaPage.css (pl-*).
  */
 import React from 'react';
@@ -44,7 +45,7 @@ function Bubble({ colors, children }) {
   return <span className="pl-story-ring" style={colors}><span className="pl-story-inner">{children}</span></span>;
 }
 
-export default function PulseStories({ lala, people, cities, active, onPerson }) {
+export default function PulseStories({ lala, people, cities, active, onPerson, cityStates = {} }) {
   const lalaName = lala?.name || 'Lala';
   return (
     <section className="pl-stories" aria-label="Stories" data-testid="pl-stories">
@@ -69,12 +70,13 @@ export default function PulseStories({ lala, people, cities, active, onPerson })
         ))}
         {cities.map((c) => {
           const [first, second] = paletteOf(c);
+          const bubble = cityStates[`city_bubble:${c.key}`];
           return (
             <li key={c.key}>
               <span className="pl-story quiet" aria-disabled="true" title="City feeds are coming to The Pulse" data-testid="pl-story-city">
                 <Bubble colors={ringVars(first, second)}>
-                  {c.bubble_image_url
-                    ? <img src={c.bubble_image_url} alt="" />
+                  {c.bubble_image_url && bubble !== 'hidden'
+                    ? <img src={c.bubble_image_url} alt="" className={bubble === 'teaser' ? 'pl-blurred' : undefined} />
                     : <span className="pl-story-initial pl-story-city-initial" style={ringVars(first, second)}>{initial(c.name)}</span>}
                 </Bubble>
                 <b>{c.name}</b>

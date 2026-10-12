@@ -6,13 +6,17 @@
  *   Posts from episodes  drafted inside an episode: Approve, Edit, Discard
  *   Comments waiting     drafted reactions: Approve, Delete
  *   Live posts           comments and "Draft reactions", "Use in a beat"
+ *   Events               the events of unpublished episodes, each with
+ *                        when it is revealed on The Pulse (Task 2940)
  *   Deleted              kept (soft delete): Restore
- * Phase 5 adds proposed numbers, reveals and the quality gate here.
+ * Every post card also carries its reveal (RevealPicker, Task 2940).
+ * Phase 5 adds proposed numbers and the quality gate here.
  * Styles: PulseReviewPost.css.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
+import RevealPicker from './RevealPicker';
 
 const LIMIT = 50;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
@@ -69,12 +73,13 @@ export default function PulseReview({ showId, onCount }) {
     const safe = async (p, label) => {
       try { return await p; } catch (err) { console.error(`[PulseReview] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
-    const [wall, episode, pending, live, deleted] = await Promise.all([
+    const [wall, episode, pending, live, deleted, side] = await Promise.all([
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=wall&with=comments&limit=${LIMIT}`), 'drafts'),
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=draft&from=episode&with=comments&limit=${LIMIT}`), 'episode posts'),
       safe(api.get(`/api/v1/feed-posts/comments/pending?show_id=${id}`), 'comments'),
       safe(api.get(`/api/v1/feed-posts?show_id=${id}&status=live&with=comments&limit=20`), 'live posts'),
       safe(api.get(`/api/v1/feed-posts/deleted?show_id=${id}&limit=200`), 'deleted posts'),
+      safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}`), 'events'),
     ]);
     if (!wall && !episode && !pending && !live && !deleted) {
       setError('Review could not be loaded.');
@@ -87,6 +92,7 @@ export default function PulseReview({ showId, onCount }) {
       pending: list(pending),
       live: list(live),
       deleted: list(deleted),
+      events: Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : [],
     };
     setData(next);
     onCount?.(next.wall.total + next.episode.total + next.pending.length);
@@ -117,6 +123,18 @@ export default function PulseReview({ showId, onCount }) {
         <p className="prv-muted">Draft reactions, delete a comment, or show a post at an episode beat.</p>
         {data.live.length === 0 && <p className="prv-muted">Nothing live yet.</p>}
         {data.live.map((p) => <PostCard key={p.id} post={p} showId={showId} onChange={load} />)}
+      </Section>
+      <Section title="Events" count={data.events.length} testId="prv-events"
+        empty="No events of unpublished episodes. An event shows here once an episode is made from it.">
+        <p className="prv-muted">When each event is revealed on The Pulse; before then it shows as a first look, or not at all.</p>
+        <ul className="prv-plain">
+          {data.events.map((ev) => (
+            <li key={ev.id} className="prv-event" data-testid="prv-event">
+              <b>{ev.name}</b>{ev.episode?.number != null && <span className="prv-muted"> · Ep {ev.episode.number}</span>}
+              <RevealPicker type="event" id={ev.id} eventId={ev.id} label={ev.name} />
+            </li>
+          ))}
+        </ul>
       </Section>
       <details className="prv-deleted" data-testid="prv-deleted">
         <summary>Deleted ({data.deleted.length})</summary>

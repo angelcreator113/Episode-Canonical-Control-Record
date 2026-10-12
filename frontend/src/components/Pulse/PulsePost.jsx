@@ -4,12 +4,15 @@
  * city; the words with #tags styled; a photo grid for one to four photos;
  * likes, comments and shares; the first live comment with its author's photo,
  * and "View N more" only when N more live comments exist. Nothing behind the
- * curtain. Styles: pages/SocialMediaPage.css (pl-*).
+ * curtain. Before its reveal (Task 2939) a teaser post reads "First look" and
+ * its photos are blurred; Director view shows when it reveals.
+ * Styles: pages/SocialMediaPage.css (pl-*).
  */
 import React, { useState } from 'react';
 import { Heart, MessageCircle, Repeat2 } from 'lucide-react';
 import { posterOf, whenLabel, initial } from '../../lib/pulsePosts';
 import { DREAM_CITIES } from '../../data/dreamCities';
+import { FirstLook, RevealChip } from './PulseReveal';
 
 /** A Dream City's name from its key (social_profiles.city), else null. */
 export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
@@ -35,7 +38,8 @@ export const photosOf = (post) => {
   return (many.length ? many : [post.image_url].filter(Boolean)).slice(0, 4);
 };
 
-export default function PulsePost({ post }) {
+/** revealLabel: Director view's "Reveals: …" chip for the post (or its photos). */
+export default function PulsePost({ post, revealLabel = null }) {
   const [allComments, setAllComments] = useState(false);
   const who = posterOf(post);
   const city = cityName(post.socialProfile?.city);
@@ -54,13 +58,18 @@ export default function PulsePost({ post }) {
         <div>
           <p className="pl-post-name">{who.name}</p>
           {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
+          <RevealChip label={revealLabel} />
         </div>
       </header>
-      {post.content_text && <p className="pl-post-text"><TaggedText text={post.content_text} /></p>}
+      {post.teaser
+        ? <p className="pl-post-text pl-first-look-text" data-testid="pl-post-teaser">First look</p>
+        : post.content_text && <p className="pl-post-text"><TaggedText text={post.content_text} /></p>}
       {photos.length > 0 && (
-        <div className={`pl-photos pl-photos-${photos.length}`} data-testid="pl-photos">
-          {photos.map((src, i) => <img key={src} src={src} alt={i === 0 ? (post.image_description || '') : ''} />)}
-        </div>
+        <FirstLook active={Boolean(post.photo_teaser)}>
+          <div className={`pl-photos pl-photos-${photos.length}`} data-testid="pl-photos">
+            {photos.map((src, i) => <img key={src} src={src} alt={post.photo_teaser ? '' : (i === 0 ? (post.image_description || '') : '')} />)}
+          </div>
+        </FirstLook>
       )}
       <p className="pl-post-actions">
         <span><Heart size={16} aria-hidden="true" /> <span className="pl-sr">Likes</span>{post.likes ?? 0}</span>

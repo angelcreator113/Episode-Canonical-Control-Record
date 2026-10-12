@@ -8,6 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
+import RevealPicker from './RevealPicker';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
 
@@ -97,6 +98,7 @@ function FitTile({ fit, onSaved, onRemoved }) {
         <>
           <p className="pulse-fit-caption">{fit.caption || <span className="pulse-hint">No caption</span>}</p>
           <p className="pulse-hint">{fit.story_date ? `Worn ${fit.story_date}` : 'No story date'}</p>
+          <RevealPicker type="image" kind="fit" id={fit.id} label={fit.caption ? `the fit “${fit.caption}”` : 'this fit'} />
           <div className="pulse-actions">
             <button type="button" className="pulse-btn" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" /> Edit</button>
             <button type="button" className="pulse-btn danger" disabled={busy} onClick={remove}><Trash2 size={16} aria-hidden="true" /> Remove</button>

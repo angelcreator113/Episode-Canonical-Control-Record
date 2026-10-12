@@ -140,6 +140,18 @@
 .pl-fit-caption { margin: 8px 0 0; font-family: 'Great Vibes', cursive; font-size: 24px; line-height: 1.2; color: var(--pulse-rose); text-align: center; }
 .pl-fit .pl-add-spot { width: 100%; justify-content: center; box-sizing: border-box; border-radius: 16px; min-height: 120px; }
 
+/* Reveals (Task 2939): a teaser is blurred and labelled "First look"; Director view's chip says when it reveals */
+.pl-first-look { position: relative; overflow: hidden; border-radius: 16px; }
+.pl-first-look-media { filter: blur(18px) saturate(1.1); transform: scale(1.05); pointer-events: none; user-select: none; }
+.pl-blurred { filter: blur(18px) saturate(1.1); }
+.pl-first-look-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; background: var(--pulse-card); color: var(--pulse-rose); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; box-shadow: var(--pulse-shadow); white-space: nowrap; }
+.pl-city-first-look { flex-shrink: 0; border-radius: 12px; }
+.pl-city-first-look .pl-first-look-label { padding: 2px 8px; font-size: 10px; }
+.pl-cover-first-look { z-index: 1; }
+.pl-first-look-text { color: var(--pulse-rose); font-weight: 700; font-style: italic; }
+.pl-reveal-chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: var(--pulse-director); color: var(--pulse-director-ink); font-size: 11px; font-weight: 700; }
+.pl-cover-chip { position: absolute; left: 16px; bottom: 8px; z-index: 1; }
+
 /* Stories row (frame: glass) */
 .pl-stories { padding: 12px 10px; border-radius: 22px; background: var(--pulse-glass); border: 1px solid var(--pulse-glass-line); box-shadow: var(--pulse-shadow); overflow-x: auto; }
 .pl-stories ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }

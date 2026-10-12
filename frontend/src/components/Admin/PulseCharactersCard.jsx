@@ -5,10 +5,11 @@
  * is every registry's characters, as the Character Registry lists them.
  * Styles: styles/AdminPanel.css.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import PulseImageSpot from './PulseImageSpot';
+import { useReveals } from './PulseRevealContext';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
 
@@ -28,7 +29,70 @@ export const characterPhotoApi = {
   remove: (id, kind) => api.delete(`/api/v1/character-registry/characters/${id}/photo?kind=${kind}`).then((r) => r.data),
 };
 
-function CharacterRow({ character, onChange }) {
+const FROM = { guest: "guest list", post: 'first episode post' };
+
+/**
+ * When Lala meets the character (Task 2940; reveals, spec §5): derived from
+ * an episode's guest list or the character's first episode post, or set by
+ * Evoni; before then their profile and posts stay off The Pulse. Needs the
+ * character linked to a Feed profile.
+ */
+function MeetsLala({ met, name, onChanged }) {
+  const ctx = useReveals();
+  const [open, setOpen] = useState(false);
+  const [episodeId, setEpisodeId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  if (!ctx || met === undefined) return null; // undefined: not read yet
+  if (!met) return <p className="pulse-met" data-testid="pulse-met">Not linked to a Feed profile, so not on The Pulse yet.</p>;
+  const run = async (fn) => {
+    setBusy(true); setNote(null);
+    try { await fn(); setOpen(false); await onChanged(); } catch (err) {
+      console.error(`[PulseCharacters] meeting ${met.profile_id} failed:`, err.response?.status || err.message);
+      setNote(err.response?.data?.error || 'That could not be saved.');
+    } finally { setBusy(false); }
+  };
+  const save = () => run(() => api.put('/api/v1/pulse-reveals', {
+    show_id: ctx.showId, item_type: 'character', item_id: String(met.profile_id), episode_id: episodeId, moment: 'during', mode: 'hidden',
+  }));
+  const reset = () => run(() => api.delete(`/api/v1/pulse-reveals/${met.set.id}`));
+  const text = met.set
+    ? (met.episode_number != null ? `Meets Lala in Ep ${met.episode_number} (set)` : 'Meets Lala: set, episode not placed yet')
+    : met.derived ? `Meets Lala in Ep ${met.derived.episode_number} (from the ${FROM[met.derived.from] || 'episodes'})`
+      : 'Has not met Lala yet: no guest list or episode post names them.';
+  return (
+    <div className="pulse-reveal">
+      <p className="pulse-met" data-testid="pulse-met">
+        {text}{' '}
+        <button type="button" className="pulse-link-btn" aria-expanded={open} aria-label={`Set when Lala meets ${name}`} onClick={() => setOpen((v) => !v)}>Set</button>
+        {met.set && met.derived && (
+          <>{' '}<button type="button" className="pulse-link-btn" disabled={busy} onClick={reset}>Reset to Ep {met.derived.episode_number}</button></>
+        )}
+        {met.set && !met.derived && (
+          <>{' '}<button type="button" className="pulse-link-btn" disabled={busy} onClick={reset}>Clear</button></>
+        )}
+      </p>
+      {open && (
+        <div className="pulse-reveal-form">
+          <label className="pulse-field">
+            Lala meets {name} in
+            <select value={episodeId} onChange={(e) => setEpisodeId(e.target.value)}>
+              <option value="">Choose an episode</option>
+              {ctx.episodes.map((ep) => <option key={ep.id} value={ep.id}>Ep {ep.episode_number}{ep.title ? ` · ${ep.title}` : ''}</option>)}
+            </select>
+          </label>
+          <div className="pulse-actions">
+            <button type="button" className="pulse-btn primary" disabled={busy || !episodeId} onClick={save}>Save</button>
+            <button type="button" className="pulse-btn" disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {note && <p className="pulse-error" role="alert">{note}</p>}
+    </div>
+  );
+}
+
+function CharacterRow({ character, onChange, met, onMetChanged }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const name = character.display_name || 'Unnamed character';
@@ -63,6 +127,7 @@ function CharacterRow({ character, onChange }) {
         <PulseImageSpot label="Cover" url={character.cover_url} alt="" busy={busy}
           onFile={upload('cover')} onRemove={remove('cover')} testId={`char-${character.id}-cover`} />
       </div>
+      <MeetsLala met={met} name={name} onChanged={onMetChanged} />
       {busy && <p className="pulse-hint"><Loader2 size={14} className="pulse-spin" aria-hidden="true" /> Saving…</p>}
       {note && <p className="pulse-error" role="alert">{note}</p>}
     </article>
@@ -73,6 +138,20 @@ export default function PulseCharactersCard() {
   const [characters, setCharacters] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
+  const reveals = useReveals();
+  const showId = reveals?.showId;
+  const [met, setMet] = useState(null); // registry character id → its "meets Lala" row; null until read
+
+  const loadMet = useCallback(async () => {
+    if (!showId) return;
+    try {
+      const res = await api.get(`/api/v1/pulse-reveals/met?show_id=${encodeURIComponent(showId)}`);
+      setMet(new Map((res.data?.met || []).filter((m) => m.registry_character_id).map((m) => [m.registry_character_id, m])));
+    } catch (err) {
+      console.error('[PulseCharacters] when Lala meets each character could not be read:', err.response?.status || err.message);
+    }
+  }, [showId]);
+  useEffect(() => { loadMet(); }, [loadMet]);
 
   useEffect(() => {
     let alive = true;
@@ -106,7 +185,7 @@ export default function PulseCharactersCard() {
           {characters.length === 0 && <p className="pulse-hint">No characters yet. They are made in the Character Registry.</p>}
           {characters.length > 0 && shown.length === 0 && <p className="pulse-hint">No character matches “{query.trim()}”.</p>}
           <div className="pulse-characters">
-            {shown.map((c) => <CharacterRow key={c.id} character={c} onChange={replace} />)}
+            {shown.map((c) => <CharacterRow key={c.id} character={c} onChange={replace} met={met ? (met.get(c.id) || null) : undefined} onMetChanged={loadMet} />)}
           </div>
         </>
       )}

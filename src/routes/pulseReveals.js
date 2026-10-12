@@ -6,7 +6,13 @@
  *   GET    /?show_id=      the show's reveals, each with its story order
  *                          resolved now and its label (requireAuth)
  *   GET    /met?show_id=   the episode each Feed profile meets Lala in:
- *                          derived, and any set override (requireAuth)
+ *                          derived, and any set override (requireAuth);
+ *                          each with the Character Registry character
+ *                          linked to it (registry_character_id), and every
+ *                          linked character, met or not (Task #2940)
+ *   GET    /state?show_id=&at=  the Dream Cities' image states at a story
+ *                          moment, for The Pulse to blur or leave out
+ *                          (their URLs come from page-content; Task #2939)
  *   PUT    /               upsert one item's reveal (requireAuth + ADMIN)
  *                          { show_id, item_type, item_id, image_kind?,
  *                            event_id?, episode_id?, moment, at?, mode? }
@@ -67,13 +73,18 @@ router.get('/met', requireAuth, async (req, res) => {
     const derived = await metLala(db, showId);
     const set = await db.PulseReveal.findAll({ where: { show_id: showId, item_type: 'character', source: 'set' } });
     const setBy = new Map(set.map((r) => [Number(r.item_id), r]));
-    const ids = [...new Set([...derived.keys(), ...setBy.keys()])].filter(Number.isInteger).sort((a, b) => a - b);
+    // The registry characters linked to Feed profiles (registry_characters.feed_profile_id; read only).
+    const [linked] = await db.sequelize.query(
+      'SELECT id, feed_profile_id FROM registry_characters WHERE feed_profile_id IS NOT NULL AND deleted_at IS NULL');
+    const characterOf = new Map(linked.map((r) => [Number(r.feed_profile_id), r.id]));
+    const ids = [...new Set([...derived.keys(), ...setBy.keys(), ...characterOf.keys()])].filter(Number.isInteger).sort((a, b) => a - b);
     const met = await Promise.all(ids.map(async (profileId) => {
       const d = derived.get(profileId) || null;
       const s = setBy.get(profileId);
       const setShape = s ? shape(s, await resolveOrder(db, s)) : null;
       return {
         profile_id: profileId,
+        registry_character_id: characterOf.get(profileId) || null,
         derived: d,
         set: setShape,
         episode_number: s ? (setShape.story_order != null ? Math.floor(setShape.story_order / 10) : null) : d?.episode_number ?? null,
@@ -82,6 +93,30 @@ router.get('/met', requireAuth, async (req, res) => {
     return res.json({ success: true, met });
   } catch (err) {
     console.error('[PulseReveals] GET met error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/state', requireAuth, async (req, res) => {
+  try {
+    const showId = String(req.query.show_id || '');
+    if (!UUID_RE.test(showId)) return badShow(res);
+    const db = getModels();
+    let at;
+    try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at ?? 'present'); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+      throw err;
+    }
+    const view = await require('../services/pulseReveals').revealsAt(db, showId, at);
+    // Only the cities' images: everything else is applied in its own read.
+    const cities = {};
+    for (const [key, state] of view.states) {
+      const [type, kind, id] = key.split(':');
+      if (type === 'image' && (kind === 'city' || kind === 'city_bubble')) cities[`${kind}:${id}`] = state;
+    }
+    return res.json({ success: true, at, cities });
+  } catch (err) {
+    console.error('[PulseReveals] GET state error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
