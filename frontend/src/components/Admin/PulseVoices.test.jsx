@@ -17,7 +17,7 @@ import { PulseRevealProvider } from './PulseRevealContext';
 
 const VOICE = {
   id: 'v1', registry_character_id: 'c1', status: 'built', built_at: '2026-10-12T10:00:00Z',
-  habits: { case: 'lowercase', punctuation: 'no full stops', emoji: { use: 'rarely', favorites: ['🙄'] }, sentence_length: 'short', topics: ['fits', 'gossip'], never_says: ['synergy'], signature_phrases: ['ok but why'] },
+  habits: { case: 'lowercase', punctuation: 'no full stops', emoji: { use: 'rarely', favorites: ['🙄'] }, sentence_length: 'short', temperament: 'oversharer', topics: ['fits', 'gossip'], never_says: ['synergy'], signature_phrases: ['ok but why'] },
   examples: [{ id: 'e1', kind: 'pinned', text: 'ok but who approved beige' }],
 };
 const DATA = {
@@ -91,6 +91,25 @@ describe('the Voices tab', () => {
     fireEvent.click(save);
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-voices/v1', { habits: { ...VOICE.habits, case: 'mixed' } }));
     expect(await within(marcus).findByText('Edited by evoni@x.dev')).toBeTruthy();
+  });
+
+  test('temperament: shown, kept on other edits, and saved when changed', async () => {
+    vi.mocked(api.put).mockResolvedValue({ data: { voice: { ...VOICE, status: 'edited', habits: { ...VOICE.habits, temperament: 'lurker' } } } });
+    render(<PulseVoices showId="show-1" />);
+    const marcus = (await screen.findAllByTestId('pulse-voices-card'))[0];
+    fireEvent.click(within(marcus).getByRole('button', { name: 'Show voice' }));
+    const select = within(marcus).getByLabelText('Temperament');
+    expect(select.value).toBe('oversharer');
+    fireEvent.change(select, { target: { value: 'lurker' } });
+    fireEvent.click(within(marcus).getByRole('button', { name: 'Save habits' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-voices/v1', { habits: { ...VOICE.habits, temperament: 'lurker' } }));
+  });
+
+  test('a voice built before temperament existed reads as regular', () => {
+    const { temperament, ...older } = VOICE.habits;
+    expect(temperament).toBe('oversharer');
+    expect(habitsToForm(older).temperament).toBe('regular');
+    expect(formToHabits(habitsToForm(older)).temperament).toBe('regular');
   });
 
   test('examples: add one in their voice, remove one', async () => {
