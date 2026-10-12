@@ -717,6 +717,7 @@ if (process.env.NODE_ENV !== 'test') {
 // drafting runs only here, never in a request. Off unless the server sets
 // PULSE_ENGINE_ENABLED=true (Evoni's .env change); never in tests.
 if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'test') {
+  require('./services/pulseEventPosting').registerHandlers();
   require('./services/pulseQueue').start(db);
 }
 
