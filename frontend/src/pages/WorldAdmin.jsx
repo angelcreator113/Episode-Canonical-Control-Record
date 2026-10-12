@@ -50,6 +50,8 @@ import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sp
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
+import RealWorldFields from '../components/Wardrobe/RealWorldFields';
+import { realDraftFrom, realChanges, realWorldErrorText } from '../lib/wardrobeRealWorld';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText, EVENTS_PER_PAGE } from '../utils/eventPagination';
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
@@ -326,6 +328,7 @@ function WorldAdmin() {
   const [seedingWardrobe, setSeedingWardrobe] = useState(false);
   const [editingWardrobeItem, setEditingWardrobeItem] = useState(null);   // item object or null
   const [wardrobeForm, setWardrobeForm] = useState({});
+  const [realDraft, setRealDraft] = useState({});   // the piece's real-world fields (Task #3019)
   const [savingWardrobe, setSavingWardrobe] = useState(false);
   // Add piece; the dialog keeps its own form (components/Wardrobe/AddPieceDialog).
   const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
@@ -4944,6 +4947,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
+          setRealDraft(realDraftFrom(item));
           setWardrobeEditBrandIsFictional(false);
           setWardrobeForm({
             name: item.name || '',
@@ -5113,6 +5117,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               aesthetic_tags: csvToArray(wardrobeForm.aesthetic_tags),
               event_types: csvToArray(wardrobeForm.event_types),
               price: wardrobeForm.price ? parseFloat(wardrobeForm.price) : null,
+              // Only the real-world fields she changed; the rest stay as stored.
+              ...realChanges(editingWardrobeItem, realDraft),
             };
             const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
             if (res.data.success) {
@@ -5121,7 +5127,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               setSuccessMsg('Wardrobe item updated!');
               setToast('Item saved!'); setTimeout(() => setToast(null), 2500);
             }
-          } catch (err) { setError(err.response?.data?.error || err.message); }
+          } catch (err) { setError(realWorldErrorText(err) || err.response?.data?.error || err.message); }
           finally { setSavingWardrobe(false); }
         };
 
@@ -5661,6 +5667,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     </div>
                   </details>
+
+                  {/* Real world (Task #3019): what she bought; Shop the Look only. */}
+                  <RealWorldFields value={realDraft} onChange={setRealDraft} disabled={savingWardrobe}
+                    source={editingWardrobeItem.real_source || null} />
                 </div>
 
                 {/* Actions */}
