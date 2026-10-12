@@ -12,7 +12,8 @@
  * images and colours, saved on the city (components/Admin/PulseCitiesCard).
  * Uploads › Characters: profile and cover photos, saved on the character
  * (components/Admin/PulseCharactersCard). Uploads › Lala's everyday fits:
- * the show's fits (components/Admin/PulseFitsCard).
+ * the show's fits (components/Admin/PulseFitsCard). Each item can carry
+ * its reveal on The Pulse (components/Admin/RevealPicker, Task 2940).
  * Styles: styles/AdminPanel.css.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -24,6 +25,8 @@ import PulseCitiesCard from '../components/Admin/PulseCitiesCard';
 import PulseCharactersCard from '../components/Admin/PulseCharactersCard';
 import PulseFitsCard from '../components/Admin/PulseFitsCard';
 import PulseReview, { loadReviewCount } from '../components/Admin/PulseReview';
+import { PulseRevealProvider } from '../components/Admin/PulseRevealContext';
+import RevealPicker from '../components/Admin/RevealPicker';
 
 export const PULSE_TABS = [
   { key: 'review', label: 'Review' },
@@ -132,6 +135,7 @@ export function CoverCard({ showId }) {
             />
           </label>
           {!cover.alt && <p className="pulse-warning" role="status">Add alt text: the cover has none yet.</p>}
+          <RevealPicker type="image" kind="cover" id={showId} label="the cover" />
           <div className="pulse-actions">
             <button type="button" className="pulse-btn primary" disabled={busy || !altDirty || !alt.trim()} onClick={saveAlt}>Save alt text</button>
             <button type="button" className="pulse-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
@@ -212,11 +216,11 @@ export default function PulseDirector() {
       {current.comingIn ? <p className="pulse-coming" data-testid="pulse-coming">{current.comingIn}</p> : (
         <AdminShowGate>
           {(showId) => (
-            <>
+            <PulseRevealProvider key={showId} showId={showId}>
               {sub !== 'review' && <ReviewCountProbe showId={showId} onCount={onCount} />}
               {sub === 'review' && <PulseReview key={showId} showId={showId} onCount={onCount} />}
               {sub === 'uploads' && <PulseUploads showId={showId} />}
-            </>
+            </PulseRevealProvider>
           )}
         </AdminShowGate>
       )}

@@ -38,6 +38,8 @@ let posts;
 let cover;
 let trending;
 let fit;
+let cityStates;
+let revealRows;
 let lalaColumn;
 beforeEach(() => {
   USER = { name: 'Viewer', groups: ['viewer'] };
@@ -46,6 +48,8 @@ beforeEach(() => {
   cover = null;
   trending = [{ topic: '#VelvetSeason', post_count: 2 }];
   fit = null;
+  cityStates = {};
+  revealRows = [];
   lalaColumn = {
     profile: LALA, portrait_url: 'https://cdn/lala.jpg', home_city: 'Echo Park', career: { tier: 1, label: 'Emerging' },
     friends: { total: 2, list: [{ id: 2, handle: 'marcus.k', display_name: 'Marcus' }, { id: 4, handle: 'bestie', display_name: 'Bestie' }] },
@@ -59,6 +63,8 @@ beforeEach(() => {
     if (url.includes('post_type=relationship')) return { data: { data: [] } };
     if (url.includes('/feed-enhanced/') && url.endsWith('/trending')) return { data: { success: true, data: trending } };
     if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { success: true, latest: fit } };
+    if (url.startsWith('/api/v1/pulse-reveals/state?')) return { data: { success: true, at: 17, cities: cityStates } };
+    if (url.startsWith('/api/v1/pulse-reveals?')) return { data: { success: true, reveals: revealRows } };
     if (url.includes('/feed-posts')) return { data: { data: posts, total: posts.length, hasMore: false } };
     return { data: {} };
   });
@@ -283,5 +289,39 @@ describe('The story clock (Task 2937)', () => {
     await waitFor(() => expect(feedCalls().length).toBeGreaterThan(0));
     await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/social-profiles/lala/sidebar?'))).toBe(true));
     expect(calls().some((u) => u.includes('at='))).toBe(false);
+  });
+});
+
+describe('Reveals (Task 2939)', () => {
+  const calls = () => vi.mocked(api.get).mock.calls.map(([u]) => u);
+
+  test("Lala's view: the cover and friends are read as of the present; the cities' states are read; a teaser cover is blurred as a first look", async () => {
+    cover = { url: 'https://cdn/cover.jpg', alt: 'Night', teaser: true };
+    renderAt('/pulse');
+    expect((await screen.findByTestId('pl-cover')).className).toBe('pl-cover pl-blurred');
+    expect(screen.getByTestId('pl-cover').getAttribute('alt')).toBe('');
+    expect(screen.getByTestId('pl-cover-first-look').textContent).toBe('First look');
+    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals/state?') && u.endsWith('&at=present'))).toBe(true));
+    expect(calls().filter((u) => u.includes('/pulse-cover')).every((u) => u.endsWith('?at=present'))).toBe(true);
+    expect(calls().filter((u) => u.startsWith('/api/v1/social-profiles/lala?show_id=') && !u.includes('sidebar')).every((u) => u.includes('at=present'))).toBe(true);
+    expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals?'))).toBe(false);
+    expect(screen.queryByTestId('pl-reveal-chip')).toBeNull();
+  });
+
+  test("a teaser post in Lala's view reads First look", async () => {
+    posts = [{ id: 'p9', poster_handle: 'lala', poster_display_name: 'Lala', content_text: null, teaser: true, photo_teaser: true, image_url: 'https://cdn/x.jpg', status: 'live', comments: [] }];
+    renderAt('/pulse');
+    expect((await screen.findByTestId('pl-post-teaser')).textContent).toBe('First look');
+  });
+
+  test('Director view reads the reveal labels and shows the chip on a post', async () => {
+    USER = { name: 'Evoni', groups: ['admin'] };
+    revealRows = [{ item_type: 'post', item_id: 'p1', image_kind: null, label: 'During Ep 3' }, { item_type: 'character', item_id: '4', label: 'During Ep 2' }];
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    fireEvent.click(screen.getByTestId('pl-director-toggle'));
+    await waitFor(() => expect(screen.getByTestId('pl-reveal-chip').textContent).toContain('During Ep 3'));
+    expect(screen.getAllByTestId('pl-reveal-chip')).toHaveLength(1);
+    expect(calls().some((u) => u.startsWith(`/api/v1/pulse-reveals?show_id=${SHOW.id}`))).toBe(true);
   });
 });

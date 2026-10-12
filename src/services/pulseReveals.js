@@ -133,7 +133,78 @@ async function metLala(db, showId) {
   return met;
 }
 
+/** Each reveal's story order, resolved now in two queries (episodes, events' episodes). */
+async function resolveOrders(db, reveals) {
+  const { sequelize } = db;
+  const episodeIds = [...new Set(reveals.map((r) => r.episode_id).filter(Boolean))];
+  const eventIds = [...new Set(reveals.filter((r) => !r.episode_id).map((r) => r.event_id).filter(Boolean))];
+  const episodeNumber = new Map();
+  const eventNumber = new Map();
+  if (episodeIds.length) {
+    const [rows] = await sequelize.query('SELECT id, episode_number FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL', { replacements: { ids: episodeIds } });
+    for (const r of rows) episodeNumber.set(r.id, r.episode_number);
+  }
+  if (eventIds.length) {
+    const [rows] = await sequelize.query(
+      `SELECT we.id, MIN(ep.episode_number) AS episode_number
+         FROM world_events we
+         JOIN episodes ep ON ep.deleted_at IS NULL AND ep.episode_number IS NOT NULL
+          AND (ep.id = we.used_in_episode_id OR EXISTS (
+                SELECT 1 FROM episode_briefs eb WHERE eb.episode_id = ep.id AND eb.event_id = we.id AND eb.deleted_at IS NULL))
+        WHERE we.id IN (:ids)
+        GROUP BY we.id`, { replacements: { ids: eventIds } });
+    for (const r of rows) eventNumber.set(r.id, r.episode_number);
+  }
+  return reveals.map((r) => {
+    if (r.moment === 'story_time') return Number.isInteger(r.story_order) ? r.story_order : null;
+    const phase = MOMENT_PHASES[r.moment];
+    if (!phase) return null;
+    const n = r.episode_id ? episodeNumber.get(r.episode_id) : eventNumber.get(r.event_id);
+    return orderOf(n ?? null, phase);
+  });
+}
+
+const keyOf = (type, id, kind) => `${type}:${kind || ''}:${id}`;
+
+/**
+ * The Pulse's reveals as of a story moment (Task #2939): stateOf(type, id,
+ * kind) gives 'revealed' | 'teaser' | 'hidden'; hiddenIds(type, kind) the ids
+ * hidden then; hiddenProfiles the Feed profiles Lala has not met by then (a
+ * set character reveal, else the derived episode, met during it), never
+ * Lala herself. With no moment (Director view) everything is revealed.
+ */
+async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
+  const view = {
+    at,
+    states: new Map(),
+    hiddenProfiles: new Set(),
+    stateOf(type, id, kind) { return this.states.get(keyOf(type, id, kind)) || 'revealed'; },
+    hiddenIds(type, kind) {
+      const prefix = `${type}:${kind || ''}:`;
+      return [...this.states].filter(([k, v]) => v === 'hidden' && k.startsWith(prefix)).map(([k]) => k.slice(prefix.length));
+    },
+  };
+  if (!Number.isInteger(at) || !db.PulseReveal) return view;
+  const rows = await db.PulseReveal.findAll({ where: { show_id: showId }, raw: true });
+  const orders = await resolveOrders(db, rows);
+  const setCharacters = new Map();
+  rows.forEach((r, i) => {
+    const state = stateAt({ story_order: orders[i], mode: r.mode }, at);
+    if (r.item_type === 'character') setCharacters.set(Number(r.item_id), state);
+    else if (state !== 'revealed') view.states.set(keyOf(r.item_type, r.item_id, r.image_kind), state);
+  });
+  const derived = await metLala(db, showId);
+  for (const [profileId, met] of derived) {
+    if (setCharacters.has(profileId)) continue;
+    const order = orderOf(met.episode_number, 'during_episode');
+    if (!(Number.isInteger(order) && order <= at)) view.hiddenProfiles.add(profileId);
+  }
+  for (const [profileId, state] of setCharacters) if (state !== 'revealed') view.hiddenProfiles.add(profileId);
+  if (lalaProfileId) view.hiddenProfiles.delete(Number(lalaProfileId));
+  return view;
+}
+
 module.exports = {
   ITEM_TYPES, IMAGE_KINDS, MODES, MOMENTS, MOMENT_PHASES,
-  episodeNumberOf, resolveOrder, stateAt, metLala,
+  episodeNumberOf, resolveOrder, resolveOrders, stateAt, metLala, revealsAt,
 };

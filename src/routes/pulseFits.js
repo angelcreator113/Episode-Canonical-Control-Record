@@ -111,8 +111,15 @@ router.get('/latest', async (req, res) => {
       throw err;
     }
     const { Op } = require('sequelize');
+    // Reveals at that moment (Task #2939): a hidden fit is passed over; a teaser is flagged to blur.
+    const reveals = await require('../services/pulseReveals').revealsAt(models, showId, at);
+    const hiddenFits = reveals.hiddenIds('image', 'fit');
     const fitRow = await PulseFit.findOne({
-      where: { show_id: showId, [Op.or]: [{ story_order: null }, { story_order: { [Op.lte]: at } }] },
+      where: {
+        show_id: showId,
+        [Op.or]: [{ story_order: null }, { story_order: { [Op.lte]: at } }],
+        ...(hiddenFits.length ? { id: { [Op.notIn]: hiddenFits } } : {}),
+      },
       order: [[sequelize.literal('story_order DESC NULLS LAST')], [sequelize.literal('story_date DESC NULLS LAST')], ['created_at', 'DESC']],
     });
     const [[episodeRow]] = await sequelize.query(
@@ -127,8 +134,9 @@ router.get('/latest', async (req, res) => {
         LIMIT 1`, { replacements: { showId, at, after: clock.PHASES.after_episode } });
 
     const fit = fitRow ? {
-      source: 'fit', image_url: fitRow.image_url, image_alt: fitRow.image_alt, caption: fitRow.caption,
+      source: 'fit', id: fitRow.id, image_url: fitRow.image_url, image_alt: fitRow.image_alt, caption: fitRow.caption,
       story_date: fitRow.story_date, story_order: fitRow.story_order ?? null, added_at: fitRow.createdAt || fitRow.created_at,
+      ...(reveals.stateOf('image', fitRow.id, 'fit') === 'teaser' ? { teaser: true } : {}),
     } : null;
     const episode = episodeRow ? {
       source: 'episode', image_url: episodeRow.image_url, image_alt: null, caption: null,

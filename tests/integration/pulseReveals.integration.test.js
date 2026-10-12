@@ -29,7 +29,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('The Pulse reveals (Task #2938)', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { show: uuid(), ep1: uuid(), ep2: uuid(), ep3: uuid(), ev2: uuid(), evLater: uuid(), post: uuid() };
+  const ids = { show: uuid(), ep1: uuid(), ep2: uuid(), ep3: uuid(), ev2: uuid(), evLater: uuid(), post: uuid(), reg: uuid(), rcNobody: uuid() };
   const p = {};
   let admin;
   let editor;
@@ -50,6 +50,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
         VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', NOW(), NOW()) RETURNING id`, { handle: `${key}-${tag}`, display: `${key} ${tag}` });
       p[key] = row.id;
     }
+    // "nobody" is a Character Registry character, linked, whom Lala has not met (Task #2940).
+    await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'Reveals registry', NOW(), NOW())`, ids);
+    await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, created_at, updated_at)
+               VALUES (:rcNobody, :reg, :key, 'Nobody', :prof, NOW(), NOW())`, { ...ids, key: `nobody-${tag}`, prof: p.nobody });
     // Episode 2's event lists "guest" and "both"; "poster" and "both" post in episode 1 and 3.
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, canon_consequences, created_at, updated_at)
                VALUES (:id, :show, 'Gala', 'used', :ep, CAST(:cc AS jsonb), NOW(), NOW())`,
@@ -68,6 +72,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM world_events WHERE show_id = :show', ids);
     await run('DELETE FROM episodes WHERE show_id = :show', ids);
+    await run('DELETE FROM registry_characters WHERE id = :rcNobody', ids);
+    await run('DELETE FROM character_registries WHERE id = :reg', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
@@ -132,7 +138,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(by(rows, p.poster)).toMatchObject({ episode_number: 1, derived: { episode_number: 1, from: 'post' } });
     // A guest list wins over an earlier post: being invited is meeting Lala.
     expect(by(rows, p.both)).toMatchObject({ episode_number: 2, derived: { from: 'guest' } });
-    expect(by(rows, p.nobody)).toBeUndefined();
+    expect(by(rows, p.nobody)).toMatchObject({ registry_character_id: ids.rcNobody, derived: null, set: null, episode_number: null });
+    expect(by(rows, p.guest).registry_character_id).toBeNull();
 
     const res = await put({ item_type: 'character', item_id: String(p.guest), episode_id: ids.ep3, moment: 'during', mode: 'hidden' });
     expect(res.status).toBe(201);

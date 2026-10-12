@@ -58,14 +58,16 @@ async function lalaProfile(sequelize, linkedId) {
       ORDER BY id LIMIT 1`, {}, 'lala profile');
 }
 
-async function friendsOf(sequelize, ownerId, limit) {
+async function friendsOf(sequelize, ownerId, limit, hidden = []) {
+  // `hidden`: profiles Lala has not met yet at the moment read (Task #2939).
   const where = `deleted_at IS NULL AND feed_layer = 'lalaverse' AND lala_relationship = 'direct'
-    AND COALESCE(is_justawoman_record, false) = false AND (CAST(:owner AS INTEGER) IS NULL OR id <> CAST(:owner AS INTEGER))`;
+    AND COALESCE(is_justawoman_record, false) = false AND (CAST(:owner AS INTEGER) IS NULL OR id <> CAST(:owner AS INTEGER))
+    ${hidden.length ? 'AND id NOT IN (:hidden)' : ''}`;
   try {
     const [list] = await sequelize.query(
       `SELECT id, handle, display_name FROM social_profiles WHERE ${where}
-        ORDER BY LOWER(COALESCE(display_name, handle)) LIMIT :limit`, { replacements: { owner: ownerId || null, limit } });
-    const [[count]] = await sequelize.query(`SELECT COUNT(*)::int AS n FROM social_profiles WHERE ${where}`, { replacements: { owner: ownerId || null } });
+        ORDER BY LOWER(COALESCE(display_name, handle)) LIMIT :limit`, { replacements: { owner: ownerId || null, limit, hidden } });
+    const [[count]] = await sequelize.query(`SELECT COUNT(*)::int AS n FROM social_profiles WHERE ${where}`, { replacements: { owner: ownerId || null, hidden } });
     return { total: count?.n || 0, list };
   } catch (err) {
     console.error('[LalaFeedProfile] friends read failed:', err.message);
@@ -73,8 +75,11 @@ async function friendsOf(sequelize, ownerId, limit) {
   }
 }
 
-/** `allFriends`: every friend (the Friends tab), not the column's first six. */
-async function getLalaFeedProfile(models, showId, { allFriends = false } = {}) {
+/**
+ * `allFriends`: every friend (the Friends tab), not the column's first six.
+ * `at`: a story order; friends Lala has not met by then are left out (Task #2939).
+ */
+async function getLalaFeedProfile(models, showId, { allFriends = false, at } = {}) {
   const { sequelize } = models;
   const character = await lalaCharacter(sequelize);
   const profile = await lalaProfile(sequelize, character?.feed_profile_id);
@@ -88,7 +93,8 @@ async function getLalaFeedProfile(models, showId, { allFriends = false } = {}) {
     cover_url: character?.cover_url || null,
     home_city: readLalaHome(show?.metadata)?.city || null,
     career: tier ? { tier, label: CAREER_TIERS[tier].label } : null,
-    friends: await friendsOf(sequelize, profile?.id, allFriends ? FRIENDS_ALL : FRIENDS_SHOWN),
+    friends: await friendsOf(sequelize, profile?.id, allFriends ? FRIENDS_ALL : FRIENDS_SHOWN,
+      Number.isInteger(at) ? [...(await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: profile?.id })).hiddenProfiles] : []),
   };
 }
 
