@@ -835,6 +835,9 @@ app.use('/api/v1/pulse-followers', pulseFollowerRoutes);
 // Post numbers in Review (Task #2954): reads requireAuth; decisions requireAuth + ADMIN.
 const pulseNumberRoutes = trackRouteLoad('pulseNumbers', () => require('./routes/pulseNumbers'));
 app.use('/api/v1/pulse-numbers', pulseNumberRoutes);
+// Voice Profiles (Task #2967): reads requireAuth; builds and edits requireAuth + ADMIN.
+const pulseVoiceRoutes = trackRouteLoad('pulseVoices', () => require('./routes/pulseVoices'));
+app.use('/api/v1/pulse-voices', pulseVoiceRoutes);
 
 // Event deliverables (Task #1814) — the Event Package's Terms area;
 // /world/:showId/events/:eventId/deliverables[/:deliverableId]
