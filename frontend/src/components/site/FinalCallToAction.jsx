@@ -22,6 +22,7 @@ export default function FinalCallToAction() {
             <li><span className="site-footer__pending" data-testid="site-footer-privacy">Privacy <em>(coming soon)</em></span></li>
             <li><span className="site-footer__pending" data-testid="site-footer-terms">Terms <em>(coming soon)</em></span></li>
             <li><Link to="/pulse-recap">The Pulse recap</Link></li>
+            <li><Link to="/shop-the-look">Shop the Look</Link></li>
             <li><Link to={LOGIN_PATH}>Enter Studio</Link></li>
           </ul>
           {/* For the Privacy page, when it exists (Task #2822): the YouTube embed. */}

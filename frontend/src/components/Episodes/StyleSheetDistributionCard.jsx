@@ -10,6 +10,40 @@ import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } 
  * whenever an included link is an affiliate link and has no edit control.
  * Nothing here posts anywhere; "Copy post text" puts it on the clipboard.
  */
+/** Why the look cannot go on the website yet, or null when it can. */
+export function siteBlocker(entry) {
+  if (!entry.include_shop_links) return 'Include the Shop the Look links to put this look on the website.';
+  if (!(entry.shop_links || []).length) return 'Add a real-world link to a piece first.';
+  return null;
+}
+
+/**
+ * Show on the website (Task #3022; the server is #3021): publishes the
+ * look's Shop the Look page, or takes it down. Only Evoni's switch makes a
+ * look public; while the links are off it stays published but hidden.
+ */
+function SiteSwitch({ entry, working, onPublish, onTakeDown }) {
+  const site = entry.site || { published: false };
+  const blocker = site.published ? null : siteBlocker(entry);
+  return (
+    <div className="ssd-links" data-testid="ssd-site">
+      <label className="ssd-check" htmlFor="ssd-site-switch">
+        <input id="ssd-site-switch" type="checkbox" role="switch" checked={Boolean(site.published)}
+          aria-checked={Boolean(site.published)} disabled={working || Boolean(blocker)}
+          onChange={(e) => (e.target.checked ? onPublish() : onTakeDown())} />
+        <span>Show on the website</span>
+      </label>
+      {blocker && <p className="ssd-hint">{blocker}</p>}
+      {site.published && site.showing && (
+        <p className="ssd-hint">On the website: <a href={site.path} target="_blank" rel="noopener noreferrer">{site.path}</a></p>
+      )}
+      {site.published && !site.showing && (
+        <p className="ssd-hint" role="status">Hidden on the website while the Shop the Look links are off.</p>
+      )}
+    </div>
+  );
+}
+
 export default function StyleSheetDistributionCard({ episodeId, episodeNumber }) {
   const [entry, setEntry] = useState(null);
   const [caption, setCaption] = useState('');
@@ -137,6 +171,10 @@ export default function StyleSheetDistributionCard({ episodeId, episodeNumber })
           <p className="ssd-hint">No piece in the look has a real-world link yet. Add one on the piece in Wardrobe.</p>
         )}
       </div>
+
+      <SiteSwitch entry={entry} working={working}
+        onPublish={() => act('site', () => styleSheetDistributionApi.publish(episodeId), 'The look could not be put on the website.')}
+        onTakeDown={() => act('site', () => styleSheetDistributionApi.takeDown(episodeId), 'The look could not be taken off the website.')} />
 
       <div className="ssd-actions ssd-actions-end">
         <button type="button" className="ssd-btn ssd-btn-quiet" disabled={working}
