@@ -9,7 +9,8 @@
  *   knows by then (Task #2982), as the post drafter is;
  * - the next message defaults to the other one in the conversation;
  * - approve, edit, reject (admin only, once); with ?at= only live messages at
- *   or before the moment show, without the gate or drafts.
+ *   or before the moment show, without the gate or drafts; profile_id=lala
+ *   reads Lala's (her Phone) and names her profile.
  */
 jest.unmock('uuid');
 
@@ -190,6 +191,11 @@ const SECRET = 'still not over the brand deal falling through';
     expect(lalaView.body.threads[0].messages[0]).not.toHaveProperty('gate');
     expect(lalaView.body.threads[0].messages[0]).not.toHaveProperty('status');
     expect(lalaView.body.threads[0]).not.toHaveProperty('topic');
+    // Her Phone does not know her id: profile_id=lala reads hers and says whose it is.
+    const phone = await as(admin, request(app).get(`/api/v1/pulse-dms?show_id=${ids.show}&at=17&profile_id=lala`));
+    expect(phone.status).toBe(200);
+    expect(phone.body.profile_id).toBe(Number(lala));
+    expect(phone.body.threads).toEqual(lalaView.body.threads);
     expect((await as(admin, request(app).get(`/api/v1/pulse-dms?show_id=${ids.show}&at=16`))).body.threads).toEqual([]);
     expect((await as(admin, request(app).get(`/api/v1/pulse-dms?show_id=${ids.show}&at=nope`))).status).toBe(400);
   });
