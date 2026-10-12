@@ -26,6 +26,9 @@
  *   proposeLater(post)       propose after the response; never throws
  *   numbersAt(row, at)       the canon numbers shown at a story moment, on
  *                            the growth curve (for #2955; not in reads yet)
+ *   decide(row, action, …)   Review's Accept, Adjust (a reason), Make it
+ *                            viral, Make it flop (Task #2954); the numbers
+ *                            then lock
  */
 
 // Likes as a share of followers, and shares as a share of likes.
@@ -236,7 +239,55 @@ function numbersAt(row, at) {
   return { likes: Math.round(likes * share), shares: Math.round(shares * share) };
 }
 
+// Review's decisions (Task #2954): Make it viral multiplies the proposal, Make it flop shrinks it.
+const VIRAL_MULTIPLE = 5;
+const FLOP_FRACTION = 0.2;
+const ACTIONS = ['accept', 'adjust', 'viral', 'flop'];
+
+class NumbersError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
+const wholeCount = (n) => Number.isInteger(n) && n >= 0;
+
+/**
+ * Decides a proposed row; the numbers then lock (a decided row is a 409).
+ *   accept   the proposal as it is
+ *   adjust   { likes, shares, reason }: a one-line reason is required
+ *   viral    the proposal × VIRAL_MULTIPLE, "Made viral"
+ *   flop     the proposal × FLOP_FRACTION, "Made a flop"
+ */
+async function decide(row, action, { likes, shares, reason, by = null } = {}) {
+  if (!ACTIONS.includes(action)) throw new NumbersError(400, `The decision must be one of ${ACTIONS.join(', ')}.`);
+  if (row.status !== 'proposed') throw new NumbersError(409, 'These numbers are already decided and locked.');
+  const proposed = { likes: Number(row.proposed_likes), shares: Number(row.proposed_shares) };
+  let final = proposed;
+  let why = null;
+  let status = 'accepted';
+  if (action === 'adjust') {
+    if (!wholeCount(likes) || !wholeCount(shares)) throw new NumbersError(400, 'Likes and shares must be whole numbers, 0 or more.');
+    const line = typeof reason === 'string' ? reason.trim() : '';
+    if (!line) throw new NumbersError(400, 'Say why in one line.');
+    if (/[\r\n]/.test(line)) throw new NumbersError(400, 'Keep the reason to one line.');
+    final = { likes, shares };
+    why = line.slice(0, 300);
+    status = 'adjusted';
+  } else if (action === 'viral') {
+    final = { likes: Math.round(proposed.likes * VIRAL_MULTIPLE), shares: Math.round(proposed.shares * VIRAL_MULTIPLE) };
+    why = 'Made viral';
+    status = 'viral';
+  } else if (action === 'flop') {
+    final = { likes: Math.round(proposed.likes * FLOP_FRACTION), shares: Math.round(proposed.shares * FLOP_FRACTION) };
+    why = 'Made a flop';
+    status = 'flop';
+  }
+  await row.update({
+    status, final_likes: final.likes, final_shares: final.shares, reason: why, decided_by: by, decided_at: new Date(),
+  });
+  return row;
+}
+
 module.exports = {
-  KIND_RATES, TREND_BOOST, EPISODE_TIER, CURVE, SPIKE_TIMES,
-  postKind, randomFactor, numbersFrom, isAboutLala, propose, proposeLater, numbersAt,
+  KIND_RATES, TREND_BOOST, EPISODE_TIER, CURVE, SPIKE_TIMES, VIRAL_MULTIPLE, FLOP_FRACTION, ACTIONS,
+  postKind, randomFactor, numbersFrom, isAboutLala, propose, proposeLater, numbersAt, decide, NumbersError,
 };
