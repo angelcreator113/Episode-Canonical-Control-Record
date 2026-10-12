@@ -209,7 +209,10 @@ router.post('/', requireAuth, async (req, res) => {
       status: scoped.status,
       sort_order: 0,
     });
-    return res.json({ data: post });
+    res.json({ data: post });
+    // A post created live has its numbers proposed after the response (Task #2953).
+    require('../services/pulseNumbers').proposeLater(post);
+    return undefined;
   } catch (err) {
     console.error('[FeedPosts] Create error:', err);
     return res.status(500).json({ error: err.message });
@@ -543,8 +546,12 @@ router.put('/:postId', requireAuth, async (req, res) => {
     // time stays as stamped.
     if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
 
+    const released = post.status !== 'live' && updates.status === 'live';
     await post.update(updates);
-    return res.json({ data: post });
+    res.json({ data: post });
+    // A draft going live has its numbers proposed after the response, never failing the release (Task #2953).
+    if (released) require('../services/pulseNumbers').proposeLater(post);
+    return undefined;
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
