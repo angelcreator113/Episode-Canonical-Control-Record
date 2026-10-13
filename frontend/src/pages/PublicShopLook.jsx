@@ -5,8 +5,9 @@
  * first; /shop-the-look/:key shows one: its title, her caption, the
  * disclosure first whenever a link is an affiliate link, then each link.
  * Affiliate links carry rel="sponsored". Plain fetches of
- * GET /api/v1/public/looks (published only, no auth; #3021). Text only: no
- * images until website storage is live. Inside the public site's frame
+ * GET /api/v1/public/looks (published only, no auth; #3021). A look's image
+ * is the look strip copied to the public site bucket when Evoni publishes
+ * (Task #3120); without one the page is text only. Inside the public site's frame
  * (PublicSiteLayout). Never linked from The Pulse or the game.
  */
 import { useEffect, useState } from 'react';
@@ -37,6 +38,7 @@ function OneLook({ look }) {
     <article data-testid="site-shop-look">
       <h1 id="site-shop-heading">{look.title}</h1>
       {look.published_at && <p className="site-shop__date">{publishedLabel(look.published_at)}</p>}
+      {look.image?.url && <img className="site-shop__image" src={look.image.url} alt={look.image.alt || ''} data-testid="site-shop-image" />}
       {look.disclosure && <p className="site-shop__disclosure" data-testid="site-shop-disclosure">{look.disclosure}</p>}
       {look.caption && <p className="site-shop__caption">{look.caption}</p>}
       <ul className="site-shop__links">
@@ -92,7 +94,10 @@ export default function PublicShopLook() {
         <h1 id="site-shop-heading">Shop the Look</h1>
         <ul className="site-shop__list" data-testid="site-shop-list">
           {looks.map((l) => (
-            <li key={l.key}><Link to={`/shop-the-look/${l.key}`}>{l.title}</Link> <span>{publishedLabel(l.published_at)}</span></li>
+            <li key={l.key} className="site-shop__item">
+              {l.image?.url && <img className="site-shop__thumb" src={l.image.url} alt="" loading="lazy" data-testid="site-shop-thumb" />}
+              <span><Link to={`/shop-the-look/${l.key}`}>{l.title}</Link> <span>{publishedLabel(l.published_at)}</span></span>
+            </li>
           ))}
         </ul>
       </>
