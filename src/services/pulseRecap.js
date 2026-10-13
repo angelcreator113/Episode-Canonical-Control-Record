@@ -67,7 +67,8 @@ const titleFor = (weekStart) => `The Pulse, week of ${new Date(`${weekStart}T00:
 /**
  * Live posts of the show as The Pulse shows them at the present, narrowed by
  * `where` (SQL on fp, with replacements): numbers on the curve, nothing
- * hidden. Returns [{ id, poster_handle, poster_display_name, content_text,
+ * hidden, and no teaser: The Pulse sends a teaser post with no words, so the
+ * public recap must not send them either (Task #3080, as Trending, #3048). Returns [{ id, poster_handle, poster_display_name, content_text,
  * likes, comments_count, posted_at, story_order }].
  */
 async function visiblePosts(db, showId, where, replacements) {
@@ -84,7 +85,7 @@ async function visiblePosts(db, showId, where, replacements) {
   if (!rows.length) return [];
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const reveals = await require('./pulseReveals').revealsAt(db, showId, present, { lalaProfileId: lalaId });
-  const hidden = new Set(reveals.hiddenIds('post').map(String));
+  const hidden = new Set([...reveals.hiddenIds('post'), ...reveals.teaserIds('post')].map(String));
   const kept = rows.filter((r) => !hidden.has(String(r.id))
     && !(r.social_profile_id != null && reveals.hiddenProfiles.has(Number(r.social_profile_id))));
   const shown = await require('./pulseNumbers').applyNumbers(db, kept, present);
