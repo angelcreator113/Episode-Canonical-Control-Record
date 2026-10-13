@@ -133,10 +133,12 @@ router.get('/latest', async (req, res) => {
         ORDER BY e.episode_number DESC, (i.category = 'front') DESC, i.sort_order ASC, i.created_at DESC
         LIMIT 1`, { replacements: { showId, at, after: clock.PHASES.after_episode } });
 
+    // A first look sends its teaser image (Task #3034), never the full one, and no words about it.
+    const fitTeaser = fitRow && reveals.stateOf('image', fitRow.id, 'fit') === 'teaser' ? reveals.teaserOf('image', fitRow.id, 'fit') || {} : null;
     const fit = fitRow ? {
       source: 'fit', id: fitRow.id, image_url: fitRow.image_url, image_alt: fitRow.image_alt, caption: fitRow.caption,
       story_date: fitRow.story_date, story_order: fitRow.story_order ?? null, added_at: fitRow.createdAt || fitRow.created_at,
-      ...(reveals.stateOf('image', fitRow.id, 'fit') === 'teaser' ? { teaser: true } : {}),
+      ...(fitTeaser ? { teaser: true, teaser_style: fitTeaser.style || 'crop', image_url: fitTeaser.url || null, image_alt: '', caption: null } : {}),
     } : null;
     const episode = episodeRow ? {
       source: 'episode', image_url: episodeRow.image_url, image_alt: null, caption: null,

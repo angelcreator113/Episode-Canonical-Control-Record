@@ -11,13 +11,20 @@
  *                          linked to it (registry_character_id), and every
  *                          linked character, met or not (Task #2940)
  *   GET    /state?show_id=&at=  the Dream Cities' image states at a story
- *                          moment, for The Pulse to blur or leave out
- *                          (their URLs come from page-content; Task #2939)
+ *                          moment, and each teaser's image (teasers), for
+ *                          The Pulse to show in place of the city's image or
+ *                          leave out (Task #2939, #3034)
  *   PUT    /               upsert one item's reveal (requireAuth + ADMIN)
  *                          { show_id, item_type, item_id, image_kind?,
- *                            event_id?, episode_id?, moment, at?, mode? }
+ *                            event_id?, episode_id?, moment, at?, mode?,
+ *                            teaser_style?, crop? }
  *                          moment story_time takes `at` (an order or
- *                          ep:<n>:<phase>, services/storyClock.js)
+ *                          ep:<n>:<phase>, services/storyClock.js). A teaser
+ *                          of an item with an image cuts its teaser image
+ *                          then (services/pulseTeasers.js, Task #3034):
+ *                          teaser_style crop (default, the `crop` detail as
+ *                          fractions) or blur; a 502 when the image cannot be
+ *                          read, the reveal kept with no teaser image
  *   DELETE /:id            soft delete (requireAuth + ADMIN)
  */
 const express = require('express');
@@ -43,6 +50,9 @@ const shape = (r, storyOrder = r.story_order) => {
     label: label(storyOrder),
     mode: r.mode,
     source: r.source,
+    teaser_style: r.teaser_style || 'crop',
+    crop: r.crop_json || null,
+    teaser_url: r.teaser_url || null,
   };
 };
 
@@ -110,11 +120,15 @@ router.get('/state', requireAuth, async (req, res) => {
     const view = await require('../services/pulseReveals').revealsAt(db, showId, at);
     // Only the cities' images: everything else is applied in its own read.
     const cities = {};
+    const teasers = {};
     for (const [key, state] of view.states) {
       const [type, kind, id] = key.split(':');
-      if (type === 'image' && (kind === 'city' || kind === 'city_bubble')) cities[`${kind}:${id}`] = state;
+      if (type === 'image' && (kind === 'city' || kind === 'city_bubble')) {
+        cities[`${kind}:${id}`] = state;
+        if (state === 'teaser') teasers[`${kind}:${id}`] = view.teaserOf(type, id, kind)?.url || null;
+      }
     }
-    return res.json({ success: true, at, cities });
+    return res.json({ success: true, at, cities, teasers });
   } catch (err) {
     console.error('[PulseReveals] GET state error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -139,6 +153,11 @@ function readBody(body = {}) {
   if (!MOMENTS.includes(body.moment)) return { error: `moment must be one of ${MOMENTS.join(', ')}.` };
   const mode = body.mode === undefined ? 'teaser' : body.mode;
   if (!MODES.includes(mode)) return { error: 'mode must be hidden or teaser.' };
+  const { TEASER_STYLES, readCrop } = require('../services/pulseTeasers');
+  const teaserStyle = body.teaser_style === undefined || body.teaser_style === null ? 'crop' : body.teaser_style;
+  if (!TEASER_STYLES.includes(teaserStyle)) return { error: 'teaser_style must be crop or blur.' };
+  const crop = readCrop(body.crop);
+  if (crop.error) return { error: crop.error };
   const eventId = body.event_id || null;
   const episodeId = body.episode_id || null;
   if (eventId && !UUID_RE.test(String(eventId))) return { error: 'event_id must be an event id (UUID).' };
@@ -154,6 +173,7 @@ function readBody(body = {}) {
     value: {
       show_id: showId, item_type: body.item_type, item_id: itemId, image_kind: imageKind,
       event_id: eventId, episode_id: episodeId, moment: body.moment, story_order: storyOrder, mode, source: 'set',
+      teaser_style: teaserStyle, crop_json: crop.value,
     },
   };
 }
@@ -170,8 +190,18 @@ router.put('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
     const where = { show_id: value.show_id, item_type: value.item_type, item_id: value.item_id, image_kind: value.image_kind };
     let reveal = await db.PulseReveal.findOne({ where });
     const created = !reveal;
-    if (reveal) await reveal.update(value);
-    else reveal = await db.PulseReveal.create(value);
+    // Saved first with no teaser image: until one is cut, a teaser shows no image at all.
+    if (reveal) await reveal.update({ ...value, teaser_url: null });
+    else reveal = await db.PulseReveal.create({ ...value, teaser_url: null });
+    const { makeTeaser, TeaserError } = require('../services/pulseTeasers');
+    try {
+      const url = await makeTeaser(db, reveal);
+      if (url) await reveal.update({ teaser_url: url });
+    } catch (err) {
+      if (!(err instanceof TeaserError)) throw err;
+      console.error('[PulseReveals] teaser not cut:', err.message);
+      return res.status(err.status).json({ success: false, error: err.message, code: 'TEASER_NOT_CUT', reveal: shape(reveal) });
+    }
     return res.status(created ? 201 : 200).json({ success: true, reveal: shape(reveal) });
   } catch (err) {
     console.error('[PulseReveals] PUT error:', err);

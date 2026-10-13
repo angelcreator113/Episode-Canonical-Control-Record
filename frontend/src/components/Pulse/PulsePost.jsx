@@ -65,7 +65,7 @@ export default function PulsePost({ post, revealLabel = null }) {
         ? <p className="pl-post-text pl-first-look-text" data-testid="pl-post-teaser">First look</p>
         : post.content_text && <p className="pl-post-text"><TaggedText text={post.content_text} /></p>}
       {photos.length > 0 && (
-        <FirstLook active={Boolean(post.photo_teaser)}>
+        <FirstLook active={Boolean(post.photo_teaser)} style={post.teaser_style}>
           <div className={`pl-photos pl-photos-${photos.length}`} data-testid="pl-photos">
             {photos.map((src, i) => <img key={src} src={src} alt={post.photo_teaser ? '' : (i === 0 ? (post.image_description || '') : '')} />)}
           </div>

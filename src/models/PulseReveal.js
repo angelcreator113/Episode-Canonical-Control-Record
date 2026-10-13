@@ -21,6 +21,10 @@ module.exports = (sequelize, DataTypes) => {
     story_order: { type: DataTypes.INTEGER, allowNull: true },
     mode:        { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'teaser' }, // hidden | teaser
     source:      { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'set' },    // set | derived
+    // The teaser image, cut from the existing one (migration 20261013020000; Task #3034).
+    teaser_style: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'crop' }, // crop | blur
+    crop_json:    { type: DataTypes.JSONB, allowNull: true },    // { x, y, w, h } as fractions of the image
+    teaser_url:   { type: DataTypes.TEXT, allowNull: true },
   }, {
     sequelize, modelName: 'PulseReveal',
     tableName: 'pulse_reveals', underscored: true,

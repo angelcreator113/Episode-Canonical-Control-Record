@@ -15,7 +15,7 @@ import PulseCity from '../components/Pulse/PulseCity';
 import PulseMessages from '../components/Pulse/PulseMessages';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
-import { revealKey, loadRevealLabels, loadCityStates } from '../lib/pulseReveals';
+import { revealKey, loadRevealLabels, loadCityReveals, withCityTeasers } from '../lib/pulseReveals';
 import { storyLabel } from '../lib/storyClock';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
@@ -96,7 +96,7 @@ function PulseHeader({ cover, lala, search, onSearch, director, showSearch, cove
   return (
     <header className="pl-header" data-testid="pl-header">
       {cover?.url
-        ? <img className={cover.teaser ? 'pl-cover pl-blurred' : 'pl-cover'} src={cover.url} alt={cover.teaser ? '' : (cover.alt || '')} data-testid="pl-cover" />
+        ? <img className="pl-cover" src={cover.url} alt={cover.teaser ? '' : (cover.alt || '')} data-testid="pl-cover" data-first-look={cover.teaser ? (cover.teaser_style || 'crop') : undefined} />
         : <div className="pl-cover pl-cover-empty" aria-hidden="true" />}
       {cover?.teaser && <span className="pl-first-look-label pl-cover-first-look" data-testid="pl-cover-first-look">First look</span>}
       {director && coverLabel && <span className="pl-cover-chip"><RevealChip label={coverLabel} /></span>}
@@ -441,6 +441,7 @@ export default function SocialMediaPage() {
   const [fit, setFit] = useState(null);
   const [labels, setLabels] = useState(null); // Director view: each item's reveal label
   const [cityStates, setCityStates] = useState({}); // Lala's view: the cities' image states
+  const [cityTeasers, setCityTeasers] = useState({}); // … and their teaser images (Task 3034)
   const [relPosts, setRelPosts] = useState([]);
   const createRequest = useRef(false);
 
@@ -510,8 +511,9 @@ export default function SocialMediaPage() {
     let alive = true;
     setLabels(null);
     setCityStates({});
+    setCityTeasers({});
     const read = director ? loadRevealLabels(show.id).then((m) => { if (alive) setLabels(m); })
-      : loadCityStates(show.id, viewAt).then((c) => { if (alive) setCityStates(c); });
+      : loadCityReveals(show.id, viewAt).then((r) => { if (alive) { setCityStates(r.states); setCityTeasers(r.teasers); } });
     read.catch((err) => console.error('[ThePulse] reveals could not be read:', err.response?.status || err.message));
     return () => { alive = false; };
   }, [show?.id, director, viewAt]);
@@ -529,6 +531,9 @@ export default function SocialMediaPage() {
 
   const owner = lala?.profile || null;
   const relationship = useMemo(() => latestStatus(relPosts, owner?.handle || 'lala') || owner?.relationship_status || null, [relPosts, owner]);
+  // Lala's view shows a city's first look as its teaser image, never the full one (Task 3034).
+  const shownCities = useMemo(() => (director ? cities : withCityTeasers(cities, { states: cityStates, teasers: cityTeasers })),
+    [director, cities, cityStates, cityTeasers]);
 
   return (
     <div className={director ? 'pl-page pl-director' : 'pl-page'} data-testid="pl-page">
@@ -554,14 +559,14 @@ export default function SocialMediaPage() {
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
-            {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={shownCities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'cities' && <PulseCity show={show} cities={shownCities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
             {tab === 'messages' && <PulseMessages show={show} lala={lala} viewAt={viewAt} />}
           </main>
-          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
+          <aside className="pl-right"><RightColumn cities={shownCities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

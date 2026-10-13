@@ -579,7 +579,8 @@ router.get('/:id/pulse-cover', requireAuth, async (req, res) => {
     if (!show) return res.status(404).json({ error: 'Show not found' });
     const { readPulseCover } = require('../services/pulseCoverService');
     let cover = readPulseCover(show.metadata);
-    // ?at= (Task #2939): the cover's reveal at that story moment; hidden leaves it out, a teaser is flagged to blur.
+    // ?at= (Task #2939): the cover's reveal at that story moment; hidden leaves it out; a first look sends
+    // its teaser image in place of the cover, never the full one (Task #3034).
     if (cover && req.query.at !== undefined) {
       const models = require('../models');
       let at;
@@ -587,9 +588,13 @@ router.get('/:id/pulse-cover', requireAuth, async (req, res) => {
         if (err.status === 400) return res.status(400).json({ error: err.message });
         throw err;
       }
-      const state = (await require('../services/pulseReveals').revealsAt(models, show.id, at)).stateOf('image', show.id, 'cover');
+      const view = await require('../services/pulseReveals').revealsAt(models, show.id, at);
+      const state = view.stateOf('image', show.id, 'cover');
       if (state === 'hidden') cover = null;
-      else if (state === 'teaser') cover = { ...cover, teaser: true };
+      else if (state === 'teaser') {
+        const teaser = view.teaserOf('image', show.id, 'cover') || {};
+        cover = teaser.url ? { url: teaser.url, width: null, height: null, alt: '', updated_at: cover.updated_at, teaser: true, teaser_style: teaser.style || 'crop' } : null;
+      }
     }
     return res.json({ success: true, cover });
   } catch (err) {

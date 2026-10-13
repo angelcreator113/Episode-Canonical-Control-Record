@@ -46,7 +46,7 @@ function AddLink({ label, className = '' }) {
 function CityImage({ city, director, state }) {
   if (city.image_url && state !== 'hidden') {
     return (
-      <FirstLook active={state === 'teaser'} className="pl-city-first-look">
+      <FirstLook active={state === 'teaser'} className="pl-city-first-look" style={city.teaser_style}>
         <img className="pl-city-image" src={city.image_url} alt={state === 'teaser' ? '' : (city.image_alt || '')} data-testid="pl-city-image" />
       </FirstLook>
     );
@@ -187,7 +187,7 @@ export function LatestFitCard({ fit, director, revealLabel = null }) {
   return (
     <section className="pl-card pl-fit" aria-labelledby="pl-fit-heading" data-testid="pl-fit">
       <h2 id="pl-fit-heading" className="pl-card-title">Check out the latest fit</h2>
-      <FirstLook active={Boolean(fit.teaser)}>
+      <FirstLook active={Boolean(fit.teaser)} style={fit.teaser_style}>
         <img className="pl-fit-photo" src={fit.image_url} alt={fit.teaser ? '' : (fit.image_alt || "Lala's latest fit")} data-testid="pl-fit-photo" />
       </FirstLook>
       {fit.caption && !fit.teaser && <p className="pl-fit-caption">{fit.caption}</p>}
