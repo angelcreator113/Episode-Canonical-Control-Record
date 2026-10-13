@@ -509,9 +509,14 @@ router.patch('/comments/:commentId', requireAuth, async (req, res) => {
     if (text !== undefined) {
       if (!String(text).trim()) return res.status(400).json({ error: 'text is required' });
       updates.text = String(text).trim();
+      // Evoni changing an AI draft's words is remembered (Task #3070).
+      if (comment.ai_generated && updates.text !== String(comment.text || '').trim()) updates.edited_at = new Date();
     }
     if (status === 'live') { updates.status = 'live'; updates.posted_at = comment.posted_at || new Date(); }
+    const learn = status === 'live' && comment.ai_generated && Boolean(updates.edited_at || comment.edited_at);
     await comment.update(updates);
+    // An approved draft Evoni edited becomes an example of the commenter's voice (Task #3070).
+    if (learn) await require('../services/pulseVoices').learnFromEdit(models, { socialProfileId: comment.social_profile_id, text: comment.text, commentId: comment.id, by: req.user?.email || null });
     if (comment.status === 'live') {
       await recountComments(models, comment.feed_post_id);
       require('../services/pulseCloseness').proposeLater(comment.feed_post_id);   // Task #2983
@@ -605,6 +610,10 @@ router.put('/:postId', requireAuth, async (req, res) => {
     // now (approving an episode's post, Task #2749, does the same); its story
     // time stays as stamped.
     if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
+    // Evoni changing an AI draft's words is remembered (Task #3070): on approval it teaches the voice.
+    if (post.ai_generated && updates.content_text !== undefined && String(updates.content_text).trim() !== String(post.content_text || '').trim()) {
+      updates.edited_at = new Date();
+    }
     // Releasing Lala's post, or one about her, is Review's: an admin's (Task #3047).
     if (updates.status === 'live' && post.status !== 'live') {
       const held = await reviewHold(req, { ...post.get(), ...updates });
@@ -614,10 +623,13 @@ router.put('/:postId', requireAuth, async (req, res) => {
     }
 
     const released = post.status !== 'live' && updates.status === 'live';
+    const learn = released && post.ai_generated && Boolean(updates.edited_at || post.edited_at);
     const newPhoto = updates.image_url !== undefined && (updates.image_url || null) !== (post.image_url || null);
     await post.update(updates);
     // A new photo: its teasers are cut again from it before the answer (Task #3052).
     if (newPhoto) await require('../services/pulseTeasers').recutFor(require('../models'), require('../services/pulseTeasers').postReveals(post.id));
+    // An approved draft Evoni edited becomes an example of the poster's voice (Task #3070).
+    if (learn) await require('../services/pulseVoices').learnFromEdit(require('../models'), { socialProfileId: post.social_profile_id, text: post.content_text, postId: post.id, by: req.user?.email || null });
     res.json({ data: post });
     // A draft going live has its numbers proposed after the response, never failing the release (Task #2953).
     if (released) require('../services/pulseNumbers').proposeLater(post);

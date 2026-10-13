@@ -86,6 +86,9 @@ module.exports = (sequelize) => {
     // The quality gate's result for an engine draft (migration 20261012060000,
     // Task #2969, services/pulseGate.js): { pass, voice, flags, review, checked_at }.
     gate_json: { type: DataTypes.JSONB, allowNull: true },
+    // When Evoni changed the text of this AI draft (Task #3070, migration 20261013040000);
+    // on approval its text becomes an "edit" example of the poster's voice.
+    edited_at: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
