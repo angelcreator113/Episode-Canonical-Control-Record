@@ -1,0 +1,39 @@
+/* Producer Mode → Wardrobe → Import orders (Task 3102). The dialog shell
+   is AddPieceDialog.css (apd-*); these are its order lines. Colours through
+   tokens only (OrderImportDialog.test.jsx). */
+
+.oid-body { display: grid; gap: 12px; padding: 6px 22px 16px; overflow-y: auto; }
+.oid-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.oid-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1.5px dashed var(--lala-lavender-line);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+}
+.oid-file:focus-within { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.oid-hint, .oid-count, .oid-facts { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lala-ink-muted); }
+.oid-h { margin: 0 0 6px; font-family: var(--font-prose); font-size: 17px; font-weight: 600; }
+.oid-lines { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.oid-line { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; }
+.oid-line.is-done { background: var(--lala-lavender-soft); }
+.oid-include { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.oid-include input { margin-top: 3px; }
+.oid-title { font-size: 14px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.oid-why { font-style: italic; }
+.oid-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.oid-pick { min-height: 36px; max-width: 100%; padding: 0 10px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--lala-ink); font: inherit; font-size: 13px; }
+.oid-note { flex: 1 1 200px; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--success-bg); color: var(--success-text); font-size: 13px; line-height: 1.45; }
+.oid-later { padding-top: 8px; border-top: 1px solid var(--lala-lavender-line); }
+
+@media (max-width: 640px) {
+  .oid-body { padding: 6px 16px 14px; }
+  .oid-pick { width: 100%; }
+}

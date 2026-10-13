@@ -46,10 +46,11 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
+import OrderImportDialog from '../components/Wardrobe/OrderImportDialog';
 import RealWorldFields from '../components/Wardrobe/RealWorldFields';
 import { realDraftFrom, realChanges, realWorldErrorText } from '../lib/wardrobeRealWorld';
 import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText, EVENTS_PER_PAGE } from '../utils/eventPagination';
@@ -332,6 +333,8 @@ function WorldAdmin() {
   const [savingWardrobe, setSavingWardrobe] = useState(false);
   // Add piece; the dialog keeps its own form (components/Wardrobe/AddPieceDialog).
   const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
+  // Import orders (Task #3102): Amazon's order history onto pieces' Real world details.
+  const [showOrderImport, setShowOrderImport] = useState(false);
   const [outfitPickerEvent, setOutfitPickerEvent] = useState(null);
   // Overlay types for the show — fetched once on showId set, refetched
   // when the modal-side picker triggers a regenerate so creators see
@@ -5204,6 +5207,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <button type="button" className="wa-wd-add" onClick={() => setShowWardrobeUpload(true)}>
                 <Plus size={14} aria-hidden="true" /> Add piece
               </button>
+              <button type="button" className="wa-wd-add" onClick={() => setShowOrderImport(true)} data-testid="wardrobe-import-orders">
+                <FileUp size={14} aria-hidden="true" /> Import orders
+              </button>
               <div className="wa-wd-tools">
                 {/* Bulk selection indicator */}
                 {selectedWardrobeIds.size > 0 && (
@@ -6068,6 +6074,22 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   setShowWardrobeUpload(false);
                   setToast(photoDropped ? "Added, but the photo didn't upload. Add it from the piece." : 'Added to the closet');
                   setTimeout(() => setToast(null), photoDropped ? 5000 : 2500);
+                }}
+              />
+            )}
+
+            {/* ── Import orders (Task #3102): fills empty Real world details; never coins ── */}
+            {showOrderImport && (
+              <OrderImportDialog
+                showId={showId}
+                pieces={wardrobeItems}
+                onClose={() => setShowOrderImport(false)}
+                onImported={(result) => {
+                  if (!result?.pieces?.length) return;
+                  // The pieces' Real world details changed: the closet reads them again.
+                  fetchClosetWithTotal(api, showId)
+                    .then((list) => { setWardrobeItems(list.items); setWardrobeTotal(list.total ?? list.items.length); })
+                    .catch((err) => console.error('[WorldAdmin] the closet could not be read again:', err.response?.status || err.message));
                 }}
               />
             )}
