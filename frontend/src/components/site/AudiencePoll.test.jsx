@@ -7,7 +7,7 @@
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import AudiencePoll, { PUBLIC_POLLS_URL } from './AudiencePoll';
+import AudiencePoll, { PUBLIC_POLLS_URL, sendVote } from './AudiencePoll';
 
 const OPEN = { id: 'p1', question: 'Which look for The Gala?', status: 'open', closes_at: null,
   options: [{ id: 'o1', label: 'The pink set' }, { id: 'o2', label: 'The black dress' }] };
@@ -67,6 +67,24 @@ describe('the audience poll', () => {
     fetchMock.mockImplementation((url, opts) => (opts?.method === 'POST' ? reply(409, { error: "You've voted already." }) : reply(200, { polls: [OPEN] })));
     fireEvent.click(screen.getByRole('button', { name: 'The pink set' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe("You've voted already. Results when it closes."));
+  });
+
+  test("a network at the soft cap (429) is told so, without the buttons; it is not remembered (Task 3094)", async () => {
+    fetchMock.mockImplementation((url, opts) => (opts?.method === 'POST' ? reply(429, { error: 'Too many votes from this network on this poll.' }) : reply(200, { polls: [OPEN] })));
+    render(<AudiencePoll />);
+    fireEvent.click(await screen.findByRole('button', { name: 'The pink set' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Too many votes from your network on this poll.');
+    expect(screen.queryByRole('button', { name: 'The pink set' })).toBeNull();
+    expect(window.localStorage.getItem('pulse_voted:p1')).toBeNull();
+  });
+
+  test("a signed-in visitor's vote carries their token; a signed-out one sends none (Task 3094)", async () => {
+    const posted = () => fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST').pop()[1];
+    expect(await sendVote('p1', 'o2')).toBe('thanks');
+    expect(posted().headers.Authorization).toBeUndefined();
+    window.localStorage.setItem('authToken', 'tok-123');
+    await sendVote('p1', 'o2');
+    expect(posted().headers.Authorization).toBe('Bearer tok-123');
   });
 
   test('a closed poll shows its result', async () => {
