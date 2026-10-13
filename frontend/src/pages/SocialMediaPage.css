@@ -182,8 +182,11 @@
 .pl-filter button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--pulse-soft); color: var(--pulse-heading); cursor: pointer; }
 
 /* Composer tools still to come */
-.pl-quiet-tools { display: flex; gap: 12px; font-size: 12px; color: var(--pulse-muted); }
-.pl-quiet-tools span { display: inline-flex; align-items: center; gap: 4px; }
+/* The composer's Location picker and a post's place link (Task 3090). */
+.pl-place-pick { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; font-size: 13px; color: var(--pulse-heading); }
+.pl-place-pick select { max-width: 180px; min-height: 36px; padding: 0 8px; border: 1px solid var(--pulse-line); border-radius: 999px; background: transparent; color: inherit; font: inherit; }
+.pl-place-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--pulse-line); text-underline-offset: 2px; }
+.pl-place-link:hover, .pl-place-link:focus-visible { color: var(--pulse-heading); }
 
 /* Post: tags, photos, more comments */
 .pl-tag { font-weight: 500; color: var(--pulse-tag); }
@@ -233,7 +236,6 @@
   .pl-right { grid-column: auto; }
   .pl-card-title { font-size: 20px !important; }
   .pl-cphotos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pl-quiet-tools { display: none; }
   .pl-cities-card { display: none; }
   .pl-city-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0; }
   .pl-city-strip li { flex-shrink: 0; display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--city-a, var(--pulse-lilac)) 18%, var(--pulse-card)); font-size: 13px; font-weight: 700; color: var(--pulse-heading); white-space: nowrap; }

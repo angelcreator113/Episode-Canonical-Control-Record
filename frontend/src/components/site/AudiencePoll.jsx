@@ -4,7 +4,9 @@
  * docs/reads/2026-10-12-pulse-public-extras-read.md). One plain fetch of
  * GET /api/v1/public/polls (same origin, no auth): an open poll shows its
  * question and its options as buttons; a vote is POST /:id/vote, which the
- * server counts once per browser (its own cookie) and per IP. After a vote
+ * server counts once per voter: a signed-in visitor's account (their token
+ * is sent when they have one), else the browser's own cookie, with a soft
+ * cap per network (Task 3094). After a vote
  * it says thanks, and the browser remembers it (localStorage, as a
  * convenience; the server is the judge). A poll closed in the last week
  * shows its result. Text only: no images until website storage is live.
@@ -35,12 +37,18 @@ export async function fetchPublicPolls() {
   }
 }
 
-/** The vote's outcome in words: 'thanks' | 'already' | 'closed' | 'not_ready' | 'failed'. */
+/** A signed-in visitor's token, as services/api reads it; null when signed out. */
+const tokenOf = () => {
+  try { return window.localStorage.getItem('authToken') || window.localStorage.getItem('token') || null; } catch (err) { console.warn('[AudiencePoll] could not read the sign-in:', err.message); return null; }
+};
+
+/** The vote's outcome in words: 'thanks' | 'already' | 'capped' | 'closed' | 'not_ready' | 'failed'. */
 export async function sendVote(pollId, optionId) {
   try {
+    const token = tokenOf();
     const res = await fetch(`${PUBLIC_POLLS_URL}/${encodeURIComponent(pollId)}/vote`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ option_id: optionId }),
     });
     if (res.ok) return 'thanks';
@@ -49,6 +57,8 @@ export async function sendVote(pollId, optionId) {
       return /closed/i.test(body?.error || '') ? 'closed' : 'already';
     }
     if (res.status === 503) return 'not_ready';
+    // 429: this network's votes on the poll reached the soft cap (or the vote limiter).
+    if (res.status === 429) return 'capped';
     return 'failed';
   } catch (err) {
     console.error('[AudiencePoll] the vote could not be sent:', err.message);
@@ -59,6 +69,7 @@ export async function sendVote(pollId, optionId) {
 const MESSAGES = {
   thanks: 'Thanks for voting. Results when it closes.',
   already: "You've voted already. Results when it closes.",
+  capped: 'Too many votes from your network on this poll.',
   closed: 'This poll has just closed.',
   not_ready: 'Voting opens soon. Try again later.',
   failed: 'Your vote could not be sent. Try again.',
@@ -107,7 +118,7 @@ export default function AudiencePoll() {
     setBusy(false);
   };
   const open = poll.status === 'open' && state !== 'closed';
-  const done = state === 'thanks' || state === 'already';
+  const done = state === 'thanks' || state === 'already' || state === 'capped';
 
   return (
     <section className="site-section site-poll" aria-labelledby="site-poll-heading" data-testid="site-poll">

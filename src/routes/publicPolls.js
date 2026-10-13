@@ -2,23 +2,28 @@
 /**
  * Audience polls, public side (Task #3005; The Pulse spec §11;
  * docs/reads/2026-10-12-pulse-public-extras-read.md §1, §3). Mounted at
- * /api/v1/public/polls. No auth middleware and no req.user: the landing page
- * is for logged-out visitors. Evoni, 2026-10-12: one vote per browser plus a
- * rate limit; no accounts, no captcha.
+ * /api/v1/public/polls. The landing page is for logged-out visitors; no
+ * route requires an account. Evoni, 2026-10-12: one vote per browser plus a
+ * rate limit; no captcha. Evoni, 2026-10-13 (Task #3094): a cookie plus a
+ * soft cap per IP; signed-in voters use their account identity.
  *
  *   GET /                  open polls (question and labels, no counts) and
  *                          those closed in the last week (with counts); no
  *                          wardrobe, event, episode or show ids
  *   POST /:id/vote { option_id }
- *                          one vote per poll per browser and per IP. The
- *                          browser's id is an HttpOnly pulse_voter cookie set
- *                          here; it and the IP are hashed with POLL_HASH_SALT
- *                          (503 until it is set) and never stored or logged
- *                          raw. Its own limiter, on top of the global ones.
+ *                          one vote per poll per voter: a signed-in voter's
+ *                          account (a valid Bearer token, optionalAuth), else
+ *                          the browser's HttpOnly pulse_voter cookie set here.
+ *                          An IP's anonymous votes on a poll stop at
+ *                          pulsePolls.IP_SOFT_CAP (429). The voter and the IP
+ *                          are hashed with POLL_HASH_SALT (503 until it is set)
+ *                          and never stored or logged raw. Its own limiter, on
+ *                          top of the global ones.
  */
 const crypto = require('crypto');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 const getModels = () => require('../models');
@@ -60,20 +65,22 @@ router.get('/', readLimiter, async (req, res) => {
   }
 });
 
-// PUBLIC: an anonymous vote; one per poll per browser cookie and per IP, both stored only as salted hashes.
-router.post('/:id/vote', voteLimiter, async (req, res) => {
+// PUBLIC: a vote, anonymous or signed in; one per poll per voter (account, else browser cookie), a soft cap per IP; stored only as salted hashes.
+router.post('/:id/vote', voteLimiter, optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     if (!String(process.env.POLL_HASH_SALT || '').trim()) {
       return res.status(503).json({ success: false, error: 'Voting is not set up yet.' });
     }
-    let voterId = voterFromCookie(req.headers.cookie);
+    // A signed-in voter is their account; no cookie is set or read for them.
+    const account = req.user?.id ? String(req.user.id) : null;
+    let voterId = account || voterFromCookie(req.headers.cookie);
     if (!voterId) {
       voterId = crypto.randomUUID();
       const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
       res.append('Set-Cookie', `${COOKIE}=${voterId}; Max-Age=${COOKIE_MAX_AGE}; Path=/api/v1/public/polls; HttpOnly; SameSite=Lax${secure}`);
     }
     await require('../services/pulsePolls').castVote(getModels(), {
-      pollId: req.params.id, optionId: req.body?.option_id, voterId, ip: req.ip,
+      pollId: req.params.id, optionId: req.body?.option_id, voterId, ip: req.ip, account: Boolean(account),
     });
     return res.status(201).json({ success: true });
   } catch (err) {

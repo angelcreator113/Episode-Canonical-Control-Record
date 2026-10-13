@@ -66,6 +66,7 @@ beforeEach(() => {
     if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { success: true, latest: fit } };
     if (url.startsWith('/api/v1/pulse-reveals/cities?')) return { data: { success: true, at: 17, cities: null, states: cityStates } };
     if (url.startsWith('/api/v1/pulse-reveals?')) return { data: { success: true, reveals: revealRows } };
+    if (url === '/api/v1/feed-posts/places') return { data: { cities: [{ key: 'echo_park', name: 'Echo Park' }], venues: [{ id: 'v-1', name: 'Velvet Room', city: 'echo_park' }] } };
     if (url.includes('/feed-posts')) return { data: { data: posts, total: posts.length, hasMore: false } };
     return { data: {} };
   });
@@ -181,6 +182,21 @@ describe("Lala's view", () => {
       show_id: SHOW.id, content_text: 'not doing this again.', poster_handle: 'lala', social_profile_id: 1, status: 'draft',
     })));
     expect((await screen.findByRole('status')).textContent).toBe('Sent.');
+  });
+
+  test('the composer tags a venue (Task 3090): the venue is sent, the server fills its city', async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Velvet Room' })).toBeTruthy());
+    expect(screen.getByRole('option', { name: 'No location' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'venue:v-1' } });
+    fireEvent.change(screen.getByLabelText("What's happening in LaLaVerse?"), { target: { value: 'back at the Velvet Room' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({
+      content_text: 'back at the Velvet Room', place_location_id: 'v-1', status: 'draft',
+    })));
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('place_city');
+    await waitFor(() => expect(screen.getByLabelText('Location').value).toBe(''));
   });
 
   test('the composer takes up to four photos: alt text, reorder, remove; they upload with the draft, in order (Task 3089)', async () => {
