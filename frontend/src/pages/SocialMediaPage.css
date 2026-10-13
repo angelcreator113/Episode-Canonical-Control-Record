@@ -57,9 +57,6 @@
 .pl-nav ul { list-style: none; margin: 0; padding: 0; }
 .pl-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 14px; border: none; border-radius: 14px; background: transparent; font: inherit; font-weight: 700; color: var(--pulse-ink); text-align: left; cursor: pointer; }
 .pl-nav-item.active { background: linear-gradient(90deg, var(--pulse-blush), var(--pulse-lilac)); }
-.pl-nav-item.quiet { color: var(--pulse-muted); font-weight: 500; cursor: default; }
-.pl-nav-label { margin: 14px 14px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pulse-muted); }
-.pl-explore li span { display: block; padding: 6px 14px; font-size: 13px; color: var(--pulse-muted); }
 
 /* Cards (solid) */
 .pl-card, .pl-post, .pl-composer { background: var(--pulse-card); border: 1px solid var(--pulse-line); border-radius: 22px; box-shadow: var(--pulse-shadow); }

@@ -114,6 +114,12 @@ describe("Lala's view", () => {
     expect(nav.getByRole('button', { name: /Messages/ })).toBeTruthy();
     expect(nav.getByRole('button', { name: /Dream Cities/ })).toBeTruthy();
     expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(false);
+    // Only views that exist (Task 3073): no Stories or Explore placeholders.
+    expect(nav.getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Feed', 'Dream Cities', 'Events', 'Characters', 'Messages']);
+    expect(nav.queryByText('Stories')).toBeNull();
+    expect(nav.queryByText('Explore')).toBeNull();
+    expect(nav.queryByText('Creator Hub')).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'The Pulse' }).querySelector('[aria-disabled="true"]')).toBeNull();
   });
 
   test('posts: who, when and city, the words, photo, likes, comments and shares, a first comment', async () => {
