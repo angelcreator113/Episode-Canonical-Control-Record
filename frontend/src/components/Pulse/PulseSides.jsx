@@ -11,9 +11,10 @@
  *                   belongs to never shows (§2 rule 5).
  *   LatestFitCard   Lala's latest fit, the caption in script.
  * Director view shows empty image spots as "+ Add" (to Uploads); Lala's view
- * leaves them out. Cities are quiet until phase 7 brings city feeds.
- * Reveals (Task 2939): before its moment an image is blurred as a "first
- * look" (or left out when hidden) and an event shows its name only;
+ * leaves them out. A city opens its own feed where the page passes onCity
+ * (Task 2987). Reveals (Task 2939): before its moment an image shows as its
+ * teaser, a detail or a blur (Task 3034), or is left out when hidden or with
+ * no teaser cut yet; an event shows its name only;
  * Director view shows a "Reveals: …" chip instead.
  * Styles: pages/SocialMediaPage.css (pl-*).
  */

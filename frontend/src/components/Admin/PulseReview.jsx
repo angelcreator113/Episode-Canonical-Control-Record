@@ -22,7 +22,7 @@
  *                        when it is revealed on The Pulse (Task 2940)
  *   Deleted              kept (soft delete): Restore
  * Every post card also carries its reveal (RevealPicker, Task 2940).
- * Phase 6 adds the quality gate here.
+ * Drafts arrive here through the quality gate (services/pulseGate.js, Task 2969).
  * Styles: PulseReviewPost.css.
  */
 import React, { useCallback, useEffect, useState } from 'react';

@@ -56,7 +56,7 @@ router.get('/characters/:characterId/entanglements', async (req, res) => {
     const entanglements = await CharacterEntanglement.findAll({
       where:   { character_id: req.params.characterId },
       include: [{ model: SocialProfile, as: 'profile',
-        attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'follower_count'] }],
+        attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'follower_count_approx'] }],
       order:   [['intensity', 'DESC'], ['created_at', 'ASC']],
     });
     res.json({ entanglements });
