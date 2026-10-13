@@ -82,13 +82,15 @@ function applyPostReveal(post, reveals) {
   if (Array.isArray(out.comments)) out.comments = out.comments.filter((c) => !reveals.hiddenProfiles.has(c.social_profile_id));
   const photo = reveals.stateOf('image', post.id, 'post_photo');
   const postTeaser = reveals.stateOf('post', post.id) === 'teaser';
-  if (photo === 'hidden') { out.image_url = null; out.image_urls = []; out.image_description = null; }
+  // Every photo of a hidden post stays back; a teaser shows only its teaser image (Task #3089: up to four photos).
+  if (photo === 'hidden') { out.image_url = null; out.image_urls = []; out.image_description = null; out.photos = []; }
   if (postTeaser || (photo === 'teaser' && out.image_url)) {
     const teaser = (postTeaser && reveals.teaserOf('post', post.id)) || reveals.teaserOf('image', post.id, 'post_photo');
     out.photo_teaser = true;
     out.teaser_style = teaser?.style || 'crop';
     out.image_url = photo === 'hidden' ? null : teaser?.url || null;
     out.image_urls = out.image_url ? [out.image_url] : [];
+    out.photos = out.image_url ? [{ url: out.image_url, alt: '' }] : [];
     out.image_description = null;
   }
   if (postTeaser) {
@@ -130,8 +132,8 @@ router.get('/', optionalAuth, async (req, res) => {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
       where.post_type = post_type;
     }
-    // ?city= (Task #2987): one Dream City's feed, the posts of its profiles
-    // (utils/feedCities.cityPostsSql; a post's city is its poster's).
+    // ?city= (Task #2987): one Dream City's feed: posts tagged there, and
+    // untagged posts of its profiles (utils/feedCities.cityPostsSql; Task #3090).
     const and = [];
     if (city !== undefined) {
       const { DREAM_CITY_KEYS, cityPostsSql } = require('../utils/feedCities');
@@ -205,6 +207,8 @@ router.get('/', optionalAuth, async (req, res) => {
     // Authors' photos for The Pulse (Task #2924): a post's or comment's
     // profile links to a registry character, whose portrait_url is the photo.
     let data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
+    // Each tagged post's place, with its venue's name (Task #3090).
+    data = await require('../utils/feedPlaces').withPlaces(require('../models'), data);
     if (reveals) data = data.map((p) => applyPostReveal(p, reveals));
     // Likes and shares as they stand at the story moment, on the growth
     // curve; without ?at=, the final numbers (Task #2955, services/pulseNumbers.js).
@@ -232,6 +236,9 @@ router.post('/', requireAuth, async (req, res) => {
     if (!content_text?.trim()) return res.status(400).json({ error: 'content_text is required' });
     const scoped = statusWhere(status === undefined ? 'live' : status);
     if (scoped.error || !scoped.status) return res.status(400).json({ error: 'status must be draft or live' });
+    // Its location, if tagged (Task #3090): a Dream City or a venue, whose city is filled in.
+    const place = await require('../utils/feedPlaces').resolvePlace(require('../models'), req.body || {});
+    if (place.error) return res.status(400).json({ error: place.error });
     const fields = {
       social_profile_id: social_profile_id || null,
       poster_handle: String(poster_handle || 'lala').replace(/^@/, ''),
@@ -242,6 +249,7 @@ router.post('/', requireAuth, async (req, res) => {
     if (held.length) scoped.status = 'draft';
     const post = await FeedPost.create({
       ...fields,
+      ...place.values,
       show_id,
       episode_id: episode_id || null,
       poster_display_name: poster_display_name || null,
@@ -265,6 +273,18 @@ router.post('/', requireAuth, async (req, res) => {
     return undefined;
   } catch (err) {
     console.error('[FeedPosts] Create error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PLACES (Task #3090) ──────────────────────────────────────────────────────
+// GET /api/v1/feed-posts/places: the five Dream Cities and the venues, each
+// with its city, for the composer's Location picker.
+router.get('/places', requireAuth, async (req, res) => {
+  try {
+    return res.json(await require('../utils/feedPlaces').listPlaces(require('../models')));
+  } catch (err) {
+    console.error('[FeedPosts] GET places error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -613,6 +633,10 @@ router.put('/:postId', requireAuth, async (req, res) => {
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
+    // A draft's location can change (Task #3090); a venue fills its city.
+    const place = await require('../utils/feedPlaces').resolvePlace(require('../models'), req.body || {});
+    if (place.error) return res.status(400).json({ error: place.error });
+    Object.assign(updates, place.values);
     // Release (Task #2748): a draft going live with no posted_at is posted
     // now (approving an episode's post, Task #2749, does the same); its story
     // time stays as stamped.
@@ -643,6 +667,58 @@ router.put('/:postId', requireAuth, async (req, res) => {
     if (released) require('../services/pulseCloseness').proposeLater(post.id);
     return undefined;
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── A DRAFT'S PHOTOS (Task #3089) ────────────────────────────────────────────
+// POST /api/v1/feed-posts/:postId/photos   multipart: photos (1–4 files, in
+// order), alts (a JSON list of their alt texts, same order)
+// Evoni, 2026-10-13: up to four photos, one by default; upload, reorder,
+// remove and alt text; no AI generation. The draft's photos are replaced by
+// these, stored as Pulse images (services/pulseImageService.js, no AI);
+// image_url and image_description become the first one, and its teaser is
+// cut again when it changes. A live post is locked (409), as for edits.
+const MAX_PHOTOS = 4;
+const MAX_PHOTO_ALT = 300;
+const photoUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: MAX_PHOTOS } }).array('photos', MAX_PHOTOS);
+const postPhotos = (req, res, next) => photoUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('[FeedPosts] photo upload rejected:', err.message);
+  const tooMany = err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE';
+  return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Each photo is 15 MB at most.' : tooMany ? `Up to ${MAX_PHOTOS} photos.` : err.message });
+});
+
+router.post('/:postId/photos', requireAuth, postPhotos, async (req, res) => {
+  const { storePulseImage, PulseImageError } = require('../services/pulseImageService');
+  try {
+    const { FeedPost } = require('../models');
+    const post = await FeedPost.findByPk(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (isLive(post)) return res.status(409).json({ error: LOCKED_MESSAGE, status: post.status });
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return res.status(400).json({ error: 'Choose at least one photo.' });
+    let alts = [];
+    if (req.body?.alts !== undefined) {
+      try { alts = JSON.parse(req.body.alts); } catch (err) {
+        console.error('[FeedPosts] photo alt texts unreadable:', err.message);
+        return res.status(400).json({ error: 'alts must be a JSON list of texts.' });
+      }
+      if (!Array.isArray(alts)) return res.status(400).json({ error: 'alts must be a JSON list of texts.' });
+    }
+    const photos = [];
+    for (const [i, file] of files.entries()) {
+      const stored = await storePulseImage(file, { keyPrefix: `shows/pulse-posts/${post.show_id}`, maxSide: 2000, minSide: 200, label: `Photo ${i + 1}` });
+      photos.push({ url: stored.url, alt: String(alts[i] ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, MAX_PHOTO_ALT) });
+    }
+    const newPhoto = (photos[0].url || null) !== (post.image_url || null);
+    await post.update({ photos, image_url: photos[0].url, image_description: photos[0].alt || null });
+    // A new first photo: its teasers are cut again from it before the answer (Task #3052).
+    if (newPhoto) await require('../services/pulseTeasers').recutFor(require('../models'), require('../services/pulseTeasers').postReveals(post.id));
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] POST photos error:', err);
+    if (err instanceof PulseImageError) return res.status(err.status).json({ error: err.message, code: err.code });
     return res.status(500).json({ error: err.message });
   }
 });

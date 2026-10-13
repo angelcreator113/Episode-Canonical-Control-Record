@@ -10,7 +10,6 @@
  * - the sidebar: a hidden event left out, a teaser its name only; people
  *   Lala has not met yet left out; Lala's friends likewise;
  * - the cover: hidden left out, a teaser flagged;
- * - /pulse-reveals/state: the Dream Cities' image states.
  * Without ?at= (Director view) everything shows.
  */
 jest.unmock('uuid');
@@ -92,9 +91,6 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await reveal({ item_type: 'event', item_id: ids.ev2, event_id: ids.ev2, moment: 'announced' });
     await reveal({ item_type: 'event', item_id: ids.ev3, event_id: ids.ev3, moment: 'announced', mode: 'hidden' });
     await reveal({ item_type: 'image', image_kind: 'cover', item_id: ids.show, moment: 'story_time', story_order: 27, teaser_url: 'https://cdn/teasers/cover.jpg' });
-    await reveal({ item_type: 'image', image_kind: 'city', item_id: 'dazzle_district', moment: 'story_time', story_order: 27, teaser_url: 'https://cdn/teasers/dazzle.jpg' });
-    await reveal({ item_type: 'image', image_kind: 'city_bubble', item_id: 'echo_park', moment: 'story_time', story_order: 27, mode: 'hidden' });
-    await reveal({ item_type: 'image', image_kind: 'city', item_id: 'radiance_row', moment: 'story_time', story_order: 7 });
   });
 
   afterAll(async () => {
@@ -169,7 +165,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await get(`/api/v1/social-profiles/lala?show_id=${ids.show}&at=soon`)).status).toBe(400);
   });
 
-  it('the cover sends its teaser image before its moment; the cities report their image states and teaser images', async () => {
+  it('the cover sends its teaser image before its moment', async () => {
     let res = await get(`/api/v1/shows/${ids.show}/pulse-cover?at=present`);
     expect(res.body.cover).toMatchObject({ url: 'https://cdn/teasers/cover.jpg', teaser: true, teaser_style: 'crop', alt: '' });
     expect(JSON.stringify(res.body)).not.toContain('https://cdn/cover.jpg');
@@ -178,10 +174,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await models.PulseReveal.update({ mode: 'hidden' }, { where: { show_id: ids.show, image_kind: 'cover' } });
     expect((await get(`/api/v1/shows/${ids.show}/pulse-cover?at=present`)).body.cover).toBeNull();
 
-    res = await get(`/api/v1/pulse-reveals/state?show_id=${ids.show}`);
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ at: 17, cities: { 'city:dazzle_district': 'teaser', 'city_bubble:echo_park': 'hidden' } });
-    expect(res.body.teasers).toEqual({ 'city:dazzle_district': 'https://cdn/teasers/dazzle.jpg' });
-    expect(res.body.cities['city:radiance_row']).toBeUndefined();
+    // The cities' image states are GET /pulse-reveals/cities's (pulseCityTeasers.integration.test.js);
+    // the unused GET /state it replaced is gone (Task #3098).
+    expect((await get(`/api/v1/pulse-reveals/state?show_id=${ids.show}`)).status).toBe(404);
   });
 });
