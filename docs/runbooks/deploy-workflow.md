@@ -31,8 +31,8 @@ On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was que
 | 6 | **Wait** until the snapshot is `available` (up to 60 min) | runner | Nothing on the box changed |
 | 6a | **Hand over the build**, only when `DEPLOY_ARTIFACT_BUCKET` is set (§2.5): check the pack's sha256 against the build job's, upload it to `s3://<bucket>/deploy-builds/`, and make a link to it that expires in 15 minutes (masked in the log) | runner | Nothing on the box changed |
 | 7 | **Deploy**, with the runner's build (§2.5): download the pack through the link and check its sha256 and that it holds only `dist/`, all before anything changes; back up `frontend/dist`, `git merge --ff-only`, mark the deploy unfinished, put the pack's `dist/` in place of `frontend/dist`. No build on the box | box | §4, row "Deploy" |
-| 7 | **Deploy**, without it (as before): back up `frontend/dist` to `~/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, mark the deploy unfinished (`~/.episode-deploy-unfinished`), `vite build` with an explicit heap (about 60% of RAM, 1536–3072 MB; the log names it) for at most 1200 s, after printing the box's memory; it stops first, changing nothing, if another vite build is still running | box | §4, row "Deploy" |
-| 8 | **Migrate**, only if files are pending: `NODE_ENV=production npx sequelize-cli db:migrate` as the migration user from `~/.episode-migrate.env`, then re-check (must be 0 pending) | box | §4, row "Migrate" |
+| 7 | **Deploy**, without it (as before): back up `frontend/dist` to `/home/ubuntu/dist-backup-<UTC>-<sha12>`, `git merge --ff-only`, mark the deploy unfinished (`/home/ubuntu/.episode-deploy-unfinished`), `vite build` with an explicit heap (about 60% of RAM, 1536–3072 MB; the log names it) for at most 1200 s, after printing the box's memory; it stops first, changing nothing, if another vite build is still running | box | §4, row "Deploy" |
+| 8 | **Migrate**, only if files are pending: `NODE_ENV=production npx sequelize-cli db:migrate` as the migration user from `/home/ubuntu/.episode-migrate.env`, then re-check (must be 0 pending) | box | §4, row "Migrate" |
 | 9 | **Restart**: `pm2 restart episode-api-prod-hotfix`; `localhost:3000/health` healthy with the database connected; then, **only if `episode-worker` was online before the restart**, `pm2 restart episode-worker` (must be online). A stopped or missing worker is left exactly as it was (#2861). The box reports the target SHA | box | §4, row "Restart" |
 | 10 | **Public health**: `HEALTH_URL` healthy with the database connected | runner | §4, row "Public health" |
 | 11 | **Summary** on the run page: commit, box before, snapshot, migrations run, the worker's state before → after (restarted, or left stopped), results. On failure, the snapshot name and a pointer here | runner | — |
@@ -44,7 +44,7 @@ It never rolls back by itself, and it never runs `npm ci` on the box (only the r
 **Re-running a stopped run** (Evoni: **Re-run jobs** on the run page) is safe. If the box is already at the commit, the plan says "resuming". The run takes a fresh snapshot, rebuilds, migrates anything still pending, and restarts.
 
 **A newer run after one that stopped in Deploy (#2948).** A deploy that stops after its fast-forward leaves the box's tree at its commit with that commit's migrations not run, and the API on the old code. A later run for a newer commit then finds files pending on the box's current tree:
-- It carries them into its own run when a workflow deploy put the box there and did not finish. The evidence is the unfinished-deploy mark the Deploy step writes and a successful Restart removes, or, for a box stopped before the mark existed, that deploy's own `~/dist-backup-…-<sha12>` for the current commit.
+- It carries them into its own run when a workflow deploy put the box there and did not finish. The evidence is the unfinished-deploy mark the Deploy step writes and a successful Restart removes, or, for a box stopped before the mark existed, that deploy's own `/home/ubuntu/dist-backup-…-<sha12>` for the current commit.
 - The plan prints "put at … by a deploy that did not finish" and `PLAN_CARRIED=` lines. The run summary lists them under "Carried from a deploy that did not finish".
 - The snapshot is taken first as always, and the Migrate step applies the carried files with the range's own.
 - Anything else still stops in Plan: an unreadable ledger, or files pending with no such evidence, such as code moved by hand.
@@ -55,6 +55,8 @@ It never rolls back by itself, and it never runs `npm ci` on the box (only the r
 ## 2. One-time setup (Evoni)
 
 Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>` (the canon instance), `<EC2_INSTANCE_ID>` (the production box).
+
+**On the box, paths are full.** Session Manager logs in as `ssm-user`, whose `~` is `/home/ssm-user`. The app, its backups and the migration file belong to `ubuntu` under `/home/ubuntu` (the app is `/home/ubuntu/episode-metadata`). This runbook writes box paths in full. Anything that changes the app (`git`, `pm2`, files in `/home/ubuntu`) runs as `ubuntu`: start with `sudo -iu ubuntu`, which also makes `~` mean `/home/ubuntu` (Evoni, 2026-10-13).
 
 ### 2.1 AWS: identity provider and role
 
@@ -197,17 +199,17 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
    4. **Systems Manager → Fleet Manager:** the instance shows **Online**. It can take a few minutes after the role is attached.
 3. **Keep that role to SSM only.** The deploy runs as `ubuntu` on the box, and anything running there as root can use the instance role. The role holds `AmazonSSMManagedInstanceCore` and nothing else: no Secrets Manager, no Cognito, no S3 or RDS permissions. The app's only Cognito call (`InitiateAuthCommand`) needs no IAM permission.
 
-   *INFERRED: how the app's own AWS access is affected.* The AWS SDK's default credential chain uses environment variables and `~/.aws/credentials` before the instance profile. `ecosystem.config.js` notes that the app's "credentials come from ~/.aws/credentials or env vars". If the app gets its AWS credentials either way today, attaching the role does not change what the app can do. Check which source the app uses without printing any value, for example whether `~/.aws/credentials` exists and whether `.env` has an `AWS_ACCESS_KEY_ID=` line (count it, as `scripts/deploy-prod.sh` counts `ANTHROPIC_API_KEY`). If it has neither, the app would start using the instance role for S3 and similar calls. Then it would get only SSM permissions, and those calls would fail, so decide with that in mind.
-4. **The migration credential** (Evoni's ruling for #2837: a `600` file on the box). On the box, as `ubuntu`:
+   *INFERRED: how the app's own AWS access is affected.* The AWS SDK's default credential chain uses environment variables and `~/.aws/credentials` before the instance profile. `ecosystem.config.js` notes that the app's "credentials come from ~/.aws/credentials or env vars". If the app gets its AWS credentials either way today, attaching the role does not change what the app can do. Check which source the app uses without printing any value, for example whether `/home/ubuntu/.aws/credentials` exists and whether `/home/ubuntu/episode-metadata/.env` has an `AWS_ACCESS_KEY_ID=` line (count it, as `scripts/deploy-prod.sh` counts `ANTHROPIC_API_KEY`). If it has neither, the app would start using the instance role for S3 and similar calls. Then it would get only SSM permissions, and those calls would fail, so decide with that in mind.
+4. **The migration credential** (Evoni's ruling for #2837: a `600` file on the box). On the box, as `ubuntu` (from Session Manager, `sudo -iu ubuntu` first):
 
 ```bash
 umask 077
 read -r -p 'Migration DB user: ' U
 read -r -s -p 'Migration DB password: ' P; echo
-printf 'DB_USER=%s\nDB_PASSWORD=%s\n' "$U" "$P" > ~/.episode-migrate.env
+printf 'DB_USER=%s\nDB_PASSWORD=%s\n' "$U" "$P" > /home/ubuntu/.episode-migrate.env
 unset U P
-chmod 600 ~/.episode-migrate.env
-stat -c '%a %U' ~/.episode-migrate.env    # must print: 600 ubuntu
+chmod 600 /home/ubuntu/.episode-migrate.env
+stat -c '%a %U' /home/ubuntu/.episode-migrate.env    # must print: 600 ubuntu
 ```
 
    Use exactly two lines, `DB_USER=` and `DB_PASSWORD=`, with no quotes and no spaces around `=`. This is the privileged user the deploy records describe ("a separate database user", `F-Deploy-1_Deploy_2026-09-30_CT.md` §0). The app's own credentials stay in `.env` as today. When that password changes, rewrite this file the same way.
@@ -298,7 +300,7 @@ The box has about 1.9 GB of memory and no swap. Deploy runs 93–94 (2026-10-12)
    SSM parameter names are letters and digits only (the console refuses `artifact_sha256` with `InvalidDocumentContent: … is not alpha-numeric`, 2026-10-13), hence `artifactSha256`.
 
    The link is in double quotes because it holds `&` and `?`. Its pattern allows no quote, space, `$` or backtick, so it cannot break out of them. The script on the box checks the link and the sha256 again before it downloads anything.
-4. **Check the box has no untracked frontend settings.** The runner builds from the repository alone. On the box, `ls -a ~/episode-metadata/frontend | grep '^\.env'` should list only `.env.example` and `.env.production`, which are both in the repository. A `.env.local` or `.env.production.local` there means the box's builds used settings the runner's will not: tell the session which variable names it holds (not the values) before going on.
+4. **Check the box has no untracked frontend settings.** The runner builds from the repository alone. On the box, `ls -a /home/ubuntu/episode-metadata/frontend | grep '^\.env'` (the full path: Session Manager's `~` is `/home/ssm-user`) should list only `.env.example` and `.env.production`, which are both in the repository. A `.env.local` or `.env.production.local` there means the box's builds used settings the runner's will not: tell the session which variable names it holds (not the values) before going on.
 5. **Settings → Secrets and variables → Actions → Variables:** add `DEPLOY_ARTIFACT_BUCKET` = the bucket's name. The next run uses it.
 
 To go back to building on the box, delete `DEPLOY_ARTIFACT_BUCKET`. The document and the role can stay as they are.
@@ -337,7 +339,7 @@ Read the step's log: the on-box output says where it stopped and what had alread
 |---|---|---|
 | Configuration, OIDC, preflight, plan | Nothing changed | Fix the cause (variables, role, SSM, the plan's message), then re-run. A plan that stops on **package files** means: deploy that range by hand (`DEVELOPMENT_WORKFLOW.md` §7.1), then later runs resume normally |
 | Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run |
-| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box. "the vite build ran past 1200 s" (or, before that limit existed, SSM status `TimedOut` right after the "vite build with a … MB heap" line, as in runs 80–81): the box was short of memory; the log prints `Memory:` and `Swap:` lines before and after. "a vite build is still running on the box": a build left by a timed-out deploy; nothing was changed. On the box, `pgrep -af 'vite(\.js)? build'` lists it and `kill <pid>` stops it; then approve a new run. With the runner's build (§2.5): "could not be downloaded (the link may have expired)", "sha256 is …, not …", "is not a readable archive", "holds something other than dist/" or "has no dist/index.html" all stop before the backup, with nothing changed: start a new run |
+| Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box. "the vite build ran past 1200 s" (or, before that limit existed, SSM status `TimedOut` right after the "vite build with a … MB heap" line, as in runs 80–81): the box was short of memory; the log prints `Memory:` and `Swap:` lines before and after. "a vite build is still running on the box": a build left by a timed-out deploy; nothing was changed. On the box, `pgrep -af 'vite(\.js)? build'` lists it and `sudo kill <pid>` stops it (it runs as `ubuntu`); then approve a new run. With the runner's build (§2.5): "could not be downloaded (the link may have expired)", "sha256 is …, not …", "is not a readable archive", "holds something other than dist/" or "has no dist/index.html" all stop before the backup, with nothing changed: start a new run |
 | Build (step 0) | Nothing changed | Read the build log; it is the same `vite build` a contributor runs. Fix forward by PR |
 | Migrate | **The database may be partly migrated**; the API still runs the old code | Read the migration error. Usually fix forward: a new PR, merged, then a new run. If the data is damaged, restore from the snapshot (§5) |
 | Restart | New code, possibly unhealthy; a worker that was online may not be restarted (a stopped one is never started) | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward |
@@ -361,9 +363,9 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 ## 6. Rolling back the code
 
 - **Preferred:** revert the PR on GitHub, merge the revert, and approve the new run. This works when the bad change needs no schema rollback. The run deploys the revert like any other commit.
-- **By hand, on the box** (Evoni), when the site must come back before a revert can be merged:
+- **By hand, on the box** (Evoni), when the site must come back before a revert can be merged. As `ubuntu`, in the app: `sudo -iu ubuntu`, then `cd /home/ubuntu/episode-metadata` (`pm2` lists only the processes of the user running it, so `ssm-user` would see none):
   1. `git reset --hard <Box before SHA from the run summary>`.
-  2. `rm -rf frontend/dist && cp -a ~/dist-backup-<…>-<sha12> frontend/dist` (the `DEPLOY_BACKUP` path in the deploy step's log).
+  2. `rm -rf frontend/dist && cp -a /home/ubuntu/dist-backup-<…>-<sha12> frontend/dist` (the `DEPLOY_BACKUP` path in the deploy step's log).
   3. `pm2 restart episode-api-prod-hotfix` (and `episode-worker` only if it is meant to be running, §1), then check `/health`.
 
   The database stays migrated; down-migrations are never run automatically. `main` still has the bad commit, so the next run will deploy it again until it is reverted. The next run's plan also requires the box to be a fast-forward of the target, which it will be after a revert.
@@ -373,6 +375,6 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 ## 7. Housekeeping
 
 - **Snapshots:** each run keeps one manual snapshot, and those are billed until deleted. The role cannot delete them. Evoni removes old `deploy-*` snapshots in RDS → Snapshots → Manual. Keep at least the newest few.
-- **Frontend backups:** `~/dist-backup-*` and `~/vite-build-*.log` accumulate in the box's home directory. Remove old ones by hand.
+- **Frontend backups:** `/home/ubuntu/dist-backup-*` and `/home/ubuntu/vite-build-*.log` accumulate in `ubuntu`'s home directory. Remove old ones by hand.
 - **Runner builds (§2.5):** the bucket's lifecycle rule deletes `deploy-builds/` objects after a day, and the run artifact expires after a day. The box deletes its downloaded copy once it is unpacked.
 - **Changing the workflow:** by PR only. The scripts the box runs come from the commit being deployed. A change to `scripts/deploy/workflow-deploy.sh` therefore takes effect on the first run that deploys it.
