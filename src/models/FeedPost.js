@@ -28,6 +28,10 @@ module.exports = (sequelize) => {
     content_text: { type: DataTypes.TEXT, allowNull: true },
     image_description: { type: DataTypes.TEXT, allowNull: true },
     image_url: { type: DataTypes.TEXT, allowNull: true },
+    // The post's location (migration 20261013070000; Task #3090): a Dream City key, and/or a
+    // world_locations venue whose city fills place_city. A label only, never Lala's travel.
+    place_city: { type: DataTypes.STRING(40), allowNull: true },
+    place_location_id: { type: DataTypes.UUID, allowNull: true },
 
     likes: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
     comments_count: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },

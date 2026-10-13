@@ -5,7 +5,7 @@
  * only when N more exist.
  */
 import React from 'react';
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import PulsePost, { TaggedText, photosOf, cityName } from './PulsePost';
 
@@ -53,5 +53,24 @@ describe('PulsePost', () => {
   test('cityName reads a Dream City key', () => {
     expect(cityName('maverick_harbor')).toBe('Maverick Harbor');
     expect(cityName(undefined)).toBeNull();
+  });
+
+  test("a tagged place (Task 3090) replaces the poster's city and opens that city's feed", () => {
+    const onCity = vi.fn();
+    const post = { ...base, place: { city: 'dazzle_district', city_name: 'Dazzle District', location_id: 'v1', name: 'Velvet Room' } };
+    const { rerender } = render(<PulsePost post={post} onCity={onCity} />);
+    const link = screen.getByTestId('pl-post-place');
+    expect(link.textContent).toBe('Velvet Room · Dazzle District');
+    expect(link.tagName).toBe('BUTTON');
+    fireEvent.click(link);
+    expect(onCity).toHaveBeenCalledWith('dazzle_district');
+    expect(screen.queryByText(/Echo Park/)).toBeNull();
+    // Untagged: the poster's city, still a link; with no onCity, plain text.
+    rerender(<PulsePost post={base} onCity={onCity} />);
+    fireEvent.click(screen.getByTestId('pl-post-place'));
+    expect(onCity).toHaveBeenLastCalledWith('echo_park');
+    rerender(<PulsePost post={base} />);
+    expect(screen.getByTestId('pl-post-place').tagName).toBe('SPAN');
+    expect(screen.getByTestId('pl-post-place').textContent).toBe('Echo Park');
   });
 });

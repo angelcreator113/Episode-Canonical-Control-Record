@@ -130,8 +130,8 @@ router.get('/', optionalAuth, async (req, res) => {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
       where.post_type = post_type;
     }
-    // ?city= (Task #2987): one Dream City's feed, the posts of its profiles
-    // (utils/feedCities.cityPostsSql; a post's city is its poster's).
+    // ?city= (Task #2987): one Dream City's feed: posts tagged there, and
+    // untagged posts of its profiles (utils/feedCities.cityPostsSql; Task #3090).
     const and = [];
     if (city !== undefined) {
       const { DREAM_CITY_KEYS, cityPostsSql } = require('../utils/feedCities');
@@ -205,6 +205,8 @@ router.get('/', optionalAuth, async (req, res) => {
     // Authors' photos for The Pulse (Task #2924): a post's or comment's
     // profile links to a registry character, whose portrait_url is the photo.
     let data = await withAuthorPortraits(require('../models'), posts.map((p) => p.toJSON()));
+    // Each tagged post's place, with its venue's name (Task #3090).
+    data = await require('../utils/feedPlaces').withPlaces(require('../models'), data);
     if (reveals) data = data.map((p) => applyPostReveal(p, reveals));
     // Likes and shares as they stand at the story moment, on the growth
     // curve; without ?at=, the final numbers (Task #2955, services/pulseNumbers.js).
@@ -232,6 +234,9 @@ router.post('/', requireAuth, async (req, res) => {
     if (!content_text?.trim()) return res.status(400).json({ error: 'content_text is required' });
     const scoped = statusWhere(status === undefined ? 'live' : status);
     if (scoped.error || !scoped.status) return res.status(400).json({ error: 'status must be draft or live' });
+    // Its location, if tagged (Task #3090): a Dream City or a venue, whose city is filled in.
+    const place = await require('../utils/feedPlaces').resolvePlace(require('../models'), req.body || {});
+    if (place.error) return res.status(400).json({ error: place.error });
     const fields = {
       social_profile_id: social_profile_id || null,
       poster_handle: String(poster_handle || 'lala').replace(/^@/, ''),
@@ -242,6 +247,7 @@ router.post('/', requireAuth, async (req, res) => {
     if (held.length) scoped.status = 'draft';
     const post = await FeedPost.create({
       ...fields,
+      ...place.values,
       show_id,
       episode_id: episode_id || null,
       poster_display_name: poster_display_name || null,
@@ -265,6 +271,18 @@ router.post('/', requireAuth, async (req, res) => {
     return undefined;
   } catch (err) {
     console.error('[FeedPosts] Create error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PLACES (Task #3090) ──────────────────────────────────────────────────────
+// GET /api/v1/feed-posts/places: the five Dream Cities and the venues, each
+// with its city, for the composer's Location picker.
+router.get('/places', requireAuth, async (req, res) => {
+  try {
+    return res.json(await require('../utils/feedPlaces').listPlaces(require('../models')));
+  } catch (err) {
+    console.error('[FeedPosts] GET places error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -613,6 +631,10 @@ router.put('/:postId', requireAuth, async (req, res) => {
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
+    // A draft's location can change (Task #3090); a venue fills its city.
+    const place = await require('../utils/feedPlaces').resolvePlace(require('../models'), req.body || {});
+    if (place.error) return res.status(400).json({ error: place.error });
+    Object.assign(updates, place.values);
     // Release (Task #2748): a draft going live with no posted_at is posted
     // now (approving an episode's post, Task #2749, does the same); its story
     // time stays as stamped.

@@ -29,14 +29,16 @@ const DREAM_CITY_CULTURE = Object.freeze({
 
 /**
  * City feeds (Task #2987; The Pulse spec §3 "each Dream City has its own feed
- * and local trends"): a post's city is its poster's social_profiles.city, read
- * through the poster, never copied onto the post. The clause keeps the posts
- * of a Dream City's profiles; `alias` is the query's name for feed_posts, and
- * the key must already be one of DREAM_CITY_KEYS (it is inlined).
+ * and local trends"): a post tagged with a place is in that place's city
+ * (feed_posts.place_city; Task #3090, Evoni 2026-10-13: "Published posts
+ * appear in that city's feed"); an untagged post is in its poster's city,
+ * social_profiles.city, read through the poster. `alias` is the query's
+ * name for feed_posts, and the key must already be one of DREAM_CITY_KEYS
+ * (it is inlined).
  */
 function cityPostsSql(alias, cityKey) {
   if (!DREAM_CITY_KEYS.includes(cityKey)) throw new Error(`Unknown Dream City: ${cityKey}`);
-  return `"${alias}"."social_profile_id" IN (SELECT sp.id FROM social_profiles sp WHERE sp.city = '${cityKey}' AND sp.deleted_at IS NULL)`;
+  return `("${alias}"."place_city" = '${cityKey}' OR ("${alias}"."place_city" IS NULL AND "${alias}"."social_profile_id" IN (SELECT sp.id FROM social_profiles sp WHERE sp.city = '${cityKey}' AND sp.deleted_at IS NULL)))`;
 }
 
 // July's mapping, old city → DREAM city.
