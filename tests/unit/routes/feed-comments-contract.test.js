@@ -72,7 +72,9 @@ describe('the wall\'s routes (2026-10-04)', () => {
   });
   test('the list carries each post\'s live comments on ?with=comments and counts distinct posts', () => {
     const list = slice("router.get('/', optionalAuth", "router.post('/', requireAuth");
-    expect(list).toMatch(/withWhat === 'comments' && FeedComment \? \[\{\s*model: FeedComment, as: 'comments', where: \{ status: 'live' \}, required: false/);
+    expect(list).toMatch(/withWhat === 'comments' && FeedComment \? \[\{\s*model: FeedComment, as: 'comments', required: false,/);
+    // Live comments only; at a moment, only those at or before it (Task #3064).
+    expect(list).toMatch(/where: Number\.isInteger\(atOrder\)\s*\? \{ status: 'live', \[require\('sequelize'\)\.Op\.or\]: \[\{ story_order: null \}, \{ story_order: \{ \[require\('sequelize'\)\.Op\.lte\]: atOrder \} \}\] \}\s*: \{ status: 'live' \}/);
     expect(list).toMatch(/FeedPost\.count\(\{ where, distinct: true, col: 'id' \}\)/);
   });
 });
