@@ -2942,7 +2942,8 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 
     const p = profile.toJSON();
-    const prestige = p.follower_tier === 'mega' ? 8 : p.follower_tier === 'macro' ? 6 : p.follower_tier === 'mid' ? 4 : 3;
+    // The host's tier sets the prestige: the six count tiers (Task #3106); Nano 2 and Emerging 1 are new.
+    const prestige = { mega: 8, macro: 6, mid: 4, micro: 3, nano: 2, emerging: 1 }[p.follower_tier] || 3;
 
     // Find venue
     const eventAutomation = require('../services/eventAutomationService');

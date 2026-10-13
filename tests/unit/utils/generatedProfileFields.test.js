@@ -20,8 +20,11 @@ describe('generatedProfileFields', () => {
   });
 
   it('sanitizes the ENUMs, so an AI variation cannot fail the insert', () => {
-    const fields = generatedProfileFields({ follower_tier: 'nano', archetype: 'influencer', current_trajectory: 'exploding' });
+    const fields = generatedProfileFields({ follower_tier: 'gigastar', archetype: 'influencer', current_trajectory: 'exploding' });
     expect(fields.follower_tier).toBe('mid');
+    // The six count tiers are kept as they are (Task #3106).
+    expect(['emerging', 'Nano', 'micro', 'mid', 'macro', 'mega'].map((t) => generatedProfileFields({ follower_tier: t }).follower_tier))
+      .toEqual(['emerging', 'nano', 'micro', 'mid', 'macro', 'mega']);
     expect(fields.archetype).toBe('polished_curator');
     expect(fields.current_trajectory).toBe('rising');
   });
