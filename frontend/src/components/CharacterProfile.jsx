@@ -10,7 +10,7 @@ export const getCharacterApi = (id) =>
   apiClient.get(`${API_URL}/character-registry/characters/${id}`).then((r) => r.data);
 export const getCharacterRelationshipsApi = (id) =>
   apiClient
-    .get(`${API_URL}/character-registry/characters/${id}/relationships`)
+    .get(`${API_URL}/relationships/character/${id}`, { params: { confirmed: true } })
     .then((r) => r.data);
 export const getSocialProfileApi = (profileId) =>
   apiClient.get(`${API_URL}/social-profiles/${profileId}`).then((r) => r.data);

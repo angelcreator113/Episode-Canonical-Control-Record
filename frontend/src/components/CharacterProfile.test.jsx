@@ -37,11 +37,11 @@ describe('CharacterProfile — Track 6 CP11 file-local helpers (CP9 dups)', () =
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/characters/lala');
   });
 
-  test('getCharacterRelationshipsApi GET on /character-registry/characters/:id/relationships', async () => {
+  test('getCharacterRelationshipsApi GET on /relationships/character/:id, confirmed only (Task #3119)', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { relationships: [] } });
     await getCharacterRelationshipsApi('lala');
     expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/v1/character-registry/characters/lala/relationships',
+      '/api/v1/relationships/character/lala', { params: { confirmed: true } },
     );
   });
 
