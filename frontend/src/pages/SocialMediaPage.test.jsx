@@ -51,7 +51,8 @@ beforeEach(() => {
   cityStates = {};
   revealRows = [];
   lalaColumn = {
-    profile: LALA, portrait_url: 'https://cdn/lala.jpg', home_city: 'Echo Park', career: { tier: 1, label: 'Emerging' },
+    profile: LALA, followers: { count: 12400, tier: { key: 'micro', label: 'Micro' }, estimated: false },
+    portrait_url: 'https://cdn/lala.jpg', home_city: 'Echo Park', career: { tier: 1, label: 'Emerging' },
     friends: { total: 2, list: [{ id: 2, handle: 'marcus.k', display_name: 'Marcus' }, { id: 4, handle: 'bestie', display_name: 'Bestie' }] },
   };
   vi.mocked(api.get).mockImplementation(async (url) => {
@@ -92,6 +93,12 @@ describe('helpers', () => {
 });
 
 describe("Lala's view", () => {
+  test("before her starting count is accepted, the header shows the estimate, marked as one (Task 3062)", async () => {
+    lalaColumn = { ...lalaColumn, followers: { count: null, tier: null, estimated: true, estimate: '12k' } };
+    renderAt('/pulse');
+    expect((await screen.findByTestId('pl-followers')).textContent).toBe('About 12k followers (estimate)');
+  });
+
   test('the frame: The Pulse, the cover with its alt text, Lala and her followers, navigation', async () => {
     cover = { url: 'https://cdn/cover.jpg', alt: 'The five Dream Cities at night' };
     renderAt('/pulse');
@@ -99,7 +106,8 @@ describe("Lala's view", () => {
     expect(screen.getByText('Every city has a story.')).toBeTruthy();
     const img = await screen.findByTestId('pl-cover');
     expect(img.getAttribute('alt')).toBe('The five Dream Cities at night');
-    expect((await screen.findByTestId('pl-followers')).textContent).toBe('12k followers');
+    // Her canon count at the moment, with her tier (Task 3062).
+    expect((await screen.findByTestId('pl-followers')).textContent).toBe('12,400 followers · Micro tier');
     const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
     expect(nav.getByRole('button', { name: /Feed/ }).getAttribute('aria-current')).toBe('page');
     // Messages (Task 2985) and Dream Cities (Task 2987) are live.

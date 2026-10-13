@@ -15,7 +15,8 @@
  *       work queued now and drafted later (a DM)
  *
  * Lanes:
- *   automated  the queue's event, ambient, comment and storyline drafts
+ *   automated  the queue's event, ambient, comment and storyline drafts, and
+ *              a new Active character's voice build (Task #3070)
  *   manual     what Evoni starts: DMs, draft reactions, redraft, building a
  *              voice, storyline beat suggestions
  *

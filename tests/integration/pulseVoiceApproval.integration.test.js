@@ -23,6 +23,7 @@ const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const queue = require('../../src/services/pulseQueue');
 const ambient = require('../../src/services/pulseAmbient');
+const { seeded } = require('../../src/services/pulseEventPosting');
 const storylines = require('../../src/services/pulseStorylines');
 
 const { sequelize } = models;
@@ -62,7 +63,10 @@ const HOUR = 60 * 60 * 1000;
       const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, created_at, updated_at)
         VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', NOW(), NOW()) RETURNING id`, { handle: `${key}${tag}`, display: key });
       p[key] = row.id;
-      c[key] = uuid();
+      // bo's roll in the test window must pass its oversharer chance, or the
+      // planner test fails about 1 run in 10 (the id seeds the roll).
+      do { c[key] = uuid(); } while (key === 'bo'
+        && seeded(`ambient:${ambient.windowOf(t0)}:${c[key]}`) >= ambient.CHANCE.oversharer);
       await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, depth_level, feed_profile_id, created_at, updated_at)
                  VALUES (:id, :reg, :key, :name, 'alive', :feed, NOW(), NOW())`, { id: c[key], reg: ids.reg, key: `${key}-${tag}`, name: key, feed: p[key] });
       const voice = await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { temperament: 'oversharer' }, examples_json: [], status: 'built' });

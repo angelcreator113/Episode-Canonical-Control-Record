@@ -30,14 +30,14 @@
  * budget.
  */
 
-const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline'];   // dm: Task #2984; storyline: Task #2989
+const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline', 'voice'];   // dm: Task #2984; storyline: Task #2989; voice: Task #3070
 const DEFAULTS = { automated_requests: 5, manual_requests: 15, ambient_enabled: false };
 const MAX_CAP = 100;   // requests a day, per lane
 const BACKOFF_MS = 60 * 1000;            // 1, 4, 9 minutes …
 const STALE_MS = 15 * 60 * 1000;         // a job running this long was lost
 const POLL_MS = parseInt(process.env.PULSE_ENGINE_POLL_MS, 10) || 15000;
 // Kinds that wait for the lane's reset when its requests are used, not skipped (Task #3049).
-const WAIT_ON_CAP = ['event', 'comment'];
+const WAIT_ON_CAP = ['event', 'comment', 'voice'];
 const CAP_WAIT_MS = 60 * 1000;           // a minute past midnight UTC
 
 const handlers = new Map();

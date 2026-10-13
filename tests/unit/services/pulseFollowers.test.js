@@ -25,6 +25,13 @@ describe('estimateStart', () => {
     expect(estimateStart({ follower_count_approx: 'unknown', follower_tier: 'mid' })).toEqual({ count: TIER_MIDDLE.mid, from: 'the middle of the mid tier' });
   });
 
+  test("each stored tier's middle lands in its matching count tier (Task #3068)", () => {
+    const { tierFor } = require('../../../src/services/pulseAudience');
+    expect(Object.fromEntries(Object.entries(TIER_MIDDLE).map(([stored, count]) => [stored, tierFor(count).key])))
+      .toEqual({ micro: 'micro', mid: 'mid', macro: 'macro', mega: 'mega' });
+    expect(estimateStart({ follower_count_approx: null, follower_tier: 'micro' })).toEqual({ count: 25000, from: 'the middle of the micro tier' });
+  });
+
   test('else nothing', () => {
     expect(estimateStart({ follower_count_approx: null, follower_tier: null })).toBeNull();
     expect(estimateStart(null)).toBeNull();
