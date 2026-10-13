@@ -81,9 +81,10 @@ function Composer({ showId, onPosted, onClose }) {
     setBusy(true);
     setError(null);
     try {
-      await api.post('/api/v1/feed-posts', { show_id: showId, content_text: text.trim(), poster_handle: 'lala', poster_display_name: 'Lala', status });
+      const res = await api.post('/api/v1/feed-posts', { show_id: showId, content_text: text.trim(), poster_handle: 'lala', poster_display_name: 'Lala', status });
       setText('');
-      onPosted(status);
+      // Only an admin may post as Lala live; anyone else's waits in Review (Evoni, 2026-10-13).
+      onPosted(res?.data?.held_for_review ? 'held' : status);
     } catch (err) {
       console.error('[LalaFeedTab] post failed:', err);
       setError(err.response?.data?.error || 'The post could not be saved.');
@@ -200,7 +201,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
       <div className="wa-lf-body">
         <div className="wa-lf-main">
           {composing && <Composer showId={showId} onClose={() => setComposing(false)}
-            onPosted={async (status) => { setComposing(false); setMessage({ ok: true, text: status === 'live' ? 'Posted to her feed.' : 'Saved to the queue.' }); await load(); }} />}
+            onPosted={async (status) => { setComposing(false); setMessage({ ok: true, text: status === 'live' ? 'Posted to her feed.' : status === 'held' ? 'Sent to Review: only an admin can post as Lala right away.' : 'Saved to the queue.' }); await load(); }} />}
           {message && (
             <p className={`wa-lf-message${message.ok ? '' : ' bad'}`} role="status">
               {message.text}
