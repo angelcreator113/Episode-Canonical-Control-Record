@@ -11,6 +11,7 @@
  *   enqueueMessage(db, { threadId, senderProfileId?, at? })
  *     queues a `dm` job (pulseQueue, under the daily draft cap); the sender
  *     defaults to whoever did not write the last message. Never calls AI.
+ *     The sender must be Alive, or Lala (Task #3030); else a 409.
  *   draftMessage(db, { threadId, senderProfileId, at })
  *     one Sonnet call in the sender's Voice Profile: the conversation so far,
  *     the topic, the story moment, the events the sender knows by then
@@ -66,6 +67,20 @@ async function messagesOf(db, threadId, { liveOnly = false, at = null } = {}) {
   return db.PulseDmMessage.findAll({ where, order: [['story_order', 'ASC'], ['created_at', 'ASC']] });
 }
 
+/**
+ * DMs are ongoing conversations, for Alive characters (Evoni, 2026-10-12);
+ * Lala is exempt. A DmError when the sender may not write.
+ */
+async function assertMaySend(db, profileId) {
+  const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+  if (lalaId != null && Number(profileId) === Number(lalaId)) return;
+  const alive = await require('./pulseVoices').aliveProfiles(db, [profileId]);
+  if (!alive.has(Number(profileId))) {
+    const [[profile]] = await db.sequelize.query('SELECT handle FROM social_profiles WHERE id = :id', { replacements: { id: profileId } });
+    throw new DmError(409, `@${profile?.handle || profileId} is not Alive yet: only Alive characters take part in conversations.`);
+  }
+}
+
 /** Queues the next message of a thread. Returns the job. */
 async function enqueueMessage(db, { threadId, senderProfileId = null, at = null }) {
   const thread = await db.PulseDmThread.findByPk(threadId);
@@ -78,6 +93,7 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
     if (!last) throw new DmError(400, 'Say who writes the first message.');
     sender = pair.find((id) => id !== Number(last.sender_profile_id));
   }
+  await assertMaySend(db, sender);
   return require('./pulseQueue').enqueue(db, {
     showId: thread.show_id, kind: 'dm',
     payload: { thread_id: thread.id, sender_profile_id: sender, ...(Number.isInteger(at) ? { at } : {}) },
@@ -88,6 +104,7 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
 async function senderOf(db, profileId) {
   const voice = await db.PulseVoice.findOne({ where: { social_profile_id: profileId } });
   if (!voice) throw new DmError(400, `Profile ${profileId} has no Voice Profile yet. Build it in Admin › The Pulse › Voices.`);
+  await assertMaySend(db, profileId);   // the stage may have changed since the message was queued
   const character = await db.RegistryCharacter.findByPk(voice.registry_character_id);
   if (!character) throw new DmError(404, 'The voice\'s character is gone.');
   const [[profile]] = await db.sequelize.query(

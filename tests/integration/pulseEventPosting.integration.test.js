@@ -103,6 +103,17 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     expect(await posting.whoPosts(models, { showId: ids.show, episodeId: ids.ep })).toEqual(plan);
   });
 
+  test('event reactions are for Alive characters: an Active guest neither posts nor comments (Task #3030)', async () => {
+    await run(`UPDATE registry_characters SET depth_level = 'active' WHERE id IN (:a)`, { a: [c.marcus, c.kim] });
+    try {
+      const plan = await posting.whoPosts(models, { showId: ids.show, episodeId: ids.ep });
+      expect(plan.posters).toEqual([]);
+      expect(plan.commenters.map((x) => x.characterId)).toEqual([c.nia]);
+    } finally {
+      await run(`UPDATE registry_characters SET depth_level = 'alive' WHERE id IN (:a)`, { a: [c.marcus, c.kim] });
+    }
+  });
+
   test('completing the episode queues the event posts once, never calls AI in the request, and nothing while the engine is off', async () => {
     process.env.PULSE_ENGINE_ENABLED = 'false';
     expect(await posting.enqueueForEpisode(models, { showId: ids.show, episodeId: ids.ep })).toEqual([]);

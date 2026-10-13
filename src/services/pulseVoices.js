@@ -8,13 +8,20 @@
  *
  *   BANNED_PHRASES            the shared list of AI-sounding phrases no
  *                             post may use; findBanned(text) finds them
- *   eligible(db, showId)      revealed characters at active/alive with a
- *                             Feed profile, each with their voice or none
+ *   eligible(db, showId, { stage })  revealed characters at the stage
+ *                             (active: Active or Alive; alive: Alive) with
+ *                             a Feed profile, each with their voice or none
+ *   aliveProfiles(db, ids)    which of these Feed profiles are Alive
  *   voiceSource(character, profile)  the public face a voice is built
  *                             from; sourceHash() fingerprints it
  *   buildVoice(db, characterId)  one Haiku call: the habits, saved
  *   normalizeHabits(raw)      the habits' shape, cleaned and capped
  *   addExample / removeExample   Evoni's edits and pinned posts
+ *
+ * Stages (Evoni, 2026-10-12; docs/reads/2026-10-12-pulse-decisions-read.md
+ * §1): an Active character gets a Voice Profile and can post; an Alive one
+ * also takes part in ongoing conversations (DMs), relationships (closeness
+ * from the social world) and event reactions.
  *
  * A voice is how a character talks in public. It is built from the public
  * face only (the mask, public persona, voice signature, posting voice).
@@ -25,7 +32,10 @@
 const crypto = require('crypto');
 
 const MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
-const POSTING_STAGES = ['active', 'alive'];
+const ACTIVE_STAGES = ['active', 'alive'];   // a voice, and posting
+const ALIVE_STAGES = ['alive'];             // also DMs, closeness, event reactions
+const POSTING_STAGES = ACTIVE_STAGES;
+const stagesFor = (stage) => (stage === 'alive' ? ALIVE_STAGES : ACTIVE_STAGES);
 const MAX_EXAMPLES = 20;
 const MAX_TEXT = 600;
 
@@ -197,13 +207,13 @@ function needsRebuild(voice, source) {
  * hidden from Lala at the story moment `at` (default the present; services/pulseReveals.js).
  * Each with their voice (or null) and whether it needs a rebuild.
  */
-async function eligible(db, showId, { at } = {}) {
+async function eligible(db, showId, { at, stage = 'active' } = {}) {
   const { sequelize } = db;
   const [rows] = await sequelize.query(
     `SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
       WHERE cr.show_id = :showId AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
         AND rc.depth_level::text IN (:stages) AND rc.feed_profile_id IS NOT NULL
-      ORDER BY rc.display_name`, { replacements: { showId, stages: POSTING_STAGES } });
+      ORDER BY rc.display_name`, { replacements: { showId, stages: stagesFor(stage) } });
   if (!rows.length) return [];
   const characters = await db.RegistryCharacter.findAll({ where: { id: rows.map((r) => r.id) } });
   const profileIds = characters.map((c) => c.feed_profile_id);
@@ -227,6 +237,17 @@ async function eligible(db, showId, { at } = {}) {
     });
 }
 
+/** The Feed profiles among `profileIds` whose registry character is Alive, as a Set of numbers. */
+async function aliveProfiles(db, profileIds) {
+  const ids = [...new Set((profileIds || []).map(Number).filter(Number.isInteger))];
+  if (!ids.length) return new Set();
+  const [rows] = await db.sequelize.query(
+    `SELECT DISTINCT feed_profile_id FROM registry_characters
+      WHERE feed_profile_id IN (:ids) AND depth_level::text IN (:stages) AND deleted_at IS NULL`,
+    { replacements: { ids, stages: ALIVE_STAGES } });
+  return new Set(rows.map((r) => Number(r.feed_profile_id)));
+}
+
 /** Adds an example (kind pinned or edit) to a voice, newest first, keeping MAX_EXAMPLES. */
 async function addExample(voice, { text, kind = 'pinned', postId = null, by = null } = {}) {
   const clean = typeof text === 'string' ? text.trim().slice(0, MAX_TEXT) : '';
@@ -247,6 +268,6 @@ async function removeExample(voice, exampleId) {
 }
 
 module.exports = {
-  BANNED_PHRASES, POSTING_STAGES, MAX_EXAMPLES, TEMPERAMENTS,
+  BANNED_PHRASES, POSTING_STAGES, ACTIVE_STAGES, ALIVE_STAGES, MAX_EXAMPLES, TEMPERAMENTS, aliveProfiles,
   findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild, eligible, buildVoice, addExample, removeExample, VoiceError,
 };
