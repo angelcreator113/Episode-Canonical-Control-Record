@@ -3,7 +3,8 @@
  * §7; Evoni, 2026-10-12; requests, Task #3031):
  * - jobs are claimed once, even by two workers at the same moment;
  * - a job whose drafting call is refused (today's requests used) is skipped
- *   with the reason, never retried;
+ *   with the reason, never retried; an event or comment job instead waits
+ *   for the reset, once, the wait not counted as an attempt (Task #3049);
  * - a failing job backs off and retries, then fails;
  * - the request limits and the ambient switch (off by default) live in the
  *   show's metadata.pulse_engine, and saving them keeps every other
@@ -95,6 +96,36 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const state = await as(editor, request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`));
     expect(state.body).toMatchObject({ drafts_today: 1, requests_today: { automated: 0, manual: 0 } });
     expect(state.body.jobs[0]).toMatchObject({ id: job.id, kind: 'event', status: 'done', drafts: 1 });
+  });
+
+  test('an event job refused by the cap waits for midnight UTC, the same job, then runs (Task #3049)', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await queue.saveSettings(models, ids.show, { automated_requests: 0 });
+    let drafted = 0;
+    queue.register('event', async (db, job) => {
+      await requests.take(db, { showId: job.show_id, lane: 'automated', kind: 'event', jobId: job.id });
+      drafted += 1;
+      return { draftIds: [uuid()] };
+    });
+    try {
+      const now = new Date();
+      const job = await queue.enqueue(models, { showId: ids.show, kind: 'event', payload: { episode_id: uuid() } });
+      const ran = await (await queue.runOne(models, { now })).reload();
+      const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      expect(ran).toMatchObject({ id: job.id, status: 'queued', attempts: 0, started_at: null });
+      expect(ran.run_after.getTime()).toBe(reset.getTime() + queue.CAP_WAIT_MS);
+      expect(ran.error).toBe("Waiting for tomorrow's requests. Automated requests are set to 0 a day in Admin › The Pulse › Engine.");
+      // Nothing more until then: no second job, no retry.
+      expect(await queue.runOne(models, { now })).toBeNull();
+      expect(await models.PulseJob.count({ where: { show_id: ids.show } })).toBe(1);
+      // After the reset (here: requests freed), the same job runs.
+      await queue.saveSettings(models, ids.show, { automated_requests: 5 });
+      const after = await (await queue.runOne(models, { now: new Date(ran.run_after.getTime() + 1000) })).reload();
+      expect(after).toMatchObject({ id: job.id, status: 'done', attempts: 1, error: null });
+      expect(drafted).toBe(1);
+    } finally {
+      await queue.saveSettings(models, ids.show, { automated_requests: 5 });
+    }
   });
 
   test('two workers at the same moment never take the same job', async () => {
