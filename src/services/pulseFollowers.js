@@ -19,7 +19,20 @@
  *                                change also writes Lala's Decision Log row
  *   override(db, …)              an accepted change with a reason, now
  *   proposeEpisodeChange(db, …)  Lala's change for a completed episode,
- *                                proposed once (Task #2956)
+ *                                proposed once (Task #2956); from its result
+ *                                only since Task #3086 (its posts count
+ *                                through their own rows)
+ *   proposeFromPost(db, numbers) a published post's change once its numbers
+ *                                lock (Task #3086)
+ *   proposeFromDeliverable(db, …) Lala's change when an event deliverable is
+ *                                approved (Task #3086)
+ *
+ * Follower causes (Evoni, 2026-10-13, Task #3086): published original posts,
+ * fulfilled (approved) event deliverables and accepted episode outcomes
+ * propose changes. Drafts, teasers, invitations and merely attending never
+ * do. Every proposed change waits in Review with its source, story time,
+ * reason and amount, and each source is applied once (a unique index). An
+ * accepted change moves followers only, never Influence.
  */
 
 // The middle of each follower tier (social_profiles.follower_tier): a starting count only.
@@ -120,7 +133,8 @@ class LedgerError extends Error {
 async function decide(db, row, { adjustTo = null, adjustBy = null, reason = null, by = null } = {}) {
   if (row.status !== 'proposed') throw new LedgerError(409, 'This change has already been decided.');
   const counted = row.cause === 'start' ? 0 : await countAt(db, row.show_id, row.social_profile_id, row.story_order);
-  if (counted === null && row.cause === 'episode') throw new LedgerError(409, "Accept Lala's starting follower count first.");
+  // Every change but a start needs the starting count first (Task #3086: posts and events too).
+  if (counted === null && row.cause !== 'start') throw new LedgerError(409, 'Accept the starting follower count first.');
   const before = counted ?? 0;
   const adjusting = adjustTo !== null || adjustBy !== null;
   if (adjustBy !== null && !Number.isInteger(adjustBy)) throw new LedgerError(400, 'The change must be a whole number.');
@@ -171,21 +185,21 @@ async function override(db, { showId, profileId, change, reason, at, by = null }
 
 // ── The episode follower change (Task #2956) ────────────────────────────────
 // Lala's change for a completed episode: a share of her followers at the
-// episode's After by its result, plus a share of its posts' decided likes.
+// episode's After by its result. Its posts no longer add to it: each post
+// proposes its own change (Task #3086), so a like counts once.
 const EPISODE_TIER_RATE = { slay: 0.05, pass: 0.025, safe: 0.01, fail: -0.01 };
 const POST_LIKES_TO_FOLLOWERS = 0.02;
-const DECIDED_NUMBERS = ['accepted', 'adjusted', 'viral', 'flop'];
 
 /**
- * The change from its factors: { change, from_result, from_posts }. The
- * result's share grows with the score (0.75× at 0, 1.25× at 100); a loss
- * never takes the count below 0.
+ * The change from its factors: { change, from_result }. The result's share
+ * grows with the score (0.75× at 0, 1.25× at 100); a loss never takes the
+ * count below 0.
  */
-function episodeChangeFrom({ followers, tier, score, post_likes: postLikes }) {
+function episodeChangeFrom({ followers, tier, score }) {
   const base = Number(followers) || 0;
-  const fromResult = Math.round(base * (EPISODE_TIER_RATE[tier] ?? 0) * (0.75 + (Number(score) || 0) / 200));
-  const fromPosts = Math.round((Number(postLikes) || 0) * POST_LIKES_TO_FOLLOWERS);
-  return { change: Math.max(-base, fromResult + fromPosts), from_result: fromResult, from_posts: fromPosts };
+  // `|| 0` turns a rounded -0 (a tiny fail) into 0.
+  const fromResult = Math.round(base * (EPISODE_TIER_RATE[tier] ?? 0) * (0.75 + (Number(score) || 0) / 200)) || 0;
+  return { change: Math.max(-base, fromResult) || 0, from_result: fromResult };
 }
 
 /**
@@ -205,21 +219,16 @@ async function proposeEpisodeChange(db, { showId, episodeId, lalaProfileId } = {
   if (!episode?.tier) return null;
   const storyOrder = require('./storyClock').orderOf(episode.episode_number ?? 0, 'after_episode');
   const followers = await countAt(db, showId, lalaId, storyOrder);
-  const [[{ likes }]] = await sequelize.query(
-    `SELECT COALESCE(SUM(pn.final_likes), 0)::int AS likes
-       FROM pulse_post_numbers pn JOIN feed_posts fp ON fp.id = pn.post_id
-      WHERE fp.episode_id = :episodeId AND fp.deleted_at IS NULL AND pn.deleted_at IS NULL AND pn.status IN (:decided)`,
-    { replacements: { episodeId, decided: DECIDED_NUMBERS } });
   const score = episode.score == null ? null : Number(episode.score);
-  const factors = { tier: episode.tier, score, followers: followers ?? 0, followers_known: followers !== null, post_likes: likes };
-  const { change, from_result: fromResult, from_posts: fromPosts } = episodeChangeFrom(factors);
-  Object.assign(factors, { from_result: fromResult, from_posts: fromPosts });
+  const factors = { tier: episode.tier, score, followers: followers ?? 0, followers_known: followers !== null };
+  const { change, from_result: fromResult } = episodeChangeFrom(factors);
+  factors.from_result = fromResult;
   try {
     return await PulseFollower.create({
       show_id: showId, social_profile_id: lalaId, story_order: storyOrder, change,
       count_after: followers === null ? null : followers + change,
       cause: 'episode', cause_id: episodeId,
-      reason: `Episode ${episode.episode_number ?? '?'} ${episode.tier.toUpperCase()}: proposed from its result and its posts.`,
+      reason: `Episode ${episode.episode_number ?? '?'} ${episode.tier.toUpperCase()}: proposed from its result.`,
       factors_json: factors, status: 'proposed',
     });
   } catch (err) {
@@ -231,7 +240,111 @@ async function proposeEpisodeChange(db, { showId, episodeId, lalaProfileId } = {
   }
 }
 
+// ── Posts and event deliverables (Task #3086) ───────────────────────────────
+// A post's numbers are "decided" once they lock (auto-accepted or by Evoni).
+const DECIDED_NUMBERS = ['accepted', 'adjusted', 'viral', 'flop'];
+// Not an authored post: these never move followers.
+const NOT_ORIGINAL = ['dm_screenshot', 'notification'];
+// An approved deliverable: this share of Lala's followers for each piece.
+const DELIVERABLE_RATE = 0.005;
+const MAX_PIECES = 5;
+
+/** Creates a proposed row once per (profile, cause, source); an existing one is returned. */
+async function proposeOnce(db, fields) {
+  const { PulseFollower } = db;
+  const where = { show_id: fields.show_id, social_profile_id: fields.social_profile_id, cause: fields.cause, cause_id: fields.cause_id };
+  const existing = await PulseFollower.findOne({ where });
+  if (existing) return existing;
+  try {
+    return await PulseFollower.create({ ...fields, status: 'proposed' });
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') return PulseFollower.findOne({ where });
+    throw err;
+  }
+}
+
+/**
+ * A published post's follower change, once its numbers lock: its likes ×
+ * POST_LIKES_TO_FOLLOWERS, a gain; a post Evoni made a flop loses what it
+ * would have gained. Stamped at the post's story order, or at its reveal
+ * when it is a teaser or hidden then (a teaser changes nothing until it is
+ * revealed). null when the post is not live, not an authored post, has no
+ * poster, or is held by a reveal whose moment is not known yet.
+ */
+async function proposeFromPost(db, numbers) {
+  if (!numbers || !DECIDED_NUMBERS.includes(numbers.status)) return null;
+  const { sequelize } = db;
+  const [[post]] = await sequelize.query(
+    `SELECT fp.id, fp.show_id, fp.social_profile_id, fp.poster_handle, fp.content_text, fp.post_type, fp.status,
+            ${require('./storyClock').postOrderSql('fp')} AS story_order
+       FROM feed_posts fp WHERE fp.id = :id AND fp.deleted_at IS NULL`, { replacements: { id: numbers.post_id } });
+  if (!post || post.status !== 'live' || !post.social_profile_id || NOT_ORIGINAL.includes(post.post_type)) return null;
+  let storyOrder = post.story_order == null ? null : Number(post.story_order);
+  const reveals = require('./pulseReveals');
+  const reveal = await db.PulseReveal.findOne({ where: { show_id: post.show_id, item_type: 'post', item_id: String(post.id) } });
+  if (reveal) {
+    const [at] = await reveals.resolveOrders(db, [reveal]);
+    if (!Number.isInteger(at)) return null;
+    if (!Number.isInteger(storyOrder) || at > storyOrder) storyOrder = at;
+  }
+  if (!Number.isInteger(storyOrder)) return null;
+  const likes = Number(numbers.final_likes) || 0;
+  const gain = Math.round(likes * POST_LIKES_TO_FOLLOWERS);
+  const change = numbers.status === 'flop' ? -gain : gain;
+  const before = await countAt(db, post.show_id, post.social_profile_id, storyOrder);
+  const snippet = String(post.content_text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return proposeOnce(db, {
+    show_id: post.show_id, social_profile_id: post.social_profile_id, story_order: storyOrder, change,
+    count_after: before === null ? null : Math.max(0, before + change),
+    cause: 'post', cause_id: String(post.id),
+    reason: numbers.status === 'flop' ? 'A post Evoni made a flop.' : `A post: ${likes.toLocaleString('en-US')} likes.`,
+    factors_json: { likes, rate: POST_LIKES_TO_FOLLOWERS, numbers: numbers.status, post_text: snippet, poster_handle: post.poster_handle || null },
+  });
+}
+
+/** proposeFromPost after the response; a failure is logged, never thrown. */
+function proposeFromPostLater(numbers) {
+  if (!numbers) return;
+  setImmediate(async () => {
+    try {
+      await proposeFromPost(require('../models'), numbers);
+    } catch (err) {
+      console.error('[PulseFollowers] the post follower change could not be proposed:', err.message);
+    }
+  });
+}
+
+/**
+ * Lala's follower change for an approved event deliverable: DELIVERABLE_RATE
+ * of her followers at the episode's After for each piece (up to MAX_PIECES).
+ * null without Lala, a started episode, or a starting count.
+ */
+async function proposeFromDeliverable(db, { showId, deliverable, lalaProfileId } = {}) {
+  if (!deliverable || deliverable.status !== 'approved') return null;
+  const { sequelize } = db;
+  const lalaId = lalaProfileId !== undefined ? lalaProfileId : await require('./lalaFeedProfile').lalaProfileId(sequelize);
+  if (!lalaId) return null;
+  const [[event]] = await sequelize.query(
+    `SELECT we.name, ep.episode_number FROM world_events we
+       LEFT JOIN episodes ep ON ep.id = COALESCE(:episodeId, we.used_in_episode_id) AND ep.deleted_at IS NULL
+      WHERE we.id = :eventId AND we.show_id = :showId`,
+    { replacements: { showId, eventId: deliverable.event_id, episodeId: deliverable.episode_id || null } });
+  if (!event || event.episode_number == null) return null;
+  const storyOrder = require('./storyClock').orderOf(Number(event.episode_number), 'after_episode');
+  const followers = await countAt(db, showId, lalaId, storyOrder);
+  if (followers === null) return null;
+  const pieces = Math.min(MAX_PIECES, Math.max(1, Number(deliverable.quantity) || 1));
+  const change = Math.round(followers * DELIVERABLE_RATE * pieces);
+  return proposeOnce(db, {
+    show_id: showId, social_profile_id: lalaId, story_order: storyOrder, change, count_after: followers + change,
+    cause: 'event', cause_id: String(deliverable.id),
+    reason: `A deliverable for ${event.name || 'an event'} was approved.`,
+    factors_json: { followers, rate: DELIVERABLE_RATE, pieces, deliverable: String(deliverable.description || '').slice(0, 120), event_name: event.name || null },
+  });
+}
+
 module.exports = {
-  TIER_MIDDLE, CAUSES, EPISODE_TIER_RATE, POST_LIKES_TO_FOLLOWERS,
-  parseApprox, estimateStart, proposeStarts, countAt, countsAt, decide, override, episodeChangeFrom, proposeEpisodeChange, LedgerError,
+  TIER_MIDDLE, CAUSES, EPISODE_TIER_RATE, POST_LIKES_TO_FOLLOWERS, DELIVERABLE_RATE, MAX_PIECES, NOT_ORIGINAL,
+  parseApprox, estimateStart, proposeStarts, countAt, countsAt, decide, override, episodeChangeFrom, proposeEpisodeChange,
+  proposeFromPost, proposeFromPostLater, proposeFromDeliverable, LedgerError,
 };
