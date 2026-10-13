@@ -2,7 +2,8 @@
  * Lala's profile column on the Feed page (Task #2747): her profile through
  * her registry link, her portrait, the show's home city, her career level
  * and the LalaVerse profiles she knows directly. Every value is the data's
- * own, or null.
+ * own, or null. Her followers (Task #3062): her canon count at the moment
+ * with its tier, else the estimate marked estimated.
  */
 jest.unmock('uuid');
 
@@ -58,6 +59,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   afterAll(async () => {
+    await run('DELETE FROM pulse_followers WHERE show_id IN (:show, :bare)', ids);
     await run('DELETE FROM registry_characters WHERE id = :rc', ids);
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:ids)', { ids: Object.values(profiles) });
@@ -106,5 +108,23 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const d = (await get(`/api/v1/social-profiles/lala?show_id=${ids.bare}`)).body.data;
     expect(d.home_city).toBeNull();
     expect(d.career).toBeNull();
+  });
+
+  it("her followers: the estimate before her start is accepted, then her canon count at the moment with its tier (Task #3062)", async () => {
+    const read = async (at) => (await get(`/api/v1/social-profiles/lala?show_id=${ids.show}${at === undefined ? '' : `&at=${at}`}`)).body.data.followers;
+    await run(`UPDATE social_profiles SET follower_count_approx = '12k' WHERE id = :id`, { id: profiles.lala });
+    // A proposed start does not count yet: the estimate, marked.
+    await models.PulseFollower.create({ show_id: ids.show, social_profile_id: profiles.lala, story_order: 0, cause: 'start', status: 'proposed', change: 0, count_after: 9000 });
+    expect(await read()).toEqual({ count: null, tier: null, estimated: true, estimate: '12k' });
+    await run(`UPDATE pulse_followers SET status = 'accepted', decided_at = NOW() WHERE show_id = :show`, ids);
+    // Accepted: 9,000 (Nano) from the start; 60,000 (Mid-tier) from story order 27.
+    await models.PulseFollower.create({ show_id: ids.show, social_profile_id: profiles.lala, story_order: 27, cause: 'episode', status: 'accepted', change: 51000, count_after: 60000, decided_at: new Date() });
+    expect(await read(17)).toEqual({ count: 9000, tier: { key: 'nano', label: 'Nano' }, estimated: false });
+    expect(await read(27)).toEqual({ count: 60000, tier: { key: 'mid', label: 'Mid-tier' }, estimated: false });
+    expect((await read()).count).toBe(60000);   // Director view: the latest
+    // A show with no ledger rows and the estimate: the estimate; with neither: null.
+    expect((await get(`/api/v1/social-profiles/lala?show_id=${ids.bare}`)).body.data.followers).toMatchObject({ count: null, estimated: true });
+    await run(`UPDATE social_profiles SET follower_count_approx = NULL WHERE id = :id`, { id: profiles.lala });
+    expect((await get(`/api/v1/social-profiles/lala?show_id=${ids.bare}`)).body.data.followers).toBeNull();
   });
 });

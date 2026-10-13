@@ -1,9 +1,10 @@
 /**
  * Admin › The Pulse › Growth (Task 2957; The Pulse spec §4 "Growth — Lala's
  * follower line across episodes (approved numbers solid, projection dashed),
- * best and worst posts, biggest jumps and their causes"). Evoni, 2026-10-12:
- * Influence waits for real data, so Growth shows the count and the tier
- * only. The tier is worked out from the count at each moment (Task 3033,
+ * best and worst posts, biggest jumps and their causes … and Influence").
+ * Influence (Task 3066; Evoni, 2026-10-13) is shown read only: Lala's stat
+ * now and each episode's change; episodes move it, The Pulse never does.
+ * The tier is worked out from the count at each moment (Task 3033,
  * lib/pulseAudience), never the stored follower_tier. Reads GET /api/v1/pulse-followers/growth; her starting count, when
  * it is still proposed, is confirmed here (PUT /pulse-followers/:id/accept),
  * and with none yet, starting counts are proposed (POST /pulse-followers/starts).
@@ -18,6 +19,31 @@ import { tierLabel } from '../../lib/pulseAudience';
 const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
 const signed = (n) => `${Number(n) > 0 ? '+' : Number(n) < 0 ? '−' : ''}${fmt(Math.abs(Number(n)))}`;
 const REVIEW = '/admin?tab=pulse&sub=review';
+
+/** Lala's Influence, read only (Task 3066): the value now out of the scale, and each episode's change. */
+export function InfluenceCard({ influence }) {
+  const rows = influence?.by_episode || [];
+  const now = influence?.now;
+  return (
+    <section className="pulse-growth-card" aria-label="Influence" data-testid="pulse-growth-influence">
+      <h3>Influence</h3>
+      {now === null || now === undefined
+        ? <p className="pulse-growth-muted">No Influence for Lala yet: it starts with her first completed episode.</p>
+        : <p className="pulse-growth-influence-now"><b>{fmt(now)}</b> of {fmt(influence.scale || 10)}</p>}
+      {rows.length > 0 && (
+        <ol className="pulse-growth-list" data-testid="pulse-growth-influence-episodes">
+          {rows.map((r) => (
+            <li key={r.episode_id}>
+              <span className="pulse-growth-num">{r.change === 0 ? '±0' : signed(r.change)}</span>
+              <span className="pulse-growth-text">Episode {r.episode_number ?? '?'}{r.after !== null && r.after !== undefined ? ` · ${fmt(r.after)} after` : ''}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="pulse-growth-muted">Read only: completing an episode changes Influence; The Pulse does not.</p>
+    </section>
+  );
+}
 
 /** A short axis label for a story moment, so the axis fits a phone: "Ep 2", "+1 day", "+1 week". */
 export function shortMoment(row) {
@@ -167,6 +193,7 @@ export default function PulseGrowth({ showId, chartWidth }) {
           </ol>
         </section>
       )}
+      <InfluenceCard influence={data.influence} />
       <div className="pulse-growth-columns">
         <PostList title="Best posts" posts={data.best || []} testId="pulse-growth-best" />
         <PostList title="Worst posts" posts={data.worst || []} testId="pulse-growth-worst" />

@@ -145,6 +145,8 @@ async function draftReactions(models, postId, { reactorIds = null, limit = DEFAU
   if (!Array.isArray(drafts)) throw new DraftError(502, 'The drafter answered in a form the feed could not read. Try again.');
 
   const existing = await FeedComment.count({ where: { feed_post_id: post.id } });
+  // Each reaction's story time: now, never before the post (Task #3064).
+  const storyOrder = await require('./storyClock').commentOrder(models, post);
   const saved = [];
   for (let i = 0; i < drafts.length; i++) {
     const d = drafts[i] || {};
@@ -162,6 +164,7 @@ async function draftReactions(models, postId, { reactorIds = null, limit = DEFAU
       text,
       status: 'draft',
       sort_order: existing + i,
+      story_order: storyOrder,
       ai_generated: true,
       generation_model: MODELS[0],
       voice_note: reactor.relationship ? `${reactor.relationship.replace(/_/g, ' ')} of the poster` : 'relevant to Lala',

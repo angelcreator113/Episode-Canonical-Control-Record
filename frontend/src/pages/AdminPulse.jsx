@@ -3,11 +3,11 @@
  * §4; Task #2919). Its sub-tabs are ?sub=: Review, Uploads, Growth,
  * Storylines and Calendar, Story clock (Task 2941: the scrubber, The
  * Pulse as of any story moment), Voices (Task 2972: each posting
- * character's Voice Profile) and Engine (Task 2968: the daily draft cap,
- * the ambient switch and the posting queue). Review (Task 2925, the feed's
- * director tools, the default), Uploads (phase 2) and Growth (Task 2957:
- * Lala's follower line, best and worst posts, biggest jumps) are live; the
- * others say which phase brings them. Review's tab counts what is waiting. Nothing here shows in
+ * character's Voice Profile), Engine (Task 2968: the daily requests by
+ * lane, Task 3031, the ambient switch and the posting queue), Polls and
+ * Recaps. Review (Task 2925, the feed's director tools) is the default.
+ * A tab with comingIn says which phase brings it; none has one now.
+ * Review's tab counts what is waiting. Nothing here shows in
  * The Pulse.
  *
  * Uploads › Cover: The Pulse's cover image and its alt text, saved to the

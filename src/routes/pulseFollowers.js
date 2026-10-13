@@ -112,7 +112,7 @@ router.get('/history', requireAuth, async (req, res) => {
 
 // GET /growth?show_id= (Task #2957): Admin › The Pulse › Growth, read only
 // (services/pulseGrowth.js): Lala's follower line, projection, best and
-// worst posts and biggest jumps. Count and tier only; no Influence yet.
+// worst posts and biggest jumps; Lala's Influence, read only (Task #3066).
 router.get('/growth', requireAuth, async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');

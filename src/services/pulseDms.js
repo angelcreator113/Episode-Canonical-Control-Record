@@ -102,6 +102,32 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
   });
 }
 
+/**
+ * Opens a conversation and queues its first message, or neither (Task #3053):
+ * the sender, their stage and today's manual requests are checked before
+ * the thread is saved, so a refused first message leaves no empty thread
+ * (which Admin listed, and a later attempt reused with its old moment and
+ * topic). A thread this call made is removed if queueing still fails.
+ * Returns { thread, job }.
+ */
+async function startConversation(db, { showId, a, b, at = 0, topic = null, senderProfileId, messageAt = null }) {
+  if (![Number(a), Number(b)].includes(Number(senderProfileId))) throw new DmError(400, 'The sender must be one of the two in the conversation.');
+  await assertMaySend(db, senderProfileId);
+  await require('./pulseRequests').assertRoom(db, showId, 'manual');
+  const [x, y] = pairOf(a, b);
+  const existed = await db.PulseDmThread.findOne({ where: { show_id: showId, profile_a_id: x, profile_b_id: y } });
+  const thread = await openThread(db, { showId, a, b, at, topic });
+  try {
+    const job = await enqueueMessage(db, { threadId: thread.id, senderProfileId, at: messageAt });
+    return { thread, job };
+  } catch (err) {
+    if (!existed) {
+      await thread.destroy({ force: true }).catch((cleanupErr) => console.error('[PulseDms] the empty conversation could not be removed:', cleanupErr.message));
+    }
+    throw err;
+  }
+}
+
 /** The sender's Voice Profile, character and Feed profile, or a DmError. */
 async function senderOf(db, profileId) {
   const voice = await db.PulseVoice.findOne({ where: { social_profile_id: profileId } });
@@ -259,5 +285,5 @@ function registerHandlers() {
 }
 
 module.exports = {
-  MODELS, HISTORY, DmError, pairOf, openThread, messagesOf, enqueueMessage, buildPrompt, draftMessage, decide, threadsOf, handleDm, registerHandlers,
+  MODELS, HISTORY, DmError, pairOf, openThread, startConversation, messagesOf, enqueueMessage, buildPrompt, draftMessage, decide, threadsOf, handleDm, registerHandlers,
 };

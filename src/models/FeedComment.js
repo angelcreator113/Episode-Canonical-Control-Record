@@ -19,6 +19,9 @@ module.exports = (sequelize) => {
     status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'draft', validate: { isIn: [['draft', 'live']] } },
     posted_at: { type: DataTypes.DATE, allowNull: true },
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // Its story time (Task #3064, migration 20261013030000): the moment it was
+    // made, never before its post; NULL reads as its post's. storyClock.commentOrder.
+    story_order: { type: DataTypes.INTEGER, allowNull: true },
     ai_generated: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     generation_model: { type: DataTypes.STRING(60), allowNull: true },
     voice_note: { type: DataTypes.TEXT, allowNull: true },

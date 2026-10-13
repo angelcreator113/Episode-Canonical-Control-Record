@@ -5,10 +5,11 @@
  * follower line across episodes (approved numbers solid, projection dashed),
  * best and worst posts, biggest jumps and their causes"). Read only, from
  * the follower ledger (services/pulseFollowers.js) and post numbers
- * (services/pulseNumbers.js). Evoni, 2026-10-12: Influence waits for real
- * data, so this is the count and the tier only. The tier is worked out from
- * the count (services/pulseAudience.js, Task #3033), never the stored
- * follower_tier, and never feeds Influence.
+ * (services/pulseNumbers.js). The tier is worked out from the count
+ * (services/pulseAudience.js, Task #3033), never the stored follower_tier,
+ * and never feeds Influence. Influence (Task #3066; Evoni, 2026-10-13: shown
+ * read only) is Lala's character_state stat, which episodes move; The Pulse
+ * only reads it.
  *
  *   growthOf(db, showId, { lalaProfileId })
  *     profile     Lala's Feed profile (handle, name) and the tier of her
@@ -19,16 +20,48 @@
  *     projection  proposed episode changes, each with the count it would make
  *     best, worst her five posts with the most and fewest locked likes
  *     jumps       her five biggest accepted changes (not the start), with causes
+ *     influence   { now, scale, by_episode: [{ episode_id, episode_number,
+ *                 change, after }] } from character_state and
+ *                 character_state_history (deltas_json.influence), oldest
+ *                 episode first; now is null with no state
  */
 
 const DECIDED = ['accepted', 'adjusted', 'viral', 'flop'];
+const INFLUENCE_SCALE = 10;   // character_state's 0–10 stats
+
+/**
+ * Lala's Influence, read only (Task #3066): the value now, and each
+ * episode's change with the value after it (the newest snapshot that
+ * episode wrote, when it wrote one). Nothing here writes it.
+ */
+async function influenceOf(db, showId) {
+  const { sequelize } = db;
+  const q = (sql) => sequelize.query(sql, { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
+  const [state] = await q(`SELECT influence FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`);
+  const rows = await q(
+    `SELECT h.episode_id, e.episode_number,
+            SUM(COALESCE((h.deltas_json->>'influence')::numeric, 0)) AS change,
+            (ARRAY_AGG(h.state_after_json->>'influence' ORDER BY h.created_at DESC)
+              FILTER (WHERE h.state_after_json IS NOT NULL AND jsonb_exists(h.state_after_json, 'influence')))[1] AS after
+       FROM character_state_history h JOIN episodes e ON e.id = h.episode_id AND e.deleted_at IS NULL
+      WHERE h.show_id = :showId AND h.character_key = 'lala' AND jsonb_exists(h.deltas_json, 'influence')
+      GROUP BY h.episode_id, e.episode_number
+      ORDER BY e.episode_number ASC NULLS LAST`);
+  const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  return {
+    now: state ? num(state.influence) : null,
+    scale: INFLUENCE_SCALE,
+    by_episode: rows.map((r) => ({ episode_id: r.episode_id, episode_number: num(r.episode_number), change: num(r.change) ?? 0, after: num(r.after) })),
+  };
+}
 const LIST = 5;
 
 async function growthOf(db, showId, { lalaProfileId } = {}) {
   const { sequelize } = db;
   const { label } = require('./storyClock');
   const lalaId = lalaProfileId !== undefined ? lalaProfileId : await require('./lalaFeedProfile').lalaProfileId(sequelize);
-  const empty = { profile: null, start: null, line: [], projection: [], best: [], worst: [], jumps: [] };
+  const influence = await influenceOf(db, showId);
+  const empty = { profile: null, start: null, line: [], projection: [], best: [], worst: [], jumps: [], influence };
   if (!lalaId) return empty;
   const q = (sql, replacements) => sequelize.query(sql, { replacements: { showId, lalaId, ...replacements }, type: sequelize.QueryTypes.SELECT });
 
@@ -84,7 +117,8 @@ async function growthOf(db, showId, { lalaProfileId } = {}) {
     best: (await posts('DESC')).map(postShape),
     worst: (await posts('ASC')).map(postShape),
     jumps,
+    influence,
   };
 }
 
-module.exports = { growthOf };
+module.exports = { INFLUENCE_SCALE, growthOf, influenceOf };

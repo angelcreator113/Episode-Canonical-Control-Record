@@ -221,6 +221,7 @@ Answer with JSON only: {"text": "the comment"}`;
     feed_post_id: post.id, show_id: post.show_id, social_profile_id: profile.id,
     handle: String(profile.handle).replace(/^@/, ''), display_name: profile.display_name || character.display_name,
     text, status: 'draft', sort_order: existing, ai_generated: true, generation_model: MODELS[0],
+    story_order: await require('./storyClock').commentOrder(db, post),   // Task #3064
   });
   return { comment, post, voice, privateState: character.living_state || null };
 }
@@ -400,6 +401,7 @@ async function draftCommentBatch(db, { postId, characterIds, jobId = null }) {
   const parsed = parseBatch(await askBatch(buildCommentBatchPrompt(post, entries), 200 * entries.length), entries.length);
   const drafted = [];
   let order = await db.FeedComment.count({ where: { feed_post_id: post.id } });
+  const storyOrder = await require('./storyClock').commentOrder(db, post);   // Task #3064
   for (const [i, e] of entries.entries()) {
     const got = parsed.get(i + 1);
     if (!got) { failed.push({ characterId: e.item.characterId, error: `${e.character.display_name}: the batch answer had no readable comment.` }); continue; }
@@ -407,6 +409,7 @@ async function draftCommentBatch(db, { postId, characterIds, jobId = null }) {
       feed_post_id: post.id, show_id: post.show_id, social_profile_id: e.profile.id,
       handle: String(e.profile.handle).replace(/^@/, ''), display_name: e.profile.display_name || e.character.display_name,
       text: got.text.slice(0, 1000), status: 'draft', sort_order: order, ai_generated: true, generation_model: MODELS[0],
+      story_order: storyOrder,
     });
     order += 1;
     drafted.push({ comment, voice: e.voice, privateState: e.character.living_state || null, characterId: e.item.characterId });
