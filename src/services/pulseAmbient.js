@@ -70,7 +70,9 @@ async function planAmbient(db, showId, now = new Date()) {
   if (room <= 0) return [];
 
   const moment = await require('./storyClock').presentOrder(db, showId);
-  const candidates = (await require('./pulseVoices').eligible(db, showId, { at: moment })).filter((c) => c.voice);
+  // Only approved voices post on their own (Task #3029).
+  const { eligible, isApproved } = require('./pulseVoices');
+  const candidates = (await eligible(db, showId, { at: moment })).filter((c) => isApproved(c.voice));
   if (!candidates.length) return [];
   const [recent] = await sequelize.query(
     `SELECT DISTINCT social_profile_id FROM feed_posts
@@ -90,6 +92,8 @@ async function planAmbient(db, showId, now = new Date()) {
 
 async function handleAmbient(db, job) {
   const p = job.payload_json || {};
+  const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
+  if (blocked) return { skipped: blocked };
   const { post } = await require('./pulseDrafter').draftAndRoute(db, {
     showId: job.show_id, characterId: p.character_id, moment: p.moment, context: {},
   });

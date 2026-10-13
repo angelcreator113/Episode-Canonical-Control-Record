@@ -68,7 +68,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
       await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, depth_level, feed_profile_id, created_at, updated_at)
                  VALUES (:id, :reg, :key, :name, 'alive', :feed, NOW(), NOW())`, { id: c[key], reg: ids.reg, key: `${key}-${tag}`, name: key, feed: p[key] });
       if (key !== 'nia') {
-        await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { case: 'lowercase' }, examples_json: [], status: 'built' });
+        await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { case: 'lowercase' }, examples_json: [], status: 'built', approved_at: new Date(), approved_by: 'evoni' });  // approved: the worker posts only for approved voices (Task #3029)
       }
     }
   });

@@ -6,6 +6,9 @@
  * editable fields; the examples, with Remove, and one added by hand. The
  * banned phrases the gate rejects are listed read-only. Posts are pinned as
  * examples from Review's cards (PinAsExample).
+ * Approve voice (Task 3029; Evoni, 2026-10-12): the worker posts for a
+ * character only once she approves the voice; her edits keep it, a rebuild
+ * clears it.
  * Styles: AdminPanel.css (pulse-voices-*).
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -30,6 +33,14 @@ export function voiceState(row) {
   if (row.needs_rebuild) return { label: 'Profile changed: rebuild', tone: 'stale' };
   if (row.voice.status === 'edited') return { label: `Edited${row.voice.edited_by ? ` by ${row.voice.edited_by}` : ''}`, tone: 'ok' };
   return { label: 'Built', tone: 'ok' };
+}
+
+/** Whether the worker may post for the character, in words. */
+export function approvalState(voice) {
+  if (!voice) return null;
+  if (!voice.approved_at) return { approved: false, label: 'Waiting for your approval: not posting yet' };
+  const when = new Date(voice.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return { approved: true, label: `Approved${voice.approved_by ? ` by ${voice.approved_by}` : ''} on ${when}` };
 }
 
 /**
@@ -156,8 +167,20 @@ export function VoiceCard({ row, onVoice }) {
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
   const state = voiceState(row);
+  const approval = approvalState(row.voice);
+  const setApproved = async (yes) => {
+    setBusy(true); setError(null);
+    try {
+      const res = await api.post(`/api/v1/pulse-voices/${row.voice.id}/${yes ? 'approve' : 'unapprove'}`);
+      onVoice(row.registry_character_id, res.data.voice);
+    } catch (err) {
+      console.error('[PulseVoices] changing the approval failed:', err.response?.status || err.message);
+      setError(errorOf(err, yes ? 'Approving the voice failed.' : 'Withdrawing the approval failed.'));
+    } finally { setBusy(false); }
+  };
   const build = async () => {
     if (row.voice?.status === 'edited' && !window.confirm('Rebuilding replaces your edits to the habits. The examples stay. Rebuild?')) return;
+    if (row.voice?.approved_at && !window.confirm('A rebuilt voice needs your approval again before automated posting. Rebuild?')) return;
     setBusy(true); setError(null);
     try {
       const res = await api.post(`/api/v1/pulse-voices/${row.registry_character_id}/build`);
@@ -176,10 +199,20 @@ export function VoiceCard({ row, onVoice }) {
           <b>{row.display_name}</b> <span className="pulse-voices-muted">@{row.handle}</span>
           <span className="pulse-voices-muted" data-testid="pulse-voices-stage">{stageText(row.depth_level)}</span>
           <span className={`pulse-voices-state pulse-voices-state-${state.tone}`} data-testid="pulse-voices-state">{state.label}</span>
+          {approval && (
+            <span className={`pulse-voices-state pulse-voices-state-${approval.approved ? 'ok' : 'stale'}`} data-testid="pulse-voices-approval">{approval.label}</span>
+          )}
         </span>
       </div>
       <span className="pulse-voices-actions">
         <button type="button" className="pulse-voices-btn" disabled={busy} onClick={build}>{busy ? 'Building…' : row.voice ? 'Rebuild' : 'Build voice'}</button>
+        {row.voice && !approval.approved && (
+          <button type="button" className="pulse-voices-btn" disabled={busy || row.needs_rebuild}
+            title={row.needs_rebuild ? 'Rebuild first: the profile changed' : undefined} onClick={() => setApproved(true)}>Approve voice</button>
+        )}
+        {row.voice && approval.approved && (
+          <button type="button" className="pulse-voices-link" disabled={busy} onClick={() => setApproved(false)}>Withdraw approval</button>
+        )}
         {row.voice && (
           <button type="button" className="pulse-voices-link" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{open ? 'Hide voice' : 'Show voice'}</button>
         )}
