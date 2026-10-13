@@ -11,6 +11,8 @@
  * Design notes:
  *   - Lala posts from her own profile (or a synthetic "Lala" fallback when
  *     no profile is configured) so the mini-reactions feel first-person.
+ *   - Every one is a draft: Lala's posts always go to Review (Evoni,
+ *     2026-10-13, Task #3103), where approving one puts it live.
  *   - Copy is templated with variety — three options per event type picked
  *     at random, so repeat milestones don't read identically.
  *   - Non-blocking: every write is try/catch + console.warn on failure.
@@ -85,8 +87,8 @@ async function writeFeedPost(sequelize, showId, post) {
       )`,
       { replacements: {
         id: uuidv4(),
-        // Tied to an episode: a draft until it is published.
-        status: post.episode_id ? 'draft' : 'live',
+        // Lala's post: a draft for Review, with or without an episode (Task #3103).
+        status: 'draft',
         showId,
         episodeId: post.episode_id || null,
         eventId: post.event_id || null,

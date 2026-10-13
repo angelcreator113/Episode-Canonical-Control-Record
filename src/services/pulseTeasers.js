@@ -234,6 +234,6 @@ async function citiesAt(db, showId, at) {
 }
 
 module.exports = {
-  TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser,
+  TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser, imageBytes,
   recutFor, postReveals, changedCityKeys, savedCities, citiesAt,
 };
