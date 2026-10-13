@@ -128,8 +128,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(one.status).toBe(200);
     expect(one.body.recap).toMatchObject({ title: 'The week the gala happened', intro: 'Here is what everyone said.', week_start: WEEK });
     expect(one.body.recap.posts).toEqual([
-      { poster_handle: `mid${tag}`, poster_display_name: 'mid', content_text: 'mid post', likes: 300, comments_count: 9, moment: 'During Ep 1' },
-      { poster_handle: `big${tag}`, poster_display_name: 'big', content_text: 'big post', likes: 900, comments_count: 4, moment: 'During Ep 1' },
+      { poster_handle: `mid${tag}`, poster_display_name: 'mid', content_text: 'mid post', likes: 300, comments_count: 9, moment: 'During Ep 1', image: null },
+      { poster_handle: `big${tag}`, poster_display_name: 'big', content_text: 'big post', likes: 900, comments_count: 4, moment: 'During Ep 1', image: null },
     ]);
     const raw = JSON.stringify(one.body);
     for (const secret of [ids.show, ids.ep1, p.mid, p.big]) expect(raw).not.toContain(secret);

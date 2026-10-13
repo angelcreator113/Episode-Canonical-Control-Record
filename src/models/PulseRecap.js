@@ -17,6 +17,8 @@ module.exports = (sequelize, DataTypes) => {
     title:        { type: DataTypes.STRING(200), allowNull: false },
     intro:        { type: DataTypes.TEXT, allowNull: true },
     post_ids:     { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    // Each post's image copied to the public site bucket at publishing (migration 20261013090000; Task #3099).
+    images:       { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
     published_at: { type: DataTypes.DATE, allowNull: true },
     published_by: { type: DataTypes.STRING(255), allowNull: true },
   }, {

@@ -5,8 +5,10 @@
  * /api/v1/public/recaps. No auth middleware and no req.user: the website is
  * for logged-out visitors. Published recaps only; each post as The Pulse
  * shows it at the present (a post since hidden or taken down drops out).
- * Text only: no images until website storage is live. No show, profile or
- * episode ids leave the server.
+ * Each post's image is its copy in the public site bucket, made at
+ * publishing, sent only while it still matches what The Pulse shows
+ * (pulseRecap.publicImageOf; Task #3099). No show, profile or episode ids,
+ * and no studio image URL, leave the server.
  *
  *   GET /        published recaps, newest week first: id, title, week_start
  *   GET /:id     one published recap: its title, intro and posts
@@ -37,14 +39,15 @@ router.get('/', readLimiter, async (req, res) => {
   }
 });
 
-// PUBLIC: one published weekly recap; its posts' text and numbers as The Pulse shows them now, no production ids, no identity read.
+// PUBLIC: one published weekly recap; its posts' text, numbers and public image copies as The Pulse shows them now, no production ids, no identity read.
 router.get('/:id', readLimiter, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Recap not found' });
     const recap = await getModels().PulseRecap.findOne({ where: { id: req.params.id, status: 'published' } });
     if (!recap) return res.status(404).json({ error: 'Recap not found' });
     const storyLabel = require('../services/storyClock').label;
-    const posts = await require('../services/pulseRecap').postsOf(getModels(), recap);
+    const { postsOf, publicImageOf } = require('../services/pulseRecap');
+    const posts = await postsOf(getModels(), recap);
     res.set('Cache-Control', 'public, max-age=300');
     return res.json({
       recap: {
@@ -52,6 +55,7 @@ router.get('/:id', readLimiter, async (req, res) => {
         posts: posts.map((p) => ({
           poster_handle: p.poster_handle, poster_display_name: p.poster_display_name, content_text: p.content_text,
           likes: p.likes, comments_count: p.comments_count, moment: p.story_order == null ? null : storyLabel(p.story_order),
+          image: publicImageOf(recap, p),
         })),
       },
     });
