@@ -171,7 +171,7 @@ const keyOf = (type, id, kind) => `${type}:${kind || ''}:${id}`;
  * kind) gives 'revealed' | 'teaser' | 'hidden'; teaserOf(type, id, kind) a
  * teaser's { style, url } (its image cut from the full one, Task #3034; url
  * null when there is none, and then no image is shown); hiddenIds(type, kind) the ids
- * hidden then; hiddenProfiles the Feed profiles Lala has not met by then (a
+ * hidden then, teaserIds(type, kind) those in teaser; hiddenProfiles the Feed profiles Lala has not met by then (a
  * set character reveal, else the derived episode, met during it), never
  * Lala herself. With no moment (Director view) everything is revealed.
  */
@@ -183,9 +183,11 @@ async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
     hiddenProfiles: new Set(),
     stateOf(type, id, kind) { return this.states.get(keyOf(type, id, kind)) || 'revealed'; },
     teaserOf(type, id, kind) { return this.teasers.get(keyOf(type, id, kind)) || null; },
-    hiddenIds(type, kind) {
+    hiddenIds(type, kind) { return this.idsIn(type, kind, 'hidden'); },
+    teaserIds(type, kind) { return this.idsIn(type, kind, 'teaser'); },
+    idsIn(type, kind, state) {
       const prefix = `${type}:${kind || ''}:`;
-      return [...this.states].filter(([k, v]) => v === 'hidden' && k.startsWith(prefix)).map(([k]) => k.slice(prefix.length));
+      return [...this.states].filter(([k, v]) => v === state && k.startsWith(prefix)).map(([k]) => k.slice(prefix.length));
     },
   };
   if (!Number.isInteger(at) || !db.PulseReveal) return view;

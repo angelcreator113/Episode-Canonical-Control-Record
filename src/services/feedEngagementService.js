@@ -368,7 +368,8 @@ async function computeFeedMomentum(showId, models) {
  * Task #2987: `at` counts only posts at or before that story order (and those
  * of unknown story time), as GET /feed-posts?at= keeps them, so a later
  * episode's trend never shows at an earlier moment (spec §2 rule 2); `city`
- * counts one Dream City's posts (its local trends).
+ * counts one Dream City's posts (its local trends). At a moment, hidden and
+ * teaser posts are left out (Task #3048).
  */
 async function getTrendingTopics(showId, models, { at = null, city = null } = {}) {
   const { FeedPost, sequelize } = models;
@@ -380,9 +381,11 @@ async function getTrendingTopics(showId, models, { at = null, city = null } = {}
     and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(at)})`));
     // Reveals at that moment (services/pulseReveals.js), as GET /feed-posts?at=:
     // a hidden post, or one by a character Lala has not met yet, is not counted.
+    // Nor is a teaser post: it is sent with no words and no topic
+    // (applyPostReveal, routes/feedPostRoutes.js), so its tags would give it away (Task #3048).
     const { lalaProfileId } = require('./lalaFeedProfile');
     const reveals = await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: await lalaProfileId(sequelize) });
-    const hiddenPosts = reveals.hiddenIds('post');
+    const hiddenPosts = [...reveals.hiddenIds('post'), ...reveals.teaserIds('post')];
     if (hiddenPosts.length) and.push({ id: { [Op.notIn]: hiddenPosts } });
     if (reveals.hiddenProfiles.size) {
       and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
