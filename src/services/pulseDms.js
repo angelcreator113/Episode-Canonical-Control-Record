@@ -135,6 +135,8 @@ async function senderOf(db, profileId) {
   await assertMaySend(db, profileId);   // the stage may have changed since the message was queued
   const character = await db.RegistryCharacter.findByPk(voice.registry_character_id);
   if (!character) throw new DmError(404, 'The voice\'s character is gone.');
+  // What they privately know shapes the message, never its words (Task #3088).
+  character.pulsePrivateKnowledge = await require('./pulseKnowledge').privateKnowledge(db, character.id);
   const [[profile]] = await db.sequelize.query(
     'SELECT id, handle, display_name FROM social_profiles WHERE id = :id AND deleted_at IS NULL', { replacements: { id: profileId } });
   if (!profile) throw new DmError(404, `Profile ${profileId} is gone.`);
@@ -160,8 +162,8 @@ What the conversation is about: ${topic || 'whatever they would message about'}.
 The conversation so far:
 ${lines}
 
-PRIVATE (shapes the mood only; never state, quote or hint at it directly):
-${JSON.stringify(sender.character.living_state || {})}
+${require('./pulseDrafter').PRIVATE_RULE}
+${JSON.stringify(require('./pulseDrafter').privateOf(sender.character))}
 
 Rules: stay in the world (nothing about a show, episodes or a studio); nothing that happens after this moment; one message, the length they really text; never use: ${BANNED_PHRASES.join(', ')}.
 Answer with JSON only: {"text": "the message"}`;
@@ -215,7 +217,7 @@ async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = 
     show_id: thread.show_id, social_profile_id: senderId, poster_handle: sender.profile.handle,
     content_text: text, trending_topic: null, story_order: order,
   };
-  const gate = await gateApi.check(db, asPost, { voice: sender.voice, privateState: sender.character.living_state || null, lalaProfileId });
+  const gate = await gateApi.check(db, asPost, { voice: sender.voice, privateState: require('./pulseDrafter').privateOf(sender.character), lalaProfileId });
   // Every DM waits for Evoni (her ruling); the other reasons say what else to look at.
   const review = ['dm', ...gateApi.reviewReasons(asPost, gate, { lalaProfileId })];
   const row = await db.PulseDmMessage.create({
