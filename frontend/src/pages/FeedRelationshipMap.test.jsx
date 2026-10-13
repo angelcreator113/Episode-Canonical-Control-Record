@@ -2,6 +2,8 @@
  * The Relationship Map shows each pair's Pulse closeness, read only
  * (Task 3072): the canvas is asked for the active show, and a selected
  * profile's relationships show how close each pair is.
+ * Since Task 3115 the map edits The Pulse's relationships: its form offers
+ * The Pulse's 17 kinds, there is no Auto-Generate, and a refused pair says why.
  */
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
@@ -46,5 +48,31 @@ describe('FeedRelationshipMap closeness', () => {
     fireEvent.click(nia);
     const close = await screen.findAllByTestId('frm-closeness');
     expect(close.map((el) => el.textContent)).toEqual(['62% close']);
+  });
+
+  test('the form offers The Pulse\'s kinds; no Auto-Generate; a refused pair shows the reason', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/feed-relationships/canvas') return { data: canvas };
+      if (url === '/api/v1/feed-relationships/profiles') return { data: { profiles: [{ id: 1, handle: 'nia' }, { id: 2, handle: 'marcus' }] } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { data: { error: 'These two already have this relationship.' } } });
+    render(<MemoryRouter><FeedRelationshipMap /></MemoryRouter>);
+    expect(screen.queryByText(/Auto-Generate/)).toBeNull();
+    fireEvent.click(await screen.findByText('+ Add Relationship'));
+    const [a, kind, b] = screen.getAllByRole('combobox');
+    expect([...kind.querySelectorAll('option')].map((o) => o.value)).toEqual([
+      'collab', 'bestie', 'mentor', 'management', 'family', 'couple', 'situationship', 'ex', 'baby_daddy', 'baby_mama',
+      'rival', 'feud', 'shade', 'former_friends', 'copycat', 'secret_link', 'orbit',
+    ]);
+    await waitFor(() => expect(a.querySelectorAll('option')).toHaveLength(3));
+    fireEvent.change(a, { target: { value: '1' } });
+    fireEvent.change(kind, { target: { value: 'former_friends' } });
+    fireEvent.change(b, { target: { value: '2' } });
+    fireEvent.click(screen.getByText(/^Create/));
+    expect(await screen.findByText('These two already have this relationship.')).toBeTruthy();
+    expect(api.post).toHaveBeenCalledWith('/api/v1/feed-relationships', {
+      influencer_a_id: 1, influencer_b_id: 2, relationship_type: 'former_friends', is_public: true,
+    });
   });
 });

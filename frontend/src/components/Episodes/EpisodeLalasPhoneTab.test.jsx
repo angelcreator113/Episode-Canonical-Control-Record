@@ -371,3 +371,56 @@ describe('EpisodeLalasPhoneTab — To build rows open the Phone Hub at their scr
     expect(within(link).getByText('Generate in Phone Hub →')).toBeTruthy();
   });
 });
+
+// Task 3111: each feed moment (a Phone beat) may be pinned to a story moment
+// of its episode; showing that moment draws The Pulse as of its pin.
+describe('EpisodeLalasPhoneTab — beat pinning (Task 3111)', () => {
+  const EP3 = { ...EPISODE, episode_number: 3 };
+  const SCREENS = [
+    { id: 'home', name: 'Home', category: 'phone', is_home: true, generated: true, url: 'https://x/home.png', asset_id: 'a-home', content_zones: [{ id: 'n1', content_type: 'notifications' }] },
+    { id: 'dms', name: 'DMs', category: 'phone', generated: true, url: 'https://x/dms.png', asset_id: 'a-dms', content_zones: [{ id: 'c1', content_type: 'dm_thread' }] },
+  ];
+  const PINNED = [
+    { id: 'm1', phone_screen_type: 'dm', screen_content: 'Are you going tonight?', story_phase: 'lala_arrives' },
+    { id: 'm2', phone_screen_type: 'notification', screen_content: 'New follower', story_phase: null },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+  // A moment's row in the list (the phone may draw the same words on its screen).
+  const row = (text) => screen.getAllByText(text).map((el) => el.closest('button.lalas-phone-moment-btn')).find(Boolean);
+
+  test('showing a pinned moment draws the phone at its moment; a screen row at During', async () => {
+    mockGets({ overlays: SCREENS, moments: PINNED });
+    render(<EpisodeLalasPhoneTab episode={EP3} onPreview={() => {}} />);
+    await screen.findByText('Are you going tonight?');
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home · During Ep 3');
+    fireEvent.click(row('Are you going tonight?'));
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: DMs · Lala arrives Ep 3');
+    fireEvent.click(row('New follower'));
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home · During Ep 3');
+  });
+
+  test("a moment's picker pins it (null for During); a refused pin says why", async () => {
+    mockGets({ overlays: SCREENS, moments: PINNED });
+    vi.mocked(api.put).mockResolvedValue({ data: { data: { id: 'm2', story_phase: 'after_episode' } } });
+    render(<EpisodeLalasPhoneTab episode={EP3} onPreview={() => {}} />);
+    await screen.findAllByText('New follower');
+    const [dmPick, notePick] = screen.getAllByLabelText('Story moment for this beat');
+    expect(dmPick.value).toBe('lala_arrives');
+    expect(notePick.value).toBe('during_episode');
+    expect([...notePick.options].map((o) => o.textContent)).toEqual(['Before', 'Announced', 'Invitation sent', 'Lala arrives', 'During', 'After', 'The day after', 'A week after']);
+    fireEvent.change(notePick, { target: { value: 'after_episode' } });
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-enhanced/s-1/moments/m2/phase', { story_phase: 'after_episode' }));
+    await waitFor(() => expect(screen.getAllByLabelText('Story moment for this beat')[1].value).toBe('after_episode'));
+    fireEvent.click(row('New follower'));
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Home · After Ep 3');
+
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { status: 409, data: { error: 'This post happens After Ep 3; a beat at Before Ep 3 is earlier in story time.' } } });
+    fireEvent.change(screen.getAllByLabelText('Story moment for this beat')[0], { target: { value: 'during_episode' } });
+    await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/api/v1/feed-enhanced/s-1/moments/m1/phase', { story_phase: null }));
+    expect((await screen.findByTestId('lalas-phone-pin-error')).textContent).toMatch(/earlier in story time/);
+    expect(screen.getAllByLabelText('Story moment for this beat')[0].value).toBe('lala_arrives');
+  });
+});

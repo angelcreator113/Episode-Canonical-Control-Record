@@ -6,13 +6,20 @@
  *   app.use('/api/v1/feed-relationships', feedRelationshipRoutes);
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * GET    /              — list; query: influencer_a_id, type
+ * GET    /              — list; query: influencer_a_id (either side), type
  * POST   /              — create
  * PUT    /:id           — update
  * DELETE /:id           — delete
  * GET    /canvas        — nodes + edges formatted for SVG renderer; with
  *                          ?show_id=, each edge's Pulse closeness (read only)
  * POST   /:id/generate-ripples — generate caught-in-middle flags
+ *
+ * Since Task #3115 (Evoni, 2026-10-13: "go with (a)") the map reads and edits
+ * social_profile_relationships, the table The Pulse reads for the kind of
+ * relationship and its closeness: an edit here changes The Pulse.
+ * feed_profile_relationships is no longer written; its rows were copied over
+ * by migration 20261013130000. The responses keep the map's old field names
+ * (influencer_a_id, influencerA, is_public, notes) so the pages read as before.
  */
 const express = require('express');
 const router  = express.Router();
@@ -26,35 +33,90 @@ function getModels(req) {
   return req.app.get('models') || require('../models');
 }
 
+const { RELATIONSHIP_KINDS, CONFLICT_KINDS } = require('../utils/relationshipKinds');
+const KINDS = new Set(RELATIONSHIP_KINDS);
+
 const EDGE_STYLES = {
-  beef:             { color: '#ef4444', dash: '6,4', label: 'beef' },
-  collab:           { color: '#22c55e', dash: null,   label: 'collab' },
-  silent_alliance:  { color: '#9ca3af', dash: '2,4', label: 'silent alliance' },
-  mentor:           { color: '#3b82f6', dash: null,   label: 'mentor' },
-  orbit:            { color: '#9ca3af', dash: null,   label: 'orbit', arrow: true },
-  public_shade:     { color: '#f59e0b', dash: '6,4', label: 'shade' },
-  copy_cat:         { color: '#a855f7', dash: '4,4', label: 'copycat' },
-  former_friends:   { color: '#ef4444', dash: '8,4', label: 'former friends' },
-  competitors:      { color: '#f97316', dash: null,   label: 'competitors' },
+  collab:         { color: '#22c55e', dash: null,  label: 'collab' },
+  bestie:         { color: '#16a34a', dash: null,  label: 'bestie' },
+  mentor:         { color: '#3b82f6', dash: null,  label: 'mentor' },
+  management:     { color: '#0ea5e9', dash: '2,4', label: 'management' },
+  family:         { color: '#6366f1', dash: null,  label: 'family' },
+  couple:         { color: '#ec4899', dash: null,  label: 'couple' },
+  situationship:  { color: '#f472b6', dash: '4,4', label: 'situationship' },
+  ex:             { color: '#db2777', dash: '8,4', label: 'ex' },
+  baby_daddy:     { color: '#be185d', dash: null,  label: 'baby daddy' },
+  baby_mama:      { color: '#be185d', dash: null,  label: 'baby mama' },
+  rival:          { color: '#f97316', dash: null,  label: 'rival' },
+  feud:           { color: '#ef4444', dash: '6,4', label: 'feud' },
+  shade:          { color: '#f59e0b', dash: '6,4', label: 'shade' },
+  former_friends: { color: '#ef4444', dash: '8,4', label: 'former friends' },
+  copycat:        { color: '#a855f7', dash: '4,4', label: 'copycat' },
+  secret_link:    { color: '#9ca3af', dash: '2,4', label: 'secret link' },
+  orbit:          { color: '#9ca3af', dash: null,  label: 'orbit', arrow: true },
 };
+
+const PROFILE_ATTRS = ['id', 'handle', 'display_name', 'platform', 'current_state'];
+const CANVAS_ATTRS = [...PROFILE_ATTRS, 'archetype', 'visibility_tier'];
+const includes = (SocialProfile, attributes) => [
+  { model: SocialProfile, as: 'sourceProfile', attributes },
+  { model: SocialProfile, as: 'targetProfile', attributes },
+];
+
+/**
+ * A row in the map's field names, with The Pulse's own fields alongside;
+ * is_conflict marks the kinds the Pressure Wave lists for ripples.
+ */
+function asMapRow(rel) {
+  const r = rel.get({ plain: true });
+  return {
+    ...r,
+    influencer_a_id: r.source_profile_id,
+    influencer_b_id: r.target_profile_id,
+    influencerA: r.sourceProfile || null,
+    influencerB: r.targetProfile || null,
+    is_public: r.public_visibility !== 'hidden',
+    notes: r.description,
+    is_conflict: CONFLICT_KINDS.includes(r.relationship_type),
+  };
+}
+
+const asId = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
+
+/** Another row of this kind for the pair, either way round (the table's unique index is one way only). */
+function findTwin(SocialProfileRelationship, a, b, type, exceptId) {
+  const where = {
+    relationship_type: type,
+    [Op.or]: [
+      { source_profile_id: a, target_profile_id: b },
+      { source_profile_id: b, target_profile_id: a },
+    ],
+  };
+  if (exceptId) where.id = { [Op.ne]: exceptId };
+  return SocialProfileRelationship.findOne({ where });
+}
 
 // GET /
 router.get('/', async (req, res) => {
-  const { FeedProfileRelationship, SocialProfile } = getModels(req);
+  const { SocialProfileRelationship, SocialProfile } = getModels(req);
   try {
     const where = {};
-    if (req.query.influencer_a_id) where.influencer_a_id = req.query.influencer_a_id;
-    if (req.query.type)            where.relationship_type = req.query.type;
+    if (req.query.influencer_a_id) {
+      const id = asId(req.query.influencer_a_id);
+      if (!id) return res.status(400).json({ error: 'influencer_a_id must be a profile id.' });
+      where[Op.or] = [{ source_profile_id: id }, { target_profile_id: id }];
+    }
+    if (req.query.type) where.relationship_type = req.query.type;
+    if (where.relationship_type && !KINDS.has(where.relationship_type)) {
+      return res.status(400).json({ error: `type must be one of: ${RELATIONSHIP_KINDS.join(', ')}` });
+    }
 
-    const relationships = await FeedProfileRelationship.findAll({
+    const relationships = await SocialProfileRelationship.findAll({
       where,
-      include: [
-        { model: SocialProfile, as: 'influencerA', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state'] },
-        { model: SocialProfile, as: 'influencerB', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state'] },
-      ],
+      include: includes(SocialProfile, PROFILE_ATTRS),
       order: [['created_at', 'DESC']],
     });
-    res.json({ relationships });
+    res.json({ relationships: relationships.map(asMapRow) });
   } catch (err) {
     console.error('[FeedRelationships] GET / error:', err);
     res.status(500).json({ error: err.message });
@@ -63,32 +125,89 @@ router.get('/', async (req, res) => {
 
 // POST /
 router.post('/', async (req, res) => {
-  const { FeedProfileRelationship } = getModels(req);
+  const { SocialProfileRelationship, SocialProfile } = getModels(req);
   try {
-    const { influencer_a_id, influencer_b_id, relationship_type, is_public, story_position, notes } = req.body;
-    if (!influencer_a_id || !influencer_b_id || !relationship_type) {
+    const { relationship_type, is_public, notes } = req.body || {};
+    const a = asId(req.body?.influencer_a_id);
+    const b = asId(req.body?.influencer_b_id);
+    if (!a || !b || !relationship_type) {
       return res.status(400).json({ error: 'influencer_a_id, influencer_b_id, and relationship_type required' });
     }
-    const rel = await FeedProfileRelationship.create({
-      influencer_a_id, influencer_b_id, relationship_type,
-      is_public: is_public !== undefined ? is_public : true,
-      story_position, notes,
+    if (a === b) return res.status(400).json({ error: 'A profile cannot have a relationship with itself.' });
+    if (!KINDS.has(relationship_type)) {
+      return res.status(400).json({ error: `relationship_type must be one of: ${RELATIONSHIP_KINDS.join(', ')}` });
+    }
+    if ((await SocialProfile.count({ where: { id: [a, b] } })) !== 2) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    const twin = await findTwin(SocialProfileRelationship, a, b, relationship_type);
+    if (twin) return res.status(409).json({ error: 'These two already have this relationship.', relationship_id: twin.id });
+
+    const rel = await SocialProfileRelationship.create({
+      source_profile_id: a,
+      target_profile_id: b,
+      relationship_type,
+      direction: 'mutual',
+      public_visibility: is_public === false ? 'hidden' : 'public',
+      description: notes || null,
+      auto_generated: false,
     });
-    res.status(201).json({ relationship: rel });
+    res.status(201).json({ relationship: asMapRow(rel) });
   } catch (err) {
     console.error('[FeedRelationships] POST / error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /:id
+// PUT /:id — only these fields; the pair itself is not changed here.
 router.put('/:id', async (req, res) => {
-  const { FeedProfileRelationship } = getModels(req);
+  const { SocialProfileRelationship } = getModels(req);
   try {
-    const rel = await FeedProfileRelationship.findByPk(req.params.id);
+    const id = asId(req.params.id);
+    const rel = id && await SocialProfileRelationship.findByPk(id);
     if (!rel) return res.status(404).json({ error: 'Relationship not found' });
-    await rel.update(req.body);
-    res.json({ relationship: rel });
+
+    const body = req.body || {};
+    const patch = {};
+    if (body.relationship_type !== undefined) {
+      if (!KINDS.has(body.relationship_type)) {
+        return res.status(400).json({ error: `relationship_type must be one of: ${RELATIONSHIP_KINDS.join(', ')}` });
+      }
+      patch.relationship_type = body.relationship_type;
+    }
+    if (body.public_visibility !== undefined) {
+      if (!['public', 'rumored', 'hidden'].includes(body.public_visibility)) {
+        return res.status(400).json({ error: 'public_visibility must be public, rumored or hidden.' });
+      }
+      patch.public_visibility = body.public_visibility;
+    } else if (body.is_public !== undefined) {
+      patch.public_visibility = body.is_public === false ? 'hidden' : 'public';
+    }
+    if (body.direction !== undefined) {
+      if (!['mutual', 'source_to_target', 'target_to_source'].includes(body.direction)) {
+        return res.status(400).json({ error: 'direction must be mutual, source_to_target or target_to_source.' });
+      }
+      patch.direction = body.direction;
+    }
+    if (body.drama_level !== undefined) {
+      const level = Number(body.drama_level);
+      if (!Number.isInteger(level) || level < 0 || level > 10) {
+        return res.status(400).json({ error: 'drama_level must be a whole number from 0 to 10.' });
+      }
+      patch.drama_level = level;
+    }
+    if (body.notes !== undefined) patch.description = body.notes || null;
+    if (body.description !== undefined) patch.description = body.description || null;
+    for (const key of ['timeline_notes', 'narrative_function']) {
+      if (body[key] !== undefined) patch[key] = body[key] || null;
+    }
+
+    if (patch.relationship_type && patch.relationship_type !== rel.relationship_type) {
+      const twin = await findTwin(SocialProfileRelationship, rel.source_profile_id, rel.target_profile_id, patch.relationship_type, rel.id);
+      if (twin) return res.status(409).json({ error: 'These two already have this relationship.', relationship_id: twin.id });
+    }
+    await rel.update(patch);
+    res.json({ relationship: asMapRow(rel) });
   } catch (err) {
     console.error('[FeedRelationships] PUT /:id error:', err);
     res.status(500).json({ error: err.message });
@@ -97,9 +216,10 @@ router.put('/:id', async (req, res) => {
 
 // DELETE /:id
 router.delete('/:id', async (req, res) => {
-  const { FeedProfileRelationship } = getModels(req);
+  const { SocialProfileRelationship } = getModels(req);
   try {
-    const rel = await FeedProfileRelationship.findByPk(req.params.id);
+    const id = asId(req.params.id);
+    const rel = id && await SocialProfileRelationship.findByPk(id);
     if (!rel) return res.status(404).json({ error: 'Relationship not found' });
     await rel.destroy();
     res.json({ success: true, message: 'Relationship deleted' });
@@ -113,60 +233,43 @@ router.delete('/:id', async (req, res) => {
 // ?author_mode=true → include underground profiles (shown with ◎ indicator)
 // Default: excludes edges where either node is underground
 router.get('/canvas', async (req, res) => {
-  const { FeedProfileRelationship, SocialProfile } = getModels(req);
+  const { SocialProfileRelationship, SocialProfile } = getModels(req);
   const authorMode = req.query.author_mode === 'true';
   if (req.query.show_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.query.show_id))) {
     return res.status(400).json({ error: 'show_id must be a show id.' });
   }
   try {
-    const relationships = await FeedProfileRelationship.findAll({
-      include: [
-        { model: SocialProfile, as: 'influencerA', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype', 'visibility_tier'] },
-        { model: SocialProfile, as: 'influencerB', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype', 'visibility_tier'] },
-      ],
-    });
+    const relationships = (await SocialProfileRelationship.findAll({ include: includes(SocialProfile, CANVAS_ATTRS) })).map(asMapRow);
 
     // Collect unique nodes, filtering underground unless author_mode
     const nodeMap = new Map();
     const filteredRels = relationships.filter(rel => {
+      if (!rel.influencerA || !rel.influencerB) return false;
       if (authorMode) return true;
-      const tierA = rel.influencerA?.visibility_tier || 'public';
-      const tierB = rel.influencerB?.visibility_tier || 'public';
+      const tierA = rel.influencerA.visibility_tier || 'public';
+      const tierB = rel.influencerB.visibility_tier || 'public';
       return tierA !== 'underground' && tierB !== 'underground';
     });
 
     for (const rel of filteredRels) {
-      if (rel.influencerA && !nodeMap.has(rel.influencerA.id)) {
-        const tier = rel.influencerA.visibility_tier || 'public';
-        nodeMap.set(rel.influencerA.id, {
-          id: rel.influencerA.id,
-          handle: rel.influencerA.handle,
-          display_name: rel.influencerA.display_name,
-          platform: rel.influencerA.platform,
-          state: rel.influencerA.current_state,
-          archetype: rel.influencerA.archetype,
-          visibility_tier: tier,
-          is_underground: tier === 'underground',
-        });
-      }
-      if (rel.influencerB && !nodeMap.has(rel.influencerB.id)) {
-        const tier = rel.influencerB.visibility_tier || 'public';
-        nodeMap.set(rel.influencerB.id, {
-          id: rel.influencerB.id,
-          handle: rel.influencerB.handle,
-          display_name: rel.influencerB.display_name,
-          platform: rel.influencerB.platform,
-          state: rel.influencerB.current_state,
-          archetype: rel.influencerB.archetype,
+      for (const p of [rel.influencerA, rel.influencerB]) {
+        if (nodeMap.has(p.id)) continue;
+        const tier = p.visibility_tier || 'public';
+        nodeMap.set(p.id, {
+          id: p.id,
+          handle: p.handle,
+          display_name: p.display_name,
+          platform: p.platform,
+          state: p.current_state,
+          archetype: p.archetype,
           visibility_tier: tier,
           is_underground: tier === 'underground',
         });
       }
     }
 
-    // The Pulse's closeness for each pair at the show's present (Task #3072;
-    // Evoni, 2026-10-13): read only. The kind of relationship The Pulse uses
-    // is social_profile_relationships; this map's types do not steer it.
+    // The Pulse's closeness for each pair at the show's present (Task #3072):
+    // read only. It starts from these same kinds, moved by the closeness ledger.
     let closeness = null;
     if (req.query.show_id) {
       const models = getModels(req);
@@ -181,6 +284,7 @@ router.get('/canvas', async (req, res) => {
       target: r.influencer_b_id,
       type: r.relationship_type,
       is_public: r.is_public,
+      is_conflict: r.is_conflict,
       style: EDGE_STYLES[r.relationship_type] || EDGE_STYLES.orbit,
       closeness: closeness ? (closeness.get(pairOf(r.influencer_a_id, r.influencer_b_id).join(':')) ?? null) : null,
     }));
@@ -188,103 +292,6 @@ router.get('/canvas', async (req, res) => {
     res.json({ nodes: Array.from(nodeMap.values()), edges, author_mode: authorMode });
   } catch (err) {
     console.error('[FeedRelationships] GET /canvas error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Relationship-type mapping from SocialProfileRelationship → FeedProfileRelationship ──
-const SPR_TO_FEED = {
-  collab:        'collab',
-  bestie:        'collab',
-  rival:         'competitors',
-  feud:          'beef',
-  shade:         'public_shade',
-  ex:            'former_friends',
-  copycat:       'copy_cat',
-  mentor:        'mentor',
-  management:    'orbit',
-  couple:        'orbit',
-  baby_daddy:    'orbit',
-  baby_mama:     'orbit',
-  situationship: 'orbit',
-  family:        'orbit',
-  secret_link:   'silent_alliance',
-};
-
-// POST /auto-generate — create feed relationships from SocialProfileRelationship + shared entanglements
-router.post('/auto-generate', aiRateLimiter, async (req, res) => {
-  const models = getModels(req);
-  const { FeedProfileRelationship, SocialProfileRelationship, CharacterEntanglement } = models;
-  try {
-    // ── 1. From SocialProfileRelationship ──────────────────────────
-    const sprRows = SocialProfileRelationship
-      ? await SocialProfileRelationship.findAll({ attributes: ['source_profile_id', 'target_profile_id', 'relationship_type'] })
-      : [];
-
-    // Existing feed rels (keyed as "minId-maxId" to avoid dupes)
-    const existing = await FeedProfileRelationship.findAll({ attributes: ['influencer_a_id', 'influencer_b_id'] });
-    const existingSet = new Set(existing.map(r => {
-      const lo = Math.min(r.influencer_a_id, r.influencer_b_id);
-      const hi = Math.max(r.influencer_a_id, r.influencer_b_id);
-      return `${lo}-${hi}`;
-    }));
-
-    const created = [];
-
-    for (const spr of sprRows) {
-      const feedType = SPR_TO_FEED[spr.relationship_type] || 'orbit';
-      const lo = Math.min(spr.source_profile_id, spr.target_profile_id);
-      const hi = Math.max(spr.source_profile_id, spr.target_profile_id);
-      const key = `${lo}-${hi}`;
-      if (existingSet.has(key)) continue;
-      existingSet.add(key);
-      const rel = await FeedProfileRelationship.create({
-        influencer_a_id: spr.source_profile_id,
-        influencer_b_id: spr.target_profile_id,
-        relationship_type: feedType,
-        is_public: true,
-      });
-      created.push(rel);
-    }
-
-    // ── 2. From shared entanglements (profiles entangled with same character) ──
-    if (CharacterEntanglement) {
-      const entanglements = await CharacterEntanglement.findAll({
-        where: { is_active: true },
-        attributes: ['character_id', 'profile_id'],
-      });
-      // Group by character
-      const byChar = {};
-      for (const e of entanglements) {
-        if (!e.profile_id) continue;
-        (byChar[e.character_id] || (byChar[e.character_id] = [])).push(e.profile_id);
-      }
-      // For each character linked to 2+ profiles, create edges between them
-      for (const profileIds of Object.values(byChar)) {
-        const unique = [...new Set(profileIds)];
-        for (let i = 0; i < unique.length; i++) {
-          for (let j = i + 1; j < unique.length; j++) {
-            const lo = Math.min(unique[i], unique[j]);
-            const hi = Math.max(unique[i], unique[j]);
-            const key = `${lo}-${hi}`;
-            if (existingSet.has(key)) continue;
-            existingSet.add(key);
-            const rel = await FeedProfileRelationship.create({
-              influencer_a_id: lo,
-              influencer_b_id: hi,
-              relationship_type: 'orbit',
-              is_public: true,
-              notes: 'Auto-generated: shared character entanglement',
-            });
-            created.push(rel);
-          }
-        }
-      }
-    }
-
-    res.json({ created: created.length, message: `${created.length} new feed relationships generated` });
-  } catch (err) {
-    console.error('[FeedRelationships] auto-generate error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -312,18 +319,15 @@ router.get('/profiles', async (req, res) => {
   }
 });
 
-// POST /:id/generate-ripples — caught-in-middle flags for beef/former_friends
+// POST /:id/generate-ripples — caught-in-middle flags for a pair in conflict (CONFLICT_KINDS)
 router.post('/:id/generate-ripples', aiRateLimiter, async (req, res) => {
   const models = getModels(req);
-  const { FeedProfileRelationship, CharacterEntanglement, RegistryCharacter, SocialProfile } = models;
+  const { SocialProfileRelationship, CharacterEntanglement, RegistryCharacter, SocialProfile } = models;
   try {
-    const rel = await FeedProfileRelationship.findByPk(req.params.id, {
-      include: [
-        { model: SocialProfile, as: 'influencerA' },
-        { model: SocialProfile, as: 'influencerB' },
-      ],
-    });
-    if (!rel) return res.status(404).json({ error: 'Relationship not found' });
+    const id = asId(req.params.id);
+    const found = id && await SocialProfileRelationship.findByPk(id, { include: includes(SocialProfile, PROFILE_ATTRS) });
+    if (!found) return res.status(404).json({ error: 'Relationship not found' });
+    const rel = asMapRow(found);
 
     // Find characters entangled with BOTH influencers
     const entangledA = await CharacterEntanglement.findAll({

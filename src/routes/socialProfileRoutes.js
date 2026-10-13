@@ -1085,10 +1085,8 @@ async function autoAssignFollower(db, profileId, characterContext, characterKey)
 }
 
 // ── Auto-link relationships — match known_associates against existing profiles ─
-const VALID_REL_TYPES = new Set([
-  'collab','rival','couple','ex','baby_daddy','baby_mama','bestie','mentor',
-  'copycat','shade','situationship','family','management','feud','secret_link',
-]);
+// The kinds social_profile_relationships takes (utils/relationshipKinds; Task #3115 added orbit and former_friends).
+const VALID_REL_TYPES = new Set(require('../utils/relationshipKinds').RELATIONSHIP_KINDS);
 
 async function autoLinkRelationships(db, profile, knownAssociates) {
   if (!db.SocialProfileRelationship) return 0;

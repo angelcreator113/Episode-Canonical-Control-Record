@@ -26,6 +26,14 @@
  * pieces); removing the sheet from Distribution takes it down. A published
  * look shows only while its Shop the Look links are included and there is
  * at least one.
+ *
+ * Its image (Task #3120; Evoni, 2026-10-13: the look strip): publishing
+ * draws the approved sheet's "The look only" export and copies it to the
+ * public site bucket, recording site.image = { key, sheet_hash }; publishing
+ * again draws it again. Without SITE_PUBLIC_BUCKET nothing is copied and the
+ * page is text only; a draw or upload that fails is logged, marked
+ * { failed: true }, and the look still publishes. Sending a re-approved
+ * sheet drops an image of the old look until she publishes again.
  */
 
 const crypto = require('crypto');
@@ -164,6 +172,8 @@ function siteView(entry) {
     key: site.key,
     path: `/shop-the-look/${site.key}`,
     showing: Boolean(entry.include_shop_links) && (site.piece_ids || []).length > 0,
+    // The look strip (Task #3120): on the site, failed to copy, or none (no bucket, or a look sent since).
+    image: site.image?.key ? 'on_site' : (site.image?.failed ? 'failed' : 'none'),
   };
 }
 
@@ -199,9 +209,11 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
     caption_edited: Boolean(keepCaption),
     include_shop_links: Boolean(includeShopLinks),
   };
-  // Published stays published, now with the look just approved.
+  // Published stays published, now with the look just approved; an image of
+  // another look is dropped until she publishes again (Task #3120).
   if (previous && isObject(previous.site) && previous.site.key) {
     entry.site = { ...previous.site, piece_ids: sheet.wardrobe_piece_ids || [] };
+    if (isObject(entry.site.image) && entry.site.image.sheet_hash !== sheet.inputs_hash) delete entry.site.image;
   }
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
@@ -221,6 +233,34 @@ async function updateStyleSheetDistribution(models, episodeId, body = {}) {
   if (body.include_shop_links !== undefined) entry.include_shop_links = Boolean(body.include_shop_links);
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * The look strip copied to the public site bucket: { key, sheet_hash }, or
+ * { failed: true, sheet_hash } when it cannot be drawn or stored, or null
+ * without SITE_PUBLIC_BUCKET (text only).
+ */
+async function copyLookImage(models, episodeId, siteKey, sheetHash) {
+  const slots = require('./websiteSlotService');
+  const cfg = slots.storageConfig();
+  if (!cfg) return null;
+  try {
+    const out = await module.exports.drawLook(models, episodeId);
+    const key = `${cfg.prefix}/looks/${siteKey}/${crypto.randomUUID()}.png`;
+    await slots.putObject(cfg, key, out.buffer, 'image/png');
+    return { key, sheet_hash: sheetHash || null };
+  } catch (err) {
+    console.error(`[StyleSheetDistribution] the look image of episode ${episodeId} could not be copied to the public site:`, err.message);
+    return { failed: true, sheet_hash: sheetHash || null };
+  }
+}
+
+/** The look's public image { url, alt }, or null. */
+function publicImageOf(site, title) {
+  const image = isObject(site.image) ? site.image : null;
+  if (!image?.key) return null;
+  const url = require('./websiteSlotService').publicUrl(image.key);
+  return url ? { url, alt: `The look: ${title}` } : null;
 }
 
 /**
@@ -244,6 +284,8 @@ async function publishStyleSheetToSite(models, episodeId, user = null) {
     key: SITE_KEY_RE.test(previous.key || '') ? previous.key : crypto.randomBytes(9).toString('base64url'),
     piece_ids: sheet.wardrobe_piece_ids || [],
   };
+  const image = await copyLookImage(models, episodeId, entry.site.key, sheet.inputs_hash);
+  if (image) entry.site.image = image;
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
 }
@@ -292,15 +334,17 @@ const lookTitle = (episode) => {
   return [n, episode.title].filter(Boolean).join(': ') || 'Shop the Look';
 };
 
-/** The website's list: each published look's key, title and date. */
+/** The website's list: each published look's key, title, date and image. */
 async function listPublicLooks(models) {
   return (await publishedLooks(models.sequelize)).map(({ site, episode }) => ({
     key: site.key, title: lookTitle(episode), published_at: site.published_at || null,
+    image: publicImageOf(site, lookTitle(episode)),
   }));
 }
 
 /**
- * One published look for the website, or null: its title, her caption, the
+ * One published look for the website, or null: its title, its image (the
+ * look strip in the public bucket, or null), her caption, the
  * links (label, retailer, url, affiliate), read live from its pieces, and
  * the disclosure first whenever any of them is an affiliate link. No ids,
  * no prices.
@@ -311,10 +355,12 @@ async function publicLook(models, key) {
   if (!look) return null;
   const links = await shopLinks(models, { wardrobe_piece_ids: look.site.piece_ids });
   if (!links.length) return null;
+  const title = lookTitle(look.episode);
   return {
     key: look.site.key,
-    title: lookTitle(look.episode),
+    title,
     published_at: look.site.published_at || null,
+    image: publicImageOf(look.site, title),
     caption: text(look.entry.caption) || '',
     disclosure: links.some((l) => l.affiliate) ? DISCLOSURE : null,
     links: links.map((l) => ({ label: l.label, retailer: l.retailer, url: l.url, affiliate: l.affiliate })),
@@ -336,4 +382,6 @@ module.exports = {
   DISCLOSURE, CAPTION_MAX, captionDraft, postText, keepStyleSheet, parseMetadata,
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, listPublicLooks, publicLook,
+  // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.
+  drawLook: (models, episodeId) => require('./styleSheetService').exportStyleSheet(models, episodeId, 'look'),
 };

@@ -37,7 +37,9 @@ module.exports = (sequelize, DataTypes) => {
         'family',          // siblings, cousins, etc.
         'management',      // one manages the other
         'feud',            // full public war
-        'secret_link'      // connected but nobody knows yet
+        'secret_link',     // connected but nobody knows yet
+        'orbit',           // one moves in the other's circle (from the Relationship Map; Task #3115)
+        'former_friends'   // close once, not now (from the Relationship Map; Task #3115)
       ),
       allowNull: false,
     },

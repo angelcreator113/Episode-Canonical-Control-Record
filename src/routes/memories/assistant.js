@@ -1461,12 +1461,13 @@ Respond ONLY in valid JSON:
 
       case 'read_feed_relationships': {
         const feedRels = await sequelize.query(
-          `SELECT fr.id, fr.relationship_type, fr.is_public, fr.notes,
+          // The Relationship Map's table since Task #3115: The Pulse's own.
+          `SELECT fr.id, fr.relationship_type, fr.public_visibility <> 'hidden' AS is_public, fr.description AS notes,
                   a.handle as handle_a, a.display_name as name_a,
                   b.handle as handle_b, b.display_name as name_b
-           FROM feed_profile_relationships fr
-           LEFT JOIN social_profiles a ON a.id = fr.influencer_a_id
-           LEFT JOIN social_profiles b ON b.id = fr.influencer_b_id
+           FROM social_profile_relationships fr
+           LEFT JOIN social_profiles a ON a.id = fr.source_profile_id
+           LEFT JOIN social_profiles b ON b.id = fr.target_profile_id
            ORDER BY fr.updated_at DESC LIMIT 30`,
           { type: sequelize.QueryTypes.SELECT }
         );
