@@ -87,7 +87,7 @@ const HOUR = 60 * 60 * 1000;
   });
 
   test('switched on: a window\'s jobs once, at the present moment; the next window plans again', async () => {
-    await queue.saveSettings(models, ids.show, { ambient_enabled: true, daily_draft_cap: 30 });
+    await queue.saveSettings(models, ids.show, { ambient_enabled: true, automated_requests: 30 });
     const jobs = await ambient.planAmbient(models, ids.show, t0);
     expect(jobs.length).toBeGreaterThan(0);
     expect(jobs.length).toBeLessThanOrEqual(ambient.PER_WINDOW);
@@ -99,11 +99,11 @@ const HOUR = 60 * 60 * 1000;
     expect((await ambient.planAmbient(models, ids.show, t1)).length).toBeGreaterThan(0);
   });
 
-  test("the day's ambient share of the cap: with a cap of 2, one ambient draft a day at most", async () => {
-    await queue.saveSettings(models, ids.show, { ambient_enabled: true, daily_draft_cap: 2 });
+  test("the day's ambient share of the automated requests: with 2 a day, one ambient draft at most", async () => {
+    await queue.saveSettings(models, ids.show, { ambient_enabled: true, automated_requests: 2 });
     expect(await ambient.planAmbient(models, ids.show, t0)).toHaveLength(1);
     expect(await ambient.planAmbient(models, ids.show, t1)).toEqual([]);
-    await queue.saveSettings(models, ids.show, { daily_draft_cap: 30 });
+    await queue.saveSettings(models, ids.show, { automated_requests: 30 });
   });
 
   test('anyone who posted in the last day is skipped', async () => {

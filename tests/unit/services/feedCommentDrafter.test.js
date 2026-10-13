@@ -8,6 +8,10 @@ const { Op } = require('sequelize');
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => function Anthropic() { return { messages: { create: mockCreate } }; });
 
+// The Pulse's request ledger (Task #3031) has its own integration test; here it only has to be asked.
+const mockTake = jest.fn(async () => ({}));
+jest.mock('../../../src/services/pulseRequests', () => ({ take: (...args) => mockTake(...args), RequestCapError: class RequestCapError extends Error {} }));
+
 const { pickReactors, draftReactions, recountComments, buildPrompt, DraftError } = require('../../../src/services/feedCommentDrafter');
 
 const P = (id, handle, extra = {}) => ({ id, handle, display_name: handle, status: 'generated', lala_relevance_score: 5, ...extra });
@@ -26,7 +30,7 @@ function makeModels({ rels = [], profiles = [], count = 0 } = {}) {
   return { SocialProfileRelationship, SocialProfile, FeedComment, FeedPost };
 }
 
-beforeEach(() => { mockCreate.mockReset(); process.env.ANTHROPIC_API_KEY = 'test'; });
+beforeEach(() => { mockCreate.mockReset(); mockTake.mockClear(); process.env.ANTHROPIC_API_KEY = 'test'; });
 
 describe('pickReactors', () => {
   test('the poster\'s connections first (by drama), then the most Lala-relevant, never the poster', async () => {
@@ -54,6 +58,8 @@ describe('draftReactions', () => {
     mockCreate.mockResolvedValue({ content: [{ text: 'Sure:\n[{"handle":"@rival","text":"Cute. Bold choice for a Tuesday."}]' }] });
     const { drafts, reactors } = await draftReactions(m, 'p-1', { limit: 1 });
     expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockTake).toHaveBeenCalledTimes(1);
+    expect(mockTake.mock.calls[0][1]).toEqual({ showId: 's-1', lane: 'manual', kind: 'reactions' });
     expect(mockCreate.mock.calls[0][0].model).toBe('claude-sonnet-4-6');
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('@rival');
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('relationship to the poster: rival');

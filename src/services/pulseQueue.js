@@ -1,34 +1,37 @@
 'use strict';
 
 /**
- * The Pulse's posting queue and daily draft cap (Task #2968; The Pulse spec
+ * The Pulse's posting queue and engine settings (Task #2968; The Pulse spec
  * §7 "Cost control: a daily generation cap; jobs run through a queue, never
  * in a live request"; docs/reads/2026-10-12-pulse-posting-read.md §4-5).
- * Evoni, 2026-10-12: the cap counts drafts per day, set in Admin; the
- * ambient worker ships off.
+ * Evoni, 2026-10-12: the ambient worker ships off; the daily cap counts
+ * requests, 5 automated and 15 manual per show (Task #3031,
+ * services/pulseRequests.js).
  *
- *   settingsOf(db, showId)        { daily_draft_cap, ambient_enabled } from
- *                                 the show's metadata.pulse_engine, defaults
- *                                 filled in
+ *   settingsOf(db, showId)        { automated_requests, manual_requests,
+ *                                 ambient_enabled } from the show's
+ *                                 metadata.pulse_engine, defaults filled in
  *   saveSettings(db, showId, …)   writes only metadata.pulse_engine
  *   enqueue(db, { showId, kind, payload, runAfter })
  *   draftsToday(db, showId)       drafts the queue made today (UTC)
  *   runOne(db, { now })           claims the next due job (skipLocked, as
- *                                 workers/sceneGenerationWorker.js), skips it
- *                                 if the cap is spent, runs its handler,
- *                                 retries with a backoff; null when idle
+ *                                 workers/sceneGenerationWorker.js), runs its
+ *                                 handler, retries with a backoff; a job
+ *                                 whose lane's requests are used is skipped
+ *                                 with the reason; null when idle
  *   register(kind, handler)       handler(db, job) → { draftIds }; the
  *                                 drafting handlers come with #2969-#2971
  *   start() / stop()              the worker loop; app.js starts it only
  *                                 when PULSE_ENGINE_ENABLED === 'true'
  *
- * Every AI call a handler makes still passes aiCostTracker's global budget;
- * the draft cap sits inside it.
+ * Each drafting call a handler makes takes one request first
+ * (pulseRequests.take); every AI call still passes aiCostTracker's global
+ * budget.
  */
 
 const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline'];   // dm: Task #2984; storyline: Task #2989
-const DEFAULTS = { daily_draft_cap: 30, ambient_enabled: false };
-const MAX_CAP = 500;
+const DEFAULTS = { automated_requests: 5, manual_requests: 15, ambient_enabled: false };
+const MAX_CAP = 100;   // requests a day, per lane
 const BACKOFF_MS = 60 * 1000;            // 1, 4, 9 minutes …
 const STALE_MS = 15 * 60 * 1000;         // a job running this long was lost
 const POLL_MS = parseInt(process.env.PULSE_ENGINE_POLL_MS, 10) || 15000;
@@ -52,20 +55,29 @@ async function settingsOf(db, showId) {
     `SELECT metadata->'pulse_engine' AS engine FROM shows WHERE id = :showId`, { replacements: { showId } });
   if (!row) throw new QueueError(404, 'Show not found');
   const saved = row.engine && typeof row.engine === 'object' ? row.engine : {};
+  const limit = (key) => (Number.isInteger(saved[key]) && saved[key] >= 0 && saved[key] <= MAX_CAP ? saved[key] : DEFAULTS[key]);
   return {
-    daily_draft_cap: Number.isInteger(saved.daily_draft_cap) ? saved.daily_draft_cap : DEFAULTS.daily_draft_cap,
+    automated_requests: limit('automated_requests'),
+    manual_requests: limit('manual_requests'),
     ambient_enabled: typeof saved.ambient_enabled === 'boolean' ? saved.ambient_enabled : DEFAULTS.ambient_enabled,
   };
 }
 
 /** Saves the settings given (others kept), only under metadata.pulse_engine. */
-async function saveSettings(db, showId, { daily_draft_cap: cap, ambient_enabled: ambient } = {}) {
+async function saveSettings(db, showId, { automated_requests: automated, manual_requests: manual, ambient_enabled: ambient } = {}) {
   const current = await settingsOf(db, showId);
-  if (cap !== undefined && (!Number.isInteger(cap) || cap < 0 || cap > MAX_CAP)) {
-    throw new QueueError(400, `The daily cap must be a whole number from 0 to ${MAX_CAP}.`);
+  for (const [lane, value] of [['automated', automated], ['manual', manual]]) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > MAX_CAP)) {
+      throw new QueueError(400, `The ${lane} requests a day must be a whole number from 0 to ${MAX_CAP}.`);
+    }
   }
   if (ambient !== undefined && typeof ambient !== 'boolean') throw new QueueError(400, 'ambient_enabled must be true or false.');
-  const next = { ...current, ...(cap !== undefined ? { daily_draft_cap: cap } : {}), ...(ambient !== undefined ? { ambient_enabled: ambient } : {}) };
+  const next = {
+    ...current,
+    ...(automated !== undefined ? { automated_requests: automated } : {}),
+    ...(manual !== undefined ? { manual_requests: manual } : {}),
+    ...(ambient !== undefined ? { ambient_enabled: ambient } : {}),
+  };
   // One statement on the one key: other metadata (pulse_cover, …) is never rewritten.
   await db.sequelize.query(
     `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{pulse_engine}', CAST(:engine AS jsonb))::json,
@@ -93,15 +105,15 @@ async function draftsToday(db, showId, now = new Date()) {
   return row.n;
 }
 
-/** The engine's state for Admin: settings, today's drafts against the cap, the last jobs. */
+/** The engine's state for Admin: settings, today's requests by lane, today's drafts, the last jobs. */
 async function stateOf(db, showId, now = new Date()) {
   const settings = await settingsOf(db, showId);
-  const today = await draftsToday(db, showId, now);
+  const requests = await require('./pulseRequests').usedToday(db, showId, now);
   const jobs = await db.PulseJob.findAll({ where: { show_id: showId }, order: [['created_at', 'DESC']], limit: 20 });
   return {
     settings,
-    drafts_today: today,
-    cap_left: Math.max(0, settings.daily_draft_cap - today),
+    requests_today: requests,
+    drafts_today: await draftsToday(db, showId, now),
     worker_enabled: process.env.PULSE_ENGINE_ENABLED === 'true',
     jobs: jobs.map((j) => ({
       id: j.id, kind: j.kind, status: j.status, attempts: j.attempts, error: j.error,
@@ -138,23 +150,12 @@ async function claimNext(db, now = new Date()) {
   });
 }
 
-/** Runs one due job: the cap first, then its handler. Returns the job, or null when idle. */
+/** Runs one due job's handler. Returns the job, or null when idle. */
 async function runOne(db, { now = new Date() } = {}) {
   const job = await claimNext(db, now);
   if (!job) return null;
   const finish = (fields) => job.update({ finished_at: new Date(), ...fields });
   try {
-    const { daily_draft_cap: cap } = await settingsOf(db, job.show_id);
-    const made = await draftsToday(db, job.show_id, now);
-    // Other jobs running now may each make a draft: count them, so two workers cannot pass the cap together.
-    const [[{ running }]] = await db.sequelize.query(
-      `SELECT COUNT(*)::int AS running FROM pulse_jobs
-        WHERE show_id = :showId AND status = 'running' AND id <> :id AND deleted_at IS NULL`,
-      { replacements: { showId: job.show_id, id: job.id } });
-    if (made + running >= cap) {
-      await finish({ status: 'skipped', error: `The daily draft cap (${cap}) was reached for today.` });
-      return job;
-    }
     const handler = handlers.get(job.kind);
     if (!handler) {
       await finish({ status: 'failed', error: `No handler for ${job.kind} jobs yet.` });
@@ -169,6 +170,12 @@ async function runOne(db, { now = new Date() } = {}) {
     const draftIds = Array.isArray(result.draftIds) ? result.draftIds.map(String) : [];
     await finish({ status: 'done', error: null, draft_ids: draftIds });
   } catch (err) {
+    // The lane's requests for today are used (pulseRequests.take): skipped, not retried.
+    if (err instanceof require('./pulseRequests').RequestCapError) {
+      console.error(`[PulseQueue] ${job.kind} job ${job.id} skipped:`, err.message);
+      await finish({ status: 'skipped', error: err.message });
+      return job;
+    }
     console.error(`[PulseQueue] ${job.kind} job ${job.id} failed (attempt ${job.attempts}):`, err);
     const message = String(err?.message || err).slice(0, 1000);
     if (job.attempts < job.max_attempts) {

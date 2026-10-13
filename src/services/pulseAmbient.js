@@ -13,7 +13,7 @@
  *     with a voice who have not posted in RECENT_HOURS, by temperament
  *     (oversharers often, lurkers rarely), seeded by the window so a
  *     restart picks the same. Queues `ambient` jobs at the present story
- *     moment, never more than the day's ambient share of the cap: the
+ *     moment, never more than the day's ambient share of the automated requests: the
  *     rest (RESERVE_FOR_EVENTS) is kept for event posts.
  *   handleAmbient(db, job)   pulseDrafter.draftAndRoute with no event:
  *                            the character's Living State shapes it,
@@ -31,7 +31,7 @@ const TICK_MS = 60 * 60 * 1000;
 
 const windowOf = (now) => Math.floor(now.getTime() / (WINDOW_HOURS * 60 * 60 * 1000));
 
-/** How many ambient drafts the day still allows: its share of the cap, less what ambient already made or queued today. */
+/** How many ambient drafts the day still allows: its share of the automated requests, less what ambient already made or queued today. */
 function ambientRoom({ cap, ambientToday }) {
   return Math.max(0, Math.floor(cap * (1 - RESERVE_FOR_EVENTS)) - ambientToday);
 }
@@ -66,7 +66,7 @@ async function planAmbient(db, showId, now = new Date()) {
        FROM pulse_jobs WHERE show_id = :showId AND kind = 'ambient' AND deleted_at IS NULL`,
     { replacements: { showId, windowKey: String(windowKey), since: startOfUtcDay(now) } });
   if (stats.this_window > 0) return [];
-  const room = Math.min(PER_WINDOW, ambientRoom({ cap: settings.daily_draft_cap, ambientToday: stats.today }));
+  const room = Math.min(PER_WINDOW, ambientRoom({ cap: settings.automated_requests, ambientToday: stats.today }));
   if (room <= 0) return [];
 
   const moment = await require('./storyClock').presentOrder(db, showId);
@@ -95,7 +95,7 @@ async function handleAmbient(db, job) {
   const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
   if (blocked) return { skipped: blocked };
   const { post } = await require('./pulseDrafter').draftAndRoute(db, {
-    showId: job.show_id, characterId: p.character_id, moment: p.moment, context: {},
+    showId: job.show_id, characterId: p.character_id, moment: p.moment, context: {}, request: { kind: 'ambient', jobId: job.id },
   });
   return { draftIds: [post.id] };
 }

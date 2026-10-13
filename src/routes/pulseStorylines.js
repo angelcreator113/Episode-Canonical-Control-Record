@@ -26,7 +26,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function sendKnown(res, err) {
   const { StorylineError } = require('../services/pulseStorylines');
-  if (err instanceof StorylineError) {
+  // RequestCapError: today's manual requests are used (429; Task #3031).
+  if (err instanceof StorylineError || err instanceof require('../services/pulseRequests').RequestCapError) {
     res.status(err.status).json({ success: false, error: err.message });
     return true;
   }

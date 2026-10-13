@@ -118,11 +118,19 @@ async function handleStoryline(db, job) {
     return { skipped: blocked };
   }
   const about = `${storyline.premise ? `${storyline.premise} ` : ''}This post should: ${beat.brief}`;
-  const { post } = await require('./pulseDrafter').draftAndRoute(db, {
-    showId: storyline.show_id, characterId, moment: beat.story_order,
-    context: { about },
-    alwaysReview: beat.kind === 'payoff' ? ['storyline_payoff'] : [],
-  });
+  let post;
+  try {
+    ({ post } = await require('./pulseDrafter').draftAndRoute(db, {
+      showId: storyline.show_id, characterId, moment: beat.story_order,
+      context: { about },
+      request: { kind: 'storyline', jobId: job.id },
+      alwaysReview: beat.kind === 'payoff' ? ['storyline_payoff'] : [],
+    }));
+  } catch (err) {
+    // Today's automated requests are used (Task #3031): the beat waits, planned, for tomorrow.
+    if (err instanceof require('./pulseRequests').RequestCapError) await beat.update({ status: 'planned', job_id: null });
+    throw err;
+  }
   await beat.update({ status: 'drafted', post_id: post.id });
   const next = beat.kind === 'payoff' ? 'paid_off' : 'running';
   if (storyline.status !== next && storyline.status !== 'paid_off') await storyline.update({ status: next });
@@ -158,6 +166,7 @@ Story moments you may use (story orders, earliest first; each is an episode mome
 Propose up to ${MAX_SUGGESTIONS} beats: first plants (small hints nobody notices yet), then builds, then one payoff. Each is one post by one character.
 Rules: stay in the world (nothing about a show, episodes or a studio); never state a character's private feelings.
 Answer with JSON only: {"beats": [{"kind": "plant" | "build" | "payoff", "story_order": 17, "handle": "@someone", "brief": "what the post does, one line"}]}`;
+  await require('./pulseRequests').take(db, { showId: storyline.show_id, lane: 'manual', kind: 'suggestions' });
   let message;
   for (const model of MODELS) {
     try {

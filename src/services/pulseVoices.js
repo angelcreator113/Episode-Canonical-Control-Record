@@ -166,6 +166,10 @@ Never use these phrases anywhere: ${BANNED_PHRASES.slice(0, 30).join(', ')}.`;
 async function buildVoice(db, characterId) {
   const { character, profile } = await loadCharacter(db, characterId);
   const source = voiceSource(character.toJSON(), profile);
+  // Building (or rebuilding) a voice is manual work: one request (Task #3031).
+  const [[registry]] = await db.sequelize.query('SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
+  if (!registry?.show_id) throw new VoiceError(409, 'This character\'s registry belongs to no show.');
+  await require('./pulseRequests').take(db, { showId: registry.show_id, lane: 'manual', kind: 'voice' });
   let message;
   for (const model of MODELS) {
     try {

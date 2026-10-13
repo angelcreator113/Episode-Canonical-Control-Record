@@ -450,6 +450,10 @@ router.post('/:postId/comments/draft', requireAuth, aiRateLimiter, async (req, r
     return res.json({ data: drafts, count: drafts.length, reactors: reactors.map((r) => r.profile.handle), message: `${drafts.length} reaction(s) drafted for approval` });
   } catch (err) {
     if (err instanceof DraftError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof require('../services/pulseRequests').RequestCapError) {
+      console.error('[FeedComments] Draft refused:', err.message);
+      return res.status(429).json({ error: err.message, code: err.code });
+    }
     console.error('[FeedComments] Draft error:', err);
     return res.status(500).json({ error: err.message });
   }
@@ -637,6 +641,10 @@ router.post('/:postId/redraft', requireAuth, aiRateLimiter, async (req, res) => 
     return res.json({ data: post, previous_text, voice });
   } catch (err) {
     if (err instanceof DraftError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof require('../services/pulseRequests').RequestCapError) {
+      console.error('[FeedPosts] Redraft refused:', err.message);
+      return res.status(429).json({ error: err.message, code: err.code });
+    }
     console.error('[FeedPosts] Redraft error:', err);
     return res.status(500).json({ error: err.message });
   }

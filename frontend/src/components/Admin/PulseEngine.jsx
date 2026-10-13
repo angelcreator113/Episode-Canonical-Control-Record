@@ -1,10 +1,11 @@
 /**
  * Admin › The Pulse › Engine (Task 2968; The Pulse spec §7 "Cost control: a
  * daily generation cap; jobs run through a queue"). Evoni, 2026-10-12: the
- * cap counts drafts per day; ambient posts ship off until she turns them
- * on. Reads and saves /api/v1/pulse-engine: the daily draft cap, the
- * ambient switch, drafts made today against the cap, whether the worker
- * runs on this server, and the last jobs.
+ * cap counts AI requests per day, 5 automated and 15 manual (Task 3031);
+ * ambient posts ship off until she turns them on. Reads and saves
+ * /api/v1/pulse-engine: the two daily limits, the ambient switch, today's
+ * requests by lane, whether the worker runs on this server, and the last
+ * jobs.
  * Styles: AdminPanel.css (pulse-engine-*).
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -12,15 +13,27 @@ import api from '../../services/api';
 
 const STATUS_LABELS = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', skipped: 'Skipped' };
 const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat' };
+const LIMIT_MAX = 100;
+
+/** Today's requests against the limits, in words. */
+export function todayText(state) {
+  const used = state.requests_today || { automated: 0, manual: 0 };
+  return `Today: ${used.automated} of ${state.settings.automated_requests} automated, ${used.manual} of ${state.settings.manual_requests} manual.`;
+}
+
+const validLimit = (text) => /^\d+$/.test(String(text).trim()) && Number(text) <= LIMIT_MAX;
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
 export default function PulseEngine({ showId }) {
   const [state, setState] = useState(null);
-  const [cap, setCap] = useState('');
+  const [limits, setLimits] = useState({ automated: '', manual: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  const apply = (data) => { setState(data); setCap(String(data.settings.daily_draft_cap)); };
+  const apply = (data) => {
+    setState(data);
+    setLimits({ automated: String(data.settings.automated_requests), manual: String(data.settings.manual_requests) });
+  };
   const load = useCallback(async () => {
     try {
       const res = await api.get(`/api/v1/pulse-engine?show_id=${encodeURIComponent(showId)}`);
@@ -46,8 +59,9 @@ export default function PulseEngine({ showId }) {
   if (!state) return error ? <p className="pulse-engine-error" role="alert">{error}</p> : <p className="pulse-engine-muted">Loading the engine…</p>;
 
   const { settings } = state;
-  const capValid = /^\d+$/.test(cap.trim()) && Number(cap) <= 500;
-  const capChanged = capValid && Number(cap) !== settings.daily_draft_cap;
+  const limitsValid = validLimit(limits.automated) && validLimit(limits.manual);
+  const limitsChanged = limitsValid
+    && (Number(limits.automated) !== settings.automated_requests || Number(limits.manual) !== settings.manual_requests);
 
   return (
     <div className="pulse-engine" data-testid="pulse-engine">
@@ -58,17 +72,26 @@ export default function PulseEngine({ showId }) {
       )}
       <section className="pulse-engine-card" aria-label="Today">
         <h3>Today</h3>
-        <p className="pulse-engine-today" data-testid="pulse-engine-today">
-          <b>{state.drafts_today}</b> of {settings.daily_draft_cap} drafts made · {state.cap_left} left
+        <p className="pulse-engine-today" data-testid="pulse-engine-today">{todayText(state)}</p>
+        <p className="pulse-engine-muted">
+          A request is one drafting call, a regeneration included; the quality check and viewing saved drafts take none.
+          Automated: event, ambient, comment and storyline posts. Manual: DMs, draft reactions, redrafts, building a voice and storyline suggestions.
+          The day resets at midnight UTC. Every AI call also stays inside the overall daily AI budget.
         </p>
-        <p className="pulse-engine-muted">The day resets at midnight UTC. Every AI call also stays inside the overall daily AI budget.</p>
       </section>
       <section className="pulse-engine-card" aria-label="Settings">
         <h3>Settings</h3>
-        <form className="pulse-engine-cap" onSubmit={(e) => { e.preventDefault(); if (capChanged) save({ daily_draft_cap: Number(cap) }, 'Saving the cap'); }}>
-          <label htmlFor="pulse-engine-cap">Daily draft cap</label>
-          <input id="pulse-engine-cap" type="number" inputMode="numeric" min="0" max="500" step="1" value={cap} onChange={(e) => setCap(e.target.value)} />
-          <button type="submit" className="pulse-engine-btn" disabled={busy || !capChanged}>Save</button>
+        <form className="pulse-engine-cap" onSubmit={(e) => {
+          e.preventDefault();
+          if (limitsChanged) save({ automated_requests: Number(limits.automated), manual_requests: Number(limits.manual) }, 'Saving the limits');
+        }}>
+          <label htmlFor="pulse-engine-automated">Automated requests a day</label>
+          <input id="pulse-engine-automated" type="number" inputMode="numeric" min="0" max={LIMIT_MAX} step="1" value={limits.automated}
+            onChange={(e) => setLimits((l) => ({ ...l, automated: e.target.value }))} />
+          <label htmlFor="pulse-engine-manual">Manual requests a day</label>
+          <input id="pulse-engine-manual" type="number" inputMode="numeric" min="0" max={LIMIT_MAX} step="1" value={limits.manual}
+            onChange={(e) => setLimits((l) => ({ ...l, manual: e.target.value }))} />
+          <button type="submit" className="pulse-engine-btn" disabled={busy || !limitsChanged}>Save</button>
         </form>
         <label className="pulse-engine-switch">
           <input type="checkbox" role="switch" checked={settings.ambient_enabled} disabled={busy}
@@ -77,7 +100,7 @@ export default function PulseEngine({ showId }) {
         </label>
         <p className="pulse-engine-muted">
           {settings.ambient_enabled
-            ? 'Characters post now and then between events, within the daily cap.'
+            ? 'Characters post now and then between events, within half the automated requests.'
             : 'Off: only events trigger posts. Turn on when you are happy with the voices.'}
         </p>
         {error && <p className="pulse-engine-error" role="alert">{error}</p>}

@@ -46,7 +46,8 @@ const shape = (v) => (v ? {
 
 /** A VoiceError as its response; false for anything else. */
 function sendKnown(res, err) {
-  if (err instanceof require('../services/pulseVoices').VoiceError) {
+  // RequestCapError: today's manual requests are used (429; Task #3031).
+  if (err instanceof require('../services/pulseVoices').VoiceError || err instanceof require('../services/pulseRequests').RequestCapError) {
     res.status(err.status).json({ success: false, error: err.message });
     return true;
   }

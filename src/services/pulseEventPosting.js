@@ -155,6 +155,7 @@ async function handleEvent(db, job) {
   const { post } = await require('./pulseDrafter').draftAndRoute(db, {
     showId: job.show_id, characterId: p.character_id, moment: p.moment,
     context: { about: p.about, episode_id: p.episode_id || null, event_id: p.event_id || null },
+    request: { kind: 'event', jobId: job.id },
   });
   const queue = require('./pulseQueue');
   for (const characterId of Array.isArray(p.commenters) ? p.commenters : []) {
@@ -168,7 +169,7 @@ async function handleComment(db, job) {
   const p = job.payload_json || {};
   const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
   if (blocked) return { skipped: blocked };
-  const { comment } = await require('./pulseDrafter').draftCommentAndRoute(db, { postId: p.post_id, characterId: p.character_id });
+  const { comment } = await require('./pulseDrafter').draftCommentAndRoute(db, { postId: p.post_id, characterId: p.character_id, jobId: job.id });
   return { draftIds: [comment.id] };
 }
 

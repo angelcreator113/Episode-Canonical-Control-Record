@@ -1,12 +1,14 @@
 /**
- * The Pulse's posting queue and daily draft cap (Task #2968; The Pulse spec
- * §7; Evoni, 2026-10-12):
+ * The Pulse's posting queue and engine settings (Task #2968; The Pulse spec
+ * §7; Evoni, 2026-10-12; requests, Task #3031):
  * - jobs are claimed once, even by two workers at the same moment;
- * - a job past the day's draft cap is skipped with a reason, never run;
+ * - a job whose drafting call is refused (today's requests used) is skipped
+ *   with the reason, never retried;
  * - a failing job backs off and retries, then fails;
- * - the cap and the ambient switch (off by default) live in the show's
- *   metadata.pulse_engine, and saving them keeps every other metadata key;
- * - settings are admin only; the state read shows today's drafts.
+ * - the request limits and the ambient switch (off by default) live in the
+ *   show's metadata.pulse_engine, and saving them keeps every other
+ *   metadata key;
+ * - settings are admin only; the state read shows today's requests and drafts.
  */
 jest.unmock('uuid');
 
@@ -16,6 +18,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const queue = require('../../src/services/pulseQueue');
+const requests = require('../../src/services/pulseRequests');
 
 const { sequelize } = models;
 
@@ -47,27 +50,33 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   afterEach(async () => {
     for (const kind of queue.KINDS) queue.unregister(kind);
     await run('DELETE FROM pulse_jobs WHERE show_id IN (:show, :other)', ids);
+    await run('DELETE FROM pulse_requests WHERE show_id IN (:show, :other)', ids);
   });
 
   afterAll(async () => {
     await run('DELETE FROM shows WHERE id IN (:show, :other)', ids);
   });
 
-  test('settings: defaults (cap 30, ambient off); saving keeps the other metadata; admin only; checked', async () => {
-    expect(await queue.settingsOf(models, ids.show)).toEqual({ daily_draft_cap: 30, ambient_enabled: false });
+  test('settings: defaults (5 automated, 15 manual, ambient off); saving keeps the other metadata; admin only; checked', async () => {
+    expect(await queue.settingsOf(models, ids.show)).toEqual({ automated_requests: 5, manual_requests: 15, ambient_enabled: false });
     expect((await request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`)).status).toBe(401);
     const put = (body, token = admin) => as(token, request(app).put('/api/v1/pulse-engine')).send({ show_id: ids.show, ...body });
-    expect((await put({ daily_draft_cap: 5 }, editor)).status).toBe(403);
-    expect((await put({ daily_draft_cap: -1 })).status).toBe(400);
-    expect((await put({ daily_draft_cap: 501 })).status).toBe(400);
+    expect((await put({ automated_requests: 3 }, editor)).status).toBe(403);
+    expect((await put({ automated_requests: -1 })).status).toBe(400);
+    expect((await put({ manual_requests: 101 })).status).toBe(400);
+    expect((await put({ manual_requests: 2.5 })).status).toBe(400);
     expect((await put({ ambient_enabled: 'yes' })).status).toBe(400);
-    expect((await put({ daily_draft_cap: 5 }, admin)).body).toMatchObject({ settings: { daily_draft_cap: 5, ambient_enabled: false } });
+    expect((await put({ automated_requests: 3, manual_requests: 100 }, admin)).body)
+      .toMatchObject({ settings: { automated_requests: 3, manual_requests: 100, ambient_enabled: false } });
     const res = await put({ ambient_enabled: true });
-    expect(res.body).toMatchObject({ settings: { daily_draft_cap: 5, ambient_enabled: true }, drafts_today: 0, cap_left: 5, worker_enabled: false });
+    expect(res.body).toMatchObject({
+      settings: { automated_requests: 3, manual_requests: 100, ambient_enabled: true },
+      requests_today: { automated: 0, manual: 0 }, drafts_today: 0, worker_enabled: false,
+    });
     const [[{ metadata }]] = await run('SELECT metadata FROM shows WHERE id = :show', ids);
-    expect(metadata).toMatchObject({ pulse_cover: { url: 'cover.jpg' }, tagline: 'keep me', pulse_engine: { daily_draft_cap: 5, ambient_enabled: true } });
-    expect((await as(admin, request(app).put('/api/v1/pulse-engine')).send({ show_id: uuid(), daily_draft_cap: 3 })).status).toBe(404);
-    await queue.saveSettings(models, ids.show, { daily_draft_cap: 30, ambient_enabled: false });
+    expect(metadata).toMatchObject({ pulse_cover: { url: 'cover.jpg' }, tagline: 'keep me', pulse_engine: { automated_requests: 3, manual_requests: 100, ambient_enabled: true } });
+    expect((await as(admin, request(app).put('/api/v1/pulse-engine')).send({ show_id: uuid(), automated_requests: 3 })).status).toBe(404);
+    await queue.saveSettings(models, ids.show, { automated_requests: 5, manual_requests: 15, ambient_enabled: false });
   });
 
   test('a job runs its handler once, records its drafts, and counts toward today', async () => {
@@ -84,7 +93,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(await queue.draftsToday(models, ids.show)).toBe(1);
     expect(await queue.runOne(models)).toBeNull();
     const state = await as(editor, request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`));
-    expect(state.body).toMatchObject({ drafts_today: 1, cap_left: 29 });
+    expect(state.body).toMatchObject({ drafts_today: 1, requests_today: { automated: 0, manual: 0 } });
     expect(state.body.jobs[0]).toMatchObject({ id: job.id, kind: 'event', status: 'done', drafts: 1 });
   });
 
@@ -96,20 +105,27 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(got).toEqual([a.id, b.id].sort());
   });
 
-  test('the daily cap: a job past it is skipped with a reason and its handler never runs', async () => {
-    await queue.saveSettings(models, ids.show, { daily_draft_cap: 2 });
-    let calls = 0;
-    queue.register('ambient', async () => { calls += 1; return { draftIds: [uuid()] }; });
+  test("the daily requests (Task #3031): a job whose drafting call is refused is skipped with the reason, once, never retried", async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await queue.saveSettings(models, ids.show, { automated_requests: 2 });
+    let drafted = 0;
+    queue.register('ambient', async (db, job) => {
+      await requests.take(db, { showId: job.show_id, lane: 'automated', kind: 'ambient', jobId: job.id });
+      drafted += 1;
+      return { draftIds: [uuid()] };
+    });
     for (let i = 0; i < 3; i += 1) await queue.enqueue(models, { showId: ids.show, kind: 'ambient' });
     const jobs = [await queue.runOne(models), await queue.runOne(models), await queue.runOne(models)];
     for (const j of jobs) await j.reload();
     expect(jobs.map((j) => j.status)).toEqual(['done', 'done', 'skipped']);
-    expect(jobs[2].error).toBe('The daily draft cap (2) was reached for today.');
-    expect(calls).toBe(2);
-    // Another show's cap is its own.
+    expect(jobs[2]).toMatchObject({ attempts: 1, error: "Today's 2 automated requests are used; they reset at midnight UTC." });
+    expect(drafted).toBe(2);
+    const ledger = await models.PulseRequest.findAll({ where: { show_id: ids.show }, order: [['created_at', 'ASC']] });
+    expect(ledger.map((r) => [r.lane, r.kind, r.job_id])).toEqual([['automated', 'ambient', jobs[0].id], ['automated', 'ambient', jobs[1].id]]);
+    // Another show's requests are its own.
     await queue.enqueue(models, { showId: ids.other, kind: 'ambient' });
     expect((await (await queue.runOne(models)).reload()).status).toBe('done');
-    await queue.saveSettings(models, ids.show, { daily_draft_cap: 30 });
+    await queue.saveSettings(models, ids.show, { automated_requests: 5 });
   });
 
   test('a failing job backs off and retries, then fails; a kind with no handler fails at once', async () => {
